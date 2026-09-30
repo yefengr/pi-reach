@@ -6,6 +6,12 @@
 
 <p align="center">在手机或任意浏览器上，远程操作你电脑上正在运行的 <a href="https://github.com/earendil-works/pi">Pi coding agent</a>。</p>
 
+<p align="center">
+  <a href="https://github.com/yefengr/pi-reach/actions/workflows/ci.yml"><img src="https://github.com/yefengr/pi-reach/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@yefengr/pi-reach"><img src="https://img.shields.io/npm/v/@yefengr/pi-reach" alt="npm" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/yefengr/pi-reach" alt="License: MIT" /></a>
+</p>
+
 <p align="center"><b>简体中文</b> · <a href="README.en.md">English</a></p>
 
 Pi Reach 为 Pi 加上一个浏览器入口：离开电脑时，用手机扫码配对，就能查看 Pi 的实时输出、继续发送指令、停止任务或切换模型。会话始终在你自己的电脑上执行。
@@ -170,6 +176,7 @@ pnpm dev:pwa
 | [架构](docs/ARCHITECTURE.md) | 三端职责、状态归属与工程边界 |
 | [协议与安全](docs/reference/protocol/README.md) | 身份、配对、消息与信任模型 |
 | [安全策略](SECURITY.md) | 漏洞报告方式与范围 |
+| [贡献指南](CONTRIBUTING.md) | 反馈问题与提交改动的流程 |
 | [设计规范](docs/DESIGN.md) | PWA 界面与交互规则 |
 | [部署](docs/DEPLOYMENT.md) | 服务器准备、Caddy 配置与发布流程 |
 | [路线图](docs/ROADMAP.md) · [待定事项](docs/BACKLOG.md) | 已确定的事项与候选建议 |

@@ -1,0 +1,49 @@
+name: Bug 报告 / Bug report
+description: 报告 Pi Reach 的错误行为 / Report something that is not working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        安全漏洞请不要在这里提交，按[安全策略](https://github.com/yefengr/pi-reach/blob/main/SECURITY.md)私密报告。不要粘贴配对码、私钥、token 或会话内容。
+        Do not report security vulnerabilities here; report them privately as described in the [security policy](https://github.com/yefengr/pi-reach/blob/main/SECURITY.md). Never paste pairing codes, private keys, tokens, or session content.
+  - type: dropdown
+    id: component
+    attributes:
+      label: 受影响的部分 / Component
+      options:
+        - PWA（浏览器 / browser）
+        - Extension（Pi 扩展 / Pi extension）
+        - Relay
+        - 不确定 / Not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 版本与环境 / Versions and environment
+      description: Extension 与 Pi 的版本、浏览器与系统，以及使用公共实例还是自托管的 Relay 与 PWA / Extension and Pi versions, browser and OS, and whether you use the public or a self-hosted Relay and PWA
+      placeholder: "@yefengr/pi-reach 0.0.3, Pi 0.99, iOS Safari, 公共 Relay / public Relay"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 期望与实际结果 / Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图 / Logs or screenshots
+      description: 可选。提交前删除配对码、密钥、token 和会话内容 / Optional. Remove pairing codes, keys, tokens, and session content first.
