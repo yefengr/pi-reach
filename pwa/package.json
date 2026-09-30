@@ -23,7 +23,8 @@
     "test:e2e:remote": "playwright test --config playwright.remote.config.ts",
     "test:e2e:remote:list": "playwright test --config playwright.remote.config.ts --list",
     "test:e2e:ui": "playwright test --ui",
-    "start:e2e-server": "node scripts/start-e2e-server.mjs"
+    "start:e2e-server": "node scripts/start-e2e-server.mjs",
+    "screenshots": "pnpm --filter @pi-reach/protocol build && vitest run --config vitest.screenshots.config.ts"
   },
   "dependencies": {
     "@mantine/core": "9.5.2",

@@ -10,6 +10,11 @@
 
 Pi Reach 为 Pi 加上一个浏览器入口：离开电脑时，用手机扫码配对，就能查看 Pi 的实时输出、继续发送指令、停止任务或切换模型。会话始终在你自己的电脑上执行。
 
+<p align="center">
+  <img src="docs/assets/screenshot-desktop-zh.png" alt="Pi Reach 桌面端：左侧是在线 Pi 与本地历史，右侧是会话" width="72%" />
+  <img src="docs/assets/screenshot-mobile-zh.png" alt="Pi Reach 手机端会话" width="21%" />
+</p>
+
 > [!NOTE]
 > 项目仍处于早期阶段，协议与本地数据格式可能调整。
 
@@ -152,6 +157,7 @@ pnpm dev:pwa
 | `pnpm test:e2e` | 依次运行 PWA 生产预览、Docker 协议与真实浏览器端到端测试 |
 | `pnpm verify:release` | 先执行 `verify`，再执行全部 E2E |
 | `pnpm test:relay` | 单独构建并验证 Relay |
+| `pnpm --filter pwa screenshots` | 用演示数据重新生成 README 截图（`docs/assets/`） |
 
 单个子项目用 `pnpm --filter <包名> <命令>`，包名分别为 `pwa`、`@yefengr/pi-reach`、`@pi-reach/relay` 和 `@pi-reach/protocol`。子项目的 `pnpm build` 会先构建共享包；修改共享包后，在子项目单独运行 `typecheck` 或 `test` 前，需要先执行 `pnpm --filter @pi-reach/protocol build`，或改用根命令。协作与验证约定见 [AGENTS.md](AGENTS.md)。
 
