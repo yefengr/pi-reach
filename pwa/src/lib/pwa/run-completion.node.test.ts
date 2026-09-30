@@ -17,43 +17,38 @@ function runEnd(id: string, group: string, timestamp: number, status: "complete"
 }
 
 describe("runCompletions", () => {
-  test("uses run_end for time and status, even while Pi is running", () => {
-    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 2), runEnd("r1", "g1", 5, "interrupted")], true);
-    expect(result.get("g1")).toEqual({ timestamp: 5, status: "interrupted" });
+  test.each(["complete", "interrupted", "error"] as const)("takes time and %s status only from run_end", (status) => {
+    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 9), runEnd("r1", "g1", 5, status)]);
+    expect(result.get("g1")).toEqual({ timestamp: 5, status });
   });
 
-  test("keeps the current run open until run_end arrives", () => {
-    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 2)], true);
+  test("keeps a run open when it has no run_end", () => {
+    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 2)]);
     expect(result.has("g1")).toBe(false);
   });
 
-  test("closes a legacy run when a later run appears", () => {
-    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 3), user("u2", "g2", 4)], true);
-    expect(result.get("g1")).toEqual({ timestamp: 3 });
-    expect(result.has("g2")).toBe(false);
+  test("does not infer completion from a later formal run", () => {
+    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 3), user("u2", "g2", 4), runEnd("r2", "g2", 5)]);
+    expect(result.has("g1")).toBe(false);
+    expect(result.get("g2")).toEqual({ timestamp: 5, status: "complete" });
   });
 
-  test("closes the last legacy run at its final event when Pi is not running", () => {
-    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 3)], false);
-    expect(result.get("g1")).toEqual({ timestamp: 3 });
-  });
-
-  test("orders by event_seq and ignores ungrouped system events", () => {
+  test("orders explicit endings by event_seq and ignores ungrouped system events", () => {
     const system: TimelineEvent = { ...base, event_id: "s1", timestamp: 9, kind: "compaction", payload: "summary", truncated: false, event_seq: 3 };
-    const result = runCompletions([assistant("a2", "g2", 6, 4), system, user("u1", "g1", 1, 1), assistant("a1", "g1", 2, 2)], true);
-    expect(result.get("g1")).toEqual({ timestamp: 2 });
+    const result = runCompletions([runEnd("r2", "g1", 5, "error", 6), assistant("a2", "g2", 6, 4), system, user("u1", "g1", 1, 1), runEnd("r1", "g1", 2, "complete", 2)]);
+    expect(result.get("g1")).toEqual({ timestamp: 5, status: "error" });
     expect(result.has("g2")).toBe(false);
+    expect(result.size).toBe(1);
   });
 
-  test("ignores a run_end whose group has no other visible events", () => {
-    const result = runCompletions([runEnd("r0", "g0", 1), user("u1", "g1", 2)], true);
+  test("ignores a run_end whose group has no other formal events", () => {
+    const result = runCompletions([runEnd("r0", "g0", 1), user("u1", "g1", 2)]);
     expect(result.has("g0")).toBe(false);
     expect(result.has("g1")).toBe(false);
   });
 
-  test("treats a streaming later turn as the start of a new run", () => {
-    const result = runCompletions([user("u1", "g1", 1), assistant("a1", "g1", 3)], true, ["g2"]);
-    expect(result.get("g1")).toEqual({ timestamp: 3 });
-    expect(result.has("g2")).toBe(false);
+  test("recognizes run_end before the other formal event of its group", () => {
+    const result = runCompletions([runEnd("r1", "g1", 1), assistant("a1", "g1", 2)]);
+    expect(result.get("g1")).toEqual({ timestamp: 1, status: "complete" });
   });
 });

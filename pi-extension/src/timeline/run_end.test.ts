@@ -65,6 +65,7 @@ describe("TimelineRuntime run_end", () => {
     const runEnds = runtime.recover(session).filter((event) => event.kind === "run_end");
     expect(runEnds.map((event) => event.kind === "run_end" && event.status)).toEqual(["complete", "interrupted"]);
     expect(new Set(runEnds.map((event) => event.kind === "run_end" && event.group_id)).size).toBe(2);
+    expect(runtime.getPublishedEvents().filter((event) => event.kind === "run_end")).toEqual(runEnds);
   });
 
   test("writes nothing when the run produced no timeline group", async () => {

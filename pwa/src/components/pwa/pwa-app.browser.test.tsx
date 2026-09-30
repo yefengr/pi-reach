@@ -1402,9 +1402,12 @@ test.each([
   await page.viewport(width, 844);
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
+    // 桌面空会话会异步聚焦输入框；先等初始化完成，避免它抢走菜单键盘操作的焦点。
+    if (width === 1280) await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toHaveFocus();
     const actions = screen.getByRole("button", { name: entry });
     await expect.element(actions).toBeEnabled();
     actions.element().focus();
+    await expect.element(actions).toHaveFocus();
     await userEvent.keyboard("{ArrowDown}");
     const newSession = screen.getByRole("menuitem", { name: entry === "Pi commands" ? /\/new/ : "New session" });
     await expect.element(newSession).toHaveFocus();

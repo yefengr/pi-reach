@@ -27,6 +27,31 @@ test("ignores delayed pre-connection formal output without appearing or incremen
   expect(state.applyTimelineChange).not.toHaveBeenCalled();
 });
 
+test("run_end obeys formal scope and sequence gates while advancing an ordinary leaf", async () => {
+  const state = harness();
+  const end: TimelineEvent = { kind: "run_end", event_id: "run-end", event_seq: 11, group_id: "group", session_id: "session", leaf_id: "next-leaf", timestamp: 2, status: "complete" };
+  const frame = (value: TimelineEvent) => ({ protocol_version: 2 as const, type: "timeline_event" as const, session_id: value.session_id, leaf_id: value.leaf_id, event: value });
+  receiveTimelineFrame(frame({ ...end, event_seq: 10 }), state);
+  receiveTimelineFrame(frame({ ...end, session_id: "foreign" }), state);
+  receiveTimelineFrame({ ...frame(end), leaf_id: "mismatched-envelope" }, state);
+  expect(state.runtime.formalEvents()).toEqual([]);
+  expect(state.applyTimelineChange).not.toHaveBeenCalled();
+  expect(mergeTimelineEvents).not.toHaveBeenCalled();
+
+  receiveTimelineFrame(frame(end), state);
+  expect(state.runtime.currentScope?.leafId).toBe("next-leaf");
+  expect(state.runtime.formalEvents()).toEqual([end]);
+  expect(state.applyTimelineChange.mock.calls.at(-1)?.[0].committed).toEqual([end]);
+  expect(state.receiveRealtimeOutput).not.toHaveBeenCalled();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(mergeTimelineEvents).toHaveBeenCalledExactlyOnceWith({ ...scope, leafId: "next-leaf" }, [end]);
+
+  receiveTimelineFrame(frame({ ...end, event_id: "delayed-end", event_seq: 10, leaf_id: "generation" }), state);
+  expect(state.runtime.formalEvents()).toEqual([end]);
+  expect(state.runtime.currentScope?.leafId).toBe("next-leaf");
+  expect(state.applyTimelineChange).toHaveBeenCalledTimes(1);
+});
+
 test("persists ordinary leaf advancement under the advanced live scope", async () => {
   const state = harness();
   const advanced = { ...event, event_seq: 11, leaf_id: "next-leaf" };

@@ -237,12 +237,15 @@ test("prepending history while reading keeps the same real paragraph at the same
 
 test.each([1280, 390])("switching back to a viewed session restores its reading position while a new session opens at the bottom at %ipx", async width => {
   await page.viewport(width, 844);
-  const sessionA = Array.from({ length: 6 }, (_, index) => answer(`a-${index}`, paragraphs(`Session A ${index}`, 4)));
-  const sessionB = Array.from({ length: 6 }, (_, index) => answer(`b-${index}`, paragraphs(`Session B ${index}`, 4)));
+  // 缺少 run_end 时没有轮末时间行；目标段落下方仍须有足够正文，确保是在回看而非底部跟随。
+  const sessionMessageCount = 10;
+  const sessionA = Array.from({ length: sessionMessageCount }, (_, index) => answer(`a-${index}`, paragraphs(`Session A ${index}`, 4)));
+  const sessionB = Array.from({ length: sessionMessageCount }, (_, index) => answer(`b-${index}`, paragraphs(`Session B ${index}`, 4)));
   const { screen, list, readAt, replace, viewport } = await renderTimeline(sessionA);
   try {
     const targetText = "Session A 2 paragraph 1: content that stays available while reading.";
     await readAt(screen.getByText(targetText).element());
+    expect(bottomGap(list)).toBeGreaterThan(list.clientHeight / 2);
     const top = offset(screen.getByText(targetText).element(), list);
     const saved = viewport().captureSessionPosition();
     expect(saved?.following).toBe(false);

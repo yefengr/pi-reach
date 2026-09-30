@@ -26,6 +26,9 @@ const toolPartial: Extract<TimelinePartial, { kind: "tool" }> = {
   blocks: [{ type: "text", text: "Streaming output" }],
 };
 function eventItem(event: TimelineEvent): TimelineViewItem { return { kind: "event", event }; }
+function runEndItem(): TimelineViewItem {
+  return eventItem({ event_id: "run-end", session_id: toolEvent.session_id, leaf_id: toolEvent.leaf_id, group_id: toolEvent.group_id, timestamp: 10, kind: "run_end", status: "complete" });
+}
 function partialItem(partial: TimelinePartial): TimelineViewItem { return { kind: "partial", createdAt: 0, partial }; }
 
 afterEach(async () => { await page.viewport(1280, 900); });
@@ -168,7 +171,7 @@ test("every tool stays reachable and expansion is independent across parallel co
   // 这一轮仍有工具在运行：每个工具逐条显示，不合并。
   expect(document.querySelectorAll(".pwa-tool-action")).toHaveLength(7);
   await screen.getByRole("button", { name: "Expand read tool" }).click();
-  await update([eventItem(before), eventItem(between), ...laterTools, eventItem({ ...toolEvent, args: toolPartial.args!, result: "Read completed last" })]);
+  await update([eventItem(before), eventItem(between), ...laterTools, eventItem({ ...toolEvent, args: toolPartial.args!, result: "Read completed last" }), runEndItem()]);
   // 这一轮结束后，连续成功的 6 条命令合并为一行摘要；已展开的读取被正文隔开，保持原位与展开状态。
   expect([...document.querySelectorAll(".pwa-message-list > article")].slice(0, 3)).toEqual(originalOrder.slice(0, 3));
   const group = screen.getByRole("button", { name: "Expand Ran 6 commands" });
@@ -375,7 +378,7 @@ test.each([1280, 390])("expanded tools use direct TUI content in both themes at 
     { ...toolEvent, event_id: "write", tool_call_id: "write", tool: "write", args: { path: "src/settings.ts", content: "export const enabled = true;" }, result: "Wrote file" },
     { ...toolEvent, event_id: "edit", tool_call_id: "edit", tool: "edit", args: { path: "src/settings.ts", oldText: "enabled = false", newText: "enabled = true" }, result: "Successfully replaced text" },
   ];
-  const { screen } = await liveList(calls.map(eventItem));
+  const { screen } = await liveList([...calls.map(eventItem), runEndItem()]);
   const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
   // 连续成功的工具先合并为一行摘要：展开摘要后再逐条展开。
   const groupToggle = document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head .pwa-tool-action")!;
@@ -499,7 +502,7 @@ test("groups only adjacent completed tools of one turn and keeps failures on the
   const failed: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "failed", tool_call_id: "failed", tool: "bash", args: { command: "pnpm lint" }, status: "error", error: "Lint failed" };
   const otherTurn: Extract<TimelineEvent, { kind: "tool" }> = { ...read("other-turn", "d.ts"), group_id: "group-2" };
   const reading: boolean[] = [];
-  const { screen } = await liveList([read("a", "a.ts"), read("b", "b.ts"), failed, read("c", "c.ts"), read("d", "a.ts"), otherTurn].map(eventItem), { onReadingChange: (value) => { reading.push(value); } });
+  const { screen } = await liveList([...([read("a", "a.ts"), read("b", "b.ts"), failed, read("c", "c.ts"), read("d", "a.ts"), otherTurn].map(eventItem)), runEndItem()], { onReadingChange: (value) => { reading.push(value); } });
   const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
   // 失败的命令单独一行并把前后隔开；另一轮里只有一条工具，不合并。
   expect(list.querySelectorAll(":scope > .pwa-tool-group")).toHaveLength(2);
@@ -521,7 +524,7 @@ test("keeps a tool the user expanded visible when its finished turn is grouped",
   expect(document.querySelector(".pwa-tool-group")).toBeNull();
   await screen.getByRole("button", { name: "Expand read tool" }).first().click();
   await expect.element(screen.getByText("First output")).toBeVisible();
-  await update([eventItem(first), eventItem(second), eventItem({ ...toolEvent, event_id: "third", tool_call_id: "third", args: { path: "c.ts" }, result: "Third output" })]);
+  await update([eventItem(first), eventItem(second), eventItem({ ...toolEvent, event_id: "third", tool_call_id: "third", args: { path: "c.ts" }, result: "Third output" }), runEndItem()]);
   // 这一轮结束后合并为摘要；组内有已展开的工具，摘要默认展开，正在阅读的内容不被收起。
   await expect.element(screen.getByRole("button", { name: "Collapse Read 3 files" })).toBeVisible();
   await expect.element(screen.getByText("First output")).toBeVisible();

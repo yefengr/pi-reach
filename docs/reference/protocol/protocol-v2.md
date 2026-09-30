@@ -263,7 +263,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - 正式 user event 满足 `event_id === message_id`。
 - `origin=pwa` 必须携带 `sender_ref`；非 PWA origin 禁止携带。
 - tool event 的 `complete | error | interrupted` 字段组合互斥。
-- `run_end` 表示 Pi 一次运行（`agent_start` 至 `agent_end`）结束，携带所结束一轮的 `group_id` 与 `status`（`complete | interrupted | error`，取本次运行最后一条 assistant 消息的结果，没有 assistant 输出时为 `interrupted`）。它与其他正式事件一样持久化、占用 `event_seq`，并在该轮正式消息之后发布；没有 `run_end` 的旧会话由 PWA 按 [ADR-20260927](../../adr/20260927-run-end-event.md) 的降级规则判断一轮是否结束。
+- `run_end` 表示 Pi 一次运行（`agent_start` 至 `agent_end`）结束，携带所结束一轮的 `group_id` 与 `status`（`complete | interrupted | error`，取本次运行最后一条 assistant 消息的结果，没有 assistant 输出时为 `interrupted`）。它与其他正式事件一样持久化、占用 `event_seq`，并在该轮正式消息之后发布。PWA 只以对应组的正式 `run_end` 确认运行结束；没有该事件时不根据 `working`、后续组或工具状态推断，也不补造结束事件，见 [ADR-20260930](../../adr/20260930-strict-run-completion.md)。
 - image block 的 inline `data` 与 `omitted=true` 互斥。
 - history chunk 中同一 event 不得同时出现在 `events` 和 `fragments`；一个 chunk 内 fragment event ID 不得重复。
 - Extension 返回的正式历史事件序号必须从 1 开始连续递增；PWA 在缓存存在缺口时按数字范围补齐，完成去重、排序和持久化后再显示整页。
