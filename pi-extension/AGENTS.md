@@ -29,7 +29,7 @@ pnpm verify
 
 `pnpm verify` 必须在 Extension 行为变更后通过。`pnpm test` 执行既有 Vitest 测试及 `scripts/` 的 Node 脚本测试；不要为区分 runner 而排除 `test/`。改动共享源码后，局部类型检查或测试前先执行根 `pnpm --filter @pi-reach/protocol build`，或使用根验证命令。生产 TypeScript 文件不超过 600 行。开发工具链以根配置为准，已发布包的 Node 支持范围仍由本包 `engines` 定义。
 
-`pnpm build` 先构建共享包，再编译 Extension 并运行 `scripts/vendor-protocol.mjs` 内置公共代码、改写 JS 与声明引用；不得跳过 vendor 步骤发布。npm 包通过 `pnpm pack` 将 catalog / workspace 引用转换为实际版本；发布脚本只上传已检查的 tarball，不直接对含 catalog 的源码目录执行 `npm publish`。独立分发验收必须在仓库之外安装并加载该 tarball。
+`pnpm build` 先构建共享包，再编译 Extension 并运行 `scripts/vendor-protocol.mjs` 内置公共代码、改写 JS 与声明引用；不得跳过 vendor 步骤发布。npm 包通过 `pnpm pack` 将 catalog / workspace 引用转换为实际版本；发布脚本只上传已检查的 tarball，不直接对含 catalog 的源码目录执行 `npm publish`。独立分发验收必须在仓库之外安装并加载该 tarball。完整发布流程与认证方式见 [DEPLOYMENT](../docs/DEPLOYMENT.md#extension-npm-发布)。
 
 ## Relay 配置
 

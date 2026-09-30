@@ -307,6 +307,30 @@ IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 
 不传 `IMAGE` 时使用 `REGISTRY_NAMESPACE`，再没有时使用本地占位命名空间。日常服务器部署不需要调用这两个发布脚本，直接执行 `./scripts/deploy-self-hosted.sh` 即可。
 
+## Extension npm 发布
+
+Extension 以 `@yefengr/pi-reach` 发布到 npm，入口为 `pi-extension/publish-npm.sh`：脚本确认登录状态且该版本尚未发布，运行 Extension 的 `pnpm verify`，用 `pnpm pack` 打包并检查 tarball，再以公开访问上传这个 tarball。版本号一经发布不可复用。
+
+发布前：
+
+1. 协议有变更时先部署 PWA，再发布 Extension（[ADR-20260927](adr/20260927-run-end-event.md)）；可核对线上 PWA 的脚本是否已包含新增的帧或事件类型。
+2. 修改 `pi-extension/package.json` 的 `version`，经 Pull Request 合并到 `main` 后再从 `main` 发布。
+
+认证：
+
+- 在交互式终端执行 `npm login`，或提供环境变量 `NPM_TOKEN`。使用 `NPM_TOKEN` 时，脚本写入只引用该变量的临时 npmrc，token 不落盘。
+- 非交互环境（CI、agent 的 shell）无法完成 npm 网页登录和双重验证，只能使用 `NPM_TOKEN`。
+- 可跳过双重验证的细粒度 token 不能执行 `npm unpublish`，npm 也在逐步限制这类 token 直接发布。
+
+执行与核对：
+
+```bash
+bash pi-extension/publish-npm.sh
+npm view @yefengr/pi-reach version
+```
+
+npm 异步处理上传（返回 202），新版本通常几分钟后才出现在 registry，可能超过脚本约 60 秒的确认等待；脚本此时只给出警告，稍后用 `npm view` 核对即可。处理完成前对同一个包执行 `npm deprecate` 会返回 422。首次发布新包时，npm 会自动生成 `0.0.0-stage` 占位版本，无需处理。发布后按 [Extension 协作规范](../pi-extension/AGENTS.md)在仓库之外安装并加载新版本。
+
 ## 故障排查
 
 ### `docker compose` 不存在
