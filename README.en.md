@@ -158,6 +158,7 @@ pnpm dev:pwa
 | `pnpm verify:release` | Run `verify`, then all E2E tests |
 | `pnpm test:relay` | Build and verify the Relay on its own |
 | `pnpm --filter pwa screenshots` | Regenerate the README screenshots in `docs/assets/` from demo data |
+| `pnpm check:docs` | Check internal links and anchors in the documentation |
 
 To work on a single package, use `pnpm --filter <package> <command>` with `pwa`, `@yefengr/pi-reach`, `@pi-reach/relay`, or `@pi-reach/protocol`. A package's `pnpm build` builds the shared package first. After changing the shared package, run `pnpm --filter @pi-reach/protocol build` before a package-only `typecheck` or `test`, or use the root commands instead. Collaboration and verification rules are in [AGENTS.md](AGENTS.md) (Chinese).
 

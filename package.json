@@ -13,6 +13,7 @@
     "lint": "pnpm --filter pwa lint",
     "test": "pnpm --filter @pi-reach/protocol build && pnpm -r test && pnpm test:scripts",
     "test:scripts": "node --test pwa/scripts/*.test.mjs scripts/*.test.mjs",
+    "check:docs": "node scripts/check-doc-links.mjs",
     "test:relay": "pnpm --filter @pi-reach/relay test",
     "test:e2e:pwa": "pnpm --filter pwa test:e2e",
     "test:e2e:protocol": "./docker/e2e/scripts/verify.sh",
