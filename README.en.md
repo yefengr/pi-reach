@@ -6,6 +6,12 @@
 
 <p align="center">Control the <a href="https://github.com/earendil-works/pi">Pi coding agent</a> running on your computer from your phone or any browser.</p>
 
+<p align="center">
+  <a href="https://github.com/yefengr/pi-reach/actions/workflows/ci.yml"><img src="https://github.com/yefengr/pi-reach/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@yefengr/pi-reach"><img src="https://img.shields.io/npm/v/@yefengr/pi-reach" alt="npm" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/yefengr/pi-reach" alt="License: MIT" /></a>
+</p>
+
 <p align="center"><a href="README.md">简体中文</a> · <b>English</b></p>
 
 Pi Reach gives Pi a browser front end. Away from your desk, pair your phone by scanning a QR code, then follow Pi's live output, send new instructions, stop a task, or switch models. The session always runs on your own computer.
@@ -172,6 +178,7 @@ Detailed documentation is currently written in Chinese.
 | [Architecture](docs/ARCHITECTURE.md) | Responsibilities, state ownership, and build boundaries |
 | [Protocol & security](docs/reference/protocol/README.md) | Identity, pairing, messages, and the trust model |
 | [Security policy](SECURITY.md) | How to report vulnerabilities, and what is in scope |
+| [Contributing](CONTRIBUTING.md) | How to report issues and submit changes |
 | [Design](docs/DESIGN.md) | PWA UI and interaction rules |
 | [Deployment](docs/DEPLOYMENT.md) | Server preparation, Caddy setup, and the release flow |
 | [Roadmap](docs/ROADMAP.md) · [Backlog](docs/BACKLOG.md) | Committed work and candidate ideas |
