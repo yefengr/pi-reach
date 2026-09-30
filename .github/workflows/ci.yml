@@ -59,7 +59,8 @@ jobs:
               docs/* | branding/* | *.md | LICENSE | */LICENSE) ;;
               *) code=true ;;
             esac
-          done < <(git diff --name-only "$base" "$HEAD")
+          # --no-renames：改名的旧路径也要参与判断，否则 src/a.ts → docs/a.md 会被误判为只改文档。
+          done < <(git diff --name-only --no-renames "$base" "$HEAD")
           echo "Code changed: $code"
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
