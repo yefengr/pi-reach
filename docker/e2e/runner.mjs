@@ -1,0 +1,338 @@
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+
+const root = new URL("../..", import.meta.url).pathname;
+const compose = `${root}docker/e2e/compose.yml`;
+const project = "pi-reach-e2e";
+const ownerPorts = { b: 18788, c: 18789 };
+const timeoutMs = Number(process.env.E2E_TIMEOUT_MS || "45000");
+
+function composeCall(args, options = {}) {
+  return execFileSync("docker", ["compose", "-p", project, "-f", compose, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options });
+}
+
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function request(port, path, { method = "GET", body, capability } = {}) {
+  const headers = {};
+  if (body) headers["content-type"] = "application/json";
+  if (capability) headers["x-e2e-control-capability"] = capability;
+  const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(`${method} ${path}: HTTP ${response.status}`);
+  return payload;
+}
+
+async function expectStatus(port, path, expectedStatus, { method = "GET", body, capability } = {}, label) {
+  const headers = {};
+  if (body) headers["content-type"] = "application/json";
+  if (capability) headers["x-e2e-control-capability"] = capability;
+  const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  await response.body?.cancel();
+  assert(response.status === expectedStatus, label);
+}
+
+async function dockerExec(service, args, input) {
+  const { spawn } = await import("node:child_process");
+  return new Promise((resolve, reject) => {
+    const child = spawn("docker", ["compose", "-p", project, "-f", compose, "exec", "-T", service, ...args], { stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("exit", (code) => code === 0 ? resolve({ stdout, stderr }) : reject(new Error(`docker exec ${service} exited ${code}: ${stderr}`)));
+    if (input) child.stdin.end(input); else child.stdin.end();
+  });
+}
+
+async function readControlCapability(service, path) {
+  const { stdout } = await dockerExec(service, ["sh", "-lc", `cat ${path}`]);
+  const capability = stdout.trim();
+  if (!capability) throw new Error(`${service} control capability is empty`);
+  return capability;
+}
+
+function sequenceOf(state) {
+  return Number.isSafeInteger(state?.sequence) ? state.sequence : 0;
+}
+
+function eventAfter(state, cursor, predicate) {
+  return state.frames.some((frame) => frame.sequence > cursor && predicate(frame));
+}
+
+function endpointEventAfter(state, cursor, predicate) {
+  return state.endpoint_events.some((event) => event.sequence > cursor && predicate(event));
+}
+
+async function waitFor(label, callback) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "not ready";
+  while (Date.now() < deadline) {
+    try {
+      const value = await callback();
+      if (value) return value;
+    } catch (error) { lastError = String(error); }
+    await sleep(250);
+  }
+  throw new Error(`timeout waiting for ${label}: ${lastError}`);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+  process.stdout.write(`assert ${message}=true\n`);
+}
+
+async function main() {
+  const runId = `run-${randomUUID()}`;
+  const id = (name) => `${runId}-${name}`;
+
+  composeCall(["up", "-d", "--build", "--force-recreate"]);
+  await waitFor("relay", async () => {
+    const result = composeCall(["ps", "--format", "json"]);
+    return result.includes('"Service":"relay"') && result.includes('"Health":"healthy"');
+  });
+  const interactive = await waitFor("interactive runtime", async () => {
+    const state = await request(18787, "/state");
+    return state.ready ? state : null;
+  });
+  assert(interactive.rpcReady, "interactive_rpc_get_state");
+  assert(interactive.runtimeReady, "interactive_runtime_ready");
+  assert(interactive.relay === "connected", "interactive_relay_connected");
+
+  await waitFor("owner-b", async () => (await request(ownerPorts.b, "/health")).ok ? true : null);
+  await waitFor("owner-c", async () => (await request(ownerPorts.c, "/health")).ok ? true : null);
+
+  const interactiveCapability = await readControlCapability("interactive", "/home/pi/.pi/pi-reach/e2e-control-capability");
+  const ownerBCapability = await readControlCapability("owner-b", "/var/lib/pi-reach-owner/control-capability");
+  const ownerCCapability = await readControlCapability("owner-c", "/var/lib/pi-reach-owner/control-capability");
+
+  await expectStatus(18787, "/private/pairing", 403, {}, "interactive_pairing_without_capability");
+  await expectStatus(ownerPorts.b, "/private/id", 403, {}, "owner_private_id_without_capability");
+  await expectStatus(18787, "/control", 403, { method: "POST", capability: "invalid-capability", body: { action: "pair" } }, "interactive_control_invalid_capability");
+  await expectStatus(ownerPorts.b, "/subscribe", 403, { method: "POST", body: { device_id: "invalid-capability-test" } }, "owner_subscribe_without_capability");
+
+  await request(18787, "/control", { method: "POST", capability: interactiveCapability, body: { action: "pair", request_id: id("control-pair-b") } });
+  const pairing = await waitFor("pairing token", async () => {
+    const value = await request(18787, "/private/pairing", { capability: interactiveCapability });
+    return value.ok ? value : null;
+  });
+  await waitFor("owner-b endpoint subscription", async () => {
+    try {
+      await request(ownerPorts.b, "/subscribe", { method: "POST", capability: ownerBCapability, body: { device_id: pairing.device_id } });
+      return true;
+    } catch { return false; }
+  });
+  await waitFor("owner-c endpoint subscription", async () => {
+    try {
+      await request(ownerPorts.c, "/subscribe", { method: "POST", capability: ownerCCapability, body: { device_id: pairing.device_id } });
+      return true;
+    } catch { return false; }
+  });
+  const ownerB = await waitFor("owner-b authenticated subscription", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return state.ready ? state : null;
+  });
+  const ownerC = await waitFor("owner-c authenticated subscription", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return state.ready ? state : null;
+  });
+  assert(ownerB.ready && ownerC.ready, "persistent_owners_ready");
+  await expectStatus(ownerPorts.b, "/resolve", 403, { method: "POST", body: { code: pairing.token, request_id: id("resolve-denied") } }, "pairing_resolution_requires_capability");
+  const unknownCode = `${pairing.token.startsWith("0") ? "1" : "0"}${pairing.token.slice(1)}`;
+  await expectStatus(ownerPorts.b, "/resolve", 409, { method: "POST", capability: ownerBCapability, body: { code: unknownCode, request_id: id("resolve-unknown") } }, "unknown_pairing_code_rejected");
+  const rejectedResolution = await request(ownerPorts.b, "/state");
+  assert(rejectedResolution.frames.some((frame) => frame.type === "pairing_code_error"
+    && frame.in_reply_to === id("resolve-unknown") && frame.reason === "unknown_code"), "relay_unknown_code_response");
+  // 目标必须来自 Relay 的短码解析，不能从 Host 控制面注入后绕过邀请登记。
+  const resolvedB = await request(ownerPorts.b, "/resolve", { method: "POST", capability: ownerBCapability, body: { code: pairing.token, request_id: id("resolve-b") } });
+  assert(resolvedB.ok, "owner_b_resolves_pairing_code");
+  const resolvedStateB = await request(ownerPorts.b, "/state");
+  assert(resolvedStateB.endpoint?.endpoint_id === pairing.endpoint_id
+    && resolvedStateB.endpoint?.runtime_instance_id === pairing.runtime_instance_id, "owner_b_resolved_target_matches_host");
+  assert(resolvedStateB.frames.every((frame) => !Object.hasOwn(frame, "code")), "pairing_code_absent_from_public_state");
+  const bPairCursor = sequenceOf(resolvedStateB);
+  const pairResult = await request(ownerPorts.b, "/pair", { method: "POST", capability: ownerBCapability, body: { token: pairing.token, request_id: id("pair-b") } });
+  assert(pairResult.ok, "pair_owner_b");
+
+  const bAfterPair = await waitFor("owner-b pair_ok", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return eventAfter(state, bPairCursor, (frame) => frame.type === "pair_ok" && frame.in_reply_to === pairResult.request_id) ? state : null;
+  });
+  const interactivePresence = await waitFor("interactive endpoint metadata", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return state.endpoint?.kind === "interactive" ? state : null;
+  });
+  assert(interactivePresence.endpoint.kind === "interactive", "extension_announces_interactive_kind");
+  const sessionEndpoint = interactivePresence.endpoint;
+  const channelB = id("channel-b");
+  const helloB = id("hello-b");
+  const bHelloCursor = sequenceOf(await request(ownerPorts.b, "/state"));
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: helloB, channel_id: channelB } } });
+  const readyState = await waitFor("session_ready", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return eventAfter(state, bHelloCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === helloB) ? state : null;
+  });
+  const sessionReady = readyState.frames.find((frame) => frame.sequence > bHelloCursor && frame.type === "session_ready" && frame.in_reply_to === helloB);
+  assert(!!sessionReady, "session_ready");
+  const sessionId = sessionReady?.session_id;
+  const leafId = sessionReady?.leaf_id;
+
+  const pingB = id("ping-b");
+  const bPingCursor = sequenceOf(await request(ownerPorts.b, "/state"));
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "ping", id: pingB, channel_id: channelB, session_id: sessionId, leaf_id: leafId } } });
+  const pong = await waitFor("pong", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return eventAfter(state, bPingCursor, (frame) => frame.type === "pong" && frame.in_reply_to === pingB);
+  });
+  assert(pong, "pong");
+
+  await request(18787, "/control", { method: "POST", capability: interactiveCapability, body: { action: "pair", request_id: id("control-pair-c") } });
+  const pairingC = await waitFor("second pairing token", async () => {
+    const value = await request(18787, "/private/pairing", { capability: interactiveCapability });
+    return value.ok && value.token !== pairing.token ? value : null;
+  });
+  const resolvedC = await request(ownerPorts.c, "/resolve", { method: "POST", capability: ownerCCapability, body: { code: pairingC.token, request_id: id("resolve-c") } });
+  assert(resolvedC.ok, "owner_c_resolves_pairing_code");
+  const cPairCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  const pairC = await request(ownerPorts.c, "/pair", { method: "POST", capability: ownerCCapability, body: { token: pairingC.token, request_id: id("pair-c") } });
+  assert(pairC.ok, "pair_owner_c");
+  await waitFor("owner-c pair_ok", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return eventAfter(state, cPairCursor, (frame) => frame.type === "pair_ok" && frame.in_reply_to === pairC.request_id);
+  });
+  const channelC = id("channel-c");
+  const helloC = id("hello-c");
+  const cHelloCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  await request(ownerPorts.c, "/frame", { method: "POST", capability: ownerCCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: helloC, channel_id: channelC } } });
+  const ownerCReady = await waitFor("owner-c session_ready", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return eventAfter(state, cHelloCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === helloC) ? state : null;
+  });
+  const cReady = ownerCReady.frames.find((frame) => frame.sequence > cHelloCursor && frame.type === "session_ready" && frame.in_reply_to === helloC);
+  assert(!!cReady, "second_owner_session_ready");
+
+  const newB = id("new-b");
+  const bNewCursor = sequenceOf(await request(ownerPorts.b, "/state"));
+  const cReplacementCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_new", id: newB, channel_id: channelB, session_id: sessionId, leaf_id: leafId } } });
+  const newResult = await waitFor("session_new reply", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return eventAfter(state, bNewCursor, (frame) => (frame.type === "action_ok" || frame.type === "action_error") && frame.in_reply_to === newB) ? state : null;
+  });
+  assert(newResult.frames.some((frame) => frame.sequence > bNewCursor && frame.type === "action_ok" && frame.in_reply_to === newB), "session_new_invariant");
+  const cReplacement = await waitFor("owner-c replacement", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return eventAfter(state, cReplacementCursor, (frame) => frame.type === "bye" && frame.reason === "session_replaced");
+  });
+  assert(cReplacement, "second_owner_session_replaced");
+  const reboundChannelB = id("channel-b-after-new");
+  const reboundHelloB = id("hello-b-after-new");
+  const bReboundCursor = sequenceOf(await request(ownerPorts.b, "/state"));
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: reboundHelloB, channel_id: reboundChannelB } } });
+  const ownerBRebound = await waitFor("owner-b rebound session", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return eventAfter(state, bReboundCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === reboundHelloB) ? state : null;
+  });
+  const bReboundReady = ownerBRebound.frames.find((frame) => frame.sequence > bReboundCursor && frame.type === "session_ready" && frame.in_reply_to === reboundHelloB);
+  assert(!!bReboundReady, "revoked_owner_rebound_after_new");
+  const revokeSessionId = bReboundReady.session_id;
+  const revokeLeafId = bReboundReady.leaf_id;
+
+  const reboundChannelC = id("channel-c-after-new");
+  const reboundHelloC = id("hello-c-after-new");
+  const cReboundCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  await request(ownerPorts.c, "/frame", { method: "POST", capability: ownerCCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: reboundHelloC, channel_id: reboundChannelC } } });
+  const ownerCRebound = await waitFor("owner-c rebound session", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return eventAfter(state, cReboundCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === reboundHelloC) ? state : null;
+  });
+  const cReboundReady = ownerCRebound.frames.find((frame) => frame.sequence > cReboundCursor && frame.type === "session_ready" && frame.in_reply_to === reboundHelloC);
+  assert(!!cReboundReady, "survivor_rebound_after_new");
+  const survivorLeafId = cReboundReady.leaf_id;
+
+  // The host command takes an 8-character public-key prefix. Obtain only the
+  // full key through the local control plane; it never enters normal output.
+  const ownerBId = (await request(ownerPorts.b, "/private/id", { capability: ownerBCapability })).owner_id;
+  const bRevokeCursor = sequenceOf(await request(ownerPorts.b, "/state"));
+  await request(18787, "/control", { method: "POST", capability: interactiveCapability, body: { action: "revoke", owner_id: ownerBId, request_id: id("control-revoke-b") } });
+  const revokeByeState = await waitFor("owner-b revoke bye", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return eventAfter(state, bRevokeCursor, (frame) => frame.type === "bye"
+      && frame.reason === "peer_stop"
+      && frame.session_id === revokeSessionId
+      && frame.leaf_id === revokeLeafId) ? state : null;
+  });
+  const revokeBye = revokeByeState.frames.find((frame) => frame.sequence > bRevokeCursor
+    && frame.type === "bye"
+    && frame.reason === "peer_stop"
+    && frame.session_id === revokeSessionId
+    && frame.leaf_id === revokeLeafId);
+  assert(!!revokeBye, "revoke_peer_stop_bye");
+  const revokeEndedState = await waitFor("owner-b endpoint_ended", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    return endpointEventAfter(state, bRevokeCursor, (event) => event.type === "endpoint_ended") ? state : null;
+  });
+  const revokeEnded = revokeEndedState.endpoint_events.find((event) => event.sequence > bRevokeCursor && event.type === "endpoint_ended");
+  assert(!!revokeEnded && revokeBye.sequence < revokeEnded.sequence, "revoke_bye_before_endpoint_ended");
+  const rejectedCursor = sequenceOf(await request(ownerPorts.b, "/state"));
+  const revokedPing = id("ping-revoked");
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "ping", id: revokedPing, channel_id: reboundChannelB, session_id: revokeSessionId, leaf_id: revokeLeafId } } });
+  await sleep(1000);
+  const revokedState = await request(ownerPorts.b, "/state");
+  assert(!eventAfter(revokedState, rejectedCursor, (frame) => frame.type === "pong" && frame.in_reply_to === revokedPing), "revoked_route_rejected");
+  const survivorPing = id("ping-survivor");
+  const cSurvivorCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  await request(ownerPorts.c, "/frame", { method: "POST", capability: ownerCCapability, body: { frame: { protocol_version: 2, type: "ping", id: survivorPing, channel_id: reboundChannelC, session_id: cReboundReady.session_id, leaf_id: survivorLeafId } } });
+  const survivorPong = await waitFor("survivor pong", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return eventAfter(state, cSurvivorCursor, (frame) => frame.type === "pong" && frame.in_reply_to === survivorPing);
+  });
+  assert(survivorPong, "survivor_ping_after_revoke");
+  const cPeerStopCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  await request(18787, "/control", { method: "POST", capability: interactiveCapability, body: { action: "peer_stop", request_id: id("control-peer-stop") } });
+  const shutdownBye = await waitFor("peer_stop bye for survivor", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return eventAfter(state, cPeerStopCursor, (frame) => frame.type === "bye" && frame.reason === "peer_stop");
+  });
+  assert(shutdownBye, "peer_stop_bye");
+  const beforeRestart = await request(18787, "/state");
+  const cRestartCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  await request(18787, "/control", { method: "POST", capability: interactiveCapability, body: { action: "restart", request_id: id("control-restart") } });
+  const restarted = await waitFor("interactive restart", async () => {
+    const state = await request(18787, "/state");
+    return state.ready
+      && state.endpointId
+      && state.endpointId !== beforeRestart.endpointId
+      && state.runtimeId
+      && state.runtimeId !== beforeRestart.runtimeId
+      ? state
+      : null;
+  });
+  assert(restarted.endpointId !== beforeRestart.endpointId, "interactive_restart_endpoint_changed");
+  assert(restarted.runtimeId !== beforeRestart.runtimeId, "interactive_restart_runtime_changed");
+  const rediscovered = await waitFor("survivor discovers restarted Pi", async () => {
+    const state = await request(ownerPorts.c, "/state");
+    return endpointEventAfter(state, cRestartCursor, (event) => (event.type === "endpoint_announced" || event.type === "endpoint_updated")
+      && event.endpoint_id === restarted.endpointId
+      && event.runtime_instance_id === restarted.runtimeId)
+      && state.endpoint?.kind === "interactive"
+      ? state
+      : null;
+  });
+  assert(rediscovered.endpoint.endpoint_id === restarted.endpointId, "paired_owner_discovers_new_endpoint");
+  assert(rediscovered.endpoint.kind === "interactive", "restarted_extension_kind_interactive");
+  assert(sessionEndpoint.endpoint_id === pairing.endpoint_id, "initial_endpoint_identity_consistent");
+}
+
+main().catch((error) => {
+  process.stderr.write(`verify failed: ${error.message}\n`);
+  process.exitCode = 1;
+});

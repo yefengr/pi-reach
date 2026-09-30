@@ -1,0 +1,74 @@
+server {
+    listen ${PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+    autoindex off;
+    absolute_redirect off;
+    server_tokens off;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    location = / {
+        return 307 /app$is_args$args;
+    }
+
+    location = /app/ {
+        return 308 /app$is_args$args;
+    }
+
+    location = /index.html {
+        return 307 /app$is_args$args;
+    }
+
+    location = /app {
+        rewrite ^ /index.html break;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    # 产品路由均位于 /app 下：子路径（如 /app/settings）回退到应用入口，由前端识别。
+    location ^~ /app/ {
+        rewrite ^ /index.html break;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location = /sw.js {
+        types { application/javascript js; }
+        default_type application/javascript;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location = /manifest.webmanifest {
+        types { application/manifest+json webmanifest; }
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location ~ (^|/)\. {
+        return 404;
+    }
+
+    location ~ \.map$ {
+        return 404;
+    }
+
+    location /assets/ {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location ~ \.html$ {
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri =404;
+    }
+}

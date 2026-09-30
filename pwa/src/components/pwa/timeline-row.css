@@ -1,0 +1,68 @@
+/* 思考与工具状态行：无分割线，以行间留白与对齐区分；手动展开／收起使用轻量高度伸缩。 */
+.pwa-timeline-row {
+  --pwa-timeline-indent: 24px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 6px 0;
+}
+
+.pwa-timeline-row .pwa-timeline-heading {
+  min-width: 0;
+  font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui);
+  font-style: normal;
+}
+
+.pwa-timeline-toggle {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 6px 4px 0;
+  border: 0;
+  border-radius: var(--pwa-radius-sm);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--pwa-ease-standard);
+}
+.pwa-timeline-toggle:hover { background: var(--pwa-hover); }
+.pwa-timeline-toggle:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
+.pwa-timeline-chevron { width: 16px; height: 16px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-expand-in) var(--pwa-ease-standard); }
+.pwa-timeline-toggle[aria-expanded="true"] > .pwa-timeline-chevron { transform: rotate(90deg); }
+.pwa-timeline-content { min-width: 0; padding-left: var(--pwa-timeline-indent, 24px); }
+
+/* 展开：进入 160ms、退出 120ms；内容略微位移并淡入淡出。减少动态效果时只保留透明度。 */
+.pwa-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--pwa-duration-expand-out) var(--pwa-ease-standard), opacity var(--pwa-duration-expand-out) var(--pwa-ease-standard);
+}
+.pwa-collapse[data-open] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition-duration: var(--pwa-duration-expand-in);
+}
+.pwa-collapse-inner {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transform: translateY(calc(-4px * var(--pwa-motion-shift)));
+  transition: transform var(--pwa-duration-expand-out) var(--pwa-ease-standard);
+}
+.pwa-collapse[data-open] > .pwa-collapse-inner {
+  transform: none;
+  transition-duration: var(--pwa-duration-expand-in);
+}
+
+/* 连续成功工具的摘要行：与工具行同一视觉，文字用界面字体；展开后的逐条工具与摘要文字左对齐。 */
+.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-summary { color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-tool-group-details { min-width: 0; padding-left: var(--pwa-timeline-indent, 24px); }
+.pwa-tool-group-details > .pwa-timeline-row:first-child { margin-top: 0; }
+.pwa-tool-group-details > .pwa-timeline-row:last-child { margin-bottom: 0; }

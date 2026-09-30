@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Reach · 焦点轮廓对照</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 16px 48px; background: #E4E6E6; color: #272B2D; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+.page { max-width: 1240px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 20px; color: #5C6166; font-size: 13px; }
+.light { --bg:#F8F9F8; --surface:#FFFFFF; --panel:#F0F2F2; --ink:#272B2D; --secondary:#5C6166; --line:#DCE1E2; --accent:#4C658D; --on-accent:#FFFFFF; --wash:#DBE4F0; --hover:#E2E7E9; --code-bg:#23282D; --danger:#AE463E; }
+.dark { --bg:#202325; --surface:#2A2E30; --panel:#25292B; --ink:#EEF0F1; --secondary:#B6BDC1; --line:#40474B; --accent:#A9C3E6; --on-accent:#172638; --wash:#303D50; --hover:#303638; --code-bg:#151A1E; --danger:#EFA39B; }
+.theme { border-radius: 10px; overflow: hidden; background: var(--bg); color: var(--ink); margin-bottom: 16px; box-shadow: 0 1px 3px #0000001f; }
+.theme > h2 { margin: 0; padding: 12px 16px; font-size: 14px; border-bottom: 1px solid var(--line); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 14px 16px; text-align: left; vertical-align: middle; }
+th { font-size: 12px; color: var(--secondary); font-weight: 600; }
+td:first-child { width: 190px; font-size: 13px; }
+td:first-child small { display: block; color: var(--secondary); font-size: 11px; }
+tr + tr td { border-top: 1px solid var(--line); }
+.stage { display: inline-flex; align-items: center; gap: 12px; padding: 14px; border-radius: 8px; }
+.on-bg { background: var(--bg); }
+.on-panel { background: var(--panel); }
+.btn { height: 44px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 6px; font-size: 13px; font-weight: 600; border: 0; background: var(--accent); color: var(--on-accent); }
+.btn.sec { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.btn.danger { background: var(--danger); color: var(--on-accent); }
+.icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); }
+.icon svg { width: 20px; height: 20px; }
+.row { width: 170px; padding: 8px 10px; border-radius: 6px; background: var(--wash); color: var(--accent); font-size: 13px; font-weight: 600; }
+.opt-a .f { outline: 2px solid var(--accent); outline-offset: 0; }
+.opt-b .f { outline: 2px solid var(--accent); outline-offset: 2px; }
+.opt-c .f { outline: none; box-shadow: 0 0 0 2px var(--ring-gap, var(--bg)), 0 0 0 4px var(--accent); }
+.opt-c .on-panel .f { --ring-gap: var(--panel); }
+.opt-c .btn.sec.f { box-shadow: inset 0 0 0 1px var(--line), 0 0 0 2px var(--ring-gap, var(--bg)), 0 0 0 4px var(--accent); }
+.notes { padding: 16px 18px; border-radius: 10px; background: #FFFFFF; font-size: 13px; }
+.notes h2 { margin: 0 0 8px; font-size: 15px; }
+.notes ul { margin: 0; padding-left: 20px; }
+.notes li { margin: 4px 0; }
+@media (max-width: 760px) { td:first-child { width: auto; } tr { display: block; } td { display: block; } .stage { flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>焦点轮廓对照</h1>
+  <p class="lead" style="color:#347953;font-weight:600">结论：选定 A 贴边轮廓；实心主操作按钮上焦点仅表现为外扩 2px，此取舍已接受。</p>
+  <p class="lead">所有元素均为键盘聚焦状态（静态展示）。每行左侧放在页面底 bg，右侧放在侧栏 panel 上。依次为：主操作、次级按钮、危险按钮、无框图标按钮、选中列表项。</p>
+  <template id="rows">
+    <table>
+      <tr class="opt-a"><td><b>A 贴边轮廓</b><small>outline 2px，偏移 0（原方案字面写法）</small></td><td><div class="stage on-bg"></div><div class="stage on-panel"></div></td></tr>
+      <tr class="opt-b"><td><b>B 偏移轮廓</b><small>outline 2px，偏移 2px，缝隙透出所在底色</small></td><td><div class="stage on-bg"></div><div class="stage on-panel"></div></td></tr>
+      <tr class="opt-c"><td><b>C 双环</b><small>内环 2px 取所在底色，外环 2px accent</small></td><td><div class="stage on-bg"></div><div class="stage on-panel"></div></td></tr>
+    </table>
+  </template>
+  <template id="items">
+    <span class="btn f">发送</span>
+    <span class="btn sec f">取消</span>
+    <span class="btn danger f">删除配对</span>
+    <span class="icon f"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"/></svg></span>
+    <span class="row f">品牌刷新评审</span>
+  </template>
+  <section class="theme light"><h2>浅色</h2><div class="slot"></div></section>
+  <section class="theme dark"><h2>深色</h2><div class="slot"></div></section>
+  <div class="notes">
+    <h2>看点</h2>
+    <ul>
+      <li><b>A</b>：主操作按钮的轮廓和按钮底色是同一个 accent，焦点只让按钮看起来「变大一圈」，几乎认不出聚焦；深色下更明显。</li>
+      <li><b>B</b>：缝隙透出所在底色，所有元素都能认出焦点。实现最简单（原生 outline），被父容器 overflow 裁切时会被截掉。</li>
+      <li><b>C</b>：效果与 B 接近，内环颜色可控；但要知道所在底色，放在 panel 等其他底上时需要另外指定，实现成本更高。</li>
+    </ul>
+  </div>
+</div>
+<script>
+  const rows = document.getElementById('rows'), items = document.getElementById('items');
+  document.querySelectorAll('.slot').forEach(slot => {
+    slot.appendChild(rows.content.cloneNode(true));
+    slot.querySelectorAll('.stage').forEach(stage => stage.appendChild(items.content.cloneNode(true)));
+  });
+</script>
+</body>
+</html>

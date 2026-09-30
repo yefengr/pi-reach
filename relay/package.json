@@ -1,0 +1,25 @@
+{
+  "name": "@pi-reach/relay",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "engines": { "node": ">=24.20.0 <25" },
+  "scripts": {
+    "build": "pnpm --filter @pi-reach/protocol build && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/main.js",
+    "test": "pnpm build && vitest run && node --test test/*.test.mjs",
+    "test:blackbox": "node --test test/blackbox.test.mjs"
+  },
+  "dependencies": {
+    "@pi-reach/protocol": "workspace:*",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/ws": "8.18.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "pi-reach-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24.20.0 <25"
+  },
+  "scripts": {
+    "prepare": "pnpm --filter @pi-reach/protocol build",
+    "dev:pwa": "pnpm --filter @pi-reach/protocol build && pnpm --filter pwa dev",
+    "dev:protocol": "pnpm --filter @pi-reach/protocol exec tsc --watch",
+    "typecheck": "pnpm --filter @pi-reach/protocol build && pnpm -r typecheck",
+    "lint": "pnpm --filter pwa lint",
+    "test": "pnpm --filter @pi-reach/protocol build && pnpm -r test && pnpm test:scripts",
+    "test:scripts": "node --test pwa/scripts/*.test.mjs scripts/*.test.mjs",
+    "test:relay": "pnpm --filter @pi-reach/relay test",
+    "test:e2e:pwa": "pnpm --filter pwa test:e2e",
+    "test:e2e:protocol": "./docker/e2e/scripts/verify.sh",
+    "test:e2e:remote": "pnpm --filter pwa test:e2e:remote",
+    "test:e2e": "pnpm test:e2e:pwa && pnpm test:e2e:protocol && pnpm test:e2e:remote",
+    "build": "pnpm --workspace-concurrency=1 -r build",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "verify:release": "pnpm verify && pnpm test:e2e",
+    "pack:extension": "pnpm --filter @yefengr/pi-reach pack"
+  }
+}

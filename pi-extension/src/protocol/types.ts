@@ -1,0 +1,177 @@
+import type { WireImage, ThinkingLevel, WireModel } from "@pi-reach/protocol/session";
+export type { WireImage, ThinkingLevel, WireModel } from "@pi-reach/protocol/session";
+
+export type PairErrorCode =
+  | "token_expired"
+  | "token_consumed"
+  | "token_unknown"
+  | "internal_error";
+
+export type StreamingBehavior = "steer";
+
+export type QueuedMessageItem = {
+  id: string;
+  text: string;
+  /** Omitted for text-only items so the existing no-image wire path is unchanged. */
+  images?: WireImage[];
+  sender_ref?: string;
+  editable: boolean;
+  created_at: number;
+};
+
+export type ClientMessage =
+  | { type: "pair_request"; id: string; code: string; device_name: string }
+  // Plan/30: optional `images` carry inline base64 attachments (one today).
+  // Omitted entirely on text-only messages — the no-image path is unchanged.
+  | {
+      type: "user_message";
+      id: string;
+      text: string;
+      images?: WireImage[];
+      streaming_behavior?: StreamingBehavior;
+    }
+  | { type: "queued_message_set"; id: string; text: string; images?: WireImage[] }
+  | { type: "queued_message_clear"; id: string; target_id?: string }
+  | { type: "approve_tool"; id: string; tool_call_id: string; decision: "allow" | "deny" }
+  | { type: "cancel"; id: string; target_id: string }
+  | { type: "ping"; id: string }
+  | { type: "session_sync"; id: string; limit?: number }
+  // Plan/28 — Typed app actions on the paired Pi session. Each carries a
+  // structured payload (no string parsing) and gets either `action_ok` or
+  // `action_error` back. Visible side-effects (chat output, model change
+  // broadcasts, compaction notice) still flow through the normal channels.
+  | { type: "session_new"; id: string }
+  | { type: "session_compact"; id: string }
+  | { type: "model_set"; id: string; provider: string; model_id: string }
+  | { type: "thinking_set"; id: string; level: ThinkingLevel }
+  | { type: "list_models"; id: string };
+
+export type Usage = { input_tokens: number; output_tokens: number };
+
+export type KnownErrorCode =
+  | "tool_approval_required"
+  | "invalid_message"
+  | "unsupported_type"
+  | "too_large"
+  | "rate_limited"
+  | "timeout"
+  | "internal_error";
+
+// aberto para forward-compat — receivers toleram codes desconhecidos
+export type ErrorCode = KnownErrorCode | (string & {});
+
+export type SessionHistoryEvent =
+  // Plan/30: `images` replayed in history so a re-sync rebuilds the image
+  // bubble (the bytes live in `_messageBuffer`). Omitted on text-only inputs.
+  | { ts: number; type: "user_input"; id: string; text: string; images?: WireImage[] }
+  | {
+      ts: number;
+      type: "tool_request";
+      tool_call_id: string;
+      tool: string;
+      args: Record<string, unknown>;
+    }
+  | {
+      ts: number;
+      type: "tool_result";
+      tool_call_id: string;
+      result?: unknown;
+      error?: string;
+    }
+  | {
+      ts: number;
+      type: "agent_message";
+      in_reply_to: string;
+      text: string;
+      usage?: Usage;
+    }
+  // Plan/32: a context-compaction marker, replayed in history (survives
+  // re-sync like images) so the app re-renders the "context compacted" notice.
+  | { ts: number; type: "compaction"; summary: string; tokens_before: number };
+
+export type ServerMessage =
+  | {
+      type: "pair_ok";
+      in_reply_to: string;
+      session_name: string;
+      session_started_at: number;
+      endpoint_id: string;
+      /**
+       * Plan/27 Wave A: identifies the host coding agent driving this
+       * pi-extension instance. `name` is hardcoded to "Pi coding agent"
+       * today; future Pi forks (Claude Code, OpenCode) populate their own
+       * here. `version` is the pi-extension `package.json` version.
+       * Optional in the wire schema so app-side parsing tolerates older
+       * Pi builds that predate this field — every new pairing emits both.
+       */
+      harness?: { name: string; version: string };
+      /**
+       * Plan/27 Wave A: `os.hostname()` of the machine the Pi runs on.
+       * App displays it in the device list so the user can distinguish
+       * two paired PCs that happen to share a nickname or sit in the
+       * same project folder.
+       */
+      hostname?: string;
+    }
+  | { type: "pair_error"; in_reply_to: string; code: PairErrorCode; message: string }
+  | { type: "user_input"; id: string; text: string; streaming_behavior?: StreamingBehavior }
+  // Echo of an app-originated user_message, broadcast by the Pi to every
+  // connected owner (including the sender). Source-of-truth model: each
+  // app waits for this echo to render the message it sent, so all owners
+  // see the same session timeline regardless of who typed.
+  // Field shape mirrors the inbound ClientMessage `user_message` exactly,
+  // and `id` is the sender-provided id — Pi never re-generates it (lets
+  // future dedup logic use id as a stable key). See plan/24 W2D fix.
+  // Plan/30: `images` echoed back so every owner renders the same image bubble.
+  | {
+      type: "user_message";
+      id: string;
+      text: string;
+      images?: WireImage[];
+      streaming_behavior?: StreamingBehavior;
+    }
+  | { type: "queued_message_state"; id?: string; text?: string; items?: QueuedMessageItem[] }
+  | { type: "steer_consumed"; id: string }
+  | { type: "agent_chunk"; in_reply_to: string; delta: string }
+  | { type: "agent_done"; in_reply_to: string; usage?: Usage }
+  | { type: "agent_message"; in_reply_to: string; text: string; usage?: Usage }
+  // Plan/32: pushed after a context compaction (live, and replayed on history
+  // re-sync). `tokens_before` is the pre-compaction token count.
+  | { type: "compaction"; summary: string; tokens_before: number; ts?: number }
+  | { type: "tool_request"; tool_call_id: string; tool: string; args: Record<string, unknown> }
+  | { type: "tool_result"; tool_call_id: string; result?: unknown; error?: string }
+  | { type: "error"; in_reply_to?: string; code: ErrorCode; message: string }
+  | { type: "cancelled"; in_reply_to: string; target_id: string }
+  | { type: "pong"; in_reply_to: string }
+  | { type: "bye"; reason: ByeReason }
+  | {
+      type: "session_history";
+      in_reply_to: string;
+      session_started_at: number;
+      events: SessionHistoryEvent[];
+      eos: boolean;
+      truncated: boolean;
+    }
+  // Plan/28 — Replies for typed app actions.
+  // `action_ok` / `action_error` carry the original `ActionName` so the
+  // app can demultiplex by action type rather than having to remember
+  // every in-flight request id.
+  // `models_list` is the response to a `list_models` request; the optional
+  // `current` echoes the model the Pi is using right now so the app can
+  // highlight the selected row without a second round-trip.
+  | { type: "action_ok"; in_reply_to: string; action: ActionName }
+  | { type: "action_error"; in_reply_to: string; action: ActionName; error: string }
+  | { type: "models_list"; in_reply_to: string; models: WireModel[]; current?: WireModel };
+
+/**
+ * Plan/28 — Stable names for the typed actions the app can request. Kept
+ * as a closed string union so a switch in either side gets exhaustiveness
+ * checking from the compiler.
+ */
+export type ActionName =
+  | "session_new"
+  | "session_compact"
+  | "model_set"
+  | "thinking_set";
+
+export type ByeReason = "peer_stop" | "session_replaced" | "shutdown";

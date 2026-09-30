@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Reach · 配色修正对照</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 16px 48px; background: #E4E6E6; color: #272B2D; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+.page { max-width: 1240px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 20px; color: #5C6166; font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.col-head { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.col-head small { font-weight: 400; color: #5C6166; }
+
+/* token sets */
+.old.light { --bg:#F8F9F8; --surface:#FFFFFF; --panel:#F0F2F2; --message:#EDF1F2; --hover:#E9EDEE; --active:#E1E7E8; --disabled:#ECEFF0; --ink:#272B2D; --secondary:#656B70; --meta:#6C7478; --soft:#4D565B; --line:#DCE1E2; --accent:#4C658D; --on-accent:#FFFFFF; --wash:#E7EDF5; --code-bg:#23282D; --code-ink:#EFF2F4; --scan:#4C658D; }
+.new.light { --bg:#F8F9F8; --surface:#FFFFFF; --panel:#F0F2F2; --message:#EDF1F2; --hover:#E2E7E9; --active:#D8DFE1; --disabled:#ECEFF0; --ink:#272B2D; --secondary:#5C6166; --meta:#5C6166; --soft:#434B50; --line:#DCE1E2; --accent:#4C658D; --on-accent:#FFFFFF; --wash:#DBE4F0; --code-bg:#23282D; --code-ink:#EFF2F4; --scan:#A9C3E6; }
+.old.dark { --bg:#202325; --surface:#2A2E30; --panel:#25292B; --message:#303639; --hover:#303638; --active:#394145; --disabled:#303638; --ink:#EEF0F1; --secondary:#B6BDC1; --meta:#A9B2B6; --soft:#CDD5D8; --line:#40474B; --accent:#A9C3E6; --on-accent:#172638; --wash:#303D50; --code-bg:#151A1E; --code-ink:#EFF2F4; --scan:#A9C3E6; }
+.new.dark { --bg:#202325; --surface:#2A2E30; --panel:#25292B; --message:#303639; --hover:#303638; --active:#394145; --disabled:#272B2D; --ink:#EEF0F1; --secondary:#B6BDC1; --meta:#B6BDC1; --soft:#CDD5D8; --line:#40474B; --accent:#A9C3E6; --on-accent:#172638; --wash:#303D50; --code-bg:#151A1E; --code-ink:#EFF2F4; --scan:#A9C3E6; }
+
+.app { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 430px; border-radius: 10px; overflow: hidden; background: var(--bg); color: var(--ink); box-shadow: 0 1px 3px #0000001f; }
+.side { background: var(--panel); padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; }
+.group { margin: 10px 8px 4px; color: var(--secondary); font-size: 11px; font-weight: 700; }
+.group:first-child { margin-top: 0; }
+.row { display: flex; flex-direction: column; padding: 7px 10px; border-radius: 6px; }
+.row b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row span { font-size: 11px; color: var(--meta); }
+.row.hover { background: var(--hover); }
+.row.sel { background: var(--wash); }
+.row.sel b { color: var(--accent); }
+.tag { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 700; background: var(--ink); color: var(--bg); vertical-align: 1px; }
+.main { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.msg-user { align-self: flex-end; max-width: 80%; padding: 8px 12px; border-radius: 8px; background: var(--message); font-size: 13px; }
+.msg-user small { display: block; color: var(--secondary); font-size: 11px; }
+.msg-bot { font-size: 13px; }
+.msg-bot blockquote { margin: 6px 0 0; padding-left: 10px; border-left: 2px solid var(--line); color: var(--soft); }
+.msg-bot .meta { color: var(--secondary); font-size: 11px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { height: 36px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.btn.h { background: var(--hover); }
+.btn.a { background: var(--active); }
+.btn.d { background: var(--disabled); color: var(--secondary); }
+.btn.p { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn-cap { display: block; margin-top: 2px; font-size: 10px; color: var(--secondary); text-align: center; }
+.btn-wrap { display: flex; flex-direction: column; }
+.scan { position: relative; height: 96px; border-radius: 8px; background: var(--code-bg); display: grid; place-items: center; color: var(--code-ink); font-size: 11px; }
+.scan i { position: absolute; width: 18px; height: 18px; border-color: var(--scan); border-style: solid; border-width: 0; }
+.scan i:nth-child(1) { top: 18px; left: calc(50% - 44px); border-top-width: 3px; border-left-width: 3px; }
+.scan i:nth-child(2) { top: 18px; right: calc(50% - 44px); border-top-width: 3px; border-right-width: 3px; }
+.scan i:nth-child(3) { bottom: 18px; left: calc(50% - 44px); border-bottom-width: 3px; border-left-width: 3px; }
+.scan i:nth-child(4) { bottom: 18px; right: calc(50% - 44px); border-bottom-width: 3px; border-right-width: 3px; }
+.label { font-size: 11px; color: var(--secondary); margin-bottom: -6px; }
+
+.notes { margin-top: 24px; padding: 16px 18px; border-radius: 10px; background: #FFFFFF; font-size: 13px; }
+.notes h2 { margin: 0 0 8px; font-size: 15px; }
+.notes ol { margin: 0; padding-left: 20px; }
+.notes li { margin: 4px 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.theme-title { margin: 28px 0 10px; font-size: 15px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .app { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>配色修正对照</h1>
+  <p class="lead" style="color:#347953;font-weight:600">结论：采用右侧修正后色值，已写入品牌刷新方案。</p>
+  <p class="lead">左侧为原方案色值，右侧为修正后色值。侧栏里第二行固定显示悬停态、第三行固定显示选中态；按钮一行依次为常态、悬停、按下、禁用、主操作。所有状态都是静态展示，便于直接比较。</p>
+
+  <template id="scene">
+    <div class="app">
+      <aside class="side">
+        <div class="group">在线 Pi</div>
+        <div class="row"><b>pi-reach · 主会话</b><span>MacBook Pro · 2 分钟前</span></div>
+        <div class="row hover"><b>发布前检查<span class="tag">悬停</span></b><span>Mac mini · 刚刚</span></div>
+        <div class="row sel"><b>品牌刷新评审<span class="tag">选中</span></b><span>MacBook Pro · 运行中</span></div>
+        <div class="group">本地历史</div>
+        <div class="row"><b>协议 v2 迁移</b><span>9 月 24 日 · 只读</span></div>
+        <div class="row"><b>Relay ACL 调整</b><span>9 月 21 日 · 只读</span></div>
+      </aside>
+      <section class="main">
+        <div class="msg-user">把侧栏的悬停色调深一点，看看效果。<small>你 · 17:42</small></div>
+        <div class="msg-bot">已调整 <code>hover</code> 与 <code>accent-wash</code>，侧栏上可以分辨悬停与选中。
+          <blockquote>引用与摘要使用 soft-ink，与辅助小字拉开层级。</blockquote>
+          <div class="meta">Pi · 17:43 · 3 个工具调用</div>
+        </div>
+        <div class="btns">
+          <div class="btn-wrap"><span class="btn">取消</span><span class="btn-cap">常态</span></div>
+          <div class="btn-wrap"><span class="btn h">取消</span><span class="btn-cap">悬停</span></div>
+          <div class="btn-wrap"><span class="btn a">取消</span><span class="btn-cap">按下</span></div>
+          <div class="btn-wrap"><span class="btn d">保存</span><span class="btn-cap">禁用</span></div>
+          <div class="btn-wrap"><span class="btn p">发送</span><span class="btn-cap">主操作</span></div>
+        </div>
+        <div class="label">配对扫描框定位角</div>
+        <div class="scan"><i></i><i></i><i></i><i></i>对准电脑上的配对二维码</div>
+      </section>
+    </div>
+  </template>
+
+  <h2 class="theme-title">浅色</h2>
+  <div class="grid">
+    <div><p class="col-head">原方案 <small>hover #E9EDEE · wash #E7EDF5 · muted #6C7478 · 扫描框 #4C658D</small></p><div class="slot old light"></div></div>
+    <div><p class="col-head">修正后 <small>hover #E2E7E9 · wash #DBE4F0 · secondary #5C6166 · 扫描框 #A9C3E6</small></p><div class="slot new light"></div></div>
+  </div>
+
+  <h2 class="theme-title">深色</h2>
+  <div class="grid">
+    <div><p class="col-head">原方案 <small>disabled #303638（与 hover 同值）· muted #A9B2B6</small></p><div class="slot old dark"></div></div>
+    <div><p class="col-head">修正后 <small>disabled #272B2D · 元数据统一 secondary #B6BDC1</small></p><div class="slot new dark"></div></div>
+  </div>
+
+  <div class="notes">
+    <h2>看点</h2>
+    <ol>
+      <li><b>浅色侧栏悬停</b>：原方案悬停行对侧栏底仅 1.05:1，修正后 1.11:1。</li>
+      <li><b>浅色侧栏选中</b>：原方案 1.05:1，修正后 1.14:1；选中文字 <code>accent</code> 对轻底为 4.61:1。</li>
+      <li><b>元数据小字</b>：原方案 <code>muted</code> 在悬停／选中行上约 4.0:1，不合格；修正后统一用 <code>secondary</code>，最低 4.64:1。</li>
+      <li><b>浅色扫描框</b>：原方案浅色 <code>accent</code> 在深底上 2.52:1，修正后改用深色 <code>accent</code>，8.24:1。</li>
+      <li><b>深色禁用按钮</b>：原方案与悬停同色，修正后更平、更暗，不再像悬停。</li>
+    </ol>
+  </div>
+</div>
+<script>
+  const tpl = document.getElementById('scene');
+  document.querySelectorAll('.slot').forEach(slot => slot.appendChild(tpl.content.cloneNode(true)));
+</script>
+</body>
+</html>

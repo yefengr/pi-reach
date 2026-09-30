@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FFFFFF">
+  <title>Pi Reach · Paper & Indigo prototype</title>
+  <link rel="stylesheet" href="./shared.css">
+  <script src="./fixtures.js" defer></script>
+  <script src="./shared.js" defer></script>
+</head>
+<body>
+  <svg class="svg-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 9v5m0 3v.1"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v6h5M8 13h8m-8 4h5"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 8 4 4-4 4m7 0h3"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6Z"/></symbol>
+      <symbol id="i-write" viewBox="0 0 24 24"><path d="M13 3H4v18h16v-8M16 3v6m-3-3h6M8 13h6m-6 4h8"/></symbol>
+      <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5c-3-5-8-1-7 3-5 2-3 8 0 8 0 6 7 5 7 1V5Zm0 0c3-5 8-1 7 3 5 2 3 8 0 8 0 6-7 5-7 1V5ZM5 8l3 2m11-2-3 2M5 16l3-2m11 2-3-2"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 20V4m-6 6 6-6 6 6"/></symbol>
+      <symbol id="i-code" viewBox="0 0 24 24"><path d="m7 7-5 5 5 5m10-10 5 5-5 5m-3-13-4 20"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 4V3H3v13h1"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 3h9v11H3V6Z"/></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-10 4a5 5 0 0 1 6 0m-3 4v.1"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-5 0h10"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5 7a8 8 0 0 1 14-1l1 6M4 12l1 6a8 8 0 0 0 14-1"/></symbol>
+    </defs>
+  </svg>
+
+  <nav class="reviewbar" aria-label="Prototype review controls">
+    <span class="review-label">Preview<span class="desktop-only"> / Paper & Indigo</span></span>
+    <label class="sr-only" for="scenario">Demo scenario</label>
+    <select id="scenario">
+      <option value="running">Running activity</option>
+      <option value="conversation">Conversation & thinking</option>
+      <option value="interleaved">Tools & commentary</option>
+      <option value="parallel">Parallel & long activity</option>
+      <option value="completed">Completed task</option>
+      <option value="error">Error while running</option>
+      <option value="recovered">Completed with an issue</option>
+      <option value="uncertain">Status unknown</option>
+    </select>
+    <button id="advance" class="review-action" type="button" aria-label="Finish activity">Finish<span class="desktop-only"> activity</span></button>
+    <button id="reset" class="icon-button" type="button" aria-label="Reset scenario" title="Reset scenario"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+    <span class="review-note desktop-only">模拟数据 · 评审中</span>
+  </nav>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">π</span><span>Pi Reach</span></div>
+      <div class="topbar-actions">
+        <button class="session-trigger" type="button" data-open="sessions" aria-label="Switch session"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span id="session-label">pi-reach</span><svg class="icon small down" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+        <span class="connection" data-state="online"><svg class="icon small" aria-hidden="true"><use href="#i-wifi"/></svg><span id="connection-label">Connected</span></span>
+        <button class="icon-button" type="button" data-open="settings" aria-label="Open settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Paired devices">
+        <div class="sidebar-heading"><div><span class="eyebrow">Workspace</span><h1>Paired devices</h1></div><button class="icon-button" type="button" data-demo="Pairing is not connected in this prototype." aria-label="Pair a Pi"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+        <div class="sidebar-count"><span>2 devices</span><span>1 online</span></div>
+        <button class="device-card selected" type="button" data-open="sessions"><span class="device-icon"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg></span><span class="device-copy"><strong>Development Mac</strong><small><span class="status-dot online"></span>Online · 2 endpoints</small></span><svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+        <button class="device-card" type="button" data-demo="Studio Mac is offline in this demo."><span class="device-icon"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg></span><span class="device-copy"><strong>Studio Mac</strong><small><span class="status-dot"></span>Offline</small></span></button>
+        <div class="sidebar-context"><svg class="icon small" aria-hidden="true"><use href="#i-folder"/></svg><span>One workspace.<br>Your Pi, within reach.</span></div>
+        <div class="sidebar-footer"><span class="eyebrow">Local workspace</span><button class="text-button" type="button" data-demo="No real workspace data is stored or cleared by this prototype.">Clear data</button></div>
+      </aside>
+
+      <main class="chat" aria-label="Pi Reach workspace">
+        <header class="chat-header"><div><div class="endpoint-label"><span class="status-dot online"></span><span id="endpoint-value">Development Mac / pi-reach</span></div><h2 id="session-title">A clearer tool timeline</h2></div><button class="icon-button" type="button" data-open="sessions" aria-label="Session details"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></header>
+        <div id="transcript" class="transcript" role="region" aria-label="Conversation" tabindex="0"><div id="timeline" class="timeline"></div></div>
+        <footer class="composer-area">
+          <div class="composer-wrap">
+            <form id="composer" class="composer"><button class="icon-button attachment" type="button" data-demo="Attachments are not uploaded in this prototype." aria-label="Add attachment"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button><label class="sr-only" for="draft">Message Pi</label><textarea id="draft" rows="1" placeholder="Message Pi…"></textarea><button id="stop-button" class="icon-button stop-button" type="button" aria-label="Stop activity"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg></button><button id="send-button" class="send-button" type="submit" aria-label="Send demo message"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></form>
+            <div class="composer-meta"><span id="composer-hint">Demo workspace · no commands are executed</span><span class="desktop-only">Pi Reach</span></div>
+          </div>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="reader-dialog" class="reader-dialog" aria-labelledby="reader-title">
+    <header class="dialog-head"><div><span class="eyebrow">Tool details</span><h2 id="reader-title">File content</h2><p id="reader-subtitle"></p></div><button class="icon-button" type="button" data-close aria-label="Close tool details" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header>
+    <div id="reader-tabs" class="reader-tabs" role="tablist" aria-label="Tool detail view"><button id="preview-tab" type="button" role="tab" data-tab="preview" aria-selected="true" aria-controls="reader-content">Output</button><button id="raw-tab" type="button" role="tab" data-tab="raw" aria-selected="false" aria-controls="reader-content" tabindex="-1">Raw data</button></div>
+    <div id="reader-content" class="reader-content" role="tabpanel" aria-labelledby="preview-tab" tabindex="0"></div>
+    <div class="reader-foot">Simulated tool result <span>Esc to return to the conversation</span></div>
+  </dialog>
+
+  <dialog id="settings-dialog" class="side-dialog" aria-labelledby="settings-title">
+    <header class="dialog-head"><div><span class="eyebrow">Workspace preferences</span><h2 id="settings-title">Settings</h2></div><button class="icon-button" type="button" data-close aria-label="Close settings" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header>
+    <div class="settings-content"><h3>Appearance</h3><p>A familiar workspace, day or night.</p><fieldset class="theme-choices"><legend class="sr-only">Appearance</legend>
+      <label class="theme-option"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><span><strong>System</strong><small>Follow your device</small></span><input type="radio" name="appearance" value="system" checked></label>
+      <label class="theme-option"><svg class="icon" aria-hidden="true"><use href="#i-sun"/></svg><span><strong>Light</strong><small>Paper & Indigo</small></span><input type="radio" name="appearance" value="light"></label>
+      <label class="theme-option"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg><span><strong>Dark</strong><small>A softer evening workspace</small></span><input type="radio" name="appearance" value="dark"></label>
+    </fieldset><p class="settings-note">Saved for this prototype in this browser. Your real PWA settings are unchanged.</p></div>
+  </dialog>
+
+  <dialog id="sessions-dialog" class="sessions-dialog" aria-labelledby="sessions-title">
+    <header class="dialog-head"><div><span class="eyebrow">Development Mac</span><h2 id="sessions-title">Choose an endpoint</h2></div><button class="icon-button" type="button" data-close aria-label="Close session switcher" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header>
+    <div class="session-list"><button type="button" class="session-item selected" data-session="timeline"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span><strong>pi-reach</strong><small>A clearer tool timeline</small></span><span class="session-pill">Current</span></button><button type="button" class="session-item" data-session="docs"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span><strong>docs-workspace</strong><small>Review project documentation</small></span></button></div>
+    <p class="session-note">Demo endpoints · switching does not connect to a Pi.</p>
+  </dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

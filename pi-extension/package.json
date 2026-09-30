@@ -1,0 +1,79 @@
+{
+  "name": "@yefengr/pi-reach",
+  "version": "0.0.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Browser PWA remote control for Pi coding agent endpoints over a Relay.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "node scripts/clean-dist.mjs && pnpm --filter @pi-reach/protocol build && tsc && node scripts/vendor-protocol.mjs",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run --exclude \"scripts/**\" && node --test scripts/*.test.mjs",
+    "verify": "pnpm typecheck && pnpm test && pnpm build",
+    "prepublishOnly": "pnpm verify",
+    "publish:npm": "bash ./publish-npm.sh"
+  },
+  "keywords": [
+    "pi",
+    "pi-package",
+    "pi-extension",
+    "pi-coding-agent",
+    "remote-control",
+    "browser",
+    "pwa",
+    "coding-agent",
+    "endpoint",
+    "qr-pairing",
+    "websocket"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist"
+    ]
+  },
+  "author": "yefeng",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yefengr/pi-reach.git",
+    "directory": "pi-extension"
+  },
+  "homepage": "https://github.com/yefengr/pi-reach#readme",
+  "bugs": {
+    "url": "https://github.com/yefengr/pi-reach/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.4",
+    "@pi-reach/protocol": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.22.0",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "typebox": "^1.1.38",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "^1.3.0",
+    "@noble/ed25519": "catalog:",
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.21.0",
+    "zod": "catalog:"
+  }
+}

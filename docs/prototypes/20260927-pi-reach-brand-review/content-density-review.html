@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 内容边界与信息密度</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./content-density-review.css">
+</head>
+<body>
+<svg class="review-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <symbol id="mark-pi" viewBox="0 0 64 64"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+    <symbol id="icon-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+    <symbol id="icon-message" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6.8a2 2 0 0 0-1.4.6L3.2 21.8A.7.7 0 0 1 2 21.3V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.7 2.7L3 8M3 3v5h5m4-1v5l4 2"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="icon-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></symbol>
+  </defs>
+</svg>
+<div class="layout-review density-review" data-appearance="light">
+  <header class="review-header"><div class="review-header-inner">
+    <a class="back-link" href="./component-output-comparison.html" aria-label="返回按钮与工具输出评审"><svg class="review-logo" viewBox="0 0 64 64" aria-hidden="true"><use href="#mark-pi"/></svg><span>Pi Reach</span></a>
+    <span class="review-label">工作区视觉评审 / 隔离效果稿</span>
+  </div></header>
+  <main class="review-main density-main">
+    <div class="review-heading"><div><p>PI REACH / READING REVIEW</p><h1>内容边界与信息密度</h1></div><span>导航常驻 · 柔和圆角 · 工具行无横线</span></div>
+    <div class="review-toolbar" aria-label="预览外观"><div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="预览外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div></div>
+
+    <section class="review-section" aria-labelledby="boundary-heading">
+      <div class="section-heading"><h2 id="boundary-heading">内容边界</h2><p>内容和字级相同，只比较分区与承载。</p></div>
+      <div class="review-grid">
+        <article class="variant-frame boundary-open" aria-labelledby="boundary-a"><div class="variant-heading"><h3 id="boundary-a">A · 开放阅读（已选）</h3><span>分组靠留白</span></div><div class="sample-mount"></div></article>
+        <article class="variant-frame boundary-structured" aria-labelledby="boundary-b"><div class="variant-heading"><h3 id="boundary-b">B · 轻边界</h3><span>列表与消息分区</span></div><div class="sample-mount"></div></article>
+      </div>
+    </section>
+
+    <section class="review-section" aria-labelledby="density-heading">
+      <div class="section-heading"><h2 id="density-heading">信息密度</h2><p>边界方式保持一致，只比较列表节奏、正文大小和行距。</p></div>
+      <div class="review-grid">
+        <article class="variant-frame density-compact boundary-open" aria-labelledby="density-a"><div class="variant-heading"><h3 id="density-a">A · 紧凑（已选）</h3><span>多看几条记录</span></div><div class="sample-mount"></div></article>
+        <article class="variant-frame density-roomy boundary-open" aria-labelledby="density-b"><div class="variant-heading"><h3 id="density-b">B · 舒展</h3><span>长段阅读更松弛</span></div><div class="sample-mount"></div></article>
+      </div>
+    </section>
+    <p class="review-caveat">静态内容样本，电脑名、在线数与工具结果仅作视觉示例。窄屏把导航摘录和会话内容上下排列，不代表移动抽屉行为；本页不决定生产尺寸或解除桌面布局冻结。</p>
+  </main>
+</div>
+<template id="workspace-sample">
+  <div class="workspace-sample">
+    <aside class="sample-nav" aria-label="电脑、在线 Pi 与本地历史示例">
+      <div class="sample-device"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-monitor"/></svg><span><strong>Studio Mac</strong><small>当前电脑 · 2 个在线 Pi</small></span><svg class="sample-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg></div>
+      <div class="nav-group"><div class="nav-heading">在线 Pi <span>2</span></div>
+        <div class="nav-row current"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-message"/></svg><span><strong>发布前检查</strong><small>工作中 · pi-reach</small></span></div>
+        <div class="nav-row"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-message"/></svg><span><strong>调查测试</strong><small>待命 · pi-reach</small></span></div>
+      </div>
+      <div class="nav-group"><div class="nav-heading">本地历史 <span>仅此浏览器</span></div>
+        <div class="nav-row"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-history"/></svg><span><strong>检查重连状态</strong><small>昨天 · 12 项记录</small></span></div>
+        <div class="nav-row"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-history"/></svg><span><strong>配对路径复查</strong><small>周一 · 8 项记录</small></span></div>
+      </div>
+    </aside>
+    <div class="sample-reading" aria-label="会话与工具示例">
+      <div class="reading-head"><div><small>pi-reach / 在线会话</small><strong>发布前检查</strong></div><span class="task-state"><span aria-hidden="true"></span>工作中</span></div>
+      <div class="reading-content"><p class="date-label">今天</p>
+        <article class="user-message"><div class="message-label">你 <time>10:42</time></div><p>检查最近的 PWA 构建结果，重点看工具详情展开、离线提示与移动端窄屏。请先列出失败项，再给出需要回归的页面。</p></article>
+        <article class="assistant-message"><div class="message-label">Pi <time>10:43</time></div><p>我会先核对测试与构建输出，再检查工具详情在长内容下是否可读。连接变化不会中断已经保存到本地的历史阅读，但在线状态需要单独确认。</p><p>完成后我会按影响范围整理回归项，避免把展示问题和连接问题混在一起。</p></article>
+        <div class="tool-list" aria-label="工具执行记录">
+          <div class="tool-row"><div class="tool-title"><strong>bash</strong><span>pnpm --filter pwa test:unit</span></div><span class="tool-state complete"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+          <div class="tool-row"><div class="tool-title"><strong>read</strong><span>pwa/src/components/pwa/tool-card.tsx</span></div><span class="tool-state complete"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+          <pre class="tool-output"><code>$ pnpm --filter pwa test:unit
+<span class="output-success">✓</span> tool-card.node.test.tsx
+<span class="output-success">✓</span> tool-output.node.test.tsx
+<span class="output-muted">…其余输出省略</span></code></pre>
+          <div class="tool-row"><div class="tool-title"><strong>bash</strong><span>pnpm --filter pwa build</span></div><span class="tool-state running"><svg class="sample-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-loader"/></svg>运行中</span></div>
+        </div>
+        <article class="assistant-message followup"><div class="message-label">Pi <time>10:44</time></div><p>测试输出已核对，构建仍在运行。结果返回后，我会把需要复核的界面按影响范围归类。</p></article>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+  const review = document.querySelector('.density-review');
+  const sample = document.querySelector('#workspace-sample');
+  document.querySelectorAll('.sample-mount').forEach((mount) => mount.append(sample.content.cloneNode(true)));
+  function setAppearance(value) {
+    review.dataset.appearance = value;
+    document.querySelectorAll('[data-appearance-choice]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.appearanceChoice === value));
+    });
+  }
+  document.querySelectorAll('[data-appearance-choice]').forEach((button) => {
+    button.addEventListener('click', () => setAppearance(button.dataset.appearanceChoice));
+  });
+  setAppearance(new URLSearchParams(location.search).get('appearance') === 'dark' ? 'dark' : 'light');
+</script>
+</body>
+</html>

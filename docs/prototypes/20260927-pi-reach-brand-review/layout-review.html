@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Pi Reach · 布局与圆角对照</title>
+  <link rel="stylesheet" href="./layout-review.css">
+</head>
+<body>
+<div class="layout-review" data-appearance="light">
+  <header class="review-header">
+    <div class="review-header-inner">
+      <a href="./color-study.html" class="back-link">← <span>Pi Reach</span></a>
+      <span class="review-label">工作区布局评审</span>
+    </div>
+  </header>
+
+  <main class="review-main">
+    <div class="review-heading"><div><p>PI REACH / LAYOUT STUDY</p><h1>工作区与圆角</h1></div><span>同内容 · 同配色 · 仅比较界面结构</span></div>
+    <div class="review-toolbar" aria-label="预览设置">
+      <div class="switch-group"><span class="switch-label">方向</span><div class="segments" role="group" aria-label="布局方向"><button type="button" data-variant-choice="a" aria-pressed="true">A · 导航常驻</button><button type="button" data-variant-choice="b" aria-pressed="false">B · 阅读优先</button></div></div>
+      <div class="switch-group radius-group"><span class="switch-label">圆角</span><div class="segments" role="group" aria-label="圆角大小"><button type="button" data-radius-choice="compact" aria-pressed="false">紧凑</button><button type="button" data-radius-choice="soft" aria-pressed="true">柔和</button></div></div>
+      <div class="switch-group"><span class="switch-label">视口</span><div class="segments" role="group" aria-label="视口"><button type="button" data-device-choice="desktop" aria-pressed="true">桌面</button><button type="button" data-device-choice="mobile" aria-pressed="false">移动</button></div></div>
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div>
+    </div>
+
+    <section class="layout-stage" data-variant="a" data-radius="soft" data-device="desktop" aria-label="工作区布局效果">
+      <div class="prototype">
+        <header class="app-header">
+          <div class="app-brand"><span class="menu-symbol" aria-hidden="true">☰</span><svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="Pi Reach 微圆角桥形标识"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z" fill="currentColor"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z" fill="currentColor"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z" fill="currentColor"/></svg><strong>Pi Reach</strong></div>
+          <div class="header-tabs" aria-label="会话与历史示意"><span class="top-computer">Studio Mac <span aria-hidden="true">⌄</span></span><span class="top-tab current">发布前检查</span><span class="top-tab">调查测试</span><span class="top-tab">本地历史</span></div>
+          <div class="app-header-end"><span class="connected"><i aria-hidden="true"></i>已连接</span><span class="pair-symbol" aria-hidden="true">＋</span></div>
+        </header>
+        <div class="app-body">
+          <aside class="sidebar" aria-label="导航布局示意">
+            <div class="side-computer"><span class="device-avatar">S</span><span><strong>Studio Mac</strong><small>已配对电脑</small></span><span class="down-mark" aria-hidden="true">⌄</span></div>
+            <div class="side-group"><div class="side-heading">正在运行的 Pi <span>2</span></div><div class="side-row selected"><i class="live-dot" aria-hidden="true"></i><span><strong>发布前检查</strong><small>pi-reach · 工作中</small></span></div><div class="side-row"><i class="live-dot" aria-hidden="true"></i><span><strong>调查测试</strong><small>pi-reach · 待命</small></span></div></div>
+            <div class="side-group"><div class="side-heading">本地历史 <span>仅此浏览器</span></div><div class="side-row"><span class="history-symbol" aria-hidden="true">◷</span><span><strong>检查重连状态</strong><small>昨天 · 12 项记录</small></span></div></div>
+            <div class="side-footer"><span>＋ 配对电脑</span><span>⚙ 设置</span></div>
+          </aside>
+          <section class="conversation" aria-label="在线会话示例">
+            <div class="conversation-head"><div><p>Studio Mac / 在线会话</p><h2>发布前检查</h2></div><span class="working"><i aria-hidden="true"></i>工作中</span></div>
+            <div class="reading-area"><div class="reading-inner"><p class="date-divider">今天</p><article class="message user-message"><div class="message-meta">你 <time>10:42</time></div><p>检查这次发布构建，列出还需处理的问题。</p></article><article class="message assistant-message"><div class="message-meta">Pi <time>10:42</time></div><p>我会先检查构建，再查看测试结果。</p></article><div class="tool-lines"><div><code>pnpm build</code><span class="complete">✓ 已完成</span></div><div><code>pnpm test</code><span class="running">◷ 运行中</span></div></div><pre class="code-block"><code><span class="code-muted">$</span> pnpm test
+<span class="code-green">✓</span> 组件测试通过
+<span class="code-amber">◷</span> 正在检查浏览器用例
+<span class="code-blue">→</span> 等待结果</code></pre><p class="assistant-followup">构建已完成。浏览器用例仍在运行，结束后我再汇总。</p></div></div>
+            <div class="composer"><div class="composer-input"><span>发送消息给 Pi…</span><div class="composer-bottom"><small>Pi · 当前会话</small><span class="send-icon" aria-label="发送示意"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-5 5m5-5 5 5"/></svg></span></div></div></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <div class="variant-notes" data-radius="soft" aria-live="polite"><div class="variant-note" data-note="a"><strong>A · 导航常驻</strong><p>电脑、在线 Pi 和本地历史同层可见；会话切换更直接，阅读区相对收窄。</p><div class="radius-spec"><span>控件 <i class="radius-control">4</i></span><span>消息 <i class="radius-message">6</i></span><span>输入区 <i class="radius-composer">8</i></span></div></div><div class="variant-note" data-note="b" hidden><strong>B · 阅读优先</strong><p>切换集中到顶部，主要宽度留给对话；多个 Pi 或长名称时需要处理横向导航。</p><div class="radius-spec"><span>控件 <i class="radius-control">6</i></span><span>消息 <i class="radius-message">8</i></span><span>输入区 <i class="radius-composer">12</i></span></div></div><p>只评审布局与形态。顶部切换、移动入口、圆角数值均未定稿；桌面布局冻结不因评审解除。</p></div>
+  </main>
+</div>
+<script>
+  const stage = document.querySelector(".layout-stage");
+  const review = document.querySelector(".layout-review");
+  function setChoice(kind, value) {
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach((button) => button.setAttribute("aria-pressed", String(button.dataset[`${kind}Choice`] === value)));
+    if (kind === "appearance") review.dataset.appearance = value;
+    else stage.dataset[kind] = value;
+    if (kind === "variant") document.querySelectorAll("[data-note]").forEach((note) => note.hidden = note.dataset.note !== value);
+    if (kind === "radius") {
+      document.querySelector(".variant-notes").dataset.radius = value;
+      const sizes = value === "soft" ? [6, 8, 12] : [4, 6, 8];
+      ["control", "message", "composer"].forEach((name, index) => {
+        document.querySelectorAll(`.radius-spec .radius-${name}`).forEach((item) => { item.textContent = sizes[index]; });
+      });
+    }
+  }
+  for (const kind of ["variant", "radius", "device", "appearance"]) {
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach((button) => button.addEventListener("click", () => setChoice(kind, button.dataset[`${kind}Choice`])));
+  }
+  setChoice("device", window.innerWidth <= 760 ? "mobile" : "desktop");
+  setChoice("variant", new URLSearchParams(location.search).get("variant") === "b" ? "b" : "a");
+  setChoice("radius", new URLSearchParams(location.search).get("radius") === "compact" ? "compact" : "soft");
+  setChoice("appearance", new URLSearchParams(location.search).get("appearance") === "dark" ? "dark" : "light");
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Reach · 阅读列宽对照</title>
+<style>
+* { box-sizing: border-box; }
+:root { --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+body { margin: 0; padding: 24px 16px 48px; background: #E4E6E6; color: #272B2D; font: 13px/1.5 var(--ui); }
+.page { max-width: 1280px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 16px; color: #5C6166; }
+.tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.tabs button { height: 36px; padding: 0 14px; border: 1px solid #DCE1E2; border-radius: 6px; background: #FFFFFF; color: #272B2D; font: 600 13px var(--ui); cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: #4C658D; border-color: #4C658D; color: #FFFFFF; }
+.opt { margin-bottom: 24px; }
+.opt-head { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.opt-head small { font-weight: 400; color: #5C6166; }
+
+.app { display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 640px; border-radius: 10px; overflow: hidden; background: #F8F9F8; box-shadow: 0 1px 3px #0000001f; font-variant-numeric: tabular-nums; }
+.app.collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.side { background: #F0F2F2; padding: 12px 8px; overflow: hidden; white-space: nowrap; }
+.group { margin: 12px 10px 4px; color: #5C6166; font-size: 12px; line-height: 1.4; font-weight: 600; }
+.group:first-child { margin-top: 0; }
+.row { padding: 6px 10px; border-radius: 6px; line-height: 1.4; }
+.row + .row { margin-top: 2px; }
+.row b { display: block; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.row span { font-size: 12px; color: #5C6166; }
+.row.sel { background: #DBE4F0; } .row.sel b { color: #4C658D; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.head { height: 56px; padding: 0 20px; display: flex; flex-direction: column; justify-content: center; line-height: 1.4; }
+.head small { font-size: 12px; color: #5C6166; }
+.head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.scroll { flex: 1; overflow: hidden; padding: 4px 20px; }
+.col { max-width: var(--col); margin: 0 auto; }
+.user { margin-left: auto; width: fit-content; max-width: 80%; padding: 8px 12px; border-radius: 8px; background: #EDF1F2; font-size: 14px; line-height: 1.65; }
+.bot { margin: 12px 0; font-size: 14px; line-height: 1.65; }
+.bot p { margin: 0 0 8px; }
+.bot code { font-family: var(--mono); font-size: 12.5px; padding: 1px 4px; border-radius: 4px; background: #F0F2F2; color: #4C658D; }
+.meta { font-size: 12px; color: #5C6166; line-height: 1.4; margin-top: 4px; }
+.tool { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; padding: 10px 12px; border-radius: 8px; background: #F0F2F2; white-space: pre; overflow-x: auto; margin: 6px 0 12px; }
+.tool .ok { color: #347953; } .tool .dim { color: #5C6166; }
+.composer-wrap { padding: 8px 20px 16px; }
+.composer { max-width: var(--col); margin: 0 auto; padding: 10px 12px; border-radius: 12px; background: #FFFFFF; box-shadow: inset 0 0 0 1px #DCE1E2; font-size: 14px; color: #5C6166; height: 76px; }
+.ruler { font-size: 11px; color: #4C658D; text-align: center; margin: 0 auto 4px; max-width: var(--col); border-bottom: 1px dashed #4C658D; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>阅读列宽对照</h1>
+  <p class="lead" style="color:#347953;font-weight:600">结论：阅读列最大宽度选定 680px。</p>
+  <p class="lead">画框宽 1280px（常见笔记本），侧栏 260px，字号为已选 B 档（正文 14px／1.65）。虚线标出阅读列宽度，输入区与阅读列同宽对齐。可切换侧栏收起，查看列宽随主区居中的效果。</p>
+  <div class="tabs"><button type="button" data-side="open" aria-pressed="true">侧栏展开</button><button type="button" data-side="closed" aria-pressed="false">侧栏收起</button></div>
+
+  <template id="scene">
+    <div class="app">
+      <aside class="side">
+        <div class="group">在线 Pi</div>
+        <div class="row sel"><b>品牌刷新评审与配色修正</b><span>MacBook Pro · 运行中 · 17:43</span></div>
+        <div class="row"><b>发布前检查</b><span>Mac mini · 2 分钟前</span></div>
+        <div class="group">本地历史</div>
+        <div class="row"><b>Protocol v2 migration</b><span>9 月 24 日 · 只读 · 128 条</span></div>
+        <div class="row"><b>Relay ACL 调整与回归测试</b><span>9 月 21 日 · 只读 · 64 条</span></div>
+      </aside>
+      <section class="main">
+        <div class="head"><small>MacBook Pro · 已连接</small><h2>品牌刷新评审与配色修正</h2></div>
+        <div class="scroll"><div class="ruler"></div><div class="col">
+          <div class="user">设置页改成子路径以后，刷新和离线打开会有什么影响？需要改哪些地方？</div>
+          <div class="bot">
+            <p>主要影响在服务端和离线缓存两处。nginx 目前只精确匹配 <code>/app</code>，访问 <code>/app/settings</code> 会直接返回 404，需要为 <code>/app/*</code> 增加回退到应用入口的规则，同时保留现有 <code>/</code> 与 <code>/app/</code> 的重定向。</p>
+            <p>Service Worker 的 scope 已经是 <code>/app</code>，按前缀匹配覆盖子路径，但离线时的导航请求只认预缓存里的 <code>app</code> 条目，所以要为 <code>/app/*</code> 的导航请求加一条回退。</p>
+            <p>In English: the manifest scope already covers the subpath, so no change is needed there. Static assets use absolute <code>/assets/</code> paths and load correctly from any depth. The remaining work is the nginx fallback and the Service Worker navigation route, each covered by an automated test for online refresh, offline launch and installed-app launch.</p>
+            <div class="meta">Pi · 17:43</div>
+          </div>
+          <div class="tool"><span class="dim">$</span> grep -n 'location' pwa/nginx.conf.template
+14:    location = / {
+26:    location = /app {
+54:    location /assets/ {
+<span class="ok">✓</span> 3 matches</div>
+        </div></div>
+        <div class="composer-wrap"><div class="composer">向 Pi 发送消息…</div></div>
+      </section>
+    </div>
+  </template>
+
+  <div class="opt" style="--col:640px"><p class="opt-head">640px <small>约 45 个汉字／行</small></p><div class="slot"></div></div>
+  <div class="opt" style="--col:680px"><p class="opt-head">680px（已选） <small>约 48 个汉字／行</small></p><div class="slot"></div></div>
+  <div class="opt" style="--col:720px"><p class="opt-head">720px <small>约 51 个汉字／行（字号对照图所用宽度）</small></p><div class="slot"></div></div>
+</div>
+<script>
+  const tpl = document.getElementById('scene');
+  document.querySelectorAll('.slot').forEach(slot => {
+    slot.appendChild(tpl.content.cloneNode(true));
+    const col = getComputedStyle(slot.closest('.opt')).getPropertyValue('--col').trim();
+    slot.querySelector('.ruler').textContent = '阅读列 ' + col;
+  });
+  document.querySelectorAll('[data-side]').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-side]').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+    document.querySelectorAll('.app').forEach(a => a.classList.toggle('collapsed', btn.dataset.side === 'closed'));
+  }));
+  if (new URLSearchParams(location.search).get('side') === 'closed') document.querySelector('[data-side="closed"]').click();
+</script>
+</body>
+</html>

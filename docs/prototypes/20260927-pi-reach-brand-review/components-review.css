@@ -1,0 +1,57 @@
+.component-review { --radius-control: 6px; --radius-message: 8px; --radius-composer: 12px; --danger: #AE463E; --disabled-bg: #ECEFF0; }
+.component-review[data-appearance="dark"] { --danger: #EFA39B; --disabled-bg: #303638; }
+.component-review .layout-stage { padding-bottom: 18px; }
+.component-review .prototype { height: 760px; }
+.component-review .app-header { padding-right: 10px; }
+.component-review .app-brand { gap: 8px; }
+.component-review .app-header-end { gap: 8px; }
+.component-review .side-footer { gap: 8px; padding: 12px 0 0; }
+.component-review .side-footer .action-button { width: 100%; }
+.component-review .conversation-actions { display: flex; align-items: center; gap: 12px; }
+.component-review[data-lines="open"] .tool-lines { margin-top: 12px; border-top: 0; }
+.component-review[data-lines="open"] .tool-lines > div { min-height: 30px; border-bottom: 0; }
+.component-review[data-lines="open"] .code-block { margin-top: 15px; }
+.component-review .code-block { border: 1px solid transparent; border-radius: var(--radius-message); }
+.component-review[data-appearance="light"][data-tool="adaptive"] .code-block { --code-bg: var(--panel); --code-ink: var(--ink); --code-muted: var(--secondary); --code-green: var(--complete); --code-amber: var(--working); --code-blue: var(--accent); border-color: var(--line); }
+.component-review .composer-input { box-shadow: 0 1px 3px var(--shadow); }
+.component-review .icon-button.mobile-menu, .component-review .icon-button.header-pair { display: none; }
+.component-review .action-button, .component-review .icon-button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: var(--radius-control); font-size: 12px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.component-review .action-button { padding: 0 16px; border: 1px solid transparent; }
+.component-review .icon-button { width: 44px; min-width: 44px; padding: 0; border: 1px solid transparent; background: transparent; color: var(--secondary); }
+.component-review .primary-button { min-height: 48px; background: var(--accent); color: var(--on-accent); }
+.component-review .secondary-button { border-color: var(--control-line); background: var(--surface); color: var(--ink); }
+.component-review .quiet-button { background: transparent; color: var(--secondary); }
+.component-review .danger-button { border-color: var(--danger); background: transparent; color: var(--danger); }
+.component-review .action-button:disabled { border-color: transparent; background: var(--disabled-bg); color: var(--secondary); cursor: not-allowed; }
+.component-review .action-button:hover:not(:disabled), .component-review .icon-button:hover { filter: brightness(.94); }
+.component-review[data-appearance="dark"] .action-button:hover:not(:disabled), .component-review[data-appearance="dark"] .icon-button:hover { filter: brightness(1.12); }
+.component-review .action-button svg, .component-review .icon-button svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.component-review .icon-button circle { fill: currentColor; stroke: none; }
+.component-review .quiet-button circle { fill: none; stroke: currentColor; }
+.component-review .send-icon { width: 44px; height: 44px; flex: 0 0 44px; padding: 0; border: 0; cursor: pointer; }
+.component-review .send-icon:hover { filter: brightness(.94); }
+.component-review .component-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding-top: 21px; border-top: 1px solid var(--line); }
+.component-review .component-notes h2 { margin: 0 0 13px; font-size: 14px; }
+.component-review .surface-notes dl { margin: 0; }
+.component-review .surface-notes dl > div { display: grid; grid-template-columns: 94px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.5; }
+.component-review .surface-notes dt { font-weight: 700; }
+.component-review .surface-notes dd { margin: 0; color: var(--secondary); }
+.component-review .button-samples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.component-review .button-notes p, .component-review .review-caveat { color: var(--secondary); font-size: 11px; line-height: 1.6; }
+.component-review .button-notes p { margin: 13px 0 0; }
+.component-review .review-caveat { margin: 22px 0 0; }
+@media (max-width: 760px) {
+  .component-review .layout-stage[data-device="mobile"] .prototype { height: 820px; }
+  .component-review .layout-stage[data-device="mobile"] .app-header { padding: 0 8px; }
+  .component-review .layout-stage[data-device="mobile"] .app-brand { gap: 6px; }
+  .component-review .layout-stage[data-device="mobile"] .mobile-menu, .component-review .layout-stage[data-device="mobile"] .header-pair { display: inline-flex; }
+  .component-review .layout-stage[data-device="mobile"] .conversation-head { padding-right: 10px; }
+  .component-review .layout-stage[data-device="mobile"] .conversation-actions { gap: 4px; }
+  .component-review .component-notes { grid-template-columns: 1fr; gap: 26px; }
+}
+@media (max-width: 370px) {
+  .component-review .layout-stage[data-device="mobile"] .app-brand { gap: 3px; }
+  .component-review .layout-stage[data-device="mobile"] .app-header-end { gap: 2px; }
+  .component-review .layout-stage[data-device="mobile"] .conversation-head { padding-left: 12px; }
+  .component-review .surface-notes dl > div { grid-template-columns: 84px minmax(0, 1fr); gap: 8px; }
+}

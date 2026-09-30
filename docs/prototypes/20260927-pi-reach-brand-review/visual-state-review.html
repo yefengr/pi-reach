@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 关键状态视觉验收</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./visual-state-review.css">
+</head>
+<body>
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="brand-mark" viewBox="0 0 64 64"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.7 2.7L3 8M3 3v5h5m4-1v5l4 2"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6.8a2 2 0 0 0-1.4.6L3.2 21.8A.7.7 0 0 1 2 21.3V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.7 4.1a2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 0 3.3 1.9 2.3 2.3 0 0 1 2.3 4 2.3 2.3 0 0 0 0 3.9 2.3 2.3 0 0 1-2.3 4 2.3 2.3 0 0 0-3.3 1.9 2.3 2.3 0 0 1-4.6 0 2.3 2.3 0 0 0-3.3-1.9 2.3 2.3 0 0 1-2.3-4 2.3 2.3 0 0 0 0-3.9 2.3 2.3 0 0 1 2.3-4 2.3 2.3 0 0 0 3.3-1.9"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4m-8.4 0a6 6 0 0 1 0-8.4m11.2-2.8a10 10 0 0 1 0 14m-14 0a10 10 0 0 1 0-14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-4 4 4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></symbol>
+</defs></svg>
+<div class="layout-review state-review" data-appearance="light" data-preview-lang="zh">
+  <header class="review-header"><div class="review-header-inner"><a href="./icon-asset-review.html" class="back-link">← Pi Reach 图标评审</a><span class="review-label">关键状态 / 隔离效果稿</span></div></header>
+  <main class="review-main state-main">
+    <div class="review-heading"><div><p>PI REACH / WORKSPACE STATES</p><h1>关键状态视觉核对</h1></div><span>沿用现有流程 · 仅看界面呈现</span></div>
+    <div class="review-toolbar" aria-label="效果稿预览选项">
+      <div class="switch-group"><span class="switch-label">状态</span><div class="segments case-tabs" role="tablist" aria-label="预览状态"><button role="tab" type="button" data-case-choice="pair" aria-selected="true" aria-controls="sample-stage">首次配对</button><button role="tab" type="button" data-case-choice="no-pi" aria-selected="false" aria-controls="sample-stage">无在线 Pi</button><button role="tab" type="button" data-case-choice="history" aria-selected="false" aria-controls="sample-stage">本地历史</button><button role="tab" type="button" data-case-choice="settings" aria-selected="false" aria-controls="sample-stage">设置与确认</button></div></div>
+      <div class="switch-group"><span class="switch-label">文案</span><div class="segments" role="group" aria-label="预览语言"><button type="button" data-language-choice="zh" aria-pressed="true">中文</button><button type="button" data-language-choice="en" aria-pressed="false">English</button></div></div>
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="预览外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div>
+      <div class="switch-group layer-preview-control" hidden><span class="switch-label">叠层</span><div class="segments" role="group" aria-label="设置叠层预览"><button type="button" data-layer-choice="drawer" aria-pressed="true">设置</button><button type="button" data-layer-choice="confirm" aria-pressed="false">确认</button></div></div>
+      <div class="switch-group nav-preview-control" hidden><span class="switch-label">移动导航</span><button class="preview-nav-button" type="button" data-nav-preview aria-pressed="false"><span class="zh" lang="zh-CN">查看导航</span><span class="en" lang="en">Show navigation</span></button></div>
+    </div>
+    <section class="sample-stage" id="sample-stage" data-case="pair" data-nav="closed" data-layer="drawer" aria-label="Pi Reach 工作区状态示例">
+      <div class="app-top"><span class="top-brand"><svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#brand-mark"/></svg><strong>Pi Reach</strong></span><span class="mobile-location"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-menu"/></svg><span data-only-case="pair"><span class="zh" lang="zh-CN">导航</span><span class="en" lang="en">Navigation</span></span><span data-only-case="no-pi,settings">Studio Mac</span><span data-only-case="history"><span class="zh" lang="zh-CN">检查重连状态</span><span class="en" lang="en">Check reconnect state</span></span></span><span class="top-status" data-only-case="pair,no-pi,settings"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span class="zh" lang="zh-CN">已连接</span><span class="en" lang="en">Connected</span></span><span class="top-status local" data-only-case="history"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-history"/></svg><span class="zh" lang="zh-CN">仅本地</span><span class="en" lang="en">Local only</span></span></div>
+      <div class="app-body">
+        <aside class="sample-sidebar" aria-label="工作区导航示例">
+          <div class="sidebar-device" data-only-case="pair"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-monitor"/></svg><strong class="zh" lang="zh-CN">尚未配对电脑</strong><strong class="en" lang="en">No computer paired</strong></div>
+          <div class="sidebar-device" data-only-case="no-pi,history,settings"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-monitor"/></svg><span><strong>Studio Mac</strong><small class="zh" lang="zh-CN">当前电脑</small><small class="en" lang="en">Current computer</small></span><svg class="line-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg></div>
+          <div class="sidebar-content" data-only-case="pair"><div class="sidebar-empty"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-radio"/></svg><strong class="zh" lang="zh-CN">未选择电脑</strong><strong class="en" lang="en">No computer selected</strong><p class="zh" lang="zh-CN">选择已配对电脑，或配对一台新电脑。</p><p class="en" lang="en">Choose a paired computer or pair a new one.</p></div></div>
+          <div class="sidebar-content" data-only-case="no-pi,history,settings"><div class="sidebar-group"><div class="group-heading"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-message"/></svg><strong class="zh" lang="zh-CN">在线 Pi</strong><strong class="en" lang="en">Online Pi</strong><small data-only-case="no-pi,history">0</small><small data-only-case="settings">1</small></div><p class="empty-list" data-only-case="no-pi,history"><span class="zh" lang="zh-CN">这台电脑目前没有运行中的 Pi。</span><span class="en" lang="en">No Pi is currently running on this computer.</span></p><div class="nav-row" data-only-case="settings"><strong class="zh" lang="zh-CN">发布前检查</strong><strong class="en" lang="en">Release check</strong><small class="zh" lang="zh-CN">工作中 · pi-reach</small><small class="en" lang="en">Working · pi-reach</small></div></div>
+            <div class="sidebar-group"><div class="group-heading"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-history"/></svg><span class="group-title"><strong class="zh" lang="zh-CN">本地历史</strong><strong class="en" lang="en">Local history</strong><em class="zh" lang="zh-CN">仅保存在此浏览器</em><em class="en" lang="en">Saved in this browser only</em></span><small>2</small></div><div class="nav-row history-row" data-only-case="no-pi,history,settings"><strong class="zh" lang="zh-CN">检查重连状态</strong><strong class="en" lang="en">Check reconnect state</strong><small class="zh" lang="zh-CN">昨天 · 12 项记录</small><small class="en" lang="en">Yesterday · 12 items</small></div><div class="nav-row"><strong class="zh" lang="zh-CN">配对路径复查</strong><strong class="en" lang="en">Review pairing path</strong><small class="zh" lang="zh-CN">周一 · 8 项记录</small><small class="en" lang="en">Monday · 8 items</small></div></div></div>
+          <div class="sidebar-footer"><span><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link"/></svg><span class="zh" lang="zh-CN">配对电脑</span><span class="en" lang="en">Pair a computer</span></span><span><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg><span class="zh" lang="zh-CN">设置</span><span class="en" lang="en">Settings</span></span></div>
+        </aside>
+        <div class="sample-content">
+          <section class="scene empty-scene" data-only-case="pair"><svg class="scene-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#brand-mark"/></svg><strong>Pi Reach</strong><h2 class="zh" lang="zh-CN">先配对一台电脑</h2><h2 class="en" lang="en">Pair a computer to begin.</h2><p class="zh" lang="zh-CN">在电脑上打开 Pi、配对这个浏览器，再选择运行中的会话。</p><p class="en" lang="en">Open Pi on your computer, pair this browser, and choose a running conversation.</p><span class="mock-button primary"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link"/></svg><span class="zh" lang="zh-CN">配对电脑</span><span class="en" lang="en">Pair a Pi</span></span></section>
+          <section class="scene empty-scene" data-only-case="no-pi"><svg class="scene-icon radio-scene" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-radio"/></svg><h2 class="zh" lang="zh-CN">没有运行中的 Pi</h2><h2 class="en" lang="en">No Pi is running</h2><p class="zh" lang="zh-CN">在这台电脑上打开 Pi。连接后会显示在这里。</p><p class="en" lang="en">Open Pi on this computer. It will appear here when it connects.</p></section>
+          <section class="scene history-scene" data-only-case="history"><div class="history-head"><div><small class="zh" lang="zh-CN">已保存的对话</small><small class="en" lang="en">Saved conversation</small><h2 class="zh" lang="zh-CN">检查重连状态</h2><h2 class="en" lang="en">Check reconnect state</h2><p class="zh" lang="zh-CN">上次活动：昨天 18:42 · 12 项记录</p><p class="en" lang="en">Last activity: yesterday 18:42 · 12 items</p></div><span class="read-only zh" lang="zh-CN">只读</span><span class="read-only en" lang="en">Read only</span></div><div class="history-banner"><span><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-history"/></svg><span class="zh" lang="zh-CN">本地历史 · 只读</span><span class="en" lang="en">Local history · Read only</span></span><span class="return-live zh" lang="zh-CN">返回在线 Pi</span><span class="return-live en" lang="en">Back to live</span></div><div class="timeline-sample"><div class="message-heading"><span class="zh" lang="zh-CN">你</span><span class="en" lang="en">You</span><time>18:39</time></div><div class="history-user"><p class="zh" lang="zh-CN">检查重连后已经保存的消息，列出需要复查的页面。</p><p class="en" lang="en">Check the messages saved after reconnection and list the screens to review.</p></div><div class="message-heading">Pi <time>18:40</time></div><p class="assistant-copy zh" lang="zh-CN">我已整理保存到这个浏览器的记录。下面是上次收到的构建结果；当前历史不会连接或恢复旧会话。</p><p class="assistant-copy en" lang="en">I reviewed the records saved in this browser. Below is the last build result received; this history view does not reconnect to an old session.</p><div class="tool-line"><strong>bash</strong><span>pnpm --filter pwa test</span><span class="complete"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span class="zh" lang="zh-CN">已完成</span><span class="en" lang="en">Complete</span></span></div><pre class="tool-output"><code>$ pnpm --filter pwa test
+✓ test files passed
+…remaining output omitted</code></pre></div></section>
+          <section class="scene live-scene" data-only-case="settings"><div class="live-head"><small class="zh" lang="zh-CN">在线对话</small><small class="en" lang="en">Live conversation</small><h2 class="zh" lang="zh-CN">发布前检查</h2><h2 class="en" lang="en">Release check</h2></div><div class="live-message"><span class="zh" lang="zh-CN">请再检查一次移动端构建。</span><span class="en" lang="en">Please check the mobile build again.</span></div><div class="live-reply"><strong>Pi</strong><p class="zh" lang="zh-CN">我会继续核对构建输出，并确认受影响的页面。</p><p class="en" lang="en">I will review the build output and check the affected screens.</p></div><div class="composer-sample"><span class="zh" lang="zh-CN">向 Pi 发送消息…</span><span class="en" lang="en">Message your agent…</span></div></section>
+        </div>
+      </div>
+      <div class="nav-backdrop" data-only-case="no-pi,history" hidden></div>
+      <div class="overlay pairing-overlay" data-only-case="pair"><div class="pair-dialog"><div class="dialog-head"><div><small class="zh" lang="zh-CN">配对电脑</small><small class="en" lang="en">Pair a Pi</small><h2 class="upload-title zh" lang="zh-CN">上传配对二维码</h2><h2 class="upload-title en" lang="en">Upload the pairing QR</h2><h2 class="scan-title zh" lang="zh-CN">扫描配对二维码</h2><h2 class="scan-title en" lang="en">Scan the pairing QR</h2></div><span class="close-glyph" aria-hidden="true"><svg class="line-icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></span></div><div class="camera-frame"><span class="scan-corners" aria-hidden="true"></span></div><p class="camera-note zh" lang="zh-CN">将二维码对准取景框。相机只在此页面使用。</p><p class="camera-note en" lang="en">Hold the QR inside the frame. Camera access stays on this page.</p><span class="mock-button secondary upload-button"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-upload"/></svg><span class="zh" lang="zh-CN">选择二维码图片</span><span class="en" lang="en">Choose QR image</span></span><div class="manual-divider"><span class="zh" lang="zh-CN">或输入配对码</span><span class="en" lang="en">or enter the pairing code</span></div><div class="code-field">K7MP-4Q2D</div><span class="mock-button secondary code-button inactive"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link"/></svg><span class="zh" lang="zh-CN">使用配对码</span><span class="en" lang="en">Use pairing code</span></span></div></div>
+      <div class="settings-overlay" data-only-case="settings"><div class="settings-drawer"><div class="drawer-heading"><div><small class="zh" lang="zh-CN">偏好设置</small><small class="en" lang="en">Preferences</small><h2 class="zh" lang="zh-CN">设置</h2><h2 class="en" lang="en">Settings</h2></div><span class="close-glyph" aria-hidden="true"><svg class="line-icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></span></div><div class="drawer-body"><h3 class="zh" lang="zh-CN">外观</h3><h3 class="en" lang="en">Appearance</h3><p class="subcopy zh" lang="zh-CN">选择此浏览器中的 Pi Reach 外观。</p><p class="subcopy en" lang="en">Choose how Pi Reach looks in this browser.</p><div class="appearance-option chosen"><span class="radio-control"></span><span><strong class="zh" lang="zh-CN">跟随系统</strong><strong class="en" lang="en">System</strong><small class="zh" lang="zh-CN">跟随设备设置</small><small class="en" lang="en">Follow your device</small></span></div><div class="appearance-option"><span class="radio-control"></span><span><strong class="zh" lang="zh-CN">浅色</strong><strong class="en" lang="en">Light</strong></span></div><div class="appearance-option"><span class="radio-control"></span><span><strong class="zh" lang="zh-CN">深色</strong><strong class="en" lang="en">Dark</strong></span></div><h3>Relay URL</h3><p class="subcopy zh" lang="zh-CN">使用 https:// 安全连接；WebSocket 会自动选择。</p><p class="subcopy en" lang="en">Use https:// for a secure relay. WebSocket is selected automatically.</p><div class="relay-field">https://relay.example.com</div><p class="settings-note zh" lang="zh-CN">身份和历史记录只保存在此浏览器。</p><p class="settings-note en" lang="en">Owner identity and session history live in this browser only.</p><span class="mock-button primary settings-button"><span class="zh" lang="zh-CN">保存设置</span><span class="en" lang="en">Save settings</span></span><span class="mock-button secondary settings-button"><span class="zh" lang="zh-CN">重置布局</span><span class="en" lang="en">Reset layout</span></span><span class="mock-button danger settings-button"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-trash"/></svg><span class="zh" lang="zh-CN">清除本地数据</span><span class="en" lang="en">Clear local data</span></span></div></div></div>
+      <div class="confirm-overlay" data-only-case="settings"><div class="confirm-dialog"><div class="confirm-heading"><small class="zh" lang="zh-CN">确认操作</small><small class="en" lang="en">Confirm action</small><h2 class="zh" lang="zh-CN">清除此浏览器的 Pi Reach 身份、配对和历史记录？</h2><h2 class="en" lang="en">Clear this browser's Pi Reach identity, pairings, and history?</h2></div><p class="zh" lang="zh-CN">此操作无法撤销。它会移除此浏览器的 Pi Reach 身份、配对和历史记录。</p><p class="en" lang="en">This cannot be undone. It removes this browser's Pi Reach identity, pairings, and history.</p><div class="confirm-actions"><span class="mock-button secondary"><span class="zh" lang="zh-CN">取消</span><span class="en" lang="en">Cancel</span></span><span class="mock-button danger"><span class="zh" lang="zh-CN">清除本地数据</span><span class="en" lang="en">Clear local data</span></span></div></div></div>
+    </section>
+    <p class="review-caveat">静态视觉样本。顶部状态／语言／外观／叠层控制只切换评审画面，扫码、配对、历史、设置和确认操作均不执行业务；中文为排版候选。相机区按移动视口模拟，实际由设备条件决定。移动导航的展开仅用于查看同一导航表面，不新增历史入口或改变既有流程。尺寸、示例数据与叠层动画不是生产规范；正式桌面布局仍受冻结约束。</p>
+  </main>
+</div>
+<script>
+  const review = document.querySelector('.state-review');
+  const stage = document.querySelector('.sample-stage');
+  const navPreview = document.querySelector('.nav-preview-control');
+  const navButton = document.querySelector('[data-nav-preview]');
+  const layerPreview = document.querySelector('.layer-preview-control');
+  function setLayer(value) {
+    const layer = value === 'confirm' ? 'confirm' : 'drawer';
+    stage.dataset.layer = layer;
+    document.querySelector('.confirm-overlay').hidden = stage.dataset.case !== 'settings' || layer !== 'confirm';
+    document.querySelectorAll('[data-layer-choice]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layerChoice === layer)));
+  }
+  function showCase(value) {
+    const choice = ['pair', 'no-pi', 'history', 'settings'].includes(value) ? value : 'pair';
+    stage.dataset.case = choice;
+    stage.dataset.nav = 'closed';
+    navButton.setAttribute('aria-pressed', 'false');
+    document.querySelectorAll('[data-case-choice]').forEach(button => button.setAttribute('aria-selected', String(button.dataset.caseChoice === choice)));
+    document.querySelectorAll('[data-only-case]').forEach(element => { element.hidden = !element.dataset.onlyCase.split(',').includes(choice); });
+    navPreview.hidden = !(window.innerWidth <= 760 && ['no-pi', 'history'].includes(choice));
+    layerPreview.hidden = choice !== 'settings';
+    setLayer('drawer');
+  }
+  function setChoice(kind, value) {
+    review.dataset[kind === 'language' ? 'previewLang' : kind] = value;
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.setAttribute('aria-pressed', String(button.dataset[`${kind}Choice`] === value)));
+  }
+  const caseTabs = [...document.querySelectorAll('[data-case-choice]')];
+  caseTabs.forEach((button, index) => {
+    button.addEventListener('click', () => showCase(button.dataset.caseChoice));
+    button.addEventListener('keydown', event => {
+      const nextIndex = event.key === 'ArrowRight' ? (index + 1) % caseTabs.length : event.key === 'ArrowLeft' ? (index - 1 + caseTabs.length) % caseTabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? caseTabs.length - 1 : -1;
+      if (nextIndex === -1) return;
+      event.preventDefault();
+      caseTabs[nextIndex].focus();
+      showCase(caseTabs[nextIndex].dataset.caseChoice);
+    });
+  });
+  document.querySelectorAll('[data-layer-choice]').forEach(button => button.addEventListener('click', () => setLayer(button.dataset.layerChoice)));
+  for (const kind of ['language', 'appearance']) document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.addEventListener('click', () => setChoice(kind, button.dataset[`${kind}Choice`])));
+  navButton.addEventListener('click', () => { stage.dataset.nav = stage.dataset.nav === 'open' ? 'closed' : 'open'; navButton.setAttribute('aria-pressed', String(stage.dataset.nav === 'open')); });
+  window.addEventListener('resize', () => { if (window.innerWidth > 760) { stage.dataset.nav = 'closed'; navButton.setAttribute('aria-pressed', 'false'); } navPreview.hidden = !(window.innerWidth <= 760 && ['no-pi', 'history'].includes(stage.dataset.case)); });
+  const params = new URLSearchParams(location.search);
+  showCase(params.get('case'));
+  if (stage.dataset.case === 'settings') setLayer(params.get('layer'));
+  setChoice('language', params.get('lang') === 'en' ? 'en' : 'zh');
+  setChoice('appearance', params.get('appearance') === 'dark' ? 'dark' : 'light');
+</script>
+</body>
+</html>

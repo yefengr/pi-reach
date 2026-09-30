@@ -1,0 +1,45 @@
+.*
+# Track CI and workspace toolchain configuration despite the `.*` rule above.
+!.github/
+!/.npmrc
+!/.node-version
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Rust
+target/
+
+# Editor
+.vscode/
+.idea/
+*.iml
+*.swp
+.DS_Store
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+# Self-hosted deployment settings — contains local SSH/server details.
+deploy.env
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test artifacts — pi-extension model-persist test writes a real settings.json
+pi-extension/test/.pi/
+
+# Project-local Pi and Pi Reach state — machine-local, never repo content.
+# Matches any `.pi/` dir at any depth (root, pi-extension/, subprojects).
+.pi/
+
+graphify-out
+
+openspec

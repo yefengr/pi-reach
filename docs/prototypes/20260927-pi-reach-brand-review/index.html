@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 品牌刷新评审目录</title>
+  <link rel="stylesheet" href="./catalog.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">跳到评审目录</a>
+  <header class="site-header"><div class="header-inner">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">π</span><strong>Pi Reach</strong><span>品牌刷新 / 评审索引</span></div>
+    <a href="../../plans/active/20260925-pi-reach-brand-refresh.md">查看已确认方案 ↗</a>
+  </div></header>
+  <main id="content">
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">PI REACH / VISUAL REVIEW</p>
+      <h1 id="page-title">从评审稿回看设计方向</h1>
+      <p>这里汇集了本轮品牌、工作区和动效的隔离页面。页面保留了候选选项与模拟内容，不代表当前 PWA 已实现；<strong>已确认的规则以品牌刷新方案为准</strong>，当前生产界面仍以现行设计规范为准。</p>
+      <a class="design-link" href="../../DESIGN.md">查看现行 DESIGN ↗</a>
+      <nav class="section-links" aria-label="评审分类"><a href="#brand">品牌与配色</a><a href="#workspace">工作区与组件</a><a href="#motion">动效</a><a href="#foundation">设计基础层</a><a href="#comparison">过程对照</a></nav>
+    </section>
+
+    <section id="brand" class="review-section" aria-labelledby="brand-title">
+      <div class="section-heading"><span>01 / Brand</span><h2 id="brand-title">品牌与配色</h2></div>
+      <div class="card-grid">
+        <a class="review-card" href="./logo-rounding-review.html"><span class="badge">标识对照</span><strong>桥形 Logo · 圆角</strong><span>选择无角标的微圆角形态；此页仍保留其他圆角对照。</span></a>
+        <a class="review-card" href="./logo-accent-review.html"><span class="badge">标识对照</span><strong>桥形 Logo · 角标</strong><span>选择无角标；方块与圆点仅供比较。</span></a>
+        <a class="review-card" href="./icon-asset-review.html"><span class="badge selected">已选方向</span><strong>favicon 与安装图标</strong><span>固定钢雾蓝底、白色桥形标识；真实浏览器和设备仍待验收。</span></a>
+        <a class="review-card" href="./color-study.html"><span class="badge selected">已选配色</span><strong>钢雾蓝场景</strong><span>只参考颜色；早期场景的顶栏、导航布局与浅色深底代码块均已被后续结论取代。</span></a>
+        <a class="review-card" href="./visual-state-review.html"><span class="badge">状态对照</span><strong>配对、离线与明暗状态</strong><span>核对视觉与语义；示例交互不替代现行配对／历史逻辑。</span></a>
+      </div>
+    </section>
+
+    <section id="workspace" class="review-section" aria-labelledby="workspace-title">
+      <div class="section-heading"><span>02 / Workspace</span><h2 id="workspace-title">工作区与组件</h2></div>
+      <div class="card-grid">
+        <a class="review-card" href="./layout-review.html?variant=a&amp;radius=soft"><span class="badge">布局对照</span><strong>导航常驻与柔和圆角</strong><span>评审 A 布局及 6／8／12px 圆角；示例尺寸不是正式规格。</span></a>
+        <a class="review-card" href="./button-icon-review.html"><span class="badge">控件对照</span><strong>按钮与图标反馈</strong><span>无框图标、圆形悬停／焦点及 44px 点击区域。</span></a>
+        <a class="review-card" href="./component-output-comparison.html"><span class="badge">控件对照</span><strong>按钮尺寸与工具输出</strong><span>主操作选 44px；工具输出浅色 panel、深色 code-bg。</span></a>
+        <a class="review-card" href="./content-density-review.html"><span class="badge selected">已选方向</span><strong>开放阅读与紧凑密度</strong><span>选择两组对照中的 A；保留其他候选供回看。</span></a>
+        <a class="review-card" href="./desktop-topbar-review.html?layout=without&amp;motion=gentle"><span class="badge">桌面对照</span><strong>无顶栏、侧栏与 220ms 收展</strong><span>链接预选轻量效果；页面上的“保留顶栏／即时”只是对照。</span></a>
+        <a class="review-card" href="./settings-page-review.html"><span class="badge">视觉结构</span><strong>独立设置页</strong><span>桌面与移动分别呈现；实际导航与返回规则以方案为准。</span></a>
+        <a class="review-card" href="./bilingual-layout-review.html"><span class="badge">排版评审</span><strong>中文／英文布局</strong><span>长标题、状态提示与窄屏换行已看过；译文不是逐条定稿。</span></a>
+      </div>
+    </section>
+
+    <section id="motion" class="review-section" aria-labelledby="motion-title">
+      <div class="section-heading"><span>03 / Motion</span><h2 id="motion-title">动效</h2></div>
+      <div class="card-grid">
+        <div class="review-card multi-link"><span class="badge selected">局部动效</span><strong>移动导航与设置转场</strong><span>导航约 240ms，独立设置页约 200ms；两段在原稿中分别演示。</span><div class="inline-links"><a href="./mobile-motion-review.html?scene=navigation">看导航 ↗</a><a href="./mobile-motion-review.html?scene=settings">看设置 ↗</a></div></div>
+        <a class="review-card" href="./confirm-motion-review.html"><span class="badge selected">局部动效</span><strong>居中确认弹窗</strong><span>清除数据样本的约 180／140ms 进出；其他 Modal 复用方向见方案。</span></a>
+        <a class="review-card" href="./tool-content-motion-review.html"><span class="badge selected">局部动效</span><strong>工具与思考展开</strong><span>约 160／120ms 轻量过渡；可模拟流式输出，未改变生产规则。</span></a>
+      </div>
+    </section>
+
+    <section id="foundation" class="review-section" aria-labelledby="foundation-title">
+      <div class="section-heading"><span>04 / Foundation</span><h2 id="foundation-title">设计基础层</h2></div>
+      <div class="card-grid">
+        <a class="review-card" href="./neutral-color-fix-review.html"><span class="badge selected">已选方向</span><strong>中性色阶修正</strong><span>加深悬停、选中与辅助文字，删除 muted；新旧色值明暗对照。</span></a>
+        <a class="review-card" href="./focus-ring-review.html"><span class="badge selected">已选方向</span><strong>焦点轮廓</strong><span>选定 A 贴边轮廓；B 偏移与 C 双环仅作对照。</span></a>
+        <a class="review-card" href="./font-stack-review.html"><span class="badge selected">已选方向</span><strong>字体栈</strong><span>选定 A 系统字体；B、C 的网络字体需联网加载，仅作对照。</span></a>
+        <a class="review-card" href="./type-scale-review.html"><span class="badge selected">已选方向</span><strong>字号阶梯</strong><span>选定 B 14px 基准，桌面与移动共用。</span></a>
+        <a class="review-card" href="./column-width-review.html"><span class="badge selected">已选方向</span><strong>阅读列宽</strong><span>选定 680px；可切换侧栏收起查看居中效果。</span></a>
+        <a class="review-card" href="./message-meta-review.html"><span class="badge selected">已选方向</span><strong>消息元数据</strong><span>轮末只显示完成时间；依赖本轮结束事件。</span></a>
+        <a class="review-card" href="./syntax-palette-review.html"><span class="badge selected">已选配色</span><strong>代码高亮</strong><span>浅色主题代码块改为浅底，两套语法色取自现有 token。</span></a>
+      </div>
+    </section>
+
+    <section id="comparison" class="review-section comparison" aria-labelledby="comparison-title">
+      <div class="section-heading"><span>05 / Earlier studies</span><h2 id="comparison-title">过程对照</h2></div>
+      <p>保留这两页供追溯组件、图标筛选过程；不要把其中每一种方案都当成已通过。</p>
+      <div class="card-grid">
+        <a class="review-card" href="./components-review.html"><span class="badge">过程稿</span><strong>组件表面与按钮</strong><span>早期比较页；以此后的尺寸、底色和边界评审结论为准。</span></a>
+        <a class="review-card" href="./icon-catalog-review.html"><span class="badge">过程稿</span><strong>图标目录</strong><span>图标候选清单；以品牌方案和按钮／图标效果为准。</span></a>
+      </div>
+    </section>
+    <p class="footer-note">本目录只收录 HTML／CSS 原型源码，不包含批量截图或真实业务数据；正式实现须另行授权。</p>
+  </main>
+</body>
+</html>

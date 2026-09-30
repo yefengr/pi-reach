@@ -1,0 +1,84 @@
+@import "./timeline-row.css";
+
+/* 消息：不用头像与发送方标签。用户消息靠右、message 轻底；Pi 回复靠左占满阅读列、无底色；一轮内间距 12。 */
+.pwa-message { min-width: 0; margin: 12px 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); overflow-wrap: anywhere; }
+.pwa-message > p, .pwa-user-blocks p { margin: 0; white-space: pre-wrap; }
+.pwa-user-blocks { display: grid; gap: 8px; }
+.pwa-message.user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-message); }
+.pwa-message.assistant { padding: 0; }
+.pwa-message-status { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-message.provider_error { padding: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-error-wash); }
+.pwa-message.provider_error .pwa-message-status { color: var(--pwa-error); }
+.pwa-message.compaction, .pwa-message.branch_summary, .pwa-message.custom { padding: 0 0 0 12px; border-left: 2px solid var(--pwa-line); color: var(--pwa-soft-ink); font-size: var(--pwa-text-body); }
+.pwa-message.compaction .pwa-message-status, .pwa-message.branch_summary .pwa-message-status, .pwa-message.custom .pwa-message-status { color: var(--pwa-secondary); }
+.pwa-message-image { display: block; max-width: min(360px, 100%); height: auto; border-radius: var(--pwa-radius-md); }
+.pwa-stream-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pwa-assistant-blocks { display: grid; gap: 12px; }
+
+/* 待发送消息下方的投递状态行：12px secondary，靠右。 */
+.pwa-pending { margin: 12px 0; }
+.pwa-pending > .pwa-message.user { margin: 0 0 0 auto; }
+.pwa-delivery-status { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0 4px; margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+.pwa-ui-scope .pwa-button.pwa-delivery-action { min-height: 44px; padding-inline: 8px; font-size: var(--pwa-text-meta); }
+
+/* 一轮结束后的完成时间，与等待首段回复时的状态行。 */
+.pwa-turn-meta { margin: 4px 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+.pwa-turn-status-error { color: var(--pwa-error); }
+.pwa-thinking-status { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
+.pwa-thinking-status > svg { color: var(--pwa-running); }
+
+/* Markdown：标题只分两级且不大于会话标题；链接常显下划线；代码块与工具输出同底。 */
+.pwa-markdown { min-width: 0; overflow-wrap: anywhere; }
+.pwa-markdown > :first-child { margin-top: 0; }
+.pwa-markdown > :last-child { margin-bottom: 0; }
+.pwa-markdown p { margin: 8px 0; }
+.pwa-markdown h1, .pwa-markdown h2, .pwa-markdown h3, .pwa-markdown h4, .pwa-markdown h5, .pwa-markdown h6 { margin: 16px 0 8px; font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-markdown h1, .pwa-markdown h2 { font-size: var(--pwa-text-title); }
+.pwa-markdown h3, .pwa-markdown h4, .pwa-markdown h5, .pwa-markdown h6 { font-size: var(--pwa-text-body); }
+.pwa-markdown ul, .pwa-markdown ol { margin: 8px 0; padding-left: 20px; }
+.pwa-markdown ul { list-style: disc; }
+.pwa-markdown ol { list-style: decimal; }
+.pwa-markdown li + li { margin-top: 4px; }
+.pwa-markdown li > p { margin: 4px 0; }
+.pwa-markdown a { color: var(--pwa-accent); text-decoration: underline; text-underline-offset: 2px; }
+.pwa-markdown blockquote { margin: 8px 0; padding-left: 12px; border-left: 2px solid var(--pwa-control-line); color: var(--pwa-soft-ink); }
+.pwa-markdown code { padding: 1px 4px; border-radius: var(--pwa-radius-xs); color: var(--pwa-accent); background: var(--pwa-panel); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
+.pwa-markdown hr { margin: 16px 0; border: 0; border-top: 1px solid var(--pwa-line); }
+.pwa-markdown img { max-width: 100%; height: auto; border-radius: var(--pwa-radius-md); }
+.pwa-markdown-table { max-width: 100%; margin: 8px 0; overflow-x: auto; }
+.pwa-markdown table { border-collapse: collapse; font-size: var(--pwa-text-body); }
+.pwa-markdown th, .pwa-markdown td { padding: 6px 10px; border-bottom: 1px solid var(--pwa-line); text-align: left; vertical-align: top; }
+.pwa-markdown th { font-weight: var(--pwa-weight-strong); }
+
+/* 成段代码：浅色主题在 panel 上、深色在 code-bg 上；块内横向滚动，右上角复制。 */
+.pwa-code-block { margin: 8px 0; border-radius: var(--pwa-radius-md); color: var(--pwa-code-text); background: var(--pwa-code-surface); }
+/* 标题栏高 36px；复制按钮保留 44px 点击区，上下各以 4px 透明扩展区越出标题栏。 */
+.pwa-code-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding-left: 12px; }
+.pwa-code-language { min-width: 0; overflow: hidden; color: var(--pwa-code-dim); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-mono); white-space: nowrap; text-overflow: ellipsis; }
+.pwa-ui-scope .pwa-icon-button.pwa-code-copy { flex: none; margin-block: -4px; color: var(--pwa-code-dim); }
+.pwa-code-block pre { margin: 0; padding: 4px 12px 12px; overflow-x: auto; overflow-y: hidden; color: inherit; background: transparent; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
+.pwa-code-block pre code { padding: 0; color: inherit; background: transparent; font: inherit; white-space: pre; overflow-wrap: normal; }
+.pwa-code-block .hljs-keyword, .pwa-code-block .hljs-literal, .pwa-code-block .hljs-selector-tag, .pwa-code-block .hljs-built_in { color: var(--pwa-syntax-keyword); }
+.pwa-code-block .hljs-string, .pwa-code-block .hljs-regexp, .pwa-code-block .hljs-addition { color: var(--pwa-syntax-string); }
+.pwa-code-block .hljs-number, .pwa-code-block .hljs-attr, .pwa-code-block .hljs-params, .pwa-code-block .hljs-variable.constant_ { color: var(--pwa-syntax-number); }
+.pwa-code-block .hljs-deletion { color: var(--pwa-syntax-error); }
+.pwa-code-block .hljs-comment, .pwa-code-block .hljs-quote, .pwa-code-block .hljs-meta { color: var(--pwa-syntax-comment); font-style: italic; }
+.pwa-code-block .hljs-punctuation, .pwa-code-block .hljs-operator { color: var(--pwa-syntax-punctuation); }
+.pwa-code-block .hljs-title.function_, .pwa-code-block .hljs-function .hljs-title { color: var(--pwa-syntax-function); }
+.pwa-code-block .hljs-title.class_, .pwa-code-block .hljs-type { color: var(--pwa-syntax-type); }
+.pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
+.pwa-code-block .hljs-emphasis { font-style: italic; }
+
+/* 思考过程：标为「思考过程」，不显示时长；正文 soft-ink。 */
+.pwa-thinking { color: var(--pwa-secondary); }
+.pwa-thinking-title { min-width: 0; }
+.pwa-thinking-content .pwa-collapse-inner { padding-bottom: 4px; }
+.pwa-long-text { min-width: 0; }
+.pwa-text-plain { margin: 0; color: var(--pwa-soft-ink); font: var(--pwa-text-body)/var(--pwa-leading-body) var(--pwa-font-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pwa-output-toggle { margin-top: 4px; }
+
+.pwa-chat-empty { display: grid; gap: 4px; margin: 48px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); text-align: center; }
+.pwa-chat-empty p { margin: 0; }
+/* 新会话的上下文：目录 · 模型 · 思考级别，发送前确认对象。 */
+.pwa-chat-empty .pwa-chat-empty-context { font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
+.pwa-timeline-notice { margin: 0 0 16px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); text-align: center; }

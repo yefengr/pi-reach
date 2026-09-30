@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 独立设置视图对照</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./visual-state-review.css">
+  <link rel="stylesheet" href="./settings-page-review.css">
+</head>
+<body>
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="brand-mark" viewBox="0 0 64 64"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7m-7 7h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+</defs></svg>
+<div class="layout-review state-review page-settings-review" data-appearance="light" data-preview-lang="zh">
+  <header class="review-header"><div class="review-header-inner"><a href="./visual-state-review.html?case=settings" class="back-link">← 原设置抽屉</a><span class="review-label">独立设置视图 / 隔离效果稿</span></div></header>
+  <main class="review-main state-main">
+    <div class="review-heading"><div><p>PI REACH / SETTINGS VIEW</p><h1>设置视图对照</h1></div><span>同一内容 · 不覆盖工作区</span></div>
+    <div class="review-toolbar" aria-label="效果稿预览选项">
+      <div class="switch-group"><span class="switch-label">画面</span><div class="segments" role="group" aria-label="预览画面"><button type="button" data-view-choice="settings" aria-pressed="true">设置页</button><button type="button" data-view-choice="confirm" aria-pressed="false">确认弹窗</button></div></div>
+      <div class="switch-group"><span class="switch-label">文案</span><div class="segments" role="group" aria-label="预览语言"><button type="button" data-language-choice="zh" aria-pressed="true">中文</button><button type="button" data-language-choice="en" aria-pressed="false">English</button></div></div>
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="预览外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div>
+    </div>
+    <section class="sample-stage" id="settings-stage" data-view="settings" aria-label="独立设置视图示例">
+      <header class="app-top"><span class="top-brand"><svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#brand-mark"/></svg><strong>Pi Reach</strong></span><a href="./visual-state-review.html?case=no-pi" class="workspace-link"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow-left"/></svg><span class="zh" lang="zh-CN">工作区</span><span class="en" lang="en">Workspace</span></a><span class="top-status"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span class="zh" lang="zh-CN">已连接</span><span class="en" lang="en">Connected</span></span></header>
+      <div class="app-body">
+        <div class="sample-content"><div class="settings-page">
+          <h2 class="settings-title"><span class="zh" lang="zh-CN">设置</span><span class="en" lang="en">Settings</span></h2>
+          <section class="settings-section appearance-section"><div class="settings-section-head"><h3><span class="zh" lang="zh-CN">外观</span><span class="en" lang="en">Appearance</span></h3><p class="zh" lang="zh-CN">选择此浏览器中的 Pi Reach 外观。</p><p class="en" lang="en">Choose how Pi Reach looks in this browser.</p></div><div class="appearance-list">
+            <div class="appearance-row selected"><div><strong class="zh" lang="zh-CN">跟随系统</strong><strong class="en" lang="en">System</strong><small class="zh" lang="zh-CN">跟随设备设置</small><small class="en" lang="en">Follow your device</small></div><span class="radio-control" aria-hidden="true"></span></div>
+            <div class="appearance-row"><div><strong class="zh" lang="zh-CN">浅色</strong><strong class="en" lang="en">Light</strong></div><span class="radio-control" aria-hidden="true"></span></div>
+            <div class="appearance-row"><div><strong class="zh" lang="zh-CN">深色</strong><strong class="en" lang="en">Dark</strong></div><span class="radio-control" aria-hidden="true"></span></div>
+          </div></section>
+          <section class="settings-section"><div class="settings-section-head"><h3><span class="zh" lang="zh-CN">连接</span><span class="en" lang="en">Connection</span></h3><p class="zh" lang="zh-CN">使用 https:// 安全连接；WebSocket 会自动选择。</p><p class="en" lang="en">Use https:// for a secure relay. WebSocket is selected automatically.</p></div><div class="settings-field"><strong>Relay URL</strong><div class="relay-field">https://relay.example.com</div></div><span class="mock-button primary save-action"><span class="zh" lang="zh-CN">保存设置</span><span class="en" lang="en">Save settings</span></span></section>
+          <section class="settings-section local-data-section"><div class="settings-section-head"><h3><span class="zh" lang="zh-CN">浏览器数据</span><span class="en" lang="en">Browser data</span></h3><p class="zh" lang="zh-CN">身份和历史记录只保存在此浏览器。</p><p class="en" lang="en">Owner identity and session history live in this browser only.</p></div><div class="local-actions"><div><span class="mock-button secondary"><span class="zh" lang="zh-CN">重置布局</span><span class="en" lang="en">Reset layout</span></span><p class="zh" lang="zh-CN">关闭面板、恢复对话滚动位置并重新计算视口。保留本地数据。</p><p class="en" lang="en">Closes panels, restores the chat scroll, and recalculates the viewport. Local data is kept.</p></div><span class="mock-button danger clear-action"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-trash"/></svg><span class="zh" lang="zh-CN">清除本地数据</span><span class="en" lang="en">Clear local data</span></span></div></section>
+        </div></div>
+      </div>
+      <div class="confirm-overlay" hidden><div class="confirm-dialog"><div class="confirm-heading"><small class="zh" lang="zh-CN">确认操作</small><small class="en" lang="en">Confirm action</small><h2 class="zh" lang="zh-CN">清除此浏览器的 Pi Reach 身份、配对和历史记录？</h2><h2 class="en" lang="en">Clear this browser's Pi Reach identity, pairings, and history?</h2></div><p class="zh" lang="zh-CN">此操作无法撤销。它会移除此浏览器的 Pi Reach 身份、配对和历史记录。</p><p class="en" lang="en">This cannot be undone. It removes this browser's Pi Reach identity, pairings, and history.</p><div class="confirm-actions"><span class="mock-button secondary"><span class="zh" lang="zh-CN">取消</span><span class="en" lang="en">Cancel</span></span><span class="mock-button danger"><span class="zh" lang="zh-CN">清除本地数据</span><span class="en" lang="en">Clear local data</span></span></div></div></div>
+    </section>
+    <p class="review-caveat">静态视觉对照。画面、文案和外观控制仅切换预览；设置选项、保存、重置、清除及确认均不执行业务。桌面和手机都从顶栏进入同一独立设置页；“工作区”链接跳到另一张样本，不模拟会话返回或保存位置。设置分组、中文措辞和尺寸并非产品规范；桌面布局冻结仍有效。</p>
+  </main>
+</div>
+<script>
+  const review = document.querySelector('.page-settings-review');
+  const stage = document.querySelector('.sample-stage');
+  const confirm = document.querySelector('.confirm-overlay');
+  function choose(kind, value) {
+    if (kind === 'view') {
+      stage.dataset.view = value;
+      confirm.hidden = value !== 'confirm';
+    } else {
+      review.dataset[kind === 'language' ? 'previewLang' : kind] = value;
+      if (kind === 'language') document.documentElement.lang = value === 'zh' ? 'zh-CN' : 'en';
+    }
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.setAttribute('aria-pressed', String(button.dataset[`${kind}Choice`] === value)));
+  }
+  for (const kind of ['view', 'language', 'appearance']) {
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.addEventListener('click', () => choose(kind, button.dataset[`${kind}Choice`])));
+  }
+  const params = new URLSearchParams(location.search);
+  choose('view', params.get('view') === 'confirm' ? 'confirm' : 'settings');
+  choose('language', params.get('lang') === 'en' ? 'en' : 'zh');
+  choose('appearance', params.get('appearance') === 'dark' ? 'dark' : 'light');
+</script>
+</body>
+</html>

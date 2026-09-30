@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>Pi Reach · Workspace navigation prototype</title>
+  <link rel="stylesheet" href="./shared.css">
+  <script src="./shared.js" defer></script>
+</head>
+<body>
+  <svg class="svg-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-computer" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-5 0h10"/></symbol>
+      <symbol id="i-message" viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4 2v-5.5A7.5 7.5 0 0 1 11.5 8H20v3.5Z"/><path d="M8 4h8a4 4 0 0 1 4 4v3.5"/></symbol>
+      <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5M12 7v5l3 2"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-10 4a5 5 0 0 1 6 0m-3 4v.1"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5 7a8 8 0 0 1 14-1l1 6M4 12l1 6a8 8 0 0 0 14-1"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m4 4 16 8-16 8 3-8-3-8Zm3 8h13"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+      <symbol id="i-slash" viewBox="0 0 24 24"><path d="M8 4 4 20M16 4l4 16"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="m9 15 6-6M7 18H6a4 4 0 0 1 0-8h3m8-4h1a4 4 0 0 1 0 8h-3"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 9v5m0 3v.1"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 3h9v11H3V6Z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v6h5M8 13h8m-8 4h5"/></symbol>
+      <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5c-3-5-8-1-7 3-5 2-3 8 0 8 0 6 7 5 7 1V5Zm0 0c3-5 8-1 7 3 5 2 3 8 0 8 0 6-7 5-7 1V5ZM5 8l3 2m11-2-3 2M5 16l3-2m11 2-3-2"/></symbol>
+    </defs>
+  </svg>
+
+  <nav class="reviewbar" aria-label="Prototype review controls">
+    <span class="review-label">Pi Reach / Interaction prototype</span>
+    <label class="sr-only" for="preview-mode">Preview state</label>
+    <select id="preview-mode">
+      <option value="auto">Responsive preview</option>
+      <option value="desktop">Desktop workbench</option>
+      <option value="mobile-live">Mobile live</option>
+      <option value="mobile-context">Mobile context sheet</option>
+      <option value="mobile-history">Mobile history</option>
+      <option value="desktop-offline">Desktop offline</option>
+    </select>
+    <button id="theme-toggle" class="review-button" type="button">Dark mode</button>
+    <span class="review-note">Prototype only</span>
+  </nav>
+
+  <div id="app" class="app" data-layout="desktop" data-mode="live">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">π</span><span>Pi Reach</span><span class="brand-tag">WORKSPACE</span></div>
+      <div class="topbar-actions">
+        <button id="mobile-context-trigger" class="context-trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+          <span class="context-trigger-copy"><strong id="mobile-endpoint">Pi in api-service</strong><small id="mobile-device">MacBook Pro</small></span>
+          <svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+        <span id="connection" class="connection online"><span class="status-dot online"></span><span id="connection-label">Connected</span></span>
+        <button id="desktop-refresh" class="icon-button desktop-only" type="button" aria-label="Refresh connection" title="Refresh connection"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+        <div class="more-wrap">
+          <button id="actions-trigger" class="icon-button" type="button" aria-label="Session actions" aria-haspopup="menu" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button>
+          <div id="actions-menu" class="actions-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-action="new">New session</button>
+            <button type="button" role="menuitem" data-action="compact">Compact context</button>
+            <button type="button" role="menuitem" data-action="model">Change model <span>›</span></button>
+            <button type="button" role="menuitem" data-action="thinking">Thinking level <span>›</span></button>
+            <div class="menu-divider"></div>
+            <button type="button" role="menuitem" data-action="retry">Retry connection</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Workspace navigation">
+        <div class="sidebar-head"><div><span class="eyebrow">Current workspace</span><h1>Computers</h1></div><button class="icon-button quiet" type="button" data-action="pair" aria-label="Add computer" title="Add computer"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+        <div class="sidebar-scroll">
+          <section class="nav-section" aria-labelledby="computer-heading">
+            <div id="computer-heading" class="section-heading"><svg class="icon small" aria-hidden="true"><use href="#i-computer"/></svg><span>Computers</span><small>2</small></div>
+            <button class="computer-row active" type="button" data-computer="mac"><span class="computer-icon online"><svg class="icon" aria-hidden="true"><use href="#i-computer"/></svg></span><span class="row-copy"><strong>MacBook Pro</strong><small><span class="status-dot online"></span>Online · 2 Pis</small></span><span class="row-state">OPEN</span></button>
+            <button class="computer-row" type="button" data-computer="office"><span class="computer-icon"><svg class="icon" aria-hidden="true"><use href="#i-computer"/></svg></span><span class="row-copy"><strong>Office PC</strong><small><span class="status-dot"></span>Offline</small></span></button>
+          </section>
+          <section class="nav-section" aria-labelledby="live-heading">
+            <div id="live-heading" class="section-heading"><svg class="icon small" aria-hidden="true"><use href="#i-message"/></svg><span>Live</span><small>2</small></div>
+            <button class="endpoint-row active" type="button" data-endpoint="api"><span class="live-dot"></span><span class="row-copy"><strong>Pi in api-service</strong><small>Working · ~/Code/api-service</small></span><span class="row-state">OPEN</span></button>
+            <button class="endpoint-row" type="button" data-endpoint="docs"><span class="live-dot"></span><span class="row-copy"><strong>Pi in docs-site</strong><small>Ready · ~/Code/docs-site</small></span></button>
+          </section>
+          <section class="nav-section" aria-labelledby="history-heading">
+            <div id="history-heading" class="section-heading"><svg class="icon small" aria-hidden="true"><use href="#i-history"/></svg><span>History</span><small>3</small></div>
+            <button class="history-row" type="button" data-history="connection"><span class="row-copy"><strong>Fix connection recovery</strong><small>Today · 18 items</small></span><svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+            <button class="history-row" type="button" data-history="layout"><span class="row-copy"><strong>PWA layout review</strong><small>Yesterday · 42 items</small></span><svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+            <button class="history-row" type="button" data-history="theme"><span class="row-copy"><strong>Theme activity</strong><small>Sep 12 · 31 items</small></span><svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+          </section>
+        </div>
+        <div class="sidebar-foot"><button class="text-button" type="button" data-action="pair"><svg class="icon small" aria-hidden="true"><use href="#i-link"/></svg>Add computer</button><button class="text-button" type="button" data-action="settings"><svg class="icon small" aria-hidden="true"><use href="#i-settings"/></svg>Settings</button></div>
+      </aside>
+
+      <main class="main" aria-label="Pi Reach conversation">
+        <header class="conversation-head">
+          <div class="conversation-context"><span class="eyebrow" id="mode-label">Live conversation</span><h2 id="conversation-title">Pi in api-service</h2><div class="conversation-meta"><span id="desktop-device">MacBook Pro</span><span class="separator">/</span><code id="cwd">~/Code/api-service</code><span class="separator">/</span><span id="desktop-connection">Connected</span></div></div>
+          <span id="read-only-label" class="read-only" hidden>READ ONLY</span>
+        </header>
+        <section class="timeline" aria-label="Conversation timeline">
+          <article class="message user"><span class="message-label">You</span><p>Check the failing tests and summarize the root cause.</p><time>10:42</time></article>
+          <article class="message assistant"><span class="message-label">Agent</span><p>I found three related failures in the connection lifecycle. I am checking the cleanup path and the overlay state now.</p><button class="timeline-row thinking-row" type="button" data-demo="Thinking details expanded in the real app."><svg class="icon small" aria-hidden="true"><use href="#i-brain"/></svg><span>Thought process</span><svg class="icon small row-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button><button class="timeline-row tool-row" type="button" data-demo="Tool details opened in the real app."><svg class="icon small" aria-hidden="true"><use href="#i-search"/></svg><span><strong>Search</strong><small>pwa/src/lib/pi-reach</small></span><span class="tool-status success">Done</span><svg class="icon small row-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button><button class="timeline-row tool-row" type="button" data-demo="Tool details opened in the real app."><svg class="icon small" aria-hidden="true"><use href="#i-file"/></svg><span><strong>Read</strong><small>pwa-app.tsx</small></span><span class="tool-status success">Done</span><svg class="icon small row-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button></article>
+          <article class="message assistant"><span class="message-label">Agent</span><p>The session channel is recreated when the viewport changes. The UI should keep the workspace mounted while only its chrome changes.</p></article>
+          <article class="message assistant final"><span class="message-label">Final answer</span><h3>Root cause identified</h3><p>The connection lifecycle is coupled to the layout branch. Keeping one main conversation mounted removes the reset and preserves the draft while switching form factors.</p></article>
+        </section>
+        <footer class="composer-area">
+          <div id="offline-notice" class="offline-notice" hidden><span><svg class="icon small" aria-hidden="true"><use href="#i-alert"/></svg><strong>Connection interrupted</strong><small>Your draft is preserved.</small></span><button class="text-button" type="button" data-action="retry">Retry</button></div>
+          <form id="composer" class="composer"><button class="icon-button composer-tool" type="button" data-demo="Attachment picker opened in the real app." aria-label="Add attachment"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button><label class="sr-only" for="draft">Message Pi</label><textarea id="draft" rows="1" placeholder="Message Pi…"></textarea><button class="icon-button composer-tool" type="button" data-demo="Pi commands opened in the real app." aria-label="Pi commands"><svg class="icon" aria-hidden="true"><use href="#i-slash"/></svg></button><button id="stop-button" class="stop-button" type="button" data-demo="Stop request simulated."><svg class="icon small" aria-hidden="true"><use href="#i-stop"/></svg><span>Stop</span></button><button class="send-button" type="submit" aria-label="Send message"><svg class="icon small" aria-hidden="true"><use href="#i-send"/></svg></button></form>
+          <div class="composer-meta"><span id="composer-hint">Connected to MacBook Pro</span><span class="desktop-only">Draft stays in this workspace</span></div>
+        </footer>
+      </main>
+    </div>
+
+    <div id="context-overlay" class="context-overlay" hidden>
+      <button class="overlay-scrim" type="button" aria-label="Close context switcher"></button>
+      <section class="context-sheet" role="dialog" aria-modal="true" aria-labelledby="context-title">
+        <div class="sheet-grabber" aria-hidden="true"></div>
+        <header class="sheet-head"><div><span class="eyebrow">Switch workspace</span><h2 id="context-title">Current context</h2></div><button id="context-close" class="icon-button" type="button" aria-label="Close context switcher"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></button></header>
+        <div class="sheet-tabs" role="tablist" aria-label="Workspace mode"><button class="sheet-tab active" type="button" role="tab" aria-selected="true" data-tab="live">Live</button><button class="sheet-tab" type="button" role="tab" aria-selected="false" data-tab="history">History</button></div>
+        <div class="sheet-body">
+          <div class="sheet-panel active" data-panel="live">
+            <section class="sheet-section"><div class="section-heading"><svg class="icon small" aria-hidden="true"><use href="#i-computer"/></svg><span>Computers</span></div><button class="sheet-computer active" type="button" data-computer="mac"><span class="computer-icon online"><svg class="icon" aria-hidden="true"><use href="#i-computer"/></svg></span><span class="row-copy"><strong>MacBook Pro</strong><small><span class="status-dot online"></span>Online · 2 Pis running</small></span><span class="row-state">OPEN</span></button><button class="sheet-computer" type="button" data-computer="office"><span class="computer-icon"><svg class="icon" aria-hidden="true"><use href="#i-computer"/></svg></span><span class="row-copy"><strong>Office PC</strong><small><span class="status-dot"></span>Offline</small></span></button></section>
+            <section class="sheet-section"><div class="section-heading"><svg class="icon small" aria-hidden="true"><use href="#i-message"/></svg><span>Running Pi</span></div><button class="sheet-endpoint active" type="button" data-endpoint="api"><span class="live-dot"></span><span class="row-copy"><strong>Pi in api-service</strong><small>Working · ~/Code/api-service</small></span><span class="row-state">OPEN</span></button><button class="sheet-endpoint" type="button" data-endpoint="docs"><span class="live-dot"></span><span class="row-copy"><strong>Pi in docs-site</strong><small>Ready · ~/Code/docs-site</small></span></button></section>
+          </div>
+          <div class="sheet-panel" data-panel="history" hidden>
+            <section class="sheet-section"><div class="section-heading"><svg class="icon small" aria-hidden="true"><use href="#i-history"/></svg><span>Saved conversations</span></div><button class="sheet-history" type="button" data-history="connection"><span class="row-copy"><strong>Fix connection recovery</strong><small>Today · 18 items</small></span><span class="history-label">Read only</span><svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg></button><button class="sheet-history" type="button" data-history="layout"><span class="row-copy"><strong>PWA layout review</strong><small>Yesterday · 42 items</small></span><span class="history-label">Read only</span><svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg></button><button class="sheet-history" type="button" data-history="theme"><span class="row-copy"><strong>Theme activity</strong><small>Sep 12 · 31 items</small></span><span class="history-label">Read only</span><svg class="icon small" aria-hidden="true"><use href="#i-chevron"/></svg></button></section><button class="back-live" type="button" data-action="live"><svg class="icon small" aria-hidden="true"><use href="#i-message"/></svg>Back to live</button>
+          </div>
+        </div>
+        <footer class="sheet-foot"><button class="text-button" type="button" data-action="pair"><svg class="icon small" aria-hidden="true"><use href="#i-link"/></svg>Add computer</button><button class="text-button" type="button" data-action="settings"><svg class="icon small" aria-hidden="true"><use href="#i-settings"/></svg>Settings</button></footer>
+      </section>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

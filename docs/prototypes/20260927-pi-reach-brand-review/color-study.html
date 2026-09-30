@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Pi Reach · 钢雾蓝配色效果</title>
+  <link rel="stylesheet" href="./color-study.css">
+</head>
+<body>
+<div class="color-study" data-theme="light">
+  <header class="review-bar">
+    <div class="review-bar-inner">
+      <a class="back-link" href="./index.html" aria-label="返回品牌评审">← <span>Pi Reach</span></a>
+      <div class="review-mode" role="group" aria-label="配色外观">
+        <button type="button" data-theme-choice="light" aria-pressed="true">浅色</button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false">深色</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="study-main">
+    <div class="study-heading">
+      <div><p class="study-eyebrow">Pi Reach / A · Steel mist</p><h1>钢雾蓝 · 场景效果</h1></div>
+      <p>颜色提案评审 · 场景和数据为示意，交互及布局未定稿</p>
+    </div>
+
+    <section class="product-view" aria-label="在线会话配色示例">
+      <div class="app-topbar">
+        <div class="app-brand"><svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="Pi Reach 微圆角桥形标识"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z" fill="currentColor"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z" fill="currentColor"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z" fill="currentColor"/></svg><strong>Pi Reach</strong></div>
+        <span class="presence"><i class="signal accent-signal" aria-hidden="true"></i>已连接</span>
+      </div>
+      <div class="app-body">
+        <aside class="app-nav" aria-label="工作区导航示例">
+          <div class="computer"><span class="computer-symbol">S</span><span><strong>Studio Mac</strong><small>已配对的电脑</small></span><span class="chevron" aria-hidden="true">⌄</span></div>
+          <div class="nav-block"><p class="nav-label">正在运行的 Pi <span>2</span></p><div class="nav-item is-current"><span class="nav-dot accent-signal"></span><span><strong>发布前检查</strong><small>pi-reach · 工作中</small></span></div><div class="nav-item"><span class="nav-dot accent-signal"></span><span><strong>调查测试</strong><small>pi-reach · 待命</small></span></div></div>
+          <div class="nav-block"><p class="nav-label">本地历史 <span>仅此浏览器</span></p><div class="nav-item"><span class="history-icon" aria-hidden="true">◷</span><span><strong>检查重连状态</strong><small>昨天 · 12 项记录</small></span></div></div>
+          <div class="nav-bottom"><span aria-hidden="true">⚙</span> 设置</div>
+        </aside>
+        <div class="conversation">
+          <div class="conversation-head"><div><p>STUDIO MAC / 在线会话</p><h2>发布前检查</h2></div><span class="state-inline state-working"><i class="signal" aria-hidden="true"></i>工作中</span></div>
+          <div class="conversation-content">
+            <p class="date-label">今天</p>
+            <article class="user-message"><div class="message-label">你 <time>10:42</time></div><p>检查这次发布构建，列出还需处理的问题。</p></article>
+            <article class="pi-message"><div class="message-label">Pi <time>10:42</time></div><p>我会先检查构建，再查看测试结果。</p></article>
+            <div class="tool-rows" aria-label="工具状态示例"><div><code>pnpm build</code><span class="state-inline state-complete">✓ 已完成</span></div><div><code>pnpm test</code><span class="state-inline state-working">◷ 运行中</span></div></div>
+            <pre class="code-output" aria-label="示例工具输出"><code><span class="code-dim">$</span> pnpm test
+<span class="code-green">✓</span> 组件测试通过
+<span class="code-amber">◷</span> 正在检查浏览器用例
+<span class="code-blue">→</span> 等待结果</code></pre>
+            <p class="pi-followup">构建已完成。浏览器用例仍在运行，结束后我再汇总。</p>
+          </div>
+          <div class="composer"><div class="composer-surface"><span class="composer-placeholder">发送消息给 Pi…</span><div class="composer-footer"><span>Pi · 当前会话</span><span class="send-sample" aria-label="发送按钮示例"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-5 5m5-5 5 5"/></svg></span></div></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="state-section" aria-labelledby="state-heading">
+      <div class="section-title"><p>01 / 状态</p><h2 id="state-heading">连接、配对与反馈</h2></div>
+      <div class="state-grid">
+        <div class="state-column">
+          <div class="state-entry"><span class="sample-label">已连接</span><div class="notice notice-brand"><span class="notice-icon">●</span><div><strong>已连接到 Studio Mac</strong><p>可以继续查看在线 Pi。</p></div></div></div>
+          <div class="state-entry"><span class="sample-label">配对中 / 重连中</span><div class="notice notice-warning"><span class="notice-icon">◷</span><div><strong>正在等待电脑确认</strong><p>请在电脑上的 Pi 中完成配对。</p></div></div></div>
+          <div class="state-entry"><span class="sample-label">离线 / 本地历史</span><div class="notice notice-neutral"><span class="notice-icon">○</span><div><strong>这台电脑没有在线 Pi</strong><p>仍可阅读此浏览器保存的历史。</p></div></div></div>
+        </div>
+        <div class="state-column">
+          <div class="state-entry"><span class="sample-label">任务完成</span><div class="notice notice-success"><span class="notice-icon">✓</span><div><strong>构建检查已完成</strong><p>可以继续查看结果。</p></div></div></div>
+          <div class="state-entry"><span class="sample-label">操作失败</span><div class="notice notice-error"><span class="notice-icon">!</span><div><strong>配对未完成</strong><p>配对码无效，请重新核对后再试。</p></div></div></div>
+          <div class="state-entry"><span class="sample-label">只读状态</span><div class="notice notice-neutral"><span class="notice-icon">◷</span><div><strong>检查重连状态</strong><p>仅保存在此浏览器 · 无法向该历史发送消息</p></div></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="controls-section" aria-labelledby="controls-heading">
+      <div class="section-title"><p>02 / 操作</p><h2 id="controls-heading">交互与阅读</h2></div>
+      <div class="controls-grid">
+        <div class="controls-column"><h3>操作状态</h3><div class="control-list"><div><span class="sample-label">主要操作</span><span class="sample-button primary">配对电脑</span></div><div><span class="sample-label">次级操作</span><span class="sample-button secondary">查看本地历史</span></div><div><span class="sample-label">不可操作</span><span class="sample-button unavailable">发送消息</span></div><div><span class="sample-label">危险操作</span><span class="sample-button destructive">移除配对</span></div><div><span class="sample-label">主要 · 交互态</span><span class="variant-row"><span class="sample-button primary-hover">悬停</span><span class="sample-button primary-active">按下</span></span></div><div><span class="sample-label">次级 · 交互态</span><span class="variant-row"><span class="sample-button secondary-hover">悬停</span><span class="sample-button secondary-active">按下</span></span></div><div><span class="sample-label">危险 · 交互态</span><span class="variant-row"><span class="sample-button destructive-hover">悬停</span><span class="sample-button destructive-active">按下</span></span></div></div></div>
+        <div class="controls-column"><h3>长文阅读</h3><p class="reader-copy">这份记录只保存在当前浏览器。检查重连时，可以先阅读本地历史，再打开正在运行的 Pi。</p><blockquote>断线不会删除已保存的正式记录。</blockquote><p class="reader-copy">运行 <code class="inline-code">/pi-reach pair</code> 只用于与当前电脑配对，不会启动新的 Pi。</p><div class="mini-code"><span class="code-dim">diff</span><br><span class="code-green">+ 连接已恢复</span><br><span class="code-red">- 旧连接已关闭</span></div></div>
+      </div>
+    </section>
+
+    <section class="layer-section" aria-labelledby="layer-heading">
+      <div class="section-title"><p>03 / 叠层</p><h2 id="layer-heading">配对确认</h2></div>
+      <div class="overlay-sample" aria-label="弹窗与遮罩配色示例"><div class="overlay-underlay"><span>Pi Reach</span><span>正在运行的 Pi</span><span>本地历史</span></div><div class="overlay-scrim"></div><div class="overlay-dialog"><div class="dialog-top"><span class="dialog-kicker">配对电脑</span><span class="close-glyph" aria-hidden="true">×</span></div><h3>连接你的电脑</h3><p>在电脑上的 Pi 中获取配对码，然后输入到这里。</p><label>配对码<div class="input-sample">K7MP-4Q2D</div></label><div class="dialog-actions"><span class="sample-button secondary">取消</span><span class="sample-button primary">确认配对</span></div></div></div>
+    </section>
+  </main>
+  <footer class="review-footer">Pi Reach / 钢雾蓝配色评审稿 <span>不是正式产品界面 · 辅助色待确认</span></footer>
+</div>
+<script>
+  const study = document.querySelector(".color-study");
+  const themeButtons = document.querySelectorAll("[data-theme-choice]");
+  function setTheme(theme) {
+    study.dataset.theme = theme;
+    themeButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.themeChoice === theme)));
+  }
+  themeButtons.forEach((button) => button.addEventListener("click", () => setTheme(button.dataset.themeChoice)));
+  setTheme(new URLSearchParams(location.search).get("theme") === "dark" ? "dark" : "light");
+</script>
+</body>
+</html>

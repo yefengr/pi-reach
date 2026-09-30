@@ -1,0 +1,13 @@
+/* iOS 等只收缩 visual viewport 的浏览器；Android 已调整 layout viewport 时不启用。 */
+.pwa-app-shell[data-keyboard-viewport] {
+  position: fixed;
+  inset-inline: 0;
+  top: var(--pwa-viewport-top);
+  height: var(--pwa-viewport-height);
+}
+
+/* 由实际可用空间决定阅读留白，不依赖布局断点或物理屏幕高度。 */
+.pwa-app-shell .pwa-main[data-composer-budget] .pwa-message-list {
+  padding-block: 8px;
+  scroll-padding-bottom: 8px;
+}

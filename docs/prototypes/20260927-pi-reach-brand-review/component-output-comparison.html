@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 按钮尺寸与工具输出对照</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./component-output-comparison.css">
+</head>
+<body>
+<svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <symbol id="mark-pi" viewBox="0 0 64 64"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+    <symbol id="icon-link" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/></symbol>
+    <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M12 7v5l4 2"/></symbol>
+    <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M10 11v6M14 11v6M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></symbol>
+  </defs>
+</svg>
+<div class="layout-review comparison-review">
+  <header class="review-header"><div class="review-header-inner">
+    <a class="back-link" href="./components-review.html" aria-label="返回组件评审"><svg class="header-mark" viewBox="0 0 64 64" aria-hidden="true"><use href="#mark-pi"/></svg><span>Pi Reach</span></a>
+    <span class="review-label">工作区视觉评审 / 隔离效果稿</span>
+  </div></header>
+  <main class="review-main comparison-main">
+    <div class="review-heading"><div><p>PI REACH / COMPONENT REVIEW</p><h1>按钮尺寸与工具输出</h1></div><span>钢雾蓝 · 柔和圆角 · 静态对照</span></div>
+
+    <section class="comparison-section" aria-labelledby="size-heading">
+      <div class="section-heading"><h2 id="size-heading">操作尺寸</h2><p>图标操作均保留 44px 点击区域；仅比较主操作高度。</p></div>
+      <div class="comparison-grid">
+        <section class="comparison-option size-option" aria-labelledby="size-a"><div class="option-heading"><h3 id="size-a">A · 统一 44px（已选）</h3><span>主操作 44 / 普通 44</span></div>
+          <div class="sample-row"><span>首次配对</span><button class="sample-button primary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-link"/></svg>配对电脑</button></div>
+          <div class="sample-row"><span>会话操作</span><div class="sample-actions"><button class="sample-button secondary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-history"/></svg>查看历史</button><button class="sample-button icon-only" type="button" aria-label="更多操作（示意）" title="更多操作"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-more"/></svg></button></div></div>
+          <div class="sample-row"><span>危险操作</span><button class="sample-button danger" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trash"/></svg>移除电脑</button></div>
+        </section>
+        <section class="comparison-option size-option size-tall" aria-labelledby="size-b"><div class="option-heading"><h3 id="size-b">B · 主操作 48px</h3><span>主操作 48 / 普通 44</span></div>
+          <div class="sample-row"><span>首次配对</span><button class="sample-button primary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-link"/></svg>配对电脑</button></div>
+          <div class="sample-row"><span>会话操作</span><div class="sample-actions"><button class="sample-button secondary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-history"/></svg>查看历史</button><button class="sample-button icon-only" type="button" aria-label="更多操作（示意）" title="更多操作"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-more"/></svg></button></div></div>
+          <div class="sample-row"><span>危险操作</span><button class="sample-button danger" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trash"/></svg>移除电脑</button></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="comparison-section output-section" aria-labelledby="output-heading">
+      <div class="section-heading"><h2 id="output-heading">工具输出</h2><p>相同命令、代码和错误信息；工具状态行不加横向分隔线。</p></div>
+      <div class="comparison-grid output-grid">
+        <section class="comparison-option output-option" aria-labelledby="output-panel"><div class="option-heading"><h3 id="output-panel">A · 浅色浅底（已选）</h3><span>panel / 正文色</span></div>
+          <div class="tool-sequence">
+            <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>bash</strong><span>pnpm --filter pwa test:unit</span></div><span class="tool-status complete"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+              <pre class="output-surface panel-surface"><code><span class="muted">$</span> pnpm --filter pwa test:unit
+<span class="success">✓</span> tool-card.node.test.tsx
+<span class="success">✓</span> tool-output.node.test.tsx
+<span class="muted">  ...其余输出已省略</span></code></pre></div>
+            <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>read</strong><span>pwa/src/components/pwa/tool-card.tsx · L21–23</span></div><span class="tool-status complete"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+              <pre class="output-surface panel-surface"><code><span class="muted">21</span> <span class="keyword">const</span> id = useId();
+<span class="muted">22</span> <span class="keyword">const</span> status = toolStatus(value, statusOverride);
+<span class="muted">23</span> <span class="keyword">const</span> [localExpanded, setLocalExpanded] = useState(<span class="value">false</span>);</code></pre></div>
+            <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>bash</strong><span>cat example-output.log</span></div><span class="tool-status error"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-alert"/></svg>错误</span></div>
+              <pre class="output-surface panel-surface"><code><span class="failure">cat: example-output.log: Permission denied</span>
+<span class="muted">命令以非零状态结束</span></code></pre></div>
+          </div>
+        </section>
+        <section class="comparison-option output-option" aria-labelledby="output-code"><div class="option-heading"><h3 id="output-code">B · 浅色深底</h3><span>code-bg / 代码色</span></div>
+          <div class="tool-sequence">
+            <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>bash</strong><span>pnpm --filter pwa test:unit</span></div><span class="tool-status complete"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+              <pre class="output-surface code-surface"><code><span class="muted">$</span> pnpm --filter pwa test:unit
+<span class="success">✓</span> tool-card.node.test.tsx
+<span class="success">✓</span> tool-output.node.test.tsx
+<span class="muted">  ...其余输出已省略</span></code></pre></div>
+            <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>read</strong><span>pwa/src/components/pwa/tool-card.tsx · L21–23</span></div><span class="tool-status complete"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+              <pre class="output-surface code-surface"><code><span class="muted">21</span> <span class="keyword">const</span> id = useId();
+<span class="muted">22</span> <span class="keyword">const</span> status = toolStatus(value, statusOverride);
+<span class="muted">23</span> <span class="keyword">const</span> [localExpanded, setLocalExpanded] = useState(<span class="value">false</span>);</code></pre></div>
+            <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>bash</strong><span>cat example-output.log</span></div><span class="tool-status error"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-alert"/></svg>错误</span></div>
+              <pre class="output-surface code-surface"><code><span class="failure">cat: example-output.log: Permission denied</span>
+<span class="muted">命令以非零状态结束</span></code></pre></div>
+          </div>
+        </section>
+      </div>
+      <section class="comparison-option output-option dark-option" aria-labelledby="output-dark"><div class="option-heading"><h3 id="output-dark">深色外观</h3><span>code-bg / 深色状态色</span></div>
+        <div class="tool-sequence">
+          <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>bash</strong><span>pnpm --filter pwa test:unit</span></div><span class="tool-status complete"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+            <pre class="output-surface code-surface"><code><span class="muted">$</span> pnpm --filter pwa test:unit
+<span class="success">✓</span> tool-card.node.test.tsx
+<span class="success">✓</span> tool-output.node.test.tsx
+<span class="muted">  ...其余输出已省略</span></code></pre></div>
+          <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>read</strong><span>pwa/src/components/pwa/tool-card.tsx · L21–23</span></div><span class="tool-status complete"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-check"/></svg>已完成</span></div>
+            <pre class="output-surface code-surface"><code><span class="muted">21</span> <span class="keyword">const</span> id = useId();
+<span class="muted">22</span> <span class="keyword">const</span> status = toolStatus(value, statusOverride);
+<span class="muted">23</span> <span class="keyword">const</span> [localExpanded, setLocalExpanded] = useState(<span class="value">false</span>);</code></pre></div>
+          <div class="tool-entry"><div class="tool-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chevron"/></svg><div class="tool-summary"><strong>bash</strong><span>cat example-output.log</span></div><span class="tool-status error"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-alert"/></svg>错误</span></div>
+            <pre class="output-surface code-surface"><code><span class="failure">cat: example-output.log: Permission denied</span>
+<span class="muted">命令以非零状态结束</span></code></pre></div>
+        </div>
+      </section>
+    </section>
+    <p class="review-caveat">仅供视觉比较。命令输出与错误文字是模拟示例，代码片段摘自当前文件；不是实际测试记录。按钮不触发业务操作。这里不决定正式 PWA 的尺寸、工具渲染或桌面布局。</p>
+  </main>
+</div>
+</body>
+</html>
