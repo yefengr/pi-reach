@@ -115,23 +115,15 @@ jobs:
         run: pnpm build
 
   pwa-browser:
-    name: pwa-browser (${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      # 矩阵只含分组名：GitHub 显示为 pwa-browser (<分组>)，任务被跳过时显示为 pwa-browser，不出现未展开的模板。
       matrix:
-        include:
-          - shard: workspace-layout
-            run: pnpm exec vitest run --project browser --browser.fileParallelism=false src/components/pwa/pwa-workspace-layout.browser.test.tsx
-          - shard: app
-            run: pnpm exec vitest run --project browser --browser.fileParallelism=false src/components/pwa/pwa-app.browser.test.tsx && pnpm test:component:production
-          - shard: rest-1
-            run: pnpm exec vitest run --project browser --browser.fileParallelism=false --exclude "**/pwa-workspace-layout.browser.test.tsx" --exclude "**/pwa-app.browser.test.tsx" --shard=1/2
-          - shard: rest-2
-            run: pnpm exec vitest run --project browser --browser.fileParallelism=false --exclude "**/pwa-workspace-layout.browser.test.tsx" --exclude "**/pwa-app.browser.test.tsx" --shard=2/2
+        shard: [workspace-layout, app, rest-1, rest-2]
     steps:
       - uses: actions/checkout@v4
 
@@ -141,7 +133,18 @@ jobs:
 
       - name: Run PWA browser tests
         working-directory: pwa
-        run: ${{ matrix.run }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          browser_tests() { pnpm exec vitest run --project browser --browser.fileParallelism=false "$@"; }
+          rest=(--exclude "**/pwa-workspace-layout.browser.test.tsx" --exclude "**/pwa-app.browser.test.tsx")
+          case "$SHARD" in
+            workspace-layout) browser_tests src/components/pwa/pwa-workspace-layout.browser.test.tsx ;;
+            app) browser_tests src/components/pwa/pwa-app.browser.test.tsx && pnpm test:component:production ;;
+            rest-1) browser_tests "${rest[@]}" --shard=1/2 ;;
+            rest-2) browser_tests "${rest[@]}" --shard=2/2 ;;
+            *) echo "Unknown shard: $SHARD" >&2; exit 1 ;;
+          esac
 
   verify:
     name: verify
