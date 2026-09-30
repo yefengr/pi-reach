@@ -1,0 +1,53 @@
+# 在推送到 main 和 Pull Request 时执行 `pnpm verify`；`main` 的保护规则要求检查 `verify` 通过后才能合并。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      # 按根 package.json 的 packageManager 启用固定版本的 pnpm。
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Resolve pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # PWA 的 Vitest Browser Mode 测试需要 Chromium。
+      - name: Install Playwright Chromium
+        run: pnpm --filter pwa exec playwright install --with-deps chromium
+
+      - name: Verify
+        run: pnpm verify
