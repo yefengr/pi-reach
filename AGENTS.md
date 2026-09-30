@@ -76,7 +76,9 @@ pnpm verify:release
 
 `pnpm verify` 串行执行 workspace 的类型检查、lint、测试和构建，包含 Node Relay、部署脚本模拟测试和 Service Worker production 专项，但不启动 Playwright 或 Docker E2E；`pnpm test:e2e` 串行执行 PWA 本地生产预览、Docker Protocol v2 和真实浏览器双 Owner 回归；`pnpm verify:release` 组合两者。`pnpm test:relay` 单独构建并验证 Relay。局部验证使用 `pnpm --filter pwa <命令>`、`pnpm --filter @yefengr/pi-reach <命令>`、`pnpm --filter @pi-reach/relay <命令>` 或在对应目录执行。PWA 与 Relay Docker 构建均使用仓库根上下文：`docker build -f pwa/Dockerfile .`、`docker build -f relay/Dockerfile .`。
 
-只运行与当前变更相关的命令；跨项目共享协议或部署配置变更时扩大验证范围。
+只运行与当前变更相关的命令；跨项目共享协议或部署配置变更时扩大验证范围。`pnpm check:docs` 检查已跟踪文档的站内链接与 Markdown 锚点。
+
+CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks` 负责类型检查、lint、除 PWA 浏览器组件测试外的测试与构建，`pwa-browser` 把浏览器组件测试按耗时分到 4 台机器；只改文档时跳过这两项，只运行空白与链接检查。汇总任务 `verify` 是 `main` 保护规则要求的检查；调整 `pnpm verify` 的内容时同步修改工作流。
 
 ## 发布
 
