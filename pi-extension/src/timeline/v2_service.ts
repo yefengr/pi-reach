@@ -246,7 +246,16 @@ export class TimelineV2Service {
 
   publishFrames(event: TimelineEvent): V2Broadcast[] {
     const parsed = TimelineEventSchema.safeParse(event);
-    if (!parsed.success || parsed.data.event_seq === undefined || parsed.data.session_id !== this.sessionId || parsed.data.leaf_id !== this.leafId) return [];
+    if (!parsed.success || parsed.data.event_seq === undefined || parsed.data.session_id !== this.sessionId || parsed.data.leaf_id !== this.leafId) {
+      if (event.kind === "run_end") console.warn("[pi-reach] run_end publication rejected", {
+        reason: !parsed.success ? "invalid_event" : parsed.data.event_seq === undefined ? "missing_event_seq"
+          : parsed.data.session_id !== this.sessionId ? "session_mismatch" : "leaf_mismatch",
+        event_id: event.event_id, group_id: event.group_id, event_seq: event.event_seq,
+        event_scope: { session_id: event.session_id, leaf_id: event.leaf_id },
+        service_scope: { session_id: this.sessionId, leaf_id: this.leafId },
+      });
+      return [];
+    }
     const complete: V2Broadcast = {
       protocol_version: 2,
       type: "timeline_event",

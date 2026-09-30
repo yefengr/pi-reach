@@ -184,9 +184,28 @@ describe("turn presentation", () => {
     expect(interrupted).toContain("· Interrupted");
     const running = renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), { hasEarlier: false, running: true });
     expect(running).not.toContain("pwa-turn-meta");
-    // 旧数据没有 run_end：Pi 空闲时以该轮最后一个事件的时间结束。
-    const legacy = renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), { hasEarlier: false, running: false });
-    expect(legacy).toContain("pwa-turn-meta");
+    const idle = renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), { hasEarlier: false, running: false });
+    expect(idle).not.toContain("pwa-turn-meta");
+  });
+
+  test.each([
+    { label: "idle", running: false },
+    { label: "history", running: true, isLive: false },
+    { label: "later formal run", running: true, later: "formal" },
+    { label: "later partial run", running: true, later: "partial" },
+  ])("does not finish or group tools without run_end ($label)", ({ running, isLive, later }) => {
+    const items: Parameters<typeof MessageList>[0]["items"] = events(
+      user("u1", "group-1", 1), toolEvent,
+      { ...toolEvent, event_id: "tool-2", tool_call_id: "tool-2", timestamp: 2 },
+    );
+    if (later === "formal") items.push(...events(user("u2", "g2", 3)));
+    if (later === "partial") items.push({ kind: "partial", createdAt: 3, partial: {
+      protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g2", partial_id: "later:assistant:0", kind: "assistant", status: "delta", delta: "Next run",
+    } });
+    const html = renderList(items, { hasEarlier: false, running, isLive });
+    expect(html).not.toContain("pwa-turn-meta");
+    expect(html).not.toContain("pwa-tool-group");
+    expect(html.match(/aria-label="Expand read tool"/g)).toHaveLength(2);
   });
 
   test("shows Pi is thinking only while running and before the turn has any output", () => {

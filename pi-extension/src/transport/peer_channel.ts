@@ -58,6 +58,10 @@ export class V2PeerChannel implements V2Channel {
       } satisfies RouteFrame));
       return true;
     } catch {
+      if (msg.type === "timeline_event" && msg.event.kind === "run_end") console.warn("[pi-reach] run_end send failed", {
+        event_id: msg.event.event_id, group_id: msg.event.group_id, event_seq: msg.event.event_seq,
+        session_id: msg.session_id, leaf_id: msg.leaf_id,
+      });
       // Formal history recovers messages lost while the relay reconnects.
       return false;
     }

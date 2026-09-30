@@ -89,6 +89,23 @@ describe("V2PeerChannel", () => {
     expect(channel.sendV2(frame)).toBe(false);
   });
 
+  test("diagnoses run_end send failure without logging the route payload", () => {
+    const relay = new RelayMock();
+    const channel = new V2PeerChannel(relay as unknown as RelayClient, "owner", host, () => undefined);
+    const event = { kind: "run_end" as const, event_id: "end", event_seq: 1, group_id: "group", session_id: "session", leaf_id: "leaf", timestamp: 1, status: "complete" as const };
+    const frame = { protocol_version: 2 as const, type: "timeline_event" as const, session_id: event.session_id, leaf_id: event.leaf_id, event };
+    const diagnostic = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(channel.sendV2(frame)).toBe(true);
+      expect(diagnostic).not.toHaveBeenCalled();
+      relay.failSend = true;
+      expect(channel.sendV2(frame)).toBe(false);
+      expect(diagnostic).toHaveBeenCalledExactlyOnceWith("[pi-reach] run_end send failed", {
+        event_id: "end", group_id: "group", event_seq: 1, session_id: "session", leaf_id: "leaf",
+      });
+    } finally { diagnostic.mockRestore(); channel.detach(); }
+  });
+
   test("does not deliver invalid UTF-8 payloads as client frames", () => {
     const relay = new RelayMock();
     const received = vi.fn();

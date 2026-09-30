@@ -110,9 +110,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier, onLoadEarlier, 
   const liveRunning = isLive && running;
   const completions = useMemo(() => runCompletions(
     items.flatMap((item) => item.kind === "event" ? [item.event] : []),
-    liveRunning,
-    items.flatMap((item) => item.kind === "partial" ? [item.partial.group_id] : []),
-  ), [items, liveRunning]);
+  ), [items]);
   return <div className="pwa-message-list" data-reconnect-phase={reconnectPhase ?? undefined} ref={listRef} tabIndex={-1} onScroll={(event) => {
     const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
     onScroll(scrollHeight - scrollTop - clientHeight <= 32);
