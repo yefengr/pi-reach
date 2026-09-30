@@ -339,6 +339,26 @@ npm view @yefengr/pi-reach version
 
 新版本在批准或直接发布后才出现在 registry。npm 异步处理上传（返回 202），新版本通常几分钟后才可见，可能超过脚本直接发布时约 60 秒的确认等待；脚本此时只给出警告，稍后用 `npm view` 核对即可。处理完成前对同一个包执行 `npm deprecate` 会返回 422。首次发布新包时，npm 会自动生成 `0.0.0-stage` 占位版本，无需处理。发布后按 [Extension 协作规范](../pi-extension/AGENTS.md)在仓库之外安装并加载新版本。
 
+## 版本标签与 GitHub Release
+
+各组件上线后，在其版本号所在的 `main` 提交上打注解标签，并创建同名 GitHub Release：
+
+| 组件 | 标签 | 版本来源 |
+|---|---|---|
+| Extension | `extension-vX.Y.Z` | `pi-extension/package.json`，即 npm 上的 `@yefengr/pi-reach@X.Y.Z` |
+| PWA | `pwa-vX.Y.Z` | `pwa/package.json`；部署时 `SITE_VERSION` 使用 `vX.Y.Z` |
+| Relay | `relay-vX.Y.Z` | `relay/package.json`；部署时 `RELAY_VERSION` 使用 `vX.Y.Z` |
+
+- Extension 在 npm 批准上线后打标签，PWA 与 Relay 在部署并核对后打标签；同一提交可以同时带多个组件的标签。
+- Release 说明写该组件的变更与发布去向（npm 版本，或线上地址与镜像标签）。Extension 的 Release 标记为 Latest，其余不标记。
+
+```bash
+git tag -a extension-vX.Y.Z -m "Extension X.Y.Z" <commit>
+git push origin extension-vX.Y.Z
+gh release create extension-vX.Y.Z --verify-tag --title "Extension X.Y.Z" --notes-file notes.md --latest
+gh release create pwa-vX.Y.Z --verify-tag --title "PWA X.Y.Z" --notes-file notes.md --latest=false
+```
+
 ## 故障排查
 
 ### `docker compose` 不存在
