@@ -4,6 +4,8 @@
 # - 认证：npm trusted publishing（GitHub OIDC），仓库和 GitHub 中不保存 npm token。npm 侧的 trusted publisher
 #   绑定本文件名 release.yml，改名时同步修改 npm 设置。
 # - 上传：pi-extension/publish-npm.sh --stage 运行 Extension 的 verify、pnpm pack 与 tarball 检查后执行 npm stage publish。
+# - npm：使用 .node-version 对应 Node 附带的 npm，不在持有发布权限的作业里另装 npm。npm stage publish 需要
+#   npm 11.15.0 或更高版本，调整 Node 版本时确认其附带的 npm 满足要求；脚本开头也会检查并在不满足时立即失败。
 # 流程与一次性配置见 docs/DEPLOYMENT.md「Extension npm 发布」。
 name: Release
 
