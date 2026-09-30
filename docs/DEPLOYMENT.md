@@ -309,27 +309,35 @@ IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 
 ## Extension npm 发布
 
-Extension 以 `@yefengr/pi-reach` 发布到 npm，入口为 `pi-extension/publish-npm.sh`：脚本确认登录状态且该版本尚未发布，运行 Extension 的 `pnpm verify`，用 `pnpm pack` 打包并检查 tarball，再以公开访问上传这个 tarball。版本号一经发布不可复用。
+Extension 以 `@yefengr/pi-reach` 发布到 npm。常规发布由 Release 工作流（`.github/workflows/release.yml`）完成：`pi-extension/package.json` 的版本号变更合并到 `main` 后，工作流以 npm trusted publishing（GitHub OIDC）认证，运行 `pi-extension/publish-npm.sh --stage` 把新版本提交到 npm 待审区，维护者在 npmjs.com 用双重验证批准后才正式上线。仓库和 GitHub 中不保存 npm token。版本号一经发布不可复用。
 
-发布前：
+`publish-npm.sh` 确认该版本尚未发布，运行 Extension 的 `pnpm verify`，用 `pnpm pack` 打包并检查 tarball，再以公开访问上传这个 tarball。默认直接发布；`--stage` 改为执行 `npm stage publish` 提交待审，需要 npm 11.15.0 或更高版本。
+
+发布步骤：
 
 1. 协议有变更时先部署 PWA，再发布 Extension（[ADR-20260927](adr/20260927-run-end-event.md)）；可核对线上 PWA 的脚本是否已包含新增的帧或事件类型。
-2. 修改 `pi-extension/package.json` 的 `version`，经 Pull Request 合并到 `main` 后再从 `main` 发布。
+2. 修改 `pi-extension/package.json` 的 `version`，经 Pull Request 合并到 `main`。
+3. Release 工作流确认版本号确有变化且 npm 上尚无该版本后提交待审；版本号未变的推送（如只改依赖）或该版本已发布时跳过。也可在 Actions 页面手动运行，此时不比较版本号。
+4. 在 npmjs.com 的 Staged Packages 中核对并批准，或在交互式终端执行 `npm stage list @yefengr/pi-reach` 与 `npm stage approve <stage-id>`；批准需要双重验证。
 
-认证：
+npm 侧一次性配置（需要网页登录与双重验证）：
 
-- 在交互式终端执行 `npm login`，或提供环境变量 `NPM_TOKEN`。使用 `NPM_TOKEN` 时，脚本写入只引用该变量的临时 npmrc，token 不落盘。
-- 非交互环境（CI、agent 的 shell）无法完成 npm 网页登录和双重验证，只能使用 `NPM_TOKEN`。
-- 可跳过双重验证的细粒度 token 不能执行 `npm unpublish`，npm 也在逐步限制这类 token 直接发布。
+- 在包设置的 Trusted publishing 中添加 GitHub Actions：用户 `yefengr`、仓库 `pi-reach`、工作流文件 `release.yml`，Environment 留空，不勾选允许直接 `npm publish`（`npm stage publish` 始终允许）。工作流改名时同步修改此配置。
+- Release 工作流跑通后，把包设置的 Publishing access 改为 “Require two-factor authentication and disallow tokens”，并撤销可跳过双重验证的 token。
 
-执行与核对：
+本地发布（备用）：
+
+- 认证使用交互式终端的 `npm login` 或环境变量 `NPM_TOKEN`。使用 `NPM_TOKEN` 时，脚本写入只引用该变量的临时 npmrc，token 不落盘。
+- `bash pi-extension/publish-npm.sh --stage` 提交待审，不需要双重验证。不加 `--stage` 时直接发布：交互式会话需要输入验证码，非交互环境（CI、agent 的 shell）只能使用可跳过双重验证的 token；包设置禁止 token 后，token 只能提交待审。
+- 可跳过双重验证的细粒度 token 不能执行 `npm unpublish`。
+
+核对：
 
 ```bash
-bash pi-extension/publish-npm.sh
 npm view @yefengr/pi-reach version
 ```
 
-npm 异步处理上传（返回 202），新版本通常几分钟后才出现在 registry，可能超过脚本约 60 秒的确认等待；脚本此时只给出警告，稍后用 `npm view` 核对即可。处理完成前对同一个包执行 `npm deprecate` 会返回 422。首次发布新包时，npm 会自动生成 `0.0.0-stage` 占位版本，无需处理。发布后按 [Extension 协作规范](../pi-extension/AGENTS.md)在仓库之外安装并加载新版本。
+新版本在批准或直接发布后才出现在 registry。npm 异步处理上传（返回 202），新版本通常几分钟后才可见，可能超过脚本直接发布时约 60 秒的确认等待；脚本此时只给出警告，稍后用 `npm view` 核对即可。处理完成前对同一个包执行 `npm deprecate` 会返回 422。首次发布新包时，npm 会自动生成 `0.0.0-stage` 占位版本，无需处理。发布后按 [Extension 协作规范](../pi-extension/AGENTS.md)在仓库之外安装并加载新版本。
 
 ## 故障排查
 
