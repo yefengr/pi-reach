@@ -29,10 +29,15 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
-# 延续 Extension 的安全下限；统一 Vite 到 PWA 已验证的解析版本。
+# 依赖的安全下限（含 Pi SDK 等开发依赖链中的漏洞修复）；统一 Vite 到 PWA 已验证的解析版本。
 overrides:
+  '@hono/node-server': ^1.19.15
   esbuild: ^0.28.1
-  hono: ^4.12.25
-  protobufjs: ^7.6.3
+  fast-uri: ^3.1.8
+  hono: ^4.13.5
+  ip-address: ^10.7.1
+  protobufjs: ^7.6.5
+  qs: ^6.16.0
+  undici: ^8.10.2
   vite: 8.2.2
   ws: ^8.21.0
