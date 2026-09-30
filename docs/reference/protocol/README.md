@@ -192,4 +192,4 @@ Relay 没有数据库或持久 volume。registry、连接、ACL、subscription �
 - Browser/PWA：[`pwa/src/`](../../../pwa/src/)
 - [会话协议](protocol-v2.md)、[配对协议](pairing.md)
 
-安全问题请通过仓库维护者公布的私密渠道报告；若当前没有私密渠道，创建 issue 时不要附带 secret、private key、配对码、Cookie 或可利用 payload。
+安全问题请按 [SECURITY.md](../../../SECURITY.md) 通过 GitHub 私密漏洞报告提交，不要在公开 issue 中披露漏洞细节，也不要附带 secret、private key、配对码、Cookie 或可利用 payload。

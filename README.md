@@ -114,7 +114,7 @@ PWA 必须通过 HTTPS（或同一设备上的 `localhost`）访问，否则浏�
 - 配对按电脑隔离。不再使用的浏览器，请在对应电脑上用 `/pi-reach revoke` 撤销。
 - 浏览器的身份和会话记录只保存在本地；清除网站数据会同时删除它们，之后需要重新配对。
 
-完整的信任边界见[协议与安全说明](docs/reference/protocol/README.md)。报告安全问题时，请不要在公开 issue 中附带密钥、配对码或可利用的细节。
+完整的信任边界见[协议与安全说明](docs/reference/protocol/README.md)。发现安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要提交公开 issue。
 
 ## 非目标
 
@@ -162,6 +162,7 @@ pnpm dev:pwa
 | [产品背景与术语](docs/CONTEXT.md) | 使用场景、核心概念、数据与信任边界 |
 | [架构](docs/ARCHITECTURE.md) | 三端职责、状态归属与工程边界 |
 | [协议与安全](docs/reference/protocol/README.md) | 身份、配对、消息与信任模型 |
+| [安全策略](SECURITY.md) | 漏洞报告方式与范围 |
 | [设计规范](docs/DESIGN.md) | PWA 界面与交互规则 |
 | [部署](docs/DEPLOYMENT.md) | 服务器准备、Caddy 配置与发布流程 |
 | [路线图](docs/ROADMAP.md) · [待定事项](docs/BACKLOG.md) | 已确定的事项与候选建议 |

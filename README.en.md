@@ -114,7 +114,7 @@ Serve the PWA over HTTPS (or `localhost` on the same device); otherwise browsers
 - Pairings are per computer. Revoke browsers you no longer use with `/pi-reach revoke` on that computer.
 - Browser identity and history are stored only locally. Clearing site data deletes both, and you will need to pair again.
 
-The full trust boundary is described in the [protocol and security reference](docs/reference/protocol/README.md) (Chinese). When reporting a security issue, do not include keys, pairing codes, or exploit details in a public issue.
+The full trust boundary is described in the [protocol and security reference](docs/reference/protocol/README.md) (Chinese). To report a vulnerability, follow [SECURITY.md](SECURITY.md) and report it privately instead of opening a public issue.
 
 ## Non-goals
 
@@ -164,6 +164,7 @@ Detailed documentation is currently written in Chinese.
 | [Context](docs/CONTEXT.md) | Use cases, core concepts, data and trust boundaries |
 | [Architecture](docs/ARCHITECTURE.md) | Responsibilities, state ownership, and build boundaries |
 | [Protocol & security](docs/reference/protocol/README.md) | Identity, pairing, messages, and the trust model |
+| [Security policy](SECURITY.md) | How to report vulnerabilities, and what is in scope |
 | [Design](docs/DESIGN.md) | PWA UI and interaction rules |
 | [Deployment](docs/DEPLOYMENT.md) | Server preparation, Caddy setup, and the release flow |
 | [Roadmap](docs/ROADMAP.md) · [Backlog](docs/BACKLOG.md) | Committed work and candidate ideas |
