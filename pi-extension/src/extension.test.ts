@@ -475,8 +475,13 @@ describe("Pi Reach endpoint extension", () => {
     const tool = { role: "toolResult", timestamp: 2, toolCallId: "wire-call", toolName: "read", ...result, isError: false };
     pi.handlers.get("message_start")!({ message: tool }, context);
     pi.handlers.get("message_end")!({ message: tool }, context);
+    // 其他扩展异步处理 message_end 时，SDK 还没有写入正式工具消息。
+    await new Promise<void>((resolve) => setImmediate(resolve));
     manager.appendMessage(tool as never);
-    pi.handlers.get("agent_end")!({}, context);
+    pi.handlers.get("turn_end")!({}, context);
+    expect(relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from(JSON.parse(line).ct, "base64").toString("utf8"))))
+      .toContainEqual(expect.objectContaining({ type: "timeline_event", event: expect.objectContaining({ kind: "tool", tool_call_id: "wire-call" }) }));
+    pi.handlers.get("agent_end")!({ messages: [assistant, tool] }, context);
     await new Promise<void>((resolve) => setImmediate(resolve));
     const frames = relay.send.mock.calls.map(([line]) => {
       const outer = JSON.parse(line) as { target_owner_id: string; ct: string };
@@ -489,6 +494,9 @@ describe("Pi Reach endpoint extension", () => {
       expect.objectContaining({ blocks: [{ type: "text", text: "complete output" }] }),
     ]);
     expect(frames).toContainEqual(expect.objectContaining({ type: "timeline_event", event: expect.objectContaining({ kind: "tool", tool_call_id: "wire-call", args: { path: "README.md" }, result: result.content }) }));
+    const formal = frames.filter((frame) => frame.type === "timeline_event");
+    expect(formal.map((frame) => [frame.event.kind, frame.event.event_seq])).toEqual([["assistant", 1], ["tool", 2], ["run_end", 3]]);
+    expect(formal.at(-1)?.event.group_id).toBe(formal[0]?.event.group_id);
   });
 
   test("keeps the primary endpoint and timeline alive across an in-process child session", async () => {

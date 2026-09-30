@@ -94,6 +94,29 @@ describe("TimelineV2Service", () => {
     expect(service.publishFrames({ ...event, leaf_id: "stale-leaf", blocks: [{ type: "text", text: "x".repeat(300_000) }] })).toEqual([]);
   });
 
+  test.each([
+    ["invalid_event", { event_seq: 0 }],
+    ["missing_event_seq", { event_seq: undefined }],
+    ["session_mismatch", { session_id: "another-session" }],
+    ["leaf_mismatch", { leaf_id: "stale-leaf" }],
+  ] as const)("diagnoses a rejected run_end without bypassing validation (%s)", (reason, overrides) => {
+    const session = SessionManager.inMemory(process.cwd());
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: () => false });
+    const event = { kind: "run_end" as const, event_id: "run-end", event_seq: 1, group_id: "group", session_id: session.getSessionId(), leaf_id: service.leafId, timestamp: 1, status: "complete" as const };
+    const diagnostic = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(service.publishFrames(event)).toHaveLength(1);
+      expect(diagnostic).not.toHaveBeenCalled();
+      const rejected = { ...event, ...overrides };
+      expect(service.publishFrames(rejected)).toEqual([]);
+      expect(diagnostic).toHaveBeenCalledExactlyOnceWith("[pi-reach] run_end publication rejected", {
+        reason, event_id: rejected.event_id, group_id: rejected.group_id, event_seq: rejected.event_seq,
+        event_scope: { session_id: rejected.session_id, leaf_id: rejected.leaf_id },
+        service_scope: { session_id: service.sessionId, leaf_id: service.leafId },
+      });
+    } finally { diagnostic.mockRestore(); }
+  });
+
   test("lists the current vision model only after hello and generation validation", () => {
     const session = SessionManager.inMemory(process.cwd());
     const onListModels = vi.fn(() => ({

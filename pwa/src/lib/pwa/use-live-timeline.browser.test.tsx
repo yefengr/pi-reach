@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { useLiveTimeline } from "./use-live-timeline";
+import { receiveTimelineFrame } from "./timeline-frame-handler";
 import type { PeerChannel } from "../pi-reach/peer-channel";
 import type { TimelineScope } from "./timeline-runtime";
 import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
@@ -12,12 +13,15 @@ import { MessageList } from "@/components/pwa/message-list";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 import { loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
 
-vi.mock("./timeline-store", () => ({ loadTimeline: vi.fn(async () => []), mergeTimelineEvents: vi.fn(async () => {}), replaceTimelineEvents: vi.fn(async () => {}) }));
+vi.mock("./timeline-store", () => ({
+  loadTimeline: vi.fn(async () => []), mergeTimelineEvents: vi.fn(async () => {}), replaceTimelineEvents: vi.fn(async () => {}),
+  TimelineStoreConflictError: class extends Error {},
+}));
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
 type Timeline = ReturnType<typeof useLiveTimeline>;
 const report = vi.fn();
 let api: Timeline;
-// 与应用一致：Pi 仍在运行（endpoint working）时，当前一轮尚未结束。
+// 与应用一致：endpoint working 只控制运行/等待展示，不决定一轮是否结束。
 let piRunning = false;
 function Harness() {
   const channelRef = useRef<PeerChannel | null>(null);
@@ -94,6 +98,64 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     expect(list.querySelectorAll(".pwa-streaming")).toHaveLength(0);
     expect(Math.abs(offset() - before)).toBeLessThanOrEqual(1);
     expect(api.followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test.each(["missing run_end", "run_end", "run_end with residual partial"] as const)("live frame delivery groups tools only after explicit completion without working updates (%s)", async mode => {
+  piRunning = true;
+  const screen = await render(<Harness />);
+  const base = { session_id: scope.sessionId, leaf_id: scope.leafId, group_id: "tool-run" };
+  const receive = (frame: ServerFrame) => flushSync(() => receiveTimelineFrame(frame, {
+    runtime: api.runtimeRef.current,
+    fragmentAssemblerRef: api.fragmentAssemblerRef,
+    applyTimelineChange: api.applyTimelineChange,
+    receiveRealtimeOutput: api.receiveRealtimeOutput,
+    setError: report,
+    setLastSyncedAt: api.setLastSyncedAt,
+  }));
+  const formal = (event: TimelineEvent) => receive({ protocol_version: 2, type: "timeline_event", session_id: event.session_id, leaf_id: event.leaf_id, event });
+  const partial = (id: string): ServerFrame => ({ ...base, protocol_version: 2, type: "timeline_partial", partial_id: `tool:${id}`, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running" });
+  const done = (id: string, seq: number): TimelineEvent => ({ ...base, event_id: `event:${id}`, event_seq: seq, timestamp: seq, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok" });
+  try {
+    flushSync(() => { expect(start(0)).toEqual([]); });
+    const list = api.messageListRef.current!;
+    receive(partial("first"));
+    receive(partial("second"));
+    await expect.poll(() => list.querySelectorAll(".pwa-tool-status-running").length).toBe(2);
+    expect(list.querySelector(".pwa-tool-group")).toBeNull();
+
+    formal(done("first", 1));
+    await expect.poll(() => list.querySelectorAll(".pwa-tool-status-complete").length).toBe(1);
+    expect(list.querySelector(".pwa-tool-group")).toBeNull();
+    formal(done("second", 2));
+    await expect.poll(() => list.querySelectorAll(".pwa-tool-status-complete").length).toBe(2);
+    expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(2);
+    expect(list.querySelector(".pwa-tool-group")).toBeNull();
+    expect(list.querySelector(".pwa-turn-meta")).toBeNull();
+
+    if (mode === "run_end with residual partial") {
+      receive({ ...base, protocol_version: 2, type: "timeline_partial", partial_id: "unfinished:assistant:0", kind: "assistant", status: "delta", delta: "Still streaming" });
+      await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Still streaming");
+    }
+    if (mode !== "missing run_end") {
+      const timestamp = Date.UTC(2026, 0, 1, 9, 30);
+      formal({ ...base, event_id: "run-end", event_seq: 3, timestamp, kind: "run_end", status: "complete" });
+      await expect.poll(() => list.querySelector(".pwa-turn-meta time")?.getAttribute("datetime")).toBe(new Date(timestamp).toISOString());
+      await expect.poll(() => vi.mocked(mergeTimelineEvents).mock.calls.some(([, values]) => values.some(event => event.kind === "run_end"))).toBe(true);
+    }
+    if (mode === "run_end") {
+      await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
+      expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+      expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(0);
+      expect(api.items.some(item => item.kind === "partial")).toBe(false);
+    } else {
+      expect(list.querySelector(".pwa-tool-group")).toBeNull();
+      expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(2);
+      if (mode === "run_end with residual partial") expect(api.items.some(item => item.kind === "partial" && item.partial.partial_id === "unfinished:assistant:0")).toBe(true);
+    }
+    expect(api.messageListRef.current).toBe(list);
+    expect(piRunning).toBe(true);
+    expect(report).not.toHaveBeenCalled();
   } finally { await screen.unmount(); }
 });
 

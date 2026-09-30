@@ -1,11 +1,22 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { Type } from "typebox";
 import { TimelineRuntime } from "./runtime.js";
-import type { TimelinePartial } from "../protocol/v2/index.js";
+import { encodeServerFrameV2, type TimelineEvent, type TimelinePartial } from "../protocol/v2/index.js";
+import { TimelineV2Service } from "./v2_service.js";
+import { decodeServerFrameV2 } from "../../../pwa/src/lib/pi-reach/protocol-v2/codec.ts";
+import { receiveTimelineFrame } from "../../../pwa/src/lib/pwa/timeline-frame-handler.ts";
+import { TimelineRuntime as PwaTimelineRuntime } from "../../../pwa/src/lib/pwa/timeline-runtime.ts";
+import { StreamDisplayBuffer } from "../../../pwa/src/lib/pwa/stream-display-buffer.ts";
+import { runCompletions } from "../../../pwa/src/lib/pwa/run-completion.ts";
+
+vi.mock("../../../pwa/src/lib/pwa/timeline-store.ts", () => ({
+  mergeTimelineEvents: vi.fn(async () => {}),
+  TimelineStoreConflictError: class extends Error {},
+}));
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -422,6 +433,109 @@ describe("plan/63 SDK timeline contracts", () => {
       expect(Object.is(startedMessages.get("user"), endedMessages.get("user"))).toBe(true);
       expect(published.map((event) => event.split(":", 1)[0])).toContain("assistant");
     } finally {
+      session.dispose();
+    }
+  });
+
+  test.each([false, true])("delivers a real SDK run_end through service, wire, PWA commit and display after two tools (async message_end=%s)", async (delayedMessageEnd) => {
+    const sessionManager = SessionManager.inMemory(process.cwd());
+    const browser = new PwaTimelineRuntime();
+    const display = new StreamDisplayBuffer();
+    const published: TimelineEvent[] = [];
+    const committed: TimelineEvent[] = [];
+    const partialIds = new Set<string>();
+    const finalGate = { started: deferred<void>(), release: deferred<void>() };
+    let service: TimelineV2Service;
+    const frameState: Parameters<typeof receiveTimelineFrame>[1] = {
+      runtime: browser,
+      fragmentAssemblerRef: { current: null },
+      applyTimelineChange: (change) => {
+        committed.push(...change.committed);
+        for (const item of change.items) if (item.kind === "partial") partialIds.add(item.partial.partial_id);
+        display.ingest(change.items);
+      },
+      receiveRealtimeOutput: vi.fn(),
+      setError: vi.fn(),
+      setLastSyncedAt: vi.fn(),
+    };
+    const receive = (frame: Parameters<typeof encodeServerFrameV2>[0]) => {
+      receiveTimelineFrame(decodeServerFrameV2(encodeServerFrameV2(frame)), frameState);
+    };
+    const runtime = new TimelineRuntime({
+      onPublished: (event) => {
+        published.push(event);
+        const frames = service.publishFrames(event);
+        expect(frames, `service rejected ${event.kind}:${event.event_id}`).toHaveLength(1);
+        for (const frame of frames) receive(frame);
+      },
+      onPartial: (partial) => {
+        const frame = service.partial(partial);
+        expect(frame).not.toBeNull();
+        if (frame) receive(frame);
+      },
+    });
+    runtime.attach(sessionManager);
+    service = new TimelineV2Service({ sessionManager, runtime, senderRef: "self", onUserMessage: () => false });
+    const ready = service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" })[0]!;
+    if (ready.type !== "session_ready") throw new Error("Expected session_ready");
+    browser.beginLive({ deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: ready.session_id, leafId: ready.leaf_id, selfSenderRef: ready.self_sender_ref, channelId: "channel" }, ready.head_seq);
+    const extensionFactory: ExtensionFactory = (pi) => {
+      pi.on("turn_end", (_event, ctx) => runtime.onTurnEnd(ctx.sessionManager));
+      pi.on("agent_start", () => runtime.onAgentStart());
+      pi.on("agent_end", (event) => runtime.onAgentEnd(event.messages));
+      pi.on("message_start", (event, ctx) => runtime.onMessageStart(event.message, ctx.sessionManager));
+      pi.on("message_update", (event, ctx) => runtime.onMessageUpdate(event, ctx.sessionManager));
+      pi.on("message_end", (event, ctx) => runtime.onMessageEnd(event.message, ctx.sessionManager));
+      pi.on("tool_execution_start", (event, ctx) => runtime.onToolExecutionStart(event, ctx.sessionManager));
+      pi.on("tool_execution_update", (event, ctx) => runtime.onToolExecutionUpdate(event, ctx.sessionManager));
+      pi.on("tool_execution_end", (event, ctx) => runtime.onToolExecutionEnd(event, ctx.sessionManager));
+      pi.registerTool({
+        name: TEST_TOOL_NAME, label: "Delivery test tool", description: "Returns a deterministic result", parameters: Type.Object({ path: Type.String() }),
+        execute: async (_id, args, _signal, onUpdate) => {
+          await nextMacrotask();
+          onUpdate?.({ content: [{ type: "text", text: `Reading ${args.path}` }], details: {} });
+          return { content: [{ type: "text", text: `Read ${args.path}` }], details: {} };
+        },
+      });
+    };
+    const streamFn: LocalStreamFn = (_model, context) => context.messages.some((message) => message.role === "toolResult")
+      ? gatedTextStream(makeAssistant([{ type: "text", text: "Both tools finished" }], "stop"), finalGate)
+      : fakeStream(makeAssistant([
+        { type: "toolCall", id: "delivery-first", name: TEST_TOOL_NAME, arguments: { path: "first.txt" } },
+        { type: "toolCall", id: "delivery-second", name: TEST_TOOL_NAME, arguments: { path: "second.txt" } },
+      ], "toolUse"));
+    const delayPersistence: ExtensionFactory = (pi) => {
+      pi.on("message_end", async (event) => {
+        if (delayedMessageEnd && event.message.role === "toolResult") await nextMacrotask();
+      });
+    };
+    const session = await createHarness({ sessionManager, extensionFactories: [extensionFactory, delayPersistence], streamFn, enableExtensionTools: true });
+    const task = session.prompt("Read two files in one run");
+    try {
+      await waitFor(finalGate.started.promise, "final assistant after both tools");
+      await nextMacrotask();
+      expect(browser.formalEvents().filter((event) => event.kind === "tool")).toHaveLength(2);
+      expect(browser.formalEvents().some((event) => event.kind === "run_end")).toBe(false);
+      expect(runCompletions(browser.formalEvents()).size).toBe(0);
+      expect(partialIds).toEqual(new Set(["tool:delivery-first", "tool:delivery-second"]));
+      finalGate.release.resolve(undefined);
+      await task;
+      await nextMacrotask();
+
+      expect(published.map((event) => event.kind)).toEqual(["user", "assistant", "tool", "tool", "assistant", "run_end"]);
+      expect(published.map((event) => event.event_seq)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(committed).toEqual(published);
+      expect(browser.formalEvents()).toEqual(published);
+      const runEnd = published.at(-1)!;
+      expect(runEnd).toMatchObject({ kind: "run_end", status: "complete", group_id: published[0]!.group_id });
+      expect(runtime.recover(sessionManager).find((event) => event.event_id === runEnd.event_id)).toEqual(runEnd);
+      expect(display.snapshot().filter((item) => item.kind === "partial")).toEqual([]);
+      expect(display.snapshot().at(-1)).toEqual({ kind: "event", event: runEnd });
+      expect(runCompletions(browser.formalEvents()).get(runEnd.group_id!)).toEqual({ timestamp: runEnd.timestamp, status: "complete" });
+      expect(frameState.setError).not.toHaveBeenCalled();
+    } finally {
+      finalGate.release.resolve(undefined);
+      await task;
       session.dispose();
     }
   });

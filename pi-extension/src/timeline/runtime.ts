@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { MessageUpdateEvent, SessionManager, ToolExecutionEndEvent, ToolExecutionStartEvent, ToolExecutionUpdateEvent } from "@earendil-works/pi-coding-agent";
 import { MarkerSchemaV2, TimelineEventSchema, type JsonValue, type MarkerV2, type TimelineEvent, type TimelinePartial } from "../protocol/v2/index.js";
 import { partialDeltaChunks } from "./partial_delta.js";
+import { TimelinePublications } from "./publication.js";
 import { isRunEndMarker, runEndEvent, runEndMarker, runEndStatus } from "./run_end.js";
 import { sequenceTimelineProjections, type TimelineProjection } from "./sequence.js";
 import { jsonValue, recoverToolCalls, ToolLifecycleTracker, toolPartial, toolTimelineEvent, type ToolCallDetails } from "./tool_lifecycle.js";
@@ -77,21 +78,22 @@ export class TimelineRuntime {
     assistant: [],
     toolResult: [],
   };
-  private readonly published: TimelineEvent[] = [];
+  private readonly publications: TimelinePublications;
   private readonly toolAssociations = new ToolLifecycleTracker<Correlation>();
   private sessionManager: SessionManager | null = null;
   private epoch = 0;
-  private stateRevision = 0;
   private activeGroupId: string | null = null;
   private active = false;
   private readonly onStarted?: (started: TimelineStarted) => void;
-  private readonly onPublished?: (event: TimelineEvent, correlation: Correlation) => void;
   private readonly onPartial?: (partial: TimelinePartial, correlation: Correlation) => void;
 
   constructor(options: TimelineRuntimeOptions = {}) {
     this.onStarted = options.onStarted;
-    this.onPublished = options.onPublished;
     this.onPartial = options.onPartial;
+    this.publications = new TimelinePublications((event, correlation) => {
+      options.onPublished?.(event, correlation);
+      if (event.kind === "tool") this.toolAssociations.complete(event.tool_call_id);
+    });
   }
 
   attach(sessionManager: SessionManager): void {
@@ -106,11 +108,10 @@ export class TimelineRuntime {
   }
 
   private resetState(): void {
-    this.stateRevision += 1;
     this.epoch = 0;
     this.activeGroupId = null;
     this.active = false;
-    this.published.length = 0;
+    this.publications.reset();
     this.pendingByRole.user = [];
     this.pendingByRole.assistant = [];
     this.pendingByRole.toolResult = [];
@@ -135,7 +136,7 @@ export class TimelineRuntime {
   }
 
   getPublishedEvents(): readonly TimelineEvent[] {
-    return [...this.published];
+    return this.publications.events();
   }
 
   getCorrelation(message: object): Correlation | undefined {
@@ -146,7 +147,7 @@ export class TimelineRuntime {
     this.attach(sessionManager);
     const event = this.recover(sessionManager).find((candidate) => candidate.event_id === entry.id) ?? null;
     if (!event) return null;
-    this.publish(event, { origin: "unknown", delivery: "unknown" });
+    this.publications.publish(event, { origin: "unknown", delivery: "unknown" });
     return event;
   }
 
@@ -162,6 +163,12 @@ export class TimelineRuntime {
     this.epoch += 1;
     this.active = true;
     this.activeGroupId = null;
+  }
+
+  /** SDK 的 turn_end 发生在本轮消息持久化之后，接管异步 message_end 尚未完成的发布。 */
+  onTurnEnd(sessionManager: SessionManager): void {
+    if (this.sessionManager !== sessionManager) return;
+    this.publications.flush(() => this.recover(sessionManager));
   }
 
   /** 为本次运行的组写入 run_end marker，并在同组正式消息发布之后推送。 */
@@ -252,17 +259,10 @@ export class TimelineRuntime {
   }
 
   private publishWhenVisible(sessionManager: SessionManager, markerId: string, correlation: Correlation): void {
-    const revision = this.stateRevision;
-    setImmediate(() => {
-      if (this.stateRevision !== revision || this.sessionManager !== sessionManager) return;
-      const markerVisible = sessionManager.getBranch().some((entry) => entry.type === "custom"
-        && entry.customType === TIMELINE_MARKER && entry.id === markerId);
-      if (!markerVisible) return;
-      const event = this.recover(sessionManager).find((candidate) => candidate.event_id === markerId);
-      if (!event) return;
-      this.publish(event, correlation);
-      if (event.kind === "tool") this.toolAssociations.complete(event.tool_call_id);
-    });
+    this.publications.defer(markerId, correlation,
+      () => this.sessionManager === sessionManager ? this.recover(sessionManager) : [],
+      () => this.sessionManager === sessionManager && sessionManager.getBranch().some((entry) => entry.type === "custom"
+        && entry.customType === TIMELINE_MARKER && entry.id === markerId));
   }
 
   onToolExecutionStart(event: ToolExecutionStartEvent, sessionManager: SessionManager): void {
@@ -350,12 +350,6 @@ export class TimelineRuntime {
   private messageIdentity(message: MessageRecord): string | null {
     if (typeof message.timestamp !== "number" || !Number.isFinite(message.timestamp)) return null;
     return [message.role, message.timestamp, message.api ?? "", message.provider ?? "", message.model ?? ""].join(":");
-  }
-
-  private publish(event: TimelineEvent, correlation: Correlation): void {
-    if (this.published.some((existing) => existing.event_id === event.event_id)) return;
-    this.published.push(event);
-    this.onPublished?.(event, { ...correlation });
   }
 
   private publishPartial(

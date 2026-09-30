@@ -10,6 +10,10 @@
 
 自 2026-09-27 起，[本轮结束事件 ADR](20260927-run-end-event.md) 修订下方「Protocol v2 inner schema」的冻结范围：TimelineEvent 新增 `kind: "run_end"`，endpoint metadata 的 `working` 改为按整次运行（`agent_start`／`agent_end`）计算；`protocol_version` 仍为 2，发布须先部署 PWA 再发布 Extension。
 
+## 当前覆盖 — ADR-20260930
+
+[严格运行结束 ADR](20260930-strict-run-completion.md) 覆盖 ADR-20260927 中缺少 `run_end` 时的降级规则：实时与历史只以正式 `run_end` 确认该轮结束，不再根据 Pi 空闲或下一轮开始推断；事件 shape 与协议版本不变。
+
 本块是当前决策入口；下方各节记录仍然有效的已关闭决策。
 
 ---

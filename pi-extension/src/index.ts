@@ -520,6 +520,10 @@ const extension: ExtensionFactory = (api): void => {
     userDelivery.scheduleDrain();
   });
   pi.on("agent_settled", () => userDelivery.scheduleDrain());
+  pi.on("turn_end", (_event, ctx) => {
+    const manager = (ctx as unknown as { sessionManager?: SessionManager }).sessionManager;
+    if (manager) ensureTimeline(manager).onTurnEnd(manager);
+  });
   pi.on("message_start", (event, ctx) => {
     const manager = (ctx as unknown as { sessionManager?: SessionManager }).sessionManager;
     if (manager) ensureTimeline(manager).onMessageStart(event.message, manager);
