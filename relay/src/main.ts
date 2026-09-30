@@ -10,8 +10,9 @@ const logEvent = createBoundedLogger(process.stderr);
 export async function runCli(): Promise<void> {
   const config = loadCliConfig();
   const relay = await startRelay({ ...config, logger: logEvent });
-  process.stderr.write(`${JSON.stringify({ event: "relay_listening", host: config.host, port: relay.port })}\n`);
+  // 先注册信号处理再宣布就绪：Linux 上写管道是同步的，读到 relay_listening 的一方可能立刻发送 SIGTERM。
   installShutdown(relay);
+  process.stderr.write(`${JSON.stringify({ event: "relay_listening", host: config.host, port: relay.port })}\n`);
 }
 
 function installShutdown(relay: RelayHandle): void {
