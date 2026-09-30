@@ -1,4 +1,10 @@
-# 在推送到 main 和 Pull Request 时执行 `pnpm verify`；`main` 的保护规则要求检查 `verify` 通过后才能合并。
+# CI：推送到 main、Pull Request 与手动触发时运行。
+# - changes：只改文档（docs/ 下除协议 fixtures 外的文件、任意 *.md、branding/、LICENSE）时跳过代码任务。
+# - docs：检查本次改动的空白错误与文档站内链接，所有改动都运行。
+# - checks 与 pwa-browser：合起来覆盖 `pnpm verify`。checks 负责类型检查、lint、除 PWA 浏览器组件测试外的
+#   全部测试与构建；pwa-browser 按耗时把浏览器组件测试分到 4 台机器，每台仍按文件串行以隔离键盘焦点。
+#   调整 `pnpm verify` 时同步修改这两个任务。
+# - verify：汇总以上任务，是 main 保护规则要求的唯一检查；任一任务失败、取消或意外跳过都会使其失败。
 name: CI
 
 on:
@@ -14,40 +20,149 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
 jobs:
-  verify:
-    name: verify
+  changes:
+    name: changes
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      base: ${{ steps.classify.outputs.base }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          base="$PUSH_BEFORE"
+          if [ "$EVENT" = pull_request ]; then base="$PR_BASE"; fi
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "No comparable base commit; running every check."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          code=false
+          while IFS= read -r file; do
+            case "$file" in
+              docs/reference/protocol/fixtures/*) code=true ;;
+              docs/* | branding/* | *.md | LICENSE | */LICENSE) ;;
+              *) code=true ;;
+            esac
+          done < <(git diff --name-only "$base" "$HEAD")
+          echo "Code changed: $code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  docs:
+    name: docs
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
 
-      # 按根 package.json 的 packageManager 启用固定版本的 pnpm。
-      - name: Enable pnpm
-        run: corepack enable
+      - name: Check whitespace in the change
+        if: needs.changes.outputs.base != ''
+        env:
+          BASE: ${{ needs.changes.outputs.base }}
+          HEAD: ${{ github.sha }}
+        run: git diff --check "$BASE" "$HEAD"
 
-      - name: Resolve pnpm store
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Check documentation links
+        run: node scripts/check-doc-links.mjs
 
-      - uses: actions/cache@v4
+  checks:
+    name: checks
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test (except PWA browser component tests)
+        run: |
+          pnpm -r --filter '!pwa' test
+          pnpm --filter pwa test:unit
+          pnpm test:scripts
+
+      - name: Build
+        run: pnpm build
+
+  pwa-browser:
+    name: pwa-browser (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: workspace-layout
+            run: pnpm exec vitest run --project browser --browser.fileParallelism=false src/components/pwa/pwa-workspace-layout.browser.test.tsx
+          - shard: app
+            run: pnpm exec vitest run --project browser --browser.fileParallelism=false src/components/pwa/pwa-app.browser.test.tsx && pnpm test:component:production
+          - shard: rest-1
+            run: pnpm exec vitest run --project browser --browser.fileParallelism=false --exclude "**/pwa-workspace-layout.browser.test.tsx" --exclude "**/pwa-app.browser.test.tsx" --shard=1/2
+          - shard: rest-2
+            run: pnpm exec vitest run --project browser --browser.fileParallelism=false --exclude "**/pwa-workspace-layout.browser.test.tsx" --exclude "**/pwa-app.browser.test.tsx" --shard=2/2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-workspace
         with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
+          playwright: "true"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Run PWA browser tests
+        working-directory: pwa
+        run: ${{ matrix.run }}
 
-      # PWA 的 Vitest Browser Mode 测试需要 Chromium。
-      - name: Install Playwright Chromium
-        run: pnpm --filter pwa exec playwright install --with-deps chromium
-
-      - name: Verify
-        run: pnpm verify
+  verify:
+    name: verify
+    if: always()
+    needs: [changes, docs, checks, pwa-browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every needed job
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          DOCS: ${{ needs.docs.result }}
+          CHECKS: ${{ needs.checks.result }}
+          BROWSER: ${{ needs.pwa-browser.result }}
+        run: |
+          echo "changes=$CHANGES docs=$DOCS checks=$CHECKS pwa-browser=$BROWSER code=$CODE"
+          test "$CHANGES" = success
+          test "$DOCS" = success
+          if [ "$CODE" = true ]; then
+            test "$CHECKS" = success
+            test "$BROWSER" = success
+          else
+            echo "Documentation-only change: code jobs were skipped by design."
+          fi

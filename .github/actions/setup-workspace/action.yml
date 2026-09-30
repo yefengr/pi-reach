@@ -1,0 +1,59 @@
+name: Set up workspace
+description: 安装 Node、pnpm 与 workspace 依赖（缓存 pnpm store），按需安装 Playwright Chromium（缓存浏览器）。
+
+inputs:
+  playwright:
+    description: 为 "true" 时安装 Playwright Chromium 及其系统依赖
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .node-version
+
+    # 按根 package.json 的 packageManager 启用固定版本的 pnpm。
+    - name: Enable pnpm
+      shell: bash
+      run: corepack enable
+
+    - name: Resolve pnpm store
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Resolve Playwright version
+      if: inputs.playwright == 'true'
+      id: playwright
+      shell: bash
+      run: echo "version=$(pnpm --filter pwa exec playwright --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache@v4
+      if: inputs.playwright == 'true'
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+    - name: Install Playwright Chromium
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm --filter pwa exec playwright install --with-deps chromium
+
+    # 浏览器命中缓存时仍需安装系统依赖。
+    - name: Install Playwright system dependencies
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: pnpm --filter pwa exec playwright install-deps chromium
