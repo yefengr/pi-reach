@@ -1,0 +1,41 @@
+# Pi Reach runs as a single environment; the project name does not depend on the remote directory.
+name: pi-reach
+
+services:
+  relay:
+    image: ${RELAY_IMAGE:?RELAY_IMAGE must be set}
+    container_name: pi-reach-relay
+    restart: unless-stopped
+
+    # Keep Relay private on the host; let Caddy/Nginx terminate TLS.
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    environment:
+      PI_REACH_RELAY_PORT: "3000"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  site:
+    image: ${SITE_IMAGE:?SITE_IMAGE must be set}
+    container_name: pi-reach-site
+    restart: unless-stopped
+
+    # The PWA is exposed through the Caddy route.
+    ports:
+      - "127.0.0.1:3001:3000"
+
+    environment:
+      PORT: "3000"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

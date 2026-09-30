@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Reach · 代码高亮配色</title>
+<style>
+* { box-sizing: border-box; }
+:root { --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+body { margin: 0; padding: 24px 16px 48px; background: #E4E6E6; color: #272B2D; font: 13px/1.5 var(--ui); }
+.page { max-width: 1280px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 16px; color: #5C6166; max-width: 960px; }
+.themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.theme { border-radius: 10px; padding: 16px 20px 20px; box-shadow: 0 1px 3px #0000001f; font-size: 14px; line-height: 1.65; }
+.theme h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+.theme p.msg { margin: 0 0 8px; }
+.theme p.msg code { font: 12.5px var(--mono); padding: 1px 4px; border-radius: 4px; background: var(--inline-bg); color: var(--k); }
+
+.light { background: #F8F9F8; color: #272B2D; --sub: #5C6166; --code-bg: #F0F2F2; --code-ink: #272B2D; --inline-bg: #F0F2F2;
+  --k: #4C658D; --s: #347953; --n: #90611F; --e: #AE463E; --f: #6A5590; --t: #2C6E75; --c: #5C6166; --p: #434B50;
+  --add: #EAF3EC; --del: #F8ECEA; --copy: #5C6166; --tool-bg: #F0F2F2; }
+.dark { background: #202325; color: #EEF0F1; --sub: #B6BDC1; --code-bg: #151A1E; --code-ink: #EFF2F4; --inline-bg: #25292B;
+  --k: #A9C3E6; --s: #95CBA8; --n: #DFBA77; --e: #EFA39B; --f: #D2C3EE; --t: #8FD0D6; --c: #BAC4C8; --p: #CDD5D8;
+  --add: #26392E; --del: #422F30; --copy: #BAC4C8; --tool-bg: #151A1E; }
+
+.label { font-size: 12px; color: var(--sub); margin: 14px 0 6px; line-height: 1.4; }
+pre { position: relative; margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--code-bg); color: var(--code-ink); font: 12.5px/1.55 var(--mono); overflow-x: auto; }
+.copy { position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--copy); }
+.copy svg { width: 16px; height: 16px; }
+.k { color: var(--k); } .s { color: var(--s); } .n { color: var(--n); } .c { color: var(--c); font-style: italic; }
+.f { color: var(--f); } .t { color: var(--t); } .e { color: var(--e); } .p { color: var(--p); }
+.dl { display: block; margin: 0 -14px; padding: 0 14px 0 11px; border-left: 3px solid transparent; }
+.dl.add { background: var(--add); border-left-color: var(--s); } .dl.del { background: var(--del); border-left-color: var(--e); }
+.dl.add::before { content: "+ "; color: var(--s); } .dl.del::before { content: "- "; color: var(--e); } .dl.ctx::before { content: "  "; }
+.toolrow { display: flex; gap: 8px; align-items: center; font-size: 12px; line-height: 1.4; color: var(--sub); margin: 0 0 6px; }
+.toolrow b { font: 12.5px var(--mono); color: inherit; color: var(--code-ink); }
+.toolrow .ok { color: var(--s); font-weight: 600; }
+.tool { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--tool-bg); color: var(--code-ink); font: 12.5px/1.55 var(--mono); white-space: pre; overflow-x: auto; }
+.tool .dim { color: var(--sub); }
+
+.legend { margin-top: 20px; padding: 16px 18px; border-radius: 10px; background: #FFFFFF; }
+.legend h2 { margin: 0 0 8px; font-size: 15px; }
+.legend p { margin: 0 0 10px; color: #5C6166; }
+table { border-collapse: collapse; font-size: 12px; }
+th, td { padding: 5px 12px; border-bottom: 1px solid #DCE1E2; text-align: left; vertical-align: middle; }
+td code { font-family: var(--mono); }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; box-shadow: inset 0 0 0 1px #0000001a; }
+@media (max-width: 900px) { .themes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>代码高亮配色</h1>
+  <p class="lead" style="color:#347953;font-weight:600">结论：采用本页两套语法色；浅色主题代码块与工具输出统一为浅底。</p>
+  <p class="lead">浅色主题下代码块改为浅底（<code>panel</code> #F0F2F2，与已选的浅色工具输出一致），深色主题仍为 <code>code-bg</code> #151A1E。两套语法色都直接取自现有 token：钢雾蓝 <code>accent</code>、三种状态色、<code>secondary</code>、<code>soft-ink</code>；每套只新增「函数」和「类型」两个颜色。Diff 行复用状态色轻底，并加 3px 左侧色条。</p>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol></svg>
+
+  <template id="samples">
+    <p class="msg">需要在路由里恢复来源状态，关键逻辑在 <code>restoreSource</code>：</p>
+<pre><span class="copy"><svg><use href="#i-copy"/></svg></span><span class="c">// 设置页路由：从 history state 恢复来源</span>
+<span class="k">export function</span> <span class="f">restoreSource</span><span class="p">(</span>state<span class="p">:</span> <span class="t">HistoryState</span> <span class="p">|</span> <span class="k">null</span><span class="p">):</span> <span class="t">SourceView</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(!</span>state<span class="p">?.</span>source<span class="p">)</span> <span class="k">return</span> <span class="p">{</span> kind<span class="p">:</span> <span class="s">"workspace"</span><span class="p">,</span> scrollTop<span class="p">:</span> <span class="n">0</span> <span class="p">};</span>
+  <span class="k">const</span> delay <span class="p">=</span> reducedMotion <span class="p">?</span> <span class="n">120</span> <span class="p">:</span> <span class="n">200</span><span class="p">;</span>
+  <span class="k">return</span> <span class="p">{ ...</span>state<span class="p">.</span>source<span class="p">,</span> delay<span class="p">,</span> restored<span class="p">:</span> <span class="k">true</span> <span class="p">};</span>
+<span class="p">}</span></pre>
+    <p class="label">Diff</p>
+<pre><span class="copy"><svg><use href="#i-copy"/></svg></span><span class="dl ctx">    <span class="k">location</span> = /app <span class="p">{</span></span><span class="dl ctx">        try_files $uri =<span class="n">404</span>;</span><span class="dl ctx">    <span class="p">}</span></span><span class="dl add">    <span class="k">location</span> /app/ <span class="p">{</span></span><span class="dl add">        try_files /app =<span class="n">404</span>;</span><span class="dl add">    <span class="p">}</span></span><span class="dl del">    <span class="k">location</span> = /app/ <span class="p">{</span> <span class="k">return</span> <span class="n">308</span> /app; <span class="p">}</span></span></pre>
+    <p class="label">Shell 代码块</p>
+<pre><span class="copy"><svg><use href="#i-copy"/></svg></span><span class="p">$</span> pnpm <span class="n">--filter</span> pwa test <span class="s">"sidebar"</span>
+<span class="s">✓</span> src/app/sidebar.test.tsx <span class="c">(27 tests)</span> <span class="n">318ms</span>
+<span class="e">✗</span> src/app/sw.test.ts <span class="p">&gt;</span> offline navigation <span class="p">&gt;</span> serves /app/settings
+  <span class="e">AssertionError: expected 404 to be 200</span></pre>
+    <p class="label">紧挨着的工具输出（原始文本，不做语法高亮）</p>
+    <div class="toolrow"><span class="ok">✓ 完成</span><b>cat pwa/nginx.conf.template</b></div>
+<div class="tool"><span class="dim">14</span>    location = / {
+<span class="dim">15</span>        return 307 /app$is_args$args;
+<span class="dim">16</span>    }</div>
+  </template>
+
+  <div class="themes">
+    <section class="theme light"><h2>浅色主题（代码块改为浅底）</h2><div class="slot"></div></section>
+    <section class="theme dark"><h2>深色主题</h2><div class="slot"></div></section>
+  </div>
+
+  <div class="legend">
+    <h2>语法角色与来源</h2>
+    <p>对比度为文字对代码底（浅色 #F0F2F2／深色 #151A1E）。Diff 行轻底上各色最低仍在 4.54:1（浅色）与 6.08:1（深色）以上。</p>
+    <table>
+      <tr><th>角色</th><th>浅色</th><th>深色</th><th>来源</th><th>对比度 浅／深</th></tr>
+      <tr><td>普通代码</td><td><span class="sw" style="background:#272B2D"></span><code>#272B2D</code></td><td><span class="sw" style="background:#EFF2F4"></span><code>#EFF2F4</code></td><td><code>ink</code>／<code>code-ink</code></td><td>12.72 ／ 15.59</td></tr>
+      <tr><td>关键字、布尔、null</td><td><span class="sw" style="background:#4C658D"></span><code>#4C658D</code></td><td><span class="sw" style="background:#A9C3E6"></span><code>#A9C3E6</code></td><td><code>accent</code></td><td>5.26 ／ 9.71</td></tr>
+      <tr><td>字符串、新增</td><td><span class="sw" style="background:#347953"></span><code>#347953</code></td><td><span class="sw" style="background:#95CBA8"></span><code>#95CBA8</code></td><td>完成色</td><td>4.67 ／ 9.50</td></tr>
+      <tr><td>数字、常量、参数</td><td><span class="sw" style="background:#90611F"></span><code>#90611F</code></td><td><span class="sw" style="background:#DFBA77"></span><code>#DFBA77</code></td><td>运行色</td><td>4.77 ／ 9.54</td></tr>
+      <tr><td>错误输出、删除</td><td><span class="sw" style="background:#AE463E"></span><code>#AE463E</code></td><td><span class="sw" style="background:#EFA39B"></span><code>#EFA39B</code></td><td>错误色</td><td>4.99 ／ 8.66</td></tr>
+      <tr><td>注释（斜体）</td><td><span class="sw" style="background:#5C6166"></span><code>#5C6166</code></td><td><span class="sw" style="background:#BAC4C8"></span><code>#BAC4C8</code></td><td><code>secondary</code>／<code>code-muted</code></td><td>5.57 ／ 9.86</td></tr>
+      <tr><td>标点、运算符</td><td><span class="sw" style="background:#434B50"></span><code>#434B50</code></td><td><span class="sw" style="background:#CDD5D8"></span><code>#CDD5D8</code></td><td><code>soft-ink</code></td><td>7.92 ／ 12.1</td></tr>
+      <tr><td><b>函数名（新增）</b></td><td><span class="sw" style="background:#6A5590"></span><code>#6A5590</code></td><td><span class="sw" style="background:#D2C3EE"></span><code>#D2C3EE</code></td><td>新增淡紫</td><td>5.64 ／ 10.67</td></tr>
+      <tr><td><b>类型、类名（新增）</b></td><td><span class="sw" style="background:#2C6E75"></span><code>#2C6E75</code></td><td><span class="sw" style="background:#8FD0D6"></span><code>#8FD0D6</code></td><td>新增青</td><td>5.20 ／ 10.15</td></tr>
+      <tr><td>Diff 新增行底</td><td><span class="sw" style="background:#EAF3EC"></span><code>#EAF3EC</code></td><td><span class="sw" style="background:#26392E"></span><code>#26392E</code></td><td>完成色轻底＋3px 完成色条</td><td>—</td></tr>
+      <tr><td>Diff 删除行底</td><td><span class="sw" style="background:#F8ECEA"></span><code>#F8ECEA</code></td><td><span class="sw" style="background:#422F30"></span><code>#422F30</code></td><td>错误色轻底＋3px 错误色条</td><td>—</td></tr>
+    </table>
+  </div>
+</div>
+<script>
+  const tpl = document.getElementById('samples');
+  document.querySelectorAll('.slot').forEach(slot => slot.appendChild(tpl.content.cloneNode(true)));
+</script>
+</body>
+</html>

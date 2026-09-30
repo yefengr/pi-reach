@@ -1,0 +1,351 @@
+
+
+.pwa-root .pwa-button.pwa-device-trigger { width: 100%; min-width: 0; min-height: 52px; height: auto; justify-content: stretch; padding: 6px 8px; border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
+
+/* 只配对一台电脑时收成无框的一行，悬停浅底；多台时保持卡片样式。 */
+.pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: 44px; padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
+.pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact:hover:not(:disabled) { background: var(--pwa-hover); }
+.pwa-root .pwa-device-trigger-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-secondary); }
+.pwa-root .pwa-device-trigger-dot.online { background: var(--pwa-accent); }
+
+.pwa-root .pwa-device-trigger .mantine-Button-inner,
+.pwa-root .pwa-device-trigger .mantine-Button-label {
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.pwa-root .pwa-device-trigger .mantine-Button-section[data-position="right"] {
+  margin-left: 8px;
+}
+
+.pwa-root .pwa-device-trigger-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.pwa-root .pwa-device-trigger-copy strong,
+.pwa-root .pwa-device-trigger-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pwa-root .pwa-device-trigger-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pwa-root .pwa-device-trigger-copy small {
+  color: var(--pwa-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.pwa-root .pwa-device-popover {
+  max-width: calc(100vw - 24px);
+  max-height: min(65dvh, 480px);
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid var(--pwa-line);
+  border-radius: var(--pwa-radius-md);
+  color: var(--pwa-ink);
+  background: var(--pwa-surface);
+  box-shadow: var(--pwa-shadow-float);
+}
+
+.pwa-root .pwa-device-panel {
+  min-width: 0;
+  min-height: 0;
+  max-height: inherit;
+  display: flex;
+  flex-direction: column;
+}
+
+.pwa-root .pwa-device-panel-list {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.pwa-root .pwa-device-panel-empty {
+  margin: 0;
+  padding: 16px 12px;
+  color: var(--pwa-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.pwa-root .pwa-device-panel-pair {
+  width: 100%;
+  flex: 0 0 auto;
+  margin-top: 6px;
+}
+
+.pwa-root .pwa-peer-card {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--pwa-radius-sm);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.pwa-root .pwa-peer-card.active {
+  border-color: var(--pwa-line);
+  background: var(--pwa-accent-wash);
+}
+
+.pwa-root .pwa-peer-card:hover {
+  background: var(--pwa-hover);
+}
+
+.pwa-root .pwa-computer-select {
+  width: auto;
+  min-width: 0;
+  min-height: 62px;
+  flex: 1;
+  gap: 10px;
+  padding: 8px 6px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pwa-root .pwa-computer-select:hover,
+.pwa-root .pwa-computer-select:active,
+.pwa-root .pwa-computer-select[data-active],
+.pwa-root .pwa-computer-select[data-active]:hover,
+.pwa-root .pwa-computer-select[data-active]:active {
+  color: inherit;
+  background: transparent;
+}
+
+.pwa-root .pwa-computer-select .pwa-peer-section {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.pwa-root .pwa-peer-icon {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--pwa-line);
+  border-radius: var(--pwa-radius-sm);
+  color: var(--pwa-secondary);
+}
+
+.pwa-root .pwa-peer-icon.online {
+  color: var(--pwa-accent);
+  border-color: color-mix(in srgb, var(--pwa-accent) 40%, var(--pwa-line));
+}
+
+.pwa-root .pwa-computer-select .pwa-peer-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.pwa-root .pwa-computer-select .pwa-peer-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pwa-root .pwa-computer-select .pwa-peer-description,
+.pwa-root .pwa-computer-select[data-active] .pwa-peer-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pwa-secondary);
+  font-size: 12px;
+  opacity: 1;
+}
+
+.pwa-root .pwa-peer-presence {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  overflow: hidden;
+  color: var(--pwa-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pwa-root .pwa-peer-presence > .pwa-peer-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pwa-root .pwa-presence-label,
+.pwa-root .pwa-current-label {
+  width: max-content;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border: 1px solid var(--pwa-line);
+  border-radius: 999px;
+  color: var(--pwa-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pwa-root .pwa-presence-label.online {
+  color: var(--pwa-accent);
+  border-color: color-mix(in srgb, var(--pwa-accent) 42%, var(--pwa-line));
+  background: var(--pwa-accent-wash);
+}
+
+.pwa-root .pwa-presence-label.partial {
+  color: var(--pwa-running);
+  border-color: color-mix(in srgb, var(--pwa-running) 42%, var(--pwa-line));
+  background: var(--pwa-running-wash);
+}
+
+.pwa-root .pwa-presence-label.checking,
+.pwa-root .pwa-current-label {
+  color: var(--pwa-accent);
+  border-color: color-mix(in srgb, var(--pwa-accent) 42%, var(--pwa-line));
+  background: var(--pwa-accent-wash);
+}
+
+.pwa-root .pwa-peer-menu-trigger {
+  flex: 0 0 44px;
+  align-self: center;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+}
+
+.pwa-root .pwa-peer-card:hover .pwa-peer-menu-trigger,
+.pwa-root .pwa-peer-menu-trigger:focus-visible,
+.pwa-root .pwa-peer-menu-trigger[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.pwa-root .pwa-peer-menu-trigger:hover:not(:disabled) {
+  color: var(--pwa-accent);
+  background: transparent;
+}
+
+.pwa-root .pwa-peer-menu-panel {
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--pwa-line);
+  border-radius: var(--pwa-radius-md);
+  color: var(--pwa-ink);
+  background: var(--pwa-surface);
+  box-shadow: var(--pwa-shadow-float);
+}
+
+.pwa-root .pwa-peer-menu-panel button {
+  min-height: 44px;
+  border-radius: var(--pwa-radius-sm);
+  font-size: 12px;
+}
+
+.pwa-root .pwa-session-sheet {
+  width: 100%;
+  height: 100dvh;
+  max-width: 100%;
+  max-height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  color: var(--pwa-ink);
+  background: var(--pwa-panel);
+  box-shadow: var(--pwa-shadow-modal);
+}
+
+.pwa-root .pwa-session-sheet-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  overflow: hidden;
+  padding: 0;
+}
+
+.pwa-root .pwa-session-sheet-body > .pwa-navigation-content {
+  flex: 1 1 auto;
+}
+
+.pwa-root .pwa-device-drawer {
+  width: 100%;
+  height: auto;
+  max-height: min(72dvh, 560px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--pwa-line);
+  border-bottom: 0;
+  border-radius: var(--pwa-radius-lg) var(--pwa-radius-lg) 0 0;
+  color: var(--pwa-ink);
+  background: var(--pwa-surface);
+}
+
+.pwa-root .pwa-device-drawer-head {
+  min-height: 56px;
+  flex: 0 0 auto;
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--pwa-line);
+}
+
+.pwa-root .pwa-device-drawer-body {
+  min-height: 0;
+  flex: 0 1 auto;
+  display: flex;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 10px calc(12px + var(--pwa-safe-bottom));
+}
+
+.pwa-root .pwa-device-drawer-body .pwa-device-panel {
+  width: 100%;
+  max-height: none;
+  flex: 0 0 auto;
+}
+
+.pwa-root .pwa-device-drawer-body .pwa-device-panel-list {
+  overflow: visible;
+}
+
+@media (max-width: 767.98px) {
+  .pwa-root .pwa-peer-menu-trigger {
+    opacity: 1;
+  }
+
+  .pwa-root .pwa-peer-presence {
+    gap: 4px;
+    font-size: 12px;
+  }
+}
+
+
+
+
+
+/* 移动导航：左侧 min(320px, 85vw)，顶部为品牌与关闭按钮，内容与桌面侧栏一致。 */
+.pwa-root .pwa-session-sheet-head { min-height: calc(56px + var(--pwa-safe-top)); flex: 0 0 auto; display: flex; align-items: center; padding: var(--pwa-safe-top) 4px 0 8px; background: var(--pwa-panel); }
+.pwa-root .pwa-session-sheet-head .pwa-sidebar-brand { min-height: 0; padding: 0; }
+.pwa-root .pwa-session-sheet .pwa-navigation-content { padding: 0 8px; }
+.pwa-scrim { background: var(--pwa-scrim) !important; backdrop-filter: none !important; }

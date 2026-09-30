@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Reach · 消息元数据</title>
+<style>
+* { box-sizing: border-box; }
+:root { --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --bg:#F8F9F8; --surface:#FFFFFF; --panel:#F0F2F2; --message:#EDF1F2; --hover:#E2E7E9; --ink:#272B2D; --secondary:#5C6166; --line:#DCE1E2; --accent:#4C658D; --wash:#DBE4F0; --done:#347953; --run:#90611F; --err:#AE463E; }
+body { margin: 0; padding: 24px 16px 48px; background: #E4E6E6; color: var(--ink); font: 13px/1.5 var(--ui); }
+.page { max-width: 1320px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 16px; color: var(--secondary); max-width: 900px; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) 375px; gap: 16px; align-items: start; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.app { display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 860px; border-radius: 10px; overflow: hidden; background: var(--bg); box-shadow: 0 1px 3px #0000001f; font-variant-numeric: tabular-nums; }
+.side { background: var(--panel); padding: 12px 8px; }
+.group { margin: 12px 10px 4px; color: var(--secondary); font-size: 12px; line-height: 1.4; font-weight: 600; }
+.group:first-child { margin-top: 0; }
+.row { padding: 6px 10px; border-radius: 6px; line-height: 1.4; }
+.row + .row { margin-top: 2px; }
+.row b { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row span { font-size: 12px; color: var(--secondary); }
+.row.sel { background: var(--wash); } .row.sel b { color: var(--accent); }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.head { height: 56px; padding: 0 20px; display: flex; flex-direction: column; justify-content: center; line-height: 1.4; }
+.head small { font-size: 12px; color: var(--secondary); }
+.head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.run-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--run); margin-right: 4px; vertical-align: 0; }
+.scroll { flex: 1; overflow: hidden; padding: 4px 20px; }
+.col { max-width: 680px; margin: 0 auto; }
+
+.turn + .turn { margin-top: 24px; }
+.user { margin-left: auto; width: fit-content; max-width: 80%; padding: 8px 12px; border-radius: 8px; background: var(--message); font-size: 14px; line-height: 1.65; margin-bottom: 12px; }
+.text { font-size: 14px; line-height: 1.65; margin: 0 0 12px; }
+.text code { font-family: var(--mono); font-size: 12.5px; padding: 1px 4px; border-radius: 4px; background: var(--panel); color: var(--accent); }
+.thinking { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary); margin: 0 0 12px; }
+.tools { margin: 0 0 12px; }
+.toolrow { display: flex; gap: 8px; align-items: center; font-size: 12px; line-height: 1.4; color: var(--secondary); padding: 3px 0; }
+.toolrow + .toolrow { margin-top: 6px; }
+.toolrow b { font-family: var(--mono); font-size: 12.5px; font-weight: 400; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.st { font-weight: 600; white-space: nowrap; }
+.st.ok { color: var(--done); } .st.run { color: var(--run); } .st.err { color: var(--err); }
+.toolrow .dur { margin-left: auto; white-space: nowrap; }
+.chev { width: 16px; height: 16px; flex: none; color: var(--secondary); }
+
+.meta { display: flex; align-items: center; gap: 4px; margin: -4px 0 0; font-size: 12px; line-height: 1.4; color: var(--secondary); }
+.meta .copy { width: 44px; height: 44px; margin: -12px -12px -12px 0; display: grid; place-items: center; border-radius: 50%; color: var(--secondary); position: relative; }
+.meta .copy::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; }
+.meta .copy.hovered::before { background: var(--hover); }
+.meta .copy svg { position: relative; width: 16px; height: 16px; }
+.meta .warn { color: var(--err); font-weight: 600; }
+.thinking-live { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--run); font-weight: 600; margin: 0 0 12px; }
+.caret { display: inline-block; width: 7px; height: 16px; background: var(--accent); vertical-align: -3px; margin-left: 2px; }
+.callout { position: relative; }
+.tag { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 4px; background: #272B2D; color: #FFFFFF; font-size: 10px; font-weight: 700; line-height: 18px; vertical-align: 1px; }
+
+.composer-wrap { padding: 8px 20px 16px; }
+.composer { max-width: 680px; margin: 0 auto; padding: 10px 12px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; color: var(--secondary); height: 72px; }
+
+.phone { width: 375px; height: 860px; border-radius: 18px; overflow: hidden; background: var(--bg); box-shadow: 0 1px 3px #0000001f; display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.mtop { display: flex; align-items: center; gap: 8px; padding: 10px 12px; line-height: 1.4; }
+.mtop i { width: 20px; height: 2px; background: var(--ink); box-shadow: 0 -6px 0 var(--ink), 0 6px 0 var(--ink); margin: 0 12px 0 4px; }
+.mtop div { min-width: 0; }
+.mtop small { display: block; font-size: 12px; color: var(--secondary); }
+.mtop b { display: block; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .scroll { padding: 4px 16px; }
+.phone .composer { margin: 8px 16px 16px; font-size: 16px; }
+
+.notes { margin-top: 20px; padding: 16px 18px; border-radius: 10px; background: #FFFFFF; }
+.notes h2 { margin: 0 0 8px; font-size: 15px; }
+.notes li { margin: 4px 0; }
+@media (max-width: 1000px) { .pair { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>消息元数据（已选：轮末只显示完成时间）</h1>
+  <p class="lead" style="color:#347953;font-weight:600">结论：一轮结束后在末尾只显示完成时间；不显示用时与工具调用数，不设复制按钮；用户消息不显示时间；思考行不显示时长。</p>
+  <p class="lead">三轮对话：第一轮正常完成，第二轮以错误结束，第三轮仍在进行中（不显示时间）。轮末时间依赖协议新增的本轮结束事件（ADR-20260927）。黑色标签只是标注，不属于界面。</p>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+  </svg>
+
+  <template id="conv">
+    <div class="turn">
+      <div class="user"><span class="sr">你：</span>设置页改成子路径后，nginx 需要改什么？</div>
+      <span class="sr">Pi：</span>
+      <div class="thinking"><svg class="chev"><use href="#i-chev"/></svg>思考过程</div>
+      <div class="tools">
+        <div class="toolrow"><svg class="chev"><use href="#i-chev"/></svg><span class="st ok">✓ 完成</span><b>read pwa/nginx.conf.template</b></div>
+        <div class="toolrow"><svg class="chev"><use href="#i-chev"/></svg><span class="st ok">✓ 完成</span><b>grep -rn "location" pwa/</b></div>
+        <div class="toolrow"><svg class="chev"><use href="#i-chev"/></svg><span class="st ok">✓ 完成</span><b>read pwa/vite.config.ts</b></div>
+      </div>
+      <p class="text">需要为 <code>/app/*</code> 增加一条回退到应用入口的 <code>location</code>，同时保留 <code>/</code> 和 <code>/app/</code> 的重定向。静态资源用的是绝对路径 <code>/assets/</code>，从子路径加载不受影响。</p>
+      <div class="meta"><span>17:43</span><span class="tag">轮末完成时间</span></div>
+    </div>
+
+    <div class="turn">
+      <div class="user"><span class="sr">你：</span>跑一下 Service Worker 的离线测试。</div>
+      <span class="sr">Pi：</span>
+      <div class="tools">
+        <div class="toolrow"><svg class="chev"><use href="#i-chev"/></svg><span class="st err">✕ 错误</span><b>pnpm --filter pwa test:sw</b></div>
+      </div>
+      <p class="text">离线测试失败：<code>/app/settings</code> 的导航请求在离线时没有命中缓存。需要先在 Service Worker 里加上导航回退。</p>
+      <div class="meta"><span>17:46</span><span class="tag">以错误结束也只显示时间</span></div>
+    </div>
+
+    <div class="turn">
+      <div class="user"><span class="sr">你：</span>好，加上导航回退再跑一次。</div>
+      <span class="sr">Pi：</span>
+      <div class="tools">
+        <div class="toolrow"><svg class="chev"><use href="#i-chev"/></svg><span class="st ok">✓ 完成</span><b>edit pwa/src/app/sw.ts</b></div>
+        <div class="toolrow"><svg class="chev"><use href="#i-chev"/></svg><span class="st run">● 运行中</span><b>pnpm --filter pwa test:sw</b></div>
+      </div>
+      <p class="text">已在 Service Worker 里为 <code>/app/*</code> 的导航请求加上回退，正在重新运行离线测试<span class="caret"></span></p>
+      <span class="tag">进行中：不显示时间</span>
+    </div>
+  </template>
+
+  <div class="pair">
+    <div class="app">
+      <aside class="side">
+        <div class="group">在线 Pi</div>
+        <div class="row sel"><b>设置页子路径改造</b><span>pi-reach · 运行中</span></div>
+        <div class="row"><b>品牌刷新评审</b><span>pi-reach · 空闲</span></div>
+        <div class="group">本地历史</div>
+        <div class="row"><b>Protocol v2 migration</b><span>9 月 24 日</span></div>
+      </aside>
+      <section class="main">
+        <div class="head"><small><span class="run-dot"></span>MacBook Pro · 运行中</small><h2>设置页子路径改造</h2></div>
+        <div class="scroll"><div class="col slot"></div></div>
+        <div class="composer-wrap"><div class="composer">向 Pi 发送消息…</div></div>
+      </section>
+    </div>
+    <div class="phone">
+      <div class="mtop"><i></i><div><small><span class="run-dot"></span>MacBook Pro · 运行中</small><b>设置页子路径改造</b></div></div>
+      <div class="scroll slot"></div>
+      <div class="composer">向 Pi 发送消息…</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h2>看点</h2>
+    <ul>
+      <li>每轮回复内的思考、工具行和正文连续排列，中间没有时间或发送方信息打断。</li>
+      <li>完成时间只在一轮结束后出现一次；工具失败由工具行自身的错误状态表达。</li>
+      <li>用户消息不带时间。</li>
+      <li>读屏会在每条消息前读到「你：」「Pi：」，视觉上不显示。</li>
+    </ul>
+  </div>
+</div>
+<script>
+  const tpl = document.getElementById('conv');
+  document.querySelectorAll('.slot').forEach(slot => slot.appendChild(tpl.content.cloneNode(true)));
+</script>
+</body>
+</html>

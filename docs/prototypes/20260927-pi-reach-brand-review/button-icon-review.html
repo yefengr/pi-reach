@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Pi Reach · 按钮与图标评审</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./components-review.css">
+  <link rel="stylesheet" href="./button-icon-review.css">
+</head>
+<body>
+<div class="layout-review component-review icon-review" data-appearance="light" data-labels="contextual" data-tool="adaptive" data-lines="open">
+  <header class="review-header">
+    <div class="review-header-inner">
+      <a class="back-link" href="./components-review.html">← <span>Pi Reach</span></a>
+      <span class="review-label">工作区图标评审</span>
+    </div>
+  </header>
+
+  <main class="review-main">
+    <div class="review-heading"><div><p>PI REACH / CONTROL STUDY</p><h1>按钮与图标</h1></div><span>同内容 · 同尺寸 · 对照标签方式</span></div>
+    <div class="review-toolbar" aria-label="预览设置">
+      <div class="switch-group"><span class="switch-label">侧栏操作</span><div class="segments" role="group" aria-label="侧栏按钮呈现"><button type="button" data-labels-choice="contextual" aria-pressed="true">图标＋文字</button><button type="button" data-labels-choice="compact" aria-pressed="false">仅图标</button></div></div>
+      <div class="switch-group"><span class="switch-label">视口</span><div class="segments" role="group" aria-label="视口"><button type="button" data-device-choice="desktop" aria-pressed="true">桌面</button><button type="button" data-device-choice="mobile" aria-pressed="false">移动</button></div></div>
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div>
+    </div>
+
+    <section class="layout-stage" data-variant="a" data-radius="soft" data-device="desktop" aria-label="工作区按钮图标效果">
+      <div class="prototype">
+        <header class="app-header">
+          <div class="app-brand">
+            <button class="icon-button mobile-menu" type="button" title="打开导航" aria-label="打开导航（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg></button>
+            <svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="Pi Reach 微圆角桥形标识"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z" fill="currentColor"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z" fill="currentColor"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z" fill="currentColor"/></svg><strong>Pi Reach</strong>
+          </div>
+          <div class="app-header-end"><span class="connected"><i aria-hidden="true"></i>已连接</span><button class="icon-button header-pair" type="button" title="配对电脑" aria-label="配对电脑（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div>
+        </header>
+        <div class="app-body">
+          <aside class="sidebar" aria-label="导航布局示意">
+            <div class="side-computer"><span class="device-avatar">S</span><span><strong>Studio Mac</strong><small>已配对电脑</small></span><span class="down-mark" aria-hidden="true">⌄</span></div>
+            <div class="side-group"><div class="side-heading">正在运行的 Pi <span>2</span></div><div class="side-row selected"><i class="live-dot" aria-hidden="true"></i><span><strong>发布前检查</strong><small>pi-reach · 工作中</small></span></div><div class="side-row"><i class="live-dot" aria-hidden="true"></i><span><strong>调查测试</strong><small>pi-reach · 待命</small></span></div></div>
+            <div class="side-group"><div class="side-heading">本地历史 <span>仅此浏览器</span></div><div class="side-row"><span class="history-symbol" aria-hidden="true">◷</span><span><strong>检查重连状态</strong><small>昨天 · 12 项记录</small></span></div></div>
+            <div class="side-footer">
+              <button class="action-button secondary-button footer-button" type="button" title="配对电脑" aria-label="配对电脑（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg><span>配对电脑</span></button>
+              <button class="action-button quiet-button footer-button" type="button" title="设置" aria-label="打开设置（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
+            </div>
+          </aside>
+          <section class="conversation" aria-label="在线会话示例">
+            <div class="conversation-head"><div><p>Studio Mac / 在线会话</p><h2>发布前检查</h2></div><div class="conversation-actions"><span class="working"><i aria-hidden="true"></i>工作中</span><button class="icon-button more-button" type="button" title="会话操作" aria-label="更多会话操作（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button></div></div>
+            <div class="reading-area"><div class="reading-inner">
+              <p class="date-divider">今天</p>
+              <article class="message user-message"><div class="message-meta">你 <time>10:42</time></div><p>检查这次发布构建，列出还需处理的问题。</p></article>
+              <article class="message assistant-message"><div class="message-meta">Pi <time>10:42</time></div><p>我会先检查构建，再查看测试结果。</p></article>
+              <div class="tool-lines"><div><code>pnpm build</code><span class="complete">✓ 已完成</span></div><div><code>pnpm test</code><span class="running">◷ 运行中</span></div></div>
+              <pre class="code-block"><code><span class="code-muted">$</span> pnpm test
+<span class="code-green">✓</span> 组件测试通过
+<span class="code-amber">◷</span> 正在检查浏览器用例
+<span class="code-blue">→</span> 等待结果</code></pre>
+              <p class="assistant-followup">构建已完成。浏览器用例仍在运行，结束后我再汇总。</p>
+            </div></div>
+            <div class="composer"><div class="composer-input"><span>发送消息给 Pi…</span><div class="composer-bottom"><div class="composer-tools"><button class="icon-button attach-button" type="button" title="添加附件" aria-label="添加附件（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></button><small>Pi · 当前会话</small></div><button class="send-icon" type="button" title="发送消息" aria-label="发送消息（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg></button></div></div></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="icon-notes" aria-label="按钮图标方案比较">
+      <div class="icon-presentation"><h2>操作呈现</h2><div class="presentation-row"><span>配对电脑</span><div class="presentation-pair"><button class="action-button secondary-button" type="button" title="配对电脑"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>配对电脑</button><button class="icon-button bordered-icon" type="button" title="配对电脑" aria-label="配对电脑（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div></div><div class="presentation-row"><span>设置</span><div class="presentation-pair"><button class="action-button quiet-button" type="button" title="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>设置</button><button class="icon-button" type="button" title="设置" aria-label="设置（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button></div></div><p>左侧保留文字，右侧纯图标；实际工作区用上方开关预览。</p></div>
+      <div class="icon-actions"><h2>输入与状态</h2><div class="icon-options"><div><button class="send-icon" type="button" title="发送消息（上箭头）" aria-label="发送消息，上箭头（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg></button><small>上箭头</small></div><div><button class="send-icon" type="button" title="发送消息（纸飞机）" aria-label="发送消息，纸飞机（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg></button><small>纸飞机</small></div><div><button class="icon-button" type="button" title="添加附件" aria-label="添加附件（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></button><small>附件</small></div></div><div class="state-options"><button class="action-button danger-button status-icon" type="button" title="停止当前任务" aria-label="停止当前任务（示意）"><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></button><span title="停止中…"><button class="action-button secondary-button status-icon" type="button" aria-label="停止中（示意）" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></button></span><button class="action-button danger-button" type="button" title="移除电脑"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 11v6M14 11v6M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>移除电脑</button></div><p>图标按 18–20px 展示，点击区域保持 44px；停止／加载仅图标，移除电脑保留文字。首次配对的主按钮仍按 48px 对照。</p></div>
+    </section>
+    <p class="review-caveat">仅供视觉评审；按钮不连接真实配对、发送或停止行为。侧栏图文、输入与停止纯图标、发送上箭头为本轮选择；具体尺寸与交互反馈仍待验收。桌面生产布局继续冻结。</p>
+  </main>
+</div>
+<script>
+  const review = document.querySelector(".layout-review");
+  const stage = document.querySelector(".layout-stage");
+  function select(kind, value) {
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset[`${kind}Choice`] === value));
+    });
+    (kind === "device" ? stage : review).dataset[kind] = value;
+  }
+  for (const kind of ["labels", "device", "appearance"]) {
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach((button) => {
+      button.addEventListener("click", () => select(kind, button.dataset[`${kind}Choice`]));
+    });
+  }
+  const params = new URLSearchParams(location.search);
+  select("labels", params.get("labels") === "compact" ? "compact" : "contextual");
+  select("device", params.get("device") === "mobile" || (!params.has("device") && innerWidth <= 760) ? "mobile" : "desktop");
+  select("appearance", params.get("appearance") === "dark" ? "dark" : "light");
+</script>
+</body>
+</html>

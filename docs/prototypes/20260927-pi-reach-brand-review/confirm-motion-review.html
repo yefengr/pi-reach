@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 确认弹窗进出动效预览</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./mobile-motion-review.css">
+  <link rel="stylesheet" href="./confirm-motion-review.css">
+</head>
+<body>
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7m-7 7h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18m-2 0-.9 14a2 2 0 0 1-2 2H7.9a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 4v8m4-8v8"/></symbol>
+</defs></svg>
+<div class="layout-review motion-review confirm-review" data-appearance="light">
+  <header class="review-header"><div class="review-header-inner"><a class="back-link" href="./mobile-motion-review.html">← 移动动效稿</a><span class="review-label">确认弹窗 / 隔离动效稿</span></div></header>
+  <main class="review-main motion-main">
+    <div class="review-heading"><div><p>PI REACH / CONFIRM MOTION</p><h1>确认弹窗进出</h1></div><span>移动设置页 · 轻量候选</span></div>
+    <div class="review-toolbar" aria-label="弹窗预览选项">
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="预览外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div>
+      <button class="review-play" type="button" data-preview>打开确认弹窗</button>
+    </div>
+    <section class="phone-stage" data-view="settings" data-motion="gentle" data-nav="closed" aria-label="设置页与确认弹窗动效示例">
+      <div class="settings-page-layer">
+        <div class="settings-scroll"><div class="settings-inner">
+          <div class="settings-heading"><a class="workspace-return" href="./mobile-motion-review.html" aria-label="返回工作区"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"/></svg></a><h2>设置</h2></div>
+          <section class="settings-section"><h3>外观</h3><p>选择此浏览器中的 Pi Reach 外观。</p><div class="appearance-row selected"><span><strong>跟随系统</strong><small>跟随设备设置</small></span><i aria-hidden="true"></i></div><div class="appearance-row"><strong>浅色</strong><i aria-hidden="true"></i></div><div class="appearance-row"><strong>深色</strong><i aria-hidden="true"></i></div></section>
+          <section class="settings-section"><h3>连接</h3><p>使用 https:// 安全连接；WebSocket 会自动选择。</p><strong class="field-label">Relay URL</strong><div class="relay-field">https://relay.example.com</div><span class="settings-save">保存设置</span></section>
+          <section class="settings-section"><h3>浏览器数据</h3><p>身份和历史记录只保存在此浏览器。</p><span class="settings-reset">重置布局</span><button class="clear-trigger" type="button"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-trash"/></svg>清除本地数据</button></section>
+        </div></div>
+      </div>
+      <div class="confirm-layer" data-state="closed" aria-hidden="true" inert>
+        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-description">
+          <div class="confirm-heading"><small>确认操作</small><h2 id="confirm-title">清除此浏览器的 Pi Reach 身份、配对和历史记录？</h2></div>
+          <p id="confirm-description">此操作无法撤销。它会移除此浏览器的 Pi Reach 身份、配对和历史记录。</p>
+          <div class="confirm-actions"><button class="cancel-action" type="button">取消</button><button class="confirm-danger" type="button">清除本地数据</button></div>
+        </div>
+      </div>
+    </section>
+    <p class="demo-status" role="status" aria-live="polite"></p>
+    <p class="motion-caveat">预览示例：弹窗和遮罩轻量进入约 180ms、退出约 140ms，仅作视觉对照，时长未定稿。点击「清除本地数据」或上方按钮打开；取消、Escape、点击遮罩可关闭并返回来源焦点。危险确认只显示模拟反馈，绝不删除数据。此稿不改变既有设置路径或正式弹窗规则。</p>
+  </main>
+</div>
+<script>
+  const review = document.querySelector('.confirm-review');
+  const settingsPage = document.querySelector('.settings-page-layer');
+  const overlay = document.querySelector('.confirm-layer');
+  const preview = document.querySelector('[data-preview]');
+  const clearButton = document.querySelector('.clear-trigger');
+  const cancelButton = document.querySelector('.cancel-action');
+  const confirmButton = document.querySelector('.confirm-danger');
+  const status = document.querySelector('.demo-status');
+  let focusOrigin = clearButton;
+  let closeTimer = 0;
+
+  function openDialog(origin) {
+    clearTimeout(closeTimer);
+    if (overlay.dataset.state === 'open') return;
+    focusOrigin = origin;
+    status.textContent = '';
+    overlay.inert = false;
+    overlay.setAttribute('aria-hidden', 'false');
+    settingsPage.inert = true;
+    overlay.dataset.state = 'open';
+    preview.textContent = '关闭确认弹窗';
+    requestAnimationFrame(() => {
+      if (overlay.dataset.state === 'open') cancelButton.focus({ preventScroll: true });
+    });
+  }
+  function finishClose() {
+    overlay.dataset.state = 'closed';
+    overlay.inert = true;
+    overlay.setAttribute('aria-hidden', 'true');
+    settingsPage.inert = false;
+    (focusOrigin?.isConnected ? focusOrigin : clearButton).focus({ preventScroll: true });
+  }
+  function closeDialog() {
+    if (overlay.dataset.state !== 'open') return;
+    overlay.dataset.state = 'closing';
+    overlay.inert = true;
+    preview.textContent = '打开确认弹窗';
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) finishClose();
+    else closeTimer = setTimeout(finishClose, parseFloat(getComputedStyle(overlay).getPropertyValue('--dialog-out')));
+  }
+  document.querySelectorAll('[data-appearance-choice]').forEach(button => button.addEventListener('click', () => {
+    review.dataset.appearance = button.dataset.appearanceChoice;
+    document.querySelectorAll('[data-appearance-choice]').forEach(choice => choice.setAttribute('aria-pressed', String(choice === button)));
+  }));
+  preview.addEventListener('click', () => overlay.dataset.state === 'open' ? closeDialog() : openDialog(preview));
+  clearButton.addEventListener('click', () => openDialog(clearButton));
+  cancelButton.addEventListener('click', closeDialog);
+  confirmButton.addEventListener('click', () => {
+    status.textContent = '模拟确认：没有清除任何数据。';
+    closeDialog();
+  });
+  overlay.addEventListener('click', event => { if (event.target === overlay) closeDialog(); });
+  window.addEventListener('keydown', event => {
+    if (overlay.dataset.state !== 'open') return;
+    if (event.key === 'Escape') { event.preventDefault(); closeDialog(); return; }
+    if (event.key !== 'Tab') return;
+    const first = cancelButton;
+    const last = confirmButton;
+    if (event.shiftKey && (document.activeElement === first || !overlay.contains(document.activeElement))) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !overlay.contains(document.activeElement))) {
+      event.preventDefault(); first.focus();
+    }
+  });
+  if (new URLSearchParams(location.search).get('appearance') === 'dark') document.querySelector('[data-appearance-choice="dark"]').click();
+</script>
+</body>
+</html>

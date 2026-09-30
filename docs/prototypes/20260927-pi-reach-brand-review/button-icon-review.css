@@ -1,0 +1,30 @@
+.icon-review .icon-button svg, .icon-review .action-button svg { stroke-linecap: round; stroke-linejoin: round; }
+.icon-review .icon-button svg circle { fill: currentColor; stroke: none; }
+.icon-review .presentation-row .icon-button svg circle { fill: none; stroke: currentColor; }
+.icon-review[data-labels="compact"] .side-footer { display: flex; align-items: center; justify-content: flex-start; }
+.icon-review[data-labels="compact"] .side-footer .footer-button { width: 44px; min-width: 44px; padding: 0; }
+.icon-review[data-labels="compact"] .footer-button span { display: none; }
+.icon-review .composer-tools { display: flex; align-items: center; gap: 5px; }
+.icon-review .composer-tools small { white-space: nowrap; }
+.icon-review .attach-button { color: var(--secondary); }
+.icon-review .send-icon svg { width: 20px; height: 20px; }
+.icon-review .icon-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding-top: 21px; border-top: 1px solid var(--line); }
+.icon-review .icon-notes h2 { margin: 0 0 13px; font-size: 14px; }
+.icon-review .presentation-row { display: grid; grid-template-columns: 86px minmax(0, 1fr); align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 12px; font-weight: 700; }
+.icon-review .presentation-pair { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.icon-review .presentation-pair .action-button { min-width: 114px; }
+.icon-review .bordered-icon { border-color: var(--control-line); background: var(--surface); color: var(--ink); }
+.icon-review .icon-notes p { margin: 12px 0 0; color: var(--secondary); font-size: 11px; line-height: 1.55; }
+.icon-review .icon-options { display: flex; flex-wrap: wrap; align-items: start; gap: 12px; }
+.icon-review .icon-options > div { width: 60px; display: grid; justify-items: center; gap: 5px; }
+.icon-review .icon-options small { color: var(--secondary); font-size: 10px; white-space: nowrap; }
+.icon-review .state-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.icon-review .state-options .action-button { min-height: 44px; }
+.icon-review .state-options .status-icon { width: 44px; min-width: 44px; padding: 0; }
+@media (max-width: 760px) {
+  .icon-review .icon-notes { grid-template-columns: 1fr; gap: 26px; }
+}
+@media (max-width: 370px) {
+  .icon-review .presentation-row { grid-template-columns: 75px minmax(0, 1fr); gap: 8px; }
+  .icon-review .presentation-pair .action-button { min-width: 105px; padding-inline: 9px; }
+}

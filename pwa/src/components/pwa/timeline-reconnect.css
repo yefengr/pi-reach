@@ -1,0 +1,9 @@
+.pwa-message-list {
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.pwa-message-list[data-reconnect-phase="fade-out"],
+.pwa-message-list[data-reconnect-phase="hidden"] {
+  opacity: 0;
+}

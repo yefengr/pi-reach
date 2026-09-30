@@ -1,0 +1,548 @@
+@import "tailwindcss";
+@import "./pwa-theme.css";
+@import "./workspace-navigation.css";
+@import "./workspace-shell.css";
+@import "./queued-messages.css";
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-border-soft: var(--border-soft);
+  --font-sans: var(--pwa-font-ui);
+  --font-mono: var(--pwa-font-mono);
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--pwa-bg);
+  color: var(--pwa-ink);
+  font-family: var(--pwa-font-ui);
+  font-size: var(--pwa-text-body);
+  font-weight: var(--pwa-weight-regular);
+  line-height: var(--pwa-leading-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea { font: inherit; }
+
+button,
+a,
+input,
+select,
+textarea,
+[tabindex] { -webkit-tap-highlight-color: transparent; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--pwa-accent);
+  outline-offset: 0;
+}
+
+::selection { background: var(--pwa-accent); color: var(--pwa-on-accent); }
+
+/* 时间、计数等数字等宽，避免刷新时抖动。 */
+time,
+.pwa-tabular { font-variant-numeric: tabular-nums; }
+
+/* 内部滚动区使用细滚动条；会话消息区与设置页等主滚动区保持系统原生样式。 */
+.pwa-navigation-scroll,
+.pwa-device-panel-list,
+.pwa-device-drawer-body,
+.pwa-queued-message-list,
+.pwa-command-menu-dropdown,
+.pwa-tool-reader-scroll,
+.pwa-markdown pre,
+.pwa-markdown table,
+.pwa-tool-code {
+  scrollbar-width: thin;
+  scrollbar-color: var(--pwa-control-line) transparent;
+}
+
+a { color: var(--pwa-accent); }
+
+html:has(.pwa-root),
+body:has(.pwa-root) { overscroll-behavior-y: none; }
+
+body:has(.pwa-root) { overflow: hidden; }
+
+.pwa-root,
+.pwa-root *,
+.pwa-root *::before,
+.pwa-root *::after,
+.pwa-runtime-notice,
+.pwa-runtime-notice * { box-sizing: border-box; }
+
+.pwa-root {
+  width: 100%;
+  max-width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--pwa-ink);
+  background: var(--pwa-bg);
+  font-family: var(--pwa-font-ui);
+}
+
+.pwa-app-shell { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--pwa-bg); }
+.pwa-runtime-notice-fallback,
+.pwa-runtime-notice-slot { flex: 0 0 auto; min-width: 0; min-height: 0; }
+.pwa-runtime-notice-slot { order: 5; }
+.pwa-runtime-notice-fallback:has(.pwa-runtime-notice) { padding-top: var(--pwa-safe-top); }
+.pwa-app-shell > .pwa-root,
+.pwa-app-shell > .pwa-loading,
+.pwa-app-shell > .pwa-startup-error { flex: 1 1 0; height: auto; min-height: 0; }
+
+.pwa-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+.pwa-brand-mark { flex: 0 0 auto; color: var(--pwa-accent); }
+
+.pwa-kicker { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); letter-spacing: 0; }
+
+/* 无框图标按钮：透明底、44px 点击区域，悬停时直径 36 的圆形浅底；键盘聚焦为圆形轮廓。 */
+.pwa-ui-scope .pwa-icon-button {
+  position: relative;
+  isolation: isolate;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--pwa-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: color 120ms var(--pwa-ease-standard);
+}
+.pwa-ui-scope .pwa-icon-button::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 4px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  transition: background-color 120ms var(--pwa-ease-standard), border-color 120ms var(--pwa-ease-standard);
+}
+.pwa-ui-scope .pwa-icon-button:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -4px; }
+.pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; }
+.pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-hover); }
+.pwa-ui-scope .pwa-icon-button:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-neutral-active); }
+/* 实心发送按钮：常显直径 36 的强调色圆。 */
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"],
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-on-accent); }
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"]::before { background: var(--pwa-accent); }
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-hover); }
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"]:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-active); }
+/* 危险入口的图标按钮保留轮廓，不套用圆形浅底。 */
+.pwa-ui-scope .pwa-icon-button[data-variant="outline"],
+.pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-error); }
+.pwa-ui-scope .pwa-icon-button[data-variant="outline"]::before { border-color: var(--pwa-error); }
+.pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-error-wash); }
+.pwa-ui-scope .pwa-icon-button:disabled,
+.pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: not-allowed; }
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"]:disabled::before,
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"][data-disabled]::before { background: var(--pwa-disabled-bg); }
+.pwa-ui-scope .pwa-icon-button:disabled::before,
+.pwa-ui-scope .pwa-icon-button[data-disabled]::before { border-color: transparent; }
+
+
+.pwa-session-actions { position: relative; }
+.pwa-root .pwa-session-actions-divider { margin: 6px 4px; border-color: var(--pwa-line); }
+.pwa-session-actions-secondary { display: grid; }
+.pwa-session-actions-secondary-item { min-height: 44px; }
+.pwa-session-title { min-width: 0; max-width: 100%; display: inline-flex; align-items: baseline; vertical-align: bottom; white-space: nowrap; }
+.pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; }
+.pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-gutter), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-timeline-pad-bottom); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: 88px; -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
+.pwa-history-main .pwa-message-list { --pwa-timeline-pad-bottom: 24px; scroll-padding-bottom: 24px; }
+.pwa-bottom-sentinel { width: 1px; height: 1px; }
+.pwa-chat-footer { flex: 0 0 auto; min-width: 0; position: relative; z-index: 3; }
+.pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-gutter) 12px; pointer-events: none; }
+
+/* 按钮层级：主操作实心强调色；次级为表面＋边线；文字按钮无底无框；危险入口为错误色轮廓。 */
+.pwa-ui-scope .pwa-button { min-height: 44px; height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color 120ms var(--pwa-ease-standard), border-color 120ms var(--pwa-ease-standard), color 120ms var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
+.pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); }
+.pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
+.pwa-ui-scope .pwa-button[data-variant="default"],
+.pwa-ui-scope .pwa-button[data-variant="light"] { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
+.pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]),
+.pwa-ui-scope .pwa-button[data-variant="light"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); }
+.pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]),
+.pwa-ui-scope .pwa-button[data-variant="light"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
+.pwa-ui-scope .pwa-button[data-variant="transparent"] { padding: 0 10px; border-color: transparent; color: var(--pwa-accent); background: transparent; }
+.pwa-ui-scope .pwa-button[data-variant="transparent"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); }
+.pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: var(--pwa-error); color: var(--pwa-error); background: transparent; }
+.pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash); }
+.pwa-ui-scope .pwa-button:disabled,
+.pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: not-allowed; }
+.pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
+.pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
+.pwa-ui-scope .pwa-button.pwa-latest-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
+.pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-accent); color: var(--pwa-accent); background: var(--pwa-accent-wash); }
+
+.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-gutter), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-safe-bottom)); }
+.pwa-image-input { display: none; }
+.pwa-composer-card { min-width: 0; padding: 10px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); transition: border-color 160ms ease; }
+.pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
+.pwa-composer-preview { position: relative; max-width: 100%; margin: 2px 2px 8px; }
+.pwa-composer-preview img { display: block; max-width: min(240px, 100%); height: 76px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); object-fit: cover; background: var(--pwa-code-bg); }
+.pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
+.pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
+.pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; }
+.pwa-composer-textarea { display: block; width: 100%; min-width: 0; }
+.pwa-ui-scope .pwa-composer .pwa-composer-input,
+.pwa-ui-scope .pwa-composer .pwa-composer-input:hover,
+.pwa-ui-scope .pwa-composer .pwa-composer-input:focus,
+.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: 44px; min-height: 44px; max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: 10px 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: 16px/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-ui-scope .pwa-composer .pwa-composer-input:disabled { background: transparent; }
+.pwa-composer .pwa-composer-input::placeholder { color: var(--pwa-secondary); }
+.pwa-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pwa-composer-tools,
+.pwa-composer-actions { display: flex; align-items: center; min-width: 0; gap: 6px; }
+.pwa-composer-actions { justify-content: flex-end; }
+/* 模型标签：发送按钮左侧的文字按钮，显示当前模型与思考级别；视觉高 32、点击区 44，手机只显示模型名。 */
+.pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
+.pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-sm); background: transparent; transition: background-color 120ms var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-composer-model:hover:not(:disabled)::before { background: var(--pwa-hover); }
+.pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); }
+.pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); }
+.pwa-ui-scope .pwa-composer-model:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -6px; }
+.pwa-ui-scope .pwa-composer-model:disabled { cursor: not-allowed; }
+.pwa-ui-scope .pwa-composer-model > svg { flex: 0 0 auto; }
+.pwa-composer-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pwa-composer-model-thinking { flex: 0 0 auto; }
+@media (max-width: 767.98px) {
+  .pwa-ui-scope .pwa-composer-model { max-width: 160px; }
+  .pwa-composer-model-thinking { display: none; }
+}
+/* 停止按钮与发送按钮同形同色：强调色圆，停止中与不可发送时一样降低不透明度。 */
+.pwa-ui-scope .pwa-icon-button.pwa-composer-send:disabled,
+.pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-disabled],
+.pwa-ui-scope .pwa-icon-button.pwa-composer-stop:disabled,
+.pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-disabled] { color: var(--pwa-on-accent); opacity: 0.5; }
+.pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-variant="filled"]:disabled::before,
+.pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-variant="filled"][data-disabled]::before,
+.pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"]:disabled::before,
+.pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"][data-disabled]::before { background: var(--pwa-accent); }
+.pwa-composer-menu,
+.pwa-composer-command { position: relative; flex: 0 0 auto; }
+.pwa-root .pwa-composer-menu-panel,
+.pwa-root .pwa-command-menu-dropdown { border: 1px solid var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); }
+.pwa-root .pwa-composer-menu-panel { min-width: 190px; padding: 6px; border-radius: var(--pwa-radius-md); }
+.pwa-composer-menu-panel { bottom: calc(100% + 8px); left: 0; }
+.pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
+.pwa-composer-menu-panel button:hover { color: var(--pwa-accent); background: var(--pwa-hover); }
+.pwa-root .pwa-command-menu-dropdown { --pwa-command-menu-width: min(340px, calc(100vw - 32px)); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
+.pwa-command-menu-panel { display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; }
+.pwa-command-row,
+.pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
+.pwa-command-menu-dropdown .mantine-Menu-itemLabel { min-width: 0; }
+.pwa-command-menu-dropdown .mantine-Menu-itemSection { flex-shrink: 0; margin: 0; }
+.pwa-command-row:hover:not(:disabled),
+.pwa-command-row:focus-visible:not(:disabled),
+.pwa-command-back:hover,
+.pwa-command-back:focus-visible { color: var(--pwa-accent); background: var(--pwa-hover); }
+.pwa-command-row:disabled { opacity: 0.45; cursor: not-allowed; }
+.pwa-command-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.pwa-command-copy code,
+.pwa-command-copy > span { overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.pwa-command-copy small,
+.pwa-command-menu-heading,
+.pwa-command-empty { color: var(--pwa-secondary); font-size: 12px; }
+.pwa-command-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwa-command-chevron,
+.pwa-command-check { flex: 0 0 auto; color: var(--pwa-accent); }
+/* 当前模型／思考等级：持久的 accent-wash 底与 accent 主文案，悬停和键盘高亮时保持不变。 */
+.pwa-command-choice[data-selected] { --menu-item-hover: var(--pwa-accent-wash); color: var(--pwa-accent); background: var(--pwa-accent-wash); }
+.pwa-command-choice[data-selected]:hover:not(:disabled),
+.pwa-command-choice[data-selected]:focus-visible:not(:disabled) { color: var(--pwa-accent); background: var(--pwa-accent-wash); }
+.pwa-command-choice[data-selected] .pwa-command-copy > span { color: var(--pwa-accent); }
+.pwa-command-menu-heading { padding: 8px 10px 6px; font-weight: 600; text-transform: uppercase; }
+.pwa-command-back { color: var(--pwa-secondary); }
+.pwa-command-empty { margin: 0; padding: 12px 10px; line-height: var(--pwa-leading-ui); }
+
+/* 独立设置页：surface 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
+.pwa-root .pwa-settings-page { min-height: 100%; color: var(--pwa-ink); background: var(--pwa-surface); }
+.pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: 32px 20px calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
+.pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }
+.pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { margin-left: -8px; padding-inline: 8px; }
+.pwa-root .pwa-settings-title { margin: 0; font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-settings-title:focus { outline: none; }
+.pwa-root .pwa-settings-title:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 2px; border-radius: var(--pwa-radius-xs); }
+.pwa-root .pwa-settings-section { min-width: 0; }
+.pwa-root .pwa-settings-section-title { margin: 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-settings-section-description { margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-settings-form { margin-top: 16px; display: grid; justify-items: start; gap: 12px; }
+.pwa-root .pwa-settings-form .pwa-field { width: 100%; }
+.pwa-root .pwa-settings-actions { margin-top: 16px; display: grid; justify-items: start; gap: 16px; }
+.pwa-appearance-options { display: block; margin-top: 16px; }
+.pwa-appearance-option { min-height: 72px; margin: 0; padding: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); transition: background 160ms ease, border-color 160ms ease; }
+.pwa-appearance-option:hover { background: var(--pwa-hover); }
+.pwa-appearance-option:has(input:checked) { border-color: var(--pwa-accent); background: var(--pwa-accent-wash); }
+.pwa-appearance-option .mantine-Radio-inner { align-self: center; }
+.pwa-appearance-option .mantine-Radio-radio { border-color: var(--pwa-line); }
+.pwa-appearance-option .mantine-Radio-radio:checked { border-color: var(--pwa-accent); background: var(--pwa-accent); }
+.pwa-appearance-option .mantine-Radio-labelWrapper { min-width: 0; flex: 1; }
+.pwa-appearance-option .mantine-Radio-label { display: block; padding-left: 10px; color: var(--pwa-ink); }
+.pwa-appearance-copy { display: flex; align-items: center; gap: 10px; }
+.pwa-appearance-copy > svg { flex: 0 0 auto; color: var(--pwa-accent); }
+.pwa-appearance-copy > span { min-width: 0; display: grid; gap: 2px; }
+.pwa-appearance-copy strong { font-size: 13px; font-weight: 600; }
+.pwa-appearance-copy small { color: var(--pwa-secondary); font-size: 12px; }
+/* 表单输入：单行高 44，surface 底、1px control-line 边框；聚焦为贴边强调色轮廓，边框不变。 */
+.pwa-ui-scope .pwa-input input,
+.pwa-ui-scope .pwa-textarea textarea,
+.pwa-ui-scope .pwa-select .mantine-Select-input { box-sizing: border-box; min-height: 44px; padding-inline: 12px; border: 1px solid var(--pwa-control-line); border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: var(--pwa-surface); font-size: var(--pwa-text-body); }
+.pwa-ui-scope .pwa-input input:focus,
+.pwa-ui-scope .pwa-textarea textarea:focus,
+.pwa-ui-scope .pwa-select .mantine-Select-input:focus { border-color: var(--pwa-control-line); outline: 2px solid var(--pwa-accent); outline-offset: 0; }
+.pwa-ui-scope .pwa-input input::placeholder,
+.pwa-ui-scope .pwa-textarea textarea::placeholder { color: var(--pwa-secondary); }
+.pwa-ui-scope .pwa-input input[aria-invalid="true"],
+.pwa-ui-scope .pwa-textarea textarea[aria-invalid="true"] { border-color: var(--pwa-error); }
+.pwa-ui-scope .pwa-input input:disabled,
+.pwa-ui-scope .pwa-textarea textarea:disabled { color: var(--pwa-secondary); background: var(--pwa-disabled-bg); opacity: 1; }
+.pwa-ui-scope .pwa-input .mantine-InputWrapper-label,
+.pwa-ui-scope .pwa-textarea .mantine-InputWrapper-label { margin-bottom: 6px; color: var(--pwa-ink); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
+.pwa-ui-scope .pwa-input .mantine-InputWrapper-description,
+.pwa-ui-scope .pwa-textarea .mantine-InputWrapper-description { margin-top: 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
+.pwa-layout-reset-note { margin: 6px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+
+.pwa-rename-dialog,
+.pwa-confirm-dialog { width: min(400px, 100%); min-width: 0; padding: 24px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
+.pwa-rename-head,
+.pwa-confirm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.pwa-rename-head h2,
+.pwa-confirm-title { margin: 8px 0 0; font-family: var(--pwa-font-ui); font-size: 16px; font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-rename-description,
+.pwa-confirm-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: 14px; line-height: var(--pwa-leading-body); }
+.pwa-rename-description { margin-bottom: 16px; }
+.pwa-rename-description strong { color: var(--pwa-ink); font-weight: 600; }
+.pwa-rename-field { display: grid; gap: 8px; color: var(--pwa-secondary); font-size: 12px; font-weight: 600; text-transform: uppercase; }
+.pwa-rename-field input { width: 100%; height: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); outline: none; color: var(--pwa-ink); background: var(--pwa-panel); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-transform: none; }
+.pwa-rename-field input:focus { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
+.pwa-rename-field input:disabled { opacity: 0.55; }
+.pwa-rename-actions,
+.pwa-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.pwa-rename-actions .pwa-button { min-width: 88px; }
+.pwa-confirm-actions .pwa-button { min-width: 120px; margin-top: 0; }
+.pwa-confirm-error,
+.pwa-error { color: var(--pwa-error); font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-confirm-error { margin: 12px 0 0; }
+
+/* Modal 宽度：确认类 400、表单类（配对、重命名）480；移动端为屏宽减两侧各 16。 */
+.pwa-rename-dialog { width: min(480px, 100%); }
+/* 危险确认：实心错误色，仅用于确认弹窗的最后一步。 */
+.pwa-ui-scope .pwa-button.pwa-danger-confirm { border-color: var(--pwa-error); color: var(--pwa-on-status); background: var(--pwa-error); }
+.pwa-ui-scope .pwa-button.pwa-danger-confirm:hover:not(:disabled) { border-color: var(--pwa-error-hover); background: var(--pwa-error-hover); }
+.pwa-ui-scope .pwa-button.pwa-danger-confirm:active:not(:disabled) { border-color: var(--pwa-error-active, var(--pwa-error-hover)); background: var(--pwa-error-active, var(--pwa-error-hover)); }
+/* Modal 标题行与弹窗同一表面，不用 Mantine 默认的标题底色。 */
+.pwa-ui-scope .mantine-Modal-header { background: transparent; }
+/* 遮罩始终只有一层：Modal 叠在带遮罩的 Drawer 上时，下层遮罩隐去，不叠加加深。 */
+.pwa-root:has(.mantine-Modal-overlay) .mantine-Drawer-overlay { opacity: 0 !important; }
+/* 配对弹窗（表单类，480）：与重命名弹窗同一表面；扫码取景、配对码输入与其他方式的文字按钮自上而下排列。 */
+.pwa-pairing-dialog { width: min(480px, 100%); min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
+.pwa-pairing-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px -10px 0 0; padding: 0; background: transparent; }
+.pwa-pairing-title { font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-pairing-body { min-width: 0; padding: 0; }
+.pwa-pairing-description { margin: 8px 0 16px; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
+.pwa-pairing-form { display: grid; gap: 12px; }
+.pwa-ui-scope .pwa-pairing-input input { font-family: var(--pwa-font-mono); letter-spacing: 0.04em; }
+.pwa-field-error { display: inline-flex; align-items: flex-start; gap: 6px; }
+.pwa-field-error svg { flex: 0 0 auto; margin-top: 1px; }
+.pwa-pairing-hint { margin: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+.pwa-pairing-error { margin: 8px 0 0; color: var(--pwa-error); font-size: var(--pwa-text-meta); }
+.pwa-pairing-status { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; color: var(--pwa-running); font-size: var(--pwa-text-meta); }
+.pwa-pairing-methods { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 16px 0 0 -8px; }
+.pwa-ui-scope .pwa-button.pwa-pairing-method { padding-inline: 8px; }
+.pwa-scanner { min-width: 0; }
+.pwa-scanner-frame { position: relative; overflow: hidden; aspect-ratio: 1; max-height: min(52dvh, 360px); margin: 0 auto 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-code-bg); }
+.pwa-scanner-frame video { width: 100%; height: 100%; object-fit: cover; }
+.pwa-scan-corner { position: absolute; width: 35px; height: 35px; border-color: var(--pwa-code-accent); border-style: solid; }
+.pwa-scan-corner-tl { top: 18%; left: 18%; border-width: 3px 0 0 3px; }
+.pwa-scan-corner-tr { top: 18%; right: 18%; border-width: 3px 3px 0 0; }
+.pwa-scan-corner-bl { bottom: 18%; left: 18%; border-width: 0 0 3px 3px; }
+.pwa-scan-corner-br { right: 18%; bottom: 18%; border-width: 0 3px 3px 0; }
+
+.pwa-startup-error,
+.pwa-loading { min-height: 100dvh; display: grid; place-items: center; padding: calc(24px + var(--pwa-safe-top)) 24px calc(24px + var(--pwa-safe-bottom)); color: var(--pwa-ink); background: var(--pwa-bg); text-align: center; }
+.pwa-startup-card { width: min(520px, 100%); padding: 32px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); }
+.pwa-startup-icon,
+.pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--pwa-running) 44%, var(--pwa-line)); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
+.pwa-startup-icon { width: 45px; height: 45px; margin-bottom: 16px; }
+.pwa-startup-card h1 { margin: 12px 0; font-family: var(--pwa-font-ui); font-size: 22px; font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-startup-card p { color: var(--pwa-secondary); font-size: 14px; line-height: var(--pwa-leading-body); }
+.pwa-startup-action-note { color: var(--pwa-accent) !important; font-size: 12px !important; }
+.pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.pwa-startup-actions a { text-decoration: none; }
+.pwa-spin { color: var(--pwa-running); animation: pwa-rotate 1.3s linear infinite; }
+.pwa-loading { color: var(--pwa-secondary); font-size: var(--pwa-text-body); }
+.pwa-loading p { margin: 16px 0 0; }
+.pwa-loading p span { color: var(--pwa-accent); }
+.pwa-loading-mark { display: block; margin: 0 auto; color: var(--pwa-accent); }
+
+.pwa-connection-banner {
+  order: 2;
+  --alert-radius: var(--pwa-radius-sm) !important;
+  align-self: center;
+  flex: 0 0 auto;
+  width: min(var(--maxw), calc(100% - 36px));
+  margin: 8px auto 0;
+  padding: 8px 12px;
+  border: 1px solid var(--alert-bd);
+  border-radius: var(--pwa-radius-sm);
+  color: var(--alert-color);
+  background: var(--alert-bg);
+  box-shadow: none;
+  font-size: 12px;
+  line-height: var(--pwa-leading-ui);
+}
+.pwa-connection-banner-relay { --alert-bg: var(--pwa-running-wash) !important; --alert-color: var(--pwa-running) !important; --alert-bd: color-mix(in srgb, var(--pwa-running) 38%, var(--pwa-line)) !important; }
+.pwa-connection-banner-network { --alert-bg: var(--pwa-error-wash) !important; --alert-color: var(--pwa-error) !important; --alert-bd: color-mix(in srgb, var(--pwa-error) 38%, var(--pwa-line)) !important; }
+.pwa-connection-banner .pwa-connection-banner-wrapper { align-items: center; gap: 8px; }
+.pwa-connection-banner .pwa-connection-banner-icon { flex: 0 0 auto; margin: 0; color: inherit; }
+.pwa-connection-banner .pwa-connection-banner-body { min-width: 0; }
+.pwa-connection-banner .pwa-connection-banner-message { color: inherit; font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-connection-banner-content { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.pwa-connection-banner-content > span { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.pwa-connection-banner .pwa-connection-retry { flex: 0 0 auto; min-width: 44px; min-height: 44px; }
+
+.pwa-runtime-notice {
+  --alert-radius: var(--pwa-radius-md) !important;
+  --alert-bg: var(--pwa-accent-wash) !important;
+  --alert-color: var(--pwa-ink) !important;
+  --alert-bd: color-mix(in srgb, var(--pwa-accent) 28%, var(--pwa-line)) !important;
+  width: min(680px, calc(100% - 36px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-width: 680px;
+  margin: 8px auto 0;
+  padding: 10px 8px 10px 12px;
+  border: 1px solid var(--alert-bd);
+  border-radius: var(--pwa-radius-md);
+  color: var(--pwa-ink);
+  background: var(--alert-bg);
+  box-shadow: none;
+  font-size: 12px;
+  line-height: var(--pwa-leading-ui);
+}
+.pwa-runtime-notice .pwa-runtime-notice-wrapper { align-items: center; min-width: 0; }
+.pwa-runtime-notice .pwa-runtime-notice-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
+.pwa-runtime-notice .pwa-runtime-notice-title { grid-column: 1; margin: 0; color: var(--pwa-ink); font-size: 14px; font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-runtime-notice .pwa-runtime-notice-message,
+.pwa-runtime-notice-content { display: contents; }
+.pwa-runtime-notice-description { grid-column: 1; min-width: 0; color: var(--pwa-secondary); font-size: 12px; line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
+.pwa-runtime-notice-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pwa-runtime-notice .pwa-runtime-notice-dismiss { flex: 0 0 44px; align-self: center; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -4px -4px -4px 4px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); }
+.pwa-runtime-notice .pwa-runtime-notice-dismiss:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-hover); }
+.pwa-toast { position: relative; flex: 0 0 auto; max-width: min(680px, calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font-size: 12px; order: 3; align-self: center; margin: 8px auto; padding: 12px; border-color: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line)); color: var(--pwa-error); background: var(--pwa-error-wash); }
+.pwa-toast > span { min-width: 0; max-height: min(14dvh, 100px); overflow-y: auto; overflow-wrap: anywhere; }
+.pwa-ui-scope .pwa-toast-dismiss { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -6px -8px -6px 0; padding: 0; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: inherit; background: transparent; cursor: pointer; }
+.pwa-ui-scope .pwa-toast-dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pwa-error) 42%, var(--pwa-line)); background: var(--pwa-error-wash); }
+
+/* Toast：顶部居中、会话标题区与主区提示（连接提示条等）下方的最顶层浮层；surface 底、浮层阴影＋line 边框、圆角 8、最大宽 400。 */
+.pwa-operation-notifications { display: none; }
+.pwa-operation-notifications[data-position="top-center"]:has(.pwa-operation-notification) { display: block; position: absolute; top: max(calc(var(--pwa-safe-top) + 64px), calc(var(--pwa-main-notices-bottom, 0px) + 8px)); left: var(--pwa-main-center, 50%); right: auto; bottom: auto; width: min(400px, calc(var(--pwa-main-width, 100%) - 32px)); max-width: 400px; margin: 0; padding: 0; transform: translateX(-50%); pointer-events: none; }
+.pwa-operation-notifications .pwa-operation-notification { min-height: 44px; padding: 4px 4px 4px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: auto; }
+.pwa-operation-notifications .pwa-operation-notification::before { display: none; }
+/* 进出只做轻微位移＋淡化；Mantine 通知状态变量区分退出，不使用整段滑入与回弹。 */
+.pwa-operation-notifications .pwa-operation-notification { transform: translateY(calc((1 - var(--notifications-state-opacity, 1)) * -8px * var(--pwa-motion-shift, 1))) !important; transition-timing-function: var(--pwa-ease-enter) !important; }
+.pwa-operation-notifications .pwa-operation-notification[style*="--notifications-state-opacity: 0"] { transition-timing-function: var(--pwa-ease-exit) !important; }
+/* Mantine 的遮罩与内容是兄弟节点，不能继承内容 in/out 上的曲线变量。 */
+.pwa-scrim[style] { transition-timing-function: var(--pwa-ease-enter) !important; }
+.pwa-scrim[style*="opacity: 0;"] { transition-timing-function: var(--pwa-ease-exit) !important; }
+@media (prefers-reduced-motion: reduce) {
+  .pwa-operation-notifications .pwa-operation-notification[style],
+  .pwa-scrim[style] { transition-timing-function: var(--pwa-ease-standard) !important; }
+}
+.pwa-operation-notifications .pwa-toast-icon { width: 16px; min-width: 16px; height: 16px; margin-right: 8px; border-radius: 0; background: transparent; }
+.pwa-operation-notifications .pwa-toast-success .pwa-toast-icon { color: var(--pwa-complete); }
+.pwa-operation-notifications .pwa-toast-info .pwa-toast-icon { color: var(--pwa-accent); }
+.pwa-operation-notifications .pwa-toast-error .pwa-toast-icon { color: var(--pwa-error); }
+.pwa-operation-notifications .pwa-operation-notification-message { color: inherit; font: inherit; overflow-wrap: anywhere; }
+.pwa-operation-notifications .pwa-toast-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pwa-operation-notifications .pwa-toast-action { flex: 0 0 auto; white-space: nowrap; min-height: 36px; padding: 0 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
+.pwa-operation-notifications .pwa-toast-action:hover { background: var(--pwa-hover); }
+.pwa-operation-notifications .pwa-operation-notification-close { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; color: var(--pwa-secondary); }
+
+/* 密度取应用壳的实际可见高度；软键盘不改变 layout viewport 时也使用同一套规则。 */
+.pwa-app-shell[data-compact-height] .pwa-message-list { --pwa-timeline-pad-top: 8px; --pwa-timeline-pad-bottom: 8px; scroll-padding-bottom: 8px; }
+.pwa-app-shell[data-compact-height] .pwa-connection-banner { margin-top: 0; padding-block: 0; font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-wrapper { gap: 8px; }
+.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-icon svg { width: 13px; height: 13px; }
+.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-message { font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-app-shell[data-compact-height] .pwa-runtime-notice { margin-top: 4px; padding-block: 6px; }
+.pwa-app-shell[data-compact-height] .pwa-runtime-notice-content { gap: 6px; }
+.pwa-app-shell[data-compact-height] .pwa-runtime-notice-description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.pwa-app-shell[data-compact-height] .pwa-toast { margin-block: 2px; }
+.pwa-app-shell[data-compact-height] .pwa-toast > span { max-height: 2lh; }
+.pwa-app-shell[data-compact-height]:has(.pwa-main-notices .pwa-toast) .pwa-toast { padding-block: 4px; }
+.pwa-app-shell[data-compact-height="very-short"]:has(.pwa-main-notices .pwa-toast) .pwa-composer { padding-block: 4px calc(4px + var(--pwa-safe-bottom)); }
+.pwa-app-shell[data-wide-compact] .pwa-runtime-notice .pwa-runtime-notice-body { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
+.pwa-app-shell[data-wide-compact] .pwa-runtime-notice .pwa-runtime-notice-message,
+.pwa-app-shell[data-wide-compact] .pwa-runtime-notice-content { display: contents; }
+.pwa-app-shell[data-wide-compact] .pwa-runtime-notice-actions { width: auto; }
+
+@keyframes pwa-rotate { to { transform: rotate(360deg); } }
+
+@media (max-width: 767.98px) {
+  /* 移动端与桌面保持同一块输入表面的内边距。 */
+  /* 移动设置页：返回箭头与标题同一行，不设固定顶栏。 */
+  .pwa-root .pwa-settings-inner { padding: calc(6px + var(--pwa-safe-top)) 16px calc(48px + var(--pwa-safe-bottom, 0px)); }
+  .pwa-root .pwa-settings-header { grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 4px; margin-left: -10px; }
+  .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { width: 44px; height: 44px; margin: 0; padding: 0; border-radius: 50%; }
+  .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back .mantine-Button-section { margin: 0; }
+  .pwa-root .pwa-settings-back-label { display: none; }
+  .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); }
+  .pwa-startup-card { padding: 24px 20px; }
+  .pwa-connection-banner { width: calc(100% - 24px); margin-top: 6px; padding: 8px 12px; }
+  .pwa-runtime-notice { width: calc(100% - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); margin-top: 6px; padding: 10px 6px 10px 12px; }
+  .pwa-runtime-notice .pwa-runtime-notice-body,
+  .pwa-runtime-notice .pwa-runtime-notice-message { display: block; }
+  .pwa-runtime-notice .pwa-runtime-notice-title { margin-bottom: 4px; }
+  .pwa-runtime-notice-content { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
+  .pwa-runtime-notice-actions { width: 100%; justify-content: flex-start; }
+  /* 移动端 Modal 左右各留 16px；Mantine 默认 5vw。 */
+  :root .mantine-Modal-root { --modal-x-offset: 16px; }
+  .pwa-pairing-dialog,
+  .pwa-rename-dialog,
+  .pwa-confirm-dialog { width: 100%; }
+  .pwa-pairing-dialog,
+  .pwa-rename-dialog,
+  .pwa-confirm-dialog { padding: 20px 16px 16px; }
+  /* 移动端所有输入框 16px，避免 iOS 聚焦时自动放大。 */
+  .pwa-ui-scope .pwa-input input { font-size: 16px; }
+  .pwa-rename-actions .pwa-button { flex: 1; }
+  .pwa-confirm-actions { flex-direction: column; align-items: stretch; margin-top: 16px; }
+  .pwa-confirm-actions .pwa-button { width: 100%; min-width: 0; }
+}

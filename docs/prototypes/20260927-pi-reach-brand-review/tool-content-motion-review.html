@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 工具与思考展开动效预览</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./tool-content-motion-review.css">
+</head>
+<body>
+<svg class="motion-icons" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="motion-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="motion-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+  <symbol id="motion-progress" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-6-7.75"/></symbol>
+</defs></svg>
+<div class="layout-review tool-motion-review" data-appearance="light">
+  <header class="review-header"><div class="review-header-inner">
+    <a class="back-link" href="./confirm-motion-review.html">← 弹窗动效稿</a>
+    <span class="review-label">工具与思考 / 隔离动效稿</span>
+  </div></header>
+  <main class="review-main motion-main">
+    <div class="review-heading"><div><p>PI REACH / CONTENT MOTION</p><h1>展开与收起</h1></div><span>单段会话 · 明暗与窄屏预览</span></div>
+    <div class="review-toolbar" aria-label="预览外观">
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="预览外观">
+        <button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button>
+        <button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button>
+      </div></div>
+    </div>
+    <section class="motion-workspace" aria-label="工具与思考展开动效示例">
+      <header class="workspace-heading"><div><small>pi-reach / 在线会话</small><strong>发布前检查</strong></div><span class="online-label"><span aria-hidden="true"></span>已连接</span></header>
+      <div class="workspace-reading">
+        <div class="conversation-width">
+          <article class="user-bubble"><small>你 · 10:42</small><p>检查最近的 PWA 构建。先确认测试结果，再看看工具详情在手机上是否方便阅读。</p></article>
+          <article class="assistant-copy"><small>Pi · 10:43</small><p>我会先查看测试和工具输出，再整理需要回归的地方。</p></article>
+
+          <section class="motion-entry thinking-entry" data-entry data-expanded="false" aria-label="思考过程">
+            <button type="button" class="entry-trigger" aria-expanded="false" aria-controls="thinking-motion-content">
+              <svg class="entry-chevron" viewBox="0 0 24 24" aria-hidden="true"><use href="#motion-chevron"/></svg>
+              <span class="entry-main"><strong>思考过程</strong><small>检查构建与测试的顺序</small></span>
+            </button>
+            <div id="thinking-motion-content" class="entry-reveal" aria-hidden="true" inert><div class="reveal-clip"><div class="thinking-body">
+              <p>先确认单元测试有没有失败，再看构建是否完成。长工具结果保持原样，避免把摘要当作完整日志。</p>
+              <p>如果测试输出仍在更新，新增内容应立即可读，不跟随展开动效反复动画。</p>
+            </div></div></div>
+          </section>
+
+          <section class="motion-entry tool-entry" data-entry data-expanded="true" aria-label="bash 工具结果">
+            <button type="button" class="entry-trigger" aria-expanded="true" aria-controls="test-motion-content">
+              <svg class="entry-chevron" viewBox="0 0 24 24" aria-hidden="true"><use href="#motion-chevron"/></svg>
+              <span class="entry-main"><strong>bash</strong><small>pnpm --filter pwa test:unit</small></span>
+              <span class="entry-status complete"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#motion-check"/></svg>已完成</span>
+            </button>
+            <div id="test-motion-content" class="entry-reveal" aria-hidden="false"><div class="reveal-clip"><div class="tool-body"><pre><code>$ pnpm --filter pwa test:unit
+✓ tool-card.node.test.tsx
+✓ tool-output.node.test.tsx
+✓ settings-panel.node.test.tsx
+
+Test files  3 passed
+Tests       18 passed</code></pre></div></div></div>
+          </section>
+
+          <section class="motion-entry tool-entry" data-entry data-expanded="false" aria-label="read 工具结果">
+            <button type="button" class="entry-trigger" aria-expanded="false" aria-controls="read-motion-content">
+              <svg class="entry-chevron" viewBox="0 0 24 24" aria-hidden="true"><use href="#motion-chevron"/></svg>
+              <span class="entry-main"><strong>read</strong><small>pwa/src/components/pwa/tool-card.tsx</small></span>
+              <span class="entry-status running"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#motion-progress"/></svg>运行中</span>
+            </button>
+            <div id="read-motion-content" class="entry-reveal" aria-hidden="true" inert><div class="reveal-clip"><div class="tool-body">
+              <pre><code data-stream-output>读取工具结果…
+1  导入预览和工具状态组件
+2  渲染可展开的工具行</code></pre>
+              <button type="button" class="append-action" data-append-output>模拟追加一行输出</button>
+              <p class="stream-feedback" role="status" aria-live="polite"></p>
+            </div></div></div>
+          </section>
+          <article class="assistant-copy after-tools"><small>Pi · 10:44</small><p>测试通过。等文件读取结束后，我会列出需要回归的界面。</p></article>
+        </div>
+      </div>
+    </section>
+    <p class="motion-caveat">候选效果：点击「思考过程」「bash」或「read」反复展开／收起，观察阅读区如何随内容轻量伸缩；打开 read 后可模拟追加输出。进入约 160ms、退出约 120ms，时长未定稿。减少动态效果时立即切换。仅模拟视觉，不连接 Pi、不修改正式的即时显隐／卸载规则；真实长输出、流式滚动与焦点仍须实施验证。</p>
+  </main>
+</div>
+<script>
+  const review = document.querySelector('.tool-motion-review');
+  document.querySelectorAll('[data-appearance-choice]').forEach(button => button.addEventListener('click', () => {
+    review.dataset.appearance = button.dataset.appearanceChoice;
+    document.querySelectorAll('[data-appearance-choice]').forEach(choice => choice.setAttribute('aria-pressed', String(choice === button)));
+  }));
+  document.querySelectorAll('[data-entry]').forEach(entry => {
+    const trigger = entry.querySelector('.entry-trigger');
+    const content = entry.querySelector('.entry-reveal');
+    trigger.addEventListener('click', () => {
+      const expanded = entry.dataset.expanded !== 'true';
+      entry.dataset.expanded = String(expanded);
+      trigger.setAttribute('aria-expanded', String(expanded));
+      content.setAttribute('aria-hidden', String(!expanded));
+      content.inert = !expanded;
+    });
+  });
+  let appended = 0;
+  document.querySelector('[data-append-output]').addEventListener('click', () => {
+    appended += 1;
+    document.querySelector('[data-stream-output]').textContent += `\n${appended + 2}  新增输出行 ${appended} · 内容立即更新`;
+    document.querySelector('.stream-feedback').textContent = `已追加 ${appended} 行模拟输出。`;
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Reach · 字号阶梯对照</title>
+<style>
+* { box-sizing: border-box; }
+:root { --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+body { margin: 0; padding: 24px 16px 48px; background: #E4E6E6; color: #272B2D; font: 13px/1.5 var(--ui); }
+.page { max-width: 1320px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 20px; color: #5C6166; }
+.opt { margin-bottom: 28px; }
+.opt-head { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.opt-head small { font-weight: 400; color: #5C6166; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) 375px; gap: 16px; align-items: start; }
+
+/* scales */
+.s13 { --meta: 11px; --label: 11px; --list: 13px; --body: 13px; --code: 12px; --title: 15px; --page: 20px; --lh-body: 1.6; --lh-ui: 1.35; }
+.s14 { --meta: 12px; --label: 12px; --list: 13px; --body: 14px; --code: 12.5px; --title: 16px; --page: 22px; --lh-body: 1.65; --lh-ui: 1.4; }
+.s15 { --meta: 12px; --label: 12px; --list: 14px; --body: 15px; --code: 13px; --title: 17px; --page: 24px; --lh-body: 1.65; --lh-ui: 1.4; }
+
+.app { display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 520px; border-radius: 10px; overflow: hidden; background: #F8F9F8; box-shadow: 0 1px 3px #0000001f; font-variant-numeric: tabular-nums; }
+.side { background: #F0F2F2; padding: 14px 8px; overflow: hidden; }
+.group { margin: 12px 10px 4px; color: #5C6166; font-size: var(--label); line-height: var(--lh-ui); font-weight: 600; }
+.group:first-child { margin-top: 0; }
+.row { padding: 6px 10px; border-radius: 6px; line-height: var(--lh-ui); }
+.row b { display: block; font-size: var(--list); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row span { font-size: var(--meta); color: #5C6166; }
+.row.sel { background: #DBE4F0; } .row.sel b { color: #4C658D; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.head { padding: 12px 20px; line-height: var(--lh-ui); }
+.head small { display: block; font-size: var(--meta); color: #5C6166; }
+.head h2 { margin: 0; font-size: var(--title); font-weight: 600; }
+.scroll { flex: 1; overflow: hidden; padding: 4px 20px; }
+.col { max-width: 720px; margin: 0 auto; }
+.user { margin-left: auto; width: fit-content; max-width: 80%; padding: 8px 12px; border-radius: 8px; background: #EDF1F2; font-size: var(--body); line-height: var(--lh-body); }
+.bot { margin: 12px 0 10px; font-size: var(--body); line-height: var(--lh-body); }
+.bot code, .user code { font-family: var(--mono); font-size: var(--code); padding: 1px 4px; border-radius: 4px; background: #F0F2F2; color: #4C658D; }
+.meta { font-size: var(--meta); color: #5C6166; line-height: var(--lh-ui); margin-top: 4px; }
+.toolrow { display: flex; gap: 8px; align-items: baseline; font-size: var(--meta); color: #5C6166; margin: 6px 0; line-height: var(--lh-ui); }
+.toolrow b { font-family: var(--mono); font-size: var(--code); font-weight: 400; color: #272B2D; }
+.toolrow .ok { color: #347953; font-weight: 600; }
+.tool { font-family: var(--mono); font-size: var(--code); line-height: 1.55; padding: 10px 12px; border-radius: 6px; background: #F0F2F2; white-space: pre; overflow: hidden; }
+.tool .ok { color: #347953; } .tool .dim { color: #5C6166; }
+.composer { margin: 8px 20px 14px; padding: 10px 12px; border-radius: 12px; background: #FFFFFF; box-shadow: inset 0 0 0 1px #DCE1E2; font-size: var(--body); color: #5C6166; }
+.composer.m { font-size: 16px; }
+
+.phone { width: 375px; height: 520px; border-radius: 18px; overflow: hidden; background: #F8F9F8; box-shadow: 0 1px 3px #0000001f; display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.mtop { display: flex; align-items: center; gap: 8px; padding: 10px 12px; line-height: var(--lh-ui); }
+.mtop i { width: 20px; height: 2px; background: #272B2D; box-shadow: 0 -6px 0 #272B2D, 0 6px 0 #272B2D; margin: 0 12px 0 4px; }
+.mtop div { min-width: 0; }
+.mtop small { display: block; font-size: var(--meta); color: #5C6166; }
+.mtop b { display: block; font-size: var(--title); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .scroll { padding: 4px 14px; }
+.phone .composer { margin: 8px 12px 14px; }
+.notes { padding: 16px 18px; border-radius: 10px; background: #FFFFFF; }
+.notes h2 { margin: 0 0 8px; font-size: 15px; }
+.notes li { margin: 4px 0; }
+table.scale { border-collapse: collapse; margin: 8px 0 12px; font-size: 12px; }
+table.scale th, table.scale td { padding: 4px 12px; border-bottom: 1px solid #DCE1E2; text-align: left; }
+@media (max-width: 1000px) { .pair { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>字号阶梯对照</h1>
+  <p class="lead" style="color:#347953;font-weight:600">结论：选定 B 14px 基准，桌面与移动共用；移动端输入框固定 16px。</p>
+  <p class="lead">字体为已选的系统字体，配色为修正后色值。左为桌面，右为 375px 宽移动端。移动端输入框统一 16px（低于 16px 时 iOS Safari 聚焦会自动放大页面）。</p>
+
+  <table class="scale">
+    <tr><th>层级</th><th>用途</th><th>A 13 基准</th><th>B 14 基准</th><th>C 15 基准</th></tr>
+    <tr><td>元数据</td><td>时间、设备、计数</td><td>11</td><td>12</td><td>12</td></tr>
+    <tr><td>分组标签</td><td>在线 Pi／本地历史</td><td>11</td><td>12</td><td>12</td></tr>
+    <tr><td>列表</td><td>侧栏会话名</td><td>13</td><td>13</td><td>14</td></tr>
+    <tr><td>正文</td><td>消息、说明</td><td>13 / 1.6</td><td>14 / 1.65</td><td>15 / 1.65</td></tr>
+    <tr><td>代码</td><td>工具输出、行内代码</td><td>12</td><td>12.5</td><td>13</td></tr>
+    <tr><td>会话标题</td><td>标题区、移动顶栏</td><td>15</td><td>16</td><td>17</td></tr>
+    <tr><td>页面标题</td><td>设置等独立页</td><td>20</td><td>22</td><td>24</td></tr>
+  </table>
+
+  <template id="desk">
+    <div class="app">
+      <aside class="side">
+        <div class="group">在线 Pi</div>
+        <div class="row sel"><b>品牌刷新评审与配色修正</b><span>MacBook Pro · 运行中 · 17:43</span></div>
+        <div class="row"><b>发布前检查</b><span>Mac mini · 2 分钟前</span></div>
+        <div class="row"><b>Relay ACL regression</b><span>Mac mini · 12 分钟前</span></div>
+        <div class="group">本地历史</div>
+        <div class="row"><b>Protocol v2 migration</b><span>9 月 24 日 · 只读 · 128 条</span></div>
+        <div class="row"><b>Relay ACL 调整与回归测试</b><span>9 月 21 日 · 只读 · 64 条</span></div>
+        <div class="row"><b>Service Worker 离线缓存</b><span>9 月 18 日 · 只读 · 37 条</span></div>
+      </aside>
+      <section class="main">
+        <div class="head"><small>MacBook Pro · 已连接</small><h2>品牌刷新评审与配色修正</h2></div>
+        <div class="scroll"><div class="col">
+          <div class="user">把侧栏的悬停色调深一点，然后跑一下 <code>pnpm test</code> 看看有没有回归。</div>
+          <div class="bot">已将 <code>hover</code> 从 <code>#E9EDEE</code> 调整为 <code>#E2E7E9</code>，侧栏上悬停行的对比由 1.05:1 提高到 1.11:1。同时把元数据统一为 <code>secondary</code>，在悬停和选中行上也能达到 4.5:1。测试全部通过，共 342 项。
+            <div class="meta">Pi · 17:43</div></div>
+          <div class="toolrow"><span class="ok">✓ 完成</span><b>pnpm --filter pwa test</b><span>18.6s</span></div>
+          <div class="tool"><span class="dim">$</span> pnpm --filter pwa test
+<span class="ok">✓</span> src/app/sidebar.test.tsx (27 tests) 318ms
+<span class="dim">Tests  342 passed (342)</span></div>
+        </div></div>
+        <div class="composer">向 Pi 发送消息…</div>
+      </section>
+    </div>
+  </template>
+  <template id="mobile">
+    <div class="phone">
+      <div class="mtop"><i></i><div><small>MacBook Pro · 已连接</small><b>品牌刷新评审与配色修正</b></div></div>
+      <div class="scroll">
+        <div class="user">把侧栏的悬停色调深一点，然后跑一下 <code>pnpm test</code>。</div>
+        <div class="bot">已将 <code>hover</code> 调整为 <code>#E2E7E9</code>，侧栏上悬停行的对比由 1.05:1 提高到 1.11:1。测试全部通过，共 342 项。
+          <div class="meta">Pi · 17:43</div></div>
+        <div class="toolrow"><span class="ok">✓ 完成</span><b>pnpm test</b><span>18.6s</span></div>
+      </div>
+      <div class="composer m">向 Pi 发送消息…</div>
+    </div>
+  </template>
+
+  <div class="opt s13"><p class="opt-head">A 13px 基准 <small>最紧凑；元数据 11px</small></p><div class="pair"><div class="d"></div><div class="m"></div></div></div>
+  <div class="opt s14"><p class="opt-head">B 14px 基准 <small>正文 14、列表 13、元数据 12</small></p><div class="pair"><div class="d"></div><div class="m"></div></div></div>
+  <div class="opt s15"><p class="opt-head">C 15px 基准 <small>最宽松；接近常见聊天产品</small></p><div class="pair"><div class="d"></div><div class="m"></div></div></div>
+
+  <div class="notes">
+    <h2>看点</h2>
+    <ul>
+      <li><b>元数据小字</b>：中文在 11px 下笔画密集，「运行中」「分钟前」是否仍清楚。</li>
+      <li><b>长消息阅读</b>：助手回复是主要阅读内容，正文字号影响长时间阅读的舒适度。</li>
+      <li><b>侧栏容量</b>：同样高度下能放几条会话、长名称从哪里开始截断。</li>
+      <li><b>移动端</b>：375px 宽下正文每行字数与顶栏标题截断。</li>
+    </ul>
+  </div>
+</div>
+<script>
+  const desk = document.getElementById('desk'), mob = document.getElementById('mobile');
+  document.querySelectorAll('.pair').forEach(p => { p.querySelector('.d').appendChild(desk.content.cloneNode(true)); p.querySelector('.m').appendChild(mob.content.cloneNode(true)); });
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 桌面布局与侧栏动效对照</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./desktop-topbar-review.css">
+</head>
+<body>
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="brand-mark" viewBox="0 0 64 64"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6.8a2 2 0 0 0-1.4.6L3.2 21.8A.7.7 0 0 1 2 21.3V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.7 2.7L3 8M3 3v5h5m4-1v5l4 2"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.7 4.1a2.3 2.3 0 0 1 4.6 0 2.3 2.3 0 0 0 3.3 1.9 2.3 2.3 0 0 1 2.3 4 2.3 2.3 0 0 0 0 3.9 2.3 2.3 0 0 1-2.3 4 2.3 2.3 0 0 0-3.3 1.9 2.3 2.3 0 0 1-4.6 0 2.3 2.3 0 0 0-3.3-1.9 2.3 2.3 0 0 1-2.3-4 2.3 2.3 0 0 0 0-3.9 2.3 2.3 0 0 1 2.3-4 2.3 2.3 0 0 0 3.3-1.9"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14-5L4 8m0-5v5h5M4 13a8 8 0 0 0 14 5l2-2m0 5v-5h-5"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+</defs></svg>
+<div class="layout-review topbar-review" data-appearance="light" data-preview-lang="zh">
+  <header class="review-header"><div class="review-header-inner"><a href="./settings-page-review.html" class="back-link">← 设置页效果稿</a><span class="review-label">桌面工作区 / 隔离效果稿</span></div></header>
+  <main class="review-main topbar-main">
+    <div class="review-heading"><div><p>PI REACH / DESKTOP WORKSPACE</p><h1>桌面布局与侧栏动效对照</h1></div><span>侧栏常驻 · 主区连续阅读</span></div>
+    <div class="review-toolbar" aria-label="效果稿预览选项">
+      <div class="switch-group desktop-control"><span class="switch-label">桌面顶栏</span><div class="segments" role="group" aria-label="桌面顶栏预览"><button type="button" data-layout-choice="without" aria-pressed="true">移除</button><button type="button" data-layout-choice="with" aria-pressed="false">保留</button></div></div>
+      <div class="switch-group desktop-control"><span class="switch-label">桌面侧栏</span><div class="segments" role="group" aria-label="桌面侧栏预览"><button type="button" data-sidebar-choice="open" aria-pressed="true">展开</button><button type="button" data-sidebar-choice="closed" aria-pressed="false">收起</button></div></div>
+      <div class="switch-group desktop-control"><span class="switch-label">收展动效</span><div class="segments" role="group" aria-label="桌面侧栏收展动效预览"><button type="button" data-motion-choice="instant" aria-pressed="true">即时</button><button type="button" data-motion-choice="gentle" aria-pressed="false">轻量过渡</button></div></div>
+      <div class="switch-group"><span class="switch-label">文案</span><div class="segments" role="group" aria-label="预览语言"><button type="button" data-language-choice="zh" aria-pressed="true">中文</button><button type="button" data-language-choice="en" aria-pressed="false">English</button></div></div>
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="预览外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div>
+    </div>
+    <section class="workspace-stage" data-layout="without" data-sidebar="open" data-motion="instant" aria-label="Pi Reach 桌面工作区示例">
+      <header class="desktop-app-top"><span class="brand-line"><svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#brand-mark"/></svg><strong>Pi Reach</strong></span><span class="top-utility"><span class="connection"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span class="zh" lang="zh-CN">已连接</span><span class="en" lang="en">Connected</span></span><button class="icon-tool" type="button" aria-label="刷新应用（示意）" title="刷新应用（示意）"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg></button></span></header>
+      <header class="mobile-app-top"><span class="mobile-nav"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-menu"/></svg><span class="zh" lang="zh-CN">发布前检查</span><span class="en" lang="en">Release check</span></span><span class="connection"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span class="zh" lang="zh-CN">已连接</span><span class="en" lang="en">Connected</span></span></header>
+      <div class="workspace-frame">
+        <aside class="workspace-sidebar" aria-label="工作区导航示例">
+          <div class="sidebar-brand"><svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#brand-mark"/></svg><strong>Pi Reach</strong></div>
+          <div class="sidebar-device"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-monitor"/></svg><span><strong>Studio Mac</strong><small class="zh" lang="zh-CN">当前电脑</small><small class="en" lang="en">Current computer</small></span><svg class="line-icon chevron" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron"/></svg></div>
+          <div class="sidebar-content">
+            <div class="sidebar-group"><div class="group-heading"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-message"/></svg><strong class="zh" lang="zh-CN">在线 Pi</strong><strong class="en" lang="en">Online Pi</strong><small>2</small></div><div class="nav-row selected"><strong class="zh" lang="zh-CN">发布前检查</strong><strong class="en" lang="en">Release check</strong><small class="zh" lang="zh-CN">工作中 · pi-reach</small><small class="en" lang="en">Working · pi-reach</small></div><div class="nav-row"><strong class="zh" lang="zh-CN">调查测试</strong><strong class="en" lang="en">Investigate tests</strong><small class="zh" lang="zh-CN">待命 · pi-reach</small><small class="en" lang="en">Idle · pi-reach</small></div></div>
+            <div class="sidebar-group"><div class="group-heading"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-history"/></svg><span class="group-title"><strong class="zh" lang="zh-CN">本地历史</strong><strong class="en" lang="en">Local history</strong><em class="zh" lang="zh-CN">仅保存在此浏览器</em><em class="en" lang="en">Saved in this browser only</em></span><small>2</small></div><div class="nav-row"><strong class="zh" lang="zh-CN">检查重连状态</strong><strong class="en" lang="en">Check reconnect state</strong><small class="zh" lang="zh-CN">昨天 · 12 项记录</small><small class="en" lang="en">Yesterday · 12 items</small></div><div class="nav-row"><strong class="zh" lang="zh-CN">配对路径复查</strong><strong class="en" lang="en">Review pairing path</strong><small class="zh" lang="zh-CN">周一 · 8 项记录</small><small class="en" lang="en">Monday · 8 items</small></div></div>
+          </div>
+          <div class="sidebar-footer"><span><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link"/></svg><span class="zh" lang="zh-CN">配对电脑</span><span class="en" lang="en">Pair a computer</span></span><span><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg><span class="zh" lang="zh-CN">设置</span><span class="en" lang="en">Settings</span></span></div>
+        </aside>
+        <button class="sidebar-toggle" type="button" aria-label="收起侧栏" title="收起侧栏"><svg class="line-icon collapse-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron-left"/></svg><svg class="line-icon expand-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+        <div class="workspace-main">
+          <div class="conversation-head"><div class="conversation-title"><small>pi-reach / <span class="zh" lang="zh-CN">在线会话</span><span class="en" lang="en">Live conversation</span></small><h2 class="zh" lang="zh-CN">发布前检查</h2><h2 class="en" lang="en">Release check</h2></div><div class="head-utilities"><span class="connection"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span class="zh" lang="zh-CN">已连接</span><span class="en" lang="en">Connected</span></span><button class="icon-tool refresh-tool" type="button" aria-label="刷新应用（示意）" title="刷新应用（示意）"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg></button><button class="icon-tool" type="button" aria-label="会话操作（示意）" title="会话操作（示意）"><svg class="line-icon more-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-more"/></svg></button></div></div>
+          <div class="conversation-scroll"><div class="reading-inner"><div class="date-label"><span class="zh" lang="zh-CN">今天</span><span class="en" lang="en">Today</span></div><div class="user-message"><div class="message-meta"><span class="zh" lang="zh-CN">你</span><span class="en" lang="en">You</span> <time>10:42</time></div><p class="zh" lang="zh-CN">检查最近的 PWA 构建结果，重点看工具详情和移动端窄屏。请先列出失败项，再给出需要回归的页面。</p><p class="en" lang="en">Review the latest PWA build, especially tool details and narrow screens. List failures first, then screens to revisit.</p></div><div class="assistant-message"><div class="message-meta">Pi <time>10:43</time></div><p class="zh" lang="zh-CN">我会先核对测试与构建输出，再检查工具详情在长内容下是否可读。连接变化不会中断本地历史阅读，但在线状态需要单独确认。</p><p class="en" lang="en">I will check the test and build output, then review long tool details. Saved local history remains readable through connection changes, but online status needs a separate check.</p></div><div class="tool-line"><strong>bash</strong><span>pnpm --filter pwa test</span><span class="complete"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span class="zh" lang="zh-CN">已完成</span><span class="en" lang="en">Complete</span></span></div><pre class="tool-output"><code>$ pnpm --filter pwa test
+✓ test files passed
+…remaining output omitted</code></pre><div class="assistant-message followup"><div class="message-meta">Pi <time>10:44</time></div><p class="zh" lang="zh-CN">测试输出已核对。构建完成后，我会按影响范围整理回归项。</p><p class="en" lang="en">The test output is checked. After the build, I will group follow-up checks by affected area.</p></div></div></div>
+          <div class="composer-shell"><div class="composer-input"><span class="zh" lang="zh-CN">向 Pi 发送消息…</span><span class="en" lang="en">Message your agent…</span><div class="composer-bottom"><button class="composer-plus" type="button" aria-label="添加内容（示意）" title="添加内容（示意）"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button><span class="composer-send"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-send"/></svg></span></div></div></div>
+        </div>
+      </div>
+    </section>
+    <p class="review-caveat">隔离动效对照：先选「即时」或「轻量过渡」，再点击侧栏箭头或展开／收起选项反复比较。过渡仅作用于桌面侧栏、主区与收展入口；系统启用减少动态效果时两档均即时切换。其他图标操作仅作视觉示意，移动端保持顶部导航；动画时长、尺寸、文案和示例数据不是生产规范。当前桌面布局冻结仍有效。</p>
+  </main>
+</div>
+<script>
+  const review = document.querySelector('.topbar-review');
+  const stage = document.querySelector('.workspace-stage');
+  const sidebarToggle = document.querySelector('.sidebar-toggle');
+  function setChoice(kind, value) {
+    if (kind === 'language') {
+      review.dataset.previewLang = value;
+      document.documentElement.lang = value === 'en' ? 'en' : 'zh-CN';
+    } else if (kind === 'appearance') review.dataset.appearance = value;
+    else stage.dataset[kind] = value;
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.setAttribute('aria-pressed', String(button.dataset[`${kind}Choice`] === value)));
+    if (kind === 'sidebar') {
+      const label = value === 'open' ? '收起侧栏' : '展开侧栏';
+      sidebarToggle.setAttribute('aria-label', label);
+      sidebarToggle.title = label;
+    }
+  }
+  for (const kind of ['layout', 'sidebar', 'motion', 'language', 'appearance']) {
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.addEventListener('click', () => setChoice(kind, button.dataset[`${kind}Choice`])));
+  }
+  sidebarToggle.addEventListener('click', () => setChoice('sidebar', stage.dataset.sidebar === 'open' ? 'closed' : 'open'));
+  const params = new URLSearchParams(location.search);
+  setChoice('layout', params.get('layout') === 'with' ? 'with' : 'without');
+  setChoice('sidebar', params.get('sidebar') === 'closed' ? 'closed' : 'open');
+  setChoice('language', params.get('lang') === 'en' ? 'en' : 'zh');
+  setChoice('appearance', params.get('appearance') === 'dark' ? 'dark' : 'light');
+  setChoice('motion', params.get('motion') === 'gentle' ? 'gentle' : 'instant');
+</script>
+</body>
+</html>

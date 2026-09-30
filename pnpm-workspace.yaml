@@ -1,0 +1,38 @@
+packages:
+  - pwa
+  - pi-extension
+  - relay
+  - packages/*
+
+catalog:
+  '@noble/ed25519': 3.1.0
+  '@types/node': 25.9.4
+  '@vitest/browser-playwright': 4.1.11
+  '@vitest/coverage-v8': 4.1.11
+  typescript: 6.0.3
+  vite: 8.2.2
+  vitest: 4.1.11
+  zod: 4.4.3
+
+# 保留 PWA 已验证的编译器与 Node 类型基线，不在构建迁移中强升大版本。
+catalogs:
+  pwa:
+    '@types/node': 20.19.41
+    typescript: 5.9.3
+
+allowBuilds:
+  '@google/genai': true
+  esbuild: true
+  keytar: true
+  koffi: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true
+
+# 延续 Extension 的安全下限；统一 Vite 到 PWA 已验证的解析版本。
+overrides:
+  esbuild: ^0.28.1
+  hono: ^4.12.25
+  protobufjs: ^7.6.3
+  vite: 8.2.2
+  ws: ^8.21.0

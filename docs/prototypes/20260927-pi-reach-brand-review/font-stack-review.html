@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Reach · 字体栈对照</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;600;700&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 16px 48px; background: #E4E6E6; color: #272B2D; font: 13px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+.page { max-width: 1180px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 20px; color: #5C6166; }
+.opt { margin-bottom: 20px; }
+.opt-head { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.opt-head small { font-weight: 400; color: #5C6166; }
+.sys { --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; --title: var(--ui); --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+.inter { --ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; --title: var(--ui); --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.cur { --ui: Manrope, -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif; --title: "Source Serif 4", "Noto Serif SC", "Songti SC", serif; --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.app { display: grid; grid-template-columns: 240px minmax(0, 1fr); border-radius: 10px; overflow: hidden; background: #F8F9F8; box-shadow: 0 1px 3px #0000001f; font-family: var(--ui); font-variant-numeric: tabular-nums; }
+.side { background: #F0F2F2; padding: 14px 8px; }
+.brand { display: flex; align-items: center; gap: 8px; padding: 0 8px 12px; font-family: var(--title); font-size: 15px; font-weight: 700; }
+.brand i { width: 22px; height: 22px; border-radius: 6px; background: #4C658D; }
+.group { margin: 8px 8px 4px; color: #5C6166; font-size: 11px; font-weight: 600; }
+.row { padding: 6px 10px; border-radius: 6px; }
+.row b { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row span { font-size: 11px; color: #5C6166; }
+.row.sel { background: #DBE4F0; }
+.row.sel b { color: #4C658D; }
+.main { padding: 14px 20px 18px; min-width: 0; }
+.title { margin: 0 0 12px; font-family: var(--title); font-size: 17px; font-weight: 700; }
+.title small { display: block; font-family: var(--ui); font-size: 11px; font-weight: 400; color: #5C6166; }
+.user { margin-left: auto; width: fit-content; max-width: 75%; padding: 8px 12px; border-radius: 8px; background: #EDF1F2; font-size: 14px; line-height: 1.6; }
+.bot { margin: 12px 0; font-size: 14px; line-height: 1.65; }
+.bot code { font-family: var(--mono); font-size: 12.5px; padding: 1px 4px; border-radius: 4px; background: #F0F2F2; color: #4C658D; }
+.tool { font-family: var(--mono); font-size: 12px; line-height: 1.6; padding: 10px 12px; border-radius: 6px; background: #F0F2F2; color: #272B2D; white-space: pre; overflow-x: auto; }
+.tool .ok { color: #347953; } .tool .dim { color: #5C6166; }
+.en { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #DCE1E2; font-size: 14px; line-height: 1.6; }
+.meta { font-size: 11px; color: #5C6166; }
+.notes { padding: 16px 18px; border-radius: 10px; background: #FFFFFF; }
+.notes h2 { margin: 0 0 8px; font-size: 15px; }
+.notes li { margin: 4px 0; }
+@media (max-width: 700px) { .app { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>字体栈对照</h1>
+  <p class="lead" style="color:#347953;font-weight:600">结论：选定 A 系统字体，不下载网络字体、不设品牌字体。</p>
+  <p class="lead">三组内容完全相同，只换字体。正文 14px、侧栏 13px、元数据 11px、代码 12px 仅为对照用，不是字号提案。Inter／Manrope／Source Serif／JetBrains Mono 从 Google Fonts 加载，需联网。</p>
+
+  <template id="scene">
+    <div class="app">
+      <aside class="side">
+        <div class="brand"><i></i>Pi Reach</div>
+        <div class="group">在线 Pi · Online</div>
+        <div class="row sel"><b>品牌刷新评审 Brand refresh review</b><span>MacBook Pro · 运行中 · 17:43</span></div>
+        <div class="row"><b>发布前检查</b><span>Mac mini · 2 分钟前</span></div>
+        <div class="group">本地历史 · Local history</div>
+        <div class="row"><b>Protocol v2 migration</b><span>9 月 24 日 · 只读 · 128 条</span></div>
+        <div class="row"><b>Relay ACL 调整与回归测试</b><span>2026-09-21 · Read-only</span></div>
+      </aside>
+      <section class="main">
+        <h2 class="title"><small>pi-reach / 在线会话</small>品牌刷新评审</h2>
+        <div class="user">把侧栏的悬停色调深一点，然后跑一下 <code style="font-family:var(--mono)">pnpm test</code> 看看有没有回归。</div>
+        <div class="bot">已将 <code>hover</code> 从 <code>#E9EDEE</code> 调整为 <code>#E2E7E9</code>，侧栏上悬停行的对比由 1.05:1 提高到 1.11:1。测试全部通过，共 342 项，用时 18.6 秒。
+          <div class="meta">Pi · 17:43 · 3 个工具调用</div>
+        </div>
+        <div class="tool"><span class="dim">$</span> pnpm --filter pwa test
+<span class="ok">✓</span> src/lib/ui/appearance.test.ts (12 tests) 41ms
+<span class="ok">✓</span> src/app/sidebar.test.tsx (27 tests) 318ms
+<span class="dim">Test Files  38 passed (38) · Tests  342 passed (342)</span></div>
+        <div class="en">The sidebar hover color is now darker. All 342 tests passed in 18.6s — no regressions in the connection or pairing flows.</div>
+      </section>
+    </div>
+  </template>
+
+  <div class="opt sys"><p class="opt-head">A 系统字体 <small>正文：SF／Segoe UI／Roboto＋苹方／微软雅黑；代码：SF Mono／Menlo／Consolas；无品牌字体；不下载任何字体</small></p><div class="slot"></div></div>
+  <div class="opt inter"><p class="opt-head">B Inter＋JetBrains Mono <small>拉丁文统一为 Inter，中文仍用系统字体；代码统一 JetBrains Mono；无品牌字体</small></p><div class="slot"></div></div>
+  <div class="opt cur"><p class="opt-head">C 现行组合 <small>正文 Manrope、标题 Source Serif 4 衬线、代码 JetBrains Mono</small></p><div class="slot"></div></div>
+
+  <div class="notes">
+    <h2>看点</h2>
+    <ul>
+      <li><b>中英混排</b>：同一行里中文和拉丁字母、数字是否协调，字重和高度是否接近。</li>
+      <li><b>紧凑密度</b>：同样字号下拉丁字母宽度不同，侧栏长标题的截断位置可以直接比较。</li>
+      <li><b>数字</b>：时间、计数使用等宽数字（tabular-nums），看是否整齐。</li>
+      <li><b>标题风格</b>：C 的衬线标题与其余两组的无衬线标题，哪种更符合钢雾蓝的工具气质。</li>
+    </ul>
+  </div>
+</div>
+<script>
+  const tpl = document.getElementById('scene');
+  document.querySelectorAll('.slot').forEach(slot => slot.appendChild(tpl.content.cloneNode(true)));
+</script>
+</body>
+</html>

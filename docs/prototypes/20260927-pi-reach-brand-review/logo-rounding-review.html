@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 桥形 Logo 圆角对照</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #272b2d; background: #f8f9f8; }
+    body { margin: 0; }
+    a { color: inherit; }
+    a:focus-visible { outline: 2px solid #4c658d; outline-offset: 3px; }
+    .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .wrap { width: min(1120px, calc(100% - 32px)); margin-inline: auto; }
+    .page-top { background: #fff; border-bottom: 1px solid #dce1e2; }
+    .page-top .wrap { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .back { min-height: 44px; display: inline-flex; align-items: center; color: #4c658d; text-decoration: none; font-size: 12px; font-weight: 700; }
+    .back:hover { text-decoration: underline; }
+    .page-top span { color: #656b70; font-size: 11px; }
+    .intro { padding-block: 34px 30px; }
+    .eyebrow { margin: 0 0 8px; color: #4c658d; font-size: 10px; font-weight: 800; }
+    h1 { margin: 0; font-size: 26px; line-height: 1.25; }
+    .intro > p:last-child { margin: 9px 0 0; color: #656b70; font-size: 13px; line-height: 1.5; }
+    section { border-top: 1px solid #dce1e2; padding-block: 24px 32px; }
+    .section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+    .section-heading h2 { margin: 0; font-size: 16px; line-height: 1.3; }
+    .section-heading span { color: #656b70; font-size: 11px; }
+    .marks, .contexts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .variant { min-width: 0; }
+    .variant-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 11px; }
+    .variant-heading span { color: #4c658d; font-size: 11px; font-weight: 800; }
+    .variant-heading h3 { margin: 0; font-size: 16px; }
+    .mark-stage { height: 252px; display: grid; place-items: center; border: 1px solid #dce1e2; border-radius: 6px; background: #f0f2f2; color: #272b2d; --accent: #4c658d; }
+    .mark { display: block; flex: none; }
+    .mark-stage .mark { width: 176px; height: 176px; }
+    .variant > p { margin: 10px 0 0; color: #656b70; font-size: 11px; line-height: 1.5; }
+    .size-legend, .size-row { display: grid; grid-template-columns: 72px repeat(2, minmax(0, 1fr)); gap: 16px; align-items: center; }
+    .size-legend { padding-bottom: 11px; color: #656b70; font-size: 11px; font-weight: 700; }
+    .size-legend span:first-child { color: transparent; }
+    .size-row { padding-block: 10px; border-top: 1px solid #dce1e2; }
+    .size-label { color: #656b70; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .size-samples { display: flex; align-items: center; gap: 8px; }
+    .tile { width: 52px; height: 52px; flex: 0 0 52px; display: grid; place-items: center; border: 1px solid #dce1e2; border-radius: 5px; background: #fff; color: #272b2d; --accent: #4c658d; }
+    .tile.dark { background: #202325; border-color: #40474b; color: #eef0f1; --accent: #a9c3e6; }
+    .tile .mark { width: var(--size); height: var(--size); }
+    .context-group { display: grid; gap: 12px; }
+    .workspace { --paper: #f8f9f8; --surface: #fff; --ink: #272b2d; --muted: #656b70; --line: #dce1e2; --accent: #4c658d; --message: #edf1f2; --status: #347953; min-width: 0; height: 202px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
+    .workspace.dark { --paper: #202325; --surface: #2a2e30; --ink: #eef0f1; --muted: #b6bdc1; --line: #40474b; --accent: #a9c3e6; --message: #303639; --status: #95cba8; }
+    .workspace-top { min-height: 51px; display: flex; align-items: center; gap: 8px; padding-inline: 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .workspace-top .mark { width: 27px; height: 27px; }
+    .workspace-top strong { font-size: 13px; white-space: nowrap; }
+    .connected { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .connected::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--status); }
+    .workspace-body { flex: 1; display: flex; flex-direction: column; align-items: flex-end; padding: 20px 15px 12px; }
+    .message { max-width: 90%; margin: 0; padding: 9px 12px; border-radius: 8px; background: var(--message); font-size: 11px; line-height: 1.4; }
+    .composer { width: 100%; min-height: 48px; display: flex; align-items: center; margin-top: auto; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); font-size: 11px; }
+    .workspace-note { margin: 3px 0 0; color: #656b70; font-size: 10px; }
+    .closing { margin: 0 0 26px; color: #656b70; font-size: 11px; line-height: 1.6; }
+    @media (max-width: 700px) {
+      .marks, .contexts { grid-template-columns: 1fr; gap: 22px; }
+      .intro { padding-block: 26px 23px; }
+      .mark-stage { height: 208px; }
+      .mark-stage .mark { width: 144px; height: 144px; }
+      .section-heading { display: block; }
+      .section-heading span { display: block; margin-top: 5px; }
+    }
+    @media (max-width: 420px) {
+      .size-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .size-legend span:first-child { display: none; }
+      .size-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .size-label { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <svg class="defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="mark-original" viewBox="0 0 64 64">
+        <path fill="currentColor" d="M11 17h33c3 0 5 2 5 5v4H11v-9Zm6 9h8v24h-8V26Zm23 0h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/>
+        <path fill="var(--accent)" d="M49 17h7v9h-7z"/>
+      </symbol>
+      <symbol id="mark-soft" viewBox="0 0 64 64">
+        <path fill="currentColor" d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/>
+        <path fill="currentColor" d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/>
+        <path fill="currentColor" d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/>
+        <rect x="49" y="17" width="7" height="9" rx="1" fill="var(--accent)"/>
+      </symbol>
+    </defs>
+  </svg>
+  <header class="page-top"><div class="wrap"><a class="back" href="./index.html">← Pi Reach 品牌评审</a><span>标识 / 02</span></div></header>
+  <main class="wrap">
+    <div class="intro"><p class="eyebrow">PI REACH / SYMBOL STUDY</p><h1>「桥」的圆角</h1><p>保持结构和颜色一致，仅比较外侧端点的柔和程度。</p></div>
+    <section aria-labelledby="shape-title">
+      <div class="section-heading"><h2 id="shape-title">形状</h2><span>同色 · 同尺度</span></div>
+      <div class="marks">
+        <article class="variant"><div class="variant-heading"><span>01</span><h3>现版 A</h3></div><div class="mark-stage"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版桥形标识"><use href="#mark-original"/></svg></div><p>横梁左端、左腿底部与右上小方形保持原有直角。</p></article>
+        <article class="variant"><div class="variant-heading"><span>02</span><h3>微圆角 A</h3></div><div class="mark-stage"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角桥形标识"><use href="#mark-soft"/></svg></div><p>左侧外端约 2/64 圆角，小色块约 1/64；右腿曲线不变。</p></article>
+      </div>
+    </section>
+    <section aria-labelledby="size-title">
+      <div class="section-heading"><h2 id="size-title">小尺寸</h2><span>分别查看浅底与深底，不放大像素</span></div>
+      <div class="size-legend" aria-hidden="true"><span>尺寸</span><span>现版 A</span><span>微圆角 A</span></div>
+      <div class="size-row"><span class="size-label">32 px</span><div class="size-samples" style="--size:32px"><div class="tile"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版 32 像素浅底"><use href="#mark-original"/></svg></div><div class="tile dark"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版 32 像素深底"><use href="#mark-original"/></svg></div></div><div class="size-samples" style="--size:32px"><div class="tile"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角 32 像素浅底"><use href="#mark-soft"/></svg></div><div class="tile dark"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角 32 像素深底"><use href="#mark-soft"/></svg></div></div></div>
+      <div class="size-row"><span class="size-label">24 px</span><div class="size-samples" style="--size:24px"><div class="tile"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版 24 像素浅底"><use href="#mark-original"/></svg></div><div class="tile dark"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版 24 像素深底"><use href="#mark-original"/></svg></div></div><div class="size-samples" style="--size:24px"><div class="tile"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角 24 像素浅底"><use href="#mark-soft"/></svg></div><div class="tile dark"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角 24 像素深底"><use href="#mark-soft"/></svg></div></div></div>
+      <div class="size-row"><span class="size-label">16 px</span><div class="size-samples" style="--size:16px"><div class="tile"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版 16 像素浅底"><use href="#mark-original"/></svg></div><div class="tile dark"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版 16 像素深底"><use href="#mark-original"/></svg></div></div><div class="size-samples" style="--size:16px"><div class="tile"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角 16 像素浅底"><use href="#mark-soft"/></svg></div><div class="tile dark"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角 16 像素深底"><use href="#mark-soft"/></svg></div></div></div>
+    </section>
+    <section aria-labelledby="context-title">
+      <div class="section-heading"><h2 id="context-title">工作区顶栏</h2><span>与已选的控件／消息／输入区圆角同屏</span></div>
+      <div class="contexts">
+        <div class="context-group"><div class="variant-heading"><span>01</span><h3>现版 A</h3></div><div class="workspace"><div class="workspace-top"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版桥形标识"><use href="#mark-original"/></svg><strong>Pi Reach</strong><span class="connected">已连接</span></div><div class="workspace-body"><p class="message">检查这次发布构建。</p><div class="composer">发送消息给 Pi…</div></div></div><div class="workspace dark"><div class="workspace-top"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="现版桥形标识"><use href="#mark-original"/></svg><strong>Pi Reach</strong><span class="connected">已连接</span></div><div class="workspace-body"><p class="message">检查这次发布构建。</p><div class="composer">发送消息给 Pi…</div></div></div></div>
+        <div class="context-group"><div class="variant-heading"><span>02</span><h3>微圆角 A</h3></div><div class="workspace"><div class="workspace-top"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角桥形标识"><use href="#mark-soft"/></svg><strong>Pi Reach</strong><span class="connected">已连接</span></div><div class="workspace-body"><p class="message">检查这次发布构建。</p><div class="composer">发送消息给 Pi…</div></div></div><div class="workspace dark"><div class="workspace-top"><svg class="mark" viewBox="0 0 64 64" role="img" aria-label="微圆角桥形标识"><use href="#mark-soft"/></svg><strong>Pi Reach</strong><span class="connected">已连接</span></div><div class="workspace-body"><p class="message">检查这次发布构建。</p><div class="composer">发送消息给 Pi…</div></div></div></div>
+      </div>
+    </section>
+    <p class="closing">仅供视觉比较；标识尚未替换到正式 PWA。安装图标、单色版与 maskable 安全区不在本次对照范围内。</p>
+  </main>
+</body>
+</html>

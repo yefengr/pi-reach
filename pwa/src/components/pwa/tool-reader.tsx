@@ -1,0 +1,142 @@
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { Drawer } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { Check, CircleAlert, CircleHelp, LoaderCircle, X } from "lucide-react";
+import { CopyButton } from "./copy-button";
+import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "./use-pwa-motion";
+import { ToolImage } from "./tool-output";
+import { toolAction, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { useI18n } from "@/lib/i18n";
+import "./tool-reader.css";
+
+type ToolReaderProps = {
+  value: ToolValue | null;
+  opened: boolean;
+  onClose: () => void;
+  onExitTransitionEnd?: () => void;
+};
+
+const FOLLOW_THRESHOLD_PX = 32;
+
+function diffLineClass(line: string): string {
+  if (line.startsWith("+") && !line.startsWith("+++")) return "pwa-reader-line pwa-reader-line-add";
+  if (line.startsWith("-") && !line.startsWith("---")) return "pwa-reader-line pwa-reader-line-remove";
+  return "pwa-reader-line";
+}
+
+/** 带行号的原始输出：长行自动换行，行号使用 secondary。 */
+function NumberedText({ block }: { block: Extract<ToolContentBlock, { kind: "text" }> }) {
+  const lines = block.text.split("\n");
+  const diff = block.style === "diff";
+  return <section className="pwa-reader-block" aria-label={block.label}>
+    {block.label ? <p className="pwa-reader-block-label">{block.label}</p> : null}
+    <pre className="pwa-reader-text">{lines.map((line, index) => <span key={index} className={diff ? diffLineClass(line) : "pwa-reader-line"}><span className="pwa-reader-line-number" aria-hidden="true">{index + 1}</span><span className="pwa-reader-line-text">{line}{index < lines.length - 1 ? "\n" : ""}</span></span>)}</pre>
+  </section>;
+}
+
+function StatusIcon({ status }: { status: ReturnType<typeof toolStatus> }) {
+  if (status === "running") return <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />;
+  if (status === "complete") return <Check size={16} aria-hidden="true" />;
+  if (status === "error" || status === "interrupted") return <CircleAlert size={16} aria-hidden="true" />;
+  return <CircleHelp size={16} aria-hidden="true" />;
+}
+
+/**
+ * 工具详情阅读器：桌面为右侧 720px Drawer，移动端全屏。
+ * 打开时压入一条不改变 URL 的历史记录，系统返回与浏览器后退关闭阅读器而不离开会话。
+ */
+export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
+  const { t } = useI18n();
+  const enterDuration = usePwaMotionDuration("--pwa-duration-reader-in", 240);
+  const exitDuration = usePwaMotionDuration("--pwa-duration-reader-out", 200);
+  const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const followRef = useRef(true);
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    if (!opened) return;
+    let pushed = false;
+    let closedByHistory = false;
+    // 推迟到下一轮任务再写历史，避免开发模式的重复挂载写入两条记录。
+    const timer = window.setTimeout(() => {
+      window.history.pushState({ ...(window.history.state ?? {}), piReachToolReader: true }, "");
+      pushed = true;
+    }, 0);
+    const onPopState = () => {
+      if (!pushed) return;
+      closedByHistory = true;
+      onCloseRef.current();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("popstate", onPopState);
+      // 通过按钮、Escape 或遮罩关闭时撤回压入的记录，保持后退行为一致。
+      if (pushed && !closedByHistory && window.history.state?.piReachToolReader) window.history.back();
+    };
+  }, [opened]);
+
+  const outputKey = value ? JSON.stringify([value.tool_call_id, "blocks" in value ? value.blocks : null, "result" in value ? value.result : null]) : "";
+  useLayoutEffect(() => {
+    // 运行中的工具实时更新：停在底部时跟随，向上回看时不跟随。
+    const scroll = scrollRef.current;
+    if (scroll && followRef.current) scroll.scrollTop = scroll.scrollHeight;
+  }, [outputKey]);
+
+  const action = value ? toolAction(value) : null;
+  const status = value ? toolStatus(value) : "unknown";
+  const blocks = value ? toolContentBlocks(value) : [];
+  const error = value ? toolError(value) : undefined;
+  const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
+  const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
+  const heading = action?.detail || action?.label || value?.tool || t.tools.readerKicker;
+
+  return <Drawer.Root
+    opened={opened}
+    onClose={onClose}
+    onExitTransitionEnd={onExitTransitionEnd}
+    position="right"
+    size={mobile ? "100%" : 720}
+    withinPortal
+    portalProps={{ target: ".pwa-root" }}
+    zIndex={30}
+    trapFocus
+    returnFocus={false}
+    transitionProps={{ transition: pwaDrawerTransitions.right, duration: enterDuration, exitDuration, timingFunction: "var(--pwa-overlay-ease)" }}
+    style={pwaOverlayEase(opened)}
+  >
+    <Drawer.Overlay className="pwa-scrim" />
+    <Drawer.Content classNames={{ content: "pwa-tool-reader" }} aria-labelledby="pwa-tool-reader-title" aria-describedby="pwa-tool-reader-description">
+      <Drawer.Header className="pwa-tool-reader-header">
+        {/* 与会话内工具行同一读法：工具名＋命令在前，状态标签放在右侧操作区。 */}
+        <div className="pwa-tool-reader-title-wrap">
+          <h2 id="pwa-tool-reader-title" className="pwa-tool-reader-title" tabIndex={-1} data-autofocus>
+            <strong className="pwa-tool-reader-tool">{value?.tool ?? t.tools.noToolSelected}</strong>
+            <span className="pwa-tool-reader-command" title={heading}>{heading}</span>
+          </h2>
+        </div>
+        <div className="pwa-tool-reader-actions">
+          <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`}><StatusIcon status={status} />{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>
+          {allText ? <CopyButton text={allText} label={t.tools.copyAll} /> : null}
+          <Drawer.CloseButton className="pwa-icon-button pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<X size={20} />} />
+        </div>
+      </Drawer.Header>
+      <Drawer.Body className="pwa-tool-reader-body">
+        <div className="pwa-tool-reader-scroll" ref={scrollRef} onScroll={(event) => {
+          const target = event.currentTarget;
+          followRef.current = target.scrollHeight - target.scrollTop - target.clientHeight <= FOLLOW_THRESHOLD_PX;
+        }}>
+          {value === null ? <p className="pwa-tool-empty">{t.tools.noDetails}</p> : <>
+            {error ? <div className="pwa-reader-error" role="alert"><CircleAlert size={16} aria-hidden="true" /><pre>{error}</pre></div> : null}
+            {bodyBlocks.map((block, index) => block.kind === "image"
+              ? <ToolImage key={`image:${index}`} block={block} index={index} preview={false} />
+              : <NumberedText key={`text:${index}`} block={block} />)}
+            {toolWasTruncated(value) ? <p className="pwa-tool-notice">{t.tools.outputTruncated}</p> : null}
+          </>}
+        </div>
+      </Drawer.Body>
+    </Drawer.Content>
+  </Drawer.Root>;
+}

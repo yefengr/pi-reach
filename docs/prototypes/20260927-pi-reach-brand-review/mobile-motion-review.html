@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Reach · 移动导航与设置页动效预览</title>
+  <link rel="stylesheet" href="./layout-review.css">
+  <link rel="stylesheet" href="./mobile-motion-review.css">
+</head>
+<body>
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="brand-mark" viewBox="0 0 64 64"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7m-7 7h14"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6.8a2 2 0 0 0-1.4.6L3.2 21.8A.7.7 0 0 1 2 21.3V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.7 2.7L3 8M3 3v5h5m4-1v5l4 2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+</defs></svg>
+<div class="layout-review motion-review" data-appearance="light">
+  <header class="review-header"><div class="review-header-inner"><a class="back-link" href="./desktop-topbar-review.html">← 桌面侧栏动效</a><span class="review-label">移动端 / 隔离动效稿</span></div></header>
+  <main class="review-main motion-main">
+    <div class="review-heading"><div><p>PI REACH / MOBILE MOTION</p><h1>导航与设置页动效</h1></div><span>轻量过渡 · 两个场景</span></div>
+    <div class="review-toolbar" aria-label="动效预览选项">
+      <div class="switch-group"><span class="switch-label">场景</span><div class="segments" role="group" aria-label="动效场景"><button type="button" data-scene-choice="navigation" aria-pressed="true">移动导航</button><button type="button" data-scene-choice="settings" aria-pressed="false">独立设置页</button></div></div>
+      <div class="switch-group"><span class="switch-label">外观</span><div class="segments" role="group" aria-label="预览外观"><button type="button" data-appearance-choice="light" aria-pressed="true">浅色</button><button type="button" data-appearance-choice="dark" aria-pressed="false">深色</button></div></div>
+      <button class="review-play" type="button" data-play>打开导航</button>
+    </div>
+    <section class="phone-stage" data-scene="navigation" data-motion="gentle" data-view="workspace" data-nav="closed" aria-label="移动工作区与设置页动效示例">
+      <div class="workspace-page">
+        <header class="mobile-top"><button class="nav-trigger" type="button" aria-controls="motion-navigation" aria-expanded="false"><span class="nav-icon"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-menu"/></svg></span><span>发布前检查</span></button><span class="connection"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>已连接</span></header>
+        <div class="conversation-scroll"><div class="reading-inner"><p class="date-label">今天</p><div class="user-message"><small>你&nbsp; 10:42</small><p>检查最近的 PWA 构建结果，重点看工具详情和移动端窄屏。请先列出失败项，再给出需要回归的页面。</p></div><div class="assistant-message"><small>Pi&nbsp; 10:43</small><p>我会先核对测试与构建输出，再检查长内容是否可读。连接变化不会中断本地历史阅读。</p></div><div class="tool-line"><strong>bash</strong><span>pnpm --filter pwa test</span><em>✓ 已完成</em></div><pre class="tool-output"><code>$ pnpm --filter pwa test
+✓ test files passed
+…remaining output omitted</code></pre><div class="assistant-message"><small>Pi&nbsp; 10:44</small><p>测试输出已核对。构建完成后，我会整理回归项。</p></div></div></div>
+        <div class="composer-shell"><div class="composer-input"><span>向 Pi 发送消息…</span><div class="composer-bottom"><span class="composer-plus"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="composer-send"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-send"/></svg></span></div></div></div>
+      </div>
+      <div class="settings-page-layer" inert>
+        <div class="settings-scroll"><div class="settings-inner"><div class="settings-heading"><button class="workspace-return" type="button" aria-label="返回工作区"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"/></svg></button><h2>设置</h2></div><section class="settings-section"><h3>外观</h3><p>选择此浏览器中的 Pi Reach 外观。</p><div class="appearance-row selected"><span><strong>跟随系统</strong><small>跟随设备设置</small></span><i aria-hidden="true"></i></div><div class="appearance-row"><strong>浅色</strong><i aria-hidden="true"></i></div><div class="appearance-row"><strong>深色</strong><i aria-hidden="true"></i></div></section><section class="settings-section"><h3>连接</h3><p>使用 https:// 安全连接；WebSocket 会自动选择。</p><strong class="field-label">Relay URL</strong><div class="relay-field">https://relay.example.com</div><span class="settings-save">保存设置</span></section><section class="settings-section"><h3>浏览器数据</h3><p>身份和历史记录只保存在此浏览器。</p><span class="settings-reset">重置布局</span></section></div></div>
+      </div>
+      <button class="nav-scrim" type="button" aria-label="关闭导航" tabindex="-1"></button>
+      <aside class="nav-panel" id="motion-navigation" aria-label="工作区导航示例" inert>
+        <div class="drawer-head"><span class="drawer-brand"><svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true"><use href="#brand-mark"/></svg><strong>Pi Reach</strong></span><button class="nav-close" type="button" aria-label="关闭导航"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+        <div class="device-row"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-monitor"/></svg><span><strong>Studio Mac</strong><small>当前电脑</small></span><span aria-hidden="true">⌄</span></div>
+        <div class="nav-scroll"><div class="nav-group"><div class="group-heading"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-message"/></svg><strong>在线 Pi</strong><small>2</small></div><div class="nav-row selected"><strong>发布前检查</strong><small>工作中 · pi-reach</small></div><div class="nav-row"><strong>调查测试</strong><small>待命 · pi-reach</small></div></div><div class="nav-group"><div class="group-heading"><svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-history"/></svg><span><strong>本地历史</strong><small>仅保存在此浏览器</small></span><small>2</small></div><div class="nav-row"><strong>检查重连状态</strong><small>昨天 · 12 项记录</small></div><div class="nav-row"><strong>配对路径复查</strong><small>周一 · 8 项记录</small></div></div></div>
+        <div class="drawer-footer"><span>配对电脑</span><span>设置</span></div>
+      </aside>
+    </section>
+    <p class="motion-caveat">两处均为轻量过渡；切换场景后，用预览按钮或画面内入口反复查看。移动导航从左侧进出约 240ms；独立设置页从右侧滑入、返回时向右滑出约 200ms；页内单行放置返回与标题，不设独立顶栏。标题与菜单图标仍共同打开导航，悬浮反馈仅突出图标。这里只模拟画面，不执行配对、发送、保存或正式导航；路径未确认为生产规则。</p>
+  </main>
+</div>
+<script>
+  const review = document.querySelector('.motion-review');
+  const stage = document.querySelector('.phone-stage');
+  const workspace = document.querySelector('.workspace-page');
+  const settings = document.querySelector('.settings-page-layer');
+  const drawer = document.querySelector('.nav-panel');
+  const scrim = document.querySelector('.nav-scrim');
+  const trigger = document.querySelector('.nav-trigger');
+  const closeButton = document.querySelector('.nav-close');
+  const returnButton = document.querySelector('.workspace-return');
+  const playButton = document.querySelector('[data-play]');
+
+  function updatePlayLabel() {
+    playButton.textContent = stage.dataset.scene === 'navigation'
+      ? stage.dataset.nav === 'open' ? '关闭导航' : '打开导航'
+      : stage.dataset.view === 'settings' ? '返回工作区' : '进入设置页';
+  }
+  function setNav(open, focus = false) {
+    stage.dataset.nav = open ? 'open' : 'closed';
+    trigger.setAttribute('aria-expanded', String(open));
+    drawer.inert = !open;
+    scrim.tabIndex = open ? 0 : -1;
+    if (focus) (open ? closeButton : trigger).focus();
+    updatePlayLabel();
+  }
+  let viewAnimations = [];
+  let viewChangeId = 0;
+  function setView(value, focus = false) {
+    setNav(false);
+    const previous = stage.dataset.view;
+    if (previous === value) {
+      if (focus) (value === 'settings' ? returnButton : trigger).focus({ preventScroll: true });
+      updatePlayLabel();
+      return;
+    }
+    const changeId = ++viewChangeId;
+    const width = stage.clientWidth;
+    const left = stage.getBoundingClientRect().left + stage.clientLeft;
+    const starts = viewAnimations.length
+      ? [workspace, settings].map(element => element.getBoundingClientRect().left - left)
+      : [previous === 'workspace' ? 0 : -width, previous === 'settings' ? 0 : width];
+    viewAnimations.forEach(animation => animation.cancel());
+    viewAnimations = [];
+    stage.dataset.view = value;
+    workspace.inert = value !== 'workspace';
+    settings.inert = value !== 'settings';
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      workspace.style.visibility = '';
+      settings.style.visibility = '';
+      if (focus) (value === 'settings' ? returnButton : trigger).focus({ preventScroll: true });
+      updatePlayLabel();
+      return;
+    }
+    const ends = value === 'settings' ? [-width, 0] : [0, width];
+    const style = getComputedStyle(stage);
+    const duration = parseFloat(style.getPropertyValue('--page-duration'));
+    const easing = style.getPropertyValue('--motion-easing').trim();
+    viewAnimations = [workspace, settings].map((element, index) => {
+      element.style.visibility = 'visible';
+      return element.animate([
+        { transform: `translateX(${starts[index]}px)` },
+        { transform: `translateX(${ends[index]}px)` }
+      ], { duration, easing, fill: 'forwards' });
+    });
+    Promise.all(viewAnimations.map(animation => animation.finished)).then(() => {
+      if (viewChangeId !== changeId) return;
+      viewAnimations.forEach(animation => animation.cancel());
+      viewAnimations = [];
+      workspace.style.visibility = '';
+      settings.style.visibility = '';
+      if (focus) (value === 'settings' ? returnButton : trigger).focus({ preventScroll: true });
+    }).catch(() => {});
+    updatePlayLabel();
+  }
+  function choose(kind, value) {
+    if (kind === 'scene') {
+      stage.dataset.scene = value;
+      setView('workspace');
+    } else review.dataset.appearance = value;
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.setAttribute('aria-pressed', String(button.dataset[`${kind}Choice`] === value)));
+    updatePlayLabel();
+  }
+  for (const kind of ['scene', 'appearance']) {
+    document.querySelectorAll(`[data-${kind}-choice]`).forEach(button => button.addEventListener('click', () => choose(kind, button.dataset[`${kind}Choice`])));
+  }
+  playButton.addEventListener('click', () => stage.dataset.scene === 'navigation'
+    ? setNav(stage.dataset.nav !== 'open', true)
+    : setView(stage.dataset.view === 'workspace' ? 'settings' : 'workspace', true));
+  trigger.addEventListener('click', () => setNav(stage.dataset.nav !== 'open', true));
+  closeButton.addEventListener('click', () => setNav(false, true));
+  scrim.addEventListener('click', () => setNav(false, true));
+  returnButton.addEventListener('click', () => setView('workspace', true));
+  window.addEventListener('keydown', event => { if (event.key === 'Escape' && stage.dataset.nav === 'open') setNav(false, true); });
+  const params = new URLSearchParams(location.search);
+  choose('scene', params.get('scene') === 'settings' ? 'settings' : 'navigation');
+  choose('appearance', params.get('appearance') === 'dark' ? 'dark' : 'light');
+</script>
+</body>
+</html>

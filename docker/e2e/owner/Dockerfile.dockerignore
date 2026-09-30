@@ -1,0 +1,31 @@
+# Root build context: include only Owner image inputs.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!.npmrc
+!pwa/
+!pwa/package.json
+!pi-extension/
+!pi-extension/package.json
+!packages/
+!packages/protocol/
+!packages/protocol/package.json
+!packages/protocol/tsconfig.json
+!packages/protocol/src/
+!packages/protocol/src/**
+!docker/
+!docker/e2e/
+!docker/e2e/owner/
+!docker/e2e/owner/Dockerfile
+!docker/e2e/owner/server.mjs
+
+# Defensive exclusions for sensitive or large material in the root context.
+node_modules/
+**/node_modules/
+.pi/
+**/.pi/
+.env*
+**/.env*
+.git/
+**/.git/

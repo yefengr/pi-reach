@@ -1,0 +1,241 @@
+/*
+ * Pi Reach 设计 token：颜色角色、字体、圆角、层级与动效。
+ * 取值与约束见 docs/DESIGN.md；颜色对比度约束由 pwa-theme-contrast 测试按本文件计算。
+ */
+:root,
+:root[data-mantine-color-scheme="light"] {
+  color-scheme: light;
+  --pwa-bg: #F8F9F8;
+  --pwa-surface: #FFFFFF;
+  --pwa-panel: #F0F2F2;
+  --pwa-message: #EDF1F2;
+  --pwa-hover: #E2E7E9;
+  --pwa-neutral-active: #D8DFE1;
+  --pwa-disabled-bg: #ECEFF0;
+  --pwa-ink: #272B2D;
+  --pwa-secondary: #5C6166;
+  --pwa-soft-ink: #434B50;
+  --pwa-line: #DCE1E2;
+  --pwa-control-line: #7B8990;
+  --pwa-accent: #4C658D;
+  --pwa-accent-hover: #425A80;
+  --pwa-accent-active: #384E72;
+  --pwa-on-accent: #FFFFFF;
+  --pwa-accent-wash: #DBE4F0;
+  --pwa-scrim: #00000047;
+  --pwa-shadow-color: #101A221A;
+  --pwa-complete: #347953;
+  --pwa-complete-wash: #EAF3EC;
+  --pwa-running: #90611F;
+  --pwa-running-wash: #F9F2E6;
+  --pwa-error: #AE463E;
+  --pwa-error-wash: #F8ECEA;
+  --pwa-error-hover: #973B34;
+  --pwa-error-active: #82312C;
+  --pwa-on-status: #FFFFFF;
+  --pwa-code-bg: #23282D;
+  --pwa-code-muted: #BAC4C8;
+  /* 成段代码与工具输出：浅色主题在 panel 上，语法色取浅色版本。 */
+  --pwa-code-surface: var(--pwa-panel);
+  --pwa-code-text: var(--pwa-ink);
+  --pwa-code-dim: var(--pwa-secondary);
+  --pwa-syntax-keyword: #4C658D;
+  --pwa-syntax-string: #347953;
+  --pwa-syntax-number: #90611F;
+  --pwa-syntax-error: #AE463E;
+  --pwa-syntax-comment: #5C6166;
+  --pwa-syntax-punctuation: #434B50;
+  --pwa-syntax-function: #6A5590;
+  --pwa-syntax-type: #2C6E75;
+}
+
+:root[data-mantine-color-scheme="dark"] {
+  color-scheme: dark;
+  --pwa-bg: #202325;
+  --pwa-surface: #2A2E30;
+  --pwa-panel: #25292B;
+  --pwa-message: #303639;
+  --pwa-hover: #303638;
+  --pwa-neutral-active: #394145;
+  --pwa-disabled-bg: #272B2D;
+  --pwa-ink: #EEF0F1;
+  --pwa-secondary: #B6BDC1;
+  --pwa-soft-ink: #CDD5D8;
+  --pwa-line: #40474B;
+  --pwa-control-line: #79868C;
+  --pwa-accent: #A9C3E6;
+  --pwa-accent-hover: #BAD0EB;
+  --pwa-accent-active: #CBDAF0;
+  --pwa-on-accent: #172638;
+  --pwa-accent-wash: #303D50;
+  --pwa-scrim: #0000008C;
+  --pwa-shadow-color: #0000004D;
+  --pwa-complete: #95CBA8;
+  --pwa-complete-wash: #26392E;
+  --pwa-running: #DFBA77;
+  --pwa-running-wash: #3D3528;
+  --pwa-error: #EFA39B;
+  --pwa-error-wash: #422F30;
+  --pwa-error-hover: #F4B2AC;
+  --pwa-error-active: #F8C4BD;
+  --pwa-on-status: #172638;
+  --pwa-code-bg: #151A1E;
+  --pwa-code-muted: #B6C0C5;
+  /* 深色主题的成段代码与工具输出在 code-bg 上，语法色取深色版本。 */
+  --pwa-code-surface: var(--pwa-code-bg);
+  --pwa-code-text: var(--pwa-code-ink);
+  --pwa-code-dim: var(--pwa-code-muted);
+  --pwa-syntax-keyword: #A9C3E6;
+  --pwa-syntax-string: #95CBA8;
+  --pwa-syntax-number: #DFBA77;
+  --pwa-syntax-error: #EFA39B;
+  --pwa-syntax-comment: #BAC4C8;
+  --pwa-syntax-punctuation: #CDD5D8;
+  --pwa-syntax-function: #D2C3EE;
+  --pwa-syntax-type: #8FD0D6;
+}
+
+/* Mantine 在首屏脚本写入 root 属性前，先按系统深色偏好取值。 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mantine-color-scheme]) {
+    color-scheme: dark;
+    --pwa-bg: #202325;
+    --pwa-surface: #2A2E30;
+    --pwa-panel: #25292B;
+    --pwa-message: #303639;
+    --pwa-hover: #303638;
+    --pwa-neutral-active: #394145;
+    --pwa-disabled-bg: #272B2D;
+    --pwa-ink: #EEF0F1;
+    --pwa-secondary: #B6BDC1;
+    --pwa-soft-ink: #CDD5D8;
+    --pwa-line: #40474B;
+    --pwa-control-line: #79868C;
+    --pwa-accent: #A9C3E6;
+    --pwa-accent-hover: #BAD0EB;
+    --pwa-accent-active: #CBDAF0;
+    --pwa-on-accent: #172638;
+    --pwa-accent-wash: #303D50;
+    --pwa-scrim: #0000008C;
+    --pwa-shadow-color: #0000004D;
+    --pwa-complete: #95CBA8;
+    --pwa-complete-wash: #26392E;
+    --pwa-running: #DFBA77;
+    --pwa-running-wash: #3D3528;
+    --pwa-error: #EFA39B;
+    --pwa-error-wash: #422F30;
+    --pwa-error-hover: #F4B2AC;
+    --pwa-error-active: #F8C4BD;
+    --pwa-on-status: #172638;
+    --pwa-code-bg: #151A1E;
+    --pwa-code-muted: #B6C0C5;
+    --pwa-code-surface: var(--pwa-code-bg);
+    --pwa-code-text: var(--pwa-code-ink);
+    --pwa-code-dim: var(--pwa-code-muted);
+    --pwa-syntax-keyword: #A9C3E6;
+    --pwa-syntax-string: #95CBA8;
+    --pwa-syntax-number: #DFBA77;
+    --pwa-syntax-error: #EFA39B;
+    --pwa-syntax-comment: #BAC4C8;
+    --pwa-syntax-punctuation: #CDD5D8;
+    --pwa-syntax-function: #D2C3EE;
+    --pwa-syntax-type: #8FD0D6;
+  }
+}
+
+:root {
+  /* 深色代码底在两种主题下都是深色；其上的强调色与状态色固定使用深色版本。 */
+  --pwa-code-ink: #EFF2F4;
+  --pwa-code-accent: #A9C3E6;
+  --pwa-code-complete: #95CBA8;
+  --pwa-code-running: #DFBA77;
+  --pwa-code-error: #EFA39B;
+
+  --pwa-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --pwa-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --pwa-text-meta: 12px;
+  --pwa-text-list: 13px;
+  --pwa-text-body: 14px;
+  --pwa-text-code: 12.5px;
+  --pwa-text-title: 16px;
+  --pwa-text-page: 22px;
+  --pwa-leading-body: 1.65;
+  --pwa-leading-ui: 1.4;
+  --pwa-leading-code: 1.55;
+  --pwa-weight-regular: 400;
+  --pwa-weight-strong: 600;
+
+  --pwa-radius-xs: 4px;
+  --pwa-radius-sm: 6px;
+  --pwa-radius-md: 8px;
+  --pwa-radius-lg: 12px;
+
+  --pwa-shadow-float: 0 4px 16px var(--pwa-shadow-color);
+  --pwa-shadow-modal: 0 12px 32px var(--pwa-shadow-color);
+
+  --pwa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --pwa-ease-enter: cubic-bezier(0, 0, 0, 1);
+  --pwa-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  --pwa-duration-sidebar: 220ms;
+  --pwa-duration-nav: 240ms;
+  --pwa-duration-chooser: 220ms;
+  --pwa-duration-page: 200ms;
+  --pwa-duration-modal-in: 180ms;
+  --pwa-duration-modal-out: 140ms;
+  --pwa-duration-expand-in: 160ms;
+  --pwa-duration-expand-out: 120ms;
+  --pwa-duration-reader-in: 240ms;
+  --pwa-duration-reader-out: 200ms;
+  --pwa-duration-toast: 180ms;
+  --pwa-duration-fade: 120ms;
+  /* 位移类动效乘以该系数；减少动态效果时为 0，只保留透明度淡化。 */
+  --pwa-motion-shift: 1;
+
+  --pwa-safe-top: env(safe-area-inset-top, 0px);
+  --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --maxw: 1180px;
+
+  /* Tailwind 工具类使用的别名。 */
+  --bg: var(--pwa-bg);
+  --fg: var(--pwa-ink);
+  --accent: var(--pwa-accent);
+  --muted: var(--pwa-secondary);
+  --surface: var(--pwa-panel);
+  --border-soft: var(--pwa-line);
+}
+
+/*
+ * 减少动态效果只跟随系统设置：取消位移、缩放与尺寸过渡，颜色与透明度改为短淡化；
+ * 加载、运行中等表达状态的动画照常运行。
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pwa-motion-shift: 0;
+    --pwa-duration-sidebar: var(--pwa-duration-fade);
+    --pwa-duration-nav: var(--pwa-duration-fade);
+    --pwa-duration-chooser: var(--pwa-duration-fade);
+    --pwa-duration-page: var(--pwa-duration-fade);
+    --pwa-duration-modal-in: var(--pwa-duration-fade);
+    --pwa-duration-modal-out: var(--pwa-duration-fade);
+    --pwa-duration-expand-in: var(--pwa-duration-fade);
+    --pwa-duration-expand-out: var(--pwa-duration-fade);
+    --pwa-duration-reader-in: var(--pwa-duration-fade);
+    --pwa-duration-reader-out: var(--pwa-duration-fade);
+    --pwa-duration-toast: var(--pwa-duration-fade);
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-property: opacity, color, background-color, border-color, outline-color, visibility !important;
+    transition-timing-function: var(--pwa-ease-standard) !important;
+  }
+
+  .pwa-root .pwa-navigation-drawer,
+  .pwa-root .pwa-device-drawer,
+  .pwa-root .pwa-tool-reader {
+    /* Mantine 的 slide 终态写在内联样式上；全局禁用 transform 过渡还需取消位移终态。 */
+    transform: none !important;
+  }
+}
