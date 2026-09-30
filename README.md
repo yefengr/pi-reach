@@ -158,6 +158,7 @@ pnpm dev:pwa
 | `pnpm verify:release` | 先执行 `verify`，再执行全部 E2E |
 | `pnpm test:relay` | 单独构建并验证 Relay |
 | `pnpm --filter pwa screenshots` | 用演示数据重新生成 README 截图（`docs/assets/`） |
+| `pnpm check:docs` | 检查文档的站内链接与锚点 |
 
 单个子项目用 `pnpm --filter <包名> <命令>`，包名分别为 `pwa`、`@yefengr/pi-reach`、`@pi-reach/relay` 和 `@pi-reach/protocol`。子项目的 `pnpm build` 会先构建共享包；修改共享包后，在子项目单独运行 `typecheck` 或 `test` 前，需要先执行 `pnpm --filter @pi-reach/protocol build`，或改用根命令。协作与验证约定见 [AGENTS.md](AGENTS.md)。
 
