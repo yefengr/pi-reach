@@ -30,12 +30,14 @@ Open Pi in the project you want to control. When the session starts, the Extensi
 /pi-reach pair
 ```
 
-Scan the code in your deployed [Pi Reach PWA](../pwa/README.md) at `/app`, select the endpoint card, and send a prompt. Pairings are local to the computer that creates them:
+Open the public [Pi Reach PWA](https://pi-reach.yefengr.cn/app) on your phone or another browser, scan the QR code or type the 8-character pairing code, then pick an online Pi and send a prompt. Each computer only needs to be paired once, and pairings are local to the computer that creates them:
 
 ```text
 /pi-reach devices
 /pi-reach revoke <shortid>
 ```
+
+The public PWA and the default Relay are run by the maintainer. For sensitive work, self-host both; see [Self-hosting](../README.en.md#self-hosting) and [Pairing and security](#pairing-and-security).
 
 ## Commands
 
@@ -58,7 +60,7 @@ The effective Relay URL resolves in this order:
 
 1. `PI_REACH_RELAY`
 2. `~/.pi/pi-reach/config.json`
-3. `https://pi-reach-relay.yefengr.cn`
+3. `https://pi-reach-relay.yefengr.cn` (the public Relay run by the maintainer)
 
 Set and inspect it from Pi:
 
@@ -71,6 +73,7 @@ Only `http://` and `https://` are accepted at the command boundary; WebSocket co
 
 ## Pairing and security
 
+- There is no application-layer end-to-end encryption, so the Relay is fully trusted. Its operator can read every conversation and, because Owner identity comes only from the Relay-injected `source_owner_id`, could impersonate a paired browser and send prompts that Pi executes on your computer.
 - `device_id` is the Host Ed25519 public key in canonical Base64 form.
 - Owner messages are trusted only through the Relay-injected `source_owner_id`.
 - Pairing and revocation update the Relay endpoint ACL with `authorized_owner_ids`.

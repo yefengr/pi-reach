@@ -167,7 +167,7 @@ Relay 没有数据库或持久 volume。registry、连接、ACL、subscription �
 ### 不提供的保护
 
 - 当前没有应用层端到端加密。`ct` 是 Base64 编码的 Protocol v2 JSON，不是 ciphertext。
-- 控制 Relay executable 或 TLS endpoint 的运营方有能力观察流量。敏感工作应 self-host Relay。
+- 控制 Relay executable 或 TLS endpoint 的运营方能够读取全部会话内容。Owner->Host 的发送者身份只由 Relay 注入的 `source_owner_id` 证明，inner frame 没有端到端签名，因此该运营方还可以冒充已授权的 Owner 向 Host 发送 prompt 等 session frame，而 Pi 可以在 Host 上执行命令。敏感工作应 self-host Relay。
 - Relay 可观察连接 IP、public identifiers、endpoint/runtime metadata、timing 和 transport sizes。
 - 获得浏览器 profile/IndexedDB、Host keyring/file identity 或进程权限的攻击者可能冒充对应身份。
 - root、进程注入、已解锁用户会话和被攻陷的终端不在防护范围内。
