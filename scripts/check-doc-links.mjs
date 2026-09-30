@@ -7,6 +7,8 @@ import { dirname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const EXTERNAL_LINK = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+// Markdown 行内链接：目标可写成 <带空格的路径>，其后可跟 "标题"、'标题' 或 (标题)。
+const MARKDOWN_LINK = /\]\(\s*(?:<([^>\n]*)>|([^)\s]+))(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\s*\)/g;
 
 function stripFencedCode(text) {
   return text.replace(/```[\s\S]*?```/g, "");
@@ -30,7 +32,7 @@ export function headingAnchors(markdown) {
 function linksIn(file, text) {
   const body = stripFencedCode(text);
   const links = [];
-  if (file.endsWith(".md")) for (const match of body.matchAll(/\]\(([^)\s]+)\)/g)) links.push(match[1]);
+  if (file.endsWith(".md")) for (const match of body.matchAll(MARKDOWN_LINK)) links.push(match[1] ?? match[2]);
   for (const match of body.matchAll(/(?:href|src)="([^"]+)"/g)) links.push(match[1]);
   return links;
 }
