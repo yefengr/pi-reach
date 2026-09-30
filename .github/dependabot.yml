@@ -1,0 +1,17 @@
+# Dependabot 版本更新：每周检查工作流与 .github/actions 下复合 Action 引用的 GitHub Actions，合并为一个升级 PR。
+# npm 依赖不在此配置：Dependabot 官方支持的 pnpm 为 v7–v10（2026-09 核对），本仓库使用 pnpm 11；
+# 依赖安全告警按 AGENTS.md「依赖安全告警」手动修复。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"
