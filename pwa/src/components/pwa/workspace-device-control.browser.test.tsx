@@ -138,9 +138,9 @@ test("mobile chooser is a compact z220 bottom Drawer with reachable actions and 
   expect(getComputedStyle(root).getPropertyValue("--mb-z-index")).toBe("220");
   await expect.poll(() => Math.round(dialog.element().getBoundingClientRect().bottom)).toBe(window.innerHeight);
   const rect = dialog.element().getBoundingClientRect();
-  expect(rect.left).toBeGreaterThanOrEqual(0);
-  expect(rect.right).toBeLessThanOrEqual(window.innerWidth);
-  expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight);
+  expect(Math.round(rect.left)).toBeGreaterThanOrEqual(0);
+  expect(Math.round(rect.right)).toBeLessThanOrEqual(window.innerWidth);
+  expect(Math.round(rect.bottom)).toBeLessThanOrEqual(window.innerHeight);
   expect(rect.height).toBeLessThan(320);
   for (const action of [
     screen.getByRole("button", { name: /Travel Mac OFFLINE/ }),

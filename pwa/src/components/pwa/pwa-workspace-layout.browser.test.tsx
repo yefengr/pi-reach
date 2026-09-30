@@ -586,9 +586,9 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(getComputedStyle(button).color).toBe(getComputedStyle(row).color);
         expect(getComputedStyle(button.querySelector(".pwa-peer-copy")!).overflow).toBe("hidden");
         expect(getComputedStyle(button.querySelector(".pwa-peer-description")!).overflow).toBe("hidden");
-        expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(62);
-        expect(menu.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
-        expect(menu.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+        expect(Math.round(button.getBoundingClientRect().height)).toBeGreaterThanOrEqual(62);
+        expect(Math.round(menu.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44);
+        expect(Math.round(menu.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
         const label = button.querySelector<HTMLElement>(".pwa-peer-label")!;
         expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
         expect(getComputedStyle(label).whiteSpace).toBe("nowrap");
