@@ -63,7 +63,11 @@ async function assertHelloDeadline(helloTimeoutMs, authTimeoutMs) {
   });
 }
 
+// 认证期限长于配额重试窗口：重试期间只能由断开清理释放配额，而不是由认证超时兜底。
+const CAPACITY_HELLO_TIMEOUT_MS = RESOURCE_TIMEOUT_MS * 2;
+
 async function assertCapacityIsReleased(limits) {
+  assert.ok(RESOURCE_TIMEOUT_MS < limits.helloTimeoutMs, "capacity retry window must end before the authentication deadline");
   await withLocalRelay({ limits }, async ({ url }) => {
     const held = await openPeer(url);
     try {
@@ -78,7 +82,7 @@ async function assertCapacityIsReleased(limits) {
 }
 
 // 客户端断开后，服务端稍后才处理被拒连接与已释放连接的关闭事件（Linux 上可稳定观察到），
-// 因此在资源期限内重试，验证配额最终释放，而不依赖关闭事件的处理时序。
+// 因此在资源期限内重试，验证断开清理最终释放配额，而不依赖关闭事件的处理时序。
 async function openPeerWhenCapacityReleases(url) {
   const deadline = performance.now() + RESOURCE_TIMEOUT_MS;
   for (;;) {
@@ -184,10 +188,10 @@ test("Node Relay resource and lifecycle contract", { concurrency: false, timeout
 
   await t.test("returns HTTP 503 for pending and total connection exhaustion, then releases both budgets", async (t) => {
     await t.test("maxPendingAuth", async () => {
-      await assertCapacityIsReleased({ maxConnections: 2, maxPendingAuth: 1, helloTimeoutMs: 500 });
+      await assertCapacityIsReleased({ maxConnections: 2, maxPendingAuth: 1, helloTimeoutMs: CAPACITY_HELLO_TIMEOUT_MS });
     });
     await t.test("maxConnections", async () => {
-      await assertCapacityIsReleased({ maxConnections: 1, maxPendingAuth: 1, helloTimeoutMs: 500 });
+      await assertCapacityIsReleased({ maxConnections: 1, maxPendingAuth: 1, helloTimeoutMs: CAPACITY_HELLO_TIMEOUT_MS });
     });
   });
 
