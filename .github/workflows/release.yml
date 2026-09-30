@@ -1,0 +1,82 @@
+# Release：把 Extension（@yefengr/pi-reach）提交到 npm 待审区，维护者在 npmjs.com 用 2FA 批准后才上线。
+# - 触发：推送到 main 且 pi-extension/package.json 的 version 发生变化；也可在 Actions 页面手动运行（不比较版本号）。
+#   版本号未变（如只改依赖）或该版本已在 npm 上时跳过。
+# - 认证：npm trusted publishing（GitHub OIDC），仓库和 GitHub 中不保存 npm token。npm 侧的 trusted publisher
+#   绑定本文件名 release.yml，改名时同步修改 npm 设置。
+# - 上传：pi-extension/publish-npm.sh --stage 运行 Extension 的 verify、pnpm pack 与 tarball 检查后执行 npm stage publish。
+# 流程与一次性配置见 docs/DEPLOYMENT.md「Extension npm 发布」。
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [pi-extension/package.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+jobs:
+  stage:
+    name: stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide whether to release
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          skip() {
+            echo "$1"
+            echo "$1" >> "$GITHUB_STEP_SUMMARY"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          version="$(jq -r .version pi-extension/package.json)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = push ] && git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+            previous="$(git show "$PUSH_BEFORE:pi-extension/package.json" 2>/dev/null | jq -r .version 2>/dev/null || true)"
+            if [ "$previous" = "$version" ]; then skip "Extension 版本仍为 ${version}，跳过。"; fi
+          fi
+          status="$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/@yefengr%2fpi-reach/$version")"
+          case "$status" in
+            200) skip "@yefengr/pi-reach@$version 已在 npm 上，跳过。" ;;
+            404) ;;
+            *) echo "无法确认 npm 上是否已有该版本（HTTP ${status}）。"; exit 1 ;;
+          esac
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-workspace
+        if: steps.decide.outputs.release == 'true'
+
+      - name: Stage on npm
+        if: steps.decide.outputs.release == 'true'
+        run: bash pi-extension/publish-npm.sh --stage
+
+      - name: Summary
+        if: steps.decide.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          {
+            echo "### @yefengr/pi-reach@$VERSION 已提交到 npm 待审区"
+            echo
+            echo "在 npmjs.com 的 Staged Packages 中核对并用 2FA 批准后才会上线。本版本依赖新的协议帧或事件时，批准前先确认 PWA 已部署。"
+          } >> "$GITHUB_STEP_SUMMARY"
