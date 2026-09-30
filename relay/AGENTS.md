@@ -28,6 +28,7 @@ Relay 使用 TypeScript、Node.js 和 `ws`，认证 PWA Owner 与 Pi Host 连接
 - 所有缓存、连接、待认证连接、发送缓冲和定时器必须有预算/归属/清理路径。
 - 慢消费者超限不能挤掉没有积压的健康连接；transport 回调可能同步注销 registry，修改广播或注册逻辑时须验证重入。
 - 认证前后的超时、heartbeat、原始 HTTP socket 和 SIGINT/SIGTERM 都要有明确期限，关闭不得遗留句柄。
+- CLI 先注册 SIGINT/SIGTERM 处理，再输出 `relay_listening` 就绪事件：Linux 上写管道是同步的，读到就绪事件的一方可能立即发送信号。
 
 ## 验证
 
