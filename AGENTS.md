@@ -84,6 +84,15 @@ pnpm verify:release
 
 CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks` 负责类型检查、lint、除 PWA 浏览器组件测试外的测试与构建，`pwa-browser` 把浏览器组件测试按耗时分到 4 台机器；只改文档时跳过这两项，只运行空白与链接检查。汇总任务 `verify` 是 `main` 保护规则要求的检查；调整 `pnpm verify` 的内容时同步修改工作流。
 
+## 依赖安全告警
+
+GitHub 的 Dependabot 告警已开启；`.github/dependabot.yml` 每周为 GitHub Actions 开升级 PR。Dependabot 官方支持的 pnpm 为 v7–v10（2026-09 核对），无法为本仓库的 pnpm 11 自动修复 npm 依赖（报 `security_update_not_possible`）。告警积累时按以下步骤手动修复：
+
+1. 按告警列出需要的修复版本，用 `pnpm why -r <包>` 找到引入路径；`pnpm why -r --prod <包>` 输出为空时，该包只在开发与构建依赖中，修复后无需重新发布或部署。
+2. 先在现有版本范围内刷新锁文件：`pnpm update -r --no-save <包...>`。
+3. 仍未升到修复版本或被上游精确锁定的包，在 `pnpm-workspace.yaml` 的 `overrides` 中设修复后的最低版本，不跨大版本；上游修复后可移除对应下限。
+4. 确认锁文件中不再有漏洞版本、`pnpm audit` 无告警，运行 `pnpm verify` 与 `pnpm test:e2e` 后提交 Pull Request。
+
 ## 发布
 
 发布、推送和部署必须在本地验证通过后按用户授权执行。PWA 的 Docker 发布和服务器部署说明以 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)、`pwa/push-docker.sh` 和 `scripts/deploy-self-hosted.sh` 为准。Extension 的版本号变更合并到 `main` 后，由 Release 工作流（`.github/workflows/release.yml`）提交到 npm 待审区，维护者在 npmjs.com 批准后上线；流程、认证方式与发布后核对见 [DEPLOYMENT](docs/DEPLOYMENT.md#extension-npm-发布)。各组件上线后打版本标签并创建 GitHub Release，命名与时机见 [DEPLOYMENT](docs/DEPLOYMENT.md#版本标签与-github-release)。
