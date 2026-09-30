@@ -88,7 +88,9 @@ CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks
 
 GitHub 的 Dependabot 告警已开启；`.github/dependabot.yml` 每周为 GitHub Actions 开升级 PR。Dependabot 官方支持的 pnpm 为 v7–v10（2026-09 核对），无法为本仓库的 pnpm 11 自动修复 npm 依赖（报 `security_update_not_possible`）。告警积累时按以下步骤手动修复：
 
-1. 按告警列出需要的修复版本，用 `pnpm why -r <包>` 找到引入路径；`pnpm why -r --prod <包>` 输出为空时，该包只在开发与构建依赖中，修复后无需重新发布或部署。
+1. 按告警列出需要的修复版本，用 `pnpm why -r <包>` 找到引入路径，并判断该包是否进入发布产物；进入的，修复后需要重新发布或部署：
+   - Extension 与 Relay 只携带运行时依赖，`pnpm why -r --prod <包>` 输出为空即不进入。
+   - PWA 会把 `pwa/src` 运行时导入的包打进产物，开发依赖也可能进入（如 `serwist` 进入 Service Worker），不能只看依赖分组。在 `pwa/` 执行 `pnpm exec vite build --sourcemap --outDir <临时目录>`，检查各 `.map` 文件的 `sources` 中是否出现该包。
 2. 先在现有版本范围内刷新锁文件：`pnpm update -r --no-save <包...>`。
 3. 仍未升到修复版本或被上游精确锁定的包，在 `pnpm-workspace.yaml` 的 `overrides` 中设修复后的最低版本，不跨大版本；上游修复后可移除对应下限。
 4. 确认锁文件中不再有漏洞版本、`pnpm audit` 无告警，运行 `pnpm verify` 与 `pnpm test:e2e` 后提交 Pull Request。
