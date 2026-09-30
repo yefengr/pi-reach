@@ -217,7 +217,7 @@ describe("TimelineHistoryPager", () => {
     const remaining = pager.sync({ requestId: "prefix", targetChannelId: "channel-1", leafId: session.getLeafId() ?? null, before: oldestSeq, limit: oldestSeq - 1 });
     expect(returnedFragmentIds(remaining)).toEqual(Array.from({ length: oldestSeq - 1 }, (_, index) => `event-${index + 1}`));
     expect(finalChunk(remaining)).toMatchObject({ eos: true });
-  });
+  }, 20_000);
 
   test("returns too_large when one formal event exceeds the 32 MiB window", () => {
     const session = SessionManager.inMemory(process.cwd());

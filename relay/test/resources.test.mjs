@@ -72,9 +72,23 @@ async function assertCapacityIsReleased(limits) {
       await held.dispose();
     }
 
-    const replacement = await openPeer(url);
+    const replacement = await openPeerWhenCapacityReleases(url);
     await replacement.dispose();
   });
+}
+
+// 客户端断开后，服务端稍后才处理被拒连接与已释放连接的关闭事件（Linux 上可稳定观察到），
+// 因此在资源期限内重试，验证配额最终释放，而不依赖关闭事件的处理时序。
+async function openPeerWhenCapacityReleases(url) {
+  const deadline = performance.now() + RESOURCE_TIMEOUT_MS;
+  for (;;) {
+    try {
+      return await openPeer(url);
+    } catch (error) {
+      if (performance.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
 }
 
 function startCli() {
