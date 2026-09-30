@@ -20,7 +20,7 @@ test("derives GitHub-style heading anchors for Chinese, code spans, and duplicat
   assert.deepEqual([...anchors].sort(), ["host", "pi-reach", "trust-model", "trust-model-1", "安全模型"].sort());
 });
 
-test("reports missing files and anchors, ignoring external, site-absolute, and fenced links", async () => {
+test("reports missing files and anchors in titled and angle-bracket links, ignoring external, site-absolute, and fenced links", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-reach-doc-links-"));
   try {
     await mkdir(join(root, "docs"));
@@ -34,6 +34,9 @@ test("reports missing files and anchors, ignoring external, site-absolute, and f
       "[route](/app/settings)",
       "[missing file](docs/nope.md)",
       "[missing anchor](docs/guide.md#nope)",
+      '[titled ok](docs/guide.md#安装步骤 "Guide")',
+      "[titled missing](docs/titled.md 'Title')",
+      "[angle missing](<docs/with space.md>)",
       '<img src="docs/missing.png" alt="" />',
       "```",
       "[fenced](docs/also-missing.md)",
@@ -46,6 +49,8 @@ test("reports missing files and anchors, ignoring external, site-absolute, and f
       "README.md: missing anchor docs/guide.md#nope",
       "README.md: missing docs/missing.png",
       "README.md: missing docs/nope.md",
+      "README.md: missing docs/titled.md",
+      "README.md: missing docs/with space.md",
     ]);
   } finally {
     await rm(root, { recursive: true, force: true });
