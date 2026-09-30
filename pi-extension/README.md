@@ -74,6 +74,7 @@ Only `http://` and `https://` are accepted at the command boundary; WebSocket co
 ## Pairing and security
 
 - There is no application-layer end-to-end encryption, so the Relay is fully trusted. Its operator can read every conversation and, because Owner identity comes only from the Relay-injected `source_owner_id`, could impersonate a paired browser and send prompts that Pi executes on your computer.
+- Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/yefengr/pi-reach/security/advisories/new); see the [security policy](https://github.com/yefengr/pi-reach/blob/main/SECURITY.md).
 - `device_id` is the Host Ed25519 public key in canonical Base64 form.
 - Owner messages are trusted only through the Relay-injected `source_owner_id`.
 - Pairing and revocation update the Relay endpoint ACL with `authorized_owner_ids`.
