@@ -96,7 +96,8 @@ describe("UserDeliveryQueue", () => {
         }
       },
       onUnknownDelivery: (value) => unknown.push(value.clientRequestId),
-      startTimeoutMs: 30,
+      // 需明显长于 nextMacrotask 的调度抖动：CI 并行测试时线程可能被挂起数十毫秒，过短的启动超时会让第三个请求提前发出。
+      startTimeoutMs: 250,
     });
     const first = scope("owner-1", "sync-failure", service);
     const second = scope("owner-1", "timeout", service);
