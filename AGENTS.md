@@ -91,3 +91,16 @@ CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks
 ## 已关闭决策
 
 [`docs/adr/20260518-closed-decisions.md`](docs/adr/20260518-closed-decisions.md) 是已关闭的产品与架构决策记录。提出方向变化前必须先核对该文件，并在需要时显式说明证据和影响；新增重要决策使用 `docs/adr/`。
+
+## Review guidelines
+
+本节供 Codex 等代码评审 agent 使用。
+
+- 评审评论使用 Pull Request 标题与描述所用的语言；Pull Request 以中文提交时，评论使用中文。
+- 重点报告会造成真实影响的问题并标注严重程度；不评论已由 lint、类型检查覆盖的问题或纯风格偏好。
+- 协议与信任边界：Protocol v2 frame 严格校验，未知字段、版本或方向一律 fail closed；Extension 只信 Relay 注入的 `source_owner_id`，不接受客户端自报身份；Relay 不解码、不记录、不持久化 `ct`。
+- 安全与隐私：日志、错误信息与测试输出不得包含私钥、配对码、token 或消息正文。
+- 行为变更须附自动化测试，且测试能在 Linux CI 上稳定运行（见「工作规则」）；修改 `pnpm verify` 时同步 CI 工作流。
+- 协议变更遵守发布顺序：先部署 PWA，再发布 Extension（见 [DEPLOYMENT](docs/DEPLOYMENT.md#extension-npm-发布)）。
+- 不得静默推翻[已关闭决策](docs/adr/20260518-closed-decisions.md)；方向变化须作为明确讨论提出。
+- 文档：同一事实只保留一个权威来源，站内链接有效，只描述 Pi Reach 本身（LICENSE 中保留的原版权声明除外）。
