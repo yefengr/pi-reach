@@ -352,11 +352,17 @@ npm view @yefengr/pi-reach version
 - Extension 在 npm 批准上线后打标签，PWA 与 Relay 在部署并核对后打标签；同一提交可以同时带多个组件的标签。
 - Release 说明写该组件的变更与发布去向（npm 版本，或线上地址与镜像标签）。Extension 的 Release 标记为 Latest，其余不标记。
 
+每个上线的组件各执行一组命令；各组件版本号相互独立，`--verify-tag` 要求标签已推送到远端：
+
 ```bash
-git tag -a extension-vX.Y.Z -m "Extension X.Y.Z" <commit>
-git push origin extension-vX.Y.Z
-gh release create extension-vX.Y.Z --verify-tag --title "Extension X.Y.Z" --notes-file notes.md --latest
-gh release create pwa-vX.Y.Z --verify-tag --title "PWA X.Y.Z" --notes-file notes.md --latest=false
+git tag -a extension-vX.Y.Z -m "Extension X.Y.Z" <commit> && git push origin extension-vX.Y.Z
+gh release create extension-vX.Y.Z --verify-tag --title "Extension X.Y.Z" --notes-file extension.md --latest
+
+git tag -a pwa-vX.Y.Z -m "PWA X.Y.Z" <commit> && git push origin pwa-vX.Y.Z
+gh release create pwa-vX.Y.Z --verify-tag --title "PWA X.Y.Z" --notes-file pwa.md --latest=false
+
+git tag -a relay-vX.Y.Z -m "Relay X.Y.Z" <commit> && git push origin relay-vX.Y.Z
+gh release create relay-vX.Y.Z --verify-tag --title "Relay X.Y.Z" --notes-file relay.md --latest=false
 ```
 
 ## 故障排查
