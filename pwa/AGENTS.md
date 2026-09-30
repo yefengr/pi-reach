@@ -35,6 +35,7 @@
 | `pnpm test:e2e` | Playwright 本地生产构建与浏览器 E2E，不启动 Docker |
 | `pnpm test:e2e:remote:list` | 只列出 Docker 支撑的真实浏览器场景，不启动服务 |
 | `pnpm test:e2e:remote` | Docker Relay／Extension 与两个真实浏览器 Owner 的独立回归 |
+| `pnpm screenshots` | 用演示数据重新生成 README 截图，写入仓库根 `docs/assets/`；不连接真实 Relay、Pi 或模型，也不属于 `pnpm test` |
 
 命令入口以 `package.json` 为准，测试项目和运行环境分别见 [`vitest.config.ts`](vitest.config.ts)、[`playwright.config.ts`](playwright.config.ts)。ESLint 排除 Playwright/Vitest 报告及 coverage 等生成物，源码与测试源码仍参与检查。不要把文档中的历史测试数量当成当前验证结果。
 

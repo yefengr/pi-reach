@@ -10,6 +10,11 @@
 
 Pi Reach gives Pi a browser front end. Away from your desk, pair your phone by scanning a QR code, then follow Pi's live output, send new instructions, stop a task, or switch models. The session always runs on your own computer.
 
+<p align="center">
+  <img src="docs/assets/screenshot-desktop-en.png" alt="Pi Reach on desktop: online Pis and local history on the left, the conversation on the right" width="72%" />
+  <img src="docs/assets/screenshot-mobile-en.png" alt="Pi Reach conversation on a phone" width="21%" />
+</p>
+
 > [!NOTE]
 > Pi Reach is at an early stage. The protocol and local data formats may still change.
 
@@ -152,6 +157,7 @@ pnpm dev:pwa
 | `pnpm test:e2e` | Run the PWA production-preview, Docker protocol, and real-browser end-to-end tests in sequence |
 | `pnpm verify:release` | Run `verify`, then all E2E tests |
 | `pnpm test:relay` | Build and verify the Relay on its own |
+| `pnpm --filter pwa screenshots` | Regenerate the README screenshots in `docs/assets/` from demo data |
 
 To work on a single package, use `pnpm --filter <package> <command>` with `pwa`, `@yefengr/pi-reach`, `@pi-reach/relay`, or `@pi-reach/protocol`. A package's `pnpm build` builds the shared package first. After changing the shared package, run `pnpm --filter @pi-reach/protocol build` before a package-only `typecheck` or `test`, or use the root commands instead. Collaboration and verification rules are in [AGENTS.md](AGENTS.md) (Chinese).
 
