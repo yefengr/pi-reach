@@ -79,17 +79,25 @@ describe("shared session protocol fixture contract", () => {
     expectCode(() => decodeClientFrameV2({ ...version, type: "future_frame" }), "unsupported");
   });
 
-  test("requires a bounded Extension version on session readiness", () => {
+  test("keeps session readiness on its original shape and reports version only on request", () => {
     const ready = { ...version, type: "session_ready", ...direct, ...session,
-      in_reply_to: "hello", head_seq: 0, self_sender_ref: "owner", extension_version: "1.2.3" };
+      in_reply_to: "hello", head_seq: 0, self_sender_ref: "owner" };
     expect(decodeServerFrameV2(ready)).toEqual(ready);
-    expect(decodeServerFrameV2({ ...ready, extension_version: "v".repeat(256) })).toHaveProperty("extension_version");
-    const { extension_version: _version, ...missing } = ready;
-    expectCode(() => decodeServerFrameV2(missing), "schema");
-    for (const extension_version of ["", null, 1, "v".repeat(257)]) {
-      expectCode(() => decodeServerFrameV2({ ...ready, extension_version }), "schema");
+    expectCode(() => decodeServerFrameV2({ ...ready, extension_version: "1.2.3" }), "schema");
+
+    const request = { ...version, type: "extension_info_request", id: "info-1", ...channel };
+    expect(decodeClientFrameV2(request)).toEqual(request);
+    const { version: _version, ...missingVersion } = { ...version, type: "extension_info", ...direct, in_reply_to: "info-1", version: "1.2.3" };
+    expectCode(() => decodeServerFrameV2(missingVersion), "schema");
+    const info = { ...version, type: "extension_info", ...direct, in_reply_to: "info-1", version: "1.2.3" };
+    expect(decodeServerFrameV2(info)).toEqual(info);
+    expect(decodeServerFrameV2({ ...info, version: "v".repeat(256) })).toHaveProperty("version", "v".repeat(256));
+    for (const value of ["", null, 1, "v".repeat(257)]) {
+      expectCode(() => decodeServerFrameV2({ ...info, version: value }), "schema");
     }
-    expectCode(() => decodeServerFrameV2({ ...ready, version: "legacy" }), "schema");
+    expectCode(() => decodeServerFrameV2({ ...info, extra: true }), "schema");
+    expectCode(() => decodeClientFrameV2(info), "direction");
+    expectCode(() => decodeServerFrameV2(request), "direction");
   });
 
   test("requires session and nullable leaf identity on scoped client requests", () => {

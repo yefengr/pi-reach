@@ -239,6 +239,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `model_set`
 - `thinking_set`
 - `list_models`
+- `extension_info_request`
 
 `session_sync.before` 是排他的正式事件序号上界：`null` 表示从当前末尾开始，数字表示只返回序号小于该值的事件；`limit` 为 1 到 80 的整数，省略时默认 80。历史响应的最后一个 chunk 在仍有更早事件时携带数字 `next_before`，没有更早事件时携带 `eos=true`。
 
@@ -247,6 +248,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `pair_ok`
 - `pair_error`
 - `session_ready`
+- `extension_info`
 - `user_message_started`
 - `user_message_status`
 - `timeline_event`
@@ -263,7 +265,9 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `queued_message_state`
 - `bye`
 
-`session_ready` 必须携带 `extension_version`（1–256 字符的非空字符串），表示当前 Pi 加载的 Pi Reach 扩展版本，而非 Pi coding agent 的版本。扩展在模块加载时固定版本，每次会话握手返回；PWA 只接受当前有效 channel、runtime 和匹配请求的结果，断开或切换后清除。缺少该字段或包含未知字段均按 strict schema 拒绝，不读取配对缓存兜底；发布仍须先部署 PWA 再发布扩展，缓存旧页面需要刷新。
+扩展版本通过独立诊断请求获取，不改变 `session_hello` / `session_ready` 的握手格式。PWA 收到匹配的 `session_ready` 后，发送一次 `extension_info_request`，携带 `id`、`channel_id`、当前 `session_id` 和 `leaf_id`；扩展按既有 ready、channel 和会话边界校验后，返回定向 `extension_info`，携带 `target_channel_id`、`in_reply_to` 和 `version`（1–256 字符的非空字符串）。版本在扩展模块加载时固定，表示 Pi Reach 扩展版本，而非 Pi coding agent 的版本。
+
+PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，断开或切换后清除，不读取配对缓存兜底。匹配版本查询的 `protocol_error` 只影响版本展示；旧扩展不支持查询或查询失败时显示「版本不可用」，不阻断聊天或触发重连。不轮询、不重试，也不主动推送新 inner frame 给未查询的页面。先部署 PWA 再发布扩展的顺序保持不变，新旧页面与扩展仍可使用原有握手建立会话。同一 Owner 的回复会到达其所有连接；旧页面若与新页面同时在线，可能因不认识新诊断响应而显示协议提示，但不改变握手或连接状态。
 
 ## Timeline 不变量
 

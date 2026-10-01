@@ -60,7 +60,6 @@ describe("V2PeerChannel", () => {
     channel.sendV2({
       protocol_version: 2,
       type: "session_ready",
-      extension_version: "1.2.3",
       in_reply_to: "h",
       target_channel_id: "c",
       session_id: "s",

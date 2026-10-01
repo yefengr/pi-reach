@@ -137,6 +137,8 @@ export class TimelineV2Service {
     switch (frame.type) {
       case "session_hello":
         return [this.ready(frame), ...this.currentQueueSnapshot()];
+      case "extension_info_request":
+        return this.handleExtensionInfo(frame);
       case "pair_request":
         return [this.error(frame.id, "protocol_upgrade_required", "pairing is handled before session_hello")];
       case "session_sync":
@@ -291,7 +293,6 @@ export class TimelineV2Service {
     return {
       protocol_version: 2,
       type: "session_ready",
-      extension_version: this.extensionVersion,
       in_reply_to: frame.id,
       target_channel_id: frame.channel_id,
       session_id: this.sessionId,
@@ -299,6 +300,12 @@ export class TimelineV2Service {
       self_sender_ref: this.senderRef,
       head_seq: headSeq,
     };
+  }
+
+  private handleExtensionInfo(frame: Extract<ClientFrame, { type: "extension_info_request" }>): ServerFrame[] {
+    const error = this.ensureReady(frame);
+    if (error) return [error];
+    return this.direct(frame.channel_id, { type: "extension_info", in_reply_to: frame.id, version: this.extensionVersion });
   }
 
   private handleHistory(frame: Extract<ClientFrame, { type: "session_sync" }>): ServerFrame[] {

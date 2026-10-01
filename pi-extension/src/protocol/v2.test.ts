@@ -169,7 +169,7 @@ describe("Protocol v2 server frames", () => {
   test("accepts started message, all status branches, timeline, fragments and history chunks", () => {
     const pairOk = { ...version, type: "pair_ok", in_reply_to: "P1", session_name: "demo", session_started_at: 1, endpoint_id: "E" };
     const pairError = { ...version, type: "pair_error", in_reply_to: "P2", code: "token_expired", message: "expired" };
-    const ready = { ...version, type: "session_ready", extension_version: "1.2.3", in_reply_to: "H1", ...direct, ...session, self_sender_ref: "owner", head_seq: 0 };
+    const ready = { ...version, type: "session_ready", in_reply_to: "H1", ...direct, ...session, self_sender_ref: "owner", head_seq: 0 };
     const started = { ...version, type: "user_message_started", ...direct, in_reply_to: "R1", ...session, message: { id: "M1", group_id: "GR1", blocks: [{ type: "text", text: "hello" }], origin: "pwa", sender_ref: "owner", delivery: "normal" } };
     const statuses = [
       { ...version, type: "user_message_status", ...direct, in_reply_to: "R1", ...session, client_request_id: "R1", status: "received" },
@@ -222,8 +222,12 @@ describe("Protocol v2 server frames", () => {
       { ...version, type: "models_list", ...direct, in_reply_to: "N5", models: [{ id: "m", name: "M", provider: "p", reasoning: true, context_window: 100, vision: false }] },
       { ...version, type: "queued_message_state", ...session, snapshot_id: "SNAP2", chunk_index: 0, final: true, items: [] },
       { ...version, type: "bye", ...session, reason: "shutdown" },
+      { ...version, type: "extension_info", ...direct, in_reply_to: "I1", version: "1.2.3" },
     ];
     for (const frame of frames) expect(decodeServerFrameV2(frame).protocol_version).toBe(2);
+    expectCode(() => decodeServerFrameV2({ ...version, type: "extension_info", ...direct, in_reply_to: "I1" }), "schema");
+    expectCode(() => decodeServerFrameV2({ ...version, type: "extension_info", ...direct, in_reply_to: "I1", version: "1.2.3", extra: true }), "schema");
+    expectCode(() => decodeClientFrameV2({ ...version, type: "extension_info", ...direct, in_reply_to: "I1", version: "1.2.3" }), "direction");
     expectCode(() => decodeServerFrameV2({ ...version, type: "cancelled", ...direct, in_reply_to: "X2", target_id: "R1" }), "schema");
     expectCode(() => decodeServerFrameV2({ ...version, type: "timeline_event", ...session, event: userEvent({ event_seq: 1 }), target_channel_id: "C1" }), "schema");
     expectCode(() => decodeServerFrameV2({ ...version, type: "bye", ...session, target_channel_id: "C1", reason: "shutdown" }), "schema");

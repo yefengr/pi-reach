@@ -287,12 +287,13 @@ export const harnessSchema = strictObject({ name: idSchema, version: idSchema })
 export const CLIENT_FRAME_TYPES = [
   "pair_request", "session_hello", "user_message", "user_message_observed", "session_sync", "ping", "cancel",
   "session_new", "session_compact", "model_set", "thinking_set", "list_models", "queued_message_set",
-  "queued_message_clear", "queued_message_steer", "approve_tool",
+  "queued_message_clear", "queued_message_steer", "approve_tool", "extension_info_request",
 ] as const;
 export const SERVER_FRAME_TYPES = [
   "pair_ok", "pair_error", "session_ready", "user_message_started", "user_message_status", "timeline_event",
   "timeline_partial", "timeline_event_fragment", "session_history_chunk", "protocol_error", "reset", "pong",
   "cancelled", "action_ok", "action_error", "models_list", "queued_message_state", "bye",
+  "extension_info",
 ] as const;
 export type ClientFrameType = (typeof CLIENT_FRAME_TYPES)[number];
 export type ServerFrameType = (typeof SERVER_FRAME_TYPES)[number];
