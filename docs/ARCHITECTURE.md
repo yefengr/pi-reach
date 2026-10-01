@@ -42,7 +42,7 @@ Relay 把共享包作为生产依赖，复用 outer 类型与版本常量；服�
 
 PWA 由 `index.html` 与 `src/main.tsx` 启动，继续复用原有 Provider、AppShell 和业务组件。Vite 输出 `pwa/dist/`，`@serwist/vite` 从 `src/app/sw.ts` 生成 `dist/sw.js`；预缓存将 HTML 映射到实际入口 `/app`，包含脚本、样式与应用图标等静态资源。现有注册组件仍手动注册 `/sw.js`，scope 为 `/app`。界面使用系统字体栈，不打包或下载网络字体；Mantine 外观脚本在应用 JS 执行前使用原存储键恢复主题。
 
-生产容器以非 root Nginx 托管静态资源；开发与本地 E2E 分别使用 Vite dev 和 preview，共用路由插件并与 Nginx 保持 HTTP 契约一致。PWA、Relay 及 E2E Host、Owner 的 Docker 构建输入均包含 `packages/protocol` 源码，并经根 workspace 安装和构建。根开发 Node 工具链不改变 Extension 的 `engines` 或 Pi SDK peer 约束。迁移进度见 [ROADMAP](ROADMAP.md)，命令见 [README](../README.md#本地开发)，运行布局见 [DEPLOYMENT](DEPLOYMENT.md)。
+生产容器以非 root Nginx 托管静态资源；开发与本地 E2E 分别使用 Vite dev 和 preview，共用路由插件并与 Nginx 保持 HTTP 契约一致。PWA、Relay 及 E2E Host、Owner 的 Docker 构建输入均包含 `packages/protocol` 源码，并经根 workspace 安装和构建。根开发 Node 工具链不改变 Extension 的 `engines` 或 Pi SDK peer 约束。命令见 [README](../README.md#本地开发)。
 
 ## Relay 运行边界
 
@@ -140,12 +140,11 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 
 Serwist 在构建时生成 `dist/sw.js`，Service Worker scope 为 `/app`；`/app/*` 的导航请求在网络不可用时回退到预缓存的 `/app`。应用壳与静态资源可被缓存，但 Service Worker 不拥有 pairing、业务会话、WebSocket 或离线发送队列。
 
-离线时，已经缓存的页面壳和 IndexedDB 中的正式历史可以读取；首次访问、未收到过的 Pi 历史、发送输入和后台持续连接均不保证。真实移动设备和离线恢复验收仍由[PWA 加固方案](plans/active/20260824-pwa-hardening.md)跟踪。
+离线时，已经缓存的页面壳和 IndexedDB 中的正式历史可以读取；首次访问、未收到过的 Pi 历史、发送输入和后台持续连接均不保证。
 
 ## 相关真源
 
 - [协议入口](reference/protocol/README.md)、[会话协议](reference/protocol/protocol-v2.md)与[配对协议](reference/protocol/pairing.md)：身份、wire 字段、配对和安全边界。
 - [纯 Extension ADR](adr/20260914-pure-extension-runtime.md)：当前运行时决策和兼容退出条件。
 - [当前设计规则](DESIGN.md)：视觉 token、布局、组件、Drawer 和历史只读规则。
-- [部署说明](DEPLOYMENT.md)：Relay/PWA 的构建、部署和运维。
-- [协作规范](../AGENTS.md)与[路线图](ROADMAP.md)：仓库操作规则和唯一项目级事项状态。
+- [协作规范](../AGENTS.md)：仓库操作规则。

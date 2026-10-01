@@ -69,7 +69,7 @@ relay.example.com {
 }
 ```
 
-Use `https://relay.example.com` in the PWA and `/pi-reach set-relay https://relay.example.com` in Pi. Both clients convert HTTP(S) Relay URLs to the corresponding WebSocket scheme. The shared Relay is `https://pi-reach-relay.yefengr.cn`; a local source change does not deploy or change that service. Publication and remote deployment require separate authorization; see [DEPLOYMENT](../docs/DEPLOYMENT.md).
+Use `https://relay.example.com` in the PWA and `/pi-reach set-relay https://relay.example.com` in Pi. Both clients convert HTTP(S) Relay URLs to the corresponding WebSocket scheme. The shared Relay is `https://pi-reach-relay.yefengr.cn`; a local source change does not deploy or change that service.
 
 ## Verification
 

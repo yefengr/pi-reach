@@ -90,7 +90,15 @@ Relay 地址使用 `https://`（本地调试可用 `http://`），两端会自�
 
 ## 自托管
 
-公共 Relay 和 PWA 由本项目维护者运营，适合试用；处理敏感代码时，建议部署自己的实例。两者都从仓库根目录构建 Docker 镜像，并由根目录的 `docker-compose.yml` 编排：
+公共 Relay 和 PWA 由本项目维护者运营，适合试用；处理敏感代码时，建议部署自己的实例。两者由根目录的 `docker-compose.yml` 编排，可以直接使用发布到 GHCR 的镜像（仅 `linux/amd64`）。Relay 与 PWA 的版本号相互独立，分别取 [Releases](https://github.com/yefengr/pi-reach/releases) 中最新的 `relay-vX.Y.Z` 与 `pwa-vX.Y.Z`：
+
+```bash
+RELAY_IMAGE=ghcr.io/yefengr/pi-reach-relay:vX.Y.Z \
+PWA_IMAGE=ghcr.io/yefengr/pi-reach-pwa:vX.Y.Z \
+docker compose up -d
+```
+
+镜像附带构建来源证明，可以用 `gh attestation verify oci://ghcr.io/yefengr/pi-reach-pwa:vX.Y.Z --owner yefengr` 核对它由本仓库的发布工作流构建。其他架构（如 arm64）或需要自行修改时，从仓库根目录构建：
 
 ```bash
 docker build -f relay/Dockerfile -t pi-reach-relay .
@@ -112,7 +120,7 @@ relay.example.com {
 
 然后在 Pi 中运行 `/pi-reach set-relay https://relay.example.com`，打开 `https://pwa.example.com/app` 并在设置中填入同一个 Relay 地址，最后重新运行 `/pi-reach pair`。
 
-PWA 必须通过 HTTPS（或同一设备上的 `localhost`）访问，否则浏览器可能禁用它依赖的加密和摄像头接口。Relay 的资源限额见 [Relay 说明](relay/README.md)，服务器准备与发布流程见 [DEPLOYMENT](docs/DEPLOYMENT.md)。
+PWA 必须通过 HTTPS（或同一设备上的 `localhost`）访问，否则浏览器可能禁用它依赖的加密和摄像头接口。Relay 的资源限额见 [Relay 说明](relay/README.md)。
 
 ## 安全模型
 
@@ -178,8 +186,6 @@ pnpm dev:pwa
 | [安全策略](SECURITY.md) | 漏洞报告方式与范围 |
 | [贡献指南](CONTRIBUTING.md) | 反馈问题与提交改动的流程 |
 | [设计规范](docs/DESIGN.md) | PWA 界面与交互规则 |
-| [部署](docs/DEPLOYMENT.md) | 服务器准备、Caddy 配置与发布流程 |
-| [路线图](docs/ROADMAP.md) · [待定事项](docs/BACKLOG.md) | 已确定的事项与候选建议 |
 
 ## 许可证
 

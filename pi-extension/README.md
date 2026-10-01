@@ -103,8 +103,8 @@ pnpm build
 
 The development toolchain is pinned by the root configuration. The published
 extension retains its Node 20+ runtime requirement. TypeScript ESM imports must
-use `.js` extensions. `prepack` builds before packaging; `pnpm pack` resolves
-catalog and workspace references, and `publish-npm.sh` uploads the inspected tarball.
+use `.js` extensions. `prepack` builds before packaging, and `pnpm pack` resolves
+catalog and workspace references.
 
 ## License
 

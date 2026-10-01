@@ -2,8 +2,6 @@
 
 React browser PWA for remotely controlling Pi coding agents, built with Vite.
 
-The public domain is deployment-specific; see [DEPLOYMENT](../docs/DEPLOYMENT.md).
-
 ## Routes
 
 - `/app` — browser workspace and the only product route.
@@ -91,7 +89,5 @@ non-root Nginx to serve `dist/` at `/usr/share/nginx/html`. `PORT` defaults to
 assets use immutable caching.
 
 Local preview and E2E use Vite preview, while production routing is maintained
-in [nginx.conf.template](nginx.conf.template). Deployment procedures and the
-existing external Caddy boundary are documented in
-[DEPLOYMENT](../docs/DEPLOYMENT.md). Publishing and remote deployment require
-separate authorization.
+in [nginx.conf.template](nginx.conf.template). Self-hosting with Compose and an
+HTTPS reverse proxy is described in [Self-hosting](../README.en.md#self-hosting).
