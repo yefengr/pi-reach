@@ -316,13 +316,22 @@ function readyFrame(channel: { channelId: string; frames: Array<{ type: string; 
   return {
     protocol_version: 2 as const,
     type: "session_ready" as const,
-    extension_version: "1.2.3",
     target_channel_id: channel.channelId,
     in_reply_to: channel.frames.find((frame) => frame.type === "session_hello")?.id ?? "missing-hello",
     session_id: sessionId,
     leaf_id: `generation-${sessionId}`,
     self_sender_ref: `sender-${sessionId}`,
     head_seq: headSeq,
+  };
+}
+
+function extensionInfoFrame(channel: { channelId: string; frames: Array<{ type: string; id: string }> }, version: string) {
+  return {
+    protocol_version: 2 as const,
+    type: "extension_info" as const,
+    target_channel_id: channel.channelId,
+    in_reply_to: channel.frames.filter((frame) => frame.type === "extension_info_request").at(-1)?.id ?? "missing-request",
+    version,
   };
 }
 
@@ -1658,11 +1667,54 @@ test("preserves the session, draft, attachment, tool state and reader across lay
   }
 });
 
+test.each(["protocol_upgrade_required", "unsupported_type", "internal_error"])('keeps the original handshake and message sending independent of a version query error (%s)', async (code) => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const channel = channelHarness.channels[0]!;
+  try {
+    expect(channel.frames.some((frame) => frame.type === "extension_info_request")).toBe(false);
+    const ready = readyFrame(channel, "session-1");
+    expect(ready).not.toHaveProperty("extension_version");
+    channel.emit(ready);
+    const infoRequest = channel.frames.find((frame) => frame.type === "extension_info_request");
+    expect(infoRequest).toMatchObject({ channel_id: channel.channelId, session_id: "session-1", leaf_id: "generation-session-1" });
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: infoRequest?.id, code, message: "diagnostic failure" });
+    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
+    expect(document.querySelector(".pwa-status-toast")).toBeNull();
+    const input = screen.getByPlaceholder("Message your agent…");
+    await expect.element(input).toBeEnabled();
+    await input.fill("Version lookup must not block sending");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(true);
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await expect.poll(() => document.querySelector('[data-version="extension"]')?.textContent).toBe("Version unavailable");
+    expect(channelHarness.channels).toHaveLength(1);
+    channel.emit(extensionInfoFrame(channel, "late-version"));
+    await flushMicrotasks();
+    expect(document.querySelector('[data-version="extension"]')?.textContent).toBe("Version unavailable");
+  } finally {
+    window.history.replaceState(null, "", "/app");
+    await screen.unmount();
+  }
+});
+
+test("does not hide an unrelated protocol error while an extension version query is pending", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const channel = channelHarness.channels[0]!;
+  try {
+    channel.emit(readyFrame(channel, "session-1"));
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: "unrelated-request", code: "too_large", message: "too large" });
+    await expect.element(screen.getByText("This message is too large to send.", { exact: true })).toBeVisible();
+    channel.emit(extensionInfoFrame(channel, "3.4.5"));
+    await expect.element(screen.getByText("This message is too large to send.", { exact: true })).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
 test("preserves the extension version when reselecting the current computer and Pi", async () => {
   const screen = await renderOnlineApp(renderWorkspaceApp);
   const channel = channelHarness.channels[0]!;
   try {
-    channel.emit({ ...readyFrame(channel, "session-1"), extension_version: "3.4.5" });
+    channel.emit(readyFrame(channel, "session-1"));
+    channel.emit(extensionInfoFrame(channel, "3.4.5"));
     await screen.getByRole("button", { name: "Choose computer, current test-host" }).click();
     await expect.element(screen.getByRole("dialog", { name: "Choose computer" })).toBeVisible();
     await page.elementLocator(document.querySelector(".pwa-computer-select")!).click();
@@ -1687,8 +1739,11 @@ test.each([1280, 390])("shows live versions in settings and clears them across R
   const version = (component: string) => document.querySelector(`[data-version="${component}"]`)?.textContent;
   try {
     relay.emitControl({ type: "relay_info", version: "2.3.4" });
-    channel.emit({ ...readyFrame(channel, "session-1"), extension_version: "9.9.9", in_reply_to: "wrong-hello" });
-    channel.emit({ ...readyFrame(channel, "session-1"), extension_version: "3.4.5" });
+    channel.emit({ ...readyFrame(channel, "session-1"), in_reply_to: "wrong-hello" });
+    expect(channel.frames.filter((frame) => frame.type === "extension_info_request")).toHaveLength(0);
+    channel.emit(readyFrame(channel, "session-1"));
+    channel.emit({ ...extensionInfoFrame(channel, "9.9.9"), in_reply_to: "wrong-version-request" });
+    channel.emit(extensionInfoFrame(channel, "3.4.5"));
     if (width < 768) await screen.getByRole("button", { name: "Open navigation" }).click();
     await screen.getByRole("button", { name: "Open settings" }).click();
     await expect.element(screen.getByRole("main", { name: "Settings" })).toBeVisible();
@@ -1705,9 +1760,11 @@ test.each([1280, 390])("shows live versions in settings and clears them across R
     relay.emitControl({ type: "relay_info", version: "2.3.5" });
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-2", metadata: { kind: "interactive", name: "New Pi", cwd: "/workspace" } }] });
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
-    channel.emit({ ...readyFrame(channel, "stale-session"), extension_version: "9.9.9" });
+    channel.emit(readyFrame(channel, "stale-session"));
     const newChannel = channelHarness.channels[1]!;
-    newChannel.emit({ ...readyFrame(newChannel, "new-session"), extension_version: "3.4.6" });
+    newChannel.emit(readyFrame(newChannel, "new-session"));
+    channel.emit(extensionInfoFrame(channel, "9.9.9"));
+    newChannel.emit(extensionInfoFrame(newChannel, "3.4.6"));
     await expect.poll(() => version("relay")).toBe("2.3.5");
     await expect.poll(() => version("extension")).toBe("3.4.6");
     await expect.element(screen.getByText("Current Pi: test-host · New Pi")).toBeInTheDocument();

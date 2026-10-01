@@ -173,7 +173,7 @@ async function capture(lang: Lang, width: number, height: number, name: string) 
   const channel = harness.channels[0]!;
   await vi.waitFor(() => expect(channel.frames.some((frame) => frame.type === "session_hello")).toBe(true));
   channel.emit({
-    protocol_version: 2, type: "session_ready", extension_version: "1.2.3", target_channel_id: channel.channelId, in_reply_to: lastFrameId(channel.frames, "session_hello"),
+    protocol_version: 2, type: "session_ready", target_channel_id: channel.channelId, in_reply_to: lastFrameId(channel.frames, "session_hello"),
     session_id: SESSION, leaf_id: LEAF, self_sender_ref: SENDER, head_seq: 9,
   });
   await vi.waitFor(() => expect(channel.frames.some((frame) => frame.type === "session_sync")).toBe(true));

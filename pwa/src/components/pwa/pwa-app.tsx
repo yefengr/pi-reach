@@ -126,6 +126,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const channelContextRef = useRef<ConnectionContext | null>(null);
   const helloRequestRef = useRef<string | null>(null);
   const modelRequestRef = useRef<string | null>(null);
+  const extensionInfoRequestRef = useRef<string | null>(null);
   const activeEndpointModelRef = useRef<string | undefined>(undefined);
   const confirmPendingRef = useRef(false);
   const pendingActionRef = useRef<PendingAction | null>(null);
@@ -263,6 +264,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     channelContextRef.current = null;
     helloRequestRef.current = null;
     modelRequestRef.current = null;
+    extensionInfoRequestRef.current = null;
     pendingActionRef.current = null;
     stopRequestIdRef.current = null;
     setPendingAction(null);
@@ -418,6 +420,13 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     return false;
   }, []);
 
+  const sendExtensionInfoRequest = useCallback((scope: TimelineScope, channel: PeerChannel) => {
+    const requestId = id();
+    extensionInfoRequestRef.current = requestId;
+    if (channel.send({ protocol_version: 2, type: "extension_info_request", id: requestId, channel_id: scope.channelId, session_id: scope.sessionId, leaf_id: scope.leafId })) return;
+    if (extensionInfoRequestRef.current === requestId) extensionInfoRequestRef.current = null;
+  }, []);
+
   const handleServerFrame = useCallback((frame: ServerFrame, context: ConnectionContext) => {
     const current = channelContextRef.current;
     if (!current || current.generation !== context.generation || current.deviceId !== context.deviceId || current.endpointId !== context.endpointId || current.runtimeInstanceId !== context.runtimeInstanceId || channelRef.current !== context.channel || relayRef.current !== context.relay) return;
@@ -436,7 +445,6 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     if (frame.type === "session_ready") {
       if (frame.in_reply_to !== helloRequestRef.current) return;
       helloRequestRef.current = null;
-      setExtensionVersion(frame.extension_version);
       const scope: TimelineScope = { deviceId: context.deviceId, endpointId: context.endpointId, runtimeInstanceId: context.runtimeInstanceId, sessionId: frame.session_id, leafId: frame.leaf_id, selfSenderRef: frame.self_sender_ref, channelId: context.channel.channelId };
       // 同一 Pi 进程换了会话（如执行 /new）：主区跟随新会话，并在开头标出切换。
       const runtimeKey = `${context.deviceId}\u0000${context.endpointId}\u0000${context.runtimeInstanceId}`;
@@ -448,9 +456,21 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       setLiveSession({ deviceId: context.deviceId, endpointId: context.endpointId, sessionId: frame.session_id });
       rememberSessionName(scope);
       sendModelsRequest(scope, context.channel);
+      sendExtensionInfoRequest(scope, context.channel);
       finishRetry();
       setConnectionFeedback(null);
       setConnection("online");
+      return;
+    }
+    if (frame.type === "extension_info") {
+      if (frame.in_reply_to !== extensionInfoRequestRef.current) return;
+      extensionInfoRequestRef.current = null;
+      setExtensionVersion(frame.version);
+      return;
+    }
+    if (frame.type === "protocol_error" && frame.in_reply_to === extensionInfoRequestRef.current) {
+      // 诊断请求失败只影响版本展示，不能干扰已建立的会话。
+      extensionInfoRequestRef.current = null;
       return;
     }
     if (frame.type === "models_list") {
@@ -488,7 +508,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       },
       receiveRealtimeOutput, setError: reportSessionFailure, setLastSyncedAt, onHistoryChanged: refreshHistory,
     });
-  }, [applyTimelineChange, disconnectSession, finishRetry, fragmentAssemblerRef, historyLoaderRef, invalidateTimelineScope, operationNotifications, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionName, reportSessionFailure, restartSession, sendModelsRequest, setLastSyncedAt, startLive, timelineRuntimeRef]);
+  }, [applyTimelineChange, disconnectSession, finishRetry, fragmentAssemblerRef, historyLoaderRef, invalidateTimelineScope, operationNotifications, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionName, reportSessionFailure, restartSession, sendExtensionInfoRequest, sendModelsRequest, setLastSyncedAt, startLive, timelineRuntimeRef]);
 
   useEffect(() => {
     const model = activeEndpoint?.model;

@@ -55,7 +55,6 @@ function readyFrame(relay: MockRelay) {
   const frames = relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from((JSON.parse(line) as { ct: string }).ct, "base64").toString("utf8")));
   const ready = frames.findLast((frame) => frame.type === "session_ready");
   if (!ready) throw new Error("expected session_ready");
-  expect(ready.extension_version).toBe(packageVersion);
   return ready;
 }
 
@@ -454,6 +453,29 @@ describe("Pi Reach endpoint extension", () => {
     }));
     await _connectForTest(ctx());
     expect(relays).toHaveLength(1);
+  });
+
+  test("reports the extension version through an explicit query after session_hello", async () => {
+    owners.push({ name: "owner", remote_epk: sourceOwner(), paired_at: "now" });
+    const pi = makePi();
+    (extension as ExtensionFactory)(pi);
+    const manager = SessionManager.inMemory(process.cwd());
+    const context = { ...ctx(), sessionManager: manager };
+    pi.handlers.get("session_start")!({}, context);
+    await _connectForTest(context);
+    const relay = relays.at(-1)!;
+    const frames = () => relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from((JSON.parse(line) as { ct: string }).ct, "base64").toString("utf8")));
+
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "extension_info_request", id: "info-early", channel_id: "channel-info", session_id: manager.getSessionId(), leaf_id: manager.getLeafId() ?? null }, "session"));
+    await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "protocol_error", code: "invalid_channel", in_reply_to: "info-early" })));
+
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "info-hello", channel_id: "channel-info" }, "session"));
+    await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "session_ready" })));
+    const ready = frames().find((frame) => frame.type === "session_ready")!;
+    expect(ready).not.toHaveProperty("extension_version");
+
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "extension_info_request", id: "info-1", channel_id: "channel-info", session_id: ready.session_id, leaf_id: ready.leaf_id }, "session"));
+    await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "extension_info", in_reply_to: "info-1", version: packageVersion, target_channel_id: "channel-info" })));
   });
 
   test("broadcasts tool lifecycle snapshots and a persisted final result through the production handlers", async () => {

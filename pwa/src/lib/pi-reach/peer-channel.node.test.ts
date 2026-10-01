@@ -123,6 +123,18 @@ test("rejects corrupt UTF-8 server payloads while accepting valid Unicode text",
   channel.close();
 });
 
+test("only delivers extension version responses targeted at this channel", () => {
+  const relay = new RelayMock();
+  const received: unknown[] = [];
+  const channel = new PeerChannel({ relay: relay as unknown as RelayClient, endpoint, channelId: "channel-1", onFrame: (frame) => received.push(frame) });
+  const info = { protocol_version: 2, type: "extension_info", target_channel_id: "channel-1", in_reply_to: "info-1", version: "1.2.3" };
+  relay.emit(route("session", { ...info, target_channel_id: "channel-other" }));
+  expect(received).toEqual([]);
+  relay.emit(route("session", info));
+  expect(received).toEqual([info]);
+  channel.close();
+});
+
 test("does not send or process routes after closing", () => {
   const relay = new RelayMock();
   const received: string[] = [];

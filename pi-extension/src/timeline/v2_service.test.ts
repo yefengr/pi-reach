@@ -33,14 +33,46 @@ describe("TimelineV2Service", () => {
     const runtime = new TimelineRuntime();
     const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime, onUserMessage: () => false });
     expect(service.handle(user(service.leafId))[0]).toMatchObject({ type: "protocol_error", code: "invalid_channel", target_channel_id: "channel-1" });
-    expect(service.handle(hello())[0]).toMatchObject({
+    expect(service.handle({
+      protocol_version: 2,
+      type: "extension_info_request",
+      id: "info-early",
+      channel_id: "channel-1",
+      session_id: session.getSessionId(),
+      leaf_id: service.leafId,
+    })[0]).toMatchObject({ type: "protocol_error", code: "invalid_channel", target_channel_id: "channel-1" });
+    const helloResponses = service.handle(hello());
+    expect(helloResponses.some((frame) => frame.type === "extension_info")).toBe(false);
+    const ready = helloResponses[0]!;
+    expect(ready).toMatchObject({
       type: "session_ready",
-      extension_version: "1.2.3",
       target_channel_id: "channel-1",
       self_sender_ref: "owner-1",
       session_id: session.getSessionId(),
       leaf_id: service.leafId,
     });
+    expect(ready).not.toHaveProperty("extension_version");
+    expect(service.handle({
+      protocol_version: 2,
+      type: "extension_info_request",
+      id: "info-1",
+      channel_id: "channel-1",
+      session_id: session.getSessionId(),
+      leaf_id: service.leafId,
+    })[0]).toMatchObject({ type: "extension_info", version: "1.2.3", target_channel_id: "channel-1", in_reply_to: "info-1" });
+  });
+
+  test("validates channel and session scope on an extension version query", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false });
+    service.handle(hello());
+    const request: Extract<ClientFrame, { type: "extension_info_request" }> = {
+      protocol_version: 2, type: "extension_info_request", id: "info-1", channel_id: "channel-1", session_id: service.sessionId, leaf_id: service.leafId,
+    };
+    expect(service.handle({ ...request, channel_id: "wrong-channel" })).toEqual([expect.objectContaining({ type: "protocol_error", code: "invalid_channel" })]);
+    expect(service.handle({ ...request, session_id: "wrong-session" })).toEqual([expect.objectContaining({ type: "reset", reason: "session_replaced" })]);
+    expect(service.handle({ ...request, leaf_id: "wrong-leaf" })).toEqual([expect.objectContaining({ type: "reset", reason: "branch_changed" })]);
+    expect(service.handle(request)).toEqual([{ protocol_version: 2, type: "extension_info", target_channel_id: "channel-1", in_reply_to: "info-1", version: "1.2.3" }]);
   });
 
   test("tracks the SessionManager leaf and resets stale requests after branch changes", () => {

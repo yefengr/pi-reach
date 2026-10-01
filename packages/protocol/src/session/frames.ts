@@ -35,6 +35,7 @@ const ownerBroadcast = { ...protocol, session_id: idSchema, leaf_id: leafIdSchem
 
 export const pairRequestFrameSchema = strictObject({ ...protocol, type: z.literal("pair_request"), id: idSchema, code: pairingCodeSchema, device_name: textSchema });
 export const sessionHelloFrameSchema = strictObject({ ...protocol, type: z.literal("session_hello"), id: idSchema, channel_id: channelIdSchema });
+export const extensionInfoRequestFrameSchema = strictObject({ ...protocol, type: z.literal("extension_info_request"), id: idSchema, ...channelRequest });
 export const userMessageFrameSchema = strictObject({ ...protocol, type: z.literal("user_message"), id: idSchema, ...channelRequest, client_request_id: idSchema, text: textSchema, images: z.array(wireImageSchema).max(1).optional(), streaming_behavior: z.literal("steer").optional() });
 export const userMessageObservedFrameSchema = strictObject({ ...protocol, type: z.literal("user_message_observed"), id: idSchema, ...channelRequest, client_request_id: idSchema, message_id: idSchema, status: z.literal("committed") });
 export const sessionSyncFrameSchema = strictObject({ ...protocol, type: z.literal("session_sync"), id: idSchema, ...channelRequest, before: eventSequenceSchema.nullable(), limit: z.number().int().min(1).finite().max(80).default(80) });
@@ -52,7 +53,8 @@ export const approveToolFrameSchema = strictObject({ ...protocol, type: z.litera
 
 export const pairOkFrameSchema = strictObject({ ...protocol, type: z.literal("pair_ok"), in_reply_to: idSchema, session_name: textSchema, session_started_at: timestampSchema, endpoint_id: idSchema, harness: harnessSchema.optional(), hostname: textSchema.optional() });
 export const pairErrorFrameSchema = strictObject({ ...protocol, type: z.literal("pair_error"), in_reply_to: idSchema, code: z.enum(["token_expired", "token_consumed", "token_unknown", "internal_error"]), message: textSchema.min(1) });
-export const sessionReadyFrameSchema = strictObject({ ...directResponse, type: z.literal("session_ready"), extension_version: idSchema, in_reply_to: idSchema, session_id: idSchema, leaf_id: leafIdSchema, head_seq: headSequenceSchema, self_sender_ref: idSchema });
+export const sessionReadyFrameSchema = strictObject({ ...directResponse, type: z.literal("session_ready"), in_reply_to: idSchema, session_id: idSchema, leaf_id: leafIdSchema, head_seq: headSequenceSchema, self_sender_ref: idSchema });
+export const extensionInfoFrameSchema = strictObject({ ...directResponse, type: z.literal("extension_info"), in_reply_to: idSchema, version: idSchema });
 
 const startedMessageSchema = strictObject({ id: idSchema, group_id: idSchema, blocks: z.array(userBlockSchema).max(MAX_ARRAY_ITEMS), origin: z.enum(["pwa", "extension", "unknown"]), sender_ref: idSchema.optional(), delivery: z.enum(["normal", "queued", "unknown"]) }).superRefine((message, ctx) => {
   if (message.origin === "pwa" && message.sender_ref === undefined) ctx.addIssue({ code: "custom", path: ["sender_ref"], message: "pwa user messages require sender_ref" });
@@ -102,8 +104,8 @@ export const modelsListFrameSchema = strictObject({ ...directResponse, type: z.l
 export const queuedMessageStateFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("queued_message_state"), snapshot_id: idSchema, chunk_index: z.number().int().nonnegative().finite(), final: z.boolean(), items: z.array(queuedMessageItemSchema).max(MAX_ARRAY_ITEMS) });
 export const byeFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("bye"), reason: byeReasonSchema });
 
-export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema]);
-export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema]);
+export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema]);
+export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema]);
 
 export const ClientFrameSchema = clientFrameSchema;
 export const ServerFrameSchema = serverFrameSchema;

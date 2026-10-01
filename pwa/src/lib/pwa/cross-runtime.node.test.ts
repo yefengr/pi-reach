@@ -102,7 +102,6 @@ export class ExtensionPeerSimulator {
       this.send(channelId, {
         protocol_version: 2,
         type: "session_ready",
-        extension_version: "1.2.3",
         target_channel_id: channelId,
         in_reply_to: frame.id,
         session_id: this.sessionId,
@@ -487,7 +486,7 @@ test("routes two channel hello/direct responses separately and broadcasts owner 
   const itemsBefore = second.currentItems();
   const directFrames: ServerFrame[] = [
     { protocol_version: 2, type: "user_message_status", target_channel_id: "C1", in_reply_to: "REQ", session_id: "SESSION", leaf_id: "G1", client_request_id: "OTHER", status: "received" },
-    { protocol_version: 2, type: "session_ready", extension_version: "1.2.3", target_channel_id: "C1", in_reply_to: "HELLO-C1", session_id: "SESSION", leaf_id: "G99", head_seq: 0, self_sender_ref: "sender-C1" },
+    { protocol_version: 2, type: "session_ready", target_channel_id: "C1", in_reply_to: "HELLO-C1", session_id: "SESSION", leaf_id: "G99", head_seq: 0, self_sender_ref: "sender-C1" },
     { protocol_version: 2, type: "session_history_chunk", target_channel_id: "C1", in_reply_to: "SYNC-C1", session_id: "SESSION", leaf_id: "G1", chunk_index: 0, events: [userEvent("WRONG")], fragments: [], final_chunk: true, eos: true },
     { protocol_version: 2, type: "reset", target_channel_id: "C1", session_id: "SESSION", leaf_id: "G2", reason: "branch_changed" },
   ];
