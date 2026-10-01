@@ -75,7 +75,10 @@ if [[ "$SCOPE" == relay || "$SCOPE" == both ]]; then
   : "${RELAY_VERSION:?RELAY_VERSION is required for relay scope}"
 fi
 if [[ "$SCOPE" == pwa || "$SCOPE" == both ]]; then
-  : "${SITE_VERSION:?SITE_VERSION is required for pwa scope}"
+  if [[ -n "${SITE_VERSION:-}" && -z "${PWA_VERSION:-}" ]]; then
+    fail "SITE_VERSION was renamed to PWA_VERSION; update $CONFIG_FILE"
+  fi
+  : "${PWA_VERSION:?PWA_VERSION is required for pwa scope}"
 fi
 
 PUBLISH_IMAGES="${PUBLISH_IMAGES:-0}"
@@ -85,12 +88,12 @@ PWA_URL="${PWA_URL:-}"
 RELAY_URL="${RELAY_URL:-}"
 SSH_TARGET="${DEPLOY_USER}@${DEPLOY_SSH}"
 RELAY_IMAGE=""
-SITE_IMAGE=""
+PWA_IMAGE=""
 if [[ "$SCOPE" == relay || "$SCOPE" == both ]]; then
   RELAY_IMAGE="${IMAGE_NAMESPACE}/pi-reach-relay:${RELAY_VERSION}"
 fi
 if [[ "$SCOPE" == pwa || "$SCOPE" == both ]]; then
-  SITE_IMAGE="${IMAGE_NAMESPACE}/pi-reach-site:${SITE_VERSION}"
+  PWA_IMAGE="${IMAGE_NAMESPACE}/pi-reach-pwa:${PWA_VERSION}"
 fi
 
 valid_token() {
@@ -108,8 +111,8 @@ valid_token "$IMAGE_NAMESPACE" || fail "IMAGE_NAMESPACE contains unsupported cha
 if [[ -n "$RELAY_IMAGE" ]]; then
   valid_token "$RELAY_VERSION" || fail "RELAY_VERSION contains unsupported characters"
 fi
-if [[ -n "$SITE_IMAGE" ]]; then
-  valid_token "$SITE_VERSION" || fail "SITE_VERSION contains unsupported characters"
+if [[ -n "$PWA_IMAGE" ]]; then
+  valid_token "$PWA_VERSION" || fail "PWA_VERSION contains unsupported characters"
 fi
 [[ "$PUBLISH_IMAGES" == 0 || "$PUBLISH_IMAGES" == 1 ]] || fail "PUBLISH_IMAGES must be 0 or 1"
 [[ "$KEEP_IMAGE_ARCHIVE" == 0 || "$KEEP_IMAGE_ARCHIVE" == 1 ]] || fail "KEEP_IMAGE_ARCHIVE must be 0 or 1"
@@ -133,7 +136,7 @@ fi
 
 # Compose needs both image variables to parse; an unselected service gets a placeholder it never starts.
 CONFIG_RELAY_IMAGE="${RELAY_IMAGE:-invalid.invalid/pi-reach-relay-unselected:never}"
-CONFIG_SITE_IMAGE="${SITE_IMAGE:-invalid.invalid/pi-reach-site-unselected:never}"
+CONFIG_PWA_IMAGE="${PWA_IMAGE:-invalid.invalid/pi-reach-pwa-unselected:never}"
 DEPLOY_LOCK_DIR="$REMOTE_DIR/.pi-reach-deploy-lock"
 DEPLOY_LOCK_HELD=0
 
@@ -152,10 +155,10 @@ if [[ "$SCOPE" == relay || "$SCOPE" == both ]]; then
 fi
 if [[ "$SCOPE" == pwa || "$SCOPE" == both ]]; then
   IMAGE_LABELS+=(PWA)
-  IMAGE_REFS+=("$SITE_IMAGE")
+  IMAGE_REFS+=("$PWA_IMAGE")
   IMAGE_DOCKERFILES+=("$ROOT_DIR/pwa/Dockerfile")
-  SERVICES+=(site)
-  CONTAINERS+=(pi-reach-site)
+  SERVICES+=(pwa)
+  CONTAINERS+=(pi-reach-pwa)
 fi
 
 # Built images carry this label so that copies left untagged by a later load can still be pruned.
@@ -209,7 +212,7 @@ acquire_deploy_lock() {
 
 compose_remote() {
   local compose_args="$1"
-  remote "cd '$REMOTE_DIR' && export RELAY_IMAGE='$CONFIG_RELAY_IMAGE' SITE_IMAGE='$CONFIG_SITE_IMAGE' && docker-compose $compose_args"
+  remote "cd '$REMOTE_DIR' && export RELAY_IMAGE='$CONFIG_RELAY_IMAGE' PWA_IMAGE='$CONFIG_PWA_IMAGE' && docker-compose $compose_args"
 }
 
 wait_for_health() {
@@ -222,7 +225,7 @@ wait_for_health() {
     sleep 2
   done
   docker inspect '$container' 2>/dev/null || true
-  cd '$REMOTE_DIR' && export RELAY_IMAGE='$CONFIG_RELAY_IMAGE' SITE_IMAGE='$CONFIG_SITE_IMAGE' && docker-compose logs --tail=80 '$service'
+  cd '$REMOTE_DIR' && export RELAY_IMAGE='$CONFIG_RELAY_IMAGE' PWA_IMAGE='$CONFIG_PWA_IMAGE' && docker-compose logs --tail=80 '$service'
   exit 1"
 }
 
@@ -348,7 +351,8 @@ info "Validating remote Compose configuration"
 compose_remote "config --quiet" || fail "Unable to parse the remote Compose configuration"
 
 info "Updating services: ${SERVICES[*]}"
-compose_remote "up -d --pull never ${SERVICES[*]}"
+# --remove-orphans drops containers of services no longer in the Compose file (such as the former site service) so they release their ports.
+compose_remote "up -d --pull never --remove-orphans ${SERVICES[*]}"
 for index in "${!SERVICES[@]}"; do
   wait_for_health "${CONTAINERS[$index]}" "${SERVICES[$index]}"
 done

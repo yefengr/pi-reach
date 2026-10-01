@@ -21,11 +21,11 @@ const SCRIPT = join(REPO_ROOT, 'scripts', 'deploy-self-hosted.sh');
 const COMPOSE = join(REPO_ROOT, 'docker-compose.yml');
 const SECRET_MARKER = 'deploy-env-secret-must-not-leak';
 const REMOTE_PATH = '/srv/pi-reach';
-const UP_COMMAND = 'docker-compose up -d --pull never ';
+const UP_COMMAND = 'docker-compose up -d --pull never --remove-orphans ';
 const PWA_URL = `https://pwa.example.invalid/app?token=${SECRET_MARKER}`;
 const RELAY_HEALTH_URL = 'https://relay.example.invalid/health';
 const RELAY_REPO = 'example.invalid/team/pi-reach-relay';
-const SITE_REPO = 'example.invalid/team/pi-reach-site';
+const PWA_REPO = 'example.invalid/team/pi-reach-pwa';
 
 const FAKE_CLI = String.raw`#!/usr/bin/env node
 const fs = require('node:fs');
@@ -245,7 +245,7 @@ function makeFixture(t) {
       `REMOTE_DIR=${REMOTE_PATH}`,
       'IMAGE_NAMESPACE=example.invalid/team',
       'RELAY_VERSION=relay-v1',
-      'SITE_VERSION=site-v1',
+      'PWA_VERSION=pwa-v1',
       'PUBLISH_IMAGES=0',
       'KEEP_IMAGE_ARCHIVE=0',
       `PWA_URL=${PWA_URL}`,
@@ -329,7 +329,7 @@ function upServices(fixture) {
   return command.split(UP_COMMAND)[1];
 }
 
-// Deployed tags relay-v1/site-v1 are the newest; relay-0 and orphan-in-use belong to containers.
+// Deployed tags relay-v1/pwa-v1 are the newest; relay-0 and orphan-in-use belong to containers.
 function imageStore() {
   const image = (id, day, tags, labels) => ({
     id: `sha256:${id}`,
@@ -344,9 +344,9 @@ function imageStore() {
       image('relay-2', '28', [`${RELAY_REPO}:v2`, `${RELAY_REPO}:v2-alias`]),
       image('relay-1', '27', [`${RELAY_REPO}:v1`]),
       image('relay-0', '26', [`${RELAY_REPO}:v0`]),
-      image('site-new', '30', [`${SITE_REPO}:site-v1`], { 'pi-reach.image': 'site' }),
-      image('site-old', '20', [`${SITE_REPO}:old`]),
-      image('orphan', '25', [], { 'pi-reach.image': 'site' }),
+      image('pwa-new', '30', [`${PWA_REPO}:pwa-v1`], { 'pi-reach.image': 'pwa' }),
+      image('pwa-old', '20', [`${PWA_REPO}:old`]),
+      image('orphan', '25', [], { 'pi-reach.image': 'pwa' }),
       image('orphan-in-use', '24', [], { 'pi-reach.image': 'relay' }),
       image('unrelated-orphan', '23', []),
       image('couchdb', '01', ['couchdb:3.5.0']),
@@ -382,7 +382,7 @@ test('default command deploys both services and preserves CLI-owned settings', (
   assert.equal(builds.length, 2);
   assert.deepEqual(
     builds.map((record) => record.args[record.args.indexOf('--label') + 1]),
-    ['pi-reach.image=relay', 'pi-reach.image=site'],
+    ['pi-reach.image=relay', 'pi-reach.image=pwa'],
   );
   assert.deepEqual(dockerCalls(fixture, 'buildx', 'inspect')[0].args, [
     'buildx',
@@ -392,8 +392,8 @@ test('default command deploys both services and preserves CLI-owned settings', (
 
   const save = dockerCalls(fixture, 'save')[0].args;
   assert.ok(save.includes('example.invalid/team/pi-reach-relay:relay-v1'));
-  assert.ok(save.includes('example.invalid/team/pi-reach-site:site-v1'));
-  assert.equal(upServices(fixture), 'relay site');
+  assert.ok(save.includes('example.invalid/team/pi-reach-pwa:pwa-v1'));
+  assert.equal(upServices(fixture), 'relay pwa');
   const stdinRecords = records(fixture).filter((record) => record.name.endsWith(':stdin'));
   assert.ok(stdinRecords.some((record) => record.stdin === 'fake-image-archive'));
   assert.deepEqual(readdirSync(fixture.remoteDir), ['docker-compose.yml']);
@@ -477,13 +477,13 @@ test('pwa scope builds, transfers, and updates only the PWA', (t) => {
 
   const builds = dockerCalls(fixture, 'buildx', 'build');
   assert.equal(builds.length, 1);
-  assert.ok(builds[0].args.includes('example.invalid/team/pi-reach-site:site-v1'));
-  assert.equal(upServices(fixture), 'site');
+  assert.ok(builds[0].args.includes('example.invalid/team/pi-reach-pwa:pwa-v1'));
+  assert.equal(upServices(fixture), 'pwa');
 
   const commands = sshCommands(fixture);
   const configCommand = commands.find((command) => command.includes('docker-compose config --quiet'));
   assert.match(configCommand, /RELAY_IMAGE='invalid\.invalid\/pi-reach-relay-unselected:never'/);
-  assert.ok(commands.some((command) => command.includes("'pi-reach-site'")));
+  assert.ok(commands.some((command) => command.includes("'pi-reach-pwa'")));
   assert.doesNotMatch(records(fixture).map(JSON.stringify).join('\n'), /pi-reach-relay:relay-v1/);
   assert.deepEqual(curlTargets(fixture), [PWA_URL]);
 });
@@ -500,9 +500,9 @@ test('relay scope builds, transfers, and updates only the Relay', (t) => {
 
   const commands = sshCommands(fixture);
   const configCommand = commands.find((command) => command.includes('docker-compose config --quiet'));
-  assert.match(configCommand, /SITE_IMAGE='invalid\.invalid\/pi-reach-site-unselected:never'/);
+  assert.match(configCommand, /PWA_IMAGE='invalid\.invalid\/pi-reach-pwa-unselected:never'/);
   assert.ok(commands.some((command) => command.includes("'pi-reach-relay'")));
-  assert.doesNotMatch(records(fixture).map(JSON.stringify).join('\n'), /pi-reach-site:site-v1/);
+  assert.doesNotMatch(records(fixture).map(JSON.stringify).join('\n'), /pi-reach-pwa:pwa-v1/);
   assert.deepEqual(curlTargets(fixture), [RELAY_HEALTH_URL]);
 });
 
@@ -533,7 +533,7 @@ test('unhealthy services fail the deployment before public checks', (t) => {
   const healthCommand = sshCommands(fixture).find((command) =>
     command.includes('for attempt in $(seq 1 30)'),
   );
-  assert.match(healthCommand, /export RELAY_IMAGE='[^']+' SITE_IMAGE='[^']+' && docker-compose logs --tail=80/);
+  assert.match(healthCommand, /export RELAY_IMAGE='[^']+' PWA_IMAGE='[^']+' && docker-compose logs --tail=80/);
   assert.deepEqual(pruneCommands(fixture), []);
 });
 
@@ -546,7 +546,7 @@ test('successful deployment prunes older images locally and on the server', (t) 
   assert.match(result.stdout, /Server: removed 3 old image\(s\)/);
   assert.match(result.stdout, /Local: removed 3 old image\(s\)/);
   assert.deepEqual(pruneCommands(fixture), [
-    `bash -s -- 3 ${RELAY_REPO}:relay-v1 ${SITE_REPO}:site-v1`,
+    `bash -s -- 3 ${RELAY_REPO}:relay-v1 ${PWA_REPO}:pwa-v1`,
   ]);
 
   for (const host of ['local', 'remote']) {
@@ -555,18 +555,18 @@ test('successful deployment prunes older images locally and on the server', (t) 
       store.images.flatMap((image) => image.tags).sort(),
       [
         'couchdb:3.5.0',
+        `${PWA_REPO}:old`,
+        `${PWA_REPO}:pwa-v1`,
         `${RELAY_REPO}:relay-v1`,
         `${RELAY_REPO}:v0`,
         `${RELAY_REPO}:v2`,
         `${RELAY_REPO}:v3`,
-        `${SITE_REPO}:old`,
-        `${SITE_REPO}:site-v1`,
       ],
       host,
     );
     assert.deepEqual(
       store.images.map((image) => image.id.slice('sha256:'.length)).sort(),
-      ['couchdb', 'orphan-in-use', 'relay-0', 'relay-2', 'relay-3', 'relay-new', 'site-new', 'site-old', 'unrelated-orphan'],
+      ['couchdb', 'orphan-in-use', 'pwa-new', 'pwa-old', 'relay-0', 'relay-2', 'relay-3', 'relay-new', 'unrelated-orphan'],
       host,
     );
   }
@@ -601,6 +601,16 @@ test('invalid KEEP_IMAGE_VERSIONS is rejected before any remote work', (t) => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /KEEP_IMAGE_VERSIONS must be a non-negative integer/);
+  assert.equal(records(fixture).length, 0);
+});
+
+test('a config that still uses SITE_VERSION is told about the PWA_VERSION rename', (t) => {
+  const fixture = makeFixture(t);
+  writeFileSync(fixture.configFile, readFileSync(fixture.configFile, 'utf8').replace('PWA_VERSION=pwa-v1', 'SITE_VERSION=site-v1'));
+  const result = runDeploy(fixture, ['pwa']);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /SITE_VERSION was renamed to PWA_VERSION/);
   assert.equal(records(fixture).length, 0);
 });
 

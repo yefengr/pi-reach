@@ -95,7 +95,7 @@ The public Relay and PWA are run by the maintainer and are fine for trying Pi Re
 ```bash
 docker build -f relay/Dockerfile -t pi-reach-relay .
 docker build -f pwa/Dockerfile -t pi-reach-pwa .
-RELAY_IMAGE=pi-reach-relay SITE_IMAGE=pi-reach-pwa docker compose up -d
+RELAY_IMAGE=pi-reach-relay PWA_IMAGE=pi-reach-pwa docker compose up -d
 ```
 
 Compose listens on loopback only (the Relay on `127.0.0.1:3000`, the PWA on `127.0.0.1:3001`), so put an HTTPS reverse proxy in front, for example Caddy:

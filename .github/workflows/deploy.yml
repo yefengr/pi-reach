@@ -2,7 +2,7 @@
 # - 触发：推送到 main 且 relay/package.json 或 pwa/package.json 的 version 发生变化；也可在 Actions 页面手动运行并
 #   选择组件（不比较版本号）。对应的 relay-vX.Y.Z／pwa-vX.Y.Z 标签已存在时跳过该组件。
 # - 构建：在 GitHub 托管 runner 上构建服务器架构（默认 linux/amd64，可用仓库变量 DEPLOY_PLATFORM 覆盖）的镜像，
-#   以 GITHUB_TOKEN 推送到 ghcr.io/<owner>/pi-reach-relay|pi-reach-site:vX.Y.Z，并附 GitHub 构建来源证明。
+#   以 GITHUB_TOKEN 推送到 ghcr.io/<owner>/pi-reach-relay|pi-reach-pwa:vX.Y.Z，并附 GitHub 构建来源证明。
 # - 部署：production Environment 需维护者批准，其 Secrets 提供受限 SSH 密钥。服务器的 authorized_keys 只允许该密钥执行
 #   scripts/deploy-from-ci.sh：按摘要拉取镜像、只更新所选服务，健康检查失败时恢复原镜像。先 Relay 后 PWA。
 # - 收尾：公网检查通过后在本次提交上创建注解标签与 GitHub Release（不标记 Latest）。
@@ -143,9 +143,9 @@ jobs:
           file: pwa/Dockerfile
           platforms: ${{ env.PLATFORM }}
           push: true
-          tags: ${{ needs.plan.outputs.image-prefix }}/pi-reach-site:v${{ needs.plan.outputs.pwa-version }}
+          tags: ${{ needs.plan.outputs.image-prefix }}/pi-reach-pwa:v${{ needs.plan.outputs.pwa-version }}
           labels: |
-            pi-reach.image=site
+            pi-reach.image=pwa
             org.opencontainers.image.source=${{ env.SOURCE }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ needs.plan.outputs.pwa-version }}
@@ -154,7 +154,7 @@ jobs:
         if: needs.plan.outputs.pwa == 'true'
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: ${{ needs.plan.outputs.image-prefix }}/pi-reach-site
+          subject-name: ${{ needs.plan.outputs.image-prefix }}/pi-reach-pwa
           subject-digest: ${{ steps.pwa.outputs.digest }}
           push-to-registry: true
 
@@ -253,9 +253,9 @@ jobs:
         run: |
           . "$RUNNER_TEMP/deploy-lib.sh"
           if released pwa "$VERSION"; then echo "pwa-v$VERSION 已发布，跳过。"; exit 0; fi
-          remote_deploy site "$PREFIX/pi-reach-site:v$VERSION@$DIGEST"
+          remote_deploy pwa "$PREFIX/pi-reach-pwa:v$VERSION@$DIGEST"
           check_url "$PWA_URL"
-          release pwa PWA "$VERSION" "$PREFIX/pi-reach-site:v$VERSION" "$DIGEST" "$PWA_URL" pwa packages/protocol
+          release pwa PWA "$VERSION" "$PREFIX/pi-reach-pwa:v$VERSION" "$DIGEST" "$PWA_URL" pwa packages/protocol
 
       - name: Remove SSH key
         if: always()

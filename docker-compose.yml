@@ -21,9 +21,9 @@ services:
       start_period: 10s
       retries: 3
 
-  site:
-    image: ${SITE_IMAGE:?SITE_IMAGE must be set}
-    container_name: pi-reach-site
+  pwa:
+    image: ${PWA_IMAGE:?PWA_IMAGE must be set}
+    container_name: pi-reach-pwa
     restart: unless-stopped
 
     # The PWA is exposed through the Caddy route.

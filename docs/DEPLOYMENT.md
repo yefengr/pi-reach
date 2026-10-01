@@ -57,7 +57,7 @@ DEPLOY_USER=your-deploy-user
 REMOTE_DIR=/home/your-deploy-user/pi-reach
 IMAGE_NAMESPACE=pi-reach-local
 RELAY_VERSION=v0.0.1
-SITE_VERSION=v0.0.1
+PWA_VERSION=v0.0.1
 PUBLISH_IMAGES=0
 PWA_URL=https://pwa.example.com/app
 RELAY_URL=https://relay.example.com
@@ -111,7 +111,7 @@ docker-compose version
 常规版本由 [Deploy 工作流](../.github/workflows/deploy.yml)发布，决策见 [ADR-20261001](adr/20261001-ci-deploy-ghcr.md)：
 
 1. 修改 `relay/package.json` 或 `pwa/package.json` 的 `version`，经 Pull Request 合并到 `main`；也可在 Actions 页面手动运行并选择组件。对应的 `relay-vX.Y.Z`／`pwa-vX.Y.Z` 标签已存在时跳过该组件。
-2. 工作流在 GitHub 托管 runner 上构建服务器架构的镜像，推送到 `ghcr.io/<owner>/pi-reach-relay`／`pi-reach-site:vX.Y.Z`，并附构建来源证明。
+2. 工作流在 GitHub 托管 runner 上构建服务器架构的镜像，推送到 `ghcr.io/<owner>/pi-reach-relay`／`pi-reach-pwa:vX.Y.Z`，并附构建来源证明。
 3. 部署作业进入 `production` Environment，等待维护者批准。
 4. 批准后以受限 SSH 密钥连接服务器，`deploy-from-ci.sh` 按摘要拉取镜像，只更新所选服务；健康检查失败时恢复部署前的镜像，工作流以失败结束。两者都部署时先 Relay 后 PWA。
 5. 公网检查通过后，在本次提交上创建注解标签与 GitHub Release（不标记 Latest）。说明列出自上一个同组件标签以来涉及该组件的提交，必要时再手工补充。
@@ -153,11 +153,11 @@ ssh your-deploy-user@your-ssh-alias 'chmod 755 /home/your-deploy-user/pi-reach/b
 restrict,command="PI_REACH_REMOTE_DIR=/home/your-deploy-user/pi-reach PI_REACH_IMAGE_PREFIX=ghcr.io/your-github-owner /home/your-deploy-user/pi-reach/bin/deploy-from-ci.sh" ssh-ed25519 AAAA... pi-reach-github-deploy
 ```
 
-`restrict` 关闭端口转发、终端与用户 rc 文件，`command=` 让这把密钥无论请求什么都只运行 `deploy-from-ci.sh`。脚本只接受 `deploy <site|relay> <前缀>/pi-reach-<site|relay>:vX.Y.Z@sha256:<摘要>`，其余请求一律拒绝，不调用 Docker。可选的 `PI_REACH_KEEP_IMAGE_VERSIONS` 控制保留的镜像数（默认 3），写在同一个 `command=` 中。
+`restrict` 关闭端口转发、终端与用户 rc 文件，`command=` 让这把密钥无论请求什么都只运行 `deploy-from-ci.sh`。脚本只接受 `deploy <pwa|relay> <前缀>/pi-reach-<pwa|relay>:vX.Y.Z@sha256:<摘要>`，其余请求一律拒绝，不调用 Docker。可选的 `PI_REACH_KEEP_IMAGE_VERSIONS` 控制保留的镜像数（默认 3），写在同一个 `command=` 中。
 
 ### 首次运行
 
-GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运行时，在构建完成、部署作业等待审批期间，到 GitHub 个人主页的 Packages 中把 `pi-reach-relay` 与 `pi-reach-site` 的可见性改为 Public（改为公开后不能再改回私有），确认它们关联到本仓库，再批准部署。两个镜像只含开源代码与构建产物，不含配置或密钥。
+GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运行时，在构建完成、部署作业等待审批期间，到 GitHub 个人主页的 Packages 中把 `pi-reach-relay` 与 `pi-reach-pwa` 的可见性改为 Public（改为公开后不能再改回私有），确认它们关联到本仓库，再批准部署。两个镜像只含开源代码与构建产物，不含配置或密钥。
 
 ### 失败处理
 
@@ -174,7 +174,7 @@ GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运
 ./scripts/deploy-self-hosted.sh [pwa|relay|both]
 ```
 
-`pwa` 只处理 PWA 镜像和 `site`，`relay` 只处理 Relay 镜像和 `relay`，`both` 处理两者；不带参数等价于 `both`。`deploy.env` 中的 `SCOPE` 不会覆盖命令行选择和默认值。已移除的 `test`、`promote` 参数按用法错误拒绝。
+`pwa` 只处理 PWA 镜像和 `pwa` 服务，`relay` 只处理 Relay 镜像和 `relay`，`both` 处理两者；不带参数等价于 `both`。`deploy.env` 中的 `SCOPE` 不会覆盖命令行选择和默认值。已移除的 `test`、`promote` 参数按用法错误拒绝。
 
 远端 Docker 检查通过后，脚本会在 `REMOTE_DIR` 下原子创建 `.pi-reach-deploy-lock`；同一部署目录已有运行中部署或遗留锁时，会在本机构建、镜像传输和 `docker-compose up` 前拒绝执行。正常退出及可处理的错误或中断会释放锁；`SIGKILL`、网络硬断等情况可能留下 stale lock。遇到锁冲突时，先核对本机和服务器均无部署进程，再在服务器手工执行 `rmdir /实际/REMOTE_DIR/.pi-reach-deploy-lock`。脚本不会自动抢占或删除未知锁。
 
@@ -188,7 +188,7 @@ GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运
 6. 按 scope 检查 `RELAY_URL` 的 `/health` 与 `PWA_URL`，变量留空时跳过对应检查；
 7. 在服务器和本机分别清理所选服务的旧镜像：每个镜像仓库保留本次部署的标签及最新的其他标签，共 `KEEP_IMAGE_VERSIONS` 个（默认 3），删除更旧的标签和带 `pi-reach.image` 标签的悬空镜像。
 
-镜像清理只处理本次部署的 `pi-reach-relay`、`pi-reach-site` 仓库和带 `pi-reach.image` 标签的悬空镜像，跳过任何容器（包括已停止容器）正在使用的镜像；`KEEP_IMAGE_VERSIONS=0` 关闭清理。清理只在健康检查和公网检查通过后执行，失败时只输出警告，不改变部署结果。
+镜像清理只处理本次部署的 `pi-reach-relay`、`pi-reach-pwa` 仓库和带 `pi-reach.image` 标签的悬空镜像，跳过任何容器（包括已停止容器）正在使用的镜像；`KEEP_IMAGE_VERSIONS=0` 关闭清理。清理只在健康检查和公网检查通过后执行，失败时只输出警告，不改变部署结果。
 
 单服务 scope 解析 Compose 时会把未选服务的镜像变量替换为固定无效占位符，未选服务不会出现在 build、transfer 或 `docker-compose up` 操作中。日志中的部署元数据只包含 scope、所选镜像引用与 ID 摘要，不打印 `deploy.env` 内容、SSH 凭据或有效配置正文。
 
@@ -211,13 +211,13 @@ GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运
 PUBLISH_IMAGES=0
 ```
 
-镜像只在本机 Buildx 和服务器 Docker 中存在，标签由 `IMAGE_NAMESPACE`、`RELAY_VERSION` 和 `SITE_VERSION` 组成；构建时附加 `pi-reach.image=relay|site` 镜像标签，供清理步骤识别被新版本顶替后失去标签的本项目镜像。每次部署递增所选服务的版本，避免同一标签指向不同构建。服务器 Compose 使用脚本注入的 `RELAY_IMAGE`、`SITE_IMAGE`，不会把本机命名空间写入仓库文件。
+镜像只在本机 Buildx 和服务器 Docker 中存在，标签由 `IMAGE_NAMESPACE`、`RELAY_VERSION` 和 `PWA_VERSION` 组成；构建时附加 `pi-reach.image=relay|pwa` 镜像标签，供清理步骤识别被新版本顶替后失去标签的本项目镜像。每次部署递增所选服务的版本，避免同一标签指向不同构建。服务器 Compose 使用脚本注入的 `RELAY_IMAGE`、`PWA_IMAGE`，不会把本机命名空间写入仓库文件。
 
 如服务器是 `x86_64`，脚本相当于构建：
 
 ```bash
 docker buildx build --platform linux/amd64 --load \
-  --tag pi-reach-local/pi-reach-site:v0.0.1 --file pwa/Dockerfile .
+  --tag pi-reach-local/pi-reach-pwa:v0.0.1 --file pwa/Dockerfile .
 
 docker buildx build --platform linux/amd64 --load \
   --tag pi-reach-local/pi-reach-relay:v0.0.1 --file relay/Dockerfile .
@@ -232,7 +232,7 @@ Relay 镜像同样以仓库根为构建上下文，使用根锁文件构建 Node
 ```bash
 docker save \
   pi-reach-local/pi-reach-relay:v0.0.1 \
-  pi-reach-local/pi-reach-site:v0.0.1 \
+  pi-reach-local/pi-reach-pwa:v0.0.1 \
   | gzip \
   | ssh your-deploy-user@your-ssh-alias 'gzip -dc | docker load'
 ```
@@ -240,7 +240,7 @@ docker save \
 服务器启动时使用：
 
 ```bash
-docker-compose up -d --pull never
+docker-compose up -d --pull never --remove-orphans
 ```
 
 ### 可选：同时推送远程镜像
@@ -261,7 +261,7 @@ docker login
 此模式会额外执行 Buildx `--push`。它推送当前服务器架构的镜像；多架构公共发布仍可单独使用：
 
 ```bash
-IMAGE=your-dockerhub-user/pi-reach-site ./pwa/push-docker.sh v0.0.1
+IMAGE=your-dockerhub-user/pi-reach-pwa ./pwa/push-docker.sh v0.0.1
 IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 ```
 
@@ -273,19 +273,19 @@ IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 
 ```text
 Relay: 127.0.0.1:3000 -> 容器 3000（容器 pi-reach-relay）
-PWA:   127.0.0.1:3001 -> 容器 3000（容器 pi-reach-site）
+PWA:   127.0.0.1:3001 -> 容器 3000（容器 pi-reach-pwa）
 ```
 
 当前 [Compose](../docker-compose.yml) 的 Relay 服务没有业务卷或 SQLite membership 存储。Relay 的 endpoint registry 和 ACL 仅保存在内存中，重启后由 Host/Owner 重连重建；旧环境是否残留历史 volume 不在本流程中自动清理。PWA 不保存服务端业务会话数据，浏览器本地使用 IndexedDB；Host 身份、配对和 Pi 会话保存在运行 Pi 的电脑上，而不是这些 Relay/PWA 容器中。
 
-源码子项目已名为 `pwa/`，但 Compose 服务 `site`、镜像名 `pi-reach-site` 和变量 `SITE_VERSION` / `SITE_IMAGE` 仍是当前脚本使用的名称。执行部署命令时不要仅按目录新名称替换它们。
+PWA 的 Compose 服务名、容器名与镜像名均为 `pwa`／`pi-reach-pwa`，部署变量为 `PWA_VERSION`／`PWA_IMAGE`。2026-10-01 之前使用的 `site`／`pi-reach-site`／`SITE_VERSION` 已停用：本机脚本遇到 `SITE_VERSION` 会提示改名；部署时 `docker-compose up` 带 `--remove-orphans`，会移除 Compose 文件中已不存在的旧服务容器，释放其端口。
 
 服务器上查看状态。Compose 文件的镜像变量只由部署脚本注入，手工排查直接按容器名查看，避免 `docker-compose ps` 因变量未设置而解析失败：
 
 ```bash
 docker ps --filter name=pi-reach
 docker logs --tail=100 pi-reach-relay
-docker logs --tail=100 pi-reach-site
+docker logs --tail=100 pi-reach-pwa
 ```
 
 服务器本机健康检查：
@@ -363,7 +363,7 @@ docker logs -f pi-reach-relay
 `pwa/push-docker.sh` 和 `relay/push-docker.sh` 支持通过 `IMAGE` 覆盖镜像名：
 
 ```bash
-IMAGE=your-dockerhub-user/pi-reach-site ./pwa/push-docker.sh v0.0.1
+IMAGE=your-dockerhub-user/pi-reach-pwa ./pwa/push-docker.sh v0.0.1
 IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 ```
 
@@ -408,7 +408,7 @@ npm view @yefengr/pi-reach version
 | 组件 | 标签 | 版本来源 |
 |---|---|---|
 | Extension | `extension-vX.Y.Z` | `pi-extension/package.json`，即 npm 上的 `@yefengr/pi-reach@X.Y.Z` |
-| PWA | `pwa-vX.Y.Z` | `pwa/package.json`；部署时 `SITE_VERSION` 使用 `vX.Y.Z` |
+| PWA | `pwa-vX.Y.Z` | `pwa/package.json`；部署时 `PWA_VERSION` 使用 `vX.Y.Z` |
 | Relay | `relay-vX.Y.Z` | `relay/package.json`；部署时 `RELAY_VERSION` 使用 `vX.Y.Z` |
 
 - Extension 在 npm 批准上线后打标签，PWA 与 Relay 在部署并核对后打标签；同一提交可以同时带多个组件的标签。
@@ -450,7 +450,7 @@ docker-compose version
 ```bash
 docker ps --filter name=pi-reach
 docker logs --tail=200 pi-reach-relay
-docker logs --tail=200 pi-reach-site
+docker logs --tail=200 pi-reach-pwa
 curl http://127.0.0.1:3000/health
 curl -I http://127.0.0.1:3001/app
 ```

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# 服务器端部署入口：由 GitHub Actions 的 Deploy 工作流通过受限 SSH 密钥调用。
-# authorized_keys 用 restrict 与 command= 强制执行本脚本，并在 command= 中给出：
-#   PI_REACH_REMOTE_DIR    部署目录，内含 docker-compose.yml（与本机部署脚本的 REMOTE_DIR 相同）
-#   PI_REACH_IMAGE_PREFIX  允许部署的镜像前缀，如 ghcr.io/<owner>
-# 客户端请求的命令在 SSH_ORIGINAL_COMMAND 中，只接受一种形式：
-#   deploy <site|relay> <PI_REACH_IMAGE_PREFIX>/pi-reach-<site|relay>:vX.Y.Z@sha256:<digest>
-# 按摘要拉取镜像并打上版本标签，只更新所选服务；健康检查失败时恢复部署前的镜像并以失败退出。
-# 与本机 scripts/deploy-self-hosted.sh 共用部署锁，Caddy 与 docker-compose.yml 不在这里修改。
-# 安装与配置见 docs/DEPLOYMENT.md「自动部署」。
+# Server-side entry point for the Deploy workflow, reached only through a restricted SSH key.
+# authorized_keys forces this script with restrict and command=, and sets in that command:
+#   PI_REACH_REMOTE_DIR    deployment directory holding docker-compose.yml (the same REMOTE_DIR as local deploys)
+#   PI_REACH_IMAGE_PREFIX  image prefix allowed to deploy, such as ghcr.io/<owner>
+# The client request arrives in SSH_ORIGINAL_COMMAND and must be exactly:
+#   deploy <pwa|relay> <PI_REACH_IMAGE_PREFIX>/pi-reach-<pwa|relay>:vX.Y.Z@sha256:<digest>
+# The image is pulled by digest and tagged with its version, then only that service is updated;
+# if it never becomes healthy the previous image is restored and the script fails.
+# Shares the deployment lock with scripts/deploy-self-hosted.sh and never changes Caddy or docker-compose.yml.
+# Installation and configuration: docs/DEPLOYMENT.md, "自动部署".
 
 set -Eeuo pipefail
 
@@ -37,17 +38,17 @@ HEALTH_INTERVAL="${PI_REACH_HEALTH_INTERVAL:-2}"
 [[ "$HEALTH_INTERVAL" =~ ^[0-9]+$ ]] || fail "PI_REACH_HEALTH_INTERVAL must be a non-negative integer"
 
 reject() {
-  fail "Rejected request. Expected: deploy <site|relay> $IMAGE_PREFIX/pi-reach-<site|relay>:vX.Y.Z@sha256:<digest>"
+  fail "Rejected request. Expected: deploy <pwa|relay> $IMAGE_PREFIX/pi-reach-<pwa|relay>:vX.Y.Z@sha256:<digest>"
 }
 
-# 只按空白拆分，不经过 shell 求值；任何多余参数或格式偏差都拒绝。
+# Split on whitespace only, never evaluated by a shell; any extra word or format deviation is rejected.
 read -r -a REQUEST <<< "${SSH_ORIGINAL_COMMAND:-}" || true
 (( ${#REQUEST[@]} == 3 )) || reject
 [[ "${REQUEST[0]}" == deploy ]] || reject
 SERVICE="${REQUEST[1]}"
 IMAGE="${REQUEST[2]}"
 case "$SERVICE" in
-  site) CONTAINER=pi-reach-site ;;
+  pwa) CONTAINER=pi-reach-pwa ;;
   relay) CONTAINER=pi-reach-relay ;;
   *) reject ;;
 esac
@@ -70,14 +71,14 @@ release_lock() {
 }
 trap release_lock EXIT
 
-# Compose 需要两个镜像变量才能解析；未选服务取一个永远不会启动的占位符。
+# Compose needs both image variables to parse; the other service gets a placeholder it never starts.
 compose_with() {
   local image="$1"
   shift
   local relay_image=invalid.invalid/pi-reach-relay-unselected:never
-  local site_image=invalid.invalid/pi-reach-site-unselected:never
-  if [[ "$SERVICE" == relay ]]; then relay_image="$image"; else site_image="$image"; fi
-  (cd "$REMOTE_DIR" && RELAY_IMAGE="$relay_image" SITE_IMAGE="$site_image" docker-compose "$@")
+  local pwa_image=invalid.invalid/pi-reach-pwa-unselected:never
+  if [[ "$SERVICE" == relay ]]; then relay_image="$image"; else pwa_image="$image"; fi
+  (cd "$REMOTE_DIR" && RELAY_IMAGE="$relay_image" PWA_IMAGE="$pwa_image" docker-compose "$@")
 }
 
 wait_for_health() {
@@ -91,8 +92,9 @@ wait_for_health() {
   return 1
 }
 
-# 与 deploy-self-hosted.sh 的 prune_images 相同：保留本次部署的标签及最新的其他标签共 KEEP 个，
-# 删除更旧的标签与带 pi-reach.image 标签的悬空镜像，跳过任何容器正在使用的镜像。输出删除数量。
+# Same as prune_images in deploy-self-hosted.sh: keep the deployed tag plus the newest other tags of its
+# repository, KEEP in total, then remove older tags and untagged images labelled pi-reach.image. Images used
+# by any container are never removed. Prints the number of removed images.
 prune_images() {
   local keep="$1"
   shift
@@ -135,14 +137,14 @@ info "Validating Compose configuration"
 compose_with "$TARGET" config --quiet || fail "Unable to parse $REMOTE_DIR/docker-compose.yml"
 
 info "Updating service: $SERVICE"
-compose_with "$TARGET" up -d --pull never "$SERVICE"
+compose_with "$TARGET" up -d --pull never --remove-orphans "$SERVICE"
 if ! wait_for_health; then
   compose_with "$TARGET" logs --tail=80 "$SERVICE" || true
   if [[ -z "$PREVIOUS" || "$PREVIOUS" == "$TARGET" ]]; then
     fail "$SERVICE is not healthy and there is no earlier image to restore"
   fi
   warn "$SERVICE is not healthy; restoring $PREVIOUS"
-  compose_with "$PREVIOUS" up -d --pull never "$SERVICE"
+  compose_with "$PREVIOUS" up -d --pull never --remove-orphans "$SERVICE"
   if wait_for_health; then
     fail "Deployment of $TARGET failed; $SERVICE was restored to $PREVIOUS"
   fi
@@ -150,7 +152,7 @@ if ! wait_for_health; then
 fi
 compose_with "$TARGET" ps "$SERVICE"
 
-# 清理只是收尾：失败只给出警告，不影响已经上线的部署。
+# Pruning is housekeeping: a failure is reported but never fails a deployment that is already live.
 if (( KEEP_IMAGE_VERSIONS > 0 )); then
   info "Pruning images older than the newest $KEEP_IMAGE_VERSIONS"
   if pruned="$(prune_images "$KEEP_IMAGE_VERSIONS" "$TARGET")"; then
