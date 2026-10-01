@@ -161,9 +161,11 @@ restrict,command="PI_REACH_REMOTE_DIR=/home/your-deploy-user/pi-reach PI_REACH_I
 ssh -i ~/.ssh/pi-reach-github-deploy -o IdentitiesOnly=yes your-deploy-user@your-server-host id
 # 预期：✗ Rejected request. Expected: deploy <pwa|relay> ...，退出码 1
 ssh -i ~/.ssh/pi-reach-github-deploy -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -N \
-  -L 18080:127.0.0.1:3001 your-deploy-user@your-server-host
-# 预期：Could not request local forwarding
+  -R 18082:127.0.0.1:22 your-deploy-user@your-server-host
+# 预期：Error: remote port forwarding failed for listen port 18082，立即退出
 ```
+
+转发检查使用 `-R`：远程转发在建立连接时向服务器申请，被 `restrict` 拒绝后立即失败。`-L` 的监听在本机建立，只有实际连接该端口时服务器才拒绝（`administratively prohibited`），命令本身会一直等待，不适合作为自检。
 
 ### 首次运行
 
