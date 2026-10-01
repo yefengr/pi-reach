@@ -162,8 +162,8 @@ test("shows the Stop action with the same accent circle as Send", async () => {
   const stop = screen.getByRole("button", { name: "Stop current task" }).element();
   const rect = stop.getBoundingClientRect();
 
-  // 与发送按钮同形同色：强调色圆（浅色 #4C658D、深色 #A9C3E6）加 on-accent 图标，点击区 44px，不用错误色。
-  expect(["rgb(76, 101, 141)", "rgb(169, 195, 230)"]).toContain(window.getComputedStyle(stop, "::before").backgroundColor);
+  // 与发送按钮同形同色：强调色圆（浅色 #446396、深色 #98B8E6）加 on-accent 图标，点击区 44px，不用错误色。
+  expect(["rgb(68, 99, 150)", "rgb(152, 184, 230)"]).toContain(window.getComputedStyle(stop, "::before").backgroundColor);
   expect(["rgb(255, 255, 255)", "rgb(23, 38, 56)"]).toContain(window.getComputedStyle(stop).color);
   expect(rect.width).toBeGreaterThanOrEqual(44);
   expect(rect.height).toBeGreaterThanOrEqual(44);
@@ -377,11 +377,12 @@ test("uses 14px action text in composer menus and keeps the current model and th
   const other: WireModel = { ...model, id: "other-model", name: "Other Model" };
   const screen = await renderPwa(<ComposerHarness commandModels={[model, other]} />);
   const probe = document.createElement("span");
-  probe.style.color = "var(--pwa-accent)";
-  probe.style.backgroundColor = "var(--pwa-accent-wash)";
+  // 当前项用中性 selected 底与 ink 文字，不用主色。
+  probe.style.color = "var(--pwa-ink)";
+  probe.style.backgroundColor = "var(--pwa-selected)";
   document.querySelector(".pwa-root")!.append(probe);
-  const accent = getComputedStyle(probe).color;
-  const accentWash = getComputedStyle(probe).backgroundColor;
+  const ink = getComputedStyle(probe).color;
+  const selectedBackground = getComputedStyle(probe).backgroundColor;
 
   await screen.getByRole("button", { name: "Add image" }).click();
   const choose = screen.getByRole("menuitem", { name: "Choose image" });
@@ -399,14 +400,14 @@ test("uses 14px action text in composer menus and keeps the current model and th
     await screen.getByRole("menuitem", { name: entry }).click();
     const selected = screen.getByRole("menuitem", { name: current }).element() as HTMLElement;
     const unselected = screen.getByRole("menuitem", { name: alternative }).element() as HTMLElement;
-    await expect.poll(() => getComputedStyle(selected).backgroundColor).toBe(accentWash);
-    expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).color).toBe(accent);
+    await expect.poll(() => getComputedStyle(selected).backgroundColor).toBe(selectedBackground);
+    expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).color).toBe(ink);
     expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).fontSize).toBe("14px");
-    expect(getComputedStyle(unselected).backgroundColor).not.toBe(accentWash);
+    expect(getComputedStyle(unselected).backgroundColor).not.toBe(selectedBackground);
     await userEvent.hover(unselected);
     unselected.focus();
-    await expect.poll(() => getComputedStyle(selected).backgroundColor).toBe(accentWash);
-    expect(getComputedStyle(unselected).backgroundColor).not.toBe(accentWash);
+    await expect.poll(() => getComputedStyle(selected).backgroundColor).toBe(selectedBackground);
+    expect(getComputedStyle(unselected).backgroundColor).not.toBe(selectedBackground);
     await screen.getByRole("menuitem", { name: "Back", exact: true }).click();
   }
   probe.remove();

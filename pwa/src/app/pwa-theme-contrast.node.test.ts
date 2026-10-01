@@ -39,9 +39,18 @@ function ratio(theme: Theme, foreground: string, background: string): number {
   return (high! + 0.05) / (low! + 0.05);
 }
 
-const neutralSurfaces = ["bg", "surface", "panel", "message", "hover", "neutral-active", "disabled-bg", "accent-wash"];
+const neutralSurfaces = ["bg", "surface", "panel", "message", "hover", "selected", "neutral-active", "disabled-bg"];
+// 中性角色不带色相，颜色只出现在主色、状态色与语法色上。
+const neutralRoles = [...neutralSurfaces, "ink", "secondary", "soft-ink", "line", "control-line", "code-bg", "code-muted", "code-ink"];
 
 describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_name, theme) => {
+  test("keeps every neutral role achromatic", () => {
+    for (const role of neutralRoles) {
+      const value = theme[`--pwa-${role}`] ?? "";
+      expect(value, role).toMatch(/^#([0-9a-f]{2})\1\1$/i);
+    }
+  });
+
   test("keeps every text level readable on every neutral surface", () => {
     for (const surface of neutralSurfaces) {
       expect(ratio(theme, "ink", surface), `ink on ${surface}`).toBeGreaterThanOrEqual(4.5);
@@ -57,12 +66,14 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
       expect(ratio(theme, "hover", surface), `hover on ${surface}`).toBeGreaterThanOrEqual(1.1);
     }
     expect(ratio(theme, "neutral-active", "hover")).toBeGreaterThanOrEqual(1.08);
-    expect(ratio(theme, "accent-wash", "panel")).toBeGreaterThanOrEqual(1.14);
+    expect(ratio(theme, "selected", "panel")).toBeGreaterThanOrEqual(1.14);
+    expect(theme["--pwa-selected"]).not.toBe(theme["--pwa-hover"]);
     expect(theme["--pwa-disabled-bg"]).not.toBe(theme["--pwa-hover"]);
   });
 
   test("keeps accent, focus and control boundaries legible", () => {
-    for (const surface of ["bg", "surface", "panel", "accent-wash"]) {
+    // 文字按钮悬停时以 accent 文字落在 hover 底上。
+    for (const surface of ["bg", "surface", "panel", "hover"]) {
       expect(ratio(theme, "accent", surface), `accent on ${surface}`).toBeGreaterThanOrEqual(4.5);
     }
     for (const fill of ["accent", "accent-hover", "accent-active"]) {

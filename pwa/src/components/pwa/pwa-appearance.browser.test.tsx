@@ -23,7 +23,7 @@ test("supports a persisted light/dark override and returning to System", async (
   await expect.element(screen.getByRole("button", { name: "Dark" })).toBeVisible();
   expect(document.documentElement.getAttribute("data-mantine-color-scheme")).toBe("dark");
   expect(window.localStorage.getItem("pi-reach-appearance")).toBe("dark");
-  expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-bg").trim().toUpperCase()).toBe("#202325");
+  expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-bg").trim().toUpperCase()).toBe("#1E1E1E");
 
   await screen.getByRole("button", { name: "Light" }).click();
   expect(document.documentElement.getAttribute("data-mantine-color-scheme")).toBe("light");

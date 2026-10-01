@@ -99,10 +99,10 @@
 
 .pwa-root .pwa-peer-card.active {
   border-color: var(--pwa-line);
-  background: var(--pwa-accent-wash);
+  background: var(--pwa-selected);
 }
 
-.pwa-root .pwa-peer-card:hover {
+.pwa-root .pwa-peer-card:not(.active):hover {
   background: var(--pwa-hover);
 }
 
@@ -145,8 +145,7 @@
 }
 
 .pwa-root .pwa-peer-icon.online {
-  color: var(--pwa-accent);
-  border-color: color-mix(in srgb, var(--pwa-accent) 40%, var(--pwa-line));
+  color: var(--pwa-ink);
 }
 
 .pwa-root .pwa-computer-select .pwa-peer-copy {
@@ -202,14 +201,14 @@
   border: 1px solid var(--pwa-line);
   border-radius: 999px;
   color: var(--pwa-secondary);
+  /* 状态标签只用描边与文字，不继承 Mantine 浅色变体的底色；运行中另用状态轻底。 */
+  background: transparent;
   font-size: 12px;
   font-weight: 600;
 }
 
 .pwa-root .pwa-presence-label.online {
-  color: var(--pwa-accent);
-  border-color: color-mix(in srgb, var(--pwa-accent) 42%, var(--pwa-line));
-  background: var(--pwa-accent-wash);
+  color: var(--pwa-ink);
 }
 
 .pwa-root .pwa-presence-label.partial {
@@ -218,11 +217,8 @@
   background: var(--pwa-running-wash);
 }
 
-.pwa-root .pwa-presence-label.checking,
 .pwa-root .pwa-current-label {
-  color: var(--pwa-accent);
-  border-color: color-mix(in srgb, var(--pwa-accent) 42%, var(--pwa-line));
-  background: var(--pwa-accent-wash);
+  color: var(--pwa-ink);
 }
 
 .pwa-root .pwa-peer-menu-trigger {
@@ -240,7 +236,7 @@
 }
 
 .pwa-root .pwa-peer-menu-trigger:hover:not(:disabled) {
-  color: var(--pwa-accent);
+  color: var(--pwa-ink);
   background: transparent;
 }
 

@@ -1,29 +1,30 @@
 /*
  * Pi Reach 设计 token：颜色角色、字体、圆角、层级与动效。
+ * 中性角色均为无彩灰（R=G=B）；主色只用于操作、链接、焦点与在线圆点，选中态用中性 selected。
  * 取值与约束见 docs/DESIGN.md；颜色对比度约束由 pwa-theme-contrast 测试按本文件计算。
  */
 :root,
 :root[data-mantine-color-scheme="light"] {
   color-scheme: light;
-  --pwa-bg: #F8F9F8;
+  --pwa-bg: #FFFFFF;
   --pwa-surface: #FFFFFF;
-  --pwa-panel: #F0F2F2;
-  --pwa-message: #EDF1F2;
-  --pwa-hover: #E2E7E9;
-  --pwa-neutral-active: #D8DFE1;
-  --pwa-disabled-bg: #ECEFF0;
-  --pwa-ink: #272B2D;
-  --pwa-secondary: #5C6166;
-  --pwa-soft-ink: #434B50;
-  --pwa-line: #DCE1E2;
-  --pwa-control-line: #7B8990;
-  --pwa-accent: #4C658D;
-  --pwa-accent-hover: #425A80;
-  --pwa-accent-active: #384E72;
+  --pwa-panel: #F7F7F7;
+  --pwa-message: #F2F2F2;
+  --pwa-hover: #EBEBEB;
+  --pwa-selected: #E5E5E5;
+  --pwa-neutral-active: #DEDEDE;
+  --pwa-disabled-bg: #F0F0F0;
+  --pwa-ink: #2A2A2A;
+  --pwa-secondary: #606060;
+  --pwa-soft-ink: #4A4A4A;
+  --pwa-line: #E0E0E0;
+  --pwa-control-line: #878787;
+  --pwa-accent: #446396;
+  --pwa-accent-hover: #395687;
+  --pwa-accent-active: #2E4A78;
   --pwa-on-accent: #FFFFFF;
-  --pwa-accent-wash: #DBE4F0;
   --pwa-scrim: #00000047;
-  --pwa-shadow-color: #101A221A;
+  --pwa-shadow-color: #0000001A;
   --pwa-complete: #347953;
   --pwa-complete-wash: #EAF3EC;
   --pwa-running: #90611F;
@@ -33,41 +34,41 @@
   --pwa-error-hover: #973B34;
   --pwa-error-active: #82312C;
   --pwa-on-status: #FFFFFF;
-  --pwa-code-bg: #23282D;
-  --pwa-code-muted: #BAC4C8;
+  --pwa-code-bg: #272727;
+  --pwa-code-muted: #C2C2C2;
   /* 成段代码与工具输出：浅色主题在 panel 上，语法色取浅色版本。 */
   --pwa-code-surface: var(--pwa-panel);
   --pwa-code-text: var(--pwa-ink);
   --pwa-code-dim: var(--pwa-secondary);
-  --pwa-syntax-keyword: #4C658D;
+  --pwa-syntax-keyword: #446396;
   --pwa-syntax-string: #347953;
   --pwa-syntax-number: #90611F;
   --pwa-syntax-error: #AE463E;
-  --pwa-syntax-comment: #5C6166;
-  --pwa-syntax-punctuation: #434B50;
+  --pwa-syntax-comment: #606060;
+  --pwa-syntax-punctuation: #4A4A4A;
   --pwa-syntax-function: #6A5590;
   --pwa-syntax-type: #2C6E75;
 }
 
 :root[data-mantine-color-scheme="dark"] {
   color-scheme: dark;
-  --pwa-bg: #202325;
-  --pwa-surface: #2A2E30;
-  --pwa-panel: #25292B;
-  --pwa-message: #303639;
-  --pwa-hover: #303638;
-  --pwa-neutral-active: #394145;
-  --pwa-disabled-bg: #272B2D;
-  --pwa-ink: #EEF0F1;
-  --pwa-secondary: #B6BDC1;
-  --pwa-soft-ink: #CDD5D8;
-  --pwa-line: #40474B;
-  --pwa-control-line: #79868C;
-  --pwa-accent: #A9C3E6;
-  --pwa-accent-hover: #BAD0EB;
-  --pwa-accent-active: #CBDAF0;
-  --pwa-on-accent: #172638;
-  --pwa-accent-wash: #303D50;
+  --pwa-bg: #1E1E1E;
+  --pwa-surface: #2D2D2D;
+  --pwa-panel: #282828;
+  --pwa-message: #353535;
+  --pwa-hover: #353535;
+  --pwa-selected: #3A3A3A;
+  --pwa-neutral-active: #404040;
+  --pwa-disabled-bg: #2A2A2A;
+  --pwa-ink: #F0F0F0;
+  --pwa-secondary: #BCBCBC;
+  --pwa-soft-ink: #D4D4D4;
+  --pwa-line: #464646;
+  --pwa-control-line: #848484;
+  --pwa-accent: #98B8E6;
+  --pwa-accent-hover: #A6C3ED;
+  --pwa-accent-active: #B4CEF4;
+  --pwa-on-accent: #142237;
   --pwa-scrim: #0000008C;
   --pwa-shadow-color: #0000004D;
   --pwa-complete: #95CBA8;
@@ -78,19 +79,19 @@
   --pwa-error-wash: #422F30;
   --pwa-error-hover: #F4B2AC;
   --pwa-error-active: #F8C4BD;
-  --pwa-on-status: #172638;
-  --pwa-code-bg: #151A1E;
-  --pwa-code-muted: #B6C0C5;
+  --pwa-on-status: #1E1E1E;
+  --pwa-code-bg: #191919;
+  --pwa-code-muted: #BEBEBE;
   /* 深色主题的成段代码与工具输出在 code-bg 上，语法色取深色版本。 */
   --pwa-code-surface: var(--pwa-code-bg);
   --pwa-code-text: var(--pwa-code-ink);
   --pwa-code-dim: var(--pwa-code-muted);
-  --pwa-syntax-keyword: #A9C3E6;
+  --pwa-syntax-keyword: #98B8E6;
   --pwa-syntax-string: #95CBA8;
   --pwa-syntax-number: #DFBA77;
   --pwa-syntax-error: #EFA39B;
-  --pwa-syntax-comment: #BAC4C8;
-  --pwa-syntax-punctuation: #CDD5D8;
+  --pwa-syntax-comment: #C2C2C2;
+  --pwa-syntax-punctuation: #D4D4D4;
   --pwa-syntax-function: #D2C3EE;
   --pwa-syntax-type: #8FD0D6;
 }
@@ -99,23 +100,23 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-mantine-color-scheme]) {
     color-scheme: dark;
-    --pwa-bg: #202325;
-    --pwa-surface: #2A2E30;
-    --pwa-panel: #25292B;
-    --pwa-message: #303639;
-    --pwa-hover: #303638;
-    --pwa-neutral-active: #394145;
-    --pwa-disabled-bg: #272B2D;
-    --pwa-ink: #EEF0F1;
-    --pwa-secondary: #B6BDC1;
-    --pwa-soft-ink: #CDD5D8;
-    --pwa-line: #40474B;
-    --pwa-control-line: #79868C;
-    --pwa-accent: #A9C3E6;
-    --pwa-accent-hover: #BAD0EB;
-    --pwa-accent-active: #CBDAF0;
-    --pwa-on-accent: #172638;
-    --pwa-accent-wash: #303D50;
+    --pwa-bg: #1E1E1E;
+    --pwa-surface: #2D2D2D;
+    --pwa-panel: #282828;
+    --pwa-message: #353535;
+    --pwa-hover: #353535;
+    --pwa-selected: #3A3A3A;
+    --pwa-neutral-active: #404040;
+    --pwa-disabled-bg: #2A2A2A;
+    --pwa-ink: #F0F0F0;
+    --pwa-secondary: #BCBCBC;
+    --pwa-soft-ink: #D4D4D4;
+    --pwa-line: #464646;
+    --pwa-control-line: #848484;
+    --pwa-accent: #98B8E6;
+    --pwa-accent-hover: #A6C3ED;
+    --pwa-accent-active: #B4CEF4;
+    --pwa-on-accent: #142237;
     --pwa-scrim: #0000008C;
     --pwa-shadow-color: #0000004D;
     --pwa-complete: #95CBA8;
@@ -126,18 +127,18 @@
     --pwa-error-wash: #422F30;
     --pwa-error-hover: #F4B2AC;
     --pwa-error-active: #F8C4BD;
-    --pwa-on-status: #172638;
-    --pwa-code-bg: #151A1E;
-    --pwa-code-muted: #B6C0C5;
+    --pwa-on-status: #1E1E1E;
+    --pwa-code-bg: #191919;
+    --pwa-code-muted: #BEBEBE;
     --pwa-code-surface: var(--pwa-code-bg);
     --pwa-code-text: var(--pwa-code-ink);
     --pwa-code-dim: var(--pwa-code-muted);
-    --pwa-syntax-keyword: #A9C3E6;
+    --pwa-syntax-keyword: #98B8E6;
     --pwa-syntax-string: #95CBA8;
     --pwa-syntax-number: #DFBA77;
     --pwa-syntax-error: #EFA39B;
-    --pwa-syntax-comment: #BAC4C8;
-    --pwa-syntax-punctuation: #CDD5D8;
+    --pwa-syntax-comment: #C2C2C2;
+    --pwa-syntax-punctuation: #D4D4D4;
     --pwa-syntax-function: #D2C3EE;
     --pwa-syntax-type: #8FD0D6;
   }
@@ -145,8 +146,8 @@
 
 :root {
   /* 深色代码底在两种主题下都是深色；其上的强调色与状态色固定使用深色版本。 */
-  --pwa-code-ink: #EFF2F4;
-  --pwa-code-accent: #A9C3E6;
+  --pwa-code-ink: #F2F2F2;
+  --pwa-code-accent: #98B8E6;
   --pwa-code-complete: #95CBA8;
   --pwa-code-running: #DFBA77;
   --pwa-code-error: #EFA39B;

@@ -14,9 +14,9 @@ function toAppearance(colorScheme: MantineColorScheme): PwaAppearance {
   return colorScheme === "auto" ? "system" : colorScheme;
 }
 
-// 浏览器主题色跟随 bg token（浅色 #F8F9F8、深色 #202325）。
-const LIGHT_THEME_COLOR = "#F8F9F8";
-const DARK_THEME_COLOR = "#202325";
+// 浏览器主题色跟随 bg token（浅色 #FFFFFF、深色 #1E1E1E）。
+const LIGHT_THEME_COLOR = "#FFFFFF";
+const DARK_THEME_COLOR = "#1E1E1E";
 
 function themeColorFor(appearance: PwaAppearance): string {
   if (appearance === "light") return LIGHT_THEME_COLOR;
