@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-IMAGE="${IMAGE:-${REGISTRY_NAMESPACE:-pi-reach-local}/pi-reach-site}"
+IMAGE="${IMAGE:-${REGISTRY_NAMESPACE:-pi-reach-local}/pi-reach-pwa}"
 VERSION="${1:-}"
 PLATFORMS="linux/amd64,linux/arm64"
 BUILDER="multiarch"

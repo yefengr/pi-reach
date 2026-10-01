@@ -95,7 +95,7 @@ Relay 地址使用 `https://`（本地调试可用 `http://`），两端会自�
 ```bash
 docker build -f relay/Dockerfile -t pi-reach-relay .
 docker build -f pwa/Dockerfile -t pi-reach-pwa .
-RELAY_IMAGE=pi-reach-relay SITE_IMAGE=pi-reach-pwa docker compose up -d
+RELAY_IMAGE=pi-reach-relay PWA_IMAGE=pi-reach-pwa docker compose up -d
 ```
 
 Compose 只监听本机回环地址（Relay 为 `127.0.0.1:3000`，PWA 为 `127.0.0.1:3001`），需要在前面加一层 HTTPS 反向代理，例如 Caddy：

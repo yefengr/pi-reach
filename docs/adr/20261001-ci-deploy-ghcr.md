@@ -17,11 +17,12 @@ Extension 已由 Release 工作流在版本号合并后自动提交 npm 待审�
 
 ## 决策
 
-1. 新增 Deploy 工作流：`relay/package.json` 或 `pwa/package.json` 的版本号变更合并到 `main` 后（或手动运行），在 GitHub 托管 runner 上构建服务器架构的镜像，以 `GITHUB_TOKEN` 推送到 `ghcr.io/<owner>/pi-reach-relay|pi-reach-site:vX.Y.Z`，并附 GitHub 构建来源证明。GHCR 镜像包设为公开，服务器拉取不需要凭据。
+1. 新增 Deploy 工作流：`relay/package.json` 或 `pwa/package.json` 的版本号变更合并到 `main` 后（或手动运行），在 GitHub 托管 runner 上构建服务器架构的镜像，以 `GITHUB_TOKEN` 推送到 `ghcr.io/<owner>/pi-reach-relay|pi-reach-pwa:vX.Y.Z`，并附 GitHub 构建来源证明。GHCR 镜像包设为公开，服务器拉取不需要凭据。
 2. 部署作业使用 `production` Environment：需维护者批准，只允许 `main`，SSH 私钥、主机公钥、主机与账号均为该环境的 Secrets。
-3. 服务器的 `authorized_keys` 以 `restrict` 与 `command=` 把这把专用密钥限定为执行 `scripts/deploy-from-ci.sh`。脚本只接受 `deploy <site|relay> <前缀>/pi-reach-<site|relay>:vX.Y.Z@sha256:<摘要>`：按摘要拉取并打版本标签，只更新所选服务；健康检查失败时恢复部署前的镜像。它与本机脚本共用部署锁，不修改 `docker-compose.yml`、Caddy 或自身。
+3. 服务器的 `authorized_keys` 以 `restrict` 与 `command=` 把这把专用密钥限定为执行 `scripts/deploy-from-ci.sh`。脚本只接受 `deploy <pwa|relay> <前缀>/pi-reach-<pwa|relay>:vX.Y.Z@sha256:<摘要>`：按摘要拉取并打版本标签，只更新所选服务；健康检查失败时恢复部署前的镜像。它与本机脚本共用部署锁，不修改 `docker-compose.yml`、Caddy 或自身。
 4. 公网检查通过后，工作流在本次提交上创建注解标签 `relay-vX.Y.Z`／`pwa-vX.Y.Z` 与 GitHub Release（不标记 Latest）。
 5. 本机 `deploy-self-hosted.sh` 保留，用于备用发布、更新 Compose 文件与首次初始化。
+6. 借新建镜像仓库的时机，PWA 的部署名称统一为 `pwa`：Compose 服务 `pwa`、容器与镜像 `pi-reach-pwa`、变量 `PWA_VERSION`／`PWA_IMAGE`，替代沿用自旧目录名的 `site`／`pi-reach-site`／`SITE_*`，与 `pwa/` 目录和 `pwa-vX.Y.Z` 标签一致。
 
 ## 后果
 
@@ -29,4 +30,5 @@ Extension 已由 Release 工作流在版本号合并后自动提交 npm 待审�
 - 「服务器不从镜像仓库拉取应用镜像」只对本机脚本成立；自动部署依赖服务器能访问 GHCR。
 - GitHub 中保存一把能在服务器上执行部署脚本的私钥，其权限受 Environment 审批、分支限制和 `command=` 约束；部署账号仍在 docker 组内，脚本被替换即可越权，因此脚本只由维护者手工安装。
 - `docker-compose.yml` 或 `deploy-from-ci.sh` 变更后，须用本机脚本或手工同步到服务器，自动部署不会带上它们。
+- 改名需要一次迁移：用本机脚本部署一次 PWA，上传新的 `docker-compose.yml`；`up --remove-orphans` 先移除旧容器 `pi-reach-site` 再启动 `pi-reach-pwa`，PWA 会短暂不可用。服务器与本机上旧的 `pi-reach-site` 镜像不再被清理逻辑覆盖，需手工删除。
 - 协议变更仍须先部署 PWA 再批准 Extension 的 npm 待审版本（[ADR-20260927](20260927-run-end-event.md)）。

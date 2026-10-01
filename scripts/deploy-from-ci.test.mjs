@@ -10,11 +10,11 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = join(REPO_ROOT, 'scripts', 'deploy-from-ci.sh');
 const PREFIX = 'ghcr.io/example';
 const DIGEST = `sha256:${'a'.repeat(64)}`;
-const SITE_REPO = `${PREFIX}/pi-reach-site`;
+const PWA_REPO = `${PREFIX}/pi-reach-pwa`;
 const RELAY_REPO = `${PREFIX}/pi-reach-relay`;
-const SITE_TARGET = `${SITE_REPO}:v0.0.4`;
-const SITE_REQUEST = `deploy site ${SITE_TARGET}@${DIGEST}`;
-const PREVIOUS_SITE = `${SITE_REPO}:v0.0.3`;
+const PWA_TARGET = `${PWA_REPO}:v0.0.4`;
+const PWA_REQUEST = `deploy pwa ${PWA_TARGET}@${DIGEST}`;
+const PREVIOUS_PWA = `${PWA_REPO}:v0.0.3`;
 
 // docker 与 docker-compose 的替身：记录调用，并在状态文件里维护容器当前镜像、健康镜像与本地镜像列表。
 const FAKE_CLI = String.raw`#!/usr/bin/env node
@@ -26,14 +26,14 @@ const stateFile = process.env.FAKE_STATE;
 const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
 const save = () => fs.writeFileSync(stateFile, JSON.stringify(state));
 fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({
-  name, args, cwd: process.cwd(), relayImage: process.env.RELAY_IMAGE, siteImage: process.env.SITE_IMAGE,
+  name, args, cwd: process.cwd(), relayImage: process.env.RELAY_IMAGE, pwaImage: process.env.PWA_IMAGE,
 }) + '\n');
 
 if (name === 'docker-compose') {
   if (args[0] === 'config' && process.env.FAKE_COMPOSE_CONFIG_FAIL) process.exit(1);
   if (args[0] === 'up') {
     const service = args[args.length - 1];
-    state.current['pi-reach-' + service] = service === 'relay' ? process.env.RELAY_IMAGE : process.env.SITE_IMAGE;
+    state.current['pi-reach-' + service] = service === 'relay' ? process.env.RELAY_IMAGE : process.env.PWA_IMAGE;
     save();
   }
   process.exit(0);
@@ -69,7 +69,7 @@ if (args[0] === 'rmi') {
 process.exit(0);
 `;
 
-function setup({ current = { 'pi-reach-site': PREVIOUS_SITE }, healthy = [SITE_TARGET, PREVIOUS_SITE], images = [] } = {}) {
+function setup({ current = { 'pi-reach-pwa': PREVIOUS_PWA }, healthy = [PWA_TARGET, PREVIOUS_PWA], images = [] } = {}) {
   // macOS 的临时目录经过符号链接，取真实路径以便与子进程的工作目录比较。
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'pi-reach-deploy-from-ci-')));
   const bin = join(root, 'bin');
@@ -114,18 +114,20 @@ test('rejects any request other than one versioned image by digest, before touch
   const requests = [
     '',
     'deploy',
-    `deploy site`,
-    `${SITE_REQUEST} extra`,
-    `run site ${SITE_TARGET}@${DIGEST}`,
-    `deploy web ${SITE_TARGET}@${DIGEST}`,
-    `deploy relay ${SITE_TARGET}@${DIGEST}`,
-    `deploy site ghcr.io/other/pi-reach-site:v0.0.4@${DIGEST}`,
-    `deploy site ${SITE_REPO}:latest@${DIGEST}`,
-    `deploy site ${SITE_TARGET}`,
-    `deploy site ${SITE_TARGET}@sha256:${'A'.repeat(64)}`,
-    `deploy site ${SITE_TARGET}@${DIGEST};reboot`,
-    `deploy site ${SITE_TARGET}@${DIGEST}@${DIGEST}`,
-    `deploy site $(reboot)`,
+    `deploy pwa`,
+    `${PWA_REQUEST} extra`,
+    `run pwa ${PWA_TARGET}@${DIGEST}`,
+    `deploy web ${PWA_TARGET}@${DIGEST}`,
+    `deploy site ${PWA_TARGET}@${DIGEST}`,
+    `deploy site ${PREFIX}/pi-reach-site:v0.0.4@${DIGEST}`,
+    `deploy relay ${PWA_TARGET}@${DIGEST}`,
+    `deploy pwa ghcr.io/other/pi-reach-pwa:v0.0.4@${DIGEST}`,
+    `deploy pwa ${PWA_REPO}:latest@${DIGEST}`,
+    `deploy pwa ${PWA_TARGET}`,
+    `deploy pwa ${PWA_TARGET}@sha256:${'A'.repeat(64)}`,
+    `deploy pwa ${PWA_TARGET}@${DIGEST};reboot`,
+    `deploy pwa ${PWA_TARGET}@${DIGEST}@${DIGEST}`,
+    `deploy pwa $(reboot)`,
   ];
   for (const request of requests) {
     const context = setup();
@@ -141,21 +143,21 @@ test('rejects any request other than one versioned image by digest, before touch
   }
 });
 
-test('pulls the site image by digest and updates only the site service', () => {
+test('pulls the PWA image by digest and updates only the PWA service', () => {
   const context = setup();
   try {
-    const result = run(context, SITE_REQUEST);
+    const result = run(context, PWA_REQUEST);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /✓ Deployed site ghcr\.io\/example\/pi-reach-site:v0\.0\.4/);
+    assert.match(result.stdout, /✓ Deployed pwa ghcr\.io\/example\/pi-reach-pwa:v0\.0\.4/);
     const docker = result.calls.filter((call) => call.name === 'docker').map((call) => call.args.join(' '));
-    assert.ok(docker.includes(`pull --quiet ${SITE_REPO}@${DIGEST}`));
-    assert.ok(docker.includes(`tag ${SITE_REPO}@${DIGEST} ${SITE_TARGET}`));
+    assert.ok(docker.includes(`pull --quiet ${PWA_REPO}@${DIGEST}`));
+    assert.ok(docker.includes(`tag ${PWA_REPO}@${DIGEST} ${PWA_TARGET}`));
     const [up] = composeUps(result.calls);
-    assert.deepEqual(up.args, ['up', '-d', '--pull', 'never', 'site']);
-    assert.equal(up.siteImage, SITE_TARGET);
+    assert.deepEqual(up.args, ['up', '-d', '--pull', 'never', '--remove-orphans', 'pwa']);
+    assert.equal(up.pwaImage, PWA_TARGET);
     assert.equal(up.relayImage, 'invalid.invalid/pi-reach-relay-unselected:never');
     assert.equal(up.cwd, context.remoteDir);
-    assert.equal(result.state.current['pi-reach-site'], SITE_TARGET);
+    assert.equal(result.state.current['pi-reach-pwa'], PWA_TARGET);
     assert.equal(existsSync(lockDir(context)), false);
   } finally {
     rmSync(context.root, { recursive: true, force: true });
@@ -171,20 +173,20 @@ test('deploys the relay through RELAY_IMAGE', () => {
     const [up] = composeUps(result.calls);
     assert.deepEqual(up.args.slice(-1), ['relay']);
     assert.equal(up.relayImage, target);
-    assert.equal(up.siteImage, 'invalid.invalid/pi-reach-site-unselected:never');
+    assert.equal(up.pwaImage, 'invalid.invalid/pi-reach-pwa-unselected:never');
   } finally {
     rmSync(context.root, { recursive: true, force: true });
   }
 });
 
 test('restores the previous image and fails when the new image never becomes healthy', () => {
-  const context = setup({ healthy: [PREVIOUS_SITE] });
+  const context = setup({ healthy: [PREVIOUS_PWA] });
   try {
-    const result = run(context, SITE_REQUEST);
+    const result = run(context, PWA_REQUEST);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /restored to ghcr\.io\/example\/pi-reach-site:v0\.0\.3/);
-    assert.deepEqual(composeUps(result.calls).map((call) => call.siteImage), [SITE_TARGET, PREVIOUS_SITE]);
-    assert.equal(result.state.current['pi-reach-site'], PREVIOUS_SITE);
+    assert.match(result.stderr, /restored to ghcr\.io\/example\/pi-reach-pwa:v0\.0\.3/);
+    assert.deepEqual(composeUps(result.calls).map((call) => call.pwaImage), [PWA_TARGET, PREVIOUS_PWA]);
+    assert.equal(result.state.current['pi-reach-pwa'], PREVIOUS_PWA);
     assert.equal(existsSync(lockDir(context)), false);
   } finally {
     rmSync(context.root, { recursive: true, force: true });
@@ -194,7 +196,7 @@ test('restores the previous image and fails when the new image never becomes hea
 test('reports a failed restore distinctly so the server gets checked', () => {
   const context = setup({ healthy: [] });
   try {
-    const result = run(context, SITE_REQUEST);
+    const result = run(context, PWA_REQUEST);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /restoring .* did not become healthy/);
   } finally {
@@ -206,7 +208,7 @@ test('refuses to run while another deployment holds the shared lock', () => {
   const context = setup();
   try {
     mkdirSync(lockDir(context));
-    const result = run(context, SITE_REQUEST);
+    const result = run(context, PWA_REQUEST);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Concurrent deployment rejected/);
     assert.deepEqual(result.calls, []);
@@ -220,7 +222,7 @@ test('stops before pulling when the server has no Compose file', () => {
   const context = setup();
   try {
     rmSync(join(context.remoteDir, 'docker-compose.yml'));
-    const result = run(context, SITE_REQUEST);
+    const result = run(context, PWA_REQUEST);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /run a local deployment once/);
     assert.deepEqual(result.calls, []);
@@ -230,13 +232,13 @@ test('stops before pulling when the server has no Compose file', () => {
 });
 
 test('keeps the deployed tag plus the newest older tags of the same repository', () => {
-  const images = ['v0.0.1', 'v0.0.2', 'v0.0.3'].map((tag, index) => ({ ref: `${SITE_REPO}:${tag}`, created: `2026-09-2${index} 12:00:00`, id: `sha256:${tag}` }));
+  const images = ['v0.0.1', 'v0.0.2', 'v0.0.3'].map((tag, index) => ({ ref: `${PWA_REPO}:${tag}`, created: `2026-09-2${index} 12:00:00`, id: `sha256:${tag}` }));
   const context = setup({ images });
   try {
-    const result = run(context, SITE_REQUEST);
+    const result = run(context, PWA_REQUEST);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Removed 1 old image/);
-    assert.deepEqual(result.state.images.map((image) => image.ref).sort(), [`${SITE_REPO}:v0.0.2`, PREVIOUS_SITE, SITE_TARGET]);
+    assert.deepEqual(result.state.images.map((image) => image.ref).sort(), [`${PWA_REPO}:v0.0.2`, PREVIOUS_PWA, PWA_TARGET]);
   } finally {
     rmSync(context.root, { recursive: true, force: true });
   }
