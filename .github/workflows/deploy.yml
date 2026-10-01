@@ -1,0 +1,262 @@
+# Deploy：构建 Relay 与 PWA 镜像并推送到 GHCR，经 production 环境审批后部署到自托管服务器。
+# - 触发：推送到 main 且 relay/package.json 或 pwa/package.json 的 version 发生变化；也可在 Actions 页面手动运行并
+#   选择组件（不比较版本号）。对应的 relay-vX.Y.Z／pwa-vX.Y.Z 标签已存在时跳过该组件。
+# - 构建：在 GitHub 托管 runner 上构建服务器架构（默认 linux/amd64，可用仓库变量 DEPLOY_PLATFORM 覆盖）的镜像，
+#   以 GITHUB_TOKEN 推送到 ghcr.io/<owner>/pi-reach-relay|pi-reach-site:vX.Y.Z，并附 GitHub 构建来源证明。
+# - 部署：production Environment 需维护者批准，其 Secrets 提供受限 SSH 密钥。服务器的 authorized_keys 只允许该密钥执行
+#   scripts/deploy-from-ci.sh：按摘要拉取镜像、只更新所选服务，健康检查失败时恢复原镜像。先 Relay 后 PWA。
+# - 收尾：公网检查通过后在本次提交上创建注解标签与 GitHub Release（不标记 Latest）。
+# 一次性配置、首次运行与本机备用流程见 docs/DEPLOYMENT.md「自动部署」。
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths: [relay/package.json, pwa/package.json]
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 要部署的组件
+        type: choice
+        options: [both, relay, pwa]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      relay: ${{ steps.decide.outputs.relay }}
+      relay-version: ${{ steps.decide.outputs.relay-version }}
+      pwa: ${{ steps.decide.outputs.pwa }}
+      pwa-version: ${{ steps.decide.outputs.pwa-version }}
+      image-prefix: ${{ steps.decide.outputs.image-prefix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide what to deploy
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          CHOICE: ${{ inputs.component }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          note() {
+            echo "$1"
+            echo "- $1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          for component in relay pwa; do
+            version="$(jq -r .version "$component/package.json")"
+            selected=true
+            if [ "$EVENT" = workflow_dispatch ]; then
+              case "$CHOICE" in both | "$component") ;; *) selected=false ;; esac
+            elif git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+              previous="$(git show "$PUSH_BEFORE:$component/package.json" 2>/dev/null | jq -r .version 2>/dev/null || true)"
+              if [ "$previous" = "$version" ]; then
+                note "$component 版本仍为 ${version}，跳过。"
+                selected=false
+              fi
+            fi
+            if [ "$selected" = true ] && git rev-parse -q --verify "refs/tags/$component-v$version" >/dev/null; then
+              note "$component-v$version 已发布，跳过。"
+              selected=false
+            fi
+            if [ "$selected" = true ]; then note "部署 $component $version。"; fi
+            echo "$component=$selected" >> "$GITHUB_OUTPUT"
+            echo "$component-version=$version" >> "$GITHUB_OUTPUT"
+          done
+          # GHCR 镜像名必须小写。
+          echo "image-prefix=ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build
+    needs: plan
+    if: needs.plan.outputs.relay == 'true' || needs.plan.outputs.pwa == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      relay-digest: ${{ steps.relay.outputs.digest }}
+      pwa-digest: ${{ steps.pwa.outputs.digest }}
+    env:
+      PLATFORM: ${{ vars.DEPLOY_PLATFORM || 'linux/amd64' }}
+      SOURCE: ${{ github.server_url }}/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Relay
+        id: relay
+        if: needs.plan.outputs.relay == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: relay/Dockerfile
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          tags: ${{ needs.plan.outputs.image-prefix }}/pi-reach-relay:v${{ needs.plan.outputs.relay-version }}
+          labels: |
+            pi-reach.image=relay
+            org.opencontainers.image.source=${{ env.SOURCE }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.plan.outputs.relay-version }}
+
+      - name: Attest Relay
+        if: needs.plan.outputs.relay == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ needs.plan.outputs.image-prefix }}/pi-reach-relay
+          subject-digest: ${{ steps.relay.outputs.digest }}
+          push-to-registry: true
+
+      - name: Build and push PWA
+        id: pwa
+        if: needs.plan.outputs.pwa == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: pwa/Dockerfile
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          tags: ${{ needs.plan.outputs.image-prefix }}/pi-reach-site:v${{ needs.plan.outputs.pwa-version }}
+          labels: |
+            pi-reach.image=site
+            org.opencontainers.image.source=${{ env.SOURCE }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.plan.outputs.pwa-version }}
+
+      - name: Attest PWA
+        if: needs.plan.outputs.pwa == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ needs.plan.outputs.image-prefix }}/pi-reach-site
+          subject-digest: ${{ steps.pwa.outputs.digest }}
+          push-to-registry: true
+
+  deploy:
+    name: deploy
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.PWA_URL }}
+    permissions:
+      contents: write
+    env:
+      PREFIX: ${{ needs.plan.outputs.image-prefix }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      RELAY_URL: ${{ vars.RELAY_URL }}
+      PWA_URL: ${{ vars.PWA_URL }}
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          for name in DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_HOST DEPLOY_USER; do
+            if [ -z "${!name}" ]; then echo "production 环境缺少 Secret：$name"; exit 1; fi
+          done
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > "$RUNNER_TEMP/deploy-lib.sh" <<'EOF'
+          # 服务器端的 authorized_keys 把这把密钥限定为执行 deploy-from-ci.sh，这里发送的只是请求参数。
+          remote_deploy() {
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ConnectTimeout=15 -o ServerAliveInterval=30 \
+              -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "deploy $1 $2"
+          }
+          # 重新运行时，已在本次运行中部署并打过标签的组件直接跳过。
+          released() {
+            gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1-v$2" >/dev/null 2>&1
+          }
+          check_url() {
+            [ -n "$1" ] || return 0
+            curl -fsS --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 10 --max-time 30 "$1" >/dev/null
+          }
+          # 在本次提交上创建注解标签与 Release；说明列出自上一个同组件标签以来涉及该组件的提交。
+          release() {
+            local component="$1" title="$2" version="$3" image="$4" digest="$5" url="$6"
+            shift 6
+            local tag="$component-v$version" previous changes tag_sha
+            previous="$(git describe --tags --abbrev=0 --match "$component-v*" "$GITHUB_SHA" 2>/dev/null || true)"
+            changes="$(git log --no-merges --format='- %s' "${previous:+$previous..}$GITHUB_SHA" -- "$@" | grep -v '^- chore: 发布' || true)"
+            {
+              echo "线上地址：${url:-未配置}（镜像 \`$image\`）"
+              echo
+              echo "镜像摘要 \`$digest\`，部署记录：$RUN_URL"
+              echo
+              echo "## 变更"
+              echo
+              echo "${changes:-- 自 ${previous:-首个版本} 以来没有涉及该组件的提交。}"
+            } > "$RUNNER_TEMP/$tag.md"
+            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags" -f tag="$tag" -f message="$title $version" -f object="$GITHUB_SHA" -f type=commit --jq .sha)"
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$tag_sha" >/dev/null
+            gh release create "$tag" --verify-tag --title "$title $version" --notes-file "$RUNNER_TEMP/$tag.md" --latest=false
+            echo "- $title $version 已部署：\`$image\`" >> "$GITHUB_STEP_SUMMARY"
+          }
+          EOF
+
+      - name: Deploy Relay
+        if: needs.plan.outputs.relay == 'true'
+        env:
+          VERSION: ${{ needs.plan.outputs.relay-version }}
+          DIGEST: ${{ needs.build.outputs.relay-digest }}
+        run: |
+          . "$RUNNER_TEMP/deploy-lib.sh"
+          if released relay "$VERSION"; then echo "relay-v$VERSION 已发布，跳过。"; exit 0; fi
+          remote_deploy relay "$PREFIX/pi-reach-relay:v$VERSION@$DIGEST"
+          check_url "${RELAY_URL:+${RELAY_URL%/}/health}"
+          release relay Relay "$VERSION" "$PREFIX/pi-reach-relay:v$VERSION" "$DIGEST" "$RELAY_URL" relay packages/protocol
+
+      - name: Deploy PWA
+        if: needs.plan.outputs.pwa == 'true'
+        env:
+          VERSION: ${{ needs.plan.outputs.pwa-version }}
+          DIGEST: ${{ needs.build.outputs.pwa-digest }}
+        run: |
+          . "$RUNNER_TEMP/deploy-lib.sh"
+          if released pwa "$VERSION"; then echo "pwa-v$VERSION 已发布，跳过。"; exit 0; fi
+          remote_deploy site "$PREFIX/pi-reach-site:v$VERSION@$DIGEST"
+          check_url "$PWA_URL"
+          release pwa PWA "$VERSION" "$PREFIX/pi-reach-site:v$VERSION" "$DIGEST" "$PWA_URL" pwa packages/protocol
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

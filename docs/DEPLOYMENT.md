@@ -1,13 +1,13 @@
 # Pi Reach 自托管部署
 
-本文记录从本机发布 Relay/PWA 到远程 Linux 服务器的可重复流程。自 2026-09-30 起只保留一个环境：原隔离测试服务（`site-test`、`relay-test`）、test/promote 状态文件和旧域名均已移除，部署直接更新线上服务。部署命令只选择 scope：
+本文记录把 Relay/PWA 发布到远程 Linux 服务器的可重复流程：常规版本由 GitHub Actions 的 Deploy 工作流构建、经审批后部署（见「自动部署」），本机脚本用于备用发布、更新 Compose 文件与首次初始化。自 2026-09-30 起只保留一个环境：原隔离测试服务（`site-test`、`relay-test`）、test/promote 状态文件和旧域名均已移除，部署直接更新线上服务。本机部署命令只选择 scope：
 
 ```text
 ./scripts/deploy-self-hosted.sh [pwa|relay|both]
   本机构建 -> SSH 传输 -> 更新所选服务 -> 健康检查与公网检查 -> 清理旧镜像
 ```
 
-省略 scope 时默认 `both`。部署没有隔离测试阶段，发布前须在本机完成受影响的验证（见仓库根 `AGENTS.md` 的常用验证）。默认不推送 Docker Hub；镜像传输和服务器启动不要求服务器从镜像仓库拉取应用镜像。本机 Buildx 构建仍需能够取得 Dockerfile 使用的基础镜像和构建依赖。Caddy 只在首次初始化或域名/端口变化时调整，普通版本部署不修改 Caddy。
+省略 scope 时默认 `both`。部署没有隔离测试阶段，发布前须完成受影响的验证（见仓库根 `AGENTS.md` 的常用验证）。本机脚本默认不推送 Docker Hub，镜像经 SSH 传输，不要求服务器从镜像仓库拉取应用镜像；自动部署则由服务器从 GHCR 按摘要拉取。本机 Buildx 构建仍需能够取得 Dockerfile 使用的基础镜像和构建依赖。Caddy 只在首次初始化或域名/端口变化时调整，普通版本部署不修改 Caddy。
 
 Node 工程使用根 pnpm workspace；开发工具链由根 `package.json`、`.node-version` 和 `pnpm-workspace.yaml` 固定。私有共享包 `packages/protocol` 由根安装的 `prepare` 与 workspace 构建流程产出；PWA 及 E2E Host、Owner 的 Docker 构建输入均包含其源码，并通过根 workspace 安装和构建，不依赖独立发布的共享包。PWA Dockerfile 位于 `pwa/`，构建上下文必须是仓库根，由 `pwa/Dockerfile.dockerignore` 限定可复制的输入。PWA 在 Node 构建阶段生成 `pwa/dist/`，运行镜像以非 root Nginx 托管 `/usr/share/nginx/html`，不运行 Node 应用服务器。配置真源为 [`pwa/nginx.conf.template`](../pwa/nginx.conf.template)，由容器入口使用 `PORT` 渲染，默认端口仍为 3000；保留 curl 和根路径健康检查，现有 Compose 端口及外层 Caddy 反向代理不变。
 
@@ -22,7 +22,9 @@ PWA 根路径返回 307 到 `/app`；`/app/` 规范化到 `/app`，`/app/<子路
 | `docker-compose.yml` | Relay 与 PWA 的运行编排，Compose 项目名固定为 `pi-reach` | 是 |
 | `deploy.env.example` | 部署变量模板，不含真实值 | 是 |
 | `deploy.env` | 本机真实 SSH/服务器配置 | 否，已加入 `.gitignore` |
-| `scripts/deploy-self-hosted.sh` | 按 scope 部署并验收 | 是 |
+| `scripts/deploy-self-hosted.sh` | 本机按 scope 部署并验收 | 是 |
+| `.github/workflows/deploy.yml` | 自动部署：构建并推送 GHCR 镜像，审批后部署，创建标签与 Release | 是 |
+| `scripts/deploy-from-ci.sh` | 自动部署的服务器端入口，只能由受限 SSH 密钥触发；由维护者手工安装到服务器 | 是 |
 | `/etc/caddy/Caddyfile` | 服务器 HTTPS 与反向代理 | 服务器 root 配置，不由部署脚本修改 |
 
 `deploy.env` 不得保存私钥、服务器密码或 Docker Hub Token。SSH 私钥由本机 SSH 客户端和 `~/.ssh/config` 管理；需要 Docker Hub 登录时，在交互式终端中单独执行 `docker login`。
@@ -104,9 +106,69 @@ docker-compose version
 
 服务器不需要安装 Caddy 才能运行容器；Caddy 是宿主机上的一次性 HTTPS 入口。
 
+## 自动部署
+
+常规版本由 [Deploy 工作流](../.github/workflows/deploy.yml)发布，决策见 [ADR-20261001](adr/20261001-ci-deploy-ghcr.md)：
+
+1. 修改 `relay/package.json` 或 `pwa/package.json` 的 `version`，经 Pull Request 合并到 `main`；也可在 Actions 页面手动运行并选择组件。对应的 `relay-vX.Y.Z`／`pwa-vX.Y.Z` 标签已存在时跳过该组件。
+2. 工作流在 GitHub 托管 runner 上构建服务器架构的镜像，推送到 `ghcr.io/<owner>/pi-reach-relay`／`pi-reach-site:vX.Y.Z`，并附构建来源证明。
+3. 部署作业进入 `production` Environment，等待维护者批准。
+4. 批准后以受限 SSH 密钥连接服务器，`deploy-from-ci.sh` 按摘要拉取镜像，只更新所选服务；健康检查失败时恢复部署前的镜像，工作流以失败结束。两者都部署时先 Relay 后 PWA。
+5. 公网检查通过后，在本次提交上创建注解标签与 GitHub Release（不标记 Latest）。说明列出自上一个同组件标签以来涉及该组件的提交，必要时再手工补充。
+
+协议有变更时，仍须在 PWA 部署完成后再批准 Extension 的 npm 待审版本（见「Extension npm 发布」）。部署 Relay 会让在线连接短暂断开，可选择合适的时机批准。
+
+自动部署与本机脚本共用服务器上的部署锁，二者不会同时更新服务。自动部署不上传 `docker-compose.yml`，也不更新服务器上的 `deploy-from-ci.sh`；这两个文件变更后，先用本机脚本部署一次或手工复制，再依赖自动部署。
+
+### 一次性配置
+
+GitHub（仓库 Settings → Environments）：
+
+- 新建 `production`：Required reviewers 选维护者，Deployment branches 限定为 `main`。
+- Environment secrets：`DEPLOY_SSH_KEY`（下文专用私钥全文）、`DEPLOY_KNOWN_HOSTS`（服务器主机公钥行）、`DEPLOY_HOST`、`DEPLOY_USER`。仓库公开，Actions 日志所有人可见，主机与账号也放在 Secrets 中，由日志遮盖。
+- Environment variables：`PWA_URL`、`RELAY_URL`（公网检查地址，留空则跳过）；SSH 端口不是 22 时设 `DEPLOY_PORT`。
+- 服务器不是 `linux/amd64` 时，设仓库变量 `DEPLOY_PLATFORM`（如 `linux/arm64`）。
+
+本机生成专用密钥，不复用个人密钥；私钥只放进上面的 Secret：
+
+```bash
+ssh-keygen -t ed25519 -N "" -C pi-reach-github-deploy -f ~/.ssh/pi-reach-github-deploy
+ssh-keyscan -t ed25519 your-server-host   # 输出即 DEPLOY_KNOWN_HOSTS；非 22 端口加 -p，主机写作 [host]:port
+```
+
+`ssh-keyscan` 的结果须与服务器上 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` 显示的指纹一致后再使用。
+
+服务器上，把脚本复制到部署目录下（路径与 `REMOTE_DIR` 一致）：
+
+```bash
+# 本机执行
+ssh your-deploy-user@your-ssh-alias 'mkdir -p /home/your-deploy-user/pi-reach/bin'
+scp scripts/deploy-from-ci.sh your-deploy-user@your-ssh-alias:/home/your-deploy-user/pi-reach/bin/
+ssh your-deploy-user@your-ssh-alias 'chmod 755 /home/your-deploy-user/pi-reach/bin/deploy-from-ci.sh'
+```
+
+再在部署账号的 `~/.ssh/authorized_keys` 末尾加一行（整条写在同一行，公钥取自 `pi-reach-github-deploy.pub`）：
+
+```text
+restrict,command="PI_REACH_REMOTE_DIR=/home/your-deploy-user/pi-reach PI_REACH_IMAGE_PREFIX=ghcr.io/your-github-owner /home/your-deploy-user/pi-reach/bin/deploy-from-ci.sh" ssh-ed25519 AAAA... pi-reach-github-deploy
+```
+
+`restrict` 关闭端口转发、终端与用户 rc 文件，`command=` 让这把密钥无论请求什么都只运行 `deploy-from-ci.sh`。脚本只接受 `deploy <site|relay> <前缀>/pi-reach-<site|relay>:vX.Y.Z@sha256:<摘要>`，其余请求一律拒绝，不调用 Docker。可选的 `PI_REACH_KEEP_IMAGE_VERSIONS` 控制保留的镜像数（默认 3），写在同一个 `command=` 中。
+
+### 首次运行
+
+GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运行时，在构建完成、部署作业等待审批期间，到 GitHub 个人主页的 Packages 中把 `pi-reach-relay` 与 `pi-reach-site` 的可见性改为 Public（改为公开后不能再改回私有），确认它们关联到本仓库，再批准部署。两个镜像只含开源代码与构建产物，不含配置或密钥。
+
+### 失败处理
+
+- 构建失败或审批前取消：线上不受影响，修复后重新运行。
+- 服务器端健康检查失败：脚本已恢复原镜像，工作流失败且不打标签；排查后重新运行失败的作业，已打过标签的组件会跳过。输出提示恢复也失败时，立即按「容器不是 healthy」检查服务器。
+- 公网检查失败：服务已更新但没有打标签；确认线上状态后重新运行，或按「版本标签与 GitHub Release」手工补标签。
+- 部署锁冲突与遗留锁的处理同本机脚本（见「部署」）。
+
 ## 部署
 
-命令形式为：
+本机脚本用于备用发布、更新 `docker-compose.yml` 与首次初始化。命令形式为：
 
 ```bash
 ./scripts/deploy-self-hosted.sh [pwa|relay|both]
@@ -341,7 +403,7 @@ npm view @yefengr/pi-reach version
 
 ## 版本标签与 GitHub Release
 
-各组件上线后，在其版本号所在的 `main` 提交上打注解标签，并创建同名 GitHub Release：
+各组件上线后，在其版本号所在的 `main` 提交上打注解标签，并创建同名 GitHub Release。PWA 与 Relay 经自动部署时由工作流创建；下面的手工命令用于 Extension 和本机备用部署：
 
 | 组件 | 标签 | 版本来源 |
 |---|---|---|
@@ -381,6 +443,8 @@ docker-compose version
 
 先区分失败发生在本机基础镜像/依赖获取、可选镜像推送，还是 SSH 镜像传输。`PUBLISH_IMAGES=0` 只关闭应用镜像推送，不消除本机构建对基础镜像和依赖源的需求；服务器接收的是本机传输的镜像，不需要从 Docker Hub 拉取这些应用镜像。
 
+本机脚本默认使用 `docker-container` 驱动的 Buildx 构建器，它不继承 Docker 守护进程的代理设置。守护进程能拉取镜像、构建却在解析 `docker/dockerfile` 时超时，可改用 `docker` 驱动的构建器，例如 `BUILDER=<构建器名> ./scripts/deploy-self-hosted.sh pwa`（`docker buildx ls` 查看可用构建器）。自动部署在 GitHub 托管 runner 上构建，不受本机网络影响。
+
 ### 容器不是 healthy
 
 ```bash
@@ -419,3 +483,5 @@ sudo journalctl -u caddy -n 100 --no-pager
 - 停止无关容器；
 - 执行 `docker system prune`，或删除本项目镜像仓库和 `pi-reach.image` 标签以外的镜像；
 - 在默认模式下向 Docker Hub 推送应用镜像，或要求服务器拉取这些应用镜像。
+
+自动部署的服务器端脚本只接受固定格式的单个部署请求，不执行其他命令，不修改 Compose 文件、Caddy 或自身；GitHub 中的专用私钥只在 `production` Environment 批准后的作业中可用，不能用于登录终端或转发端口。
