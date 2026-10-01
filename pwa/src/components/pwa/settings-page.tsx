@@ -3,10 +3,18 @@ import { Button, Radio, Stack, TextInput } from "@mantine/core";
 import { ArrowLeft, Globe, Languages, Monitor, Moon, RefreshCw, Sun, Trash2 } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
+import { CopyButton } from "@/components/pwa/copy-button";
+import type { ConnectionViewState } from "@/components/pwa/workspace-view";
+import { version as pwaVersion } from "../../../package.json";
 
 type SettingsPageProps = {
   relayUrl: string;
   defaultRelayUrl: string;
+  relayVersion: string | null;
+  relayStatus: ConnectionViewState;
+  extensionVersion: string | null;
+  extensionStatus: ConnectionViewState;
+  extensionTarget: string | null;
   onSave: (value: string) => Promise<void>;
   onBack: () => void;
   /** 返回按钮的可访问名称随来源为「返回导航」或「返回工作区」。 */
@@ -20,13 +28,21 @@ type SettingsPageProps = {
  * 独立设置页：不保留工作区侧栏，内容最大宽 640，分区间距 32。
  * 移动端返回箭头与标题同一行；桌面返回为带文字的按钮，标题在其下方。
  */
-export function SettingsPage({ relayUrl, defaultRelayUrl, onSave, onBack, backLabel, onClearData, onResetLayout, titleRef }: SettingsPageProps) {
+export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, titleRef }: SettingsPageProps) {
   const [value, setValue] = useState(relayUrl);
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
   const { t, preference } = useI18n();
   const s = t.settings;
+  const versionText = (version: string | null, status: ConnectionViewState) => {
+    if (status === "online") return version ?? s.versionUnavailable;
+    if (status === "connecting" || status === "retrying") return s.gettingVersion;
+    return s.notConnected;
+  };
+  const relayVersionText = versionText(relayVersion, relayStatus);
+  const extensionVersionText = extensionTarget ? versionText(extensionVersion, extensionStatus) : s.noOnlinePi;
+  const versionInfo = `PWA: ${pwaVersion}\nRelay: ${relayVersionText}\n${s.extension}: ${extensionVersionText}`;
   const save = async () => {
     if (savePendingRef.current) return;
     savePendingRef.current = true;
@@ -87,6 +103,18 @@ export function SettingsPage({ relayUrl, defaultRelayUrl, onSave, onBack, backLa
           </div>
           <Button variant="outline" color="red" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
+      </section>
+      <section className="pwa-settings-section" aria-labelledby="pwa-about-heading">
+        <div className="pwa-settings-about-heading">
+          <h2 id="pwa-about-heading" className="pwa-settings-section-title">{s.about}</h2>
+          <CopyButton text={versionInfo} label={s.copyVersionInfo} />
+        </div>
+        <dl className="pwa-settings-versions">
+          <div><dt>PWA</dt><dd data-version="pwa">{pwaVersion}</dd></div>
+          <div><dt>Relay</dt><dd data-version="relay">{relayVersionText}</dd></div>
+          <div><dt>{s.extension}</dt><dd data-version="extension">{extensionVersionText}</dd></div>
+        </dl>
+        {extensionTarget ? <p className="pwa-settings-section-description pwa-settings-version-target">{s.currentPi(extensionTarget)}</p> : null}
       </section>
     </div>
   </div>;

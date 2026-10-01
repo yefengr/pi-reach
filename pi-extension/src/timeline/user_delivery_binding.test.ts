@@ -54,6 +54,7 @@ describe("UserDeliveryBinding", () => {
     service = new TimelineV2Service({
       sessionManager: session,
       senderRef: "owner-1",
+      extensionVersion: "1.2.3",
       runtime,
       onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
         ownerId: "owner-1",
@@ -107,8 +108,8 @@ describe("UserDeliveryBinding", () => {
       findTarget: (ownerId) => targets.get(ownerId) ?? null,
       sendFrames: vi.fn(),
     });
-    const serviceA = new TimelineV2Service({ sessionManager: session, senderRef: "owner-a", runtime, onUserMessage: () => false });
-    const serviceB = new TimelineV2Service({ sessionManager: session, senderRef: "owner-b", runtime, onUserMessage: () => false });
+    const serviceA = new TimelineV2Service({ sessionManager: session, senderRef: "owner-a", extensionVersion: "1.2.3", runtime, onUserMessage: () => false });
+    const serviceB = new TimelineV2Service({ sessionManager: session, senderRef: "owner-b", extensionVersion: "1.2.3", runtime, onUserMessage: () => false });
     targets.set("owner-a", { service: serviceA, sessionId: session.getSessionId(), leafId: session.getLeafId() ?? null });
     targets.set("owner-b", { service: serviceB, sessionId: session.getSessionId(), leafId: session.getLeafId() ?? null });
 

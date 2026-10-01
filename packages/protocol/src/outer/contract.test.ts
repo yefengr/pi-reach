@@ -50,6 +50,19 @@ describe("shared outer contract", () => {
     expect(parseJson("not-json")).toBeUndefined();
   });
 
+  test("accepts only a bounded version in the Relay info control", () => {
+    const frame = { type: "relay_info", version: "1.2.3" };
+    expect(decodeControlFrame(frame)).toEqual(frame);
+    expect(decodeRelayFrame(frame)).toEqual({ kind: "control", frame });
+    expect(decodeControlFrame({ ...frame, version: "v".repeat(256) })).toBeDefined();
+    for (const value of [{ type: "relay_info" }, { ...frame, version: "" }, { ...frame, version: null },
+      { ...frame, version: 1 }, { ...frame, version: "v".repeat(257) }, { ...frame, device_id: "device" },
+      { ...frame, extra: true }]) {
+      expect(decodeControlFrame(value)).toBeUndefined();
+      expect(decodeRelayFrame(value)).toBeUndefined();
+    }
+  });
+
   test("preserves endpoint metadata and legacy daemon read compatibility", () => {
     for (const kind of ["interactive", "daemon"] as const) {
       const frame = { type: "endpoint_announced", device_id: "device", endpoint_id: endpointId,

@@ -31,10 +31,11 @@ describe("TimelineV2Service", () => {
   test("requires hello and returns direct ready with server-derived sender ref", () => {
     const session = SessionManager.inMemory(process.cwd());
     const runtime = new TimelineRuntime();
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime, onUserMessage: () => false });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime, onUserMessage: () => false });
     expect(service.handle(user(service.leafId))[0]).toMatchObject({ type: "protocol_error", code: "invalid_channel", target_channel_id: "channel-1" });
     expect(service.handle(hello())[0]).toMatchObject({
       type: "session_ready",
+      extension_version: "1.2.3",
       target_channel_id: "channel-1",
       self_sender_ref: "owner-1",
       session_id: session.getSessionId(),
@@ -49,6 +50,7 @@ describe("TimelineV2Service", () => {
       senderRef: "owner-1",
       runtime: new TimelineRuntime(),
       onUserMessage: () => false,
+      extensionVersion: "1.2.3",
     });
     const initialLeaf = service.leafId;
     expect(service.handle(hello())[0]).toMatchObject({ leaf_id: initialLeaf });
@@ -86,7 +88,7 @@ describe("TimelineV2Service", () => {
 
   test("does not broadcast or fragment an event from a different session or leaf", () => {
     const session = SessionManager.inMemory(process.cwd());
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: () => false });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false });
     const event = { kind: "assistant" as const, event_id: "event-1", event_seq: 1, group_id: "group-1", session_id: session.getSessionId(), leaf_id: service.leafId, timestamp: 1, status: "complete" as const, blocks: [{ type: "text", text: "current" }] };
     expect(service.publishFrames(event)).toHaveLength(1);
     expect(service.publishFrames({ ...event, session_id: "another-session" })).toEqual([]);
@@ -101,7 +103,7 @@ describe("TimelineV2Service", () => {
     ["leaf_mismatch", { leaf_id: "stale-leaf" }],
   ] as const)("diagnoses a rejected run_end without bypassing validation (%s)", (reason, overrides) => {
     const session = SessionManager.inMemory(process.cwd());
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: () => false });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false });
     const event = { kind: "run_end" as const, event_id: "run-end", event_seq: 1, group_id: "group", session_id: session.getSessionId(), leaf_id: service.leafId, timestamp: 1, status: "complete" as const };
     const diagnostic = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
@@ -123,7 +125,7 @@ describe("TimelineV2Service", () => {
       models: [{ id: "vision-1", name: "Vision", provider: "test", reasoning: false, context_window: 1000, vision: true }],
       current: { id: "vision-1", name: "Vision", provider: "test", reasoning: false, context_window: 1000, vision: true },
     }));
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: () => false, onListModels });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false, onListModels });
     const request = {
       protocol_version: 2 as const,
       type: "list_models" as const,
@@ -151,6 +153,7 @@ describe("TimelineV2Service", () => {
       senderRef: "owner-1",
       runtime: new TimelineRuntime(),
       onUserMessage: () => false,
+      extensionVersion: "1.2.3",
       onAction,
     });
     const actions: ClientFrame[] = [
@@ -179,6 +182,7 @@ describe("TimelineV2Service", () => {
       senderRef: "owner-1",
       runtime: new TimelineRuntime(),
       onUserMessage: () => false,
+      extensionVersion: "1.2.3",
       onListModels: () => { throw new Error("/private/models.json contains a secret"); },
     });
     service.handle(hello());
@@ -198,7 +202,7 @@ describe("TimelineV2Service", () => {
 
   test("rejects old generation after hello", () => {
     const session = SessionManager.inMemory(process.cwd());
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: () => false });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false });
     service.handle(hello());
     expect(service.handle(user("old"))[0]).toMatchObject({ type: "reset", reason: "branch_changed", target_channel_id: "channel-1" });
   });
@@ -206,7 +210,7 @@ describe("TimelineV2Service", () => {
   test("keeps queued delivery accepted across idempotent retries", () => {
     const session = SessionManager.inMemory(process.cwd());
     const onUserMessage = vi.fn(() => "queued" as const);
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage });
     service.handle(hello());
     expect(service.handle(user(service.leafId))[0]).toMatchObject({
       type: "user_message_status",
@@ -230,7 +234,7 @@ describe("TimelineV2Service", () => {
       correlation = value;
       return true;
     });
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime, onUserMessage: send });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime, onUserMessage: send });
     service.handle(hello());
     const first = service.handle(user(service.leafId));
     expect(first).toEqual([expect.objectContaining({ type: "user_message_status", status: "received" })]);
@@ -251,7 +255,7 @@ describe("TimelineV2Service", () => {
   test("rejects same id with different payload and keeps unknown delivery idempotent", () => {
     const session = SessionManager.inMemory(process.cwd());
     const send = vi.fn(() => false);
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: send });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: send });
     service.handle(hello());
     const frame = user(service.leafId, {
       streaming_behavior: "steer",
@@ -285,6 +289,7 @@ describe("TimelineV2Service", () => {
       senderRef: "owner-1",
       runtime: new TimelineRuntime(),
       onUserMessage: () => false,
+      extensionVersion: "1.2.3",
       onCancel,
     });
     service.handle(hello());
@@ -311,6 +316,7 @@ describe("TimelineV2Service", () => {
       senderRef: "owner-1",
       runtime: new TimelineRuntime(),
       onUserMessage: () => false,
+      extensionVersion: "1.2.3",
       onCancel: () => { throw new Error("abort failed"); },
     });
     service.handle(hello());
@@ -331,7 +337,7 @@ describe("TimelineV2Service", () => {
 
   test("observed clears the idempotency record after commit", () => {
     const session = SessionManager.inMemory(process.cwd());
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: () => true });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => true });
     service.handle(hello());
     service.handle(user(service.leafId));
     const observed = service.handle({
@@ -350,7 +356,7 @@ describe("TimelineV2Service", () => {
 
   test("observed clears a committed request after an ordinary append advances the leaf", () => {
     const session = SessionManager.inMemory(process.cwd());
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: new TimelineRuntime(), onUserMessage: () => true });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => true });
     service.handle(hello());
     const sendingLeaf = service.leafId;
     expect(service.handle(user(sendingLeaf))[0]).toMatchObject({ type: "user_message_status", status: "received" });
@@ -375,7 +381,7 @@ describe("TimelineV2Service", () => {
   test("propagates an ordinary SessionManager append through the Extension frame into the PWA runtime", () => {
     const session = SessionManager.inMemory(process.cwd());
     const extensionRuntime = new TimelineRuntime();
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime: extensionRuntime, onUserMessage: () => false });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: extensionRuntime, onUserMessage: () => false });
     const ready = service.handle(hello())[0]!;
     expect(ready.type).toBe("session_ready");
     if (ready.type !== "session_ready") throw new Error("session_ready expected");
@@ -409,7 +415,7 @@ describe("TimelineV2Service", () => {
     const session = SessionManager.inMemory(process.cwd());
     const messageId = session.appendMessage({ role: "user", content: "legacy", timestamp: 1 } as never);
     const runtime = new TimelineRuntime();
-    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", runtime, onUserMessage: () => false });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime, onUserMessage: () => false });
     service.handle(hello());
     const frames = service.handle({
       protocol_version: 2,

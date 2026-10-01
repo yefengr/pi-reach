@@ -18,7 +18,7 @@ function harness(idle = false) {
     sendFrames: vi.fn(),
   });
   service = new TimelineV2Service({
-    sessionManager: manager, runtime, senderRef: "owner",
+    sessionManager: manager, runtime, senderRef: "owner", extensionVersion: "1.2.3",
     onUserMessage: (frame, correlation) => binding.submit(frame, correlation, { ownerId: "owner", sessionId: manager.getSessionId(), leafId: manager.getLeafId() ?? null, service, clientRequestId: frame.client_request_id }),
     onQueueSnapshot: () => binding.snapshot("owner", service),
     onQueuedMessageClear: (target) => binding.clearQueued("owner", service, target),

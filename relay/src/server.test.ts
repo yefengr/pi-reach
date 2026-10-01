@@ -6,6 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket, { type RawData } from "ws";
 
 import { startRelay, type RelayHandle, type RelayLogEvent } from "./server.js";
+import { PeerRegistry } from "./registry.js";
+import { BoundedTransport } from "./transport.js";
+import { RELAY_VERSION } from "./version.js";
 
 const openRelays: RelayHandle[] = [];
 const openSockets: WebSocket[] = [];
@@ -15,6 +18,7 @@ afterEach(async () => {
   for (const socket of openSockets.splice(0)) socket.terminate();
   for (const socket of openTcpSockets.splice(0)) socket.destroy();
   await Promise.all(openRelays.splice(0).map((relay) => relay.close()));
+  vi.restoreAllMocks();
 });
 
 function keyPair(): { id: string; privateKey: KeyObject } {
@@ -53,6 +57,8 @@ async function invalidUpgrade(port: number): Promise<void> {
 async function authenticateOwner(socket: WebSocket, owner: { id: string; privateKey: KeyObject }): Promise<void> {
   socket.send(JSON.stringify({ type: "hello", protocol_version: 2, role: "owner", pubkey: owner.id }));
   await sendAuth(socket, owner.privateKey);
+  const [raw] = await once(socket, "message") as [RawData, boolean];
+  expect(JSON.parse(raw.toString())).toEqual({ type: "relay_info", version: RELAY_VERSION });
 }
 
 async function authenticateHost(
@@ -94,6 +100,60 @@ describe("startRelay", () => {
     await authenticateOwner(socket, owner);
     socket.send(JSON.stringify({ type: "subscribe_endpoints", device_ids: [] }));
     await vi.waitFor(() => expect(events).toContainEqual({ event: "authenticated", role: "owner" }));
+  });
+
+  it("sends Relay info once after Owner auth, never to Hosts or rejected peers", async () => {
+    const events: RelayLogEvent[] = [];
+    const relay = await startRelay({ port: 0, logger: (event) => events.push(event) });
+    openRelays.push(relay);
+    const identity = keyPair();
+    const owner = await connect(relay.port);
+    const ownerFrames: Array<{ type: string }> = [];
+    owner.on("message", (raw: RawData) => ownerFrames.push(JSON.parse(raw.toString()) as { type: string }));
+    await authenticateOwner(owner, identity);
+    const snapshot = once(owner, "message");
+    owner.send(JSON.stringify({ type: "auth", sig: "invalid repeated auth" }));
+    owner.send(JSON.stringify({ type: "subscribe_endpoints", device_ids: [identity.id] }));
+    await snapshot;
+    expect(ownerFrames.map((frame) => frame.type)).toEqual(["challenge", "relay_info", "endpoints"]);
+
+    const host = await connect(relay.port);
+    const hostFrames: Array<{ type: string }> = [];
+    host.on("message", (raw: RawData) => hostFrames.push(JSON.parse(raw.toString()) as { type: string }));
+    await authenticateHost(host, keyPair(), identity.id, { kind: "interactive" });
+    await vi.waitFor(() => expect(events).toContainEqual({ event: "authenticated", role: "host" }));
+    expect(hostFrames.map((frame) => frame.type)).toEqual(["challenge"]);
+
+    const rejected = await connect(relay.port);
+    const rejectedFrames: Array<{ type: string }> = [];
+    rejected.on("message", (raw: RawData) => rejectedFrames.push(JSON.parse(raw.toString()) as { type: string }));
+    const challenge = once(rejected, "message");
+    rejected.send(JSON.stringify({ type: "hello", protocol_version: 2, role: "owner", pubkey: identity.id }));
+    await challenge;
+    expect(rejectedFrames.map((frame) => frame.type)).toEqual(["challenge"]);
+    const closed = once(rejected, "close");
+    rejected.send(JSON.stringify({ type: "auth", sig: "invalid" }));
+    await closed;
+    expect(rejectedFrames.map((frame) => frame.type)).toEqual(["challenge"]);
+  });
+
+  it.each(["returned_false", "synchronous_failure"] as const)("deactivates Owner registration when Relay info delivery fails (%s)", async (failure) => {
+    const events: RelayLogEvent[] = [];
+    const unregister = vi.spyOn(PeerRegistry.prototype, "unregisterOwner");
+    const send = BoundedTransport.prototype.send;
+    vi.spyOn(BoundedTransport.prototype, "send").mockImplementation(function (this: BoundedTransport, line: string) {
+      if (JSON.parse(line).type !== "relay_info") return send.call(this, line);
+      if (failure === "synchronous_failure") this.evict();
+      return failure === "synchronous_failure";
+    });
+    const relay = await startRelay({ port: 0, logger: (event) => events.push(event) });
+    openRelays.push(relay);
+    const socket = await connect(relay.port);
+    const identity = keyPair();
+    socket.send(JSON.stringify({ type: "hello", protocol_version: 2, role: "owner", pubkey: identity.id }));
+    await sendAuth(socket, identity.privateKey);
+    await vi.waitFor(() => expect(unregister).toHaveBeenCalledExactlyOnceWith(identity.id, expect.any(Number)));
+    expect(events).not.toContainEqual({ event: "authenticated", role: "owner" });
   });
 
   it("releases pending-auth capacity immediately when a timed-out peer starts closing", async () => {

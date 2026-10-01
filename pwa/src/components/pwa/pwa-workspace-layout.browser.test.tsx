@@ -77,7 +77,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
     toast={unpaired ? null : <div data-testid="toast">Toast</div>}
     settingsRoute={route}
     onOpenSettings={(origin) => { events.push(`settings:${origin.kind}`); openSettings(origin); }}
-    renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.example.test" onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmOpen(true)} onResetLayout={() => {}} />}
+    renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.example.test" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmOpen(true)} onResetLayout={() => {}} />}
     overlays={<ConfirmActionDialog action={confirmOpen ? { kind: "clear-local-data" } : null} pending={false} error={null} onConfirm={() => {}} onClose={() => setConfirmOpen(false)} />}
     closeBackgroundOverlay={(close) => { events.push("close-request"); if (!rejectClose) close(); }}
   >

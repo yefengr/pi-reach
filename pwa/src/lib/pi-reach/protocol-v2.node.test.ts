@@ -136,7 +136,7 @@ test("accepts the closed client catalog, including queue and approval frames", (
 });
 
 test("accepts server frames while rejecting old wrappers and direction drift", () => {
-  const ready = { ...version, type: "session_ready", ...direct, in_reply_to: "H1", session_id: "S1", leaf_id: "G1", head_seq: 80, self_sender_ref: "sender-1" };
+  const ready = { ...version, type: "session_ready", extension_version: "1.2.3", ...direct, in_reply_to: "H1", session_id: "S1", leaf_id: "G1", head_seq: 80, self_sender_ref: "sender-1" };
   const started = { ...version, type: "user_message_started", ...direct, in_reply_to: "R1", ...session, message: { id: "M1", group_id: "GR1", blocks: [{ type: "text", text: "hello" }], origin: "pwa", sender_ref: "sender-1", delivery: "normal" } };
   const statuses = [
     { ...version, type: "user_message_status", ...direct, in_reply_to: "R1", ...session, client_request_id: "R1", status: "received" },

@@ -87,6 +87,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const { t } = useI18n();
   const [identity, setIdentity] = useState<OwnerKeyPair | null>(null); const [devices, setDevices] = useState<PwaDeviceRecord[]>([]);
   const [connection, setConnection] = useState<ConnectionViewState>("offline");
+  const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
   const [connectionFeedback, setConnectionFeedback] = useState<PwaConnectionBannerKind | null>(null);
   const [sessionRestartToken, setSessionRestartToken] = useState(0);
   const [relayUrl, setRelayUrl] = useState(DEFAULT_RELAY); const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
@@ -269,6 +270,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     setVisionAvailable(null);
     setModels([]);
     setCurrentModel(null);
+    setExtensionVersion(null);
     disconnectTimeline();
   }, [disconnectTimeline]);
   const finishRetry = useCallback(() => {
@@ -300,6 +302,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     relayRef,
     onlineRef,
     relayStatus,
+    relayVersion,
     retryAttempt,
     generation: relayConnectionGeneration,
     reconnectNow: reconnectRelayNow,
@@ -395,6 +398,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       .catch(() => { if (token === historyLoadTokenRef.current) setHistoryError("Could not read the saved conversation."); });
   }, [clearSessionConnection, operationNotifications, rememberSessionPosition, resetOutputFollowing]);
   const openLiveEndpoint = useCallback((endpointId: string) => {
+    if (selectedHistory !== null || activeEndpointId !== endpointId) setExtensionVersion(null);
     operationNotifications.clearSession();
     historyLoadTokenRef.current += 1;
     setSelectedHistory(null); setHistoryItems([]); setHistoryError(null);
@@ -405,7 +409,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     const saved = activeDevice ? sessionPositionsRef.current.get(`live:${activeDevice.deviceId}\u0000${endpointId}`) : undefined;
     restoreSessionPosition(saved && !("history" in saved) ? saved : null);
     selectEndpoint(endpointId);
-  }, [activeDevice, liveEndpointSnapshot?.endpointId, operationNotifications, rememberSessionPosition, resetOutputFollowing, restoreSessionPosition, selectEndpoint]);
+  }, [activeDevice, activeEndpointId, liveEndpointSnapshot?.endpointId, operationNotifications, rememberSessionPosition, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory]);
   const sendModelsRequest = useCallback((scope: TimelineScope, channel: PeerChannel): boolean => {
     const requestId = id();
     modelRequestRef.current = requestId;
@@ -432,6 +436,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     if (frame.type === "session_ready") {
       if (frame.in_reply_to !== helloRequestRef.current) return;
       helloRequestRef.current = null;
+      setExtensionVersion(frame.extension_version);
       const scope: TimelineScope = { deviceId: context.deviceId, endpointId: context.endpointId, runtimeInstanceId: context.runtimeInstanceId, sessionId: frame.session_id, leafId: frame.leaf_id, selfSenderRef: frame.self_sender_ref, channelId: context.channel.channelId };
       // 同一 Pi 进程换了会话（如执行 /new）：主区跟随新会话，并在开头标出切换。
       const runtimeKey = `${context.deviceId}\u0000${context.endpointId}\u0000${context.runtimeInstanceId}`;
@@ -837,7 +842,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
             : placeholderKind === "choose-pi"
               ? <ChoosePiWorkspace endpoints={onlinePis} completedEndpointIds={completedEndpointIds} onSelect={openLiveEndpoint} />
               : <NoPiWorkspace onViewHistory={openLatestHistory} />;
-  return <PwaWorkspaceLayout navigation={navigation} titleBar={titleBar} historyMode={selectedHistory !== null} connectionBanner={connectionBannerKind ? <PwaConnectionBanner kind={connectionBannerKind} connection={displayConnection} onRetry={retryCurrentSession} retryDisabled={retryPending} /> : null} toast={<PwaStatusToast message={selectedHistory ? historyError : error} onDismiss={() => { if (selectedHistory) setHistoryError(null); else setError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl={relayUrl} defaultRelayUrl={DEFAULT_RELAY} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
+  return <PwaWorkspaceLayout navigation={navigation} titleBar={titleBar} historyMode={selectedHistory !== null} connectionBanner={connectionBannerKind ? <PwaConnectionBanner kind={connectionBannerKind} connection={displayConnection} onRetry={retryCurrentSession} retryDisabled={retryPending} /> : null} toast={<PwaStatusToast message={selectedHistory ? historyError : error} onDismiss={() => { if (selectedHistory) setHistoryError(null); else setError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl={relayUrl} defaultRelayUrl={DEFAULT_RELAY} relayVersion={relayVersion} relayStatus={relayStatus} extensionVersion={extensionVersion} extensionStatus={connection} extensionTarget={sessionOnline && activeDevice && activeEndpoint ? `${displayDevice(activeDevice)} · ${displayPi(activeEndpoint)}` : null} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
     <PairingDialog opened={pairing.state !== "idle"} connecting={pairing.state === "pairing"} error={pairing.error} onSubmit={(code) => { void pairing.pairFromCode(code); }} onClearError={pairing.clearError} onClose={pairing.close} focusOrigin={pairingFocusOrigin} focusFallbackSelectors={[".pwa-session-trigger"]} />
     <ConfirmActionDialog action={confirmAction?.kind === "remove-pairing" ? { kind: "remove-pairing", label: confirmAction.label } : confirmAction} pending={confirmPending} error={confirmError} onConfirm={() => { void confirmRequestedAction(); }} onClose={() => { if (!confirmPendingRef.current) { setConfirmAction(null); setConfirmError(null); } }} onExitTransitionEnd={finishConfirmationTransition} /></>} closeBackgroundOverlay={closeBackgroundOverlay}>{mainContent}</PwaWorkspaceLayout>;
 }

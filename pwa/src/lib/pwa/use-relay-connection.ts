@@ -36,6 +36,7 @@ export function useRelayConnection({
   const [generation, setGeneration] = useState(0);
   // Relay 与网络本身的状态，与会话连接分开：未打开会话时标题区和连接提示条只看它。
   const [relayStatus, setRelayStatus] = useState<ConnectionViewState>("connecting");
+  const [relayVersion, setRelayVersion] = useState<string | null>(null);
   const devicesRef = useRef(devices);
   const relayRef = useRef<RelayClient | null>(null);
   const reconnectNowRef = useRef<(() => void) | null>(null);
@@ -89,6 +90,7 @@ export function useRelayConnection({
     connectRelay = (token: number) => {
       if (cancelled || !onlineRef.current) return;
       intentionalCloseRef.current = false;
+      setRelayVersion(null);
       reportRelay("connecting");
       void relay.connect().then(() => {
         if (cancelled || relayRef.current !== relay || !onlineRef.current || token !== activeToken) return;
@@ -123,9 +125,17 @@ export function useRelayConnection({
     };
     reconnectNowRef.current = reconnectNow;
 
-    const unsubscribeControl = relay.on("control", onControl);
+    const unsubscribeControl = relay.on("control", (frame) => {
+      if (cancelled || relayRef.current !== relay) return;
+      if (frame.type === "relay_info") {
+        setRelayVersion(frame.version);
+        return;
+      }
+      onControl(frame);
+    });
     const unsubscribeState = relay.on("state", (state) => {
       if (cancelled || relayRef.current !== relay || state !== "closed") return;
+      setRelayVersion(null);
       onSessionDisconnect(!intentionalCloseRef.current);
       onAllEndpointsOffline();
       if (!onlineRef.current) {
@@ -223,5 +233,5 @@ export function useRelayConnection({
     relay.close(1000, reason);
   }, []);
 
-  return { relayRef, onlineRef, relayStatus, retryAttempt, generation, reconnectNow, resubscribe, closeIntentionally };
+  return { relayRef, onlineRef, relayStatus, relayVersion, retryAttempt, generation, reconnectNow, resubscribe, closeIntentionally };
 }

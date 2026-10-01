@@ -147,7 +147,7 @@ export function useEndpointRegistry({ devices, onError }: UseEndpointRegistryOpt
   }, []);
 
   const applyControl = useCallback((frame: ControlFrame) => {
-    if (frame.type === "pairing_target" || frame.type === "pairing_code_error") return;
+    if (frame.type === "relay_info" || frame.type === "pairing_target" || frame.type === "pairing_code_error") return;
     const device = devicesRef.current.find((candidate) => candidate.deviceId === frame.device_id);
     if (!device) return;
     if (frame.type === "endpoints") {

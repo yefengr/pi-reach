@@ -131,6 +131,14 @@ Host 在 `/pi-reach pair` 后发布短期 target：
 
 ### Relay -> Owner
 
+Owner 认证并注册成功后，Relay 通过当前连接发送一次自身版本；Host 不接收该帧：
+
+```json
+{ "type": "relay_info", "version": "<Relay package version>" }
+```
+
+`version` 为 1–256 字符的非空字符串，只允许上述两个字段。版本在 Relay 进程加载时固定，不改变 challenge-response、订阅或路由流程。
+
 Snapshot：
 
 ```json
@@ -254,6 +262,8 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `models_list`
 - `queued_message_state`
 - `bye`
+
+`session_ready` 必须携带 `extension_version`（1–256 字符的非空字符串），表示当前 Pi 加载的 Pi Reach 扩展版本，而非 Pi coding agent 的版本。扩展在模块加载时固定版本，每次会话握手返回；PWA 只接受当前有效 channel、runtime 和匹配请求的结果，断开或切换后清除。缺少该字段或包含未知字段均按 strict schema 拒绝，不读取配对缓存兜底；发布仍须先部署 PWA 再发布扩展，缓存旧页面需要刷新。
 
 ## Timeline 不变量
 

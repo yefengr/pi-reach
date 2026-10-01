@@ -79,6 +79,19 @@ describe("shared session protocol fixture contract", () => {
     expectCode(() => decodeClientFrameV2({ ...version, type: "future_frame" }), "unsupported");
   });
 
+  test("requires a bounded Extension version on session readiness", () => {
+    const ready = { ...version, type: "session_ready", ...direct, ...session,
+      in_reply_to: "hello", head_seq: 0, self_sender_ref: "owner", extension_version: "1.2.3" };
+    expect(decodeServerFrameV2(ready)).toEqual(ready);
+    expect(decodeServerFrameV2({ ...ready, extension_version: "v".repeat(256) })).toHaveProperty("extension_version");
+    const { extension_version: _version, ...missing } = ready;
+    expectCode(() => decodeServerFrameV2(missing), "schema");
+    for (const extension_version of ["", null, 1, "v".repeat(257)]) {
+      expectCode(() => decodeServerFrameV2({ ...ready, extension_version }), "schema");
+    }
+    expectCode(() => decodeServerFrameV2({ ...ready, version: "legacy" }), "schema");
+  });
+
   test("requires session and nullable leaf identity on scoped client requests", () => {
     const frame = { ...version, type: "user_message", id: "U1", ...channel, leaf_id: null, client_request_id: "R1", text: "hello" };
     expect(decodeClientFrameV2(frame)).toMatchObject({ session_id: channel.session_id, leaf_id: null });

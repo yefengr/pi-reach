@@ -19,7 +19,7 @@ export function SettingsConfirmHarness() {
   return (
     <>
       <span data-testid="settings-confirm-transition" data-state={confirmTransition} hidden />
-      <div className="pwa-settings-view"><SettingsPage relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.default.test" onSave={async () => {}} onBack={() => {}} backLabel="Back to workspace" onClearData={requestClear} onResetLayout={() => {}} /></div>
+      <div className="pwa-settings-view"><SettingsPage relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.default.test" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={() => {}} backLabel="Back to workspace" onClearData={requestClear} onResetLayout={() => {}} /></div>
       <ConfirmActionDialog
         action={confirmAction}
         pending={false}
