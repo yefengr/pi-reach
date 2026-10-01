@@ -124,7 +124,7 @@ docker-compose version
 
 GitHub（仓库 Settings → Environments）：
 
-- 新建 `production`：Required reviewers 选维护者，Deployment branches 限定为 `main`。
+- 新建 `production`：Required reviewers 选维护者；Deployment branches 选 Protected branches only（本仓库只有 `main` 受保护），或 Selected branches 指定 `main`。
 - Environment secrets：`DEPLOY_SSH_KEY`（下文专用私钥全文）、`DEPLOY_KNOWN_HOSTS`（服务器主机公钥行）、`DEPLOY_HOST`、`DEPLOY_USER`。仓库公开，Actions 日志所有人可见，主机与账号也放在 Secrets 中，由日志遮盖。
 - Environment variables：`PWA_URL`、`RELAY_URL`（公网检查地址，留空则跳过）；SSH 端口不是 22 时设 `DEPLOY_PORT`。
 - 服务器不是 `linux/amd64` 时，设仓库变量 `DEPLOY_PLATFORM`（如 `linux/arm64`）。
@@ -154,6 +154,16 @@ restrict,command="PI_REACH_REMOTE_DIR=/home/your-deploy-user/pi-reach PI_REACH_I
 ```
 
 `restrict` 关闭端口转发、终端与用户 rc 文件，`command=` 让这把密钥无论请求什么都只运行 `deploy-from-ci.sh`。脚本只接受 `deploy <pwa|relay> <前缀>/pi-reach-<pwa|relay>:vX.Y.Z@sha256:<摘要>`，其余请求一律拒绝，不调用 Docker。可选的 `PI_REACH_KEEP_IMAGE_VERSIONS` 控制保留的镜像数（默认 3），写在同一个 `command=` 中。
+
+配置后用这把密钥自检，确认它拿不到 shell，也不能转发端口：
+
+```bash
+ssh -i ~/.ssh/pi-reach-github-deploy -o IdentitiesOnly=yes your-deploy-user@your-server-host id
+# 预期：✗ Rejected request. Expected: deploy <pwa|relay> ...，退出码 1
+ssh -i ~/.ssh/pi-reach-github-deploy -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes -N \
+  -L 18080:127.0.0.1:3001 your-deploy-user@your-server-host
+# 预期：Could not request local forwarding
+```
 
 ### 首次运行
 
