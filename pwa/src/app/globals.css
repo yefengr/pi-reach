@@ -307,6 +307,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-form { margin-top: 16px; display: grid; justify-items: start; gap: 12px; }
 .pwa-root .pwa-settings-form .pwa-field { width: 100%; }
 .pwa-root .pwa-settings-actions { margin-top: 16px; display: grid; justify-items: start; gap: 16px; }
+.pwa-root .pwa-settings-about-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.pwa-root .pwa-settings-versions { margin: 8px 0 0; display: grid; gap: 12px; font-size: var(--pwa-text-body); }
+.pwa-root .pwa-settings-versions > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
+.pwa-root .pwa-settings-versions dd { margin: 0; text-align: right; color: var(--pwa-secondary); overflow-wrap: anywhere; user-select: text; }
+.pwa-root .pwa-settings-version-target { margin-top: 12px; overflow-wrap: anywhere; }
 .pwa-appearance-options { display: block; margin-top: 16px; }
 .pwa-appearance-option { min-height: 72px; margin: 0; padding: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); transition: background 160ms ease, border-color 160ms ease; }
 .pwa-appearance-option:hover { background: var(--pwa-hover); }

@@ -1,10 +1,12 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import { SessionManager, type ExtensionAPI, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { decodeServerFrameV2 } from "./protocol/v2/index.js";
 import { resetExtensionOwnerForTest } from "./runtime/extension_owner.js";
 
 type OwnerRecord = { name: string; remote_epk: string; paired_at: string };
+const packageVersion = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
 
 const relays: MockRelay[] = [];
 const owners: OwnerRecord[] = [];
@@ -53,6 +55,7 @@ function readyFrame(relay: MockRelay) {
   const frames = relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from((JSON.parse(line) as { ct: string }).ct, "base64").toString("utf8")));
   const ready = frames.findLast((frame) => frame.type === "session_ready");
   if (!ready) throw new Error("expected session_ready");
+  expect(ready.extension_version).toBe(packageVersion);
   return ready;
 }
 
@@ -225,6 +228,7 @@ describe("Pi Reach endpoint extension", () => {
       customType: "pi-reach:runtime-ready",
       details: expect.objectContaining({
         control_protocol_version: 2,
+        extension_version: packageVersion,
         endpoint_id: processEndpointIdentity().endpointId,
         runtime_instance_id: processEndpointIdentity().runtimeInstanceId,
         session_id: context.sessionManager.getSessionId(),
@@ -235,6 +239,7 @@ describe("Pi Reach endpoint extension", () => {
     expect(JSON.parse(controlStatus as string)).toMatchObject({
       type: "runtime_ready",
       control_protocol_version: 2,
+      extension_version: packageVersion,
       endpoint_id: processEndpointIdentity().endpointId,
       runtime_instance_id: processEndpointIdentity().runtimeInstanceId,
       session_id: context.sessionManager.getSessionId(),
@@ -860,6 +865,7 @@ describe("Pi Reach endpoint extension", () => {
     expect(outbound.source_owner_id).toBeUndefined();
     expect(decodeServerFrameV2(Buffer.from(outbound.ct, "base64").toString("utf8"))).toMatchObject({
       type: "pair_ok",
+      harness: { name: "Pi coding agent", version: packageVersion },
       session_name: "Pairing session",
       endpoint_id: processEndpointIdentity().endpointId,
     });

@@ -52,7 +52,7 @@ export const approveToolFrameSchema = strictObject({ ...protocol, type: z.litera
 
 export const pairOkFrameSchema = strictObject({ ...protocol, type: z.literal("pair_ok"), in_reply_to: idSchema, session_name: textSchema, session_started_at: timestampSchema, endpoint_id: idSchema, harness: harnessSchema.optional(), hostname: textSchema.optional() });
 export const pairErrorFrameSchema = strictObject({ ...protocol, type: z.literal("pair_error"), in_reply_to: idSchema, code: z.enum(["token_expired", "token_consumed", "token_unknown", "internal_error"]), message: textSchema.min(1) });
-export const sessionReadyFrameSchema = strictObject({ ...directResponse, type: z.literal("session_ready"), in_reply_to: idSchema, session_id: idSchema, leaf_id: leafIdSchema, head_seq: headSequenceSchema, self_sender_ref: idSchema });
+export const sessionReadyFrameSchema = strictObject({ ...directResponse, type: z.literal("session_ready"), extension_version: idSchema, in_reply_to: idSchema, session_id: idSchema, leaf_id: leafIdSchema, head_seq: headSequenceSchema, self_sender_ref: idSchema });
 
 const startedMessageSchema = strictObject({ id: idSchema, group_id: idSchema, blocks: z.array(userBlockSchema).max(MAX_ARRAY_ITEMS), origin: z.enum(["pwa", "extension", "unknown"]), sender_ref: idSchema.optional(), delivery: z.enum(["normal", "queued", "unknown"]) }).superRefine((message, ctx) => {
   if (message.origin === "pwa" && message.sender_ref === undefined) ctx.addIssue({ code: "custom", path: ["sender_ref"], message: "pwa user messages require sender_ref" });

@@ -1,4 +1,5 @@
 import type { Page } from "playwright/test";
+import packageInfo from "../package.json" with { type: "json" };
 import { test, expect } from "./fixtures/pwa";
 
 const TEST_RELAY_URL = "http://127.0.0.1:9";
@@ -81,4 +82,8 @@ test("opens /app/settings offline once the service worker controls the app", asy
   await page.goto("/app/settings");
   await expect(settingsPage(page)).toBeVisible();
   await expect(page).toHaveURL(/\/app\/settings$/);
+  await expect(settingsPage(page).locator('[data-version="pwa"]')).toHaveText(packageInfo.version);
+  // 请求阻断不保证 navigator.onLine 为 false；连接状态不能冒充版本。
+  await expect(settingsPage(page).locator('[data-version="relay"]')).toHaveText(/^(Not connected|Getting version…)$/);
+  await expect(settingsPage(page).locator('[data-version="extension"]')).toHaveText("No online Pi selected");
 });

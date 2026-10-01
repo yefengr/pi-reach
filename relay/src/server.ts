@@ -9,6 +9,7 @@ import { resolveRelayLimits, type RelayLimits } from "./config.js";
 import { DiscoveryCapacityError } from "./discovery-budget.js";
 import { PeerRegistry, type Outbound } from "./registry.js";
 import { BoundedTransport, TransportPool } from "./transport.js";
+import { RELAY_VERSION } from "./version.js";
 import {
   frameType,
   parseEndpointUpdate,
@@ -242,6 +243,11 @@ class PeerSession {
     this.hello = undefined;
     this.nonce = undefined;
     this.state = "ready";
+    if (connection.role === "owner" && !this.transport.send(JSON.stringify({ type: "relay_info", version: RELAY_VERSION }))) {
+      this.deactivate();
+      return;
+    }
+    if (this.isClosed()) return;
     this.startHeartbeat();
     this.logger({ event: "authenticated", role: connection.role });
   }

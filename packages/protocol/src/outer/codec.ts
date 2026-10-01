@@ -52,6 +52,9 @@ export function decodeControlFrame(value: unknown): ControlFrame | undefined {
   if (value.type === "pairing_code_error" && hasOnlyKeys(value, ["type", "in_reply_to", "reason"]) && isId(value.in_reply_to) && (value.reason === "unknown_code" || value.reason === "expired_code" || value.reason === "stale_target" || value.reason === "rate_limited")) {
     return { type: "pairing_code_error", in_reply_to: value.in_reply_to, reason: value.reason };
   }
+  if (value.type === "relay_info" && hasOnlyKeys(value, ["type", "version"]) && isId(value.version)) {
+    return { type: "relay_info", version: value.version };
+  }
   if (!isId(value.device_id)) return undefined;
   if (value.type === "endpoints" && hasOnlyKeys(value, ["type", "device_id", "endpoints"]) && Array.isArray(value.endpoints)) {
     const endpoints = value.endpoints.map(decodeEndpoint);

@@ -76,6 +76,8 @@ device_id
 | Host 的 Pi session | Pi 本机状态 | 当前 session/branch 与正式历史的权威来源。 |
 | Relay registry | 内存 | 实时 endpoint、ACL、Owner 订阅、连接与短期 pairing offer。 |
 
+组件版本不写入 IndexedDB。PWA 版本来自当前 bundle 编译时使用的本包版本；Relay 版本由 `useRelayConnection` 持有，扩展版本由 `PwaApp` 持有，分别随当前连接和会话清理，不从配对记录恢复。版本上报契约见[Protocol v2](reference/protocol/protocol-v2.md#relay-control-frames)，展示规则见[设置页](DESIGN.md#设置页)。
+
 浏览器数据库名为 `pi-reach`，定义由 [`db.ts`](../pwa/src/lib/pwa/db.ts) 维护。IndexedDB v11 使用 `events` 和 `sessions` 表；正式历史的稳定分区键为：
 
 ```text

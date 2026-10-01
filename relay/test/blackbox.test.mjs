@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -152,6 +153,28 @@ test("Relay WebSocket black-box contract", { concurrency: false, timeout: 45_000
         const owner = await openOwner(url, track);
         const snapshot = await subscribe(owner, [owner.identity.id]);
         assert.ok(snapshotContainsExactly(snapshot, []), "unknown device subscription must return an empty snapshot");
+      });
+    });
+
+    await t.test("announces the actual Relay package version once per authenticated Owner, not to Hosts", async () => {
+      await withScenario(url, async (track) => {
+        const identity = createIdentity();
+        const { peer, nonce } = await beginAuthentication(url, ownerHello(identity));
+        track(peer);
+        await peer.expectNoJson((frame) => isFrame(frame, "relay_info"), 0);
+        const after = peer.cursor();
+        await peer.sendJson({ type: "auth", sig: signNonce(identity, nonce) });
+        const info = await peer.waitForJson((frame) => isFrame(frame, "relay_info"), after);
+        assert.deepEqual(Object.keys(info).sort(), ["type", "version"]);
+        assert.ok(typeof info.version === "string" && info.version.length > 0 && info.version.length <= 256);
+        if (!externalUrl) {
+          const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+          assert.equal(info.version, pkg.version, "compiled Relay must use its package version");
+        }
+        await subscribe({ identity, peer }, [identity.id]);
+        await peer.expectNoJson((frame) => isFrame(frame, "relay_info"), after + 1);
+        const host = await openHost(url, track, { authorizedOwnerIds: [identity.id] });
+        await host.peer.expectNoJson((frame) => isFrame(frame, "relay_info"), 0);
       });
     });
 

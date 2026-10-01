@@ -147,3 +147,32 @@ test("ignores delayed callbacks from an old socket after a new connection starts
   expect(client.sendControl({ type: "subscribe_endpoints", device_ids: ["device"] })).toBe(true);
   expect(first.sent.filter((frame) => frame.includes("subscribe_endpoints"))).toHaveLength(0);
 });
+
+test("forwards only valid Relay versions from the current authenticated socket", async () => {
+  const first = new FakeWebSocket();
+  const second = new FakeWebSocket();
+  const sockets = [first, second];
+  const identity = await generateOwnerKeyPair();
+  const client = new RelayClient({ relayUrl: "https://relay.example.test", identity, webSocketFactory: () => sockets.shift() ?? second });
+  const versions: string[] = [];
+  client.on("control", (frame) => { if (frame.type === "relay_info") versions.push(frame.version); });
+  const connected = client.connect();
+  first.open();
+  first.message(challenge());
+  await connected;
+  first.message(JSON.stringify({ type: "relay_info", version: "1.2.3" }));
+  first.message(JSON.stringify({ type: "relay_info", version: "bad", extra: true }));
+  await Promise.resolve();
+  expect(versions).toEqual(["1.2.3"]);
+
+  client.close();
+  const reconnected = client.connect();
+  second.open();
+  second.message(challenge());
+  await reconnected;
+  first.message(JSON.stringify({ type: "relay_info", version: "old-socket" }));
+  second.message(JSON.stringify({ type: "relay_info", version: "2.3.4" }));
+  await Promise.resolve();
+  expect(versions).toEqual(["1.2.3", "2.3.4"]);
+  client.close();
+});

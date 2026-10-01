@@ -172,7 +172,7 @@ export function useDevicePairing({ getOwnerRelay, relayUrl, onPaired, onError }:
               if (isActive()) fail("relay_unavailable", attempt.requestSent);
             });
             attempt.unsubscribeControl = relay.on("control", (frame) => {
-              if (!isActive() || frame.type === "endpoints" || frame.type === "endpoint_announced" || frame.type === "endpoint_updated" || frame.type === "endpoint_ended" || frame.in_reply_to !== requestId) return;
+              if (!isActive() || (frame.type !== "pairing_target" && frame.type !== "pairing_code_error") || frame.in_reply_to !== requestId) return;
               if (frame.type === "pairing_code_error") {
                 fail(frame.reason, false);
                 return;

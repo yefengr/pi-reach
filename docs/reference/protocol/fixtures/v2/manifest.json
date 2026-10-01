@@ -38,6 +38,38 @@
       }
     },
     {
+      "id": "session-ready",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "session_ready",
+        "extension_version": "0.0.3",
+        "in_reply_to": "hello-1",
+        "target_channel_id": "channel-1",
+        "session_id": "session-1",
+        "leaf_id": null,
+        "head_seq": 0,
+        "self_sender_ref": "owner-1"
+      }
+    },
+    {
+      "id": "session-ready-missing-extension-version",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "session_ready",
+        "in_reply_to": "hello-1",
+        "target_channel_id": "channel-1",
+        "session_id": "session-1",
+        "leaf_id": null,
+        "head_seq": 0,
+        "self_sender_ref": "owner-1"
+      }
+    },
+    {
       "id": "timeline-event",
       "direction": "timeline",
       "valid": true,

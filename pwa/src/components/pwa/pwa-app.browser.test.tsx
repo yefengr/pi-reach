@@ -316,6 +316,7 @@ function readyFrame(channel: { channelId: string; frames: Array<{ type: string; 
   return {
     protocol_version: 2 as const,
     type: "session_ready" as const,
+    extension_version: "1.2.3",
     target_channel_id: channel.channelId,
     in_reply_to: channel.frames.find((frame) => frame.type === "session_hello")?.id ?? "missing-hello",
     session_id: sessionId,
@@ -1654,6 +1655,89 @@ test("preserves the session, draft, attachment, tool state and reader across lay
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
+  }
+});
+
+test("preserves the extension version when reselecting the current computer and Pi", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const channel = channelHarness.channels[0]!;
+  try {
+    channel.emit({ ...readyFrame(channel, "session-1"), extension_version: "3.4.5" });
+    await screen.getByRole("button", { name: "Choose computer, current test-host" }).click();
+    await expect.element(screen.getByRole("dialog", { name: "Choose computer" })).toBeVisible();
+    await page.elementLocator(document.querySelector(".pwa-computer-select")!).click();
+    await expect.poll(() => document.querySelector(".pwa-device-panel")).toBeNull();
+    await page.elementLocator(document.querySelector('.pwa-nav-session[aria-current="true"]')!).click();
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await expect.element(screen.getByRole("main", { name: "Settings" })).toBeVisible();
+    await expect.poll(() => document.querySelector('[data-version="extension"]')?.textContent).toBe("3.4.5");
+    expect(channelHarness.channels).toHaveLength(1);
+    expect(channel.frames.filter((frame) => frame.type === "session_hello")).toHaveLength(1);
+  } finally {
+    window.history.replaceState(null, "", "/app");
+    await screen.unmount();
+  }
+});
+
+test.each([1280, 390])("shows live versions in settings and clears them across Relay reconnects at %ipx", async (width) => {
+  await page.viewport(width, 844);
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const relay = relayHarness.instances[0]!;
+  const channel = channelHarness.channels[0]!;
+  const version = (component: string) => document.querySelector(`[data-version="${component}"]`)?.textContent;
+  try {
+    relay.emitControl({ type: "relay_info", version: "2.3.4" });
+    channel.emit({ ...readyFrame(channel, "session-1"), extension_version: "9.9.9", in_reply_to: "wrong-hello" });
+    channel.emit({ ...readyFrame(channel, "session-1"), extension_version: "3.4.5" });
+    if (width < 768) await screen.getByRole("button", { name: "Open navigation" }).click();
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await expect.element(screen.getByRole("main", { name: "Settings" })).toBeVisible();
+    await expect.poll(() => version("relay")).toBe("2.3.4");
+    await expect.poll(() => version("extension")).toBe("3.4.5");
+    expect(relayHarness.instances).toHaveLength(1);
+    expect(channelHarness.channels).toHaveLength(1);
+    expect(relay.closeCalls).toBe(0);
+
+    relay.emitState("closed");
+    await expect.poll(() => version("extension")).toBe("No online Pi selected");
+    await expect.poll(() => version("relay")).not.toBe("2.3.4");
+    await vi.waitFor(() => expect(relay.connectCalls).toBe(2));
+    relay.emitControl({ type: "relay_info", version: "2.3.5" });
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-2", metadata: { kind: "interactive", name: "New Pi", cwd: "/workspace" } }] });
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    channel.emit({ ...readyFrame(channel, "stale-session"), extension_version: "9.9.9" });
+    const newChannel = channelHarness.channels[1]!;
+    newChannel.emit({ ...readyFrame(newChannel, "new-session"), extension_version: "3.4.6" });
+    await expect.poll(() => version("relay")).toBe("2.3.5");
+    await expect.poll(() => version("extension")).toBe("3.4.6");
+    await expect.element(screen.getByText("Current Pi: test-host · New Pi")).toBeInTheDocument();
+  } finally {
+    window.history.replaceState(null, "", "/app");
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});
+
+test("ignores version callbacks from a replaced Relay while saving settings", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const relay = relayHarness.instances[0]!;
+  try {
+    relay.emitControl({ type: "relay_info", version: "2.3.4" });
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1"));
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await expect.element(screen.getByRole("main", { name: "Settings" })).toBeVisible();
+    await screen.getByRole("textbox", { name: "Relay URL" }).fill("https://relay.changed.test");
+    await screen.getByRole("button", { name: "Save settings" }).click();
+    await vi.waitFor(() => expect(relayHarness.instances).toHaveLength(2));
+    const replacement = relayHarness.instances[1]!;
+    await vi.waitFor(() => expect(replacement.state).toBe("open"));
+    replacement.emitControl({ type: "relay_info", version: "4.5.6" });
+    relay.emitControl({ type: "relay_info", version: "9.9.9" });
+    await expect.poll(() => document.querySelector('[data-version="relay"]')?.textContent).toBe("4.5.6");
+    await expect.poll(() => document.querySelector('[data-version="extension"]')?.textContent).toBe("Getting version…");
+  } finally {
+    window.history.replaceState(null, "", "/app");
+    await screen.unmount();
   }
 });
 

@@ -9,7 +9,7 @@ import type { ExtensionAPI, ExtensionContext, ExtensionFactory, SessionManager }
 import { canonicalizeEd25519PublicKey } from "./pairing/crypto.js";
 import { qrSession } from "./pairing/qr.js";
 import { addPeer, conditionalRollbackPeer, getOrCreateEd25519Keypair, KeyringUnavailableError, PairedIdentityMissingError, listPeers, type PeerRecord } from "./pairing/storage.js";
-import { type ClientFrame, type ServerFrame } from "./protocol/v2/index.js";
+import { idSchema, type ClientFrame, type ServerFrame } from "./protocol/v2/index.js";
 import { RelayClient, type HostConnectOptions } from "./transport/relay_client.js";
 import { V2PeerChannel, type HostRouteIdentity } from "./transport/peer_channel.js";
 import { TimelineV2Service, type V2ActionFrame } from "./timeline/v2_service.js";
@@ -30,6 +30,7 @@ import { clearLegacyRelayStatuses, renderRelayFooter } from "./runtime/footer.js
 export type { RelayConnectivity, RemoteState } from "./runtime/relay_lifecycle.js";
 const CTRL_PREFIX = "\x00pi-reach-ctrl:";
 const CONTROL_PROTOCOL_VERSION = 2;
+const EXTENSION_VERSION = readExtensionVersion();
 const RUNTIME_CONTROL_STATUS_KEY = "pi-reach:control";
 type ProcessIdentity = Readonly<{ endpointId: string; runtimeInstanceId: string }>;
 type EndpointGlobal = typeof globalThis & { [key: symbol]: ProcessIdentity | undefined };
@@ -123,7 +124,7 @@ function emitRelayState(): void {
 function emitRuntimeReady(ctx: Pick<ExtensionContext, "ui" | "mode">): void {
   const details = {
     control_protocol_version: CONTROL_PROTOCOL_VERSION,
-    extension_version: extensionVersion(),
+    extension_version: EXTENSION_VERSION,
     endpoint_id: endpointIdentity.endpointId,
     runtime_instance_id: endpointIdentity.runtimeInstanceId,
     ...(currentSessionManager ? { session_id: currentSessionManager.getSessionId() } : {}),
@@ -333,6 +334,7 @@ function createBinding(relayClient: RelayClient, ownerId: string): OwnerBinding 
   service = new TimelineV2Service({
     sessionManager: manager,
     senderRef: ownerId,
+    extensionVersion: EXTENSION_VERSION,
     runtime,
     onUserMessage: (frame, correlation) => {
       currentTurnId = frame.client_request_id;
@@ -414,7 +416,7 @@ const pairingCoordinator = new PairingCoordinator({
     session_name: currentSessionName(currentSessionManager),
     session_started_at: Date.now(),
     endpoint_id: endpointIdentity.endpointId,
-    harness: { name: "Pi coding agent", version: extensionVersion() },
+    harness: { name: "Pi coding agent", version: EXTENSION_VERSION },
     hostname: hostname(),
   }),
 });
@@ -449,13 +451,13 @@ async function hostConnectOptions(cwd = process.cwd()): Promise<HostConnectOptio
 function start(ctx: RelayStartContext) { return relayLifecycle.start(ctx); }
 function waitForInitialRelay() { return relayLifecycle.waitForInitial(); }
 
-const extensionVersion = (): string => {
-  try {
-    const here = fileURLToPath(import.meta.url);
-    const pkg = JSON.parse(readFileSync(join(dirname(dirname(here)), "package.json"), "utf8")) as { version?: unknown };
-    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
-  } catch { return "0.0.0"; }
-};
+function readExtensionVersion(): string {
+  const here = fileURLToPath(import.meta.url);
+  const pkg = JSON.parse(readFileSync(join(dirname(dirname(here)), "package.json"), "utf8")) as { version?: unknown };
+  const version = idSchema.safeParse(pkg.version);
+  if (!version.success) throw new Error("Pi Reach Extension package has an invalid version");
+  return version.data;
+}
 
 const APPLIED = Symbol.for("pi-reach.endpoint-extension-applied");
 function appliedSet(): WeakSet<object> {

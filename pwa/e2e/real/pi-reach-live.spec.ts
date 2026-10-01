@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type BrowserContext, type Page, type TestInfo } from "playwright/test";
 
@@ -118,6 +119,18 @@ async function configureRelay(page: Page): Promise<void> {
   await expect(settings).toHaveCount(0);
 }
 
+async function expectLiveVersions(page: Page): Promise<void> {
+  const packageVersion = (path: string) => (JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8")) as { version: string }).version;
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("main", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await expect(settings.locator('[data-version="pwa"]')).toHaveText(packageVersion("../../package.json"));
+  await expect(settings.locator('[data-version="relay"]')).toHaveText(packageVersion("../../../relay/package.json"));
+  await expect(settings.locator('[data-version="extension"]')).toHaveText(packageVersion("../../../pi-extension/package.json"));
+  await settings.getByRole("button", { name: "Back to workspace" }).click();
+  await expect(settings).toHaveCount(0);
+}
+
 async function pairOwner(page: Page, pairingCode: string): Promise<void> {
   await page.getByRole("button", { name: "Start pairing", exact: true }).click();
   const pairingDialog = page.getByRole("dialog", { name: "Pair a computer" });
@@ -216,6 +229,7 @@ test("pairs two browser Owners and preserves recovery state across Relay restart
     await pairOwner(ownerAPage, firstPairingCode);
     const secondPairingCode = await generatePairingCode(capability, firstPairingCode);
     await pairOwner(ownerBPage, secondPairingCode);
+    await Promise.all([expectLiveVersions(ownerAPage), expectLiveVersions(ownerBPage)]);
 
     const beforeReloadA = await readPersistenceSnapshot(ownerAPage);
     const beforeReloadB = await readPersistenceSnapshot(ownerBPage);
@@ -264,6 +278,7 @@ test("pairs two browser Owners and preserves recovery state across Relay restart
       expect(ownerBPage.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 }),
     ]);
 
+    await Promise.all([expectLiveVersions(ownerAPage), expectLiveVersions(ownerBPage)]);
     const afterReloadA = await readPersistenceSnapshot(ownerAPage);
     const afterReloadB = await readPersistenceSnapshot(ownerBPage);
     expect(afterReloadA).toEqual(beforeReloadA);

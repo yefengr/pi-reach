@@ -21,6 +21,7 @@ export type V2ActionFrame = Extract<
 export type V2ServiceOptions = {
   sessionManager: SessionManager;
   senderRef: string;
+  extensionVersion: string;
   runtime: TimelineRuntime;
   onUserMessage: (
     frame: Extract<ClientFrame, { type: "user_message" }>,
@@ -47,6 +48,7 @@ export class TimelineV2Service {
   private readonly pager: TimelineHistoryPager;
   private readonly sessionManager: SessionManager;
   private readonly senderRef: string;
+  private readonly extensionVersion: string;
   private readonly runtime: TimelineRuntime;
   private readonly onUserMessage: V2ServiceOptions["onUserMessage"];
   private readonly onCancel?: V2ServiceOptions["onCancel"];
@@ -60,6 +62,7 @@ export class TimelineV2Service {
   constructor(options: V2ServiceOptions) {
     this.sessionManager = options.sessionManager;
     this.senderRef = options.senderRef;
+    this.extensionVersion = options.extensionVersion;
     this.state = new V2SessionState({ sessionId: options.sessionManager.getSessionId(), leafId: options.sessionManager.getLeafId() ?? null });
     this.runtime = options.runtime;
     this.onUserMessage = options.onUserMessage;
@@ -288,6 +291,7 @@ export class TimelineV2Service {
     return {
       protocol_version: 2,
       type: "session_ready",
+      extension_version: this.extensionVersion,
       in_reply_to: frame.id,
       target_channel_id: frame.channel_id,
       session_id: this.sessionId,
