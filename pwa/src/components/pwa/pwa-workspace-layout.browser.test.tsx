@@ -571,14 +571,14 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(button.querySelector(".pwa-peer-presence")?.textContent).toContain(["2 Pis running", "0 Pis running", "1 Pi running", "Checking"][index]);
         expect(button.querySelector(".pwa-peer-icon")?.classList.contains("online")).toBe(index === 0 || index === 2);
         if (index === 0 || index === 2) {
+          // 在线电脑的图标与标签只用正文色，不铺主色底。
           const probe = document.createElement("span");
-          probe.style.color = "var(--pwa-accent)";
-          probe.style.backgroundColor = "var(--pwa-accent-wash)";
+          probe.style.color = "var(--pwa-ink)";
           row.append(probe);
           expect(getComputedStyle(button.querySelector(".pwa-peer-icon")!).color).toBe(getComputedStyle(probe).color);
           if (index === 0) {
             expect(getComputedStyle(button.querySelector(".pwa-presence-label")!).color).toBe(getComputedStyle(probe).color);
-            expect(getComputedStyle(button.querySelector(".pwa-presence-label")!).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+            expect(getComputedStyle(button.querySelector(".pwa-presence-label")!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
           }
           probe.remove();
         }

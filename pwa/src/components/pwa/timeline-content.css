@@ -42,7 +42,7 @@
 .pwa-markdown li > p { margin: 4px 0; }
 .pwa-markdown a { color: var(--pwa-accent); text-decoration: underline; text-underline-offset: 2px; }
 .pwa-markdown blockquote { margin: 8px 0; padding-left: 12px; border-left: 2px solid var(--pwa-control-line); color: var(--pwa-soft-ink); }
-.pwa-markdown code { padding: 1px 4px; border-radius: var(--pwa-radius-xs); color: var(--pwa-accent); background: var(--pwa-panel); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
+.pwa-markdown code { padding: 1px 4px; border-radius: var(--pwa-radius-xs); color: var(--pwa-soft-ink); background: var(--pwa-panel); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
 .pwa-markdown hr { margin: 16px 0; border: 0; border-top: 1px solid var(--pwa-line); }
 .pwa-markdown img { max-width: 100%; height: auto; border-radius: var(--pwa-radius-md); }
 .pwa-markdown-table { max-width: 100%; margin: 8px 0; overflow-x: auto; }

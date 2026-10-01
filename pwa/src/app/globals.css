@@ -123,7 +123,7 @@ body:has(.pwa-root) { overflow: hidden; }
 }
 
 
-.pwa-brand-mark { flex: 0 0 auto; color: var(--pwa-accent); }
+.pwa-brand-mark { flex: 0 0 auto; color: var(--pwa-ink); }
 
 .pwa-kicker { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); letter-spacing: 0; }
 
@@ -210,7 +210,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
 .pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
 .pwa-ui-scope .pwa-button.pwa-latest-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
-.pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-accent); color: var(--pwa-accent); background: var(--pwa-accent-wash); }
+.pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); }
 
 .pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-gutter), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-safe-bottom)); }
 .pwa-image-input { display: none; }
@@ -263,7 +263,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-composer-menu-panel { min-width: 190px; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-composer-menu-panel { bottom: calc(100% + 8px); left: 0; }
 .pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
-.pwa-composer-menu-panel button:hover { color: var(--pwa-accent); background: var(--pwa-hover); }
+.pwa-composer-menu-panel button:hover { color: var(--pwa-ink); background: var(--pwa-hover); }
 .pwa-root .pwa-command-menu-dropdown { --pwa-command-menu-width: min(340px, calc(100vw - 32px)); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-command-menu-panel { display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; }
 .pwa-command-row,
@@ -273,7 +273,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-row:hover:not(:disabled),
 .pwa-command-row:focus-visible:not(:disabled),
 .pwa-command-back:hover,
-.pwa-command-back:focus-visible { color: var(--pwa-accent); background: var(--pwa-hover); }
+.pwa-command-back:focus-visible { color: var(--pwa-ink); background: var(--pwa-hover); }
 .pwa-command-row:disabled { opacity: 0.45; cursor: not-allowed; }
 .pwa-command-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
 .pwa-command-copy code,
@@ -282,19 +282,19 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-menu-heading,
 .pwa-command-empty { color: var(--pwa-secondary); font-size: 12px; }
 .pwa-command-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pwa-command-chevron,
-.pwa-command-check { flex: 0 0 auto; color: var(--pwa-accent); }
-/* 当前模型／思考等级：持久的 accent-wash 底与 accent 主文案，悬停和键盘高亮时保持不变。 */
-.pwa-command-choice[data-selected] { --menu-item-hover: var(--pwa-accent-wash); color: var(--pwa-accent); background: var(--pwa-accent-wash); }
+.pwa-command-chevron { flex: 0 0 auto; color: var(--pwa-secondary); }
+.pwa-command-check { flex: 0 0 auto; color: var(--pwa-ink); }
+/* 当前模型／思考等级：持久的 selected 中性底与 ink 文字，悬停和键盘高亮时保持不变。 */
+.pwa-command-choice[data-selected] { --menu-item-hover: var(--pwa-selected); color: var(--pwa-ink); background: var(--pwa-selected); }
 .pwa-command-choice[data-selected]:hover:not(:disabled),
-.pwa-command-choice[data-selected]:focus-visible:not(:disabled) { color: var(--pwa-accent); background: var(--pwa-accent-wash); }
-.pwa-command-choice[data-selected] .pwa-command-copy > span { color: var(--pwa-accent); }
+.pwa-command-choice[data-selected]:focus-visible:not(:disabled) { color: var(--pwa-ink); background: var(--pwa-selected); }
+.pwa-command-choice[data-selected] .pwa-command-copy > span { color: var(--pwa-ink); }
 .pwa-command-menu-heading { padding: 8px 10px 6px; font-weight: 600; text-transform: uppercase; }
 .pwa-command-back { color: var(--pwa-secondary); }
 .pwa-command-empty { margin: 0; padding: 12px 10px; line-height: var(--pwa-leading-ui); }
 
-/* 独立设置页：surface 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
-.pwa-root .pwa-settings-page { min-height: 100%; color: var(--pwa-ink); background: var(--pwa-surface); }
+/* 独立设置页：与工作区同为 bg 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
+.pwa-root .pwa-settings-page { min-height: 100%; color: var(--pwa-ink); background: var(--pwa-bg); }
 .pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: 32px 20px calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
 .pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }
 .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { margin-left: -8px; padding-inline: 8px; }
@@ -310,14 +310,15 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-appearance-options { display: block; margin-top: 16px; }
 .pwa-appearance-option { min-height: 72px; margin: 0; padding: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); transition: background 160ms ease, border-color 160ms ease; }
 .pwa-appearance-option:hover { background: var(--pwa-hover); }
-.pwa-appearance-option:has(input:checked) { border-color: var(--pwa-accent); background: var(--pwa-accent-wash); }
+/* 选中项只加深描边；颜色只留给单选圆点。 */
+.pwa-appearance-option:has(input:checked) { border-color: var(--pwa-ink); background: var(--pwa-surface); }
 .pwa-appearance-option .mantine-Radio-inner { align-self: center; }
 .pwa-appearance-option .mantine-Radio-radio { border-color: var(--pwa-line); }
 .pwa-appearance-option .mantine-Radio-radio:checked { border-color: var(--pwa-accent); background: var(--pwa-accent); }
 .pwa-appearance-option .mantine-Radio-labelWrapper { min-width: 0; flex: 1; }
 .pwa-appearance-option .mantine-Radio-label { display: block; padding-left: 10px; color: var(--pwa-ink); }
 .pwa-appearance-copy { display: flex; align-items: center; gap: 10px; }
-.pwa-appearance-copy > svg { flex: 0 0 auto; color: var(--pwa-accent); }
+.pwa-appearance-copy > svg { flex: 0 0 auto; color: var(--pwa-secondary); }
 .pwa-appearance-copy > span { min-width: 0; display: grid; gap: 2px; }
 .pwa-appearance-copy strong { font-size: 13px; font-weight: 600; }
 .pwa-appearance-copy small { color: var(--pwa-secondary); font-size: 12px; }
@@ -404,14 +405,14 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-startup-icon { width: 45px; height: 45px; margin-bottom: 16px; }
 .pwa-startup-card h1 { margin: 12px 0; font-family: var(--pwa-font-ui); font-size: 22px; font-weight: 600; line-height: var(--pwa-leading-ui); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: 14px; line-height: var(--pwa-leading-body); }
-.pwa-startup-action-note { color: var(--pwa-accent) !important; font-size: 12px !important; }
+.pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: 12px !important; }
 .pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .pwa-startup-actions a { text-decoration: none; }
 .pwa-spin { color: var(--pwa-running); animation: pwa-rotate 1.3s linear infinite; }
 .pwa-loading { color: var(--pwa-secondary); font-size: var(--pwa-text-body); }
 .pwa-loading p { margin: 16px 0 0; }
-.pwa-loading p span { color: var(--pwa-accent); }
-.pwa-loading-mark { display: block; margin: 0 auto; color: var(--pwa-accent); }
+.pwa-loading p span { color: var(--pwa-secondary); }
+.pwa-loading-mark { display: block; margin: 0 auto; color: var(--pwa-ink); }
 
 .pwa-connection-banner {
   order: 2;
@@ -441,9 +442,9 @@ body:has(.pwa-root) { overflow: hidden; }
 
 .pwa-runtime-notice {
   --alert-radius: var(--pwa-radius-md) !important;
-  --alert-bg: var(--pwa-accent-wash) !important;
+  --alert-bg: var(--pwa-panel) !important;
   --alert-color: var(--pwa-ink) !important;
-  --alert-bd: color-mix(in srgb, var(--pwa-accent) 28%, var(--pwa-line)) !important;
+  --alert-bd: var(--pwa-line) !important;
   width: min(680px, calc(100% - 36px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
   max-width: 680px;
   margin: 8px auto 0;
@@ -487,7 +488,7 @@ body:has(.pwa-root) { overflow: hidden; }
 }
 .pwa-operation-notifications .pwa-toast-icon { width: 16px; min-width: 16px; height: 16px; margin-right: 8px; border-radius: 0; background: transparent; }
 .pwa-operation-notifications .pwa-toast-success .pwa-toast-icon { color: var(--pwa-complete); }
-.pwa-operation-notifications .pwa-toast-info .pwa-toast-icon { color: var(--pwa-accent); }
+.pwa-operation-notifications .pwa-toast-info .pwa-toast-icon { color: var(--pwa-ink); }
 .pwa-operation-notifications .pwa-toast-error .pwa-toast-icon { color: var(--pwa-error); }
 .pwa-operation-notifications .pwa-operation-notification-message { color: inherit; font: inherit; overflow-wrap: anywhere; }
 .pwa-operation-notifications .pwa-toast-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

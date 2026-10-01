@@ -543,6 +543,26 @@ test("entering saved history revokes session feedback and ignores old channel re
   } finally { await context.screen.unmount(); }
 });
 
+test("marks the open history row with the neutral selected background, also while hovered", async () => {
+  await seedArchivedSession();
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    await expect.poll(() => document.querySelector(".pwa-history-row")?.textContent).toContain("Archived note");
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+    await expect.element(context.screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    const row = document.querySelector<HTMLElement>(".pwa-history-row[data-active]")!;
+    const probe = document.createElement("span");
+    probe.style.cssText = "color: var(--pwa-ink); background: var(--pwa-selected)";
+    row.append(probe);
+    const [ink, selected] = [getComputedStyle(probe).color, getComputedStyle(probe).backgroundColor];
+    probe.remove();
+    // 点击后指针仍停在该行上，当前项不能被悬停底覆盖。
+    expect(row.matches(":hover")).toBe(true);
+    await expect.poll(() => getComputedStyle(row).backgroundColor).toBe(selected);
+    expect(getComputedStyle(row).color).toBe(ink);
+  } finally { await context.screen.unmount(); }
+});
+
 test("saves session names, follows renames, and keeps replaced sessions separate", async () => {
   await seedTimeline(numberedEvents(1));
   const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);

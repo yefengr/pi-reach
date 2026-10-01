@@ -4,7 +4,7 @@
 .pwa-root .pwa-tool-card { padding: 0; border: 0; color: var(--pwa-ink); background: transparent; box-shadow: none; }
 .pwa-root .pwa-tool-head { width: 100%; }
 .pwa-root .pwa-tool-action-copy { min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
-.pwa-root .pwa-tool-action-copy strong { min-width: 0; max-width: 45%; flex: 0 1 auto; overflow: hidden; color: var(--pwa-accent); font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+.pwa-root .pwa-tool-action-copy strong { min-width: 0; max-width: 45%; flex: 0 1 auto; overflow: hidden; color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-action-copy strong:only-child { max-width: 100%; }
 .pwa-root .pwa-tool-action-copy span { min-width: 0; flex: 1 1 0; overflow: hidden; color: var(--pwa-secondary); font: 400 var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); text-overflow: ellipsis; white-space: nowrap; }
 /* 展开后的参数保留原始换行；箭头、名称与状态留在第一行。 */

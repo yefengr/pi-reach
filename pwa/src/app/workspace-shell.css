@@ -60,7 +60,7 @@
 .pwa-root .pwa-nav-heading-copy em { min-width: 0; overflow: hidden; font-size: var(--pwa-text-meta); font-style: normal; font-weight: var(--pwa-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-nav-empty { margin: 0; padding: 4px 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
-/* 会话行：上下 6、左右 10，行间 2；悬停 hover，选中 accent-wash＋accent。 */
+/* 会话行：上下 6、左右 10，行间 2；悬停 hover，选中 selected＋ink。 */
 .pwa-root .pwa-nav-session,
 .pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: 6px 10px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color 120ms var(--pwa-ease-standard); }
 .pwa-root .pwa-nav-session .pwa-nav-link-body,
@@ -74,10 +74,11 @@
 .pwa-root .pwa-nav-session .pwa-nav-link-description,
 .pwa-root .pwa-history-row .pwa-nav-link-description { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); opacity: 1; }
 .pwa-root .pwa-nav-session .pwa-nav-link-section { margin: 0 0 0 8px; }
-.pwa-root .pwa-nav-session:hover:not(:disabled):not([data-disabled]),
-.pwa-root .pwa-history-row:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); }
+/* 当前项悬停时保持 selected，不跳回 hover。 */
+.pwa-root .pwa-nav-session:hover:not(:disabled):not([data-disabled]):not([data-active]),
+.pwa-root .pwa-history-row:hover:not(:disabled):not([data-disabled]):not([data-active]) { background: var(--pwa-hover); }
 .pwa-root .pwa-nav-session[data-active],
-.pwa-root .pwa-history-row[data-active] { color: var(--pwa-accent); background: var(--pwa-accent-wash); cursor: default; opacity: 1; }
+.pwa-root .pwa-history-row[data-active] { color: var(--pwa-ink); background: var(--pwa-selected); cursor: default; opacity: 1; }
 .pwa-root .pwa-nav-session[data-disabled],
 .pwa-root .pwa-history-row[data-disabled] { cursor: default; opacity: 1; }
 .pwa-root .pwa-pi-directory { color: var(--pwa-secondary); }
@@ -115,9 +116,9 @@
 .pwa-root .pwa-main-notices > .pwa-toast { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); max-width: none; }
 .pwa-root .pwa-composer-hint { margin: 6px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); text-align: center; }
 
-/* 连接状态：在线 accent，连接中／重连运行色并带动态图形，离线中性色；带文字（移动端已连接时只显示圆点）。 */
+/* 连接状态：在线为 accent 圆点加中性文字，连接中／重连运行色并带动态图形，离线中性色；带文字（移动端已连接时只显示圆点）。 */
 .pwa-connection { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); white-space: nowrap; }
-.pwa-connection.online { color: var(--pwa-accent); }
+.pwa-connection.online .pwa-status-dot { background: var(--pwa-accent); }
 .pwa-connection.connecting,
 .pwa-connection.retrying { color: var(--pwa-running); }
 .pwa-status-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
@@ -130,7 +131,7 @@
 .pwa-root .pwa-workspace-state > .pwa-button { margin-top: 16px; }
 /* 未配对空状态的命令块：panel 底、高 44，右侧复制按钮。 */
 .pwa-root .pwa-command-block { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 8px; padding-left: 12px; border-radius: var(--pwa-radius-sm); background: var(--pwa-panel); }
-.pwa-root .pwa-command-block code { padding: 0; color: var(--pwa-accent); background: transparent; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
+.pwa-root .pwa-command-block code { padding: 0; color: var(--pwa-ink); background: transparent; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
 /* 选择 Pi：有边界的可点行，悬停 hover、按下 neutral-active，右侧箭头提示可进入。 */
 .pwa-root .pwa-choose-pi-list { width: min(var(--pwa-reading-width), 100%); display: grid; gap: 8px; margin-top: 16px; text-align: left; }
 .pwa-root .pwa-choose-pi-list .pwa-nav-session { min-height: 56px; margin: 0; padding: 8px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); }

@@ -497,6 +497,24 @@ test("code blocks keep the copy button in a header so long lines stay readable o
   }
 });
 
+test("keeps inline code and tool names in neutral text while links keep the accent", async () => {
+  const answer: Extract<TimelineEvent, { kind: "assistant" }> = { ...assistantEvent, event_id: "inline-answer", blocks: [{ type: "text", text: "Run `pnpm test` or read [the guide](https://example.com/guide)." }] };
+  const screen = await renderMessageList([eventItem(toolEvent), eventItem(answer)]);
+  try {
+    await expect.element(screen.getByText("pnpm test")).toBeVisible();
+    const probe = document.createElement("span");
+    probe.style.cssText = "color: var(--pwa-soft-ink); border-top: 1px solid var(--pwa-ink); background: var(--pwa-accent)";
+    document.querySelector(".pwa-root")!.append(probe);
+    const [softInk, ink, accent] = [getComputedStyle(probe).color, getComputedStyle(probe).borderTopColor, getComputedStyle(probe).backgroundColor];
+    probe.remove();
+    expect(getComputedStyle(document.querySelector(".pwa-markdown p code")!).color).toBe(softInk);
+    expect(getComputedStyle(document.querySelector(".pwa-markdown a")!).color).toBe(accent);
+    expect(getComputedStyle(document.querySelector(".pwa-tool-action-copy strong")!).color).toBe(ink);
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("groups only adjacent completed tools of one turn and keeps failures on their own rows", async () => {
   const read = (id: string, path: string): Extract<TimelineEvent, { kind: "tool" }> => ({ ...toolEvent, event_id: id, tool_call_id: id, args: { path }, result: "ok" });
   const failed: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "failed", tool_call_id: "failed", tool: "bash", args: { command: "pnpm lint" }, status: "error", error: "Lint failed" };
