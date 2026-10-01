@@ -90,7 +90,15 @@ Use an `https://` Relay URL (`http://` is fine for local testing); both clients 
 
 ## Self-hosting
 
-The public Relay and PWA are run by the maintainer and are fine for trying Pi Reach out. For sensitive code, run your own. Both build as Docker images from the repository root and are orchestrated by the root `docker-compose.yml`:
+The public Relay and PWA are run by the maintainer and are fine for trying Pi Reach out. For sensitive code, run your own. Both are orchestrated by the root `docker-compose.yml`, and you can use the images published to GHCR (`linux/amd64` only). The Relay and the PWA are versioned independently; take the latest `relay-vX.Y.Z` and `pwa-vX.Y.Z` from [Releases](https://github.com/yefengr/pi-reach/releases):
+
+```bash
+RELAY_IMAGE=ghcr.io/yefengr/pi-reach-relay:vX.Y.Z \
+PWA_IMAGE=ghcr.io/yefengr/pi-reach-pwa:vX.Y.Z \
+docker compose up -d
+```
+
+The images carry build provenance: `gh attestation verify oci://ghcr.io/yefengr/pi-reach-pwa:vX.Y.Z --owner yefengr` checks that this repository's release workflow built them. For other architectures (such as arm64), or to run your own changes, build from the repository root:
 
 ```bash
 docker build -f relay/Dockerfile -t pi-reach-relay .
@@ -112,7 +120,7 @@ relay.example.com {
 
 Then run `/pi-reach set-relay https://relay.example.com` in Pi, open `https://pwa.example.com/app`, enter the same Relay URL in Settings, and run `/pi-reach pair` again.
 
-Serve the PWA over HTTPS (or `localhost` on the same device); otherwise browsers may disable the crypto and camera APIs it relies on. See the [Relay README](relay/README.md) for resource limits and [DEPLOYMENT](docs/DEPLOYMENT.md) (Chinese) for server preparation and the release flow.
+Serve the PWA over HTTPS (or `localhost` on the same device); otherwise browsers may disable the crypto and camera APIs it relies on. See the [Relay README](relay/README.md) for resource limits.
 
 ## Security model
 
@@ -180,8 +188,6 @@ Detailed documentation is currently written in Chinese.
 | [Security policy](SECURITY.md) | How to report vulnerabilities, and what is in scope |
 | [Contributing](CONTRIBUTING.md) | How to report issues and submit changes |
 | [Design](docs/DESIGN.md) | PWA UI and interaction rules |
-| [Deployment](docs/DEPLOYMENT.md) | Server preparation, Caddy setup, and the release flow |
-| [Roadmap](docs/ROADMAP.md) · [Backlog](docs/BACKLOG.md) | Committed work and candidate ideas |
 
 ## License
 

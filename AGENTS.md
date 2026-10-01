@@ -44,6 +44,7 @@
 ### 文档职责
 
 - `README.md` 是项目入口；`AGENTS.md` 只记录项目协作、命令、范围和验证规范。
+- 公开文档面向使用者、自托管者和贡献者：`README`、`CONTRIBUTING`、`SECURITY`、`docs/CONTEXT.md`、`docs/ARCHITECTURE.md`、`docs/DESIGN.md`、`docs/reference/` 与各子项目 README。它们只描述项目本身，不链接项目内部的工作管理与运维文档：`docs/ROADMAP.md`、`docs/BACKLOG.md`、`docs/plans/` 和 `docs/DEPLOYMENT.md`。内部文档可以链接公开文档；ADR 记录决策背景时可以引用内部方案。
 - `docs/CONTEXT.md`、`docs/DESIGN.md`、`docs/ARCHITECTURE.md`、`docs/DEPLOYMENT.md` 分别维护稳定业务背景、设计系统、当前架构和部署运维事实；没有相应内容时不创建。
 - `docs/BACKLOG.md` 保存尚未确定开发的候选事项；`docs/ROADMAP.md` 保存已确定事项及唯一项目级状态，状态使用 `待开始`、`进行中`、`阻塞`、`已完成`、`已取消`。
 - 已有 Issues、Projects、Jira 等权威任务系统时，沿用其状态约定，仓库文档只保留必要链接，不双写状态。

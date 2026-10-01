@@ -57,4 +57,3 @@ TLS 不等于应用层端到端加密（E2E）。Relay 是完全受信的一方�
 - [当前设计规则](DESIGN.md)：桌面/移动导航、Drawer、token 和实时/历史视觉规则。
 - [协议入口](reference/protocol/README.md)：身份、配对码、消息与信任边界；详细定义见[会话协议](reference/protocol/protocol-v2.md)和[配对协议](reference/protocol/pairing.md)。
 - [纯 Extension ADR](adr/20260914-pure-extension-runtime.md)：当前决策、兼容窗口和非目标。
-- [路线图](ROADMAP.md)：已确定事项及唯一项目级状态。

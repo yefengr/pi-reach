@@ -2,8 +2,6 @@
 
 本文是 Pi Reach 当前 PWA 的视觉与交互规则真源。规则来自 `pwa/src/app/pwa-theme.css`、`pwa/src/app/globals.css`、`pwa/src/app/workspace-navigation.css`、`pwa/src/app/workspace-shell.css`、`pwa/src/lib/ui/pi-reach-theme.ts` 及现有 PWA 组件；未来原型或主题方案不能覆盖本文。
 
-[品牌刷新](plans/active/20260925-pi-reach-brand-refresh.md)已获准分阶段实施，桌面与移动布局均可在其范围内调整；各部分落地时以验收值替换本文相应内容，未落地部分仍以本文为准。
-
 ## 视觉 token
 
 PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中态与长篇对话都以无彩中性灰（R=G=B）承载；主色为在 Pi Reach「钢雾蓝」基础上提纯的雾蓝，只用于主操作、文字按钮与链接、焦点、单选框选中点和在线／新回复圆点（见 [ADR-20261001](adr/20261001-neutral-surfaces-mist-blue.md)）。token 定义在 [`pwa-theme.css`](../pwa/src/app/pwa-theme.css)：浅色在 `:root`，深色在 `:root[data-mantine-color-scheme="dark"]`；Mantine 在首屏脚本写入属性前，CSS 按系统深色偏好回退到同一组深色值。[`pwa-theme-contrast`](../pwa/src/app/pwa-theme-contrast.node.test.ts) 测试直接读取该文件，校验下文的对比度约束以及深色回退与深色主题一致。
@@ -125,7 +123,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | 配对、重命名、确认、历史加载和消息投递错误 | 保留在对应表单、会话或消息上下文说明影响与下一步，不用 Toast；现有局部 `PwaStatusToast` 继续承担会话内的局部错误。 |
 | PWA 安装与浏览器能力提示 | 使用工作区上方的持久 `Alert`，保留安装操作按钮和按需回焦，不进入全局通知队列，也不占据 Composer 下方；更新提示已由 Toast 承担。 |
 
-反馈状态所有权见[当前架构](ARCHITECTURE.md#pwa-反馈状态所有权)。用户文案说明影响和可执行下一步，不直接展示浏览器异常、协议 payload、内部字段或 UUID。结构化系统事件的专门展示属于[独立候选事项](BACKLOG.md#结构化系统事件展示)。
+反馈状态所有权见[当前架构](ARCHITECTURE.md#pwa-反馈状态所有权)。用户文案说明影响和可执行下一步，不直接展示浏览器异常、协议 payload、内部字段或 UUID。
 
 ## 实时与只读历史
 
@@ -151,4 +149,3 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 - [产品背景与术语](CONTEXT.md)
 - [当前架构](ARCHITECTURE.md)
 - [协议与安全总览](reference/protocol/README.md)
-- [PWA 加固与真实设备验收](plans/active/20260824-pwa-hardening.md)
