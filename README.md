@@ -176,6 +176,24 @@ pnpm dev:pwa
 
 单个子项目用 `pnpm --filter <包名> <命令>`，包名分别为 `pwa`、`@yefengr/pi-reach`、`@pi-reach/relay` 和 `@pi-reach/protocol`。子项目的 `pnpm build` 会先构建共享包；修改共享包后，在子项目单独运行 `typecheck` 或 `test` 前，需要先执行 `pnpm --filter @pi-reach/protocol build`，或改用根命令。协作与验证约定见 [AGENTS.md](AGENTS.md)。
 
+### 扩展更新后重启并继续会话
+
+本地开发时，可以用可选的辅助脚本启动 Pi：
+
+```bash
+bash scripts/pi-dev.sh
+# 继续指定的已有会话
+bash scripts/pi-dev.sh --session /absolute/path/to/session.jsonl
+```
+
+脚本需要交互式终端及 PATH 中可用的 Node.js、Pi，不改变 Pi Reach 的安装方式。如果 Pi 已经直接启动，先用 `/session` 查看会话文件路径，再 `/quit`，然后用上面的 `--session` 命令进入。
+
+首次接入后，让 Agent 按原有方式更新扩展即可。辅助扩展提供 `dev_restart` 工具，要求 Agent 在更新及相关验证成功后主动调用，完成本轮总结后再重启，不需要你每次输入命令。更新或验证失败时不应调用该工具；它只负责请求重启，不执行或核验升级步骤。`/dev-restart` 保留为手动备用入口。
+
+重启正常退出旧进程，再恢复同一会话、工作目录、模型和思考级别，不会自动发送“继续”。`/quit` 或异常退出会结束脚本，不会自动拉起。
+
+只有已保存到磁盘的会话可以重启；排队消息未处理完时会拒绝重启，等待期间切换会话或 `/reload` 会取消请求。执行中的工具、未发送输入及其他未持久化运行时状态不会恢复。Pi Reach 会生成新的 endpoint/runtime，但保留配对。支持的启动参数和限制见 `bash scripts/pi-dev.sh --help`。
+
 ## 文档
 
 | 文档 | 内容 |

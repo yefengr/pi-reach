@@ -176,6 +176,24 @@ pnpm dev:pwa
 
 To work on a single package, use `pnpm --filter <package> <command>` with `pwa`, `@yefengr/pi-reach`, `@pi-reach/relay`, or `@pi-reach/protocol`. A package's `pnpm build` builds the shared package first. After changing the shared package, run `pnpm --filter @pi-reach/protocol build` before a package-only `typecheck` or `test`, or use the root commands instead. Collaboration and verification rules are in [AGENTS.md](AGENTS.md) (Chinese).
 
+### Restart after an extension update
+
+For local development, you can start Pi with the optional helper script:
+
+```bash
+bash scripts/pi-dev.sh
+# Resume a specific saved session
+bash scripts/pi-dev.sh --session /absolute/path/to/session.jsonl
+```
+
+The script requires an interactive terminal and Node.js and Pi on PATH. It does not change how Pi Reach is installed. To adopt it for an already running Pi, use `/session` to find the session file, `/quit`, then launch with `--session` as shown above.
+
+After this one-time setup, let the agent update extensions as usual. The helper exposes a `dev_restart` tool that instructs the agent to request a restart after the update and relevant checks succeed, then finish its current summary before restarting. You do not need to enter a command each time. The tool must not be called after a failed update or check; it requests the restart but does not perform or verify the upgrade. `/dev-restart` remains available as a manual fallback.
+
+The restart exits the old process gracefully and restores the same session, working directory, model, and thinking level without sending a follow-up prompt. Normal `/quit` and abnormal exits stop the script without restarting.
+
+Only sessions saved to disk can restart. Pending messages block a restart; switching sessions or running `/reload` while waiting cancels the request. Tool processes, unsent input, and other unpersisted runtime state are not restored. Pi Reach gets a new endpoint/runtime but retains pairing. Run `bash scripts/pi-dev.sh --help` for supported startup options and limitations.
+
 ## Documentation
 
 Detailed documentation is currently written in Chinese.
