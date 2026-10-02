@@ -91,9 +91,10 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
     expect(Math.abs(back.getBoundingClientRect().top + back.getBoundingClientRect().height / 2 - (title.getBoundingClientRect().top + title.getBoundingClientRect().height / 2))).toBeLessThan(2);
     expect(back.getBoundingClientRect().width).toBe(44);
     expect(getComputedStyle(back.querySelector(".pwa-settings-back-label")!).display).toBe("none");
+    expect(getComputedStyle(title).fontSize).toBe("18px");
   } else {
     expect(title.getBoundingClientRect().top).toBeGreaterThanOrEqual(back.getBoundingClientRect().bottom);
-    expect(getComputedStyle(title).fontSize).toBe("22px");
+    expect(getComputedStyle(title).fontSize).toBe("24px");
     await expect.element(screen.getByText("Back to workspace", { exact: true })).toBeVisible();
   }
   await page.screenshot({ path: `../../../.vitest/screenshots/settings-page-top-${width}.png` });

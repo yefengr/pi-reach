@@ -280,7 +280,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-copy > span { overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-command-copy small,
 .pwa-command-menu-heading,
-.pwa-command-empty { color: var(--pwa-secondary); font-size: 12px; }
+.pwa-command-empty { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 .pwa-command-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pwa-command-chevron { flex: 0 0 auto; color: var(--pwa-secondary); }
 .pwa-command-check { flex: 0 0 auto; color: var(--pwa-ink); }
@@ -325,8 +325,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-appearance-copy { display: flex; align-items: center; gap: 10px; }
 .pwa-appearance-copy > svg { flex: 0 0 auto; color: var(--pwa-secondary); }
 .pwa-appearance-copy > span { min-width: 0; display: grid; gap: 2px; }
-.pwa-appearance-copy strong { font-size: 13px; font-weight: 600; }
-.pwa-appearance-copy small { color: var(--pwa-secondary); font-size: 12px; }
+.pwa-appearance-copy strong { font-size: var(--pwa-text-list); font-weight: 600; }
+.pwa-appearance-copy small { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 /* 表单输入：单行高 44，surface 底、1px control-line 边框；聚焦为贴边强调色轮廓，边框不变。 */
 .pwa-ui-scope .pwa-input input,
 .pwa-ui-scope .pwa-textarea textarea,
@@ -351,12 +351,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-rename-head,
 .pwa-confirm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .pwa-rename-head h2,
-.pwa-confirm-title { margin: 8px 0 0; font-family: var(--pwa-font-ui); font-size: 16px; font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-confirm-title { margin: 8px 0 0; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-title); font-weight: 600; line-height: var(--pwa-leading-ui); }
 .pwa-rename-description,
-.pwa-confirm-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: 14px; line-height: var(--pwa-leading-body); }
+.pwa-confirm-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-rename-description { margin-bottom: 16px; }
 .pwa-rename-description strong { color: var(--pwa-ink); font-weight: 600; }
-.pwa-rename-field { display: grid; gap: 8px; color: var(--pwa-secondary); font-size: 12px; font-weight: 600; text-transform: uppercase; }
+.pwa-rename-field { display: grid; gap: 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: 600; text-transform: uppercase; }
 .pwa-rename-field input { width: 100%; height: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); outline: none; color: var(--pwa-ink); background: var(--pwa-panel); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-transform: none; }
 .pwa-rename-field input:focus { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-rename-field input:disabled { opacity: 0.55; }
@@ -365,7 +365,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-rename-actions .pwa-button { min-width: 88px; }
 .pwa-confirm-actions .pwa-button { min-width: 120px; margin-top: 0; }
 .pwa-confirm-error,
-.pwa-error { color: var(--pwa-error); font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-error { color: var(--pwa-error); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-confirm-error { margin: 12px 0 0; }
 
 /* Modal 宽度：确认类 400、表单类（配对、重命名）480；移动端为屏宽减两侧各 16。 */
@@ -408,9 +408,9 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-startup-icon,
 .pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--pwa-running) 44%, var(--pwa-line)); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
 .pwa-startup-icon { width: 45px; height: 45px; margin-bottom: 16px; }
-.pwa-startup-card h1 { margin: 12px 0; font-family: var(--pwa-font-ui); font-size: 22px; font-weight: 600; line-height: var(--pwa-leading-ui); }
-.pwa-startup-card p { color: var(--pwa-secondary); font-size: 14px; line-height: var(--pwa-leading-body); }
-.pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: 12px !important; }
+.pwa-startup-card h1 { margin: 12px 0; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
+.pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: var(--pwa-text-meta) !important; }
 .pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .pwa-startup-actions a { text-decoration: none; }
 .pwa-spin { color: var(--pwa-running); animation: pwa-rotate 1.3s linear infinite; }
@@ -432,7 +432,7 @@ body:has(.pwa-root) { overflow: hidden; }
   color: var(--alert-color);
   background: var(--alert-bg);
   box-shadow: none;
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   line-height: var(--pwa-leading-ui);
 }
 .pwa-connection-banner-relay { --alert-bg: var(--pwa-running-wash) !important; --alert-color: var(--pwa-running) !important; --alert-bd: color-mix(in srgb, var(--pwa-running) 38%, var(--pwa-line)) !important; }
@@ -440,7 +440,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-connection-banner .pwa-connection-banner-wrapper { align-items: center; gap: 8px; }
 .pwa-connection-banner .pwa-connection-banner-icon { flex: 0 0 auto; margin: 0; color: inherit; }
 .pwa-connection-banner .pwa-connection-banner-body { min-width: 0; }
-.pwa-connection-banner .pwa-connection-banner-message { color: inherit; font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-connection-banner .pwa-connection-banner-message { color: inherit; font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-connection-banner-content { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .pwa-connection-banner-content > span { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
 .pwa-connection-banner .pwa-connection-retry { flex: 0 0 auto; min-width: 44px; min-height: 44px; }
@@ -459,19 +459,19 @@ body:has(.pwa-root) { overflow: hidden; }
   color: var(--pwa-ink);
   background: var(--alert-bg);
   box-shadow: none;
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   line-height: var(--pwa-leading-ui);
 }
 .pwa-runtime-notice .pwa-runtime-notice-wrapper { align-items: center; min-width: 0; }
 .pwa-runtime-notice .pwa-runtime-notice-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
-.pwa-runtime-notice .pwa-runtime-notice-title { grid-column: 1; margin: 0; color: var(--pwa-ink); font-size: 14px; font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-runtime-notice .pwa-runtime-notice-title { grid-column: 1; margin: 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: 600; line-height: var(--pwa-leading-ui); }
 .pwa-runtime-notice .pwa-runtime-notice-message,
 .pwa-runtime-notice-content { display: contents; }
-.pwa-runtime-notice-description { grid-column: 1; min-width: 0; color: var(--pwa-secondary); font-size: 12px; line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
+.pwa-runtime-notice-description { grid-column: 1; min-width: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
 .pwa-runtime-notice-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pwa-runtime-notice .pwa-runtime-notice-dismiss { flex: 0 0 44px; align-self: center; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -4px -4px -4px 4px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); }
 .pwa-runtime-notice .pwa-runtime-notice-dismiss:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-hover); }
-.pwa-toast { position: relative; flex: 0 0 auto; max-width: min(680px, calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font-size: 12px; order: 3; align-self: center; margin: 8px auto; padding: 12px; border-color: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line)); color: var(--pwa-error); background: var(--pwa-error-wash); }
+.pwa-toast { position: relative; flex: 0 0 auto; max-width: min(680px, calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font-size: var(--pwa-text-meta); order: 3; align-self: center; margin: 8px auto; padding: 12px; border-color: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line)); color: var(--pwa-error); background: var(--pwa-error-wash); }
 .pwa-toast > span { min-width: 0; max-height: min(14dvh, 100px); overflow-y: auto; overflow-wrap: anywhere; }
 .pwa-ui-scope .pwa-toast-dismiss { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -6px -8px -6px 0; padding: 0; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: inherit; background: transparent; cursor: pointer; }
 .pwa-ui-scope .pwa-toast-dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pwa-error) 42%, var(--pwa-line)); background: var(--pwa-error-wash); }
@@ -503,10 +503,10 @@ body:has(.pwa-root) { overflow: hidden; }
 
 /* 密度取应用壳的实际可见高度；软键盘不改变 layout viewport 时也使用同一套规则。 */
 .pwa-app-shell[data-compact-height] .pwa-message-list { --pwa-timeline-pad-top: 8px; --pwa-timeline-pad-bottom: 8px; scroll-padding-bottom: 8px; }
-.pwa-app-shell[data-compact-height] .pwa-connection-banner { margin-top: 0; padding-block: 0; font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-app-shell[data-compact-height] .pwa-connection-banner { margin-top: 0; padding-block: 0; font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-wrapper { gap: 8px; }
 .pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-icon svg { width: 13px; height: 13px; }
-.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-message { font-size: 12px; line-height: var(--pwa-leading-ui); }
+.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-message { font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-app-shell[data-compact-height] .pwa-runtime-notice { margin-top: 4px; padding-block: 6px; }
 .pwa-app-shell[data-compact-height] .pwa-runtime-notice-content { gap: 6px; }
 .pwa-app-shell[data-compact-height] .pwa-runtime-notice-description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

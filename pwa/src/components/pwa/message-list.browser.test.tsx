@@ -329,7 +329,7 @@ test.each([1280, 390])("reply, thinking and tools share typography and alignment
         document.querySelector(".pwa-tool-action-copy strong")!,
       ];
       for (const label of labels) {
-        expect(getComputedStyle(label).fontSize).toBe("14px");
+        expect(getComputedStyle(label).fontSize).toBe("16px");
         expect(getComputedStyle(label).fontStyle).toBe("normal");
         expect(getComputedStyle(label).fontWeight).toBe("600");
         expect(leftOfText(label)).toBeCloseTo(leftOfText(labels[0]), 0);
@@ -468,6 +468,29 @@ test("message list controls retain 44px touch targets", async () => {
     const rect = screen.getByRole("button", { name }).element().getBoundingClientRect();
     expect(rect.width).toBeGreaterThanOrEqual(44);
     expect(rect.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test.each([390, 767, 768, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width, scheme }))))("keeps enlarged message, code and metadata typography readable at $width in $scheme", async ({ width, scheme }) => {
+  await page.viewport(width, 844);
+  const originalScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  const answer: Extract<TimelineEvent, { kind: "assistant" }> = { ...assistantEvent, blocks: [{ type: "text", text: "## 阅读标题 Reading title\n\n正文更易阅读。Run `pnpm test`.\n\n```ts\nconst readable = true;\n```" }] };
+  const screen = await renderMessageList([eventItem(answer), runEndItem()]);
+  try {
+    document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
+    await expect.element(screen.getByRole("heading", { name: "阅读标题 Reading title" })).toBeVisible();
+    for (const [selector, size, lineHeight] of [[".pwa-markdown h2", "18px", "25.2px"], [".pwa-markdown p", "16px", "26.4px"], [".pwa-markdown p code", "14px", "21.7px"], [".pwa-code-block pre", "14px", "21.7px"], [".pwa-code-language", "13px", "18.2px"], [".pwa-turn-meta", "13px", "18.2px"]]) {
+      const element = document.querySelector(selector)!;
+      expect(element, selector).not.toBeNull();
+      expect(getComputedStyle(element).fontSize, selector).toBe(size);
+      expect(getComputedStyle(element).lineHeight, selector).toBe(lineHeight);
+    }
+    const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+    expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+  } finally {
+    if (originalScheme === null) document.documentElement.removeAttribute("data-mantine-color-scheme");
+    else document.documentElement.setAttribute("data-mantine-color-scheme", originalScheme);
+    await screen.unmount();
   }
 });
 

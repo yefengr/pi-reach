@@ -97,7 +97,7 @@
 /* 会话「更多」菜单顶部的只读信息区：完整会话名换行不截断，路径可选中复制。 */
 .pwa-session-info { display: grid; gap: 4px; padding: 8px 10px; }
 .pwa-session-info-name { color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; white-space: normal; }
-.pwa-session-info-cwd { color: var(--pwa-secondary); font: 12px/var(--pwa-leading-ui) var(--pwa-font-mono); overflow-wrap: anywhere; user-select: text; }
+.pwa-session-info-cwd { color: var(--pwa-secondary); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-mono); overflow-wrap: anywhere; user-select: text; }
 .pwa-session-info-meta { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
 /* 主区与会话标题区。 */

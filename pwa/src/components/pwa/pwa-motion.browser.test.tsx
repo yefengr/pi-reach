@@ -57,8 +57,8 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
       expect(duration(overlay)).toBe(reduce ? 120 : enter);
       if (kind === "reader") {
         const command = card.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
-        expect(getComputedStyle(command).fontSize).toBe("12.5px");
-        expect(getComputedStyle(command).lineHeight).toBe("19.375px");
+        expect(getComputedStyle(command).fontSize).toBe("14px");
+        expect(getComputedStyle(command).lineHeight).toBe("21.7px");
       }
       flushSync(() => setOpened(null));
       await expect.poll(() => card.style.opacity).toBe("0");
@@ -81,7 +81,7 @@ test.each([false, true])("uses token timing and distinct Toast exit easing (redu
     const card = document.querySelector<HTMLElement>(".pwa-operation-notification")!;
     await expect.poll(() => getComputedStyle(card).opacity).toBe("1");
     expect(duration(card)).toBe(reduce ? 120 : 180);
-    expect(getComputedStyle(card).fontSize).toBe("14px");
+    expect(getComputedStyle(card).fontSize).toBe("16px");
     expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : enterEase);
     (screen.getByRole("button", { name: "Dismiss operation notification" }).element() as HTMLElement).click();
     await expect.poll(() => card.style.getPropertyValue("--notifications-state-opacity")).toBe("0");
