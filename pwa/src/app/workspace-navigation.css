@@ -34,13 +34,13 @@
 }
 
 .pwa-root .pwa-device-trigger-copy strong {
-  font-size: 13px;
+  font-size: var(--pwa-text-list);
   font-weight: 600;
 }
 
 .pwa-root .pwa-device-trigger-copy small {
   color: var(--pwa-secondary);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   font-weight: 400;
 }
 
@@ -77,7 +77,7 @@
   margin: 0;
   padding: 16px 12px;
   color: var(--pwa-secondary);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   text-align: center;
 }
 
@@ -161,7 +161,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--pwa-text-list);
   font-weight: 600;
 }
 
@@ -170,7 +170,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--pwa-secondary);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   opacity: 1;
 }
 
@@ -182,7 +182,7 @@
   gap: 2px 4px;
   overflow: hidden;
   color: var(--pwa-secondary);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   white-space: nowrap;
 }
 
@@ -203,7 +203,7 @@
   color: var(--pwa-secondary);
   /* 状态标签只用描边与文字，不继承 Mantine 浅色变体的底色；运行中另用状态轻底。 */
   background: transparent;
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   font-weight: 600;
 }
 
@@ -253,7 +253,7 @@
 .pwa-root .pwa-peer-menu-panel button {
   min-height: 44px;
   border-radius: var(--pwa-radius-sm);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
 }
 
 .pwa-root .pwa-session-sheet {
@@ -332,7 +332,7 @@
 
   .pwa-root .pwa-peer-presence {
     gap: 4px;
-    font-size: 12px;
+    font-size: var(--pwa-text-meta);
   }
 }
 

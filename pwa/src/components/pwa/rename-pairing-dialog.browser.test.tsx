@@ -103,9 +103,9 @@ test.each([390, 767, 768, 1440].flatMap(width => ["light", "dark"].map(scheme =>
     const actions = document.querySelector<HTMLElement>(".pwa-rename-actions")!;
     await expect.poll(() => getComputedStyle(dialog.element()).opacity).toBe("1");
     expect(input.getBoundingClientRect().height).toBe(44);
-    expect(getComputedStyle(input).fontSize).toBe(width < 768 ? "16px" : "14px");
-    expect(getComputedStyle(description).fontSize).toBe("14px");
-    expect(getComputedStyle(description).lineHeight).toBe("23.1px");
+    expect(getComputedStyle(input).fontSize).toBe("16px");
+    expect(getComputedStyle(description).fontSize).toBe("16px");
+    expect(getComputedStyle(description).lineHeight).toBe("26.4px");
     expect(getComputedStyle(actions).gap).toBe("8px");
     expect(getComputedStyle(actions).marginTop).toBe("24px");
     expect(dialog.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(0);

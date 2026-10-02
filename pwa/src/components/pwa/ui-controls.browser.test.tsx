@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { ActionIcon, Badge, Button, Select } from "@mantine/core";
+import { ActionIcon, Badge, Button, Select, Text, TextInput, Title } from "@mantine/core";
 import { DesktopSidebar } from "./workspace-view";
 
 function SelectHarness({ disabled = false }: { disabled?: boolean }) {
@@ -37,6 +37,40 @@ function PrimitiveHarness() {
     <Badge className="pwa-current-label">Current</Badge>
   </div>;
 }
+
+test.each([390, 767, 768, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width, scheme }))))("uses the enlarged typography scale for Mantine controls at $width in $scheme", async ({ width, scheme }) => {
+  await page.viewport(width, 844);
+  const originalScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  const screen = await renderPwa(<>
+    <Title order={1}>Page title</Title>
+    <Title order={2}>Session title</Title>
+    <Title order={3}>Section title</Title>
+    <Text size="xs">Metadata</Text>
+    <Text size="sm">List label</Text>
+    <Text size="md">Body text</Text>
+    <Text size="lg">Large text</Text>
+    <Text size="xl">Page text</Text>
+    <TextInput className="pwa-input" label="Computer name" description="Only saved in this browser" />
+    <Button>Save typography</Button>
+  </>);
+  try {
+    document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
+    for (const [text, size] of [["Page title", "24px"], ["Session title", "18px"], ["Section title", "16px"], ["Metadata", "13px"], ["List label", "14px"], ["Body text", "16px"], ["Large text", "18px"], ["Page text", "24px"], ["Save typography", "16px"]]) {
+      expect(getComputedStyle(screen.getByText(text, { exact: true }).element()).fontSize).toBe(size);
+    }
+    const input = screen.getByRole("textbox", { name: "Computer name" }).element();
+    expect(getComputedStyle(input).fontSize).toBe("16px");
+    expect(Math.round(input.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    expect(getComputedStyle(document.querySelector(".mantine-InputWrapper-label")!).fontSize).toBe("14px");
+    expect(getComputedStyle(screen.getByText("Only saved in this browser").element()).fontSize).toBe("13px");
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  } finally {
+    if (originalScheme === null) document.documentElement.removeAttribute("data-mantine-color-scheme");
+    else document.documentElement.setAttribute("data-mantine-color-scheme", originalScheme);
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});
 
 test("Select opens with the keyboard and selects an option", async () => {
   const screen = await renderPwa(<SelectHarness />);

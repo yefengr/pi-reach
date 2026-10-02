@@ -17,7 +17,7 @@
   min-width: 0;
   margin: 0;
   color: var(--pwa-ink);
-  font: 600 12px/var(--pwa-leading-ui) var(--pwa-font-ui);
+  font: 600 var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui);
 }
 
 .pwa-queued-messages-count {
@@ -31,7 +31,7 @@
   border-radius: var(--pwa-radius-sm);
   color: var(--pwa-secondary);
   background: var(--pwa-panel);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   font-weight: 600;
   line-height: var(--pwa-leading-ui);
 }
@@ -77,7 +77,7 @@
 .pwa-queued-message-status {
   flex: 0 0 auto;
   color: var(--pwa-secondary);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   line-height: var(--pwa-leading-ui);
   white-space: nowrap;
 }
@@ -98,7 +98,7 @@
   min-width: 0;
   margin: 0;
   color: var(--pwa-secondary);
-  font-size: 12px;
+  font-size: var(--pwa-text-meta);
   line-height: var(--pwa-leading-ui);
   overflow-wrap: anywhere;
 }

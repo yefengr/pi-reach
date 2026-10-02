@@ -373,7 +373,7 @@ test("navigates command keys and subview Back without closing or requesting mode
   expect(opens).toBe(2);
 });
 
-test("uses 14px action text in composer menus and keeps the current model and thinking level marked", async () => {
+test("uses 16px action text in composer menus and keeps the current model and thinking level marked", async () => {
   const other: WireModel = { ...model, id: "other-model", name: "Other Model" };
   const screen = await renderPwa(<ComposerHarness commandModels={[model, other]} />);
   const probe = document.createElement("span");
@@ -387,14 +387,14 @@ test("uses 14px action text in composer menus and keeps the current model and th
   await screen.getByRole("button", { name: "Add image" }).click();
   const choose = screen.getByRole("menuitem", { name: "Choose image" });
   await expect.element(choose).toBeVisible();
-  expect(getComputedStyle(choose.element()).fontSize).toBe("14px");
+  expect(getComputedStyle(choose.element()).fontSize).toBe("16px");
   await userEvent.keyboard("{Escape}");
 
   await screen.getByRole("button", { name: "Pi commands" }).click();
   const modelEntry = screen.getByRole("menuitem", { name: /\/model/ });
   await expect.element(modelEntry).toBeVisible();
-  expect(getComputedStyle(modelEntry.element().querySelector("code")!).fontSize).toBe("14px");
-  expect(getComputedStyle(modelEntry.element().querySelector("small")!).fontSize).toBe("12px");
+  expect(getComputedStyle(modelEntry.element().querySelector("code")!).fontSize).toBe("16px");
+  expect(getComputedStyle(modelEntry.element().querySelector("small")!).fontSize).toBe("13px");
 
   for (const [entry, current, alternative] of [[/\/model/, /Claude Sonnet 4/, /Other Model/], [/\/thinking/, /^medium/, /^high/]] as const) {
     await screen.getByRole("menuitem", { name: entry }).click();
@@ -402,7 +402,7 @@ test("uses 14px action text in composer menus and keeps the current model and th
     const unselected = screen.getByRole("menuitem", { name: alternative }).element() as HTMLElement;
     await expect.poll(() => getComputedStyle(selected).backgroundColor).toBe(selectedBackground);
     expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).color).toBe(ink);
-    expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).fontSize).toBe("14px");
+    expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).fontSize).toBe("16px");
     expect(getComputedStyle(unselected).backgroundColor).not.toBe(selectedBackground);
     await userEvent.hover(unselected);
     unselected.focus();
