@@ -1,11 +1,14 @@
 import { ActionIcon } from "@mantine/core";
 import { useI18n, type Messages } from "@/lib/i18n";
 import { CornerDownLeft, X } from "lucide-react";
+import type { AttachmentDescriptor } from "@pi-reach/protocol/session";
+import { AttachmentCards, readonlyAttachmentItems } from "./attachment-cards";
 
 export type QueuedMessageView = {
   id: string;
   text: string;
   images?: { data: string; mime: string }[];
+  attachments?: readonly AttachmentDescriptor[];
   status: string;
   notice?: string;
   dismissible?: boolean;
@@ -49,6 +52,7 @@ export function QueuedMessages({ items, isOnline, onInsert, onCancel, onDismissN
               <span className="pwa-queued-message-status">{item.status}</span>
               {item.text ? <p className="pwa-queued-message-text">{item.text}</p> : null}
             </div>
+            {item.attachments?.length ? <AttachmentCards items={readonlyAttachmentItems(item.attachments)} /> : null}
             {item.notice ? <p className="pwa-queued-message-notice">{item.notice}</p> : null}
           </div>
           <div className="pwa-queued-message-actions">

@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, TimelineRuntime, type TimelinePending, type TimelineScope } from "./timeline-runtime";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
+import { pendingPayloadBytes } from "./timeline-pending";
 import type { ServerFrame } from "../pi-reach/protocol-v2/frames";
+import { ATTACHMENT_METADATA_TYPE, type AttachmentDescriptor, type TimelineEvent } from "../pi-reach/protocol-v2/schema";
 
 const scope: TimelineScope = { deviceId: "d", endpointId: "e", runtimeInstanceId: "r", sessionId: "s", leafId: "g", selfSenderRef: "owner", channelId: "c" };
 type QueueFrame = Extract<ServerFrame, { type: "queued_message_state" }>;
@@ -310,4 +312,98 @@ test("does not report a cancellation that the host rejected before the snapshot"
 test("does not report a queued message that leaves the queue without a local cancel", () => {
   const runtime = queuedRuntime();
   expect(runtime.receive(snapshot([], { snapshot_id: "consumed" })).cancelledQueued).toBeUndefined();
+});
+
+function attachmentDescriptor(attachmentId: string): AttachmentDescriptor {
+  return { attachment_id: attachmentId, file_name: `${attachmentId}.png`, mime_type: "image/png", byte_length: 4, sha256: "a".repeat(64), preview: { mime_type: "image/jpeg", data: "aGk=", byte_length: 2, width: 8, height: 8 } };
+}
+function metadataEvent(eventId: string, clientRequestId: string, senderRef: string, text: string, attachments: AttachmentDescriptor[]): TimelineEvent & { kind: "custom" } {
+  return { event_id: eventId, session_id: "s", leaf_id: "g", timestamp: 10, kind: "custom", payload: { custom_type: ATTACHMENT_METADATA_TYPE, data: { version: 1, client_request_id: clientRequestId, sender_ref: senderRef, text, attachments } }, truncated: false };
+}
+
+test("late attachment metadata backfills a queued message's text and display previews", () => {
+  const runtime = queuedRuntime();
+  expect(queuedPending(runtime).attachments).toBeUndefined();
+  const changed = runtime.commit(metadataEvent("meta", "q", "owner", "later with files", [attachmentDescriptor("attachment-1")]));
+  expect(queuedPending(runtime)).toMatchObject({ text: "later with files", attachments: [attachmentDescriptor("attachment-1")], queued: true, cancelable: true, images: item.images });
+  expect(changed.items).toContainEqual(expect.objectContaining({ kind: "pending", clientRequestId: "q", attachments: [attachmentDescriptor("attachment-1")] }));
+});
+
+test("attachment metadata bindings do not leak across senders when the queue snapshot arrives later", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  runtime.commit(metadataEvent("meta-self", "q", "owner", "self text", [attachmentDescriptor("attachment-1")]));
+  runtime.commit(metadataEvent("meta-other", "other", "other", "other text", [attachmentDescriptor("attachment-2")]));
+  runtime.sendUser("later", item.images, { clientRequestId: "q", requestId: "send" });
+  runtime.receive(snapshot([item, { ...item, id: "other", sender_ref: "other" }]));
+
+  const self = runtime.pendingItems.find((pending) => pending.clientRequestId === "q")!;
+  const foreign = runtime.pendingItems.find((pending) => pending.clientRequestId === "other")!;
+  expect(self).toMatchObject({ text: "self text", attachments: [attachmentDescriptor("attachment-1")], senderRef: "owner", cancelable: true, images: item.images });
+  expect(foreign).toMatchObject({ text: "other text", attachments: [attachmentDescriptor("attachment-2")], senderRef: "other", cancelable: false });
+});
+
+test.each(["conflict", "removed", "sender"] as const)("sidecar projection is withdrawn on %s before queued cancellation", (invalidation) => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  runtime.receive(snapshot([item]));
+  runtime.commit(metadataEvent("meta-a", "q", "owner", "remote A", [attachmentDescriptor("a")]));
+  expect(queuedPending(runtime)).toMatchObject({ text: "remote A", attachments: [attachmentDescriptor("a")] });
+  if (invalidation === "conflict") runtime.commit(metadataEvent("meta-b", "q", "owner", "remote B", [attachmentDescriptor("b")]));
+  else if (invalidation === "removed") runtime.replaceHistory([]);
+  else {
+    runtime.receive(snapshot([{ ...item, sender_ref: "other" }]));
+    expect(queuedPending(runtime).attachments).toBeUndefined();
+    runtime.receive(snapshot([item]));
+    runtime.replaceHistory([metadataEvent("foreign", "q", "other", "foreign", [attachmentDescriptor("foreign")])]);
+  }
+  expect(queuedPending(runtime)).toMatchObject({ text: item.text, images: item.images });
+  expect(queuedPending(runtime).attachments).toBeUndefined();
+  expect(runtime.actOnQueued("q", "cancel")).not.toBeNull();
+  expect(runtime.receive(snapshot([])).cancelledQueued).toEqual([{ clientRequestId: "q", text: item.text, images: item.images }]);
+});
+
+test.each(["explicit", "disconnect", "protocol-error"] as const)("local original attachment IDs and text survive %s unknown delivery and conflicting sidecars", (unknown) => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const original = attachmentDescriptor("local");
+  const sent = runtime.sendUserWithAttachments("original text", [original], { clientRequestId: "q", requestId: "send" })!;
+  runtime.commit(metadataEvent("meta-a", "q", "owner", "remote A", [attachmentDescriptor("a")]));
+  if (unknown === "explicit") runtime.markUnknownDelivery("q");
+  else if (unknown === "disconnect") { runtime.markDisconnected(); runtime.setScope({ ...scope, channelId: "new" }); }
+  else runtime.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: sent.frame.id, target_channel_id: "c", code: "internal_error", message: "Failed" });
+  expect(queuedPending(runtime)).toMatchObject({ text: "original text", attachments: [original], delivery: "unknown_delivery" });
+  runtime.commit(metadataEvent("meta-b", "q", "owner", "remote B", [attachmentDescriptor("b")]));
+  expect(runtime.retryUnknown("q")?.frame).toMatchObject({ text: "original text", attachment_ids: ["local"], client_request_id: "q" });
+  runtime.receive(snapshot([{ ...item, text: "server fallback", images: undefined }]));
+  expect(queuedPending(runtime)).toMatchObject({ text: "original text", attachments: [original] });
+  runtime.actOnQueued("q", "cancel");
+  expect(runtime.receive(snapshot([])).cancelledQueued).toEqual([{ clientRequestId: "q", text: "original text", attachments: [original] }]);
+});
+
+test("retry uses original legacy content, never attachment IDs borrowed from a sidecar", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  runtime.sendUser("original", item.images, { clientRequestId: "q", requestId: "send" });
+  runtime.commit(metadataEvent("meta-a", "q", "owner", "derived", [attachmentDescriptor("a")]));
+  runtime.markUnknownDelivery("q");
+  const retry = runtime.retryUnknown("q")!.frame;
+  expect(retry).toMatchObject({ text: "original", images: item.images });
+  expect(retry).not.toHaveProperty("attachment_ids");
+});
+
+test("sidecar budget includes retained fallback and legacy images, and oversized projections are not kept", () => {
+  const base = { text: item.text, images: item.images };
+  const derived = { text: "derived", images: item.images, attachments: [attachmentDescriptor("a")] };
+  const runtime = new TimelineRuntime({ maxPayloadBytes: pendingPayloadBytes(base) + pendingPayloadBytes(derived) - 1 });
+  runtime.setScope(scope);
+  runtime.receive(snapshot([item]));
+  expect(runtime.commit(metadataEvent("meta-a", "q", "owner", "derived", [attachmentDescriptor("a")])).pendingCapacityExceeded).toBe(true);
+  expect(queuedPending(runtime)).toMatchObject(base);
+  expect(queuedPending(runtime).attachments).toBeUndefined();
+});
+
+test("a confirmed cancellation returns the queued message with its attachment previews", () => {
+  const runtime = queuedRuntime();
+  runtime.commit(metadataEvent("meta", "q", "owner", "later with files", [attachmentDescriptor("attachment-1")]));
+  expect(runtime.actOnQueued("q", "cancel")).not.toBeNull();
+  const change = runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  expect(change.cancelledQueued).toEqual([{ clientRequestId: "q", text: "later with files", images: item.images, attachments: [attachmentDescriptor("attachment-1")] }]);
+  expect(runtime.pendingItems).toEqual([]);
 });

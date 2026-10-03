@@ -5,7 +5,8 @@ import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
-import { MessageComposer, type MessageComposerAttachment } from "./message-composer";
+import { MessageComposer } from "./message-composer";
+import type { ComposerAttachmentItem } from "./attachment-cards";
 import { MessageList } from "./message-list";
 import { PwaAppShell } from "./pwa-app-shell";
 import { PwaUiProvider } from "./pwa-ui-provider";
@@ -34,11 +35,11 @@ async function settle() {
 
 async function renderWorkspace(initialDraft = "") {
   let changeDraft!: (text: string) => void;
-  let changeAttachment!: (value: MessageComposerAttachment | null) => void;
+  let changeAttachment!: (value: ComposerAttachmentItem | null) => void;
   let timeline!: TimelineViewport;
   function Harness() {
     const [draft, setDraft] = useState(initialDraft);
-    const [attachment, setAttachment] = useState<MessageComposerAttachment | null>(null);
+    const [attachment, setAttachment] = useState<ComposerAttachmentItem | null>(null);
     changeDraft = setDraft;
     changeAttachment = setAttachment;
     timeline = useTimelineViewport(items);
@@ -49,8 +50,8 @@ async function renderWorkspace(initialDraft = "") {
           <header className="pwa-title-bar">Pi Reach</header>
           <MessageList items={items} hasEarlier={false} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} />
           <div className="pwa-chat-footer"><MessageComposer
-            attachment={attachment} canAttachImage sendingImage={false} isOnline isWorking={false} stopping={false}
-            draft={draft} onDraftChange={setDraft} onSend={() => {}} onStop={() => {}} onSetAttachment={() => {}} onClearAttachment={() => setAttachment(null)}
+            attachments={attachment ? [attachment] : []} canAttach sendingAttachments={false} isOnline isWorking={false} stopping={false}
+            draft={draft} onDraftChange={setDraft} onSend={() => {}} onStop={() => {}} onAddFiles={() => {}} onRemoveAttachment={() => setAttachment(null)} onRetryAttachment={() => {}}
             commandModels={[]} commandCurrentModel={null} commandCurrentModelFallback={null} commandThinking="off" commandPendingAction={null}
             onNewSession={() => {}} onCompactSession={() => {}} onSetModel={() => {}} onSetThinking={() => {}} onCommandsOpen={() => {}}
           /></div>
@@ -66,7 +67,7 @@ async function renderWorkspace(initialDraft = "") {
   return {
     screen, input, list, shell, timeline: () => timeline,
     draft: async (text: string) => { flushSync(() => changeDraft(text)); await settle(); },
-    attachment: async (value: MessageComposerAttachment | null) => { flushSync(() => changeAttachment(value)); await settle(); },
+    attachment: async (value: ComposerAttachmentItem | null) => { flushSync(() => changeAttachment(value)); await settle(); },
   };
 }
 
@@ -105,7 +106,7 @@ test("recalculates visual wrapping on width changes and includes an attachment i
   expect(view.input.getBoundingClientRect().height).toBeGreaterThan(wideHeight);
   expect(view.input.getBoundingClientRect().height).toBeLessThanOrEqual(sixLineHeight(view.input));
   await page.viewport(390, 420);
-  await view.attachment({ source: new Blob(["image"], { type: "image/png" }), label: "Attachment", previewUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/%3E" });
+  await view.attachment({ id: "attachment", fileName: "Attachment", byteLength: 1024, status: "draft" });
   expect(view.input.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   expect(view.input.getBoundingClientRect().height).toBeLessThan(sixLineHeight(view.input));
   expect(view.list.clientHeight).toBeGreaterThanOrEqual(40);

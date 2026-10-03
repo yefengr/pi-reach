@@ -4,6 +4,7 @@ import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js
 import {
   UserDeliveryQueue,
   type UserDeliveryEnqueueResult,
+  type UserDeliveryPayload,
   type UserDeliveryScope,
   type UserDeliveryScopeInput,
   type UserDeliverySteerResult,
@@ -27,6 +28,8 @@ export type UserDeliveryBindingOptions = {
   getCurrentLeafId: () => string | null;
   findTarget: (ownerId: string) => UserDeliveryTarget | null;
   sendFrames: (ownerId: string, frames: readonly ServerFrame[]) => void;
+  prepareAttachment?: (frame: UserMessageFrame, ownerId: string) => { content: string; payload: UserDeliveryPayload } | null;
+  beforeSend?: (correlation: Correlation) => void;
 };
 
 export class UserDeliveryBinding {
@@ -46,8 +49,17 @@ export class UserDeliveryBinding {
   }
 
   submit(frame: UserMessageFrame, correlation: Correlation, scope: UserDeliveryScopeInput): UserDeliveryEnqueueResult | true {
+    if (frame.attachment_ids && frame.streaming_behavior === "steer") return "conflict";
     if (frame.streaming_behavior === "steer") return this.sendSteer(messageContent(frame), correlation);
     if (!this.options.canAcceptNormal()) return false;
+    if (frame.attachment_ids) {
+      if (!this.options.prepareAttachment) return "conflict";
+      const prepared = this.options.prepareAttachment(frame, scope.ownerId);
+      if (!prepared) return "rejected";
+      const result = this.queue.enqueue(prepared.content, correlation, { ...scope, leafId: this.options.getCurrentLeafId() }, prepared.payload);
+      if (result !== "queued" && result !== "duplicate") prepared.payload.on_release?.();
+      return result;
+    }
     return this.queue.enqueue(messageContent(frame), correlation, scope, messagePayload(frame));
   }
 
@@ -105,7 +117,10 @@ export class UserDeliveryBinding {
   ): void {
     const pi = this.options.getPi();
     if (!pi) throw new Error("Pi API is unavailable");
-    const send = () => pi.sendUserMessage(content, options);
+    const send = () => {
+      this.options.beforeSend?.(correlation);
+      pi.sendUserMessage(content, options);
+    };
     const timeline = this.options.getTimeline();
     if (timeline) timeline.runWithCorrelation(correlation, send); else send();
   }

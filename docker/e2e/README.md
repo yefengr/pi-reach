@@ -65,10 +65,17 @@ pnpm --filter pwa test:e2e:remote
 
 - 两个真实、相互隔离的 Chromium context 分别通过 Settings UI 保存 loopback Relay URL；
 - interactive capability 仅在测试 Node 进程内读取，触发两次新短码；两个 Owner 都通过 PWA `Pairing code` 手工输入和真实 Relay 短码解析完成配对；
-- Owner A 通过 `Session actions` 的 `New session` 和确认框发起无需模型的控制动作，并核对 interactive `/state` 的 session ID 已变化；
+- Owner A 通过 `Session actions` 的 `New session` 和确认框建立独立验收会话，避免保留卷内的旧附件混入本轮断言；不删除历史卷；
+- 上传二进制、零字节文本和 PNG 原件，移除另一个尚未发送的文件，核对发送前未落盘、发送后原件大小和 SHA-256 与输入一致；
+- 核对真实 Pi 用户消息的文件清单指向对应原件，内容仅含 text blocks；两个 Owner 均能看到正式附件卡片和图片小预览，刷新后从正式历史恢复，页面不显示电脑端路径；
+- 上传后再次新建会话，并核对 interactive `/state` 的 session ID 已变化；
 - 限定执行 `docker compose ... restart relay`，观察 Host 和两个页面断连后自动恢复为 Connected；
 - 刷新两个页面，使用摘要核对各自 IndexedDB `identities` 的 Owner public key 与 `devices` 记录未变化，并再次恢复 Connected；
 - 配对完成后为两个 context 启动失败保留 trace；失败截图会遮罩 Pairing code 输入框，测试输出不打印短码、Owner secret 或 control capability。
+
+interactive 容器显式加载 `host/e2e-provider.ts`，只返回确定性的空 assistant stop，用于让真实 Pi 写入用户正文并完成生命周期。它不请求网络、读取真实模型凭据或执行工具；生产启动入口不加载该 provider。
+
+可选的旧页面共存测试通过 `PI_REACH_E2E_LEGACY_DIST` 指向明确基线的旧 PWA 构建目录。同一浏览器身份下打开旧资产，检查附件文件名与规范化历史可读，并在旧页刷新后验证普通文字投递。资产拦截所需的 loopback 权限仅授予测试 origin；该场景不等于真实 Service Worker 缓存升级验收，也不保证旧页刷新前没有协议或 stale-scope 提示。未提供此变量时不运行旧页面分支。
 
 ## 协议自动化矩阵
 
@@ -85,4 +92,4 @@ pnpm --filter pwa test:e2e:remote
 
 ## 未覆盖范围
 
-真实浏览器入口只使用桌面 Chromium，不代表 Safari、Firefox、移动 viewport 或物理设备验收；它不发送用户 prompt，不验证模型推理、tool execution、thinking、图片、离线 Service Worker 或真实移动网络切换。协议 runner 的 revoke、peer stop 和 Pi 进程重启矩阵也保持在原入口，不在浏览器场景重复执行。
+真实浏览器入口只使用桌面 Chromium，不代表 Safari、Firefox、移动 viewport 或物理设备验收。附件与文字会进入真实 Pi session，但由本地确定性 provider 驱动，不验证模型理解、推理、tool execution 或 thinking；也不覆盖离线 Service Worker 启动、真实 BFCache 冻结恢复、手机文件选择或移动网络切换。协议 runner 的 revoke、peer stop 和 Pi 进程重启矩阵保持在原入口，不在浏览器场景重复执行。

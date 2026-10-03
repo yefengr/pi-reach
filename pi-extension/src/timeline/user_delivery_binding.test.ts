@@ -1,8 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { ATTACHMENT_METADATA_TYPE } from "@pi-reach/protocol/session";
 import { describe, expect, test, vi } from "vitest";
 import type { ClientFrame, ServerFrame } from "../protocol/v2/index.js";
 import { TimelineRuntime } from "./runtime.js";
+import { USER_DELIVERY_START_TIMEOUT_MS } from "./user_delivery.js";
 import { UserDeliveryBinding, type UserDeliveryTarget } from "./user_delivery_binding.js";
 import { TimelineV2Service } from "./v2_service.js";
 
@@ -85,6 +87,95 @@ describe("UserDeliveryBinding", () => {
     expect(outbound[1]).toMatchObject({ type: "user_message_status", status: "accepted" });
     expect(outbound[2]).toMatchObject({ type: "user_message_started", message: { sender_ref: "owner-1" } });
     expect(outbound[3]).toMatchObject({ type: "queued_message_state", items: [] });
+  });
+
+  test("reports unknown after an ordinary native append before SDK start", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    const targets = new Map<string, UserDeliveryTarget>();
+    const outbound: ServerFrame[] = [];
+    const release = vi.fn();
+    const sendUserMessage = vi.fn();
+    const correlatedSend = vi.spyOn(runtime, "runWithCorrelation");
+    const binding = new UserDeliveryBinding({
+      isIdle: () => true,
+      canAcceptNormal: () => true,
+      getPi: () => ({ sendUserMessage } as unknown as ExtensionAPI),
+      getTimeline: () => runtime,
+      getCurrentSessionId: () => session.getSessionId(),
+      getCurrentLeafId: () => session.getLeafId(),
+      findTarget: (ownerId) => targets.get(ownerId) ?? null,
+      sendFrames: (_ownerId, frames) => outbound.push(...frames),
+      prepareAttachment: () => ({ content: "hello", payload: {
+        text: "hello", attachment_ids: ["attachment-1"], on_release: release,
+      } }),
+      beforeSend: () => {
+        // 同 manager、同 session 的普通 append，不是切换分支或 reset。
+        session.appendCustomEntry(ATTACHMENT_METADATA_TYPE, {
+          version: 1, client_request_id: "request-1", sender_ref: "owner-1", text: "hello", attachments: [],
+        });
+      },
+    });
+    const service = new TimelineV2Service({
+      sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime,
+      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
+        ownerId: "owner-1", sessionId: session.getSessionId(), leafId: service.leafId,
+        service, clientRequestId: frame.client_request_id,
+      }),
+      onQueueSnapshot: () => binding.snapshot("owner-1", service),
+    });
+    const unknownDelivery = vi.spyOn(service, "unknownDelivery");
+    targets.set("owner-1", { service, sessionId: session.getSessionId(), leafId: session.getLeafId() });
+    try {
+      service.handle(hello());
+      expect(service.handle({ ...user(service.leafId), attachment_ids: ["attachment-1"] })[0])
+        .toMatchObject({ type: "user_message_status", status: "accepted" });
+      await nextMacrotask();
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
+      const inFlight = binding.snapshot("owner-1", service);
+      await vi.advanceTimersByTimeAsync(USER_DELIVERY_START_TIMEOUT_MS);
+      expect(release).toHaveBeenCalledTimes(1);
+      const timeoutCalls = unknownDelivery.mock.calls.length;
+      expect({ inFlight, timeoutCalls, unknown: outbound.filter((frame) =>
+        frame.type === "user_message_status" && frame.status === "unknown_delivery") }).toMatchObject({
+        inFlight: [{ type: "queued_message_state", items: [{ id: "request-1", editable: false }] }],
+        timeoutCalls: 1,
+        unknown: [{ type: "user_message_status", status: "unknown_delivery", leaf_id: service.leafId }],
+      });
+      const retry = { ...user(service.leafId), attachment_ids: ["attachment-1"] };
+      expect(service.handle(retry)[0]).toMatchObject({ status: "unknown_delivery" });
+      await vi.advanceTimersByTimeAsync(USER_DELIVERY_START_TIMEOUT_MS);
+      expect(unknownDelivery).toHaveBeenCalledTimes(2); // 第二次是同 request 重试的状态重放。
+      expect(outbound.filter((frame) => frame.type === "user_message_status" && frame.status === "unknown_delivery"))
+        .toHaveLength(1);
+
+      // 超时后又有普通 append，晚到 start 仍须使用原 token，不得再次调用 Pi。
+      session.appendCustomEntry("ordinary-progress", {});
+      const correlation = correlatedSend.mock.calls[0]![0];
+      const lateStarted = runtime.runWithCorrelation(correlation, () => runtime.onMessageStart(
+        { role: "user", content: "hello", timestamp: 1 }, session,
+      ));
+      expect(lateStarted).not.toBeNull();
+      binding.onStarted(lateStarted!);
+      binding.onPublished({
+        kind: "user", event_id: lateStarted!.eventId, message_id: lateStarted!.eventId,
+        group_id: lateStarted!.groupId, session_id: session.getSessionId(), leaf_id: service.leafId,
+        event_seq: 1, timestamp: 1, status: "committed", blocks: [], origin: "pwa",
+        sender_ref: "owner-1", delivery: "normal",
+      }, correlation);
+      expect(outbound.filter((frame) => frame.type === "user_message_started")).toHaveLength(1);
+      expect(outbound.filter((frame) => frame.type === "user_message_status" && frame.status === "committed"))
+        .toHaveLength(1);
+      expect(service.handle({ ...retry, leaf_id: service.leafId })[0]).toMatchObject({ status: "committed" });
+      await nextMacrotask();
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
+      expect(release).toHaveBeenCalledTimes(1);
+    } finally {
+      correlatedSend.mockRestore();
+      binding.clearAll();
+      vi.useRealTimers();
+    }
   });
 
   test("isolates owners and hands a queued target to steer at most once", () => {

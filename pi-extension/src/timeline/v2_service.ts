@@ -10,6 +10,8 @@ import {
   type TimelineEvent,
   type TimelinePartial,
 } from "../protocol/v2/index.js";
+import { attachmentReplayFrames, type AttachmentReplay } from "./attachment_delivery.js";
+import { userMessageIdempotencyPayload } from "./attachment_content.js";
 import { TimelineHistoryPager } from "./history.js";
 import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js";
 
@@ -27,6 +29,7 @@ export type V2ServiceOptions = {
     frame: Extract<ClientFrame, { type: "user_message" }>,
     correlation: Correlation,
   ) => boolean | "queued" | "duplicate" | "conflict" | "rejected";
+  onAttachmentReplay?: (frame: Extract<ClientFrame, { type: "user_message" }>) => AttachmentReplay;
   onCancel?: () => boolean;
   onAction?: (frame: V2ActionFrame) => void;
   onQueueSnapshot?: () => ServerFrame[];
@@ -51,6 +54,7 @@ export class TimelineV2Service {
   private readonly extensionVersion: string;
   private readonly runtime: TimelineRuntime;
   private readonly onUserMessage: V2ServiceOptions["onUserMessage"];
+  private readonly onAttachmentReplay?: V2ServiceOptions["onAttachmentReplay"];
   private readonly onCancel?: V2ServiceOptions["onCancel"];
   private readonly onAction?: V2ServiceOptions["onAction"];
   private readonly onQueueSnapshot?: V2ServiceOptions["onQueueSnapshot"];
@@ -67,6 +71,7 @@ export class TimelineV2Service {
     this.runtime = options.runtime;
     this.onUserMessage = options.onUserMessage;
     this.onCancel = options.onCancel;
+    this.onAttachmentReplay = options.onAttachmentReplay;
     this.onAction = options.onAction;
     this.onQueueSnapshot = options.onQueueSnapshot;
     this.onQueuedMessageClear = options.onQueuedMessageClear;
@@ -156,6 +161,12 @@ export class TimelineV2Service {
       case "model_set":
       case "thinking_set":
         return this.handleAction(frame);
+      case "attachment_capabilities_request":
+      case "attachment_begin":
+      case "attachment_chunk":
+      case "attachment_finish":
+      case "attachment_status_request":
+      case "attachment_cancel":
       case "queued_message_set":
       case "approve_tool":
         return this.requireReady(frame);
@@ -397,10 +408,12 @@ export class TimelineV2Service {
   private handleUserMessage(frame: Extract<ClientFrame, { type: "user_message" }>): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
+    const attachmentReplay = attachmentReplayFrames(frame, this.onAttachmentReplay, this.sessionId, this.leafId);
+    if (attachmentReplay) return attachmentReplay;
     const result = this.state.begin({
       senderRef: this.senderRef,
       clientRequestId: frame.client_request_id,
-      payload: this.idempotencyPayload(frame),
+      payload: userMessageIdempotencyPayload(frame),
     });
     if (result.kind === "conflict") {
       return [this.error(frame.id, "invalid_message", "client_request_id payload conflict", frame.channel_id)];
@@ -499,6 +512,8 @@ export class TimelineV2Service {
     return [error ?? this.error("id" in frame ? frame.id : "v2", "unsupported_type", "frame is not implemented", "channel_id" in frame ? frame.channel_id : undefined)];
   }
 
+  validateRequest(frame: ClientFrame): ServerFrame | null { return this.ensureReady(frame); }
+
   private ensureReady(frame: ClientFrame): ServerFrame | null {
     if (!("channel_id" in frame) || !this.state.get(this.senderRef, frame.channel_id)) {
       return this.error("id" in frame ? frame.id : "v2", "invalid_channel", "session_hello required", "channel_id" in frame ? frame.channel_id : undefined);
@@ -567,14 +582,6 @@ export class TimelineV2Service {
       in_reply_to: inReplyTo,
       code,
       message,
-    };
-  }
-
-  private idempotencyPayload(frame: Extract<ClientFrame, { type: "user_message" }>): unknown {
-    return {
-      text: frame.text,
-      images: frame.images ?? [],
-      streaming_behavior: frame.streaming_behavior ?? null,
     };
   }
 

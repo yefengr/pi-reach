@@ -92,7 +92,7 @@ function updateFromLine(line) {
 function start() {
   if (closing || child) return;
   state = { ...state, running: true, rpcReady: false, runtimeReady: false, relay: "connecting", endpointId: null, runtimeId: null, lastError: null };
-  const nextChild = spawn("pi", ["--mode", "rpc", "--approve", "--continue", "--name", "e2e-interactive"], {
+  const nextChild = spawn("pi", ["--mode", "rpc", "--approve", "--continue", "--name", "e2e-interactive", "--extension", "/usr/local/bin/e2e-provider.ts", "--provider", "pi-reach-e2e", "--model", "fixture"], {
     cwd: workspace,
     env: {
       ...process.env,

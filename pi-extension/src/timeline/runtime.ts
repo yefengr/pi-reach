@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { MessageUpdateEvent, SessionManager, ToolExecutionEndEvent, ToolExecutionStartEvent, ToolExecutionUpdateEvent } from "@earendil-works/pi-coding-agent";
 import { MarkerSchemaV2, TimelineEventSchema, type JsonValue, type MarkerV2, type TimelineEvent, type TimelinePartial } from "../protocol/v2/index.js";
+import { attachmentRecords, attachmentDisplayBlocks, userContentBlocks } from "./attachment_content.js";
+import type { AttachmentMetadata } from "@pi-reach/protocol/session";
 import { partialDeltaChunks } from "./partial_delta.js";
 import { TimelinePublications } from "./publication.js";
 import { isRunEndMarker, runEndEvent, runEndMarker, runEndStatus } from "./run_end.js";
@@ -65,6 +67,7 @@ export type TimelineStarted = {
 
 export type TimelineRuntimeOptions = {
   onStarted?: (started: TimelineStarted) => void;
+  prepareStarted?: (started: TimelineStarted, manager: SessionManager, runtime: TimelineRuntime) => TimelineStarted;
   onPublished?: (event: TimelineEvent, correlation: Correlation) => void;
   onPartial?: (partial: TimelinePartial, correlation: Correlation) => void;
 };
@@ -86,9 +89,11 @@ export class TimelineRuntime {
   private active = false;
   private readonly onStarted?: (started: TimelineStarted) => void;
   private readonly onPartial?: (partial: TimelinePartial, correlation: Correlation) => void;
+  private readonly prepareStarted?: TimelineRuntimeOptions["prepareStarted"];
 
   constructor(options: TimelineRuntimeOptions = {}) {
     this.onStarted = options.onStarted;
+    this.prepareStarted = options.prepareStarted;
     this.onPartial = options.onPartial;
     this.publications = new TimelinePublications((event, correlation) => {
       options.onPublished?.(event, correlation);
@@ -168,7 +173,7 @@ export class TimelineRuntime {
   /** SDK 的 turn_end 发生在本轮消息持久化之后，接管异步 message_end 尚未完成的发布。 */
   onTurnEnd(sessionManager: SessionManager): void {
     if (this.sessionManager !== sessionManager) return;
-    this.publications.flush(() => this.recover(sessionManager));
+    this.publications.flush(() => this.recoverForPublication(sessionManager));
   }
 
   /** 为本次运行的组写入 run_end marker，并在同组正式消息发布之后推送。 */
@@ -205,13 +210,14 @@ export class TimelineRuntime {
     const pending = { message: objectMessage, role: record.role, marker, correlation, identity: this.messageIdentity(record) };
     this.pending.set(objectMessage, pending);
     this.pendingByRole[record.role].push(pending);
-    const started: TimelineStarted = {
+    let started: TimelineStarted = {
       eventId: markerId,
       groupId,
       role: record.role,
       correlation: { ...correlation },
-      blocks: record.role === "user" ? this.userBlocks(record.content) : [],
+      blocks: record.role === "user" ? userContentBlocks(record.content) : [],
     };
+    started = this.prepareStarted?.(started, sessionManager, this) ?? started;
     this.onStarted?.(started);
     return started;
   }
@@ -258,11 +264,29 @@ export class TimelineRuntime {
     this.publishWhenVisible(sessionManager, pending.marker.event_id, pending.correlation);
   }
 
+  appendDeferredCustom(sessionManager: SessionManager, customType: string, data: unknown): string {
+    this.attach(sessionManager);
+    const id = sessionManager.appendCustomEntry(customType, data);
+    this.publishWhenVisible(sessionManager, id, { origin: "unknown", delivery: "unknown" });
+    return id;
+  }
+
+  private recoverForPublication(manager: SessionManager): TimelineEvent[] {
+    const events = this.recover(manager);
+    const visible = new Set(events.map((event) => event.event_id));
+    const branch = manager.getBranch();
+    const cutoff = branch.findIndex((entry) => entry.type === "custom" && entry.customType === TIMELINE_MARKER
+      && !visible.has(entry.id) && this.parseMarker(entry.data) !== null);
+    if (cutoff < 0) return events;
+    const before = new Set(branch.slice(0, cutoff).map((entry) => entry.id));
+    return events.filter((event) => before.has(event.event_id));
+  }
+
   private publishWhenVisible(sessionManager: SessionManager, markerId: string, correlation: Correlation): void {
     this.publications.defer(markerId, correlation,
-      () => this.sessionManager === sessionManager ? this.recover(sessionManager) : [],
+      () => this.sessionManager === sessionManager ? this.recoverForPublication(sessionManager) : [],
       () => this.sessionManager === sessionManager && sessionManager.getBranch().some((entry) => entry.type === "custom"
-        && entry.customType === TIMELINE_MARKER && entry.id === markerId));
+        && entry.id === markerId));
   }
 
   onToolExecutionStart(event: ToolExecutionStartEvent, sessionManager: SessionManager): void {
@@ -299,6 +323,7 @@ export class TimelineRuntime {
     const branch = sessionManager.getBranch();
     const legacyGroup = `legacy:${sessionManager.getSessionId()}`;
     const recoveryTools = recoverToolCalls(branch);
+    const attachmentMessages = attachmentRecords(sessionManager);
     const positions = new Map(branch.map((entry, index) => [entry.id, index]));
     const matched = new Set<string>();
     const recovered: TimelineProjection[] = [];
@@ -316,7 +341,7 @@ export class TimelineRuntime {
       const target = this.scanTargetAfterMarker(branch, index, this.roleForMarker(marker));
       if (!target) continue;
       matched.add(target.id);
-      const event = this.toTimelineEvent(target, marker, this.correlationFromMarker(marker), sessionManager, recoveryTools.get(target.id));
+      const event = this.toTimelineEvent(target, marker, this.correlationFromMarker(marker), sessionManager, recoveryTools.get(target.id), attachmentMessages.get(marker.event_id));
       if (event) recovered.push({ event, branchPosition: positions.get(target.id)! });
     }
     for (const [branchPosition, entry] of branch.entries()) {
@@ -327,7 +352,7 @@ export class TimelineRuntime {
           const marker: MessageMarker = role === "user"
             ? { version: 2, event_id: entry.id, group_id: legacyGroup, kind: "user", origin: "unknown", delivery: "unknown" }
             : { version: 2, event_id: entry.id, group_id: legacyGroup, kind: role === "assistant" ? "assistant" : "tool" };
-          event = this.toTimelineEvent(entry, marker, this.correlationFromMarker(marker), sessionManager, recoveryTools.get(entry.id));
+          event = this.toTimelineEvent(entry, marker, this.correlationFromMarker(marker), sessionManager, recoveryTools.get(entry.id), attachmentMessages.get(marker.event_id));
         }
       } else if (entry.type !== "message") {
         event = this.toSystemEvent(entry, sessionManager);
@@ -440,6 +465,7 @@ export class TimelineRuntime {
     correlation: Correlation,
     sessionManager: SessionManager,
     association?: ToolCallDetails,
+    attachmentMetadata?: AttachmentMetadata,
   ): TimelineEvent | null {
     const message = this.asMessageRecord(entry.message);
     if (!message) return null;
@@ -453,7 +479,9 @@ export class TimelineRuntime {
       const senderRef = marker.kind === "user" && marker.sender_ref ? { sender_ref: marker.sender_ref } : {};
       return TimelineEventSchema.parse({
         ...base, group_id: groupId, kind: "user", message_id: marker.event_id,
-        blocks: this.userBlocks(message.content), origin: correlation.origin, delivery: correlation.delivery,
+        blocks: attachmentMetadata && attachmentMetadata.sender_ref === senderRef.sender_ref
+          ? attachmentDisplayBlocks(attachmentMetadata) : userContentBlocks(message.content),
+        origin: correlation.origin, delivery: correlation.delivery,
         status: "committed", ...senderRef,
       });
     }
@@ -541,20 +569,6 @@ export class TimelineRuntime {
     return Date.now();
   }
 
-  private userBlocks(content: unknown): JsonValue[] {
-    if (typeof content === "string") return [{ type: "text", text: content }];
-    if (!Array.isArray(content)) return [{ type: "text", text: "" }];
-    return content.flatMap((part): JsonValue[] => {
-      if (!part || typeof part !== "object") return [];
-      const item = part as { type?: unknown; text?: unknown; data?: unknown; mimeType?: unknown };
-      if (item.type === "text" && typeof item.text === "string") return [{ type: "text", text: item.text }];
-      if (item.type === "image" && typeof item.data === "string" && typeof item.mimeType === "string") {
-        return [{ type: "image", mime_type: item.mimeType, data: item.data, byte_length: this.base64Length(item.data) }];
-      }
-      return [];
-    });
-  }
-
   private assistantBlocks(content: unknown): JsonValue[] {
     if (typeof content === "string") return [{ type: "text", text: content }];
     if (!Array.isArray(content)) return [];
@@ -579,14 +593,6 @@ export class TimelineRuntime {
 
   private nonEmpty(value: string): string {
     return value.trim() || "tool failed";
-  }
-
-  private base64Length(value: string): number {
-    try {
-      return Buffer.from(value, "base64").byteLength;
-    } catch {
-      return 0;
-    }
   }
 
 }

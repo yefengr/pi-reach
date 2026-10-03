@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 import { PendingCapacityError, TimelineRuntime, type TimelineScope } from "./timeline-runtime";
 import type { ServerFrame } from "../pi-reach/protocol-v2/frames";
-import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
+import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_MESSAGE_BYTES, type AttachmentDescriptor, type TimelineEvent } from "../pi-reach/protocol-v2/schema";
+import { pendingPayloadBytes } from "./timeline-pending";
 
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime-a", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
 function userEvent(messageId: string): Extract<TimelineEvent, { kind: "user" }> { return { event_id: messageId, message_id: messageId, session_id: scope.sessionId, leaf_id: scope.leafId, timestamp: 2, group_id: "group", kind: "user", blocks: [{ type: "text", text: "hello" }], origin: "pwa", sender_ref: scope.selfSenderRef, delivery: "normal", status: "committed" }; }
@@ -296,4 +297,80 @@ test("falls back to replacement for large gaps, scope changes, and unsafe formal
   staleHead.setScope(scope);
   staleHead.prependHistory(numberedUserEvents(1, 5));
   expect(staleHead.prepareLive(scope, 4).plan.mode).toBe("replace");
+});
+
+function attachment(attachmentId: string, overrides: Partial<AttachmentDescriptor> = {}): AttachmentDescriptor {
+  return { attachment_id: attachmentId, file_name: `${attachmentId}.png`, mime_type: "image/png", byte_length: 4, sha256: "a".repeat(64), ...overrides };
+}
+function imagePreview(): AttachmentDescriptor["preview"] {
+  return { mime_type: "image/jpeg", data: "aGk=", byte_length: 2, width: 8, height: 8 };
+}
+
+test("sends only attachment ids on the wire while keeping previews out of the frame", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const descriptors = [attachment("attachment-1", { preview: imagePreview() }), attachment("attachment-2", { byte_length: 8 })];
+  const sent = runtime.sendUserWithAttachments("", descriptors, { clientRequestId: "req-1", requestId: "send-1" });
+  expect(sent).toBeTruthy();
+  expect(sent!.frame).toMatchObject({ text: "", client_request_id: "req-1", id: "send-1", attachment_ids: ["attachment-1", "attachment-2"] });
+  expect(sent!.frame).not.toHaveProperty("images");
+  const wire = JSON.stringify(sent!.frame);
+  expect(wire).not.toContain("preview");
+  expect(wire).not.toContain("byte_length");
+  expect(wire).not.toContain("sha256");
+  const pending = runtime.pendingItems.find((item) => item.clientRequestId === "req-1");
+  expect(pending).toMatchObject({ text: "", attachments: descriptors, senderRef: scope.selfSenderRef });
+  expect(pending?.attachments?.[0]?.preview).toEqual(imagePreview());
+});
+
+test("rejects attachment messages that break count, per-file, total, uniqueness, or descriptor rules", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const tooMany = Array.from({ length: ATTACHMENT_MAX_COUNT + 1 }, (_, index) => attachment(`attachment-${index}`));
+  const tooLargeTotal = [
+    attachment("attachment-1", { byte_length: ATTACHMENT_MAX_FILE_BYTES }),
+    attachment("attachment-2", { byte_length: ATTACHMENT_MAX_FILE_BYTES }),
+    attachment("attachment-3", { byte_length: ATTACHMENT_MAX_MESSAGE_BYTES - ATTACHMENT_MAX_FILE_BYTES * 2 + 1 }),
+  ];
+  expect(runtime.sendUserWithAttachments("x", [])).toBeNull();
+  expect(runtime.sendUserWithAttachments("x", tooMany)).toBeNull();
+  expect(runtime.sendUserWithAttachments("x", [attachment("attachment-1"), attachment("attachment-1")])).toBeNull();
+  expect(runtime.sendUserWithAttachments("x", [attachment("attachment-1", { file_name: "bad\nname.png" })])).toBeNull();
+  expect(runtime.sendUserWithAttachments("x", [attachment("attachment-1", { byte_length: ATTACHMENT_MAX_FILE_BYTES + 1 })])).toBeNull();
+  expect(runtime.sendUserWithAttachments("x", tooLargeTotal)).toBeNull();
+  expect(runtime.sendUserWithAttachments("x", [{ ...attachment("attachment-1"), extra: true } as unknown as AttachmentDescriptor])).toBeNull();
+  expect(runtime.pendingItems).toEqual([]);
+});
+
+test("counts display previews against the pending payload budget", () => {
+  const plain = attachment("attachment-1");
+  const withPreview = attachment("attachment-1", { preview: imagePreview() });
+  expect(pendingPayloadBytes({ text: "", attachments: [withPreview] })).toBeGreaterThan(pendingPayloadBytes({ text: "", attachments: [plain] }));
+  const rejecting = new TimelineRuntime({ maxPayloadBytes: pendingPayloadBytes({ text: "", attachments: [plain] }) });
+  rejecting.setScope(scope);
+  expect(() => rejecting.sendUserWithAttachments("", [withPreview])).toThrow(PendingCapacityError);
+  expect(rejecting.pendingItems).toEqual([]);
+  const allowing = new TimelineRuntime({ maxPayloadBytes: pendingPayloadBytes({ text: "", attachments: [withPreview] }) });
+  allowing.setScope(scope);
+  expect(allowing.sendUserWithAttachments("", [withPreview])).toBeTruthy();
+});
+
+test("retries unknown image and attachment deliveries with their original request correlation", () => {
+  const imageRuntime = new TimelineRuntime(); imageRuntime.setScope(scope);
+  const images = [{ mime: "image/png" as const, data: "abc" }];
+  expect(imageRuntime.sendUser("caption", images, { clientRequestId: "img", requestId: "img-send" })).toBeTruthy();
+  imageRuntime.markUnknownDelivery("img");
+  const imageRetried = imageRuntime.retryUnknown("img")!;
+  expect(imageRetried.frame).toMatchObject({ client_request_id: "img", images });
+  expect(imageRetried.frame.id).not.toBe("img-send");
+  expect(imageRetried.frame).not.toHaveProperty("attachment_ids");
+
+  const attachmentRuntime = new TimelineRuntime(); attachmentRuntime.setScope(scope);
+  const descriptor = attachment("attachment-1", { preview: imagePreview() });
+  const attachmentSent = attachmentRuntime.sendUserWithAttachments("", [descriptor], { clientRequestId: "req-1", requestId: "send-1" })!;
+  expect(attachmentSent.frame.attachment_ids).toEqual(["attachment-1"]);
+  attachmentRuntime.markUnknownDelivery("req-1");
+  const retried = attachmentRuntime.retryUnknown("req-1")!;
+  expect(retried.frame).toMatchObject({ client_request_id: "req-1", attachment_ids: ["attachment-1"] });
+  expect(retried.frame.id).not.toBe("send-1");
+  expect(retried.frame).not.toHaveProperty("images");
+  expect(attachmentRuntime.pendingItems[0]).toMatchObject({ clientRequestId: "req-1", attachments: [descriptor] });
 });

@@ -3,7 +3,8 @@ import { expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
-import { MessageComposer, type MessageComposerAttachment } from "./message-composer";
+import { MessageComposer } from "./message-composer";
+import type { ComposerAttachmentItem } from "./attachment-cards";
 
 const model: WireModel = {
   id: "claude-sonnet-4",
@@ -17,47 +18,45 @@ const model: WireModel = {
 type ComposerHarnessProps = {
   initialDraft?: string;
   initialWorking?: boolean;
+  attachmentNotice?: string;
   commandModels?: WireModel[];
   onCommandsOpen?: () => void;
   onNewSession?: () => void;
   onSend?: () => void | Promise<void>;
   onStop?: () => void;
-  onSetAttachment?: (source: Blob, label: string) => void;
+  onAddFiles?: (files: File[]) => void;
   onSetModel?: (nextModel: WireModel) => void;
   onSetThinking?: (level: ThinkingLevel) => void;
 };
 
-function attachmentFrom(source: Blob, label: string): MessageComposerAttachment {
-  return {
-    source,
-    previewUrl: "data:image/png;base64,",
-    label,
-  };
+function attachmentFrom(source: File): ComposerAttachmentItem {
+  return { id: source.name, fileName: source.name, byteLength: source.size, status: "draft" };
 }
 
 function ComposerHarness({
   initialDraft = "",
   initialWorking = false,
+  attachmentNotice,
   commandModels = [model],
   onCommandsOpen = () => {},
   onNewSession = () => {},
   onSend = () => {},
   onStop = () => {},
-  onSetAttachment = () => {},
+  onAddFiles = () => {},
   onSetModel = () => {},
   onSetThinking = () => {},
 }: ComposerHarnessProps) {
   const [draft, setDraft] = useState(initialDraft);
-  const [attachment, setAttachment] = useState<MessageComposerAttachment | null>(null);
+  const [attachments, setAttachments] = useState<ComposerAttachmentItem[]>([]);
   const [isOnline, setIsOnline] = useState(true);
   const [isWorking, setIsWorking] = useState(initialWorking);
   const [stopping, setStopping] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
   const [pendingAction, setPendingAction] = useState<"model_set" | null>(null);
 
-  const setImageAttachment = (source: Blob, label: string) => {
-    onSetAttachment(source, label);
-    setAttachment(attachmentFrom(source, label));
+  const addFiles = (files: File[]) => {
+    onAddFiles(files);
+    setAttachments(current => [...current, ...files.map(attachmentFrom)]);
   };
 
   return (
@@ -66,14 +65,15 @@ function ComposerHarness({
       <button type="button" data-testid="composer-set-draft" hidden onClick={() => setDraft("Continue this task")} />
       <button type="button" data-testid="composer-toggle-working" hidden onClick={() => setIsWorking((current) => !current)} />
       <button type="button" data-testid="composer-set-stopping" hidden onClick={() => setStopping(true)} />
-      <button type="button" data-testid="composer-set-attachment" hidden onClick={() => setAttachment(attachmentFrom(new Blob(["image"], { type: "image/png" }), "Queued image"))} />
+      <button type="button" data-testid="composer-set-attachment" hidden onClick={() => setAttachments([attachmentFrom(new File(["image"], "Queued image", { type: "image/png" }))])} />
       <button type="button" data-testid="composer-set-sending-image" hidden onClick={() => setSendingImage(true)} />
       <button type="button" data-testid="composer-go-offline" hidden onClick={() => setIsOnline(false)} />
       <button type="button" data-testid="composer-set-command-pending" hidden onClick={() => setPendingAction("model_set")} />
       <MessageComposer
-        attachment={attachment}
-        canAttachImage={isOnline && !sendingImage}
-        sendingImage={sendingImage}
+        attachments={attachments}
+        canAttach={isOnline}
+        sendingAttachments={sendingImage}
+        attachmentNotice={attachmentNotice}
         isOnline={isOnline}
         isWorking={isWorking}
         stopping={stopping}
@@ -81,8 +81,9 @@ function ComposerHarness({
         onDraftChange={setDraft}
         onSend={onSend}
         onStop={onStop}
-        onSetAttachment={setImageAttachment}
-        onClearAttachment={() => setAttachment(null)}
+        onAddFiles={addFiles}
+        onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+        onRetryAttachment={() => {}}
         commandModels={commandModels}
         commandCurrentModel={model}
         commandCurrentModelFallback={null}
@@ -101,7 +102,7 @@ function ComposerHarness({
 test("keeps the image remove action at a 44px touch target", async () => {
   const screen = await renderPwa(<ComposerHarness />);
   screen.getByTestId("composer-set-attachment").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-  const remove = screen.getByRole("button", { name: "Remove image" });
+  const remove = screen.getByRole("button", { name: "Remove Queued image" });
   await expect.element(remove).toBeVisible();
   const rect = remove.element().getBoundingClientRect();
 
@@ -116,7 +117,7 @@ test.each([[1280, 900], [390, 844]])("keeps a single Composer surface, frameless
     const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
     const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
     const send = screen.getByRole("button", { name: "Send message" }).element() as HTMLButtonElement;
-    const image = screen.getByRole("button", { name: "Add image" }).element();
+    const image = screen.getByRole("button", { name: "Add attachments" }).element();
     const commands = screen.getByRole("button", { name: "Pi commands" }).element();
     const cardStyle = getComputedStyle(card);
     const inputStyle = getComputedStyle(input);
@@ -155,6 +156,25 @@ test.each([[1280, 900], [390, 844]])("keeps a single Composer surface, frameless
     await screen.unmount();
     await page.viewport(1280, 900);
   }
+});
+
+test.each([320, 390, 1440])("keeps a single attachment notice outside the cards and input surface at %ipx", async width => {
+  await page.viewport(width, 900);
+  const screen = await renderPwa(<ComposerHarness attachmentNotice="Uploads paused" />);
+  screen.getByTestId("composer-set-attachment").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  screen.getByTestId("composer-go-offline").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await expect.element(screen.getByText("Uploads paused")).toBeVisible();
+  const notice = document.querySelector<HTMLElement>(".pwa-composer-hint")!;
+  const cards = document.querySelector<HTMLElement>(".pwa-attachment-cards")!;
+  const surface = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+  expect(notice.parentElement).toBe(surface.parentElement);
+  expect(surface.contains(cards)).toBe(false);
+  expect(document.querySelectorAll(".pwa-composer-hint")).toHaveLength(1);
+  expect(Math.round(notice.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(cards.getBoundingClientRect().top));
+  expect(Math.round(cards.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(surface.getBoundingClientRect().top));
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+  await screen.unmount();
+  await page.viewport(1280, 900);
 });
 
 test("shows the Stop action with the same accent circle as Send", async () => {
@@ -250,10 +270,10 @@ test("keeps slash menu typing, button entry, menu actions and image menu focus i
   await expect.element(screen.getByRole("menu", { name: "Pi commands" })).toBeVisible();
   await userEvent.keyboard("{Escape}");
   await expect.element(trigger).toHaveFocus();
-  const image = screen.getByRole("button", { name: "Add image" });
+  const image = screen.getByRole("button", { name: "Add attachments" });
   image.element().focus();
   await image.click();
-  await expect.element(screen.getByRole("menuitem", { name: "Choose image" })).toBeVisible();
+  await expect.element(screen.getByRole("menuitem", { name: "Choose files" })).toBeVisible();
   await userEvent.keyboard("{Escape}");
   await expect.element(image).toHaveFocus();
 });
@@ -279,13 +299,13 @@ test("does not open commands for pasted slash or when offline", async () => {
 
 test("portals mutually exclusive image and Pi command menus, then returns focus after closing", async () => {
   const screen = await renderPwa(<ComposerHarness />);
-  const imageTrigger = screen.getByRole("button", { name: "Add image" });
+  const imageTrigger = screen.getByRole("button", { name: "Add attachments" });
   const commandTrigger = screen.getByRole("button", { name: "Pi commands" });
 
   imageTrigger.element().focus();
   await expect.element(imageTrigger).toHaveFocus();
   await imageTrigger.click();
-  const chooseImage = screen.getByRole("menuitem", { name: "Choose image" });
+  const chooseImage = screen.getByRole("menuitem", { name: "Choose files" });
   await expect.element(chooseImage).toBeVisible();
   expect(chooseImage.element().closest(".pwa-root")).not.toBeNull();
   chooseImage.element().focus();
@@ -295,10 +315,10 @@ test("portals mutually exclusive image and Pi command menus, then returns focus 
   await expect.element(imageTrigger).toHaveFocus();
 
   await imageTrigger.click();
-  await expect.element(screen.getByRole("menuitem", { name: "Choose image" })).toBeVisible();
+  await expect.element(screen.getByRole("menuitem", { name: "Choose files" })).toBeVisible();
   commandTrigger.element().focus();
   await commandTrigger.click();
-  await expect.element(screen.getByRole("menuitem", { name: "Choose image" })).not.toBeInTheDocument();
+  await expect.element(screen.getByRole("menuitem", { name: "Choose files" })).not.toBeInTheDocument();
   const commandsMenu = screen.getByRole("menu", { name: "Pi commands" });
   await expect.element(commandsMenu).toBeVisible();
   expect(commandsMenu.element().closest(".pwa-root")).not.toBeNull();
@@ -314,7 +334,7 @@ test("portals mutually exclusive image and Pi command menus, then returns focus 
 
 test("keeps both menu switch directions stable and does not steal valid outside focus", async () => {
   const screen = await renderPwa(<ComposerHarness />);
-  const image = screen.getByRole("button", { name: "Add image" });
+  const image = screen.getByRole("button", { name: "Add attachments" });
   const commands = screen.getByRole("button", { name: "Pi commands" });
   for (let cycle = 0; cycle < 2; cycle += 1) {
     commands.element().focus();
@@ -324,7 +344,7 @@ test("keeps both menu switch directions stable and does not steal valid outside 
     await image.click();
     await settleOverlayFocus();
     await expect.element(screen.getByRole("menu", { name: "Pi commands" })).not.toBeInTheDocument();
-    const chooseImage = screen.getByRole("menuitem", { name: "Choose image" });
+    const chooseImage = screen.getByRole("menuitem", { name: "Choose files" });
     await expect.element(chooseImage).toBeVisible();
     expect(chooseImage.element().closest('[role="menu"]')?.contains(document.activeElement)).toBe(true);
     commands.element().focus();
@@ -384,8 +404,8 @@ test("uses 16px action text in composer menus and keeps the current model and th
   const ink = getComputedStyle(probe).color;
   const selectedBackground = getComputedStyle(probe).backgroundColor;
 
-  await screen.getByRole("button", { name: "Add image" }).click();
-  const choose = screen.getByRole("menuitem", { name: "Choose image" });
+  await screen.getByRole("button", { name: "Add attachments" }).click();
+  const choose = screen.getByRole("menuitem", { name: "Choose files" });
   await expect.element(choose).toBeVisible();
   expect(getComputedStyle(choose.element()).fontSize).toBe("16px");
   await userEvent.keyboard("{Escape}");
@@ -451,14 +471,15 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the Composer
   }
 });
 
-test("uses the exact hidden image inputs and only captures pasted image files", async () => {
-  const attachments: Array<{ source: Blob; label: string }> = [];
-  const screen = await renderPwa(<ComposerHarness onSetAttachment={(source, label) => attachments.push({ source, label })} />);
+test("passes all selected, pasted and camera files without converting their originals", async () => {
+  const attachments: File[][] = [];
+  const screen = await renderPwa(<ComposerHarness onAddFiles={files => attachments.push(files)} />);
   const [imageInput, cameraInput] = getImageInputs();
-  const imageTrigger = screen.getByRole("button", { name: "Add image" });
+  const imageTrigger = screen.getByRole("button", { name: "Add attachments" });
 
-  expect(imageInput.accept).toBe("image/png,image/jpeg,image/webp");
-  expect(cameraInput.accept).toBe("image/png,image/jpeg,image/webp");
+  expect(imageInput.accept).toBe("");
+  expect(imageInput.multiple).toBe(true);
+  expect(cameraInput.accept).toBe("image/*");
   expect(cameraInput.getAttribute("capture")).toBe("environment");
 
   let imageClicks = 0;
@@ -467,7 +488,7 @@ test("uses the exact hidden image inputs and only captures pasted image files", 
   cameraInput.addEventListener("click", () => { cameraClicks += 1; });
 
   await imageTrigger.click();
-  await screen.getByRole("menuitem", { name: "Choose image" }).click();
+  await screen.getByRole("menuitem", { name: "Choose files" }).click();
   expect(imageClicks).toBe(1);
   expect(cameraClicks).toBe(0);
 
@@ -487,7 +508,8 @@ test("uses the exact hidden image inputs and only captures pasted image files", 
   });
   textarea.dispatchEvent(imagePaste);
   expect(imagePaste.defaultPrevented).toBe(true);
-  expect(attachments).toEqual([{ source: imageFile, label: "clipboard.webp" }]);
+  expect(attachments).toEqual([[imageFile]]);
+  expect(attachments[0][0]).toBe(imageFile);
 
   const textFile = new File(["plain text"], "notes.txt", { type: "text/plain" });
   const textClipboard = new DataTransfer();
@@ -498,17 +520,33 @@ test("uses the exact hidden image inputs and only captures pasted image files", 
     clipboardData: textClipboard,
   });
   textarea.dispatchEvent(textPaste);
-  expect(textPaste.defaultPrevented).toBe(false);
-  expect(attachments).toHaveLength(1);
+  expect(textPaste.defaultPrevented).toBe(true);
+  expect(attachments[1][0]).toBe(textFile);
+
+  const selected = new DataTransfer();
+  selected.items.add(imageFile);
+  selected.items.add(textFile);
+  imageInput.files = selected.files;
+  imageInput.dispatchEvent(new Event("change", { bubbles: true }));
+  expect(attachments[2]).toEqual([imageFile, textFile]);
+  expect(attachments[2][0]).toBe(imageFile);
+  expect(attachments[2][1]).toBe(textFile);
+  const captured = new File(["camera original"], "camera.heic", { type: "image/heic" });
+  const cameraFiles = new DataTransfer();
+  cameraFiles.items.add(captured);
+  cameraInput.files = cameraFiles.files;
+  cameraInput.dispatchEvent(new Event("change", { bubbles: true }));
+  expect(attachments[3][0]).toBe(captured);
+  expect(cameraInput.value).toBe("");
 });
 
-test.each([1280, 390])("keeps the image input mounted after menu close and resets repeated selections at %ipx", async (width) => {
+test.each([1280, 390])("keeps the file input mounted after menu close and resets repeated selections at %ipx", async (width) => {
   await page.viewport(width, 844);
-  const attachments: Array<{ source: Blob; label: string }> = [];
-  const screen = await renderPwa(<ComposerHarness onSetAttachment={(source, label) => attachments.push({ source, label })} />);
+  const attachments: File[][] = [];
+  const screen = await renderPwa(<ComposerHarness onAddFiles={files => attachments.push(files)} />);
   try {
     const [imageInput, cameraInput] = getImageInputs();
-    const trigger = screen.getByRole("button", { name: "Add image" });
+    const trigger = screen.getByRole("button", { name: "Add attachments" });
     let chooserOpens = 0;
     imageInput.addEventListener("click", (event) => {
       event.preventDefault();
@@ -520,7 +558,7 @@ test.each([1280, 390])("keeps the image input mounted after menu close and reset
     const openChooser = async () => {
       trigger.element().focus();
       await trigger.click();
-      const choose = screen.getByRole("menuitem", { name: "Choose image", exact: true });
+      const choose = screen.getByRole("menuitem", { name: "Choose files", exact: true });
       // 等非零入场和初始 FocusTrap placeholder 稳定，再模拟用户选择。
       await expect.poll(() => getComputedStyle(choose.element().closest('[role="menu"]')!).opacity).toBe("1");
       choose.element().focus();
@@ -547,11 +585,11 @@ test.each([1280, 390])("keeps the image input mounted after menu close and reset
       expect(imageInput.value).toContain("chosen.webp");
       imageInput.dispatchEvent(new Event("change", { bubbles: true }));
       await expect.poll(() => attachments.length).toBe(selection + 1);
-      expect(attachments[selection]).toEqual({ source: file, label: "chosen.webp" });
+      expect(attachments[selection][0]).toBe(file);
       expect(imageInput.value).toBe("");
       expect(imageInput.files).toHaveLength(0);
       expect(cameraInput.files).toHaveLength(0);
-      await screen.getByRole("button", { name: "Remove image" }).click();
+      await screen.getByRole("button", { name: "Remove chosen.webp" }).click();
     }
     expect(chooserOpens).toBe(3);
   } finally {
@@ -690,7 +728,7 @@ test("updates Stop and Send client state through working, stopping, image sendin
   screen.getByTestId("composer-set-attachment").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   screen.getByTestId("composer-set-sending-image").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   await expect.element(textarea).toBeDisabled();
-  await expect.element(screen.getByRole("button", { name: "Remove image" })).toBeDisabled();
+  await expect.element(screen.getByRole("button", { name: "Remove Queued image" })).toBeEnabled();
   await expect.element(screen.getByRole("button", { name: "Send message" })).not.toBeInTheDocument();
 
   screen.getByTestId("composer-go-offline").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -698,7 +736,7 @@ test("updates Stop and Send client state through working, stopping, image sendin
   await expect.element(offlineSend).toBeDisabled();
   await expect.element(textarea).toBeDisabled();
   await expect.element(screen.getByRole("button", { name: "Pi commands" })).toBeDisabled();
-  await expect.element(screen.getByRole("button", { name: "Add image" })).toBeDisabled();
+  await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeDisabled();
 });
 
 test("prevents duplicate native submits until an asynchronous send settles, then permits the next submit", async () => {
