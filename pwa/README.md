@@ -12,6 +12,14 @@ The PWA uses IndexedDB for browser-local identity, pairings, session history,
 and offline-readable messages. Live connections use the existing Relay and
 Pi Extension protocol.
 
+Session attachments keep the original `File` in page memory until sending.
+The PWA uploads originals over the existing Relay route and then submits their
+IDs; only descriptions and bounded previews enter persisted history. Reloads
+do not preserve unsent files, and the PWA has no original-file download action.
+Limits, leases and host storage are documented in
+[ARCHITECTURE](../docs/ARCHITECTURE.md#会话附件) and the
+[session protocol](../docs/reference/protocol/protocol-v2.md#会话附件).
+
 ## Stack
 
 - React 19 + Vite 8 and strict TypeScript

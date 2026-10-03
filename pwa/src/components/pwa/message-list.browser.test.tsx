@@ -49,6 +49,20 @@ function renderMessageList(items: ListProps["items"], overrides: Partial<ListPro
   return renderPwa(<MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} onRetryUnknown={() => {}} onCancelQueued={() => {}} {...overrides} />);
 }
 
+test("supplements a readonly historical user row when metadata arrives after the message", async () => {
+  const user: TimelineEvent = { event_id: "message", message_id: "message", group_id: "group", session_id: "session-1", leaf_id: "user-leaf", timestamp: 2, kind: "user", blocks: [{ type: "text", text: "Server fallback notes.txt" }], sender_ref: "owner", origin: "pwa", delivery: "normal", status: "committed" };
+  const metadata: TimelineEvent = { event_id: "metadata", session_id: "session-1", leaf_id: "metadata-leaf", timestamp: 1, kind: "custom", truncated: false, payload: { custom_type: "pi-reach:attachments-v1", data: { version: 1, client_request_id: "request", sender_ref: "owner", text: "Original text", attachments: [{ attachment_id: "file", file_name: "notes.txt", mime_type: "text/plain", byte_length: 1024, sha256: "a".repeat(64) }] } } };
+  const binding: TimelineEvent = { ...metadata, event_id: "binding", leaf_id: "binding-leaf", payload: { custom_type: "pi-reach:attachment-message-v1", data: { version: 1, client_request_id: "request", sender_ref: "owner", message_id: "message" } } };
+  const { screen, update } = await liveList([eventItem(user)], { isLive: false });
+  await expect.element(screen.getByText("Server fallback notes.txt")).toBeVisible();
+  await update([eventItem(metadata), eventItem(binding), eventItem(user)]);
+  await expect.element(screen.getByText("Original text")).toBeVisible();
+  await expect.element(screen.getByText("notes.txt", { exact: true })).toBeVisible();
+  expect(document.querySelector(".pwa-attachment-cards button")).toBeNull();
+  await expect.element(screen.getByText("Server fallback notes.txt")).not.toBeInTheDocument();
+  await screen.unmount();
+});
+
 test("thinking is independently collapsed and keyboard toggling leaves the answer visible", async () => {
   const screen = await renderMessageList([eventItem(assistantEvent)]);
   await expect.element(screen.getByText("The final answer.")).toBeVisible();

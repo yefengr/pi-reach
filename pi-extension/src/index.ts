@@ -11,7 +11,9 @@ import { qrSession } from "./pairing/qr.js";
 import { addPeer, conditionalRollbackPeer, getOrCreateEd25519Keypair, KeyringUnavailableError, PairedIdentityMissingError, listPeers, type PeerRecord } from "./pairing/storage.js";
 import { idSchema, type ClientFrame, type ServerFrame } from "./protocol/v2/index.js";
 import { RelayClient, type HostConnectOptions } from "./transport/relay_client.js";
-import { V2PeerChannel, type HostRouteIdentity } from "./transport/peer_channel.js";
+import { type HostRouteIdentity } from "./transport/peer_channel.js";
+import { AttachmentRuntime, handleAttachmentFrame, isAttachmentFrame } from "./runtime/attachment_binding.js";
+import { createOwnerBinding, type OwnerBinding } from "./runtime/create_owner_binding.js";
 import { TimelineV2Service, type V2ActionFrame } from "./timeline/v2_service.js";
 import { TimelineRuntime } from "./timeline/runtime.js";
 import { UserDeliveryBinding } from "./timeline/user_delivery_binding.js";
@@ -192,7 +194,8 @@ function refreshFooter(): void {
   } catch { /* stale UI context */ }
 }
 
-type OwnerBinding = { channel: V2PeerChannel; service: TimelineV2Service; sessionId: string; leafId: string | null };
+const attachmentRuntime = new AttachmentRuntime(endpointIdentity.runtimeInstanceId);
+const attachments = () => attachmentRuntime.get();
 
 const activeOwners = new Map<string, OwnerBinding>();
 const userDelivery = new UserDeliveryBinding({
@@ -203,6 +206,11 @@ const userDelivery = new UserDeliveryBinding({
   getCurrentSessionId: () => currentSessionManager?.getSessionId() ?? null,
   getCurrentLeafId: () => currentSessionManager?.getLeafId() ?? null,
   findTarget: (ownerId) => activeOwners.get(ownerId) ?? null,
+  prepareAttachment: (frame, ownerId) => {
+    if (!currentSessionManager || !timeline) throw new Error("Attachment session unavailable");
+    return attachments().prepare(frame, ownerId, currentSessionManager, timeline);
+  },
+  beforeSend: (correlation) => { if (currentSessionManager) attachmentRuntime.current?.beforeSend(correlation, currentSessionManager); },
   sendFrames: (ownerId, frames) => {
     const binding = activeOwners.get(ownerId);
     if (binding) for (const frame of frames) binding.channel.sendV2(frame);
@@ -269,6 +277,7 @@ function ensureTimeline(sessionManager: SessionManager): TimelineRuntime {
   currentSessionManager = sessionManager;
   if (!timeline) {
     timeline = new TimelineRuntime({
+      prepareStarted: (started, manager, runtime) => attachmentRuntime.current?.started(started, manager, runtime) ?? started,
       onStarted: (started) => userDelivery.onStarted(started),
       onPartial: (partial) => {
         broadcastV2((service) => {
@@ -288,6 +297,7 @@ function ensureTimeline(sessionManager: SessionManager): TimelineRuntime {
 
 function refreshOwnerScopes(reason: "branch_changed" | "session_replaced"): void {
   userDelivery.clearAll();
+  if (currentSessionManager) attachmentRuntime.reset(currentSessionManager.getSessionId());
   for (const { channel, service } of activeOwners.values()) {
     service.refreshScope();
     for (const frame of service.reset(reason)) channel.sendV2(frame);
@@ -328,37 +338,18 @@ function routeAction(ownerId: string, frame: V2ActionFrame): void {
 function createBinding(relayClient: RelayClient, ownerId: string): OwnerBinding | null {
   const manager = currentSessionManager;
   if (!manager) return null;
-  const runtime = ensureTimeline(manager);
-  const channel = new V2PeerChannel(relayClient, ownerId, routeIdentity(), (frame) => routeClientFrame(ownerId, frame));
-  let service!: TimelineV2Service;
-  service = new TimelineV2Service({
-    sessionManager: manager,
-    senderRef: ownerId,
-    extensionVersion: EXTENSION_VERSION,
-    runtime,
-    onUserMessage: (frame, correlation) => {
-      currentTurnId = frame.client_request_id;
-      return userDelivery.submit(frame, correlation, {
-        ownerId,
-        sessionId: manager.getSessionId(),
-        leafId: manager.getLeafId() ?? null,
-        service,
-        clientRequestId: frame.client_request_id,
-      });
-    },
+  return createOwnerBinding({ relayClient, ownerId, manager, runtime: ensureTimeline(manager),
+    identity: routeIdentity(), extensionVersion: EXTENSION_VERSION, delivery: userDelivery, attachments: attachments(),
+    onFrame: (frame) => routeClientFrame(ownerId, frame), onTurn: (id) => { currentTurnId = id; },
     onCancel: () => {
       const abort = lastEventCtx?.abort ?? lastCommandCtx?.abort;
       if (!abort) return false;
       abort();
       return true;
     },
-    onQueueSnapshot: () => userDelivery.snapshot(ownerId, service),
-    onQueuedMessageClear: (targetId) => userDelivery.clearQueued(ownerId, service, targetId),
-    onQueuedMessageSteer: (targetId) => userDelivery.steerQueued(ownerId, service, targetId).kind,
     onAction: (frame) => routeAction(ownerId, frame),
     onListModels: () => getModelsList((lastEventCtx ?? lastCommandCtx) as ActionCtx | null, ensureModelRegistry((lastEventCtx ?? lastCommandCtx) as ActionCtx | null), currentModel),
   });
-  return { channel, service, sessionId: manager.getSessionId(), leafId: manager.getLeafId() ?? null };
 }
 
 function attachOwner(relayClient: RelayClient, ownerId: string): OwnerBinding | null {
@@ -372,6 +363,13 @@ function attachOwner(relayClient: RelayClient, ownerId: string): OwnerBinding | 
 function routeClientFrame(ownerId: string, frame: ClientFrame): void {
   const binding = activeOwners.get(ownerId);
   if (!binding) return;
+  if (isAttachmentFrame(frame)) {
+    void handleAttachmentFrame(attachments().store, binding.service, ownerId, frame).then((responses) => {
+      if (activeOwners.get(ownerId) !== binding) return;
+      for (const response of responses) binding.channel.sendV2(response);
+    });
+    return;
+  }
   for (const response of binding.service.handle(frame)) binding.channel.sendV2(response);
 }
 
@@ -427,6 +425,7 @@ function handlePairRequest(relayClient: RelayClient, ownerId: string, frame: Ext
 
 function closeRelay(reason?: "peer_stop" | "session_replaced" | "shutdown"): void {
   userDelivery.clearAll();
+  attachmentRuntime.close();
   sessionNewBridge.clear("session replacement cancelled because the endpoint closed");
   qrSession.clear();
   replacedSessionId = null;
@@ -561,6 +560,7 @@ const extension: ExtensionFactory = (api): void => {
     if (manager) {
       userDelivery.clearAll();
       currentSessionManager = manager;
+      attachmentRuntime.reset(manager.getSessionId());
       ensureTimeline(manager).resetSession(manager);
       emitRuntimeEvent("session-changed", { endpoint_id: endpointIdentity.endpointId, runtime_instance_id: endpointIdentity.runtimeInstanceId, session_id: manager.getSessionId(), leaf_id: manager.getLeafId() ?? null });
       emitRuntimeReady(ctx);
@@ -579,6 +579,7 @@ const extension: ExtensionFactory = (api): void => {
     footerCtx = null;
     if (event.reason !== "quit") {
       replacedSessionId = currentSessionManager?.getSessionId() ?? null;
+      if (currentSessionManager) attachmentRuntime.reset(currentSessionManager.getSessionId());
       currentSessionManager = null;
       owner.release(event);
       return;

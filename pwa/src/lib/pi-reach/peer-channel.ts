@@ -1,4 +1,4 @@
-import { decodeRoutePayload, encodeRoutePayload } from "./protocol";
+import { decodeRoutePayload, encodeRoutePayload, isRecord, parseJson } from "./protocol";
 import { decodeServerFrameV2, encodeClientFrameV2 } from "./protocol-v2";
 import type { ClientFrame, ServerFrame } from "./protocol-v2/frames";
 import type { RelayClient } from "./relay-client";
@@ -56,6 +56,9 @@ export class PeerChannel {
     if (route.device_id !== endpoint.deviceId || route.endpoint_id !== endpoint.endpointId || route.runtime_instance_id !== endpoint.runtimeInstanceId || route.target_owner_id !== this.options.relay.ownerId || route.source_owner_id !== undefined) return;
     const payload = decodeRoutePayload(route);
     if (!payload) return this.options.onMalformed?.("Malformed route payload");
+    // 其他同 Owner channel 的 direct 帧不属于本连接；匹配本 channel 的帧仍必须严格解码。
+    const envelope = parseJson(payload);
+    if (isRecord(envelope) && typeof envelope.target_channel_id === "string" && envelope.target_channel_id !== this.channel) return;
     let frame: ServerFrame;
     try { frame = decodeServerFrameV2(payload); } catch (error) { this.options.onMalformed?.(error instanceof Error ? error.message : "Malformed Protocol v2 route"); return; }
     const expectedPurpose = frame.type === "pair_ok" || frame.type === "pair_error" ? "pairing" : "session";

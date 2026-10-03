@@ -134,9 +134,21 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 2. 用户选中一个当前 online endpoint 后，PWA 建立 session channel 并发送 `session_hello`。
 3. 收到 `session_ready` 后，PWA 建立 scope，异步读取本地正式 timeline，并请求当前 Pi 的 recent history。
 4. 正式 event 与 history 按稳定 `event_id` 合流；不同事件不能占用同一 `event_seq`。普通追加更新当前 `leaf_id`，branch reset 的新投影在完整同步和持久化成功后原子替换旧投影；partial 和 pending 只保留内存。
-5. PWA 发送文本、图片或受限 typed action；Extension 把操作交给当前 Pi session。Relay 只转发，不提供离线队列。
+5. PWA 发送文本、会话附件或受限 typed action；附件先上传原件，再通过文件 ID 提交消息。Extension 把用户文字与本地文件清单交给当前 Pi session。Relay 只转发，不提供离线队列。
 
 事件字段、分组、错误码、尺寸限制和合流不变量见[会话协议](reference/protocol/protocol-v2.md)，本文不复制 wire schema。
+
+## 会话附件
+
+附件沿用既有 session route，不增加 HTTP 上传服务或 Relay 文件存储。浏览器只在用户发送时读取原 File、计算摘要并分片上传；具体限额、租约和回执见[会话协议](reference/protocol/protocol-v2.md#会话附件)。图片只生成有界展示预览，原件不转换；所有格式都以清单和路径提供给 Pi，不自动注入视觉 block、解析、解压或执行。
+
+Extension 将原件保存在 `~/.pi/pi-reach/attachments/` 下的会话哈希目录，以服务端随机 ID 命名，原文件名不决定路径。目录和文件分别使用 `0700`、`0600`，独占创建并拒绝预置符号链接。发送前校验实际大小与 SHA-256；使用跨进程磁盘预留和有限的活上传资源保护写入。磁盘余量是尽力保护，不保证无关进程并发写入时绝不耗尽；ENOSPC 按受控错误失败。
+
+可能已交给 Pi 的原件会保守 retain。已发送原件长期保留，不设历史累计配额、到期清理或淘汰旧文件；取消和租约失效只清理确定废弃的临时原件。能力、上传任务和消息幂等保护均有内存准入门禁；门禁耗尽时拒绝新请求，不删除历史原件或逐出仍有用的重试保护记录。
+
+Pi 输入包含完整原文和 JSON 转义的文件清单、本地路径；PWA 的 started、queue 和历史展示使用原文与文件名，不展示这些路径。附件描述与预览、正式消息关联分别写入 Pi 原生 custom entries，不进入模型上下文。它们参与正式时间线序号、历史同步和 IndexedDB 持久化，只在展示层隐藏；PWA 通过它们补齐正式消息和队列卡片。
+
+浏览器按实际电脑、endpoint、runtime、session 和 Owner 保存页面内草稿。File 不写入 IndexedDB，不保证刷新、浏览器迁移或 Pi 重启后续传；已保存的历史只包含描述和预览，不能从 PWA 下载原件。短断线可在同一上传租约内查询已收 offset 后恢复；真正切换目标或 branch 租约后不能转投旧附件。
 
 ## PWA 缓存与离线边界
 

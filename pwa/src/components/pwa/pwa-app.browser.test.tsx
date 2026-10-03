@@ -8,11 +8,10 @@ import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
 import { encodeBase64 } from "@/lib/pi-reach/encoding";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import type { WireImage } from "@/lib/pi-reach/types";
+import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_IN_FLIGHT, ATTACHMENT_MAX_MESSAGE_BYTES, type AttachmentDescriptor } from "@pi-reach/protocol/session";
 import { toStoredKey } from "@/lib/pwa/runtime";
 import { listTimelineSessions, loadTimeline, mergeTimelineEvents, TimelineStoreConflictError } from "@/lib/pwa/timeline-store";
 import { PendingCapacityError, TimelineRuntime } from "@/lib/pwa/timeline-runtime";
-import { prepareImageAttachment } from "@/lib/pwa/image-upload";
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { PwaApp } from "./pwa-app";
 import { connectionBannerTiming } from "./pwa-app-actions";
@@ -44,10 +43,14 @@ const channelHarness = vi.hoisted(() => ({
     closeCalls: number;
   }>,
   nextSendResults: [] as boolean[],
+  supportsAttachments: true,
+  holdFinish: false,
+  failNextChunk: false,
+  finishReplies: [] as Array<() => void>,
+  uploads: new Map<string, { descriptor: AttachmentDescriptor; received: number; complete: boolean }>(),
 }));
 
 vi.mock("@/lib/pwa/timeline-store", { spy: true });
-vi.mock("@/lib/pwa/image-upload", { spy: true });
 
 vi.mock("@/lib/pi-reach/relay-client", () => ({
   RelayClient: class {
@@ -165,6 +168,34 @@ vi.mock("@/lib/pi-reach/peer-channel", () => ({
       this.frames.push(frame);
       const sendResult = channelHarness.nextSendResults.shift() ?? true;
       if (!sendResult) return false;
+      if (frame.type === "attachment_capabilities_request") {
+        queueMicrotask(() => this.onFrame?.(channelHarness.supportsAttachments ? {
+          protocol_version: 2, type: "attachment_capabilities", target_channel_id: this.channelId, in_reply_to: frame.id,
+          session_id: frame.session_id, upload_scope: `uploads-${frame.session_id}`,
+          max_file_bytes: ATTACHMENT_MAX_FILE_BYTES, max_message_bytes: ATTACHMENT_MAX_MESSAGE_BYTES,
+          max_attachments: ATTACHMENT_MAX_COUNT, chunk_bytes: ATTACHMENT_CHUNK_BYTES, max_in_flight: ATTACHMENT_MAX_IN_FLIGHT,
+        } : { protocol_version: 2, type: "protocol_error", target_channel_id: this.channelId, in_reply_to: frame.id, code: "unsupported_type", message: "legacy" }));
+      }
+      if (frame.type === "attachment_begin" || frame.type === "attachment_chunk" || frame.type === "attachment_status_request" || frame.type === "attachment_finish" || frame.type === "attachment_cancel") {
+        if (frame.type === "attachment_chunk" && channelHarness.failNextChunk) {
+          channelHarness.failNextChunk = false;
+          queueMicrotask(() => this.onFrame?.({ protocol_version: 2, type: "attachment_error", target_channel_id: this.channelId, in_reply_to: frame.id, session_id: frame.session_id, upload_scope: frame.upload_scope, upload_id: frame.upload_id, code: "no_space", retryable: true }));
+          return true;
+        }
+        if (frame.type === "attachment_begin") channelHarness.uploads.set(frame.upload_id, {
+          descriptor: { attachment_id: `file-${frame.upload_id}`, file_name: frame.file_name, mime_type: frame.mime_type, byte_length: frame.byte_length, sha256: frame.sha256, ...(frame.preview ? { preview: frame.preview } : {}) }, received: 0, complete: false,
+        });
+        const upload = channelHarness.uploads.get(frame.upload_id);
+        if (upload && frame.type === "attachment_chunk") upload.received = frame.offset + atob(frame.data_base64).length;
+        if (upload && frame.type === "attachment_finish") upload.complete = true;
+        const reply = () => this.onFrame?.({ protocol_version: 2, target_channel_id: this.channelId, in_reply_to: frame.id,
+          session_id: frame.session_id, upload_scope: frame.upload_scope, upload_id: frame.upload_id,
+          ...(upload ? { type: "attachment_state", received_bytes: upload.received, status: frame.type === "attachment_cancel" ? "cancelled" : upload.complete ? "complete" : "receiving", ...(upload.complete && frame.type !== "attachment_cancel" ? { attachment: upload.descriptor } : {}) }
+            : { type: "attachment_error", code: "not_found", retryable: false }),
+        });
+        if (frame.type === "attachment_finish" && channelHarness.holdFinish) channelHarness.finishReplies.push(reply);
+        else queueMicrotask(reply);
+      }
       if (frame.type === "pair_request") {
         queueMicrotask(() => this.options.onPairOk?.({
           protocol_version: 2,
@@ -202,6 +233,11 @@ beforeEach(async () => {
   relayHarness.rejectConnect = null;
   channelHarness.channels.length = 0;
   channelHarness.nextSendResults.length = 0;
+  channelHarness.supportsAttachments = true;
+  channelHarness.holdFinish = false;
+  channelHarness.failNextChunk = false;
+  channelHarness.finishReplies.length = 0;
+  channelHarness.uploads.clear();
   const db = await openPwaDatabase();
   await db.transaction("rw", [db.identities, db.devices, db.endpoints, db.events, db.sessions, db.settings], async () => {
     await Promise.all([
@@ -236,12 +272,6 @@ test("keeps the Owner Relay alive while endpoint discovery is still checking", a
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
-}
-
-function deferImagePreparation(): { promise: Promise<WireImage>; resolve: (image: WireImage) => void } {
-  let resolve!: (image: WireImage) => void;
-  const promise = new Promise<WireImage>((next) => { resolve = next; });
-  return { promise, resolve };
 }
 
 function renderWorkspaceApp() {
@@ -341,6 +371,7 @@ async function renderReadyTimeline(renderApp = () => renderPwa(<PwaApp />)) {
   if (!channel) throw new Error("Expected a session channel.");
   channel.emit(readyFrame(channel, "session-1"));
   await flushMicrotasks();
+  await expect.poll(() => document.querySelector<HTMLButtonElement>('[aria-label="Add attachments"]')?.disabled).toBe(!channelHarness.supportsAttachments);
   const list = document.querySelector<HTMLDivElement>(".pwa-message-list");
   if (!list) throw new Error("Expected the message list.");
   Object.defineProperties(list, {
@@ -396,7 +427,7 @@ async function issueOperation({ screen, channel }: OperationHarness, action: Tes
     const current = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
     const vision = { ...current, id: "vision-model", name: "Vision model", vision: true };
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [current, vision], current });
-    await expect.element(screen.getByRole("button", { name: "Add image" })).toBeDisabled();
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
   }
   if (action === "model_set") {
     // 模型从输入区的模型标签进入，菜单直接打开模型列表。
@@ -440,7 +471,7 @@ test.each([
   try {
     const request = await issueOperation(context, action);
     if (action === "session_new") await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
-    if (action === "model_set") await expect.element(screen.getByRole("button", { name: "Add image" })).toBeEnabled();
+    if (action === "model_set") await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
     replyOperation(channel, { ...request, id: "obsolete-request" });
     await flushMicrotasks();
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();
@@ -449,7 +480,7 @@ test.each([
     expect(operationFeedback().textContent).not.toMatch(/WebSocket|Relay|endpoint_id|550e8400/);
     expect(document.querySelector(".pwa-toast")).toBeNull();
     expect(document.querySelectorAll(".pwa-operation-notification")).toHaveLength(1);
-    if (action === "model_set") await expect.element(screen.getByRole("button", { name: "Add image" })).toBeDisabled();
+    if (action === "model_set") await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
     await screen.getByRole("button", { name: "Dismiss operation notification" }).click();
     await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
     replyOperation(channel, request);
@@ -731,7 +762,7 @@ test("message send failure keeps draft and delivery feedback out of global notif
   } finally { await screen.unmount(); }
 });
 
-test("abandons an image send when the view enters saved history", async () => {
+test("confirms leaving an attachment send, preserves the original draft and rejects late completion", async () => {
   await seedArchivedSession();
   const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
   try {
@@ -742,24 +773,28 @@ test("abandons an image send when the view enters saved history", async () => {
     const clipboard = new DataTransfer();
     clipboard.items.add(new File([Uint8Array.of(137, 80, 78, 71)], "scope-image.png", { type: "image/png" }));
     input.element().dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
-    await expect.element(screen.getByRole("img", { name: "scope-image.png" })).toBeVisible();
-    const deferred = deferImagePreparation();
-    vi.mocked(prepareImageAttachment).mockImplementationOnce(() => deferred.promise);
+    await expect.element(screen.getByText("scope-image.png", { exact: true })).toBeVisible();
+    channelHarness.holdFinish = true;
     const send = screen.getByRole("button", { name: "Send message", exact: true }).element();
     send.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     send.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    await expect.poll(() => vi.mocked(prepareImageAttachment).mock.calls.length).toBe(1);
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
     await expect.poll(() => document.querySelector<HTMLButtonElement>(".pwa-history-row")).not.toBeNull();
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+    await expect.element(screen.getByRole("button", { name: "Keep sending", exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "Keep sending", exact: true }).click();
+    await expect.element(input).toHaveValue("Keep scope-bound image draft");
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+    await screen.getByRole("button", { name: "Stop and switch", exact: true }).click();
     await expect.element(screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
-    deferred.resolve({ data: "encoded-image", mime: "image/png" });
+    channelHarness.finishReplies[0]?.();
     await flushMicrotasks();
     expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(0);
     await screen.getByRole("button", { name: "Back to live session", exact: true }).click();
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
     const resumedChannel = channelHarness.channels[1];
     if (!resumedChannel) throw new Error("Expected a replacement session channel.");
-    resumedChannel.emit(readyFrame(resumedChannel, "session-2"));
+    resumedChannel.emit(readyFrame(resumedChannel, "session-1"));
     const resumedInput = screen.getByPlaceholder("Message your agent…");
     await expect.element(resumedInput).toHaveValue("Keep scope-bound image draft");
     expect(resumedChannel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(0);
@@ -1355,7 +1390,7 @@ test("routes session actions through the live channel with current model and thi
   }
 });
 
-test("refreshes image attachment capability after switching to a vision model", async () => {
+test("keeps attachment capability independent of switching to a vision model", async () => {
   const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const textOnlyModel = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
@@ -1363,8 +1398,8 @@ test("refreshes image attachment capability after switching to a vision model", 
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel });
 
-    const addImage = screen.getByRole("button", { name: "Add image" });
-    await expect.element(addImage).toBeDisabled();
+    const addImage = screen.getByRole("button", { name: "Add attachments" });
+    await expect.element(addImage).toBeEnabled();
     await screen.getByRole("button", { name: /^Change model, current Text model/ }).click();
     await screen.getByRole("menuitem", { name: /test \/ Vision model/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "model_set", provider: "test", model_id: "vision-model" }));
@@ -1384,7 +1419,7 @@ test("refreshes image attachment capability after switching to a vision model", 
   }
 });
 
-test("refreshes image attachment capability after an external endpoint model update", async () => {
+test("keeps attachment capability independent of external endpoint model updates", async () => {
   const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const textOnlyModel = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
@@ -1392,8 +1427,8 @@ test("refreshes image attachment capability after an external endpoint model upd
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel });
 
-    const addImage = screen.getByRole("button", { name: "Add image" });
-    await expect.element(addImage).toBeDisabled();
+    const addImage = screen.getByRole("button", { name: "Add attachments" });
+    await expect.element(addImage).toBeEnabled();
     relayHarness.instances[0]?.emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", model: "vision-model" } });
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(2));
     expect(channelHarness.channels).toHaveLength(1);
@@ -1413,8 +1448,8 @@ test("uses the endpoint model as a unique capability fallback when current is om
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel });
 
-    const addImage = screen.getByRole("button", { name: "Add image" });
-    await expect.element(addImage).toBeDisabled();
+    const addImage = screen.getByRole("button", { name: "Add attachments" });
+    await expect.element(addImage).toBeEnabled();
     relayHarness.instances[0]?.emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", model: "vision-model" } });
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(2));
     const refreshedModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
@@ -1604,9 +1639,12 @@ test("preserves the session, draft, attachment, tool state and reader across lay
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.find((frame) => frame.type === "list_models")?.id, models: [model], current: model });
     const input = screen.getByRole("textbox");
     await input.fill("Keep this draft across layouts");
-    await expect.element(screen.getByRole("button", { name: "Add image" })).toBeEnabled();
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
     const clipboard = new DataTransfer();
-    const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII="), (character) => character.charCodeAt(0));
+    const canvas = document.createElement("canvas");
+    canvas.width = 10; canvas.height = 10;
+    canvas.getContext("2d")!.fillRect(0, 0, 10, 10);
+    const png = await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob!), "image/png"));
     clipboard.items.add(new File([png], "layout-image.png", { type: "image/png" }));
     input.element().dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
     const image = screen.getByRole("img", { name: "layout-image.png" });
@@ -2319,6 +2357,230 @@ test("lists running Pis first as bordered rows while waiting for a choice", asyn
   } finally {
     await screen.unmount();
   }
+});
+
+function pasteAttachments(input: Element, ...files: File[]) {
+  if (!(input instanceof HTMLTextAreaElement)) throw new Error("Expected the composer textarea.");
+  const clipboard = new DataTransfer();
+  for (const file of files) clipboard.items.add(file);
+  input.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
+}
+
+test("legacy capability failure disables attachments but keeps text and vision models working", async () => {
+  channelHarness.supportsAttachments = false;
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const model = { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true };
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [model], current: model });
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeDisabled();
+    await expect.element(screen.getByText("Upgrade the computer's extension to upload attachments.", { exact: true })).toBeVisible();
+    await screen.getByPlaceholder("Message your agent…").fill("Legacy text works");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    expect(channel.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ text: "Legacy text works" });
+    expect(document.querySelector(".pwa-toast")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test.each([false, true])("uploads originals and hands off IDs only, including unknown delivery=%s", async (unknownDelivery) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    const bytes = Uint8Array.from({ length: ATTACHMENT_CHUNK_BYTES + 17 }, (_, index) => index % 251);
+    pasteAttachments(input.element(), new File([bytes], "original.bin", { type: "application/octet-stream" }));
+    await expect.element(screen.getByText("original.bin", { exact: true })).toBeVisible();
+    expect(channel.frames.some((frame) => frame.type === "attachment_begin")).toBe(false);
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    await expect.element(input).toBeDisabled();
+    expect(channel.frames.filter((frame) => frame.type === "attachment_chunk").map((frame) => frame.type === "attachment_chunk" ? atob(frame.data_base64).length : 0)).toEqual([ATTACHMENT_CHUNK_BYTES, 17]);
+    if (unknownDelivery) channelHarness.nextSendResults.push(false);
+    channelHarness.finishReplies[0]?.();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    const message = channel.frames.findLast((frame) => frame.type === "user_message");
+    expect(message).toMatchObject({ text: "", attachment_ids: [expect.any(String)] });
+    expect(message).not.toHaveProperty("images");
+    expect(message).not.toHaveProperty("attachments");
+    await expect.element(input).toBeEnabled();
+    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-card")).toHaveLength(0);
+    if (unknownDelivery) {
+      await expect.element(screen.getByText("Message could not be sent. Check the connection and try again.", { exact: true })).toBeVisible();
+      await screen.getByRole("button", { name: "Retry delivery" }).click();
+      const retry = channel.frames.findLast((frame) => frame.type === "user_message");
+      expect(retry).toMatchObject({ client_request_id: message?.type === "user_message" ? message.client_request_id : "", attachment_ids: message?.type === "user_message" ? message.attachment_ids : [] });
+      expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
+    }
+  } finally { await screen.unmount(); }
+});
+
+test.each(["Keep text", ""])("removing all active files sends only remaining text (%s)", async (text) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill(text);
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    pasteAttachments(input.element(), new File(["keep-original"], "cancel-me.txt", { type: "text/plain" }));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    await screen.getByRole("button", { name: "Cancel cancel-me.txt", exact: true }).click();
+    await expect.element(input).toBeEnabled();
+    channelHarness.finishReplies[0]?.();
+    await flushMicrotasks();
+    const messages = channel.frames.filter((frame) => frame.type === "user_message");
+    expect(messages).toHaveLength(text ? 1 : 0);
+    if (text) { expect(messages[0]).toMatchObject({ text }); expect(messages[0]).not.toHaveProperty("attachment_ids"); }
+  } finally { await screen.unmount(); }
+});
+
+test("removing one active file does not cancel the remaining attachment", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Two originals");
+    pasteAttachments(input.element(), new File(["one"], "one.txt"), new File(["two"], "two.txt"));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(2);
+    await screen.getByRole("button", { name: "Cancel one.txt", exact: true }).click();
+    for (const reply of channelHarness.finishReplies) reply();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    const message = channel.frames.findLast((frame) => frame.type === "user_message");
+    const remaining = [...channelHarness.uploads.values()].find((item) => item.descriptor.file_name === "two.txt")!;
+    expect(message).toMatchObject({ text: "Two originals", attachment_ids: [remaining.descriptor.attachment_id] });
+    expect(channel.frames.filter((frame) => frame.type === "attachment_cancel")).toHaveLength(1);
+    await expect.element(input).toHaveValue("");
+  } finally { await screen.unmount(); }
+});
+
+test("settings and ordinary leaf updates keep an active upload on one channel", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    pasteAttachments(input.element(), new File(["body"], "settings.txt"));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    expect(document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    const leaf = "new-leaf";
+    channel.emit({ protocol_version: 2, type: "timeline_event", session_id: "session-1", leaf_id: leaf, event: { ...numberedEvents(1)[0], leaf_id: leaf, event_seq: 1 } });
+    channelHarness.finishReplies[0]?.();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(channel.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ leaf_id: leaf });
+    expect(channel.frames.filter((frame) => frame.type === "attachment_capabilities_request")).toHaveLength(1);
+    expect(channelHarness.channels).toHaveLength(1);
+    await screen.getByRole("button", { name: "Back to workspace", exact: true }).click();
+  } finally { await screen.unmount(); }
+});
+
+test("deleting an unrelated computer pairing does not stop the active attachment send", async () => {
+  const db = await openPwaDatabase();
+  await db.devices.put({ id: makePwaDeviceId("other-computer"), deviceId: "other-computer", relayUrl: "https://relay.example.test", pairedAt: "2000-01-01T00:00:00.000Z", hostname: "other-host" });
+  await db.settings.put({ key: "active_device", value: makePwaDeviceId("owner-device-key") });
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    pasteAttachments(screen.getByPlaceholder("Message your agent…").element(), new File(["keep"], "unrelated-pairing.txt"));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    await screen.getByRole("button", { name: "Choose computer, current test-host" }).click();
+    await screen.getByRole("button", { name: "Computer actions for other-host" }).click();
+    await screen.getByRole("menuitem", { name: "Remove other-host", exact: true }).click();
+    await screen.getByRole("button", { name: "Delete pairing", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    expect(channel.frames.some((frame) => frame.type === "attachment_cancel")).toBe(false);
+    channelHarness.finishReplies[0]?.();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(channelHarness.channels).toHaveLength(1);
+  } finally { await screen.unmount(); }
+});
+
+test("a persisted pagehide and pageshow keep attachment selection and sending usable", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    pasteAttachments(screen.getByPlaceholder("Message your agent…").element(), new File(["restored"], "bfcache.txt"));
+    await expect.element(screen.getByText("bfcache.txt", { exact: true })).toBeVisible();
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    // 既有 pageshow 恢复会重新握手；模拟当前 Pi 的真实 ready/能力响应。
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    const restored = channelHarness.channels[1]!;
+    restored.emit(readyFrame(restored, "session-1"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(screen.getByText("bfcache.txt", { exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => restored.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("failed upload offers a safe retry without dropping the original File or text", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Retry my original");
+    pasteAttachments(input.element(), new File(["original bytes"], "retry.txt"));
+    channelHarness.failNextChunk = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.element(screen.getByText("Not enough space on the computer.", { exact: true })).toBeVisible();
+    await expect.element(input).toHaveValue("Retry my original");
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+    await screen.getByRole("button", { name: "Retry retry.txt", exact: true }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
+    expect(channel.frames.filter((frame) => frame.type === "attachment_status_request")).toHaveLength(2);
+    await expect.element(input).toHaveValue("");
+  } finally { await screen.unmount(); }
+});
+
+test("short disconnect resumes the same attachment batch through a new capability query", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Resume on original Pi");
+    pasteAttachments(input.element(), new File(["resume body"], "resume.txt"));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.element(screen.getByText("Connection lost. Uploads will resume after reconnecting.", { exact: true })).toBeVisible();
+    relay.emitState("open");
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1"));
+    await expect.poll(() => resumed.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(resumed.frames.some((frame) => frame.type === "attachment_status_request")).toBe(true);
+    expect(resumed.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "attachment_chunk")).toBe(false);
+    expect(resumed.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ text: "Resume on original Pi", attachment_ids: [expect.any(String)] });
+    channelHarness.finishReplies[0]?.();
+    await flushMicrotasks();
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("session replacement preserves old text and File without automatically sending to the new session", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Only original session");
+    pasteAttachments(input.element(), new File(["old"], "old-session.txt"));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "session-2"));
+    await expect.element(screen.getByPlaceholder("Message your agent…")).toHaveValue("");
+    channelHarness.finishReplies[0]?.();
+    await flushMicrotasks();
+    expect(next.frames.some((frame) => frame.type === "user_message")).toBe(false);
+    await expect.element(screen.getByText("old-session.txt", { exact: true })).not.toBeInTheDocument();
+  } finally { await screen.unmount(); }
 });
 
 test("shows the directory and model under the empty-session hint", async () => {

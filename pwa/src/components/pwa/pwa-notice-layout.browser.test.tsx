@@ -23,9 +23,9 @@ function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; ini
         </div>
         <div className="pwa-message-list">Current session output</div>
         <div className="pwa-chat-footer"><MessageComposer
-          attachment={null} canAttachImage={false} sendingImage={false} isOnline isWorking={false} stopping={false}
+          attachments={[]} canAttach={false} sendingAttachments={false} isOnline isWorking={false} stopping={false}
           draft={draft} onDraftChange={setDraft} onSend={onSend} onStop={() => {}}
-          onSetAttachment={() => {}} onClearAttachment={() => {}}
+          onAddFiles={() => {}} onRemoveAttachment={() => {}} onRetryAttachment={() => {}}
           commandModels={[]} commandCurrentModel={null} commandCurrentModelFallback={null} commandThinking="off" commandPendingAction={null}
           onNewSession={() => {}} onCompactSession={() => {}} onSetModel={() => {}} onSetThinking={() => {}} onCommandsOpen={() => {}}
         /></div>

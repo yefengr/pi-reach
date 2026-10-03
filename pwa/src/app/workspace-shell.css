@@ -114,7 +114,7 @@
 /* 连接提示条、Toast 与操作通知与阅读列同宽，位于会话标题区下方。 */
 .pwa-root .pwa-main-notices > .pwa-connection-banner,
 .pwa-root .pwa-main-notices > .pwa-toast { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); max-width: none; }
-.pwa-root .pwa-composer-hint { margin: 6px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); text-align: center; }
+.pwa-root .pwa-composer-hint { margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); text-align: left; }
 
 /* 连接状态：在线为 accent 圆点加中性文字，连接中／重连运行色并带动态图形，离线中性色；带文字（移动端已连接时只显示圆点）。 */
 .pwa-connection { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); white-space: nowrap; }

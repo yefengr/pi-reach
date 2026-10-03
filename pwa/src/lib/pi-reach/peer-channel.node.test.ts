@@ -135,6 +135,21 @@ test("only delivers extension version responses targeted at this channel", () =>
   channel.close();
 });
 
+test("ignores foreign direct envelopes before decoding while strictly validating this channel", () => {
+  const relay = new RelayMock();
+  const malformed: string[] = [];
+  const received: unknown[] = [];
+  const channel = new PeerChannel({ relay: relay as unknown as RelayClient, endpoint, channelId: "channel-1", onFrame: (frame) => received.push(frame), onMalformed: (reason) => malformed.push(reason) });
+  const invalid = { protocol_version: 2, type: "future_direct", target_channel_id: "channel-other", extra: true };
+  relay.emit(route("session", invalid));
+  expect(malformed).toEqual([]);
+  relay.emit(route("session", { ...invalid, target_channel_id: "channel-1" }));
+  relay.emit(route("session", { protocol_version: 2, type: "pong", target_channel_id: "channel-1", in_reply_to: "ping", extra: true }));
+  expect(malformed).toHaveLength(2);
+  expect(received).toEqual([]);
+  channel.close();
+});
+
 test("does not send or process routes after closing", () => {
   const relay = new RelayMock();
   const received: string[] = [];

@@ -36,6 +36,7 @@ RUN apt-get update \
 
 # deploy 生成独立依赖树，避免复制指向 workspace 根 virtual store 的失效链接。
 COPY --from=extension-build /out/extension/ /opt/pi-reach/
+COPY docker/e2e/host/e2e-provider.ts /usr/local/bin/e2e-provider.ts
 COPY docker/e2e/host/interactive-controller.mjs /usr/local/bin/interactive-controller.mjs
 COPY docker/e2e/host/interactive-entrypoint.sh /usr/local/bin/interactive-entrypoint.sh
 

@@ -5,7 +5,8 @@ import { safeConfirmationError } from "@/lib/pwa/feedback-messages";
 export type ConfirmActionRequest =
   | { kind: "new-session" }
   | { kind: "remove-pairing"; label: string; device: PwaDeviceRecord }
-  | { kind: "clear-local-data" };
+  | { kind: "clear-local-data" }
+  | { kind: "leave-attachments"; next: () => void };
 
 type ConfirmActionEffects = {
   startNewSession: () => boolean;
@@ -27,7 +28,10 @@ export async function runConfirmAction(action: ConfirmActionRequest, effects: Co
   state.setPending(true);
   state.setError(null);
   try {
-    if (action.kind === "new-session") {
+    if (action.kind === "leave-attachments") {
+      action.next();
+      state.onSuccess();
+    } else if (action.kind === "new-session") {
       if (!effects.startNewSession()) throw new Error("Could not start a fresh session. Check the connection and try again.");
       state.onSuccess();
     } else if (action.kind === "remove-pairing") {
@@ -40,7 +44,7 @@ export async function runConfirmAction(action: ConfirmActionRequest, effects: Co
     }
     return "completed";
   } catch {
-    state.setError(safeConfirmationError(action.kind));
+    state.setError(action.kind === "leave-attachments" ? "Could not complete this action. Try again." : safeConfirmationError(action.kind));
     return "failed";
   } finally {
     state.pendingRef.current = false;

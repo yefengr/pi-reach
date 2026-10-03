@@ -46,9 +46,9 @@ function QueueComposerHarness({ items }: { items: QueuedMessageView[] }) {
   const [draft, setDraft] = useState("Keep the composer ready");
   return <div style={{ position: "fixed", right: 0, bottom: 0, left: 0 }}>
     <MessageComposer
-      attachment={null}
-      canAttachImage={false}
-      sendingImage={false}
+      attachments={[]}
+      canAttach={false}
+      sendingAttachments={false}
       isOnline
       isWorking={false}
       stopping={false}
@@ -56,8 +56,9 @@ function QueueComposerHarness({ items }: { items: QueuedMessageView[] }) {
       onDraftChange={setDraft}
       onSend={() => {}}
       onStop={() => {}}
-      onSetAttachment={() => {}}
-      onClearAttachment={() => {}}
+      onAddFiles={() => {}}
+      onRemoveAttachment={() => {}}
+      onRetryAttachment={() => {}}
       commandModels={[]}
       commandCurrentModel={null}
       commandCurrentModelFallback={null}
@@ -115,6 +116,20 @@ test("renders parent-supplied status, previews, actions, and disabled states", a
   const offline = await renderPwa(<QueuedMessages items={[queuedItem({ text: "Offline queued message" })]} isOnline={false} onInsert={onInsert} onCancel={onCancel} />);
   await expect.element(offline.getByRole("button", { name: "Insert into conversation — queued message 1: Offline queued message" })).toBeDisabled();
   await expect.element(offline.getByRole("button", { name: "Cancel queued message 1: Offline queued message" })).toBeDisabled();
+});
+
+test("queue panel passes pending attachments to readonly bounded cards", async () => {
+  const runtime = new TimelineRuntime();
+  runtime.setScope(queueScope);
+  runtime.sendUserWithAttachments("Original queue text", [{ attachment_id: "file", file_name: "queued-notes.txt", mime_type: "text/plain", byte_length: 1024, sha256: "a".repeat(64) }], { clientRequestId: "q", requestId: "send" });
+  runtime.receive(runtimeSnapshot([{ ...runtimeQueueItem, text: "Original queue text" }]));
+  const screen = await renderPwa(<QueuePanelHarness runtime={runtime} onSend={() => true} />);
+  await expect.element(screen.getByText("queued-notes.txt")).toBeVisible();
+  const cards = document.querySelector<HTMLElement>(".pwa-attachment-cards")!;
+  expect(cards.querySelector("button")).toBeNull();
+  expect(getComputedStyle(cards.querySelector(".pwa-attachment-list")!).overflowY).toBe("auto");
+  await expect.element(screen.getByRole("button", { name: /^Cancel queued message/ })).toBeEnabled();
+  await screen.unmount();
 });
 
 test("uses a scheduled timeout for an insertion notice and never sends when it is dismissed", async () => {

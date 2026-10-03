@@ -58,6 +58,7 @@ export function QueuedMessagesPanel({ items, isOnline, runtimeRef, channelRef, a
       id: item.clientRequestId,
       text: item.text,
       images: item.images,
+      attachments: item.attachments,
       status: item.insertionStatus === "unconfirmed" ? q.unconfirmed
         : item.insertionStatus === "waiting" ? item.queuedAction === "insert" ? q.requestingInsert : q.awaitingInsert
           : item.delivery === "unknown_delivery" ? q.waitingReconnect

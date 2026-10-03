@@ -220,6 +220,8 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 | PWA direct request | `channel_id` + `session_id` + `leaf_id` |
 | Extension direct response | `target_channel_id`；ready 后业务响应再带 `session_id + leaf_id` |
 | Owner broadcast | `session_id` + `leaf_id`，不得带 `target_channel_id` |
+| 附件上传请求（能力查询除外） | `channel_id` + `session_id` + `upload_scope`，不携带 `leaf_id` |
+| 附件定向响应 | `target_channel_id` + `in_reply_to` + `session_id` + `upload_scope`，不携带 `leaf_id` |
 
 配对完成后，PWA 必须先发送 `session_hello`；收到 `session_ready` 前不得发送 ready-only 业务 frame。
 
@@ -240,6 +242,12 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `thinking_set`
 - `list_models`
 - `extension_info_request`
+- `attachment_capabilities_request`
+- `attachment_begin`
+- `attachment_chunk`
+- `attachment_finish`
+- `attachment_status_request`
+- `attachment_cancel`
 
 `session_sync.before` 是排他的正式事件序号上界：`null` 表示从当前末尾开始，数字表示只返回序号小于该值的事件；`limit` 为 1 到 80 的整数，省略时默认 80。历史响应的最后一个 chunk 在仍有更早事件时携带数字 `next_before`，没有更早事件时携带 `eos=true`。
 
@@ -249,6 +257,9 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `pair_error`
 - `session_ready`
 - `extension_info`
+- `attachment_capabilities`
+- `attachment_state`
+- `attachment_error`
 - `user_message_started`
 - `user_message_status`
 - `timeline_event`
@@ -268,6 +279,32 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 扩展版本通过独立诊断请求获取，不改变 `session_hello` / `session_ready` 的握手格式。PWA 收到匹配的 `session_ready` 后，发送一次 `extension_info_request`，携带 `id`、`channel_id`、当前 `session_id` 和 `leaf_id`；扩展按既有 ready、channel 和会话边界校验后，返回定向 `extension_info`，携带 `target_channel_id`、`in_reply_to` 和 `version`（1–256 字符的非空字符串）。版本在扩展模块加载时固定，表示 Pi Reach 扩展版本，而非 Pi coding agent 的版本。
 
 PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，断开或切换后清除，不读取配对缓存兜底。匹配版本查询的 `protocol_error` 只影响版本展示；旧扩展不支持查询或查询失败时显示「版本不可用」，不阻断聊天或触发重连。不轮询、不重试，也不主动推送新 inner frame 给未查询的页面。先部署 PWA 再发布扩展的顺序保持不变，新旧页面与扩展仍可使用原有握手建立会话。同一 Owner 的回复会到达其所有连接；旧页面若与新页面同时在线，可能因不认识新诊断响应而显示协议提示，但不改变握手或连接状态。
+
+## 会话附件
+
+能力查询独立于 `session_hello/session_ready`。握手成功后，PWA 以既有 direct request scope 发送 `attachment_capabilities_request`；支持端返回定向 `attachment_capabilities`，携带本次 `upload_scope` 和以下固定上限。不支持或查询失败时附件入口不可用，但同版本契约中的普通文字和历史不受影响。
+
+| 项目 | 限制 |
+| --- | --- |
+| 原件 | 50 MiB/文件、100 MiB/消息、最多 10 件，允许零字节 |
+| 分片 | 解码后 1–64 KiB，最多 2 个在途 |
+| 展示预览 | JPEG，最大 32 KiB、宽高各不超过 320px；失败不影响原件 |
+
+`MiB` 为 `1024 × 1024` 字节。机器可读字段、strict 校验及固定错误码以[共享附件 schema](../../../packages/protocol/src/session/attachments.ts)为准；原有 2 MiB frame 上限不变。
+
+上传请求由已认证 Owner、当前 runtime/session 和服务端租约共同授权。租约不依赖临时 channel 或普通追加的 `leaf_id`；channel 重建须重新查询能力，真正 session/branch/runtime 变化会使旧租约失效，不能把旧附件交给新目标。
+
+- `attachment_begin`：提供客户端 `upload_id`、文件名、MIME、原件字节数和小写 SHA-256，可附预览；幂等重放不能改变这些参数。
+- `attachment_chunk`：提供精确 offset 和 canonical Base64；服务端核对已接收位置和原件上限，拒绝缺口或不一致重放。
+- `attachment_finish`、`attachment_status_request`、`attachment_cancel`：按租约和 upload ID 完成、查询或取消；零字节原件不发空分片。
+- `attachment_state`：返回 `receiving/complete/cancelled` 和已收字节数；只有 complete 带服务端附件描述，且字节数与描述一致。
+- `attachment_error`：只携带固定 code、retryable 和关联字段，不携带系统错误正文或本地路径。
+
+上传完成后，`user_message` 以 `attachment_ids` 提交，最多 10 个且不可重复，与旧 `images` 互斥。可以只有附件、没有文字；附件与直接 `streaming_behavior=steer` 的组合被拒绝，普通附件消息仍走既有队列。Extension 按 Owner 和租约解析 ID，可能投递后保留幂等保护；相同请求不能重复送给 Pi，投递未知不能假定原件尚未被读取。
+
+正式事件、user blocks 与 queue item 不新增附件字段。原生 custom `pi-reach:attachments-v1` 保存 request/sender、原文、描述及预览；`pi-reach:attachment-message-v1` 将同一 request/sender 关联到正式 `message_id`。PWA 按 session、sender、request 和 message 严格关联，不要求同 leaf；冲突时撤回派生展示，不能借用其他 Owner 或会话的数据。这些 custom 参与正式 `event_seq` 与历史持久化，展示时隐藏原始 payload。
+
+旧页面可读取合法 custom 和规范化 user/history，但不认识新定向帧时仍会拒绝该帧；同 Owner 的旧页面可能看到协议提示，或需要刷新重新确认当前会话后才能发送文字。不能因此宣称旧缓存页面完全没有可见影响。能力不足不改变协议版本，也不提供 v1 fallback；部署顺序仍先 PWA、后 Extension。
 
 ## Timeline 不变量
 
@@ -298,6 +335,6 @@ too_large
 internal_error
 ```
 
-PWA 与 Pi Extension 必须同步升级到相互匹配的版本，两端不得与旧版本混用；v2 timeline 不读取旧 cursor、旧 wire shape 或历史 timeline 数据，也不提供双栈或 fallback。
+PWA 与 Pi Extension 必须使用相容的 Protocol v2 契约；独立附件或诊断能力不足只使对应功能不可用，不构成协议降级。v2 timeline 不读取旧 cursor、旧 wire shape 或历史 timeline 数据，也不提供 v1 双栈或 fallback。
 
 未知 frame、未知字段、方向错误、缺少版本、v1 或未知版本都必须 fail closed。任何一端不得根据旧字段猜测 endpoint、runtime、channel 或 session。兼容读取旧 `daemon` metadata 不构成这一规则的例外。

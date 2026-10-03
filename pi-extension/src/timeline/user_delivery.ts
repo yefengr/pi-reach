@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { AttachmentMetadata } from "@pi-reach/protocol/session";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ServerFrame, TimelineEvent } from "../protocol/v2/index.js";
 import type { Correlation, TimelineStarted } from "./runtime.js";
@@ -19,6 +20,11 @@ export type QueuedMessageItem = Extract<ServerFrame, { type: "queued_message_sta
 export type UserDeliveryPayload = Readonly<{
   text: string;
   images?: readonly Readonly<{ data: string; mime: string }>[];
+  attachment_ids?: readonly string[];
+  attachment_metadata?: AttachmentMetadata;
+  display_text?: string;
+  /** 释放 queue 持有的附件展示/正文，不影响可能已投递的幂等保护。 */
+  on_release?: () => void;
 }>;
 
 export type UserDeliveryScope = {
@@ -104,7 +110,7 @@ export class UserDeliveryQueue {
     const existing = this.findTarget(scope.ownerId, scope.service, scope.clientRequestId);
     if (existing) return payloadEquals(existing.payload, payload) ? "duplicate" : "conflict";
 
-    const bytes = contentBytes(content);
+    const bytes = contentBytes(content) + (payload.attachment_metadata ? Buffer.byteLength(JSON.stringify(payload), "utf8") : 0);
     const deliveryToken = randomUUID();
     const job: DeliveryJob = {
       scope: { ...scope, deliveryToken },
@@ -183,14 +189,10 @@ export class UserDeliveryQueue {
     if (started.role !== "user") return null;
     const job = this.jobFor(started.correlation);
     if (!job) return null;
+    this.followCurrentTip(job);
     if (!this.isCurrentScope(job.scope)) {
-      if (job.state === "in_flight" && job.scope.sessionId === job.scope.service.sessionId) {
-        job.scope = { ...job.scope, leafId: job.scope.service.leafId };
-      }
-      if (!this.isCurrentScope(job.scope)) {
-        this.remove(job);
-        return null;
-      }
+      this.remove(job);
+      return null;
     }
     if (job.state !== "in_flight" && job.state !== "timed_out") return null;
     this.clearTimer(job);
@@ -237,9 +239,7 @@ export class UserDeliveryQueue {
         this.remove(job);
         continue;
       }
-      if (job.state === "queued" && job.scope.sessionId === job.scope.service.sessionId && job.scope.leafId !== job.scope.service.leafId) {
-        job.scope = { ...job.scope, leafId: job.scope.service.leafId };
-      }
+      this.followCurrentTip(job);
       if (!this.isCurrentScope(job.scope)) {
         this.remove(job);
         continue;
@@ -269,6 +269,7 @@ export class UserDeliveryQueue {
 
   private failBeforeStart(job: DeliveryJob, retainLateRecord: boolean): void {
     if (job.state !== "in_flight" || !this.jobs.has(job.scope.deliveryToken)) return;
+    this.followCurrentTip(job);
     this.clearTimer(job);
     this.releasePayload(job);
     if (this.active === job) this.active = undefined;
@@ -318,6 +319,7 @@ export class UserDeliveryQueue {
   }
 
   private matches(job: DeliveryJob, ownerId: string, service: TimelineV2Service): boolean {
+    if (job.scope.ownerId === ownerId && job.scope.service === service) this.followCurrentTip(job);
     return job.scope.ownerId === ownerId
       && job.scope.service === service
       && job.scope.sessionId === service.sessionId
@@ -325,11 +327,20 @@ export class UserDeliveryQueue {
       && this.isCurrentScope(job.scope);
   }
 
+  private followCurrentTip(job: DeliveryJob): void {
+    // 普通 native append 会推进 leaf；显式 reset 必须先 clearAll，且跟随后仍检查 isCurrent。
+    if ((job.state === "queued" || job.state === "in_flight" || job.state === "timed_out")
+      && job.scope.sessionId === job.scope.service.sessionId
+      && job.scope.leafId !== job.scope.service.leafId) {
+      job.scope = { ...job.scope, leafId: job.scope.service.leafId };
+    }
+  }
+
   private itemFor(job: DeliveryJob): QueuedMessageItem {
     const payload = job.payload ?? { text: "" };
     return {
       id: job.scope.clientRequestId,
-      text: payload.text,
+      text: payload.display_text ?? payload.text,
       ...(payload.images?.length ? { images: payload.images.map((image) => ({ ...image })) } : {}),
       sender_ref: job.scope.ownerId,
       editable: job.state === "queued",
@@ -347,6 +358,7 @@ export class UserDeliveryQueue {
 
   private releasePayload(job: DeliveryJob): void {
     if (job.content === undefined) return;
+    job.payload?.on_release?.();
     job.content = undefined;
     job.payload = undefined;
     this.queuedPayloadCount -= 1;
@@ -390,6 +402,9 @@ function positiveInteger(value: number | undefined, fallback: number): number {
 function copyPayload(payload: UserDeliveryPayload): UserDeliveryPayload {
   return {
     text: payload.text,
+    ...(payload.attachment_ids ? { attachment_ids: [...payload.attachment_ids],
+      attachment_metadata: payload.attachment_metadata, display_text: payload.display_text,
+      on_release: payload.on_release } : {}),
     ...(payload.images?.length ? { images: payload.images.map((image) => ({ ...image })) } : {}),
   };
 }

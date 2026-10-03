@@ -1,4 +1,4 @@
-import type { WireImage } from "../pi-reach/protocol-v2/schema";
+import type { AttachmentDescriptor, WireImage } from "../pi-reach/protocol-v2/schema";
 
 export const DEFAULT_TIMELINE_PENDING_LIMITS = {
   maxEntries: 128,
@@ -15,6 +15,10 @@ export type TimelinePendingLimits = {
 export type PendingPayload = {
   text: string;
   images?: readonly WireImage[];
+  /** 展示用附件描述（含预览），计入 payload 预算；不含任何原件。 */
+  attachments?: readonly AttachmentDescriptor[];
+  /** 仅预算计算使用：派生投影之外仍保留的原始内容，不进入 wire 或持久化。 */
+  retainedPayload?: PendingPayload;
 };
 
 export class PendingCapacityError extends Error {
@@ -39,7 +43,8 @@ export function normalizeTimelinePendingLimits(limits: Partial<TimelinePendingLi
 }
 
 export function pendingPayloadBytes(payload: PendingPayload): number {
-  const serialized = JSON.stringify({ text: payload.text, images: payload.images });
+  const serialized = JSON.stringify({ text: payload.text, images: payload.images, attachments: payload.attachments });
+  if (payload.retainedPayload) return new TextEncoder().encode(serialized).byteLength + pendingPayloadBytes(payload.retainedPayload);
   return new TextEncoder().encode(serialized).byteLength;
 }
 

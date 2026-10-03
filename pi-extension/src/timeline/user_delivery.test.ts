@@ -281,6 +281,112 @@ describe("UserDeliveryQueue", () => {
     expect(queue.snapshot("owner-1", service)).toEqual([]);
   });
 
+  test("follows native appends at timeout without a snapshot and correlates late start only once", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const tip = { sessionId: "session-1", leafId: null as string | null };
+    const service = tip as TimelineV2Service;
+    const sent: Correlation[] = [];
+    const unknown = vi.fn();
+    const release = vi.fn();
+    const queue = new UserDeliveryQueue({
+      isIdle: () => true,
+      isCurrent: (value) => value.ownerId === "owner-1" && value.service === service
+        && value.sessionId === tip.sessionId && value.leafId === tip.leafId,
+      send: (_content, correlation) => { sent.push(correlation); tip.leafId = "native-append"; },
+      onUnknownDelivery: unknown,
+      startTimeoutMs: 100,
+    });
+    try {
+      queue.enqueue("body", { origin: "pwa", delivery: "normal", clientRequestId: "request-1" },
+        scope("owner-1", "request-1", service), { text: "display", attachment_ids: ["attachment-1"], on_release: release });
+      await nextMacrotask();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(unknown).toHaveBeenCalledTimes(1);
+      expect(unknown).toHaveBeenCalledWith(expect.objectContaining({ leafId: "native-append" }));
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(queue.snapshot("owner-1", service)).toEqual([]);
+      tip.leafId = "later-append";
+      expect(queue.onUserStarted(started(sent[0]!))).toMatchObject({ leafId: "later-append" });
+      expect(queue.onUserPublished({ ...event(sent[0]!), leaf_id: tip.leafId }, sent[0]!))
+        .toMatchObject({ clientRequestId: "request-1" });
+      expect(queue.onUserStarted(started(sent[0]!))).toBeNull();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(unknown).toHaveBeenCalledTimes(1);
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(sent).toHaveLength(1);
+    } finally {
+      queue.clearAll();
+      vi.useRealTimers();
+    }
+  });
+
+  test.each([
+    ["all", false], ["all", true], ["owner", false], ["owner", true],
+  ] as const)("clear %s after timeout=%s prevents stale callbacks from reviving delivery", async (clear, afterTimeout) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const tip = { sessionId: "session-1", leafId: null as string | null };
+    const service = tip as TimelineV2Service;
+    const sent: Correlation[] = [];
+    const unknown = vi.fn();
+    const release = vi.fn();
+    const queue = new UserDeliveryQueue({
+      isIdle: () => true,
+      isCurrent: (value) => value.service === service && value.leafId === tip.leafId,
+      send: (_content, correlation) => { sent.push(correlation); tip.leafId = "append"; },
+      onUnknownDelivery: unknown, startTimeoutMs: 100,
+    });
+    try {
+      queue.enqueue("body", { origin: "pwa", delivery: "normal" }, scope("owner-1", "request-1", service),
+        { text: "display", attachment_ids: ["attachment-1"], on_release: release });
+      await nextMacrotask();
+      if (afterTimeout) await vi.advanceTimersByTimeAsync(100);
+      if (clear === "all") queue.clearAll(); else queue.clearOwner("owner-1", service);
+      tip.leafId = "reset-tip";
+      await vi.advanceTimersByTimeAsync(200);
+      expect(queue.onUserStarted(started(sent[0]!))).toBeNull();
+      expect(queue.onUserPublished({ ...event(sent[0]!), leaf_id: tip.leafId }, sent[0]!)).toBeNull();
+      expect(queue.snapshot("owner-1", service)).toEqual([]);
+      expect(unknown).toHaveBeenCalledTimes(afterTimeout ? 1 : 0);
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(sent).toHaveLength(1);
+    } finally {
+      queue.clearAll();
+      vi.useRealTimers();
+    }
+  });
+
+  test.each(["owner", "service", "session"] as const)("native tip following keeps the %s gate", async (changed) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const tip = { sessionId: "session-1", leafId: null as string | null };
+    const service = tip as TimelineV2Service;
+    let currentOwner = "owner-1";
+    let currentService = service;
+    const sent: Correlation[] = [];
+    const unknown = vi.fn();
+    const queue = new UserDeliveryQueue({
+      isIdle: () => true,
+      isCurrent: (value) => value.ownerId === currentOwner && value.service === currentService
+        && value.sessionId === tip.sessionId && value.leafId === tip.leafId,
+      send: (_content, correlation) => { sent.push(correlation); tip.leafId = "append"; },
+      onUnknownDelivery: unknown, startTimeoutMs: 100,
+    });
+    try {
+      queue.enqueue("body", { origin: "pwa", delivery: "normal" }, scope("owner-1", "request-1", service));
+      await nextMacrotask();
+      if (changed === "owner") currentOwner = "owner-2";
+      if (changed === "service") currentService = { sessionId: tip.sessionId, leafId: tip.leafId } as TimelineV2Service;
+      if (changed === "session") tip.sessionId = "session-2";
+      expect(queue.snapshot("owner-1", service)).toEqual([]);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(unknown).not.toHaveBeenCalled();
+      expect(queue.onUserStarted(started(sent[0]!))).toBeNull();
+      expect(sent).toHaveLength(1);
+    } finally {
+      queue.clearAll();
+      vi.useRealTimers();
+    }
+  });
+
   test("rejects an attachment before enqueue when one snapshot item cannot fit", () => {
     const service = { sessionId: "session-1", leafId: null } as TimelineV2Service;
     const checked = vi.fn(() => false);

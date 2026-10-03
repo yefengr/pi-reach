@@ -161,6 +161,40 @@ test("keeps compaction and branch summaries visible alongside hidden custom even
   expect(html).not.toContain("notice");
 });
 
+describe("attachment history presentation", () => {
+  const attachment = { attachment_id: "file", file_name: "notes.txt", mime_type: "text/plain", byte_length: 1024, sha256: "a".repeat(64) };
+  const user: Extract<TimelineEvent, { kind: "user" }> = { event_id: "message", message_id: "message", group_id: "group", session_id: "session-1", leaf_id: "user-leaf", timestamp: 2, kind: "user", blocks: [{ type: "text", text: "Server fallback notes.txt" }], sender_ref: "owner", origin: "pwa", delivery: "normal", status: "committed" };
+  const metadata: TimelineEvent = { ...customEvent, event_id: "metadata", leaf_id: "metadata-leaf", payload: { custom_type: "pi-reach:attachments-v1", data: { version: 1, client_request_id: "request", sender_ref: "owner", text: "Original text", attachments: [attachment] } } };
+  const binding: TimelineEvent = { ...customEvent, event_id: "binding", leaf_id: "binding-leaf", payload: { custom_type: "pi-reach:attachment-message-v1", data: { version: 1, client_request_id: "request", sender_ref: "owner", message_id: "message" } } };
+  const items = (...events: TimelineEvent[]) => events.map(event => ({ kind: "event" as const, event }));
+
+  test("uses metadata before custom filtering and across ordinary leaf changes", () => {
+    const html = renderList(items(metadata, binding, user), { isLive: false });
+    expect(html).toContain("Original text");
+    expect(html).toContain("notes.txt");
+    expect(html).toContain("pwa-attachment-card");
+    expect(html).not.toContain("Server fallback");
+    expect(html).not.toContain("pi-reach:attachments");
+    expect(html).not.toContain("pwa-attachment-actions button");
+    expect(html).not.toContain('aria-label="Remove');
+  });
+
+  test("falls back until metadata arrives and never borrows another session or sender", () => {
+    expect(renderList(items(binding, user))).toContain("Server fallback");
+    expect(renderList(items({ ...metadata, session_id: "other" }, binding, user))).toContain("Server fallback");
+    expect(renderList(items(metadata, binding, { ...user, sender_ref: "other" }))).toContain("Server fallback");
+  });
+
+  test("renders attachment-only pending and preserves old image blocks", () => {
+    const html = renderList([{ ...unknownPending, text: "", attachments: [attachment] }]);
+    expect(html).toContain("notes.txt");
+    expect(html).toContain("Delivery status unknown");
+    const legacy = renderList(items({ ...user, blocks: [{ type: "image", mime_type: "image/png", data: "YQ==", byte_length: 1 }] }));
+    expect(legacy).toContain("data:image/png;base64,YQ==");
+    expect(legacy).not.toContain("pwa-attachment-cards");
+  });
+});
+
 describe("turn presentation", () => {
   const scope = { session_id: "session-1", leaf_id: "history-1" };
   const user = (id: string, group: string, timestamp: number): TimelineEvent => ({ ...scope, event_id: id, message_id: id, group_id: group, timestamp, kind: "user", blocks: [{ type: "text", text: `Question ${id}` }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" });

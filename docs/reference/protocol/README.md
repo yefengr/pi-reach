@@ -121,12 +121,12 @@ Owner 使用 `subscribe_endpoints` 订阅已配对 device。Relay 以 `endpoints
 
 PWA->Extension frame 包括 pairing、session hello/sync、prompt、queue、cancel、typed actions、model/thinking 和 ping。Extension->PWA frame 包括 pairing result、session ready、timeline/history、queue state、typed action result、model list、pong、reset、protocol error 和 bye。精确字段及错误码以 strict contract/fixtures 为准。
 
-### Timeline 与图片
+### Timeline 与附件
 
 - 正式 user event 满足 `event_id === message_id`。
 - tool 的 `complete/error/interrupted` 状态互斥。
 - image 的 inline `data` 与 `omitted=true` 互斥。
-- 图片作为受尺寸限制的 Base64 inline block 进入 Protocol v2 frame；没有独立对象存储或 binary upload channel。
+- 旧图片输入与历史仍可读取受尺寸限制的 Base64 inline block；新 PWA 使用[会话附件帧](protocol-v2.md#会话附件)分片上传原件，消息只提交附件 ID，不发送 inline images。Relay 不存原件，也不新增对象存储或上传服务。
 - PWA-owned follow-up queue 位于当前 Pi Extension 进程内存；Relay 不提供 offline queue，Pi 进程结束会丢失未发送 queue state。
 
 ### Typed actions
@@ -142,11 +142,11 @@ PWA 只调用冻结的 typed action：`session_new`、`session_compact`、`model
 - 如果已有 pairing 但原 identity 不可读，Extension 不得静默生成新 identity；应进入确定性 failure。
 - 并发初始化互斥、已有文件身份优先级及异常锁恢复见[Host identity 存储规则](pairing.md#host)。
 - `peers.json` 保存当前设备的 Owner public key、显示名和 paired time。
-- Relay 配置和 Pi session 均是本机状态。
+- Relay 配置和 Pi session 均是本机状态；会话附件的本机路径、长期保留与临时清理规则见[当前架构](../../ARCHITECTURE.md#会话附件)。
 
 ### Browser/PWA
 
-IndexedDB 保存 Owner private identity、device pairing、endpoint metadata 和正式 timeline。清理浏览器站点数据会删除 Owner identity 和本地 timeline，需要重新 pairing。PWA 不持久化 runtime presence，runtime 只来自当前 Relay session。
+IndexedDB 保存 Owner private identity、device pairing、endpoint metadata 和正式 timeline。清理浏览器站点数据会删除 Owner identity 和本地 timeline，需要重新 pairing。PWA 不持久化 runtime presence，runtime 只来自当前 Relay session。未发送的附件 File 只在页面内存中；正式历史保存附件描述和有界预览，不保存原件。
 
 ### Relay
 

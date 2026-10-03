@@ -1,0 +1,19 @@
+.pwa-attachment-cards { min-width: 0; margin-bottom: 8px; }
+.pwa-attachment-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: min(184px, 24dvh); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--pwa-control-line) transparent; }
+.pwa-attachment-card { box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-width: 0; height: 58px; padding: 6px 8px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-panel); color: var(--pwa-ink); }
+.pwa-attachment-thumb { display: block; flex: 0 0 32px; width: 32px; height: 32px; object-fit: cover; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); }
+.pwa-attachment-file { display: flex; align-items: center; justify-content: center; color: var(--pwa-secondary); }
+.pwa-attachment-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pwa-attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--pwa-weight-strong) var(--pwa-text-list)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-attachment-status, .pwa-attachment-progress { font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); color: var(--pwa-secondary); font-variant-numeric: tabular-nums; }
+.pwa-attachment-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwa-attachment-card[data-status="failed"] .pwa-attachment-status { color: var(--pwa-error); }
+.pwa-attachment-progress { display: flex; align-items: center; gap: 8px; }
+.pwa-attachment-progress > :first-child { flex: 1; min-width: 0; height: 6px; background: var(--pwa-neutral-active); }
+.pwa-attachment-progress .mantine-Progress-section { background: var(--pwa-accent); }
+.pwa-attachment-actions { display: flex; flex: 0 0 auto; align-items: center; }
+.pwa-attachment-actions button { flex: 0 0 44px; width: 44px; height: 44px; }
+.pwa-attachment-ready { margin-inline: 12px; color: var(--pwa-complete); }
+.pwa-ui-scope .pwa-attachment-toggle { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 8px; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); font-size: var(--pwa-text-meta); }
+.pwa-ui-scope .pwa-attachment-toggle:hover { background: var(--pwa-hover); }
+@media (max-width: 767.98px) { .pwa-attachment-list { grid-template-columns: minmax(0, 1fr); } }

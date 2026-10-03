@@ -8,6 +8,7 @@ import {
   headSequenceSchema,
   idSchema,
   MAX_ARRAY_ITEMS,
+  imageMimeSchema,
   pairingCodeSchema,
   protocolVersionSchema,
   eventSequenceSchema,
@@ -25,6 +26,20 @@ import {
   strictObject,
   textSchema,
 } from "./schema.js";
+import {
+  ATTACHMENT_CHUNK_BYTES,
+  ATTACHMENT_MAX_COUNT,
+  ATTACHMENT_MAX_FILE_BYTES,
+  ATTACHMENT_MAX_IN_FLIGHT,
+  ATTACHMENT_MAX_MESSAGE_BYTES,
+  attachmentByteLengthSchema,
+  attachmentChunkDataSchema,
+  attachmentDescriptorSchema,
+  attachmentFileNameSchema,
+  attachmentIdsSchema,
+  attachmentPreviewSchema,
+  attachmentSha256Schema,
+} from "./attachments.js";
 import type { TimelineEvent, TimelinePartial } from "./schema.js";
 
 const wireTimelineEventSchema: z.ZodType<TimelineEvent> = sequencedTimelineEventSchema;
@@ -32,11 +47,18 @@ const protocol = { protocol_version: protocolVersionSchema };
 const channelRequest = { ...protocol, channel_id: channelIdSchema, session_id: idSchema, leaf_id: leafIdSchema };
 const directResponse = { ...protocol, target_channel_id: channelIdSchema };
 const ownerBroadcast = { ...protocol, session_id: idSchema, leaf_id: leafIdSchema };
+const attachmentUploadRequest = { ...protocol, channel_id: channelIdSchema, session_id: idSchema, upload_scope: idSchema };
+const attachmentUploadResponse = { ...directResponse, in_reply_to: idSchema, session_id: idSchema, upload_scope: idSchema };
+const safeOffsetSchema = z.number().int().nonnegative().finite().max(Number.MAX_SAFE_INTEGER);
 
 export const pairRequestFrameSchema = strictObject({ ...protocol, type: z.literal("pair_request"), id: idSchema, code: pairingCodeSchema, device_name: textSchema });
 export const sessionHelloFrameSchema = strictObject({ ...protocol, type: z.literal("session_hello"), id: idSchema, channel_id: channelIdSchema });
 export const extensionInfoRequestFrameSchema = strictObject({ ...protocol, type: z.literal("extension_info_request"), id: idSchema, ...channelRequest });
-export const userMessageFrameSchema = strictObject({ ...protocol, type: z.literal("user_message"), id: idSchema, ...channelRequest, client_request_id: idSchema, text: textSchema, images: z.array(wireImageSchema).max(1).optional(), streaming_behavior: z.literal("steer").optional() });
+export const userMessageFrameSchema = strictObject({ ...protocol, type: z.literal("user_message"), id: idSchema, ...channelRequest, client_request_id: idSchema, text: textSchema, images: z.array(wireImageSchema).max(1).optional(), attachment_ids: attachmentIdsSchema.optional(), streaming_behavior: z.literal("steer").optional() }).superRefine((frame, ctx) => {
+  if (frame.images !== undefined && frame.attachment_ids !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["attachment_ids"], message: "attachment_ids and images are mutually exclusive" });
+  }
+});
 export const userMessageObservedFrameSchema = strictObject({ ...protocol, type: z.literal("user_message_observed"), id: idSchema, ...channelRequest, client_request_id: idSchema, message_id: idSchema, status: z.literal("committed") });
 export const sessionSyncFrameSchema = strictObject({ ...protocol, type: z.literal("session_sync"), id: idSchema, ...channelRequest, before: eventSequenceSchema.nullable(), limit: z.number().int().min(1).finite().max(80).default(80) });
 export const pingFrameSchema = strictObject({ ...protocol, type: z.literal("ping"), id: idSchema, ...channelRequest });
@@ -50,6 +72,13 @@ export const queuedMessageSetFrameSchema = strictObject({ ...protocol, type: z.l
 export const queuedMessageClearFrameSchema = strictObject({ ...protocol, type: z.literal("queued_message_clear"), id: idSchema, ...channelRequest, target_id: idSchema.optional() });
 export const queuedMessageSteerFrameSchema = strictObject({ ...protocol, type: z.literal("queued_message_steer"), id: idSchema, ...channelRequest, target_id: idSchema });
 export const approveToolFrameSchema = strictObject({ ...protocol, type: z.literal("approve_tool"), id: idSchema, ...channelRequest, tool_call_id: idSchema, decision: z.enum(["allow", "deny"]) });
+
+export const attachmentCapabilitiesRequestFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_capabilities_request"), id: idSchema, ...channelRequest });
+export const attachmentBeginFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_begin"), id: idSchema, ...attachmentUploadRequest, upload_id: idSchema, file_name: attachmentFileNameSchema, mime_type: imageMimeSchema, byte_length: attachmentByteLengthSchema, sha256: attachmentSha256Schema, preview: attachmentPreviewSchema.optional() });
+export const attachmentChunkFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_chunk"), id: idSchema, ...attachmentUploadRequest, upload_id: idSchema, offset: safeOffsetSchema, data_base64: attachmentChunkDataSchema });
+export const attachmentFinishFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_finish"), id: idSchema, ...attachmentUploadRequest, upload_id: idSchema });
+export const attachmentStatusRequestFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_status_request"), id: idSchema, ...attachmentUploadRequest, upload_id: idSchema });
+export const attachmentCancelFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_cancel"), id: idSchema, ...attachmentUploadRequest, upload_id: idSchema });
 
 export const pairOkFrameSchema = strictObject({ ...protocol, type: z.literal("pair_ok"), in_reply_to: idSchema, session_name: textSchema, session_started_at: timestampSchema, endpoint_id: idSchema, harness: harnessSchema.optional(), hostname: textSchema.optional() });
 export const pairErrorFrameSchema = strictObject({ ...protocol, type: z.literal("pair_error"), in_reply_to: idSchema, code: z.enum(["token_expired", "token_consumed", "token_unknown", "internal_error"]), message: textSchema.min(1) });
@@ -104,8 +133,24 @@ export const modelsListFrameSchema = strictObject({ ...directResponse, type: z.l
 export const queuedMessageStateFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("queued_message_state"), snapshot_id: idSchema, chunk_index: z.number().int().nonnegative().finite(), final: z.boolean(), items: z.array(queuedMessageItemSchema).max(MAX_ARRAY_ITEMS) });
 export const byeFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("bye"), reason: byeReasonSchema });
 
-export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema]);
-export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema]);
+export const attachmentCapabilitiesFrameSchema = strictObject({ ...attachmentUploadResponse, type: z.literal("attachment_capabilities"), max_file_bytes: z.literal(ATTACHMENT_MAX_FILE_BYTES), max_message_bytes: z.literal(ATTACHMENT_MAX_MESSAGE_BYTES), max_attachments: z.literal(ATTACHMENT_MAX_COUNT), chunk_bytes: z.literal(ATTACHMENT_CHUNK_BYTES), max_in_flight: z.literal(ATTACHMENT_MAX_IN_FLIGHT) });
+
+const attachmentStateBase = { ...attachmentUploadResponse, type: z.literal("attachment_state"), upload_id: idSchema, received_bytes: z.number().int().nonnegative().finite().max(ATTACHMENT_MAX_FILE_BYTES) };
+export const attachmentStateFrameSchema = z.union([
+  strictObject({ ...attachmentStateBase, status: z.literal("receiving") }),
+  strictObject({ ...attachmentStateBase, status: z.literal("cancelled") }),
+  strictObject({ ...attachmentStateBase, status: z.literal("complete"), attachment: attachmentDescriptorSchema }).superRefine((state, ctx) => {
+    if (state.received_bytes !== state.attachment.byte_length) {
+      ctx.addIssue({ code: "custom", path: ["received_bytes"], message: "received_bytes must equal attachment.byte_length" });
+    }
+  }),
+]);
+
+export const attachmentErrorCodeSchema = z.enum(["invalid_scope", "not_found", "invalid_upload", "too_large", "busy", "no_space", "io_error", "integrity_mismatch", "offset_mismatch", "cancelled"]);
+export const attachmentErrorFrameSchema = strictObject({ ...attachmentUploadResponse, type: z.literal("attachment_error"), upload_id: idSchema.optional(), code: attachmentErrorCodeSchema, retryable: z.boolean() });
+
+export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema]);
+export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema]);
 
 export const ClientFrameSchema = clientFrameSchema;
 export const ServerFrameSchema = serverFrameSchema;

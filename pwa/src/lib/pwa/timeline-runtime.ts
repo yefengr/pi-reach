@@ -1,5 +1,6 @@
 import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
+import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_MESSAGE_BYTES, attachmentDescriptorSchema, type AttachmentDescriptor } from "../pi-reach/protocol-v2/schema";
 import { parseTimelineEventV2, parseTimelinePartialV2 } from "../pi-reach/protocol-v2/codec";
 import { TIMELINE_RECENT_LIMIT } from "./timeline-reconnect";
 import { matchesFormalMessage, partialMessageIdentity } from "./timeline-identity";
@@ -9,9 +10,12 @@ import {
   PendingCapacityError,
   exceedsPendingCapacity,
   normalizeTimelinePendingLimits,
+  pendingCapacityUsage,
+  pendingPayloadBytes,
   type PendingPayload,
   type TimelinePendingLimits,
 } from "./timeline-pending";
+import { attachmentRequestKey, projectAttachmentMetadata } from "./timeline-attachments";
 
 export { PendingCapacityError } from "./timeline-pending";
 type UserMessageFrame = Extract<ClientFrame, { type: "user_message" }>;
@@ -38,6 +42,10 @@ export type TimelinePending = {
   clientRequestId: string;
   text: string;
   images?: UserMessageImages;
+  /** 展示用附件描述（含预览）；承诺已提交前保留以驱动卡片展示，不含任何原件。 */
+  attachments?: AttachmentDescriptor[];
+  /** 消息真实 sender_ref；本端发送为 selfSenderRef，队列取 item.sender_ref，用于元信息关联。 */
+  senderRef?: string;
   cancelable?: boolean;
   queued?: boolean;
   queuedAction?: "insert" | "cancel";
@@ -53,7 +61,7 @@ export type TimelinePending = {
 export type TimelinePartialView = { kind: "partial"; partial: TimelinePartial; createdAt: number };
 export type TimelineViewItem = { kind: "event"; event: TimelineEvent } | TimelinePending | TimelinePartialView;
 /** 本端撤回的排队消息：取消已被权威快照确认，文字与图片可放回输入区。 */
-export type QueuedCancellation = { clientRequestId: string; text: string; images?: UserMessageImages };
+export type QueuedCancellation = { clientRequestId: string; text: string; images?: UserMessageImages; attachments?: AttachmentDescriptor[] };
 export type TimelineRuntimeChange = {
   items: TimelineViewItem[];
   committed: TimelineEvent[];
@@ -129,6 +137,8 @@ export class TimelineRuntime {
   private readonly events = new Map<string, TimelineEvent>();
   private readonly partials = new Map<string, TimelinePartialView>();
   private readonly pending = new Map<string, Pending>();
+  // 原始内容随 pending 对象回收；展示投影不能改变未知投递的重试内容。
+  private readonly pendingBases = new WeakMap<Pending, { payload: PendingPayload; local: boolean }>();
   private unknown: Pending[] = [];
   private queuedSnapshotId: string | null = null;
   private readonly queuedSnapshotItems = new Map<string, QueueItem>();
@@ -244,8 +254,36 @@ export class TimelineRuntime {
     const requestId = requestIds?.requestId ?? randomId();
     const candidate: PendingPayload = { text, ...(hasImages ? { images } : {}) };
     if (exceedsPendingCapacity([...this.pendingPayloads(), candidate], this.limits)) throw new PendingCapacityError();
-    this.pending.set(clientRequestId, { kind: "pending", scope, id: `pending:${clientRequestId}`, clientRequestId, requestId, text, ...(hasImages ? { images } : {}), createdAt: Date.now(), delivery: "pending" });
+    this.storePending({ kind: "pending", scope, id: `pending:${clientRequestId}`, clientRequestId, requestId, text, ...(hasImages ? { images } : {}), senderRef: scope.selfSenderRef, createdAt: Date.now(), delivery: "pending" }, candidate, true);
     return { frame: this.userMessageFrame(scope, requestId, clientRequestId, text, images), change: this.change() };
+  }
+  /**
+   * 附件消息入口：只传 attachment_ids，绝不把预览或原件写入 user_message。
+   * 严格校验描述、数量、总量与 ID 唯一，任一不合法直接 fail closed（返回 null）。
+   */
+  sendUserWithAttachments(text: string, attachments: readonly AttachmentDescriptor[], requestIds?: { clientRequestId: string; requestId: string }): UserMessageSendResult | null {
+    const scope = this.scope;
+    if (this.replacement || !scope) return null;
+    if (attachments.length < 1 || attachments.length > ATTACHMENT_MAX_COUNT) return null;
+    const descriptors: AttachmentDescriptor[] = [];
+    const seen = new Set<string>();
+    let totalBytes = 0;
+    for (const attachment of attachments) {
+      const parsed = attachmentDescriptorSchema.safeParse(attachment);
+      if (!parsed.success) return null;
+      if (seen.has(parsed.data.attachment_id)) return null;
+      seen.add(parsed.data.attachment_id);
+      totalBytes += parsed.data.byte_length;
+      descriptors.push(parsed.data);
+    }
+    if (totalBytes > ATTACHMENT_MAX_MESSAGE_BYTES) return null;
+    const clientRequestId = requestIds?.clientRequestId ?? randomId();
+    if (this.hasClientRequestId(clientRequestId)) return null;
+    const requestId = requestIds?.requestId ?? randomId();
+    const candidate: PendingPayload = { text, attachments: descriptors };
+    if (exceedsPendingCapacity([...this.pendingPayloads(), candidate], this.limits)) throw new PendingCapacityError();
+    this.storePending({ kind: "pending", scope, id: `pending:${clientRequestId}`, clientRequestId, requestId, text, attachments: descriptors, senderRef: scope.selfSenderRef, createdAt: Date.now(), delivery: "pending" }, candidate, true);
+    return { frame: this.userMessageFrame(scope, requestId, clientRequestId, text, undefined, descriptors.map((descriptor) => descriptor.attachment_id)), change: this.change() };
   }
   actOnQueued(clientRequestId: string, action: "insert" | "cancel"): { frame: ClientFrame; change: TimelineRuntimeChange } | null {
     const scope = this.scope;
@@ -293,7 +331,8 @@ export class TimelineRuntime {
     if (!pending) return this.change();
     this.deletePending(pending);
     if (pending.insertionStatus) this.markInsertionUnconfirmed(pending);
-    this.unknown.push({ ...pending, delivery: "unknown_delivery" });
+    pending.delivery = "unknown_delivery";
+    this.unknown.push(pending);
     return this.change();
   }
   retryUnknown(clientRequestId: string): UserMessageSendResult | null {
@@ -304,10 +343,14 @@ export class TimelineRuntime {
     // 队列操作断线后的结果需由权威快照恢复，不能把已插入的消息重新发送。
     if (previous.queued || previous.insertionStatus) return null;
     const requestId = randomId();
-    const pending = { ...previous, scope, requestId, delivery: "pending" as const };
+    const base = this.pendingBases.get(previous)!;
+    const pending: Pending = { ...previous, scope, requestId, delivery: "pending", text: base.payload.text,
+      images: base.payload.images ? [...base.payload.images] : undefined,
+      attachments: base.payload.attachments ? [...base.payload.attachments] : undefined };
+    this.pendingBases.set(pending, base);
     this.unknown.splice(index, 1);
     this.storePending(pending);
-    return { frame: this.userMessageFrame(scope, requestId, clientRequestId, pending.text, pending.images), change: this.change() };
+    return { frame: this.userMessageFrame(scope, requestId, clientRequestId, base.payload.text, pending.images, pending.attachments?.map((descriptor) => descriptor.attachment_id)), change: this.change() };
   }
   acceptsTimelineFrame(frame: ServerFrame): boolean {
     const scope = this.scope;
@@ -342,8 +385,12 @@ export class TimelineRuntime {
       const stagedIds = new Set(stagedItems.map((item) => item.id));
       const retainedPayloads = [...this.pending.values(), ...this.unknown]
         .filter((pending) => !stagedIds.has(pending.clientRequestId))
-        .map((pending) => ({ text: pending.text, ...(pending.images ? { images: pending.images } : {}) }));
-      const stagedPayloads = stagedItems.map((item) => ({ text: item.text, ...(item.images ? { images: item.images } : {}) }));
+        .map((pending) => this.pendingPayload(pending));
+      const stagedPayloads = stagedItems.map((item) => {
+        const existing = this.pending.get(item.id) ?? this.unknown.find((pending) => pending.clientRequestId === item.id);
+        const payload = { text: item.text, ...(item.images ? { images: item.images } : {}), ...(existing?.attachments ? { attachments: existing.attachments } : {}) };
+        return existing ? this.pendingPayload(existing, payload) : payload;
+      });
       if (exceedsPendingCapacity([...retainedPayloads, ...stagedPayloads], this.limits)) {
         this.clearQueuedSnapshot();
         this.rejectedQueuedSnapshotId = frame.snapshot_id;
@@ -363,7 +410,7 @@ export class TimelineRuntime {
           delete pending.queuedAction;
         } else if (!pending.messageId) {
           // 本端请求的取消由不含该条的快照确认；取消失败（如已开始发送）时，错误回执先于快照到达并已释放 queuedAction。
-          if (pending.queuedAction === "cancel") cancelled.push({ clientRequestId: pending.clientRequestId, text: pending.text, ...(pending.images?.length ? { images: pending.images } : {}) });
+          if (pending.queuedAction === "cancel") cancelled.push({ clientRequestId: pending.clientRequestId, text: pending.text, ...(pending.images?.length ? { images: pending.images } : {}), ...(pending.attachments?.length ? { attachments: pending.attachments } : {}) });
           this.deletePending(pending);
         } else {
           pending.queued = false;
@@ -376,8 +423,9 @@ export class TimelineRuntime {
           const wasUnknown = this.unknown.includes(existing);
           this.unknown = this.unknown.filter((pending) => pending !== existing);
           this.pending.set(item.id, existing);
-          existing.text = item.text;
-          existing.images = item.images;
+          const base = this.pendingBases.get(existing)!;
+          if (!base.local) base.payload = { text: item.text, ...(item.images ? { images: item.images } : {}) };
+          existing.senderRef = item.sender_ref;
           // 断线后新的权威快照可以恢复仍在队列中的消息；同连接重复快照不解锁在途操作。
           if (wasUnknown || (existing.messageId === undefined && existing.insertionRejected)) {
             this.clearInsertionNotice(existing);
@@ -390,7 +438,7 @@ export class TimelineRuntime {
           existing.cancelable = item.editable && item.sender_ref === scope.selfSenderRef;
           continue;
         }
-        this.pending.set(item.id, { kind: "pending", scope, id: `pending:${item.id}`, clientRequestId: item.id, text: item.text, ...(item.images ? { images: item.images } : {}), queued: true, cancelable: item.editable && item.sender_ref === scope.selfSenderRef, createdAt: item.created_at, delivery: "accepted", requestId: item.id });
+        this.storePending({ kind: "pending", scope, id: `pending:${item.id}`, clientRequestId: item.id, text: item.text, ...(item.images ? { images: item.images } : {}), senderRef: item.sender_ref, queued: true, cancelable: item.editable && item.sender_ref === scope.selfSenderRef, createdAt: item.created_at, delivery: "accepted", requestId: item.id }, { text: item.text, ...(item.images ? { images: item.images } : {}) });
       }
       this.clearQueuedSnapshot();
       const change = this.change();
@@ -408,7 +456,8 @@ export class TimelineRuntime {
       const pending = this.findPending((candidate) => candidate.requestId === frame.in_reply_to);
       if (pending) {
         this.deletePending(pending);
-        this.unknown.push({ ...pending, delivery: "unknown_delivery" });
+        pending.delivery = "unknown_delivery";
+        this.unknown.push(pending);
       }
       return this.change();
     }
@@ -526,8 +575,45 @@ export class TimelineRuntime {
     this.queuedSnapshotId = null;
     this.rejectedQueuedSnapshotId = null;
   }
+  private pendingPayload(pending: Pending, value: PendingPayload = pending): PendingPayload {
+    const payload: PendingPayload = { text: value.text, images: value.images, attachments: value.attachments };
+    const base = this.pendingBases.get(pending)!.payload;
+    return JSON.stringify(payload) === JSON.stringify(base) ? payload : { ...payload, retainedPayload: base };
+  }
   private pendingPayloads(): PendingPayload[] {
-    return [...this.pending.values(), ...this.unknown].map((pending) => ({ text: pending.text, ...(pending.images ? { images: pending.images } : {}) }));
+    return [...this.pending.values(), ...this.unknown].map((pending) => this.pendingPayload(pending));
+  }
+  /**
+   * 晚到的附件元信息按 session/sender/request 关联到 pending（含其他 Owner 队列）。
+   * 只补齐展示描述与规范化文本；超预算时不塞入并上报 pendingCapacityExceeded。
+   */
+  private reconcileAttachmentMetadata(): boolean {
+    const formal = this.replacement?.previousEvents ?? [...this.events.values()];
+    const { requests } = projectAttachmentMetadata(formal.map((event) => ({ kind: "event" as const, event })));
+    let payloadBytes = pendingCapacityUsage(this.pendingPayloads()).payloadBytes;
+    let exceeded = false;
+    for (const pending of [...this.pending.values(), ...this.unknown]) {
+      if (!this.isCurrentPending(pending) || !pending.senderRef) continue;
+      const base = this.pendingBases.get(pending)!;
+      // 本端附件描述和原文是未知投递的重试依据，不能被远端 sidecar 替换。
+      const metadata = base.local && (base.payload.attachments || pending.senderRef !== pending.scope.selfSenderRef)
+        ? undefined : requests.get(attachmentRequestKey(pending.scope.sessionId, pending.senderRef, pending.clientRequestId));
+      const nextPayload: PendingPayload = metadata
+        ? { text: metadata.text, images: base.payload.images, attachments: metadata.attachments } : base.payload;
+      const currentBytes = pendingPayloadBytes(this.pendingPayload(pending));
+      let delta = pendingPayloadBytes(this.pendingPayload(pending, nextPayload)) - currentBytes;
+      let accepted = nextPayload;
+      if (payloadBytes + delta > this.limits.maxPayloadBytes) {
+        exceeded = true;
+        accepted = base.payload;
+        delta = pendingPayloadBytes(base.payload) - currentBytes;
+      }
+      payloadBytes += delta;
+      pending.text = accepted.text;
+      pending.images = accepted.images ? [...accepted.images] : undefined;
+      pending.attachments = accepted.attachments ? [...accepted.attachments] : undefined;
+    }
+    return exceeded;
   }
   private hasClientRequestId(clientRequestId: string): boolean {
     return this.pending.has(clientRequestId) || this.unknown.some((pending) => pending.clientRequestId === clientRequestId);
@@ -542,7 +628,8 @@ export class TimelineRuntime {
   private pendingHas(pending: TimelinePending): boolean {
     return this.pending.get(pending.clientRequestId) === pending;
   }
-  private storePending(pending: Pending): void {
+  private storePending(pending: Pending, basePayload?: PendingPayload, local = false): void {
+    if (basePayload) this.pendingBases.set(pending, { payload: basePayload, local });
     this.unknown = this.unknown.filter((candidate) => candidate !== pending && candidate.clientRequestId !== pending.clientRequestId);
     this.pending.set(pending.clientRequestId, pending);
   }
@@ -598,8 +685,8 @@ export class TimelineRuntime {
     this.scope = next;
     this.liveHeadSeq = event.event_seq;
   }
-  private userMessageFrame(scope: TimelineScope, requestId: string, clientRequestId: string, text: string, images?: UserMessageImages): UserMessageFrame {
-    return { protocol_version: 2, type: "user_message", id: requestId, channel_id: scope.channelId, session_id: scope.sessionId, leaf_id: scope.leafId, client_request_id: clientRequestId, text, ...(images?.length ? { images } : {}) };
+  private userMessageFrame(scope: TimelineScope, requestId: string, clientRequestId: string, text: string, images?: UserMessageImages, attachmentIds?: readonly string[]): UserMessageFrame {
+    return { protocol_version: 2, type: "user_message", id: requestId, channel_id: scope.channelId, session_id: scope.sessionId, leaf_id: scope.leafId, client_request_id: clientRequestId, text, ...(images?.length ? { images } : {}), ...(attachmentIds?.length ? { attachment_ids: [...attachmentIds] } : {}) };
   }
   private commitParsed(event: TimelineEvent): void {
     this.events.set(event.event_id, event);
@@ -658,12 +745,14 @@ export class TimelineRuntime {
     if (movePendingToUnknown) {
       for (const pending of this.pending.values()) {
         if (pending.insertionStatus) this.markInsertionUnconfirmed(pending);
-        this.unknown.push({ ...pending, delivery: "unknown_delivery" });
+        pending.delivery = "unknown_delivery";
+        this.unknown.push(pending);
       }
     }
     this.pending.clear();
   }
   private change(result: { committed?: TimelineEvent[]; newLiveEvent?: boolean; tipAdvanced?: boolean } = {}): TimelineRuntimeChange {
+    const attachmentCapacityExceeded = this.reconcileAttachmentMetadata();
     const formal = this.replacement?.previousEvents ?? [...this.events.values()];
     const transient = this.replacement ? [] : [...this.pendingItems, ...this.partials.values()];
     const items: TimelineViewItem[] = [...formal.map((event) => ({ kind: "event" as const, event })), ...transient];
@@ -673,6 +762,7 @@ export class TimelineRuntime {
       committed: result.committed ?? [],
       observed: this.replacement ? [] : this.observedQueue.splice(0),
       unknown: this.replacement ? [] : [...this.unknown],
+      ...(attachmentCapacityExceeded ? { pendingCapacityExceeded: true } : {}),
       ...(result.newLiveEvent ? { newLiveEvent: true } : {}),
       ...(result.tipAdvanced ? { tipAdvanced: true } : {}),
     };

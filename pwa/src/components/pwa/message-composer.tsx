@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from "react";
 import { ActionIcon, FileButton, Menu, Textarea, UnstyledButton } from "@mantine/core";
-import { ArrowUp, Camera, ChevronDown, ImagePlus, LoaderCircle, Plus, Slash, Square, X } from "lucide-react";
+import { ArrowUp, Camera, ChevronDown, Files, LoaderCircle, Plus, Slash, Square } from "lucide-react";
+import { AttachmentCards, type ComposerAttachmentItem } from "./attachment-cards";
 import { ComposerCommandMenu, type ComposerCommandAction } from "./composer-command-menu";
 import { pwaFadeTransition, useMenuExitAction, usePwaMotionDuration } from "./use-pwa-motion";
 import { useComposerAutosize } from "./use-composer-autosize";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { useI18n } from "@/lib/i18n";
 
-export type MessageComposerAttachment = {
-  source: Blob;
-  previewUrl: string;
-  label: string;
-};
-
-type ComposerImageMenuProps = {
+type ComposerAttachmentMenuProps = {
   disabled: boolean;
   opened: boolean;
   onChange: (opened: boolean) => void;
-  onChooseImage: () => void;
+  onChooseFiles: () => void;
   onUseCamera: () => void;
   returnFocus?: boolean;
   triggerRef?: Ref<HTMLButtonElement>;
@@ -25,7 +20,7 @@ type ComposerImageMenuProps = {
   onExitTransitionEnd?: () => void;
 };
 
-export function ComposerImageMenu({ disabled, opened, onChange, onChooseImage, onUseCamera, returnFocus = true, triggerRef, withinPortal = true, onExitTransitionEnd }: ComposerImageMenuProps) {
+export function ComposerAttachmentMenu({ disabled, opened, onChange, onChooseFiles, onUseCamera, returnFocus = true, triggerRef, withinPortal = true, onExitTransitionEnd }: ComposerAttachmentMenuProps) {
   const { t } = useI18n();
   const menuDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
   return <Menu
@@ -43,11 +38,11 @@ export function ComposerImageMenu({ disabled, opened, onChange, onChooseImage, o
     zIndex={21}
   >
     <Menu.Target>
-      <ActionIcon ref={triggerRef} className="pwa-composer-icon" type="button" disabled={disabled} aria-label={t.composer.addImage} title={t.composer.addImage}><Plus size={20} /></ActionIcon>
+      <ActionIcon ref={triggerRef} className="pwa-composer-icon" type="button" disabled={disabled} aria-label={t.attachments.add} title={t.attachments.add}><Plus size={20} /></ActionIcon>
     </Menu.Target>
     <Menu.Dropdown inert={!opened} className="pwa-composer-menu-panel" style={{ bottom: "auto" }}>
-      <Menu.Item leftSection={<ImagePlus size={20} />} onClick={onChooseImage}>{t.composer.chooseImage}</Menu.Item>
-      <Menu.Item leftSection={<Camera size={20} />} onClick={onUseCamera}>{t.composer.useCamera}</Menu.Item>
+      <Menu.Item leftSection={<Files size={20} />} onClick={onChooseFiles} disabled={disabled}>{t.attachments.choose}</Menu.Item>
+      <Menu.Item leftSection={<Camera size={20} />} onClick={onUseCamera} disabled={disabled}>{t.composer.useCamera}</Menu.Item>
     </Menu.Dropdown>
   </Menu>;
 }
@@ -76,9 +71,10 @@ function scheduleFocusReturn(
 }
 
 type MessageComposerProps = {
-  attachment: MessageComposerAttachment | null;
-  canAttachImage: boolean;
-  sendingImage: boolean;
+  attachments: readonly ComposerAttachmentItem[];
+  canAttach: boolean;
+  sendingAttachments: boolean;
+  attachmentNotice?: string | null;
   isOnline: boolean;
   isWorking: boolean;
   stopping: boolean;
@@ -86,8 +82,9 @@ type MessageComposerProps = {
   onDraftChange: (value: string) => void;
   onSend: () => void | Promise<void>;
   onStop: () => void;
-  onSetAttachment: (source: Blob, label: string) => void;
-  onClearAttachment: () => void;
+  onAddFiles: (files: File[]) => void;
+  onRemoveAttachment: (id: string) => void;
+  onRetryAttachment: (id: string) => void;
   commandModels: WireModel[];
   commandCurrentModel: WireModel | null;
   commandCurrentModelFallback: string | null;
@@ -102,9 +99,10 @@ type MessageComposerProps = {
 };
 
 export function MessageComposer({
-  attachment,
-  canAttachImage,
-  sendingImage,
+  attachments,
+  canAttach,
+  sendingAttachments,
+  attachmentNotice,
   isOnline,
   isWorking,
   stopping,
@@ -112,8 +110,9 @@ export function MessageComposer({
   onDraftChange,
   onSend,
   onStop,
-  onSetAttachment,
-  onClearAttachment,
+  onAddFiles,
+  onRemoveAttachment,
+  onRetryAttachment,
   commandModels,
   commandCurrentModel,
   commandCurrentModelFallback,
@@ -228,12 +227,14 @@ export function MessageComposer({
     if (modelFocusFrameRef.current !== null) cancelAnimationFrame(modelFocusFrameRef.current);
   }, []);
 
-  const hasMessage = Boolean(draft.trim() || attachment);
+  const hasMessage = Boolean(draft.trim() || attachments.length);
   const showStop = isOnline && isWorking;
+  const addDisabled = !canAttach || sendingAttachments;
+  const notice = attachmentNotice || (!isOnline ? t.composer.sendAfterReconnect : null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (sendPendingRef.current) return;
+    if (sendPendingRef.current || !isOnline || showStop || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)) return;
     sendPendingRef.current = true;
     try {
       await onSend();
@@ -243,15 +244,15 @@ export function MessageComposer({
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const image = Array.from(event.clipboardData.files).find((file) => file.type.startsWith("image/"));
-    if (!image) return;
+    const files = Array.from(event.clipboardData.files);
+    if (!files.length || addDisabled) return;
     event.preventDefault();
-    onSetAttachment(image, image.name || t.composer.clipboardImage);
+    onAddFiles(files);
   };
 
   const useCamera = () => {
     setImageMenuOpened(false);
-    cameraInputRef.current?.click();
+    if (!addDisabled) cameraInputRef.current?.click();
   };
 
   const handleDraftChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -259,7 +260,7 @@ export function MessageComposer({
     onDraftChange(textarea.value);
     const inputEvent = event.nativeEvent;
     // 只识别开头实际键入的 /；粘贴、正文中的 / 和程序恢复的草稿不触发菜单。
-    if (commandMenuOpenRef.current || !isOnline || sendingImage || !(inputEvent instanceof InputEvent)
+    if (commandMenuOpenRef.current || !isOnline || sendingAttachments || !(inputEvent instanceof InputEvent)
       || inputEvent.isComposing || inputEvent.inputType !== "insertText" || inputEvent.data !== "/"
       || textarea.selectionStart !== 1 || textarea.selectionEnd !== 1) return;
     commandFocusOriginRef.current = "textarea";
@@ -345,27 +346,29 @@ export function MessageComposer({
 
   return (
     <form className="pwa-composer" onSubmit={handleSubmit}>
-      <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/png,image/jpeg,image/webp" capture="environment" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) onSetAttachment(file, file.name || t.composer.cameraImage); event.currentTarget.value = ""; }} />
+      <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/*" capture="environment" disabled={addDisabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file && !addDisabled) onAddFiles([file]); event.currentTarget.value = ""; }} />
       {queuedMessages}
+      {notice ? <p className="pwa-composer-hint" role="status">{notice}</p> : null}
+      <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
       <div className="pwa-composer-card">
-        {attachment ? <div className="pwa-composer-preview"><img src={attachment.previewUrl} alt={attachment.label} /><ActionIcon className="pwa-composer-remove" type="button" onClick={onClearAttachment} disabled={sendingImage} aria-label={t.composer.removeImage} title={t.composer.removeImage}><X size={16} /></ActionIcon></div> : null}
-        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onPaste={handlePaste} placeholder={t.composer.placeholder} disabled={sendingImage} rows={1} />
+        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onPaste={handlePaste} placeholder={t.composer.placeholder} disabled={sendingAttachments} rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">
             <div className="pwa-composer-menu">
               <FileButton
-                accept="image/png,image/jpeg,image/webp"
+                multiple
+                disabled={addDisabled}
                 inputProps={{ className: "pwa-image-input" }}
                 resetRef={resetRef}
-                onChange={(file) => {
-                  if (!file) return;
-                  onSetAttachment(file, file.name || t.composer.imageAttachment);
+                onChange={(files) => {
+                  if (!files.length || addDisabled) return;
+                  onAddFiles(files);
                   resetRef.current?.();
                 }}
               >
                 {({ onClick }) => (
-                  <ComposerImageMenu
-                    disabled={!canAttachImage}
+                  <ComposerAttachmentMenu
+                    disabled={addDisabled}
                     opened={menuOpen}
                     onChange={(opened) => {
                       if (opened) {
@@ -374,9 +377,9 @@ export function MessageComposer({
                       }
                       setImageMenuOpened(opened);
                     }}
-                    onChooseImage={() => {
+                    onChooseFiles={() => {
                       setImageMenuOpened(false);
-                      onClick();
+                      if (!addDisabled) onClick();
                     }}
                     onUseCamera={useCamera}
                     returnFocus={false}
@@ -439,11 +442,10 @@ export function MessageComposer({
                 />
               </Menu.Dropdown>
             </Menu> : null}
-            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" color="piReach" type="button" onClick={onStop} disabled={stopping} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="submit" disabled={!isOnline || sendingImage || !hasMessage || (attachment !== null && !canAttachImage)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
+            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" color="piReach" type="button" onClick={onStop} disabled={stopping} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="submit" disabled={!isOnline || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
           </div>
         </div>
       </div>
-      {!isOnline ? <p className="pwa-composer-hint" role="status">{t.composer.sendAfterReconnect}</p> : null}
     </form>
   );
 }

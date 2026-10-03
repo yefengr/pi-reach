@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
+import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, type AttachmentDescriptor, type AttachmentMetadata, type TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { getPwaDatabase, openPwaDatabase, type PwaTimelineEventRecord } from "./db";
+import { attachmentMessageKey, projectAttachmentMetadata } from "./timeline-attachments";
 import {
   clearScope,
   findTimelineConflict,
@@ -434,4 +435,46 @@ test.each([10, 1_000, 10_000])("keeps single-event merge reads bounded with %i s
 test("omits runtime identity from the persistent key", () => {
   expect(makeTimelineScopeId({ ...scope, leafId: null })).toBe(makeTimelineScopeId({ ...scope, leafId: "null" }));
   expect(makePwaTimelineEventId(scope, "event/1")).toBe("device:endpoint:session:event%2F1");
+});
+
+function attachmentDescriptor(attachmentId: string): AttachmentDescriptor {
+  return { attachment_id: attachmentId, file_name: `${attachmentId}.png`, mime_type: "image/png", byte_length: 4, sha256: "a".repeat(64) };
+}
+function attachmentMetadata(clientRequestId: string, text: string, attachmentId: string): AttachmentMetadata {
+  return { version: 1, client_request_id: clientRequestId, sender_ref: "owner", text, attachments: [attachmentDescriptor(attachmentId)] };
+}
+function customEvent(eventId: string, timestamp: number, payload: unknown): TimelineEvent {
+  return { event_id: eventId, session_id: scope.sessionId, leaf_id: scope.leafId, timestamp, kind: "custom", payload: payload as TimelineEvent extends { payload: infer P } ? P : never, truncated: false };
+}
+function metadataEvent(eventId: string, timestamp: number, value: AttachmentMetadata): TimelineEvent {
+  return customEvent(eventId, timestamp, { custom_type: ATTACHMENT_METADATA_TYPE, data: value });
+}
+function bindingEvent(eventId: string, timestamp: number, clientRequestId: string, messageId: string): TimelineEvent {
+  return customEvent(eventId, timestamp, { custom_type: ATTACHMENT_MESSAGE_TYPE, data: { version: 1, client_request_id: clientRequestId, sender_ref: "owner", message_id: messageId } });
+}
+function attachmentUserEvent(messageId: string, leafId: string, timestamp: number): UserTimelineEvent {
+  return { event_id: messageId, message_id: messageId, session_id: scope.sessionId, leaf_id: leafId, timestamp, group_id: "group", kind: "user", blocks: [{ type: "text", text: messageId }], origin: "pwa", delivery: "normal", status: "committed", sender_ref: "owner" };
+}
+
+test("roundtrips attachment metadata and bindings across leaves and pages into projected messages", async () => {
+  const firstLeaf = { ...scope, leafId: "first-leaf" };
+  const secondLeaf = { ...scope, leafId: "second-leaf" };
+  const first = attachmentMetadata("req-a", "first", "a1");
+  const second = attachmentMetadata("req-b", "second", "b1");
+  // 分页式多次写入，且 metadata / binding / user 分处不同 leaf，重载后仍应各自关联。
+  await mergeTimelineEvents(firstLeaf, [metadataEvent("meta-a", 1, first)]);
+  await mergeTimelineEvents(secondLeaf, [metadataEvent("meta-b", 2, second)]);
+  await mergeTimelineEvents(firstLeaf, [attachmentUserEvent("msg-a", firstLeaf.leafId, 3), bindingEvent("bind-a", 4, "req-a", "msg-a")]);
+  await mergeTimelineEvents(secondLeaf, [attachmentUserEvent("msg-b", secondLeaf.leafId, 5), bindingEvent("bind-b", 6, "req-b", "msg-b")]);
+
+  getPwaDatabase().close();
+  await openPwaDatabase();
+
+  const reloaded = await loadTimeline(scope);
+  expect(reloaded.map((event) => event.event_id)).toEqual(["meta-a", "meta-b", "msg-a", "bind-a", "msg-b", "bind-b"]);
+  const projection = projectAttachmentMetadata(reloaded.map((event) => ({ kind: "event" as const, event })));
+  expect(projection.requests.size).toBe(2);
+  expect(projection.messages.size).toBe(2);
+  expect(projection.messages.get(attachmentMessageKey(scope.sessionId, "msg-a"))).toEqual(first);
+  expect(projection.messages.get(attachmentMessageKey(scope.sessionId, "msg-b"))).toEqual(second);
 });

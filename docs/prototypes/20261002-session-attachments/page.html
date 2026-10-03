@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-viewport="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会话附件 · Pi Reach 评审原型</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<!-- 评审工具条：仅用于驱动模拟状态，不属于产品页面 -->
+<header class="review-bar" aria-label="评审工具条">
+  <span class="rb-brand"><img src="../../../pwa/public/logo.svg" alt="">Pi Reach · 会话附件</span>
+  <span class="rb-tag">评审中</span>
+  <span class="rb-tag">新 UI 方案未确认</span>
+  <span class="rb-note">文件、进度与回复均为模拟</span>
+
+  <div class="rb-controls">
+    <span class="rb-group">
+      <label class="rb-label" for="scenario">场景</label>
+      <select id="scenario">
+        <option value="draft">草稿（默认）</option>
+        <option value="uploading">上传中</option>
+        <option value="disconnected">连接中断</option>
+        <option value="failed">上传失败</option>
+        <option value="sent">已发送</option>
+        <option value="legacy">旧扩展（仅文字）</option>
+        <option value="many">多附件（10 个）</option>
+      </select>
+    </span>
+
+    <span class="rb-group">
+      <label class="rb-label" for="placement">附件位置</label>
+      <select id="placement"><option value="inside">A · 输入框内</option><option value="outside">B · 输入框外</option></select>
+    </span>
+
+    <span class="rb-group" role="group" aria-label="预览视口">
+      <span class="rb-seg">
+        <button type="button" data-vp="desktop" aria-pressed="false">桌面</button>
+        <button type="button" data-vp="auto" aria-pressed="true">自适应</button>
+        <button type="button" data-vp="mobile" aria-pressed="false">手机</button>
+      </span>
+    </span>
+
+    <span class="rb-group" role="group" aria-label="模拟上传控制">
+      <button type="button" class="rb-btn" id="sim-complete" disabled>模拟上传完成</button>
+      <button type="button" class="rb-btn" id="sim-offline" disabled>模拟断线</button>
+      <button type="button" class="rb-btn" id="sim-fail" disabled>模拟失败</button>
+    </span>
+
+    <button type="button" class="rb-btn" id="toolbar-switch-session">切换会话</button>
+    <button type="button" class="rb-btn icon-only" id="theme-toggle" aria-label="切换到深色外观">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+    </button>
+    <button type="button" class="rb-btn icon-only" id="reset-demo" aria-label="重置演示">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+    </button>
+  </div>
+  <p class="rb-note" id="review-feedback" role="status" hidden></p>
+</header>
+
+<main class="stage">
+  <!-- 产品外壳：单页只呈现一个工作区 -->
+  <div class="app-frame" id="app-frame">
+    <aside class="app-sidebar" aria-label="会话导航">
+      <div class="sb-head"><img src="../../../pwa/public/logo.svg" alt="">Pi Reach</div>
+      <nav class="sb-section" aria-label="在线 Pi">
+        <p class="sb-label">在线 Pi</p>
+        <button type="button" class="pi-row" data-pi="main" aria-current="true">
+          <span class="pi-dot"></span>
+          <span class="pi-txt"><span class="pi-name">会话附件上传排查</span><span class="pi-sub">~/Code/pi-reach · 运行中</span></span>
+        </button>
+        <button type="button" class="pi-row" data-pi="other" aria-current="false">
+          <span class="pi-dot off"></span>
+          <span class="pi-txt"><span class="pi-name">另一个在线 Pi</span><span class="pi-sub">~/Code/demo · 空闲</span></span>
+        </button>
+      </nav>
+      <p class="sb-foot">设置与模型管理不在本次评审范围，仅只读展示。</p>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-topbar">
+        <button type="button" class="icon-btn nav-toggle" id="nav-toggle" aria-label="打开会话导航" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <h1 class="tb-title" id="session-title">会话附件上传排查</h1>
+        <span class="tb-status"><span class="pi-dot"></span>在线</span>
+      </header>
+
+      <div class="app-scroll">
+        <div class="scroll-inner" id="messages"></div>
+      </div>
+
+      <div class="composer-wrap">
+        <div class="composer-stack" id="composer-stack">
+        <p class="composer-notice" id="composer-notice" role="status" hidden></p>
+        <form class="composer" id="composer" novalidate>
+          <div class="attachment-zone" id="attachment-zone">
+          <section class="up-panel" id="upload-panel" aria-label="附件上传状态" hidden></section>
+
+          <div class="att-wrap">
+            <div class="att-list" id="attachments"></div>
+            <button type="button" class="att-toggle" id="expand-toggle" hidden>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              <span id="expand-label">展开全部</span>
+            </button>
+          </div>
+
+          </div>
+
+          <label class="sr-only" for="composer-input">消息输入</label>
+          <textarea id="composer-input" rows="2" placeholder="向 Pi 发送消息…"></textarea>
+
+          <div class="composer-actions">
+            <button type="button" class="icon-btn" id="attach-button" aria-label="添加附件（模拟）" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <button type="button" class="icon-btn" id="command-button" aria-label="斜杠命令入口（本次评审未覆盖）">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 2 22"/></svg>
+            </button>
+
+            <div class="menu" id="attach-menu" role="menu" aria-label="添加附件（模拟）" hidden>
+              <p class="menu-title">模拟操作，不调用真实文件或摄像头</p>
+              <button type="button" role="menuitem" id="menu-sample">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M9 9h.01"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.83 0L6 21"/></svg>
+                选择示例文件
+              </button>
+              <button type="button" role="menuitem" id="menu-camera">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
+                模拟拍照
+              </button>
+            </div>
+
+            <span class="model-label" id="model-label" title="模型标签在本原型中为只读展示">默认模型 · 思考 中</span>
+            <button type="submit" class="send-btn" id="send" aria-label="发送">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+            </button>
+          </div>
+        </form>
+        </div>
+
+        <div class="switched-note" id="switched-note" hidden>
+          <p>已切换到「另一个在线 Pi」（模拟）。原会话草稿仍保留在原会话，不会转投到新会话。</p>
+          <button type="button" class="btn primary" id="restore-draft">返回原会话草稿</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页内可收起的评审说明 -->
+  <details class="review-notes" id="review-notes">
+    <summary>评审说明</summary>
+    <ul>
+      <li>本原型只评审会话附件流程与交互；新 UI 方案尚未确认，不代表已批准的实现。</li>
+      <li>沿用 docs/DESIGN.md 当前中性灰加雾蓝 <code>#446396</code>、系统字体、字重 400/600、圆角与 768px 断点。</li>
+      <li>真实上传、权限校验、断点续传、磁盘空间保护、模型能力与真机键盘均未实现或未验证；上传进度为固定模拟快照。</li>
+      <li>内置与外置版使用相同的紧凑卡片，仅对比附件区位置。提示统一在输入框外、附件区上方；无提示不占位，不显示消息区与输入区之间的分隔线。</li>
+      <li>仅上传中显示逐文件进度；成功只保留勾选标记，失败只显示短原因。常规卡片约 58px 高，按钮点击区域保持 44px，长错误允许换行。</li>
+      <li>文件右侧 × 仅展示取消入口；点击只提示行为待确认，不移除文件、不改变发送意图。↻ 模拟重试当前失败文件；断线恢复仍是连接级动作，由评审工具条模拟。</li>
+      <li>本页中文是本次评审语言，正式实现需中英双语。</li>
+      <li>设置与模型管理不在本次评审范围，页面内仅作只读展示。</li>
+    </ul>
+  </details>
+</main>
+
+<div id="live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+<!-- 移动导航（原生 dialog 提供焦点陷阱） -->
+<dialog id="nav-dialog" class="nav-dialog" aria-labelledby="nav-title">
+  <div class="nav-head">
+    <h2 id="nav-title">会话</h2>
+    <button type="button" class="icon-btn" id="nav-close" aria-label="关闭导航">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
+  <div class="nav-list">
+    <button type="button" class="pi-row" data-pi="main" aria-current="true">
+      <span class="pi-dot"></span>
+      <span class="pi-txt"><span class="pi-name">会话附件上传排查</span><span class="pi-sub">~/Code/pi-reach · 运行中</span></span>
+    </button>
+    <button type="button" class="pi-row" data-pi="other" aria-current="false">
+      <span class="pi-dot off"></span>
+      <span class="pi-txt"><span class="pi-name">另一个在线 Pi</span><span class="pi-sub">~/Code/demo · 空闲</span></span>
+    </button>
+  </div>
+  <p class="nav-note">设置与管理入口不在本次评审范围。</p>
+</dialog>
+
+<!-- 切换确认（上传中） -->
+<dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
+  <h2 class="dlg-title" id="confirm-title">取消本次发送并切换？</h2>
+  <p class="dlg-body" id="confirm-desc">当前有附件正在上传。切换会话会取消本次发送，已上传的临时数据将被丢弃；原会话草稿会保留，返回后可恢复。</p>
+  <div class="dlg-actions">
+    <button type="button" class="btn quiet" id="confirm-stay">留在当前</button>
+    <button type="button" class="btn primary" id="confirm-switch">取消并切换</button>
+  </div>
+</dialog>
+
+<script src="shared.js"></script>
+</body>
+</html>

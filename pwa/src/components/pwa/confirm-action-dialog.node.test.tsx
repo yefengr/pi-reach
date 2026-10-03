@@ -91,6 +91,21 @@ test("renders each confirmation action as an accessible Mantine modal", () => {
   }
 });
 
+test("renders attachment leave copy and invokes navigation only after confirmation", async () => {
+  const html = render({ kind: "leave-attachments" });
+  expect(html).toContain("Stop sending attachments?");
+  expect(html).toContain("Keep sending");
+  expect(html).toContain("Stop and switch");
+  expect(html).toContain("draft stays with the original Pi");
+  const harness = actionHarness();
+  let navigation = 0;
+  const action = { kind: "leave-attachments" as const, next: () => { navigation++; } };
+  expect(navigation).toBe(0);
+  expect(await runConfirmAction(action, harness.effects, harness.state)).toBe("completed");
+  expect(navigation).toBe(1);
+  expect(harness.successes()).toBe(1);
+});
+
 test("uses a primary confirmation for a new session and a solid danger confirmation for destructive actions", () => {
   const newSessionConfirm = confirmButton(render({ kind: "new-session" }));
   expect(newSessionConfirm).toMatch(/data-variant="filled"/);
