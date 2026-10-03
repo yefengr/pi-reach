@@ -59,6 +59,7 @@ interface Upload {
   tail: Promise<void>;
   pending: number;
   cleanupTask?: Promise<void>;
+  cleanupFailure?: AttachmentStoreError;
 }
 
 function freezeDescriptor(descriptor: AttachmentDescriptor): AttachmentDescriptor {
@@ -75,7 +76,6 @@ export class AttachmentStore {
   private readonly metadataLimit: number;
   private readonly ownerPending = new Map<string, number>();
   private readonly cleanups = new Set<Promise<void>>();
-  private cleanupFailure?: AttachmentStoreError;
   private sessionId?: string;
   private lease?: string;
   private disposed = false;
@@ -103,11 +103,11 @@ export class AttachmentStore {
     if (this.disposed || !idSchema.safeParse(sessionId).success) throw new AttachmentStoreError("invalid_scope");
     this.sessionId = sessionId;
     this.lease = randomUUID();
-    const previous = this.uploads;
     this.uploads = new Map();
     this.byAttachment = new Map();
-    for (const entry of previous.values()) {
-      if (!isUpload(entry) || entry.retained) continue;
+    // 索引只覆盖当前租约；此前失败的清理仍在资源集合中，后续 reset 也须重试。
+    for (const entry of this.resources) {
+      if (entry.retained) continue;
       entry.cancelled = true;
       void this.scheduleCleanup(entry).catch(() => undefined);
     }
@@ -263,7 +263,7 @@ export class AttachmentStore {
       } catch (error) {
         const failure = storeError(error);
         upload.failure = failure;
-        try { await this.cleanup(upload); } catch (cleanupError) { this.cleanupFailure = storeError(cleanupError); }
+        try { await this.cleanup(upload); } catch { upload.cancelled = true; }
         if (!upload.cancelled && this.uploads.get(key) === upload) this.uploads.delete(key);
         throw failure;
       }
@@ -429,9 +429,7 @@ export class AttachmentStore {
     if (upload.retained) return;
     let failure: AttachmentStoreError | undefined;
     const attempt = async (operation: () => Promise<void>) => {
-      try { await operation(); } catch (error) {
-        if (!nodeErrorHasCode(error, "ENOENT")) failure ??= storeError(error);
-      }
+      try { await operation(); } catch (error) { failure ??= storeError(error); }
     };
     try {
       // stat 初始化失败仍必须关句柄；只有能证明 inode 所有权时才删除路径。
@@ -442,41 +440,53 @@ export class AttachmentStore {
           upload.device = stat.dev;
         });
       }
-      if (upload.path && upload.inode !== undefined) {
+      if (upload.path) {
         await attempt(async () => {
-          assertDirectories(dirname(upload.path!));
-          const stat = assertRegularFile(upload.path!);
-          if (stat.ino !== upload.inode || stat.dev !== upload.device || stat.nlink !== 1) {
-            throw new AttachmentStoreError("invalid_upload");
+          if (upload.inode === undefined) throw new AttachmentStoreError("invalid_upload");
+          try {
+            assertDirectories(dirname(upload.path!));
+            const stat = assertRegularFile(upload.path!);
+            if (stat.ino !== upload.inode || stat.dev !== upload.device || stat.nlink !== 1) {
+              throw new AttachmentStoreError("invalid_upload");
+            }
+            await unlink(upload.path!);
+          } catch (error) {
+            if (!nodeErrorHasCode(error, "ENOENT")) throw error;
           }
-          await unlink(upload.path!);
           upload.path = undefined;
         });
       }
     } finally {
       if (upload.handle) {
-        const handle = upload.handle;
-        upload.handle = undefined;
-        await attempt(() => handle.close());
+        await attempt(async () => {
+          await upload.handle!.close();
+          upload.handle = undefined;
+        });
       }
-      await attempt(async () => { await upload.reservation?.remove(); });
-      this.resources.delete(upload);
-      if (upload.descriptor && this.byAttachment.get(upload.descriptor.attachment_id) === upload) {
-        this.byAttachment.delete(upload.descriptor.attachment_id);
-      }
-      if (upload.cancelled && this.uploads.get(upload.key) === upload) {
-        this.uploads.set(upload.key, { scope: upload.scope, cancelled: true, received: upload.received,
-          ...(upload.descriptor ? { attachmentId: upload.descriptor.attachment_id } : {}) });
-      }
+      await attempt(async () => {
+        await upload.reservation?.remove();
+        upload.reservation = undefined;
+      });
     }
+    // 失败仍占有界资源预算；仅完整释放后提交成功墓碑并撤销该资源的旧错误。
+    upload.cleanupFailure = failure;
     if (failure) throw failure;
+    this.resources.delete(upload);
+    if (upload.descriptor && this.byAttachment.get(upload.descriptor.attachment_id) === upload) {
+      this.byAttachment.delete(upload.descriptor.attachment_id);
+    }
+    if (upload.cancelled && this.uploads.get(upload.key) === upload) {
+      this.uploads.set(upload.key, { scope: upload.scope, cancelled: true, received: upload.received,
+        ...(upload.descriptor ? { attachmentId: upload.descriptor.attachment_id } : {}) });
+    }
   }
 
   private scheduleCleanup(upload: Upload): Promise<void> {
     if (upload.cleanupTask) return upload.cleanupTask;
-    const task = this.enqueue(upload, () => this.cleanup(upload), true);
+    const task = this.enqueue(upload, () => this.cleanup(upload), true)
+      .finally(() => { upload.cleanupTask = undefined; });
     upload.cleanupTask = task;
-    const observed = task.catch((error: unknown) => { this.cleanupFailure = storeError(error); });
+    const observed = task.catch(() => undefined);
     this.cleanups.add(observed);
     void observed.then(() => this.cleanups.delete(observed));
     return task;
@@ -489,11 +499,12 @@ export class AttachmentStore {
       upload.cancelled = true;
       void this.scheduleCleanup(upload).catch(() => undefined);
     }
-    this.uploads.clear();
-    this.byAttachment.clear();
     this.disposing = (async () => {
       await Promise.all([...this.cleanups]);
-      if (this.cleanupFailure) throw this.cleanupFailure;
+      const failure = [...this.resources].find((upload) => upload.cleanupFailure)?.cleanupFailure;
+      if (failure) throw failure;
+      this.uploads.clear();
+      this.byAttachment.clear();
     })();
     return this.disposing;
   }

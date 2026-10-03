@@ -2535,7 +2535,7 @@ test("queued cancellation restores a released descriptor and removal discards th
     if (message.type !== "user_message") throw new Error("missing attachment handoff");
     const attachmentId = message.attachment_ids![0];
     expect(channelHarness.uploads.size).toBe(1);
-    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-card")).toHaveLength(0);
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
     channel.emit(queuedStateFrame([{ id: message.client_request_id, text: message.text }], "queue-before-cancel"));
     await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
     channel.emit(queuedStateFrame([], "queue-after-cancel"));
@@ -2548,7 +2548,7 @@ test("queued cancellation restores a released descriptor and removal discards th
     })]);
     expect(channel.frames.some((frame) => frame.type === "attachment_cancel")).toBe(false);
     expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
-    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-card")).toHaveLength(0);
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
   } finally { await screen.unmount(); }
 });
 
