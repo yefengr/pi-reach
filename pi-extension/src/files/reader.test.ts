@@ -81,15 +81,18 @@ describe.skipIf(!["darwin", "linux"].includes(process.platform))("FileReaderRunt
   it.each([0, FILE_CHUNK_BYTES, FILE_CHUNK_BYTES + 7, FILE_MAX_BYTES])("streams %i bytes with continuous offsets, canonical frames, and final digest", async (length) => {
     const bytes = Buffer.alloc(length, 0x61);
     await fs.writeFile(path, bytes);
-    const reader = runtime();
+    const resolve = vi.fn(() => ({ sourcePath: path }));
+    const reader = runtime({ resolve });
     const initial = await opened(reader);
     expect(initial).toMatchObject({ file_name: "file.md", mime_type: "text/markdown", byte_length: length, preview: { kind: "text" } });
     expect(serverFrameSchema.safeParse(initial).success).toBe(true);
     const hash = createHash("sha256");
     let offset = 0;
     for (;;) {
+      resolve.mockClear();
       const chunk = await reader.handle(readFrame(initial, offset), scope);
       expect(chunk.type).toBe("file_chunk");
+      expect(resolve).toHaveBeenCalledTimes(2);
       if (chunk.type !== "file_chunk") break;
       expect(serverFrameSchema.safeParse(chunk).success).toBe(true);
       expect(chunk.offset).toBe(offset);
@@ -108,6 +111,47 @@ describe.skipIf(!["darwin", "linux"].includes(process.platform))("FileReaderRunt
     await expect(handles[0]!.stat()).rejects.toMatchObject({ code: "EBADF" });
     expect(await reader.handle(readFrame(initial, offset), scope)).toMatchObject({ type: "file_error", code: "invalid_transfer" });
   }, 60_000);
+
+  it("bounds publication checks independently of path depth and short reads", async () => {
+    path = join(directory, "one", "two", "three", "four", "file.md");
+    await fs.mkdir(join(directory, "one", "two", "three", "four"), { recursive: true });
+    const bytes = Buffer.alloc(FILE_CHUNK_BYTES + 7, 0x61);
+    await fs.writeFile(path, bytes);
+    const resolve = vi.fn(() => ({ sourcePath: path }));
+    const reader = runtime({ resolve }); const initial = await opened(reader);
+    const actualRead = handles[0]!.read.bind(handles[0]!);
+    const read = vi.spyOn(handles[0]!, "read").mockImplementation(async (...args: Parameters<FileHandle["read"]>) => {
+      args[2] = Math.min(args[2]!, 257);
+      return actualRead(...args);
+    });
+    const received: Buffer[] = [];
+    for (const offset of [0, FILE_CHUNK_BYTES]) {
+      resolve.mockClear(); read.mockClear();
+      const response = await reader.handle(readFrame(initial, offset), scope);
+      expect(response.type).toBe("file_chunk");
+      expect(resolve).toHaveBeenCalledTimes(2);
+      expect(read).toHaveBeenCalledTimes(Math.ceil(Math.min(FILE_CHUNK_BYTES, bytes.length - offset) / 257));
+      if (response.type !== "file_chunk") throw new Error("read failed");
+      received.push(Buffer.from(response.data_base64, "base64"));
+      expect(response.final).toBe(offset === FILE_CHUNK_BYTES);
+      if (response.final) expect(response.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    }
+    expect(Buffer.concat(received)).toEqual(bytes);
+    await drained(reader);
+    await expect(handles[0]!.stat()).rejects.toMatchObject({ code: "EBADF" });
+  });
+
+  it.each(["missing", "path"] as const)("rejects an ineligible read at entry without reading: %s", async (change) => {
+    let publication: { sourcePath: string } | null = { sourcePath: path };
+    const reader = runtime({ resolve: () => publication }); const initial = await opened(reader);
+    const read = vi.spyOn(handles[0]!, "read");
+    publication = change === "missing" ? null : { sourcePath: `${path}.different` };
+    expect(await reader.handle(readFrame(initial), scope)).toMatchObject({ type: "file_error",
+      code: change === "missing" ? "not_available" : "file_changed" });
+    expect(read).not.toHaveBeenCalled();
+    await drained(reader);
+    await expect(handles[0]!.stat()).rejects.toMatchObject({ code: "EBADF" });
+  });
 
   it("rejects oversized originals before inspection and does not modify them", async () => {
     const handle = await fs.open(path, "r+");
@@ -231,6 +275,28 @@ describe.skipIf(!["darwin", "linux"].includes(process.platform))("FileReaderRunt
     expect(await reader.handle(readFrame(initial), scope)).toMatchObject({ type: "file_error",
       code: change === "missing" ? "not_available" : change === "path" ? "file_changed" : "invalid_transfer" });
     await drained(reader);
+    await expect(handles[0]!.stat()).rejects.toMatchObject({ code: "EBADF" });
+  });
+
+  it.each(["missing", "path", "scope"] as const)("rejects eligibility lost while a non-final read is awaiting I/O: %s", async (change) => {
+    await fs.writeFile(path, Buffer.alloc(FILE_CHUNK_BYTES + 7, 0x61));
+    let publication: { sourcePath: string } | null = { sourcePath: path }; let current = true;
+    const reader = runtime({ resolve: () => publication, isCurrent: () => current }); const initial = await opened(reader);
+    const gate = deferred(); const started = deferred();
+    const actualRead = handles[0]!.read.bind(handles[0]!);
+    vi.spyOn(handles[0]!, "read").mockImplementationOnce(async (...args: Parameters<FileHandle["read"]>) => {
+      const result = await actualRead(...args); started.resolve(); await gate.promise; return result;
+    });
+    const pending = reader.handle(readFrame(initial), scope);
+    await started.promise;
+    if (change === "missing") publication = null;
+    if (change === "path") publication = { sourcePath: `${path}.different` };
+    if (change === "scope") current = false;
+    gate.resolve();
+    expect(await pending).toMatchObject({ type: "file_error",
+      code: change === "missing" ? "not_available" : change === "path" ? "file_changed" : "invalid_transfer" });
+    await drained(reader);
+    await expect(handles[0]!.stat()).rejects.toMatchObject({ code: "EBADF" });
   });
 
   it("does not emit a final chunk before a successful close and retains failed closes for retry", async () => {
@@ -296,21 +362,26 @@ describe.skipIf(!["darwin", "linux"].includes(process.platform))("FileReaderRunt
     gate.resolve(); await drained(reader);
   });
 
-  it("keeps a final chunk pending until close succeeds and rechecks scope after close", async () => {
-    let current = true;
-    const reader = runtime({ isCurrent: () => current }); const initial = await opened(reader);
+  it.each(["missing", "path", "scope"] as const)("keeps a final chunk pending until close succeeds and rechecks eligibility after close: %s", async (change) => {
+    let current = true; let publication: { sourcePath: string } | null = { sourcePath: path };
+    const reader = runtime({ resolve: () => publication, isCurrent: () => current }); const initial = await opened(reader);
     const gate = deferred(); const started = deferred();
     const actualClose = handles[0]!.close.bind(handles[0]!);
     vi.spyOn(handles[0]!, "close").mockImplementationOnce(async () => {
-      started.resolve(); await gate.promise; await actualClose(); current = false;
+      started.resolve(); await gate.promise; await actualClose();
     });
     let settled = false;
     const pending = reader.handle(readFrame(initial), scope).then((response) => { settled = true; return response; });
     await started.promise;
     expect(settled).toBe(false); expect(reader.resourceCount).toBe(1);
+    if (change === "missing") publication = null;
+    if (change === "path") publication = { sourcePath: `${path}.different` };
+    if (change === "scope") current = false;
     gate.resolve();
-    expect(await pending).toMatchObject({ type: "file_error", code: "invalid_transfer" });
+    expect(await pending).toMatchObject({ type: "file_error",
+      code: change === "missing" ? "not_available" : change === "path" ? "file_changed" : "invalid_transfer" });
     await drained(reader);
+    await expect(handles[0]!.stat()).rejects.toMatchObject({ code: "EBADF" });
   });
 
   it("rejects content changed by an awaited read before sending even a non-final chunk", async () => {

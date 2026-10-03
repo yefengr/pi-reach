@@ -125,12 +125,12 @@ export class FileReaderRuntime {
     if (!resource.path) resource.path = publication.sourcePath;
   }
 
-  private async checked<T>(resource: Resource, operation: () => Promise<T>): Promise<T> {
-    await this.eligible(resource);
+  private async checked<T>(resource: Resource, operation: () => Promise<T>, policy: "publication" | "scope" = "publication"): Promise<T> {
+    if (policy === "publication") await this.eligible(resource);
     this.assertCurrent(resource);
     const result = await operation();
     this.assertCurrent(resource);
-    await this.eligible(resource);
+    if (policy === "publication") await this.eligible(resource);
     return result;
   }
 
@@ -267,22 +267,22 @@ export class FileReaderRuntime {
     } finally { await this.finish(resource); }
   }
 
-  private async verify(resource: Resource): Promise<void> {
-    const current = await this.checked(resource, () => resource.handle!.stat({ bigint: true }));
+  private async verify(resource: Resource, policy: "publication" | "scope" = "publication"): Promise<void> {
+    const current = await this.checked(resource, () => resource.handle!.stat({ bigint: true }), policy);
     if (!sameFile(resource.stat!, current)) throw new FileAccessError("file_changed");
     // 对父路径逐层拒绝后来引入的链接；同一句柄属性检查不能替代路径身份检查。
     let parent = dirname(resource.path!);
     const root = parse(parent).root;
     while (true) {
-      const stat = await this.checked(resource, () => lstat(parent, { bigint: true }));
+      const stat = await this.checked(resource, () => lstat(parent, { bigint: true }), policy);
       if (!stat.isDirectory() || stat.isSymbolicLink()) throw new FileAccessError("file_changed");
       if (parent === root) break;
       parent = dirname(parent);
     }
     try {
-      const atPath = await this.checked(resource, () => lstat(resource.path!, { bigint: true }));
+      const atPath = await this.checked(resource, () => lstat(resource.path!, { bigint: true }), policy);
       if (atPath.isSymbolicLink() || !sameFile(resource.stat!, atPath)) throw new FileAccessError("file_changed");
-      const canonical = await this.checked(resource, () => realpath(resource.path!));
+      const canonical = await this.checked(resource, () => realpath(resource.path!), policy);
       if (canonical !== resource.path) throw new FileAccessError("file_changed");
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && ["ENOENT", "ENOTDIR", "ELOOP"].includes(String(error.code))) {
@@ -294,6 +294,8 @@ export class FileReaderRuntime {
 
   private async readTask(resource: Resource, frame: Extract<Request, { type: "file_read" }>, scope: FileScope): Promise<Response> {
     try {
+      // 分支发布索引只在请求入口和响应出口重建；底层 I/O 仍逐次检查 scope 和磁盘身份。
+      await this.eligible(resource);
       const response = await this.read(resource, frame, scope);
       if (response.type !== "file_error") await this.eligible(resource);
       return response;
@@ -305,23 +307,23 @@ export class FileReaderRuntime {
 
   private async read(resource: Resource, frame: Extract<Request, { type: "file_read" }>, scope: FileScope): Promise<Response> {
     try {
-      await this.verify(resource);
+      await this.verify(resource, "scope");
       const total = Number(resource.stat!.size);
       const data = Buffer.alloc(Math.min(FILE_CHUNK_BYTES, total - resource.offset));
       let count = 0;
       while (count < data.length) {
-        const result = await this.checked(resource, () => resource.handle!.read(data, count, data.length - count, resource.offset + count));
+        const result = await this.checked(resource, () => resource.handle!.read(data, count, data.length - count, resource.offset + count), "scope");
         if (!result.bytesRead) throw new FileAccessError("file_changed");
         count += result.bytesRead;
       }
-      await this.verify(resource);
+      await this.verify(resource, "scope");
       resource.hash.update(data);
       resource.offset += data.length;
       const common = { ...this.reply(frame, scope), type: "file_chunk" as const, transfer_id: resource.transferId,
         offset: frame.offset, data_base64: data.toString("base64") };
       if (resource.offset !== total) return { ...common, final: false };
       const sha256 = resource.hash.digest("hex");
-      await this.checked(resource, () => this.closeHandle(resource));
+      await this.checked(resource, () => this.closeHandle(resource), "scope");
       this.assertCurrent(resource);
       return { ...common, final: true, total_bytes: total, sha256 };
     } catch (error) {
