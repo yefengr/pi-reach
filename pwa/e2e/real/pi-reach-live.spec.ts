@@ -238,13 +238,18 @@ async function attachTrace(context: BrowserContext, name: string, testInfo: Test
   await testInfo.attach(`${name}-trace`, { path, contentType: "application/zip" });
 }
 
-async function originalDigests(sessionId: string): Promise<Array<{ size: number; sha256: string }>> {
+async function originalDigests(): Promise<Array<{ size: number; sha256: string }>> {
+  // 日期目录不再表达会话归属；隔离容器中比较上传前后快照，保留旧卷内容。
   const script = `const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-    const directory=path.join('/home/pi/.pi/pi-reach/attachments',crypto.createHash('sha256').update(process.argv[1]).digest('hex'));
-    const entries=fs.existsSync(directory)?fs.readdirSync(directory).filter(name=>name.endsWith('.bin')):[];
-    console.log(JSON.stringify(entries.map(name=>{const bytes=fs.readFileSync(path.join(directory,name));
+    const root='/home/pi/.pi/pi-reach/attachments',files=[];
+    if(fs.existsSync(root))for(const date of fs.readdirSync(root).sort()){
+      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))continue;
+      const directory=path.join(root,date);
+      for(const id of fs.readdirSync(directory).sort())for(const name of fs.readdirSync(path.join(directory,id)).sort()){
+        const file=path.join(directory,id,name);if(fs.lstatSync(file).isFile())files.push(file);}}
+    console.log(JSON.stringify(files.map(file=>{const bytes=fs.readFileSync(file);
       return {size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')};})));`;
-  return JSON.parse(await runCompose(["exec", "-T", "interactive", "node", "-e", script, sessionId])) as Array<{ size: number; sha256: string }>;
+  return JSON.parse(await runCompose(["exec", "-T", "interactive", "node", "-e", script])) as Array<{ size: number; sha256: string }>;
 }
 
 async function nativeManifestMatches(sessionId: string, expected: Array<{ name: string; size: number; sha256: string }>): Promise<boolean> {
@@ -260,10 +265,13 @@ async function nativeManifestMatches(sessionId: string, expected: Array<{ name: 
     const blocks=typeof user?.content==='string'?[{type:'text',text:user.content}]:user?.content??[];
     const manifest=blocks.filter(block=>block.type==='text').flatMap(block=>block.text.split('\\n')).flatMap(line=>{
       try{const item=JSON.parse(line);return item&&typeof item.path==='string'?[item]:[];}catch{return [];}});
-    const directory=path.join('/home/pi/.pi/pi-reach/attachments',crypto.createHash('sha256').update(sessionId).digest('hex'));
+    const directory='/home/pi/.pi/pi-reach/attachments';
     const matches=blocks.every(block=>block.type==='text')&&manifest.length===expected.length&&expected.every(item=>{
       const file=manifest.find(file=>file.file_name===item.name);
-      if(!file||file.byte_length!==item.size||path.dirname(file.path)!==directory||!fs.lstatSync(file.path).isFile())return false;
+      if(!file||file.byte_length!==item.size)return false;
+      const parts=path.relative(directory,file.path).split(path.sep);
+      if(parts.length!==3||!/^\\d{4}-\\d{2}-\\d{2}$/.test(parts[0])||
+        !/^[0-9a-f-]{36}$/.test(parts[1])||parts[2]!==item.name||!fs.lstatSync(file.path).isFile())return false;
       const bytes=fs.readFileSync(file.path);return bytes.length===item.size&&crypto.createHash('sha256').update(bytes).digest('hex')===item.sha256;});
     console.log(JSON.stringify(matches));`;
   return JSON.parse(await runCompose(["exec", "-T", "interactive", "node", "-e", script, sessionId, JSON.stringify(expected)])) as boolean;
@@ -285,7 +293,7 @@ async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: str
     { name: "empty-original.txt", mimeType: "text/plain", buffer: Buffer.alloc(0) },
     { name: "image-original.png", mimeType: "image/png", buffer: png },
   ];
-  const before = await originalDigests(sessionId);
+  const before = await originalDigests();
   await expect(page.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
   // 通用输入与相机分开；选择原件不触发网络上传。
   await page.locator('.pwa-composer input[type="file"]:not([capture])').setInputFiles([
@@ -294,11 +302,11 @@ async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: str
   ]);
   await page.getByRole("button", { name: "Show all (4)", exact: true }).click();
   await page.getByRole("button", { name: "Remove removed-before-send.txt", exact: true }).click();
-  expect(await originalDigests(sessionId)).toEqual(before);
+  expect(await originalDigests()).toEqual(before);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
-  await expect.poll(async () => (await originalDigests(sessionId)).length, { timeout: 60_000 }).toBe(before.length + originals.length);
+  await expect.poll(async () => (await originalDigests()).length, { timeout: 60_000 }).toBe(before.length + originals.length);
   const expected = originals.map(({ buffer }) => ({ size: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex") }));
-  await expect.poll(() => originalDigests(sessionId), { timeout: 60_000 }).toEqual(expect.arrayContaining(expected));
+  await expect.poll(() => originalDigests(), { timeout: 60_000 }).toEqual(expect.arrayContaining(expected));
   for (const owner of [page, otherOwner]) {
     await expect(owner.locator('.pwa-message.user').filter({ hasText: "binary-original.bin" }).first()).toBeVisible({ timeout: 60_000 });
     await expect(owner.locator('.pwa-message.user:not(.pending) .pwa-attachment-card')).toHaveCount(originals.length);

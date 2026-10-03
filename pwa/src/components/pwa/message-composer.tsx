@@ -256,6 +256,7 @@ export function MessageComposer({
   };
 
   const handleDraftChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    if (sendingAttachments) return;
     const textarea = event.currentTarget;
     onDraftChange(textarea.value);
     const inputEvent = event.nativeEvent;
@@ -351,7 +352,7 @@ export function MessageComposer({
       {notice ? <p className="pwa-composer-hint" role="status">{notice}</p> : null}
       <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
       <div className="pwa-composer-card">
-        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onPaste={handlePaste} placeholder={t.composer.placeholder} disabled={sendingAttachments} rows={1} />
+        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments} rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">
             <div className="pwa-composer-menu">

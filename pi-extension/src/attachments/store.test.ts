@@ -1,14 +1,26 @@
 import { fork, type ChildProcess } from "node:child_process";
+import { lstatSync, rmdirSync, type PathLike } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, readdir, readFile, realpath, rm, stat, symlink, unlink, writeFile, type FileHandle } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, unlink, writeFile, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_COUNT } from "@pi-reach/protocol/session";
 import { AttachmentStore, AttachmentStoreError, type AttachmentBeginInput, type AttachmentScope,
   type AttachmentStoreOptions, type AttachmentStoreTestHooks } from "./store.js";
 import { DiskReservation } from "./reservations.js";
+import { createPrivateFile } from "./safe-files.js";
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, randomUUID: vi.fn(actual.randomUUID) };
+});
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, lstatSync: vi.fn(actual.lstatSync), rmdirSync: vi.fn(actual.rmdirSync) };
+});
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -40,6 +52,10 @@ async function complete(store: AttachmentStore, scope: AttachmentScope, uploadId
   const done = await store.finish(scope, uploadId);
   expect(done.status).toBe("complete");
   return done.attachment!.attachment_id;
+}
+
+function localDateDirectory(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function gate() {
@@ -82,6 +98,7 @@ async function killChild(child: ChildProcess) {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   for (const child of children.splice(0)) await killChild(child);
   for (const store of stores.splice(0)) await store.dispose();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
@@ -93,15 +110,86 @@ describe("attachment safe receiving store", () => {
     const id = await complete(store, scope, "one", "原件\u0000contents");
     const [{ path, descriptor }] = store.resolve(scope, [id]);
     expect(await readFile(path)).toEqual(Buffer.from("原件\u0000contents"));
-    expect(dirname(path)).toBe(join(rootDir, createHash("sha256").update("session").digest("hex")));
-    expect(path).not.toContain("display-only");
+    expect(dirname(path)).toBe(join(rootDir, localDateDirectory(new Date()), id));
+    expect(basename(path)).toBe(".._display-only.bin");
+    expect(createHash("sha256").update(await readFile(path)).digest("hex")).toBe(descriptor.sha256);
     expect(descriptor.file_name).toBe("../display-only.bin");
     expect(Object.isFrozen(descriptor)).toBe(true);
     if (process.platform !== "win32") {
       expect((await stat(path)).mode & 0o777).toBe(0o600);
       expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
+      expect((await stat(dirname(dirname(path)))).mode & 0o777).toBe(0o700);
       expect((await stat(rootDir)).mode & 0o777).toBe(0o700);
     }
+  });
+
+  test("new uploads, reset and dispose leave legacy session-hash originals at their existing paths", async () => {
+    const { store, scope, rootDir } = await setup();
+    const directory = join(rootDir, createHash("sha256").update(scope.sessionId).digest("hex"));
+    const legacyPath = join(directory, `${randomUUID()}.bin`);
+    const bytes = Buffer.from("旧原件\u0000保持原位");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(directory, { recursive: true });
+    await writeFile(legacyPath, bytes);
+    const original = await stat(legacyPath);
+    const id = await complete(store, scope, "new-upload");
+    const newPath = store.resolve(scope, [id])[0].path;
+    expect(dirname(newPath)).not.toBe(directory);
+    expect(await readdir(directory)).toEqual([basename(legacyPath)]);
+    expect(await readFile(legacyPath)).toEqual(bytes);
+    store.resetScope(scope.sessionId);
+    await store.dispose();
+    await expect(stat(newPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(directory)).toEqual([basename(legacyPath)]);
+    expect(await readFile(legacyPath)).toEqual(bytes);
+    expect(await stat(legacyPath)).toMatchObject({ ino: original.ino, dev: original.dev, size: bytes.length });
+  });
+
+  test("preserves ordinary names and extensions with identical names isolated by attachment ID", async () => {
+    const { store, scope, rootDir } = await setup();
+    const fileName = "项目 原件.v1.tar.gz";
+    const ids: string[] = [];
+    for (const uploadId of ["first-name", "same-name"]) {
+      await store.begin(scope, input(uploadId, "原始字节\u0000", { fileName }));
+      await store.write(scope, uploadId, 0, Buffer.from("原始字节\u0000"));
+      ids.push((await store.finish(scope, uploadId)).attachment!.attachment_id);
+    }
+    const files = store.resolve(scope, ids);
+    expect(files[0].path).not.toBe(files[1].path);
+    for (const { path, descriptor } of files) {
+      expect(path).toBe(join(rootDir, localDateDirectory(new Date()), descriptor.attachment_id, fileName));
+      expect(descriptor.file_name).toBe(fileName);
+      expect(await readFile(path)).toEqual(Buffer.from("原始字节\u0000"));
+    }
+    const longName = `${"长".repeat(100)}.jpeg`;
+    await store.begin(scope, input("long-name", "", { fileName: longName }));
+    const done = await store.finish(scope, "long-name");
+    const path = store.resolve(scope, [done.attachment!.attachment_id])[0].path;
+    expect(Buffer.byteLength(basename(path))).toBeLessThanOrEqual(240);
+    expect(basename(path)).toMatch(/^长+\.jpeg$/u);
+    expect(done.attachment!.file_name).toBe(longName);
+    expect((await stat(path)).size).toBe(0);
+  });
+
+  test("first begin freezes local date even while queued and repeated across midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const firstDay = new Date(2026, 9, 3, 23, 59, 59);
+    vi.setSystemTime(firstDay);
+    const { store, scope, rootDir } = await setup();
+    const file = input("midnight", "", { fileName: "空文件.txt" });
+    const beginning = store.begin(scope, file);
+    vi.setSystemTime(new Date(2026, 9, 4, 0, 0, 1));
+    await beginning;
+    await store.begin(scope, file);
+    const done = await store.finish(scope, file.uploadId);
+    const [{ path }] = store.resolve(scope, [done.attachment!.attachment_id]);
+    expect(path).toBe(join(rootDir, localDateDirectory(firstDay), done.attachment!.attachment_id, file.fileName));
+    expect(await store.begin(scope, file)).toEqual(done);
+    expect(store.resolve(scope, [done.attachment!.attachment_id])[0].path).toBe(path);
+    await store.begin(scope, input("next-day", ""));
+    const next = await store.finish(scope, "next-day");
+    expect(dirname(dirname(store.resolve(scope, [next.attachment!.attachment_id])[0].path)))
+      .toBe(join(rootDir, "2026-10-04"));
   });
 
   test("discard isolates owner/session/lease and releases ten completed originals idempotently", async () => {
@@ -121,10 +209,122 @@ describe("attachment safe receiving store", () => {
       expect(await store.discard(scope, id)).toBe("cancelled");
       await expect(store.discard({ ...scope, ownerId: "other" }, id)).rejects.toMatchObject({ code: "not_found" });
     }
-    for (const path of paths) await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    for (const path of paths) {
+      await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(dirname(path))).rejects.toMatchObject({ code: "ENOENT" });
+    }
     expect(store.debugCounts()).toMatchObject({ resources: 0, attachments: 0 });
     for (let index = 0; index < ATTACHMENT_MAX_COUNT; index++) await complete(store, scope, `new-${index}`);
     expect(store.debugCounts().resources).toBe(10);
+  });
+
+  test.each(["cancel", "discard", "reset", "dispose"] as const)("%s retries failed ID-directory removal without dropping ownership", async (operation) => {
+    const { store, scope } = await setup();
+    const id = await complete(store, scope, "directory-retry");
+    const path = store.resolve(scope, [id])[0].path;
+    const directory = dirname(path);
+    const remove = vi.mocked(rmdirSync);
+    remove.mockClear();
+    remove.mockImplementationOnce(() => { throw Object.assign(new Error("private directory"), { code: "EACCES" }); });
+    if (operation === "reset") {
+      store.resetScope(scope.sessionId);
+      await vi.waitFor(() => expect(store.debugCounts()).toMatchObject({ resources: 1, cleanups: 0, pending: 0 }));
+    } else {
+      const task = operation === "cancel" ? store.cancel(scope, "directory-retry") :
+        operation === "discard" ? store.discard(scope, id) : store.dispose();
+      await expect(task).rejects.toMatchObject({ code: "io_error", retryable: true });
+    }
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await stat(directory)).isDirectory()).toBe(true);
+    expect(store.debugCounts().resources).toBe(1);
+    if (operation === "reset") {
+      store.resetScope(scope.sessionId);
+      await vi.waitFor(() => expect(store.debugCounts()).toMatchObject({ resources: 0, cleanups: 0, pending: 0 }));
+    } else if (operation === "dispose") await expect(store.dispose()).resolves.toBeUndefined();
+    else if (operation === "cancel") await store.cancel(scope, "directory-retry");
+    else await store.discard(scope, id);
+    expect(remove.mock.calls.filter(([target]) => target === directory)).toHaveLength(2);
+    await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(store.debugCounts().resources).toBe(0);
+    if (operation !== "dispose") {
+      const current = { ...scope, uploadScope: store.scopeFor(scope.sessionId) };
+      await complete(store, current, "next-upload");
+      await expect(store.dispose()).resolves.toBeUndefined();
+    }
+  });
+
+  test.each(["error", "invalid"] as const)("post-mkdir identity %s retains the incomplete directory resource without later adoption", async (failure) => {
+    const { rootDir, store, scope } = await setup();
+    const id = "11111111-1111-4111-8111-111111111111";
+    const directory = join(rootDir, localDateDirectory(new Date()), id);
+    const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+    let injected = false;
+    vi.mocked(lstatSync).mockImplementation(((path: PathLike) => {
+      const current = actual.lstatSync(path);
+      if (path === directory && !injected) {
+        injected = true;
+        if (failure === "error") throw Object.assign(new Error("private identity"), { code: "EACCES" });
+        current.isDirectory = () => false;
+      }
+      return current;
+    }) as typeof lstatSync);
+    vi.mocked(randomUUID).mockReturnValueOnce(id);
+    await expect(store.begin(scope, input("identity-failure", ""))).rejects.toMatchObject({
+      code: failure === "error" ? "io_error" : "invalid_upload",
+    });
+    expect(injected).toBe(true);
+    expect(store.debugCounts()).toMatchObject({ resources: 1, records: 1, attachments: 0 });
+    expect(await readdir(directory)).toEqual([]);
+    // 后续 lstat 已恢复正常，也不能将现在看到的 identity 当作 mkdir 时的证据。
+    await expect(store.cancel(scope, "identity-failure")).rejects.toMatchObject({ code: "invalid_upload" });
+    expect(store.debugCounts()).toMatchObject({ resources: 1, records: 1 });
+    expect(await readdir(directory)).toEqual([]);
+    await expect(store.dispose()).rejects.toMatchObject({ code: "invalid_upload" });
+    stores.splice(stores.indexOf(store), 1);
+    expect(store.debugCounts()).toMatchObject({ resources: 1, records: 1 });
+    expect(await readdir(directory)).toEqual([]);
+  });
+
+  test.each(["empty", "nonempty", "symlink"] as const)("pre-existing %s ID directory is never acquired or deleted", async (kind) => {
+    const { root, rootDir, store, scope } = await setup();
+    const id = "11111111-1111-4111-8111-111111111111";
+    const directory = join(rootDir, localDateDirectory(new Date()), id);
+    await mkdir(dirname(directory), { recursive: true });
+    const outside = join(root, "outside");
+    await mkdir(outside);
+    if (kind === "symlink") await symlink(outside, directory);
+    else await mkdir(directory);
+    if (kind === "nonempty") await writeFile(join(directory, "other"), "historical");
+    vi.mocked(randomUUID).mockReturnValueOnce(id);
+    await expect(store.begin(scope, input("pre-existing", ""))).rejects.toMatchObject({ code: "invalid_upload" });
+    expect(await readdir(directory)).toEqual(kind === "nonempty" ? ["other"] : []);
+    expect(store.debugCounts().resources).toBe(0);
+    await store.dispose();
+    expect(await readdir(directory)).toEqual(kind === "nonempty" ? ["other"] : []);
+  });
+
+  test.each(["empty", "nonempty", "symlink"] as const)("cleanup refuses a runtime %s directory replacement and retries only the owned inode", async (kind) => {
+    const { root, store, scope } = await setup();
+    const moved = join(root, "owned-directory");
+    const outside = join(root, "outside");
+    // 原件先成功 unlink，再让 rmdir 故障保留精确目录所有权。
+    const next = await complete(store, scope, "replacement-retry");
+    const nextDirectory = dirname(store.resolve(scope, [next])[0].path);
+    vi.mocked(rmdirSync).mockImplementationOnce(() => { throw Object.assign(new Error("retry"), { code: "EACCES" }); });
+    await expect(store.discard(scope, next)).rejects.toMatchObject({ code: "io_error" });
+    await rename(nextDirectory, moved);
+    await mkdir(outside);
+    if (kind === "symlink") await symlink(outside, nextDirectory);
+    else await mkdir(nextDirectory);
+    if (kind === "nonempty") await writeFile(join(nextDirectory, "other"), "unowned");
+    await expect(store.discard(scope, next)).rejects.toMatchObject({ code: "invalid_upload" });
+    expect(await readdir(nextDirectory)).toEqual(kind === "nonempty" ? ["other"] : []);
+    expect(store.debugCounts().resources).toBe(1);
+    await rm(nextDirectory, { recursive: true });
+    await rename(moved, nextDirectory);
+    await store.discard(scope, next);
+    await expect(stat(nextDirectory)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(store.debugCounts().resources).toBe(0);
   });
 
   test("discard retries a failed original unlink before publishing its cancellation tombstone", async () => {
@@ -150,12 +350,13 @@ describe("attachment safe receiving store", () => {
 
   test.each(["close", "reservation"] as const)("cancel retries a failed %s without losing its live cleanup resource", async (step) => {
     let handle!: FileHandle;
-    const { store, scope, rootDir } = await setup({ testHooks: { afterCreate: (created) => { handle = created; } } });
+    let path = "";
+    const { store, scope, rootDir } = await setup({ testHooks: {
+      createFile: async (filePath) => { path = filePath; return createPrivateFile(filePath); },
+      afterCreate: (created) => { handle = created; },
+    } });
     await store.begin(scope, input("cleanup-retry"));
-    const directory = join(rootDir, createHash("sha256").update(scope.sessionId).digest("hex"));
-    const [name] = await readdir(directory);
-    const path = join(directory, name);
-    const id = name.slice(0, -4);
+    const id = basename(dirname(path));
     const ledger = join(rootDir, ".reservations");
     const close = vi.spyOn(handle, "close");
     const remove = vi.spyOn(DiskReservation.prototype, "remove");
@@ -167,6 +368,7 @@ describe("attachment safe receiving store", () => {
     await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
     if (step === "close") {
       expect(handle.fd).toBeGreaterThanOrEqual(0);
+      expect((await stat(dirname(path))).isDirectory()).toBe(true);
       expect(await readdir(ledger)).toEqual([]);
     } else {
       expect(handle.fd).toBe(-1);
@@ -174,6 +376,7 @@ describe("attachment safe receiving store", () => {
     }
     expect(await store.discard(scope, id)).toBe("cancelled");
     expect(failed).toHaveBeenCalledTimes(2);
+    await expect(stat(dirname(path))).rejects.toMatchObject({ code: "ENOENT" });
     expect(handle.fd).toBe(-1);
     expect(await readdir(ledger)).toEqual([]);
     expect(store.debugCounts()).toMatchObject({ attachments: 0, resources: 0 });
@@ -373,6 +576,7 @@ describe("attachment safe receiving store", () => {
     fresh.scopeFor("new-session");
     await fresh.dispose();
     expect(await readFile(path, "utf8")).toBe("test");
+    expect((await stat(dirname(path))).isDirectory()).toBe(true);
   });
 
   test("disconnect/channel reconstruction has no storage side effect; session changes invalidate leases", async () => {
@@ -401,7 +605,11 @@ describe("attachment safe receiving store", () => {
 
   test("bounded queue copies buffers and cancel/finish cannot resurrect an in-flight write", async () => {
     const blocked = gate();
-    const { store, scope, rootDir } = await setup({ testHooks: { beforeWrite: blocked.block } });
+    let path = "";
+    const { store, scope } = await setup({ testHooks: {
+      beforeWrite: blocked.block,
+      createFile: async (filePath) => { path = filePath; return createPrivateFile(filePath); },
+    } });
     await store.begin(scope, input("one", "ab"));
     const buffer = Buffer.from("a");
     const first = store.write(scope, "one", 0, buffer);
@@ -415,7 +623,7 @@ describe("attachment safe receiving store", () => {
     expect((await second).status).toBe("cancelled");
     await cancel;
     expect((await store.finish(scope, "one")).status).toBe("cancelled");
-    expect(await readdir(join(rootDir, createHash("sha256").update("session").digest("hex")))).toEqual([]);
+    await expect(stat(dirname(path))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("copy at enqueue preserves bytes and per-upload queue serializes writes", async () => {
@@ -436,25 +644,27 @@ describe("attachment safe receiving store", () => {
   test("scope reset and dispose wait for started filesystem writes before removing files", async () => {
     for (const reset of [true, false]) {
       const blocked = gate();
+      let path = "";
       const hooks: AttachmentStoreTestHooks = {
+        createFile: async (filePath) => { path = filePath; return createPrivateFile(filePath); },
         write: async (handle, bytes, position) => {
           await blocked.block();
           return (await handle.write(bytes, 0, bytes.length, position)).bytesWritten;
         },
       };
-      const { store, scope, rootDir } = await setup({ testHooks: hooks });
+      const { store, scope } = await setup({ testHooks: hooks });
       await store.begin(scope, input("one"));
       const writing = store.write(scope, "one", 0, Buffer.from("test"));
       const failed = expect(writing).rejects.toMatchObject({ code: "invalid_scope" });
       await blocked.started;
       if (reset) store.resetScope("session");
       const disposing = store.dispose();
-      const directory = join(rootDir, createHash("sha256").update("session").digest("hex"));
+      const directory = dirname(path);
       expect((await readdir(directory)).length).toBe(1);
       blocked.release();
       await failed;
       await disposing;
-      expect(await readdir(directory)).toEqual([]);
+      await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" });
     }
   });
 
@@ -489,8 +699,10 @@ describe("attachment safe receiving store", () => {
     expect(() => store.resolve(scope, Array.from({ length: 11 }, () => randomUUID()))).toThrowError(AttachmentStoreError);
   });
 
-  test("rejects pre-existing root, session and reservation symlinks without changing targets", async () => {
-    for (const target of ["root", "session", "ledger"]) {
+  test("rejects pre-existing root, date, attachment and reservation symlinks without changing targets", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 3, 12));
+    for (const target of ["root", "date", "attachment", "ledger"]) {
       const { root, rootDir, store, scope } = await setup();
       const outside = join(root, "outside");
       const { mkdir } = await import("node:fs/promises");
@@ -498,7 +710,13 @@ describe("attachment safe receiving store", () => {
       if (target === "root") await symlink(outside, rootDir);
       else {
         await mkdir(rootDir);
-        const internal = target === "session" ? createHash("sha256").update("session").digest("hex") : ".reservations";
+        const date = localDateDirectory(new Date());
+        const id = "11111111-1111-4111-8111-111111111111";
+        const internal = target === "ledger" ? ".reservations" : target === "date" ? date : join(date, id);
+        if (target === "attachment") {
+          await mkdir(join(rootDir, date));
+          vi.mocked(randomUUID).mockReturnValueOnce(id);
+        }
         await symlink(outside, join(rootDir, internal));
       }
       await expect(store.begin(scope, input("one"))).rejects.toMatchObject({ code: "invalid_upload" });
