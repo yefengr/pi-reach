@@ -196,6 +196,13 @@ vi.mock("@/lib/pi-reach/peer-channel", () => ({
         if (frame.type === "attachment_finish" && channelHarness.holdFinish) channelHarness.finishReplies.push(reply);
         else queueMicrotask(reply);
       }
+      if (frame.type === "attachment_discard") {
+        const entry = [...channelHarness.uploads].find(([, item]) => item.descriptor.attachment_id === frame.attachment_id);
+        if (entry) channelHarness.uploads.delete(entry[0]);
+        queueMicrotask(() => this.onFrame?.({ protocol_version: 2, type: "attachment_discarded", target_channel_id: this.channelId,
+          in_reply_to: frame.id, session_id: frame.session_id, upload_scope: frame.upload_scope,
+          attachment_id: frame.attachment_id, status: "cancelled" }));
+      }
       if (frame.type === "pair_request") {
         queueMicrotask(() => this.options.onPairOk?.({
           protocol_version: 2,
@@ -2513,6 +2520,35 @@ test("a persisted pagehide and pageshow keep attachment selection and sending us
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => restored.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
     expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("queued cancellation restores a released descriptor and removal discards the actual uploaded original", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Restore then remove");
+    pasteAttachments(input.element(), new File(["original"], "restored.txt", { type: "text/plain" }));
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    const message = channel.frames.findLast((frame) => frame.type === "user_message")!;
+    if (message.type !== "user_message") throw new Error("missing attachment handoff");
+    const attachmentId = message.attachment_ids![0];
+    expect(channelHarness.uploads.size).toBe(1);
+    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-card")).toHaveLength(0);
+    channel.emit(queuedStateFrame([{ id: message.client_request_id, text: message.text }], "queue-before-cancel"));
+    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    channel.emit(queuedStateFrame([], "queue-after-cancel"));
+    await expect.element(input).toHaveValue("Restore then remove");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(1);
+    await screen.getByRole("button", { name: "Remove restored.txt", exact: true }).click();
+    await expect.poll(() => channelHarness.uploads.size).toBe(0);
+    expect(channel.frames.filter((frame) => frame.type === "attachment_discard")).toEqual([expect.objectContaining({
+      attachment_id: attachmentId, session_id: "session-1", upload_scope: "uploads-session-1",
+    })]);
+    expect(channel.frames.some((frame) => frame.type === "attachment_cancel")).toBe(false);
+    expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
+    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-card")).toHaveLength(0);
   } finally { await screen.unmount(); }
 });
 

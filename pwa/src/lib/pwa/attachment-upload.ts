@@ -32,6 +32,7 @@ type UploadTask = {
   error?: AttachmentUploadError;
 };
 type CancelIntent = { id: string; target: TimelineScope; uploadScope?: string; cancellation?: Promise<void> };
+type DiscardIntent = { id: string; target: TimelineScope; uploadScope: string; cancellation?: Promise<void> };
 type UploadOperation = "attachment_begin" | "attachment_chunk" | "attachment_status_request" | "attachment_finish";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
@@ -41,6 +42,7 @@ export class AttachmentUploadClient {
   private capability: AttachmentCapability = { status: "unknown" };
   private readonly tasks = new Map<string, UploadTask>();
   private readonly cancellations = new Map<string, CancelIntent>();
+  private readonly discards = new Map<string, DiscardIntent>();
   private readonly requests: AttachmentRequests;
   private readonly waiters = new Set<() => void>();
   private connectionVersion = 0;
@@ -60,6 +62,7 @@ export class AttachmentUploadClient {
       this.tasks.clear();
       // 新目标不具备清理旧目标的权限，只放弃本页的远端清理意图。
       this.cancellations.clear();
+      this.discards.clear();
     }
     this.scope = { ...scope };
     this.send = send;
@@ -139,6 +142,16 @@ export class AttachmentUploadClient {
     return this.flushCancel(intent);
   }
 
+  cancelAttachment(attachmentId: string, uploadScope: string): Promise<void> {
+    if (this.disposed || !this.scope || !idSchema.safeParse(attachmentId).success || !idSchema.safeParse(uploadScope).success ||
+      (this.capability.status === "supported" && this.capability.uploadScope !== uploadScope)) return Promise.resolve();
+    const existing = this.discards.get(attachmentId);
+    if (existing) return existing.uploadScope === uploadScope ? this.flushDiscard(existing) : Promise.resolve();
+    const intent: DiscardIntent = { id: attachmentId, target: { ...this.scope }, uploadScope };
+    this.discards.set(attachmentId, intent);
+    return this.flushDiscard(intent);
+  }
+
   release(uploadId: string): void {
     const task = this.tasks.get(uploadId);
     this.cancellations.delete(uploadId);
@@ -159,6 +172,7 @@ export class AttachmentUploadClient {
     this.requests.reset();
     this.tasks.clear();
     this.cancellations.clear();
+    this.discards.clear();
     this.wake();
   }
 
@@ -181,6 +195,10 @@ export class AttachmentUploadClient {
       }
       this.setCapability({ status: "supported", uploadScope: response.upload_scope });
       if (version !== this.connectionVersion || this.disposed) return;
+      for (const intent of this.discards.values()) {
+        if (intent.uploadScope !== response.upload_scope) this.discards.delete(intent.id);
+        else void this.flushDiscard(intent);
+      }
       for (const intent of this.cancellations.values()) {
         if (intent.uploadScope && intent.uploadScope !== response.upload_scope) this.cancellations.delete(intent.id);
         else void this.flushCancel(intent);
@@ -382,6 +400,22 @@ export class AttachmentUploadClient {
       if (task.error) throw task.error;
       throw error instanceof AttachmentUploadError ? error : new AttachmentUploadError("prepare_failed");
     }
+  }
+
+  private flushDiscard(intent: DiscardIntent): Promise<void> {
+    if (intent.cancellation) return intent.cancellation;
+    if (this.discards.get(intent.id) !== intent || !this.send || !this.scope || this.capability.status !== "supported" ||
+      !sameAttachmentTarget(intent.target, this.scope) || this.capability.uploadScope !== intent.uploadScope) return Promise.resolve();
+    const cancellation = this.requests.request({
+      protocol_version: 2, type: "attachment_discard", id: crypto.randomUUID(), channel_id: this.scope.channelId,
+      session_id: this.scope.sessionId, upload_scope: intent.uploadScope, attachment_id: intent.id,
+    }, this.send).then(() => {
+      if (this.discards.get(intent.id) === intent) this.discards.delete(intent.id);
+    }).catch(() => {
+      // 无有效回执时仅保留精确目标/租约，不持有 File 或已交付的上传任务。
+    }).finally(() => { intent.cancellation = undefined; });
+    intent.cancellation = cancellation;
+    return cancellation;
   }
 
   private flushCancel(task: CancelIntent): Promise<void> {

@@ -43,7 +43,22 @@ describe("attachment routing", () => {
       if (finished?.type !== "attachment_state" || finished.status !== "complete") throw new Error("not complete");
       const [file] = store.resolve({ ownerId: "owner-a", sessionId: manager.getSessionId(), uploadScope: caps.upload_scope }, [finished.attachment.attachment_id]);
       expect(await readFile(file!.path)).toEqual(bytes);
+      const discard = { protocol_version: 2 as const, type: "attachment_discard" as const, id: "discard",
+        channel_id: "channel", session_id: common.session_id, upload_scope: caps.upload_scope,
+        attachment_id: finished.attachment.attachment_id };
+      expect(await handleAttachmentFrame(store, service, "owner-a", { ...discard, channel_id: "unready" })).toMatchObject([{ code: "invalid_channel" }]);
+      expect(await handleAttachmentFrame(store, service, "owner-b", discard)).toEqual([{
+        protocol_version: 2, type: "attachment_error", target_channel_id: "channel", in_reply_to: "discard",
+        session_id: common.session_id, upload_scope: caps.upload_scope, attachment_id: discard.attachment_id,
+        code: "not_found", retryable: false,
+      }]);
+      expect(await handleAttachmentFrame(store, service, "owner-a", { ...discard, upload_scope: "wrong" })).toMatchObject([{ code: "invalid_scope" }]);
+      expect(await handleAttachmentFrame(store, service, "owner-a", { ...discard, session_id: "wrong" })).toMatchObject([{ type: "reset" }]);
+      store.retain({ ownerId: "owner-a", sessionId: common.session_id, uploadScope: caps.upload_scope }, [discard.attachment_id]);
+      expect(await handleAttachmentFrame(store, service, "owner-a", discard)).toMatchObject([{ type: "attachment_discarded", attachment_id: discard.attachment_id, status: "retained" }]);
+      expect(service.handle(discard)).toMatchObject([{ code: "unsupported_type" }]);
       store.resetScope(manager.getSessionId());
+      expect(await handleAttachmentFrame(store, service, "owner-a", discard)).toMatchObject([{ code: "invalid_scope" }]);
       expect(await handleAttachmentFrame(store, service, "owner-a", { ...common, type: "attachment_status_request" })).toMatchObject([{ code: "invalid_scope" }]);
       expect(service.handle({ ...common, type: "attachment_cancel" } as ClientFrame)).toMatchObject([{ code: "unsupported_type" }]);
     } finally {

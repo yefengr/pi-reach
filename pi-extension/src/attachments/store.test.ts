@@ -98,6 +98,47 @@ describe("attachment safe receiving store", () => {
     }
   });
 
+  test("discard isolates owner/session/lease and releases ten completed originals idempotently", async () => {
+    const { store, scope } = await setup();
+    const ids: string[] = [];
+    for (let index = 0; index < ATTACHMENT_MAX_COUNT; index++) ids.push(await complete(store, scope, `old-${index}`));
+    const paths = store.resolve(scope, ids).map((item) => item.path);
+    await expect(store.begin(scope, input("overflow"))).rejects.toMatchObject({ code: "too_large" });
+    await expect(store.discard({ ...scope, ownerId: "other" }, ids[0])).rejects.toMatchObject({ code: "not_found" });
+    for (const wrong of [{ sessionId: "other" }, { uploadScope: "stale" }]) {
+      await expect(store.discard({ ...scope, ...wrong }, ids[0])).rejects.toMatchObject({ code: "invalid_scope" });
+    }
+    await expect(store.discard(scope, "unknown")).rejects.toMatchObject({ code: "not_found" });
+    expect(store.debugCounts().resources).toBe(10);
+    for (const id of ids) {
+      expect(await store.discard(scope, id)).toBe("cancelled");
+      expect(await store.discard(scope, id)).toBe("cancelled");
+      await expect(store.discard({ ...scope, ownerId: "other" }, id)).rejects.toMatchObject({ code: "not_found" });
+    }
+    for (const path of paths) await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(store.debugCounts()).toMatchObject({ resources: 0, attachments: 0 });
+    for (let index = 0; index < ATTACHMENT_MAX_COUNT; index++) await complete(store, scope, `new-${index}`);
+    expect(store.debugCounts().resources).toBe(10);
+  });
+
+  test("discard protects retained originals and expires cancellation tombstones with the lease", async () => {
+    const { store, scope } = await setup();
+    const retained = await complete(store, scope, "retained");
+    const path = store.resolve(scope, [retained])[0].path;
+    store.retain(scope, [retained]);
+    expect(await store.discard(scope, retained)).toBe("retained");
+    expect(await store.discard(scope, retained)).toBe("retained");
+    expect(await readFile(path, "utf8")).toBe("test");
+    const removed = await complete(store, scope, "removed");
+    await store.discard(scope, removed);
+    store.resetScope(scope.sessionId);
+    const next = { ...scope, uploadScope: store.scopeFor(scope.sessionId) };
+    await expect(store.discard(scope, removed)).rejects.toMatchObject({ code: "invalid_scope" });
+    await expect(store.discard(next, removed)).rejects.toMatchObject({ code: "not_found" });
+    await expect(store.discard(next, retained)).rejects.toMatchObject({ code: "not_found" });
+    expect(await readFile(path, "utf8")).toBe("test");
+  });
+
   test("zero files finish and begin/finish/identical chunks are idempotent", async () => {
     const { store, scope } = await setup();
     const emptyId = await complete(store, scope, "empty", "");

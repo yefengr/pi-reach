@@ -13,6 +13,7 @@ export type AttachmentUploadPort = {
   receive(frame: ServerFrame): boolean;
   upload(file: File, uploadId: string, progress: (value: AttachmentUploadProgress) => void, signal?: AbortSignal): Promise<AttachmentDescriptor>;
   cancel(uploadId: string): Promise<void>;
+  cancelAttachment(attachmentId: string, uploadScope: string): Promise<void>;
   release(uploadId: string): void;
   dispose(): void;
 };
@@ -45,7 +46,7 @@ export type AttachmentReadyMessage = {
 };
 type DraftEntry = AttachmentDraftItem & {
   file?: File;
-  uploadId: string;
+  uploadId?: string;
   uploadScope?: string;
   revision: number;
   abort?: AbortController;
@@ -161,7 +162,7 @@ export class AttachmentComposer {
     for (const attachment of attachments) {
       if ([...draft.items.values()].some((item) => item.attachment?.attachment_id === attachment.attachment_id)) continue;
       const id = crypto.randomUUID();
-      draft.items.set(id, { id, uploadId: crypto.randomUUID(), fileName: attachment.file_name, byteLength: attachment.byte_length,
+      draft.items.set(id, { id, fileName: attachment.file_name, byteLength: attachment.byte_length,
         status: "draft", receivedBytes: attachment.byte_length, attachment, uploadScope: draft.capability.uploadScope, revision: 0 });
     }
     this.options.onChange();
@@ -188,10 +189,9 @@ export class AttachmentComposer {
     const item = draft?.items.get(id);
     if (!draft || !item || draft.batch?.committing) return;
     item.revision++;
-    item.abort?.abort();
     draft.items.delete(id);
     // 先移出发送集合再做远端清理，清理回执不能重新加入本次消息。
-    void draft.client.cancel(item.uploadId).catch(() => undefined);
+    this.discardItem(draft, item);
     this.refreshIssue(draft);
     this.options.onChange();
     this.maybeReady(draft);
@@ -202,7 +202,7 @@ export class AttachmentComposer {
     const item = draft?.items.get(id);
     if (!draft?.batch || draft.batch.committing || !item || item.status !== "failed" || !item.file) return;
     if (["integrity_mismatch", "cancelled", "aborted"].includes(item.errorCode ?? "")) {
-      void draft.client.cancel(item.uploadId).catch(() => undefined);
+      if (item.uploadId) void draft.client.cancel(item.uploadId).catch(() => undefined);
       item.uploadId = crypto.randomUUID();
     }
     this.startItem(draft, item);
@@ -242,6 +242,7 @@ export class AttachmentComposer {
     item.status = "preparing";
     item.errorCode = undefined;
     const current = () => !this.disposed && draft.batch === batch && draft.items.get(item.id) === item && item.revision === revision;
+    item.uploadId ??= crypto.randomUUID();
     void draft.client.upload(file, item.uploadId, (progress) => {
       if (!current()) return;
       item.status = progress.status;
@@ -294,7 +295,7 @@ export class AttachmentComposer {
     } finally {
       draft.batch = undefined;
       if (accepted) {
-        for (const item of draft.items.values()) draft.client.release(item.uploadId);
+        for (const item of draft.items.values()) if (item.uploadId) draft.client.release(item.uploadId);
         draft.items.clear();
         draft.issue = undefined;
       } else {
@@ -311,24 +312,35 @@ export class AttachmentComposer {
     else if (draft.issue === "disconnected" || draft.issue === "unsupported") draft.issue = undefined;
   }
 
+  private discardItem(draft: TargetDraft, item: DraftEntry): void {
+    if (item.attachment && item.uploadScope) {
+      void draft.client.cancelAttachment(item.attachment.attachment_id, item.uploadScope).catch(() => undefined);
+      if (item.uploadId) draft.client.release(item.uploadId);
+    } else if (item.uploadId) void draft.client.cancel(item.uploadId).catch(() => undefined);
+    item.abort?.abort();
+  }
+
   private stop(draft: TargetDraft, issue?: AttachmentComposerIssue): void {
     draft.batch = undefined;
     draft.issue = issue;
     for (const item of draft.items.values()) {
       item.revision++;
-      item.abort?.abort();
-      void draft.client.cancel(item.uploadId).catch(() => undefined);
-      item.uploadId = crypto.randomUUID();
-      item.status = "draft";
-      item.errorCode = undefined;
-      if (item.file) { item.attachment = undefined; item.uploadScope = undefined; item.receivedBytes = 0; }
+      // 取消发送不是放弃原件：已完成（含恢复）的描述符仍可在同租约重发。
+      if (!issue && item.attachment) { item.status = "draft"; item.errorCode = undefined; continue; }
+      this.discardItem(draft, item);
+      item.uploadId = item.file ? crypto.randomUUID() : undefined;
+      item.attachment = undefined;
+      item.uploadScope = undefined;
+      item.receivedBytes = 0;
+      item.status = item.file ? "draft" : "failed";
+      item.errorCode = item.file ? undefined : "invalid_scope";
     }
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    for (const draft of this.drafts.values()) { this.stop(draft); draft.client.dispose(); }
+    for (const draft of this.drafts.values()) { this.stop(draft, "scope_changed"); draft.client.dispose(); }
     this.drafts.clear();
     this.current = null;
   }

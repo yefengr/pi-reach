@@ -28,6 +28,7 @@ const MAX_METADATA_RECORDS = 4096;
 const MAX_GLOBAL_ACTIVE = MAX_OWNER_PENDING;
 
 interface Tombstone {
+  attachmentId?: string;
   scope: AttachmentScope;
   cancelled: true;
   received: number;
@@ -379,6 +380,24 @@ export class AttachmentStore {
     return this.checkedState(upload, uploadId);
   }
 
+  async discard(scope: AttachmentScope, attachmentId: string): Promise<"cancelled" | "retained"> {
+    this.checkScope(scope);
+    if (!idSchema.safeParse(attachmentId).success) throw new AttachmentStoreError("invalid_upload");
+    const upload = this.byAttachment.get(attachmentId);
+    if (!upload) {
+      // 墓碑沿用有界 uploads 账本，不另存可无限增长的附件 ID 索引。
+      const cancelled = [...this.uploads.values()].some((entry) => !isUpload(entry) && entry.attachmentId === attachmentId &&
+        entry.scope.ownerId === scope.ownerId && entry.scope.sessionId === scope.sessionId && entry.scope.uploadScope === scope.uploadScope);
+      if (cancelled) return "cancelled";
+      throw new AttachmentStoreError("not_found");
+    }
+    if (upload.scope.ownerId !== scope.ownerId || upload.scope.sessionId !== scope.sessionId ||
+        upload.scope.uploadScope !== scope.uploadScope) throw new AttachmentStoreError("not_found");
+    if (upload.retained) return "retained";
+    await this.cancel(scope, upload.input!.uploadId);
+    return "cancelled";
+  }
+
   resolve(scope: AttachmentScope, attachmentIds: readonly string[]): ReadonlyArray<{ descriptor: AttachmentDescriptor; path: string }> {
     this.checkScope(scope);
     if (!attachmentIdsSchema.safeParse(attachmentIds).success) throw new AttachmentStoreError("invalid_upload");
@@ -446,7 +465,8 @@ export class AttachmentStore {
         this.byAttachment.delete(upload.descriptor.attachment_id);
       }
       if (upload.cancelled && this.uploads.get(upload.key) === upload) {
-        this.uploads.set(upload.key, { scope: upload.scope, cancelled: true, received: upload.received });
+        this.uploads.set(upload.key, { scope: upload.scope, cancelled: true, received: upload.received,
+          ...(upload.descriptor ? { attachmentId: upload.descriptor.attachment_id } : {}) });
       }
     }
     if (failure) throw failure;

@@ -56,6 +56,10 @@ class Transport {
       response = { ...base, type: "attachment_capabilities", max_file_bytes: ATTACHMENT_MAX_FILE_BYTES,
         max_message_bytes: ATTACHMENT_MAX_MESSAGE_BYTES, max_attachments: ATTACHMENT_MAX_COUNT,
         chunk_bytes: ATTACHMENT_CHUNK_BYTES, max_in_flight: ATTACHMENT_MAX_IN_FLIGHT };
+    } else if (frame.type === "attachment_discard") {
+      const state = [...this.states.values()].find((item) => item.descriptor.attachment_id === frame.attachment_id);
+      if (state) state.cancelled = true;
+      response = { ...base, type: "attachment_discarded", attachment_id: frame.attachment_id, status: "cancelled" };
     } else {
       if (frame.type === "attachment_chunk") --this.inFlight;
       const upload_id = frame.upload_id;
@@ -149,6 +153,74 @@ describe("AttachmentUploadClient", () => {
     expect(transport.client.receive(response)).toBe(false);
     await upload;
   });
+
+  it("discards released descriptors and strictly separates attachment reply identity from upload requests", async () => {
+    const transport = new Transport();
+    await transport.connect();
+    const descriptor = await transport.client.upload(file(1), "one", vi.fn());
+    transport.client.release("one");
+    transport.hold.add("attachment_discard");
+    const discard = transport.client.cancelAttachment(descriptor.attachment_id, "lease");
+    const request = await transport.heldFrame("attachment_discard");
+    const response = { ...transport.replyBase(request), type: "attachment_discarded" as const,
+      attachment_id: descriptor.attachment_id, status: "cancelled" as const };
+    for (const mutation of [{ in_reply_to: "unrelated" }, { target_channel_id: "other" }, { session_id: "other" },
+      { upload_scope: "other" }, { attachment_id: "other" }, { upload_id: "one" }, { unexpected: true }]) {
+      expect(transport.client.receive({ ...response, ...mutation } as ServerFrame)).toBe(false);
+    }
+    expect(transport.client.receive({ ...transport.replyBase(request), type: "attachment_state", upload_id: descriptor.attachment_id,
+      status: "cancelled", received_bytes: 0 })).toBe(false);
+    expect(transport.client.receive({ ...transport.replyBase(request), type: "attachment_error", upload_id: descriptor.attachment_id,
+      code: "not_found", retryable: false })).toBe(false);
+    expect(transport.client.receive(response)).toBe(true);
+    await discard;
+    expect(transport.client.receive(response)).toBe(false);
+    transport.hold.add("attachment_status_request");
+    const uploading = transport.client.upload(file(1), descriptor.attachment_id, vi.fn());
+    const status = await transport.heldFrame("attachment_status_request");
+    expect(transport.client.receive({ ...response, in_reply_to: status.id })).toBe(false);
+    expect(transport.client.receive({ ...transport.replyBase(status), type: "attachment_error", attachment_id: descriptor.attachment_id,
+      code: "not_found", retryable: false })).toBe(false);
+    transport.hold.clear();
+    transport.answer(status);
+    await uploading;
+  });
+
+  it.each(["retained", "error"] as const)("settles only the matching descriptor cleanup %s reply", async (mode) => {
+    const transport = new Transport();
+    await transport.connect();
+    transport.hold.add("attachment_discard");
+    const discard = transport.client.cancelAttachment("restored", "lease");
+    const request = await transport.heldFrame("attachment_discard");
+    const base = { ...transport.replyBase(request), attachment_id: "restored" };
+    expect(transport.client.receive(mode === "retained" ? { ...base, type: "attachment_discarded", status: "retained" }
+      : { ...base, type: "attachment_error", code: "not_found", retryable: false })).toBe(true);
+    await discard;
+    expect(transport.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(0);
+  });
+
+  it("keeps only exact descriptor cleanup intentions offline and sends after lease confirmation", async () => {
+    const transport = new Transport();
+    await transport.connect();
+    transport.client.disconnect();
+    await transport.client.cancelAttachment("restored", "lease");
+    expect(transport.frames.some((frame) => frame.type === "attachment_discard")).toBe(false);
+    await transport.connect({ ...scope, channelId: "new" });
+    await vi.waitFor(() => expect(transport.frames.findLast((frame) => frame.type === "attachment_discard")).toMatchObject({
+      channel_id: "new", attachment_id: "restored", upload_scope: "lease",
+    }));
+  });
+
+  it.each(["runtimeInstanceId", "sessionId", "deviceId", "endpointId", "selfSenderRef", "lease"] as const)(
+    "never retargets descriptor cleanup after changing %s", async (key) => {
+      const transport = new Transport();
+      await transport.connect();
+      transport.client.disconnect();
+      await transport.client.cancelAttachment("restored", "lease");
+      if (key === "lease") transport.uploadScope = "new-lease";
+      await transport.connect(key === "lease" ? { ...scope, channelId: "new" } : { ...scope, [key]: "other", channelId: "new" });
+      expect(transport.frames.some((frame) => frame.type === "attachment_discard")).toBe(false);
+    });
 
   it("keeps files across disconnect and resumes after a lost chunk acknowledgement by status", async () => {
     const transport = new Transport();
