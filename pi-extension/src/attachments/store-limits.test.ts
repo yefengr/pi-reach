@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { ATTACHMENT_MAX_COUNT } from "@pi-reach/protocol/session";
 import { createPrivateFile } from "./safe-files.js";
@@ -45,6 +45,9 @@ test.each(["ENOSPC", "EACCES"])("creation %s preserves sanitized error and relea
       message: `Attachment operation failed (${code === "ENOSPC" ? "no_space" : "io_error"}).`,
     });
     expect(await readdir(join(rootDir, ".reservations"))).toEqual([]);
+    for (const name of (await readdir(rootDir)).filter((name) => name !== ".reservations")) {
+      expect(await readdir(join(rootDir, name))).toEqual([]);
+    }
   }
   await drained(store);
   expect(store.debugCounts().records).toBe(0);
@@ -52,6 +55,31 @@ test.each(["ENOSPC", "EACCES"])("creation %s preserves sanitized error and relea
   await store.begin(scope, { ...empty("failed-0"), byteLength: 4 });
   await store.cancel(scope, "failed-0");
   expect(await readdir(join(rootDir, ".reservations"))).toEqual([]);
+});
+
+test("reservation failure loops never create ID directories", async () => {
+  const { store, scope, rootDir } = await setup({ availableBytes: () => 0n });
+  for (let i = 0; i < ATTACHMENT_MAX_COUNT + 1; i++) {
+    await expect(store.begin(scope, empty(`reservation-${i}`))).rejects.toMatchObject({ code: "no_space" });
+    expect(await readdir(rootDir)).toEqual([".reservations"]);
+    expect(store.debugCounts().resources).toBe(0);
+  }
+});
+
+test("cancel during reservation publication never creates an ID directory", async () => {
+  let entered!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const { store, scope, rootDir } = await setup({ availableBytes: async () => { entered(); await blocked; return 6n; } });
+  const beginning = store.begin(scope, empty("publishing"));
+  await started;
+  const cancelled = store.cancel(scope, "publishing");
+  release();
+  expect((await beginning).status).toBe("cancelled");
+  await cancelled;
+  expect(await readdir(rootDir)).toEqual([".reservations"]);
+  await drained(store);
 });
 
 test("exclusive collision never deletes someone else's path", async () => {
@@ -64,10 +92,15 @@ test("exclusive collision never deletes someone else's path", async () => {
   await expect(store.begin(scope, empty("collision"))).rejects.toMatchObject({ code: "io_error" });
   expect(await readFile(collisionPath, "utf8")).toBe("other original");
   expect(await readdir(join(rootDir, ".reservations"))).toEqual([]);
+  // 目录确为本次创建，但碰撞文件不归本次所有；非空目录失败须保留有界资源。
+  expect(store.debugCounts().resources).toBe(1);
+  await expect(store.cancel(scope, "collision")).rejects.toMatchObject({ code: "io_error" });
   collide = false;
-  await store.begin(scope, empty("collision"));
-  await store.cancel(scope, "collision");
-  await store.dispose();
+  await store.begin(scope, empty("another-upload"));
+  await store.cancel(scope, "another-upload");
+  await expect(store.dispose()).rejects.toMatchObject({ code: "io_error" });
+  stores.splice(stores.indexOf(store), 1);
+  expect(store.debugCounts().resources).toBe(1);
   expect(await readFile(collisionPath, "utf8")).toBe("other original");
 });
 
@@ -92,6 +125,7 @@ test.each(["stat", "initialization"])("post-creation %s failure closes handle, r
   await expect(store.begin(scope, empty("one"))).rejects.toMatchObject({ code: stage === "stat" ? "io_error" : "no_space" });
   expect(captured!.fd).toBe(-1);
   await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(stat(dirname(path))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readdir(join(rootDir, ".reservations"))).toEqual([]);
   fail = false;
   await store.begin(scope, empty("one"));

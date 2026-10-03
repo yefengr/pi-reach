@@ -10,7 +10,11 @@ import {
   type AttachmentDescriptor,
 } from "@pi-reach/protocol/session";
 import { DiskReservation } from "./reservations.js";
-import { assertDirectories, assertRegularFile, createPrivateFile, ensurePrivateDirectory } from "./safe-files.js";
+import { attachmentStoragePath } from "./storage-path.js";
+import {
+  assertDirectories, assertOwnedDirectory, assertRegularFile, createOwnedDirectory,
+  createPrivateFile, ensurePrivateDirectory, removeOwnedDirectory, type OwnedDirectory,
+} from "./safe-files.js";
 import {
   AttachmentStoreError, nodeErrorHasCode, storeError,
   type AttachmentBeginInput, type AttachmentScope, type AttachmentStoreOptions, type AttachmentUploadState,
@@ -46,6 +50,7 @@ interface Upload {
   input?: AttachmentBeginInput;
   descriptor?: AttachmentDescriptor;
   path?: string;
+  directory?: OwnedDirectory;
   handle?: FileHandle;
   inode?: number;
   device?: number;
@@ -190,6 +195,7 @@ export class AttachmentStore {
     try {
       if (!upload.path) throw new AttachmentStoreError("invalid_upload");
       assertDirectories(dirname(upload.path));
+      if (upload.directory) assertOwnedDirectory(upload.directory);
       const stat = assertRegularFile(upload.path);
       if (stat.ino !== upload.inode || stat.dev !== upload.device || stat.nlink !== 1 ||
           (finished && stat.size !== upload.input?.byteLength)) throw new AttachmentStoreError("invalid_upload");
@@ -235,14 +241,14 @@ export class AttachmentStore {
     const upload = this.newUpload(key, scope);
     upload.input = normalized;
     upload.descriptor = freezeDescriptor(parsed.data);
+    // 首次 begin 即冻结本地日期；入队延迟或跨午夜重试都不改变原件位置。
+    const path = attachmentStoragePath(this.root, parsed.data.attachment_id, normalized.fileName, new Date());
     this.uploads.set(key, upload);
     this.resources.add(upload);
     return this.enqueue(upload, async () => {
       if (upload.cancelled) return this.state(upload, input.uploadId);
       try {
         ensurePrivateDirectory(this.root);
-        const sessionDirectory = join(this.root, createHash("sha256").update(scope.sessionId).digest("hex"));
-        ensurePrivateDirectory(sessionDirectory);
         upload.reservation = new DiskReservation(this.root, this.options.runtimeId, input.uploadId,
           input.byteLength, this.floor, this.options.testHooks);
         await upload.reservation.publish();
@@ -250,7 +256,9 @@ export class AttachmentStore {
           await this.cleanup(upload);
           return this.checkedState(upload, input.uploadId);
         }
-        const path = join(sessionDirectory, `${parsed.data.attachment_id}.bin`);
+        const attachmentDirectory = dirname(path);
+        ensurePrivateDirectory(dirname(attachmentDirectory));
+        createOwnedDirectory(attachmentDirectory, (directory) => { upload.directory = directory; });
         upload.handle = await (this.options.testHooks?.createFile ?? createPrivateFile)(path);
         // 成功独占创建后才记录路径；失败不得触碰预先存在的文件。
         upload.path = path;
@@ -445,6 +453,7 @@ export class AttachmentStore {
           if (upload.inode === undefined) throw new AttachmentStoreError("invalid_upload");
           try {
             assertDirectories(dirname(upload.path!));
+            if (upload.directory) assertOwnedDirectory(upload.directory);
             const stat = assertRegularFile(upload.path!);
             if (stat.ino !== upload.inode || stat.dev !== upload.device || stat.nlink !== 1) {
               throw new AttachmentStoreError("invalid_upload");
@@ -461,6 +470,13 @@ export class AttachmentStore {
         await attempt(async () => {
           await upload.handle!.close();
           upload.handle = undefined;
+        });
+      }
+      // 原件路径和句柄均释放后才清理目录；失败保留 identity 供后续真实重试。
+      if (!upload.path && !upload.handle && upload.directory) {
+        await attempt(async () => {
+          removeOwnedDirectory(upload.directory!);
+          upload.directory = undefined;
         });
       }
       await attempt(async () => {
@@ -505,7 +521,11 @@ export class AttachmentStore {
       if (failure) throw failure;
       this.uploads.clear();
       this.byAttachment.clear();
-    })();
+    })().catch((error: unknown) => {
+      // 保留失败资源，但不缓存拒绝结果；重复 dispose 必须再次执行磁盘清理。
+      this.disposing = undefined;
+      throw error;
+    });
     return this.disposing;
   }
 }

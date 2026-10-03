@@ -1,6 +1,6 @@
-import { constants, chmodSync, lstatSync, mkdirSync, type Stats } from "node:fs";
+import { constants, chmodSync, lstatSync, mkdirSync, rmdirSync, type Stats } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
-import { parse, resolve, sep } from "node:path";
+import { dirname, parse, resolve, sep } from "node:path";
 import { AttachmentStoreError, nodeErrorHasCode } from "./types.js";
 
 export function assertDirectories(directory: string): void {
@@ -27,6 +27,49 @@ export function ensurePrivateDirectory(directory: string): void {
     if (stat.isSymbolicLink() || !stat.isDirectory()) throw new AttachmentStoreError("invalid_upload");
   }
   chmodSync(absolute, 0o700);
+}
+
+export interface OwnedDirectory {
+  path: string;
+  inode?: number;
+  device?: number;
+}
+
+/** mkdir 与 identity 获取同步相邻；既有目录绝不成为本次上传的资源。 */
+export function createOwnedDirectory(path: string, recordCreated: (directory: OwnedDirectory) => void): OwnedDirectory {
+  assertDirectories(dirname(path));
+  try { mkdirSync(path, { mode: 0o700 }); } catch (error) {
+    if (nodeErrorHasCode(error, "EEXIST")) throw new AttachmentStoreError("invalid_upload");
+    throw error;
+  }
+  // mkdir 成功即转移资源，identity 获取失败也不得让有界账本漏掉已创建目录。
+  const directory: OwnedDirectory = { path };
+  recordCreated(directory);
+  const stat = lstatSync(path);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new AttachmentStoreError("invalid_upload");
+  directory.inode = stat.ino;
+  directory.device = stat.dev;
+  return directory;
+}
+
+export function assertOwnedDirectory(directory: OwnedDirectory): void {
+  // 缺失创建时证据不能靠后续 stat 补齐，也不能因路径消失就提交成功清理。
+  if (directory.inode === undefined || directory.device === undefined) throw new AttachmentStoreError("invalid_upload");
+  assertDirectories(dirname(directory.path));
+  const stat = lstatSync(directory.path);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.ino !== directory.inode || stat.dev !== directory.device) {
+    throw new AttachmentStoreError("invalid_upload");
+  }
+}
+
+/** 只移除仍归本次上传所有的空目录，绝不递归删除或接管替换目录。 */
+export function removeOwnedDirectory(directory: OwnedDirectory): void {
+  try {
+    assertOwnedDirectory(directory);
+    rmdirSync(directory.path);
+  } catch (error) {
+    if (!nodeErrorHasCode(error, "ENOENT")) throw error;
+  }
 }
 
 export function assertRegularFile(path: string): Stats {

@@ -727,16 +727,56 @@ test("updates Stop and Send client state through working, stopping, image sendin
 
   screen.getByTestId("composer-set-attachment").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   screen.getByTestId("composer-set-sending-image").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-  await expect.element(textarea).toBeDisabled();
+  await expect.element(textarea).toHaveAttribute("readonly");
+  await expect.element(textarea).toBeEnabled();
   await expect.element(screen.getByRole("button", { name: "Remove Queued image" })).toBeEnabled();
   await expect.element(screen.getByRole("button", { name: "Send message" })).not.toBeInTheDocument();
 
   screen.getByTestId("composer-go-offline").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   const offlineSend = screen.getByRole("button", { name: "Send message" });
   await expect.element(offlineSend).toBeDisabled();
-  await expect.element(textarea).toBeDisabled();
+  await expect.element(textarea).toHaveAttribute("readonly");
+  await expect.element(textarea).toBeEnabled();
   await expect.element(screen.getByRole("button", { name: "Pi commands" })).toBeDisabled();
   await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeDisabled();
+});
+
+test.each([[1280, 900], [390, 844]])("keeps uploading text readable, selectable and scrollable without allowing edits at %ix%i", async (width, height) => {
+  await page.viewport(width, height);
+  const draft = Array.from({ length: 12 }, (_, index) => `Attachment instructions line ${index + 1}`).join("\n");
+  let sends = 0;
+  let added = 0;
+  const screen = await renderPwa(<ComposerHarness initialDraft={draft} onSend={() => { sends += 1; }} onAddFiles={() => { added += 1; }} />);
+  try {
+    const textbox = screen.getByRole("textbox");
+    const input = textbox.element() as HTMLTextAreaElement;
+    const editableColor = getComputedStyle(input).color;
+    screen.getByTestId("composer-set-sending-image").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect.element(textbox).toHaveAttribute("readonly");
+    await expect.element(textbox).toBeEnabled();
+    await expect.element(textbox).toHaveValue(draft);
+    expect(getComputedStyle(input).color).toBe(editableColor);
+    expect(getComputedStyle(input).opacity).toBe("1");
+    expect(getComputedStyle(input).overflowY).toBe("auto");
+    await textbox.click();
+    input.setSelectionRange(0, 10);
+    expect(document.activeElement).toBe(input);
+    expect(input.value.slice(input.selectionStart, input.selectionEnd)).toBe(draft.slice(0, 10));
+    await userEvent.keyboard("should not be inserted{Backspace}{Enter}");
+    await expect.element(textbox).toHaveValue(draft);
+    const clipboardData = new DataTransfer();
+    clipboardData.items.add(new File(["not added"], "extra.txt"));
+    input.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData }));
+    input.scrollTop = input.scrollHeight;
+    expect(input.scrollTop).toBeGreaterThan(0);
+    document.querySelector("form.pwa-composer")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    expect(sends).toBe(0);
+    expect(added).toBe(0);
+    await expect.element(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
 });
 
 test("prevents duplicate native submits until an asynchronous send settles, then permits the next submit", async () => {

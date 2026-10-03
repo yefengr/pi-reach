@@ -55,11 +55,13 @@ test("keeps offline text editable and places its one hint outside and before the
 });
 
 test("locks adding/text/sending during upload without disabling individual cancellation", () => {
-  const html = renderComposer({ attachments: [{ ...attachment, status: "uploading", receivedBytes: 512 }], sendingAttachments: true });
+  const html = renderComposer({ draft: "Review these files", attachments: [{ ...attachment, status: "uploading", receivedBytes: 512 }], sendingAttachments: true });
   expect(button(html, "Cancel notes.txt")).not.toContain('disabled=""');
   expect(button(html, "Add attachments")).toContain('disabled=""');
   expect(button(html, "Send message")).toContain('disabled=""');
-  expect(html.match(/<textarea[^>]*>/)?.[0]).toContain('disabled=""');
+  expect(html.match(/<textarea[^>]*>/)?.[0]).toContain('readOnly=""');
+  expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain('disabled=""');
+  expect(html).toContain("Review these files</textarea>");
 });
 
 test.each(["", "Continue this task"])("shows only Stop while working with draft %s", draft => {

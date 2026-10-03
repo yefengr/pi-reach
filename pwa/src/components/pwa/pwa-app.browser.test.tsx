@@ -2388,11 +2388,12 @@ test("legacy capability failure disables attachments but keeps text and vision m
   } finally { await screen.unmount(); }
 });
 
-test.each([false, true])("uploads originals and hands off IDs only, including unknown delivery=%s", async (unknownDelivery) => {
+test.each([false, true])("uploads originals and retains readonly text until IDs handoff, including unknown delivery=%s", async (unknownDelivery) => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const input = screen.getByPlaceholder("Message your agent…");
     await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await input.fill("Please review the original file");
     const bytes = Uint8Array.from({ length: ATTACHMENT_CHUNK_BYTES + 17 }, (_, index) => index % 251);
     pasteAttachments(input.element(), new File([bytes], "original.bin", { type: "application/octet-stream" }));
     await expect.element(screen.getByText("original.bin", { exact: true })).toBeVisible();
@@ -2400,17 +2401,21 @@ test.each([false, true])("uploads originals and hands off IDs only, including un
     channelHarness.holdFinish = true;
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
-    await expect.element(input).toBeDisabled();
+    await expect.element(input).toHaveAttribute("readonly");
+    await expect.element(input).toBeEnabled();
+    await expect.element(input).toHaveValue("Please review the original file");
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
     expect(channel.frames.filter((frame) => frame.type === "attachment_chunk").map((frame) => frame.type === "attachment_chunk" ? atob(frame.data_base64).length : 0)).toEqual([ATTACHMENT_CHUNK_BYTES, 17]);
     if (unknownDelivery) channelHarness.nextSendResults.push(false);
     channelHarness.finishReplies[0]?.();
     await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
     const message = channel.frames.findLast((frame) => frame.type === "user_message");
-    expect(message).toMatchObject({ text: "", attachment_ids: [expect.any(String)] });
+    expect(message).toMatchObject({ text: "Please review the original file", attachment_ids: [expect.any(String)] });
     expect(message).not.toHaveProperty("images");
     expect(message).not.toHaveProperty("attachments");
-    await expect.element(input).toBeEnabled();
-    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-card")).toHaveLength(0);
+    await expect.element(input).not.toHaveAttribute("readonly");
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
     if (unknownDelivery) {
       await expect.element(screen.getByText("Message could not be sent. Check the connection and try again.", { exact: true })).toBeVisible();
       await screen.getByRole("button", { name: "Retry delivery" }).click();
@@ -2562,6 +2567,8 @@ test("failed upload offers a safe retry without dropping the original File or te
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.element(screen.getByText("Not enough space on the computer.", { exact: true })).toBeVisible();
     await expect.element(input).toHaveValue("Retry my original");
+    await expect.element(input).toHaveAttribute("readonly");
+    await expect.element(input).toBeEnabled();
     expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
     await screen.getByRole("button", { name: "Retry retry.txt", exact: true }).click();
     await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
@@ -2583,6 +2590,9 @@ test("short disconnect resumes the same attachment batch through a new capabilit
     const relay = relayHarness.instances[0]!;
     relay.emitState("closed");
     await expect.element(screen.getByText("Connection lost. Uploads will resume after reconnecting.", { exact: true })).toBeVisible();
+    await expect.element(input).toHaveValue("Resume on original Pi");
+    await expect.element(input).toHaveAttribute("readonly");
+    await expect.element(input).toBeEnabled();
     relay.emitState("open");
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
