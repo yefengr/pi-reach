@@ -1,4 +1,5 @@
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
+import { PUBLISHED_FILE_TOOL_NAME } from "../files/publications.js";
 import { MAX_FRAME_BYTES, MAX_TEXT_CHARS, TimelineEventSchema, TimelinePartialSchema, type JsonValue, type TimelineEvent, type TimelinePartial } from "../protocol/v2/index.js";
 
 export type ToolCallDetails = Readonly<{ tool: string; args: JsonValue }>;
@@ -20,6 +21,11 @@ export function jsonValue(value: unknown): JsonValue {
     return result;
   }
   return null;
+}
+
+/** publish_file 的原始参数含本机绝对路径，只保留在原生记录中，不进入 wire timeline/partial；其他工具参数原样。 */
+function outgoingToolArgs(tool: string, args: JsonValue): JsonValue {
+  return tool === PUBLISHED_FILE_TOOL_NAME ? {} : args;
 }
 
 function truncateText(text: string): string {
@@ -86,9 +92,10 @@ export function toolTimelineEvent(
   call?: ToolCallDetails,
 ): TimelineEvent {
   const state = { truncated: false };
+  const tool = call?.tool ?? message.toolName ?? "unknown";
   const fields = {
     ...base, group_id: groupId, kind: "tool", tool_call_id: message.toolCallId ?? base.event_id,
-    tool: call?.tool ?? message.toolName ?? "unknown", args: boundJson(call?.args ?? jsonValue(message.args ?? {}), state),
+    tool, args: boundJson(outgoingToolArgs(tool, call?.args ?? jsonValue(message.args ?? {})), state),
   };
   if (!message.isError) {
     const result = boundJson(jsonValue(message.content), state);
@@ -137,7 +144,7 @@ export function toolPartial<T>(
     protocol_version: 2, type: "timeline_partial",
     session_id: scope.sessionId, leaf_id: scope.leafId,
     group_id: association.groupId, partial_id: `tool:${toolCallId}`,
-    kind: "tool", tool_call_id: toolCallId, tool: association.tool, args: association.args,
+    kind: "tool", tool_call_id: toolCallId, tool: association.tool, args: outgoingToolArgs(association.tool, association.args),
     status: result === undefined ? "running" : "delta",
     ...(blocks === undefined ? {} : { blocks }),
   };

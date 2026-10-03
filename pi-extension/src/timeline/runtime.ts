@@ -8,7 +8,9 @@ import { partialDeltaChunks } from "./partial_delta.js";
 import { TimelinePublications } from "./publication.js";
 import { isRunEndMarker, runEndEvent, runEndMarker, runEndStatus } from "./run_end.js";
 import { sequenceTimelineProjections, type TimelineProjection } from "./sequence.js";
-import { jsonValue, recoverToolCalls, ToolLifecycleTracker, toolPartial, toolTimelineEvent, type ToolCallDetails } from "./tool_lifecycle.js";
+import { recoverToolCalls, ToolLifecycleTracker, toolPartial, toolTimelineEvent, type ToolCallDetails } from "./tool_lifecycle.js";
+import { systemTimelineEvent } from "./system_event.js";
+import { collectPublications } from "../files/publications.js";
 
 export const TIMELINE_MARKER = "pi-reach:timeline-v2" as const;
 
@@ -173,12 +175,14 @@ export class TimelineRuntime {
   /** SDK 的 turn_end 发生在本轮消息持久化之后，接管异步 message_end 尚未完成的发布。 */
   onTurnEnd(sessionManager: SessionManager): void {
     if (this.sessionManager !== sessionManager) return;
+    this.deferConfirmedFiles(sessionManager);
     this.publications.flush(() => this.recoverForPublication(sessionManager));
   }
 
   /** 为本次运行的组写入 run_end marker，并在同组正式消息发布之后推送。 */
   onAgentEnd(messages?: readonly unknown[]): void {
     const sessionManager = this.sessionManager;
+    if (sessionManager) this.deferConfirmedFiles(sessionManager);
     if (this.activeGroupId && sessionManager) {
       const markerId = sessionManager.appendCustomEntry(TIMELINE_MARKER, runEndMarker(this.activeGroupId, runEndStatus(messages)));
       this.publishWhenVisible(sessionManager, markerId, { origin: "unknown", delivery: "unknown" });
@@ -193,6 +197,7 @@ export class TimelineRuntime {
 
   onMessageStart(message: unknown, sessionManager: SessionManager): TimelineStarted | null {
     this.attach(sessionManager);
+    this.deferConfirmedFiles(sessionManager);
     const record = this.asMessageRecord(message);
     if (!record) return null;
     if (!this.active) {
@@ -262,6 +267,17 @@ export class TimelineRuntime {
     this.pending.delete(objectMessage);
     this.pendingByRole[pending.role] = this.pendingByRole[pending.role].filter((candidate) => candidate !== pending);
     this.publishWhenVisible(sessionManager, pending.marker.event_id, pending.correlation);
+    // message_end 在 SDK 写盘前触发；下轮任务只读核验，turn_end 兜底晚结束的扩展 handler。
+    setImmediate(() => {
+      if (this.sessionManager === sessionManager) this.deferConfirmedFiles(sessionManager);
+    });
+  }
+
+  private deferConfirmedFiles(manager: SessionManager): void {
+    const published = new Set(this.publications.events().map((event) => event.event_id));
+    for (const id of collectPublications(manager).keys()) {
+      if (!published.has(id)) this.publishWhenVisible(manager, id, { origin: "unknown", delivery: "unknown" });
+    }
   }
 
   appendDeferredCustom(sessionManager: SessionManager, customType: string, data: unknown): string {
@@ -279,7 +295,10 @@ export class TimelineRuntime {
       && !visible.has(entry.id) && this.parseMarker(entry.data) !== null);
     if (cutoff < 0) return events;
     const before = new Set(branch.slice(0, cutoff).map((entry) => entry.id));
-    return events.filter((event) => before.has(event.event_id));
+    const files = collectPublications(manager);
+    return events.filter((event) => files.has(event.event_id)
+      ? files.get(event.event_id)!.branchPosition < cutoff
+      : before.has(event.event_id));
   }
 
   private publishWhenVisible(sessionManager: SessionManager, markerId: string, correlation: Correlation): void {
@@ -324,6 +343,7 @@ export class TimelineRuntime {
     const legacyGroup = `legacy:${sessionManager.getSessionId()}`;
     const recoveryTools = recoverToolCalls(branch);
     const attachmentMessages = attachmentRecords(sessionManager);
+    const files = collectPublications(sessionManager);
     const positions = new Map(branch.map((entry, index) => [entry.id, index]));
     const matched = new Set<string>();
     const recovered: TimelineProjection[] = [];
@@ -355,9 +375,9 @@ export class TimelineRuntime {
           event = this.toTimelineEvent(entry, marker, this.correlationFromMarker(marker), sessionManager, recoveryTools.get(entry.id), attachmentMessages.get(marker.event_id));
         }
       } else if (entry.type !== "message") {
-        event = this.toSystemEvent(entry, sessionManager);
+        event = systemTimelineEvent(entry, sessionManager, this.timestamp(entry.timestamp), TIMELINE_MARKER, files.get(entry.id));
       }
-      if (event) recovered.push({ event, branchPosition });
+      if (event) recovered.push({ event, branchPosition: files.get(entry.id)?.branchPosition ?? branchPosition });
     }
     return sequenceTimelineProjections(recovered);
   }
@@ -500,54 +520,6 @@ export class TimelineRuntime {
       });
     }
     return toolTimelineEvent(base, groupId, message, association);
-  }
-
-  private toSystemEvent(entry: SessionEntry, sessionManager: SessionManager): TimelineEvent | null {
-    const base = {
-      event_id: entry.id,
-      session_id: sessionManager.getSessionId(),
-      leaf_id: sessionManager.getLeafId() ?? null,
-      timestamp: this.timestamp(entry.timestamp),
-      truncated: false,
-    };
-    let candidate: unknown;
-    if (entry.type === "compaction") {
-      candidate = {
-        ...base,
-        kind: "compaction",
-        payload: {
-          summary: entry.summary,
-          first_kept_entry_id: entry.firstKeptEntryId,
-          tokens_before: entry.tokensBefore,
-          from_hook: entry.fromHook ?? false,
-          ...(entry.details === undefined ? {} : { details: jsonValue(entry.details) }),
-        },
-      };
-    } else if (entry.type === "branch_summary") {
-      candidate = {
-        ...base,
-        kind: "branch_summary",
-        payload: {
-          summary: entry.summary,
-          from_id: entry.fromId,
-          from_hook: entry.fromHook ?? false,
-          ...(entry.details === undefined ? {} : { details: jsonValue(entry.details) }),
-        },
-      };
-    } else if (entry.type === "custom" && entry.customType !== TIMELINE_MARKER) {
-      candidate = {
-        ...base,
-        kind: "custom",
-        payload: {
-          custom_type: entry.customType,
-          ...(entry.data === undefined ? {} : { data: jsonValue(entry.data) }),
-        },
-      };
-    } else {
-      return null;
-    }
-    const parsed = TimelineEventSchema.safeParse(candidate);
-    return parsed.success ? parsed.data : null;
   }
 
   private asMessageRecord(value: unknown): MessageRecord | null {

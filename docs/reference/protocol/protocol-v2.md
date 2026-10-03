@@ -204,7 +204,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - 单 frame JSON UTF-8：最大 `2 MiB`。
 - 单 history chunk：最大 `512 KiB`。
 - 单 fragment 解码后：最大 `50 KiB`。
-- 一个未完成逻辑窗口：最大 `32 MiB`。
+- 一个未完成 timeline/history 逻辑窗口：最大 `32 MiB`；文件获取使用独立的有界缓冲。
 - ID：1-256 字符。
 - 普通字符串：最大 `1 MiB`。
 - 数组：最大 4096 项。
@@ -222,6 +222,8 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 | Owner broadcast | `session_id` + `leaf_id`，不得带 `target_channel_id` |
 | 附件上传请求（能力查询除外） | `channel_id` + `session_id` + `upload_scope`，不携带 `leaf_id` |
 | 附件定向响应 | `target_channel_id` + `in_reply_to` + `session_id` + `upload_scope`，不携带 `leaf_id` |
+| 文件获取请求 | `channel_id` + `session_id`，不携带 `leaf_id` 或 `upload_scope` |
+| 文件获取定向响应 | `target_channel_id` + `in_reply_to` + `session_id`，不携带 `leaf_id` 或 `upload_scope` |
 
 配对完成后，PWA 必须先发送 `session_hello`；收到 `session_ready` 前不得发送 ready-only 业务 frame。
 
@@ -249,6 +251,9 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `attachment_status_request`
 - `attachment_cancel`
 - `attachment_discard`
+- `file_open`
+- `file_read`
+- `file_close`
 
 `session_sync.before` 是排他的正式事件序号上界：`null` 表示从当前末尾开始，数字表示只返回序号小于该值的事件；`limit` 为 1 到 80 的整数，省略时默认 80。历史响应的最后一个 chunk 在仍有更早事件时携带数字 `next_before`，没有更早事件时携带 `eos=true`。
 
@@ -262,6 +267,10 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `attachment_state`
 - `attachment_discarded`
 - `attachment_error`
+- `file_opened`
+- `file_chunk`
+- `file_closed`
+- `file_error`
 - `user_message_started`
 - `user_message_status`
 - `timeline_event`
@@ -309,6 +318,29 @@ PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，�
 正式事件、user blocks 与 queue item 不新增附件字段。原生 custom `pi-reach:attachments-v1` 保存 request/sender、原文、描述及预览；`pi-reach:attachment-message-v1` 将同一 request/sender 关联到正式 `message_id`。PWA 按 session、sender、request 和 message 严格关联，不要求同 leaf；冲突时撤回派生展示，不能借用其他 Owner 或会话的数据。这些 custom 参与正式 `event_seq` 与历史持久化，展示时隐藏原始 payload。
 
 旧页面可读取合法 custom 和规范化 user/history，但不认识新定向帧时仍会拒绝该帧；同 Owner 的旧页面可能看到协议提示，或需要刷新重新确认当前会话后才能发送文字。不能因此宣称旧缓存页面完全没有可见影响。能力不足不改变协议版本，也不提供 v1 fallback；部署顺序仍先 PWA、后 Extension。
+
+## 会话文件发布与获取
+
+文件发布不改变握手，也不增加能力帧、HTTP 文件服务或 Relay 存储。Pi 的 `publish_file` 工具将普通文件引用保存为原生 custom `pi-reach:published-file-v1`。该记录之后必须有同一工具调用的成功原生 `toolResult`，且两者已落盘，才取得发布资格；失败留下的内部记录不可展示或获取。文件只属于当前原生分支，普通 leaf 追加不改变资格。
+
+正式 custom event 的 `payload` 严格为 `{custom_type: "pi-reach:published-file-v1", data: {file_name, mime_type, byte_length, tool_call_id}}`；`event_id` 即 `publication_id`，`data` 不重复保存 ID。源路径仅留在电脑的原生记录中，不进入文件 metadata、回执或错误。文件行沿用原 custom 的 ID、时间和 `group_id`，正式投影排在确认结果之后；与原件无关的工具参数仍遵循既有工具展示规则。
+
+PWA 在完成会话握手和历史同步后获取文件。Extension 每次打开和读取都核对已认证 Owner、channel、runtime、session、branch generation 和当前发布资格；不接受客户端路径。真正切换目标或分支使旧任务失效，普通 leaf 追加不失效。
+
+| Frame | 行为与关联 |
+| --- | --- |
+| `file_open` | 用 `publication_id` 请求原件；同 scope 的活跃请求 ID 可幂等重放，不能改为其他文件。 |
+| `file_opened` | 返回 `publication_id`、`transfer_id`、当前 `file_name/mime_type/byte_length` 和 `preview`；旧发布 metadata 不是内容版本或快照。 |
+| `file_read` | 用 `transfer_id` 和精确 `offset` 连续读取；不提供任意范围读取或断点恢复。 |
+| `file_chunk` | 返回对应 `transfer_id/offset`、canonical Base64 `data_base64` 和 `final`；末片必须有 `total_bytes` 与小写 SHA-256，非末片禁止这两个字段。只有零字节文件的末片可为空。 |
+| `file_close` / `file_closed` | 按 `transfer_id` 尽力释放句柄；取消、断线和失效先停止使用结果，再清理资源。无关闭回执不表示远端已释放。 |
+| `file_error` | 返回固定 code，可带关联的 `transfer_id`；不含路径、异常正文或原件。身份与会话错误仍走既有 `protocol_error/reset` 恢复，不降格为文件错误。 |
+
+原件最大 50 MiB，单片解码后最大 64 KiB。图片 preview 为 `{kind:"image", width, height}` 且最多 2000 万像素；文本为 `{kind:"text"}`，其他为 `{kind:"none"}`。机器可读约束与错误码见[共享文件 schema](../../../packages/protocol/src/session/files.ts)。Extension 同进程最多保有 8 个活文件资源，计入发布检查、打开中及关闭失败的句柄；空闲 30 秒回收。关闭失败仍占额度，不伪报释放。
+
+读取沿用同一只读句柄，每片前后检查文件身份与属性；路径替换、读取中变化或取消后迟到结果不能完成任务。最后关闭成功后才发送完整摘要。摘要验证不承诺文件系统原子快照，也不保证硬取消已经进入内核的 I/O。
+
+PWA 同时最多一个获取任务和一片在途，请求超时 15 秒。完成原件长度和 SHA-256 校验后才显示图片或提供保存链接；完整内容只留在 64 MiB 页面缓存，阅读器使用的内容被 pin，预算不足时拒绝准入。短断线保留完整结果，刷新、切换目标或离开页面不保证保留；不写 IndexedDB、Service Worker 或后台任务，不自动重试或续传。具体自动预览、受限文本阅读和保存手势见[当前设计](../../DESIGN.md#组件规则)。
 
 ## Timeline 不变量
 
