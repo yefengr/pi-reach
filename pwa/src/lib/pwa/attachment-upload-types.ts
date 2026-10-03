@@ -22,7 +22,7 @@ export class AttachmentUploadError extends Error {
   }
 }
 export type UploadState = Extract<ServerFrame, { type: "attachment_state" }>;
-export type UploadResponse = UploadState | Extract<ServerFrame, { type: "attachment_capabilities" }>;
+export type UploadResponse = UploadState | Extract<ServerFrame, { type: "attachment_capabilities" | "attachment_discarded" }>;
 export type SendAttachmentFrame = (frame: ClientFrame) => boolean;
 export type PreparedAttachment = Pick<AttachmentDescriptor, "sha256" | "preview">;
 export function sameAttachmentTarget(a: TimelineScope, b: TimelineScope): boolean {

@@ -45,7 +45,7 @@ export class AttachmentRequests {
     const entry = this.pending.get(input.in_reply_to);
     if (!entry) return false;
     if (input.type !== "attachment_capabilities" && input.type !== "attachment_state"
-      && input.type !== "attachment_error" && input.type !== "protocol_error") return false;
+      && input.type !== "attachment_error" && input.type !== "attachment_discarded" && input.type !== "protocol_error") return false;
     const parsed = serverFrameSchema.safeParse(input);
     if (!parsed.success) return false;
     const frame = parsed.data;
@@ -54,12 +54,15 @@ export class AttachmentRequests {
     const isCapability = request.type === "attachment_capabilities_request";
     if (frame.type === "protocol_error") {
       if (!isCapability) return false;
-    } else if (frame.type === "attachment_capabilities" || frame.type === "attachment_state" || frame.type === "attachment_error") {
+    } else if (frame.type === "attachment_capabilities" || frame.type === "attachment_state" || frame.type === "attachment_error" || frame.type === "attachment_discarded") {
       if (frame.session_id !== request.session_id) return false;
       if (isCapability) {
         if (frame.type !== "attachment_capabilities") return false;
+      } else if (request.type === "attachment_discard") {
+        if ((frame.type !== "attachment_discarded" && frame.type !== "attachment_error") ||
+          frame.upload_scope !== request.upload_scope || frame.attachment_id !== request.attachment_id) return false;
       } else {
-        if (frame.type === "attachment_capabilities" || frame.upload_scope !== request.upload_scope
+        if ((frame.type !== "attachment_state" && frame.type !== "attachment_error") || frame.upload_scope !== request.upload_scope
           || frame.upload_id !== request.upload_id) return false;
       }
     } else return false;

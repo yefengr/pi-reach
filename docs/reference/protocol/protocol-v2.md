@@ -248,6 +248,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `attachment_finish`
 - `attachment_status_request`
 - `attachment_cancel`
+- `attachment_discard`
 
 `session_sync.before` 是排他的正式事件序号上界：`null` 表示从当前末尾开始，数字表示只返回序号小于该值的事件；`limit` 为 1 到 80 的整数，省略时默认 80。历史响应的最后一个 chunk 在仍有更早事件时携带数字 `next_before`，没有更早事件时携带 `eos=true`。
 
@@ -259,6 +260,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `extension_info`
 - `attachment_capabilities`
 - `attachment_state`
+- `attachment_discarded`
 - `attachment_error`
 - `user_message_started`
 - `user_message_status`
@@ -298,7 +300,9 @@ PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，�
 - `attachment_chunk`：提供精确 offset 和 canonical Base64；服务端核对已接收位置和原件上限，拒绝缺口或不一致重放。
 - `attachment_finish`、`attachment_status_request`、`attachment_cancel`：按租约和 upload ID 完成、查询或取消；零字节原件不发空分片。
 - `attachment_state`：返回 `receiving/complete/cancelled` 和已收字节数；只有 complete 带服务端附件描述，且字节数与描述一致。
-- `attachment_error`：只携带固定 code、retryable 和关联字段，不携带系统错误正文或本地路径。
+- `attachment_discard`：提供 `protocol_version=2`、`id`、`channel_id`、`session_id`、`upload_scope` 和服务端 `attachment_id`，用于清理恢复的描述符原件；不接受 `upload_id`，两种身份不能混用。
+- `attachment_discarded`：以 `in_reply_to`、`target_channel_id`、`session_id`、`upload_scope` 和 `attachment_id` 严格关联该清理请求，返回 `cancelled/retained`，不携带原件或路径。服务端校验已认证 Owner、session 和租约后复用取消清理；重复清理可回执 cancelled，已 retain 的原件必须保护并回执 retained。客户端仅在重新握手核验同目标和同租约后发送离线清理意图，不能转投其他 Owner/runtime/session/lease；此回执不能结清 upload ID 请求。
+- `attachment_error`：只携带固定 code、retryable 和关联字段，不携带系统错误正文或本地路径。可选 `upload_id` 与可选 `attachment_id` 互斥；两者均省略的既有错误形状仍合法。
 
 上传完成后，`user_message` 以 `attachment_ids` 提交，最多 10 个且不可重复，与旧 `images` 互斥。可以只有附件、没有文字；附件与直接 `streaming_behavior=steer` 的组合被拒绝，普通附件消息仍走既有队列。Extension 按 Owner 和租约解析 ID，可能投递后保留幂等保护；相同请求不能重复送给 Pi，投递未知不能假定原件尚未被读取。
 

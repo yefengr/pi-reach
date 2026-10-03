@@ -15,6 +15,7 @@ class UploadPort implements AttachmentUploadPort {
   readonly jobs = new Map<string, { file: File; resolve(value: AttachmentDescriptor): void; reject(error: unknown): void;
     progress(value: AttachmentUploadProgress): void; signal?: AbortSignal }>();
   readonly cancel = vi.fn(async () => undefined);
+  readonly cancelAttachment = vi.fn(async (_id: string, _scope: string) => undefined);
   readonly release = vi.fn();
   readonly disconnect = vi.fn();
   readonly dispose = vi.fn();
@@ -238,6 +239,52 @@ describe("session attachment message intent", () => {
     composer.start("restored", context);
     expect(client.jobs.size).toBe(0);
     expect(onReady.mock.calls[0][0].attachments).toEqual([descriptor("queued")]);
+  });
+
+  test("restored removal uses attachment ID and lease without inventing an upload job", () => {
+    const { composer, client } = setup();
+    composer.restoreAttachments([descriptor("queued")]);
+    composer.remove(composer.snapshot().items[0].id);
+    expect(client.cancelAttachment).toHaveBeenCalledWith("attachment-queued", "lease");
+    expect(client.cancel).not.toHaveBeenCalled();
+    expect(client.jobs.size).toBe(0);
+    expect(composer.snapshot().items).toEqual([]);
+  });
+
+  test("cancel intent preserves restored and newly completed originals for resend", async () => {
+    const { composer, client, onReady } = setup(() => false);
+    composer.restoreAttachments([descriptor("queued")]);
+    composer.addFiles([file("fresh"), file("waiting")]);
+    composer.start("first", context);
+    await client.finish("fresh");
+    composer.cancelIntent();
+    expect(client.cancelAttachment).not.toHaveBeenCalled();
+    expect(composer.snapshot().items.slice(0, 2).map((item) => item.attachment)).toEqual([descriptor("queued"), descriptor("fresh")]);
+    composer.remove(composer.snapshot().items[2].id);
+    const jobs = client.jobs.size;
+    composer.start("retry", context);
+    expect(client.jobs.size).toBe(jobs);
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(onReady.mock.calls[0][0]).toMatchObject({ text: "retry", attachments: [descriptor("queued"), descriptor("fresh")] });
+  });
+
+  test.each(["target", "lease", "dispose"])("true abandonment cleans restored descriptors on %s without resurrection", (mode) => {
+    const { composer, client, onReady } = setup();
+    composer.restoreAttachments([descriptor("queued")]);
+    if (mode === "dispose") composer.dispose();
+    else if (mode === "lease") client.changed({ status: "supported", uploadScope: "new" });
+    else {
+      composer.connect({ ...scope, endpointId: "other" }, () => true);
+      composer.connect(scope, () => true);
+    }
+    expect(client.cancelAttachment).toHaveBeenCalledWith("attachment-queued", "lease");
+    expect(client.cancel).not.toHaveBeenCalled();
+    if (mode !== "dispose") {
+      expect(composer.snapshot().items[0]).toMatchObject({ status: "failed", errorCode: "invalid_scope" });
+      expect(composer.snapshot().items[0].attachment).toBeUndefined();
+      composer.start("retry", context);
+      expect(onReady).not.toHaveBeenCalled();
+    }
   });
 
   test("selection limits are atomic and unsupported capability never uploads", () => {

@@ -263,6 +263,38 @@ describe("attachment server frames", () => {
   });
 });
 
+describe("attachment descriptor discard frames", () => {
+  const request = { ...version, ...upload, type: "attachment_discard" as const, id: "discard-1", attachment_id: "attachment-1" };
+  const response = { ...version, ...direct, type: "attachment_discarded" as const, in_reply_to: request.id,
+    session_id: upload.session_id, upload_scope: upload.upload_scope, attachment_id: request.attachment_id, status: "cancelled" as const };
+
+  test("strictly round-trips discard and retained acknowledgements without upload identity", () => {
+    expect(decodeClientFrameV2(encodeClientFrameTextV2(request))).toEqual(request);
+    for (const status of ["cancelled", "retained"] as const) {
+      const reply = { ...response, status };
+      expect(decodeServerFrameV2(encodeServerFrameTextV2(reply))).toEqual(reply);
+    }
+    for (const mutation of [{ extra: true }, { upload_id: "upload-1" }, { attachment_id: undefined }, { upload_scope: undefined }]) {
+      expectCode(() => decodeClientFrameV2({ ...request, ...mutation }), "schema");
+      expectCode(() => decodeServerFrameV2({ ...response, ...mutation }), "schema");
+    }
+    expectCode(() => decodeClientFrameV2({ ...request, protocol_version: 1 }), "version");
+    expectCode(() => decodeServerFrameV2({ ...response, protocol_version: 1 }), "version");
+    expectCode(() => decodeServerFrameV2(request), "direction");
+    expectCode(() => decodeClientFrameV2(response), "direction");
+    expectCode(() => decodeServerFrameV2({ ...response, status: "complete" }), "schema");
+  });
+
+  test("errors distinguish attachment IDs from upload IDs and preserve identifier-free errors", () => {
+    const error = { ...version, ...direct, type: "attachment_error" as const, in_reply_to: request.id,
+      session_id: upload.session_id, upload_scope: upload.upload_scope, code: "not_found" as const, retryable: false };
+    for (const identity of [{}, { upload_id: "upload-1" }, { attachment_id: "attachment-1" }]) {
+      expect(decodeServerFrameV2(encodeServerFrameTextV2({ ...error, ...identity }))).toEqual({ ...error, ...identity });
+    }
+    expectCode(() => decodeServerFrameV2({ ...error, upload_id: "upload-1", attachment_id: "attachment-1" }), "schema");
+  });
+});
+
 describe("legacy wire compatibility", () => {
   test("keeps previously frozen frames byte-identical", () => {
     const ping = { ...version, type: "ping" as const, id: "ping-1", ...channel };

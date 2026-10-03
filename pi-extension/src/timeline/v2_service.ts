@@ -167,6 +167,7 @@ export class TimelineV2Service {
       case "attachment_finish":
       case "attachment_status_request":
       case "attachment_cancel":
+      case "attachment_discard":
       case "queued_message_set":
       case "approve_tool":
         return this.requireReady(frame);

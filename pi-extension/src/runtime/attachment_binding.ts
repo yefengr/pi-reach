@@ -27,7 +27,7 @@ export class AttachmentRuntime {
 
 export type AttachmentFrame = Extract<ClientFrame, { type:
   "attachment_capabilities_request" | "attachment_begin" | "attachment_chunk" |
-  "attachment_finish" | "attachment_status_request" | "attachment_cancel" }>;
+  "attachment_finish" | "attachment_status_request" | "attachment_cancel" | "attachment_discard" }>;
 
 export function isAttachmentFrame(frame: ClientFrame): frame is AttachmentFrame {
   return frame.type.startsWith("attachment_");
@@ -45,6 +45,11 @@ export async function handleAttachmentFrame(store: AttachmentStore, service: Tim
   }];
   const scope = { ownerId, sessionId: frame.session_id, uploadScope: frame.upload_scope };
   try {
+    if (frame.type === "attachment_discard") return [{
+      protocol_version: 2, type: "attachment_discarded", target_channel_id: frame.channel_id, in_reply_to: frame.id,
+      session_id: frame.session_id, upload_scope: frame.upload_scope, attachment_id: frame.attachment_id,
+      status: await store.discard(scope, frame.attachment_id),
+    }];
     const state = await (() => {
       switch (frame.type) {
         case "attachment_begin": return store.begin(scope, { uploadId: frame.upload_id, fileName: frame.file_name,
@@ -61,7 +66,8 @@ export async function handleAttachmentFrame(store: AttachmentStore, service: Tim
   } catch (error) {
     const safe = error instanceof AttachmentStoreError ? error : new AttachmentStoreError("io_error", true);
     return [{ protocol_version: 2, type: "attachment_error", target_channel_id: frame.channel_id, in_reply_to: frame.id,
-      session_id: frame.session_id, upload_scope: frame.upload_scope, upload_id: frame.upload_id,
+      session_id: frame.session_id, upload_scope: frame.upload_scope,
+      ...(frame.type === "attachment_discard" ? { attachment_id: frame.attachment_id } : { upload_id: frame.upload_id }),
       code: safe.code, retryable: safe.retryable }];
   }
 }

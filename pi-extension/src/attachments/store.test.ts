@@ -1,6 +1,6 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm, stat, symlink, unlink, writeFile, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,12 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_COUNT } from "@pi-reach/protocol/session";
 import { AttachmentStore, AttachmentStoreError, type AttachmentBeginInput, type AttachmentScope,
   type AttachmentStoreOptions, type AttachmentStoreTestHooks } from "./store.js";
+import { DiskReservation } from "./reservations.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, unlink: vi.fn(actual.unlink) };
+});
 
 const roots: string[] = [];
 const stores: AttachmentStore[] = [];
@@ -96,6 +102,164 @@ describe("attachment safe receiving store", () => {
       expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
       expect((await stat(rootDir)).mode & 0o777).toBe(0o700);
     }
+  });
+
+  test("discard isolates owner/session/lease and releases ten completed originals idempotently", async () => {
+    const { store, scope } = await setup();
+    const ids: string[] = [];
+    for (let index = 0; index < ATTACHMENT_MAX_COUNT; index++) ids.push(await complete(store, scope, `old-${index}`));
+    const paths = store.resolve(scope, ids).map((item) => item.path);
+    await expect(store.begin(scope, input("overflow"))).rejects.toMatchObject({ code: "too_large" });
+    await expect(store.discard({ ...scope, ownerId: "other" }, ids[0])).rejects.toMatchObject({ code: "not_found" });
+    for (const wrong of [{ sessionId: "other" }, { uploadScope: "stale" }]) {
+      await expect(store.discard({ ...scope, ...wrong }, ids[0])).rejects.toMatchObject({ code: "invalid_scope" });
+    }
+    await expect(store.discard(scope, "unknown")).rejects.toMatchObject({ code: "not_found" });
+    expect(store.debugCounts().resources).toBe(10);
+    for (const id of ids) {
+      expect(await store.discard(scope, id)).toBe("cancelled");
+      expect(await store.discard(scope, id)).toBe("cancelled");
+      await expect(store.discard({ ...scope, ownerId: "other" }, id)).rejects.toMatchObject({ code: "not_found" });
+    }
+    for (const path of paths) await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(store.debugCounts()).toMatchObject({ resources: 0, attachments: 0 });
+    for (let index = 0; index < ATTACHMENT_MAX_COUNT; index++) await complete(store, scope, `new-${index}`);
+    expect(store.debugCounts().resources).toBe(10);
+  });
+
+  test("discard retries a failed original unlink before publishing its cancellation tombstone", async () => {
+    const { store, scope } = await setup();
+    const id = await complete(store, scope, "unlink-retry");
+    const path = store.resolve(scope, [id])[0].path;
+    const remove = vi.mocked(unlink);
+    remove.mockClear();
+    remove.mockRejectedValueOnce(Object.assign(new Error("temporary cleanup failure"), { code: "EACCES" }));
+    await expect(store.discard(scope, id)).rejects.toMatchObject({ code: "io_error", retryable: true });
+    expect((await stat(path)).size).toBe(4);
+    expect(store.debugCounts()).toMatchObject({ attachments: 1, resources: 1 });
+    expect(() => store.resolve(scope, [id])).toThrowError(AttachmentStoreError);
+    expect(() => store.retain(scope, [id])).toThrowError(AttachmentStoreError);
+    expect(await store.discard(scope, id)).toBe("cancelled");
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(remove.mock.calls.filter(([target]) => target === path)).toHaveLength(2);
+    expect(store.debugCounts()).toMatchObject({ attachments: 0, resources: 0 });
+    expect(await store.discard(scope, id)).toBe("cancelled");
+    expect(remove.mock.calls.filter(([target]) => target === path)).toHaveLength(2);
+    await expect(store.dispose()).resolves.toBeUndefined();
+  });
+
+  test.each(["close", "reservation"] as const)("cancel retries a failed %s without losing its live cleanup resource", async (step) => {
+    let handle!: FileHandle;
+    const { store, scope, rootDir } = await setup({ testHooks: { afterCreate: (created) => { handle = created; } } });
+    await store.begin(scope, input("cleanup-retry"));
+    const directory = join(rootDir, createHash("sha256").update(scope.sessionId).digest("hex"));
+    const [name] = await readdir(directory);
+    const path = join(directory, name);
+    const id = name.slice(0, -4);
+    const ledger = join(rootDir, ".reservations");
+    const close = vi.spyOn(handle, "close");
+    const remove = vi.spyOn(DiskReservation.prototype, "remove");
+    const failed = step === "close" ? close : remove;
+    failed.mockRejectedValueOnce(Object.assign(new Error("temporary cleanup failure"), { code: "EACCES" }));
+    await expect(store.cancel(scope, "cleanup-retry")).rejects.toMatchObject({ code: "io_error", retryable: true });
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(store.debugCounts()).toMatchObject({ attachments: 1, resources: 1 });
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    if (step === "close") {
+      expect(handle.fd).toBeGreaterThanOrEqual(0);
+      expect(await readdir(ledger)).toEqual([]);
+    } else {
+      expect(handle.fd).toBe(-1);
+      expect(await readdir(ledger)).toHaveLength(1);
+    }
+    expect(await store.discard(scope, id)).toBe("cancelled");
+    expect(failed).toHaveBeenCalledTimes(2);
+    expect(handle.fd).toBe(-1);
+    expect(await readdir(ledger)).toEqual([]);
+    expect(store.debugCounts()).toMatchObject({ attachments: 0, resources: 0 });
+    await expect(store.dispose()).resolves.toBeUndefined();
+  });
+
+  test("dispose retries earlier failures but does not erase a different resource's real failure", async () => {
+    const { store, scope } = await setup();
+    const first = await complete(store, scope, "first-retry");
+    const second = await complete(store, scope, "second-failure");
+    const [firstPath, secondPath] = store.resolve(scope, [first, second]).map((item) => item.path);
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const remove = vi.mocked(unlink);
+    remove.mockClear();
+    let firstFailed = false;
+    remove.mockImplementation(async (path) => {
+      if (path === secondPath || (path === firstPath && !firstFailed)) {
+        firstFailed ||= path === firstPath;
+        throw Object.assign(new Error("temporary cleanup failure"), { code: "EACCES" });
+      }
+      return actual.unlink(path);
+    });
+    try {
+      await expect(store.discard(scope, first)).rejects.toMatchObject({ code: "io_error" });
+      await expect(store.discard(scope, second)).rejects.toMatchObject({ code: "io_error" });
+      expect(await store.discard(scope, first)).toBe("cancelled");
+      await expect(store.dispose()).rejects.toMatchObject({ code: "io_error" });
+      await expect(stat(firstPath)).rejects.toMatchObject({ code: "ENOENT" });
+      expect((await stat(secondPath)).size).toBe(4);
+      expect(remove.mock.calls.filter(([path]) => path === firstPath)).toHaveLength(2);
+      expect(remove.mock.calls.filter(([path]) => path === secondPath)).toHaveLength(2);
+      expect(store.debugCounts().resources).toBe(1);
+    } finally {
+      remove.mockImplementation(actual.unlink);
+      stores.splice(stores.indexOf(store), 1);
+    }
+  });
+
+  test("dispose retries an earlier reservation failure and reports only remaining failures", async () => {
+    const { store, scope, rootDir } = await setup();
+    await store.begin(scope, input("dispose-retry"));
+    const remove = vi.spyOn(DiskReservation.prototype, "remove")
+      .mockRejectedValueOnce(Object.assign(new Error("temporary cleanup failure"), { code: "EACCES" }));
+    await expect(store.cancel(scope, "dispose-retry")).rejects.toMatchObject({ code: "io_error" });
+    await expect(store.dispose()).resolves.toBeUndefined();
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(await readdir(join(rootDir, ".reservations"))).toEqual([]);
+    expect(store.debugCounts()).toMatchObject({ resources: 0, attachments: 0 });
+  });
+
+  test("reset retries failed old-lease cleanup before restoring the owner's full active quota", async () => {
+    const { store, scope } = await setup();
+    const id = await complete(store, scope, "old-reset");
+    const path = store.resolve(scope, [id])[0].path;
+    const remove = vi.mocked(unlink);
+    remove.mockClear();
+    remove.mockRejectedValueOnce(Object.assign(new Error("temporary cleanup failure"), { code: "EACCES" }));
+    store.resetScope(scope.sessionId);
+    await vi.waitFor(() => expect(store.debugCounts()).toMatchObject({ resources: 1, cleanups: 0, pending: 0 }));
+    expect((await stat(path)).size).toBe(4);
+    await expect(store.discard(scope, id)).rejects.toMatchObject({ code: "invalid_scope" });
+    store.resetScope(scope.sessionId);
+    const next = { ...scope, uploadScope: store.scopeFor(scope.sessionId) };
+    await vi.waitFor(() => expect(store.debugCounts()).toMatchObject({ resources: 0, cleanups: 0, pending: 0 }), { timeout: 5_000 });
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(remove.mock.calls.filter(([target]) => target === path)).toHaveLength(2);
+    for (let index = 0; index < ATTACHMENT_MAX_COUNT; index++) await complete(store, next, `after-reset-${index}`);
+    expect(store.debugCounts()).toMatchObject({ resources: ATTACHMENT_MAX_COUNT, attachments: ATTACHMENT_MAX_COUNT });
+  }, 15_000);
+
+  test("discard protects retained originals and expires cancellation tombstones with the lease", async () => {
+    const { store, scope } = await setup();
+    const retained = await complete(store, scope, "retained");
+    const path = store.resolve(scope, [retained])[0].path;
+    store.retain(scope, [retained]);
+    expect(await store.discard(scope, retained)).toBe("retained");
+    expect(await store.discard(scope, retained)).toBe("retained");
+    expect(await readFile(path, "utf8")).toBe("test");
+    const removed = await complete(store, scope, "removed");
+    await store.discard(scope, removed);
+    store.resetScope(scope.sessionId);
+    const next = { ...scope, uploadScope: store.scopeFor(scope.sessionId) };
+    await expect(store.discard(scope, removed)).rejects.toMatchObject({ code: "invalid_scope" });
+    await expect(store.discard(next, removed)).rejects.toMatchObject({ code: "not_found" });
+    await expect(store.discard(next, retained)).rejects.toMatchObject({ code: "not_found" });
+    expect(await readFile(path, "utf8")).toBe("test");
   });
 
   test("zero files finish and begin/finish/identical chunks are idempotent", async () => {

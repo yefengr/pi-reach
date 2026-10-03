@@ -113,7 +113,7 @@ test("missing original during cleanup still closes its handle and releases disk 
   await store.begin(scope, { ...empty("two"), byteLength: 4 });
 });
 
-test("unsafe replacement cleanup preserves original begin error but still closes handles and releases credits", async () => {
+test("unsafe replacement cleanup preserves the begin error and bounded failed resource while closing handles and releasing credits", async () => {
   let handle: FileHandle | undefined;
   let path = "";
   const { store, scope, rootDir } = await setup({
@@ -131,8 +131,16 @@ test("unsafe replacement cleanup preserves original begin error but still closes
   expect(handle!.fd).toBe(-1);
   expect(await readFile(path, "utf8")).toBe("replacement original");
   expect(await readdir(join(rootDir, ".reservations"))).toEqual([]);
-  await drained(store);
-  expect(store.debugCounts().records).toBe(0);
+  await vi.waitFor(() => expect(store.debugCounts()).toMatchObject({
+    cleanups: 0, pending: 0, resources: 1, records: 1,
+  }));
+  await expect(store.cancel(scope, "one")).rejects.toMatchObject({ code: "invalid_upload" });
+  expect(await readFile(path, "utf8")).toBe("replacement original");
+  expect(handle!.fd).toBe(-1);
+  expect(await readdir(join(rootDir, ".reservations"))).toEqual([]);
+  await vi.waitFor(() => expect(store.debugCounts()).toMatchObject({
+    cleanups: 0, pending: 0, resources: 1, records: 1,
+  }));
   await expect(store.dispose()).rejects.toMatchObject({ code: "invalid_upload" });
   stores.splice(stores.indexOf(store), 1);
 });
