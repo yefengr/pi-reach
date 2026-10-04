@@ -6,7 +6,7 @@ export type ConfirmActionRequest =
   | { kind: "new-session" }
   | { kind: "remove-pairing"; label: string; device: PwaDeviceRecord }
   | { kind: "clear-local-data" }
-  | { kind: "leave-attachments"; next: () => void };
+  | { kind: "leave-attachments"; next: () => void; uploads?: boolean; files?: boolean };
 
 type ConfirmActionEffects = {
   startNewSession: () => boolean;

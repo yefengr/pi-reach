@@ -40,6 +40,18 @@ import {
   attachmentPreviewSchema,
   attachmentSha256Schema,
 } from "./attachments.js";
+import {
+  FILE_MAX_BYTES,
+  canonicalBase64ByteLength,
+  fileByteLengthSchema,
+  fileChunkDataSchema,
+  fileErrorCodeSchema,
+  fileFileNameSchema,
+  fileMimeSchema,
+  fileOffsetSchema,
+  filePreviewSchema,
+  fileSha256Schema,
+} from "./files.js";
 import type { TimelineEvent, TimelinePartial } from "./schema.js";
 
 const wireTimelineEventSchema: z.ZodType<TimelineEvent> = sequencedTimelineEventSchema;
@@ -49,6 +61,9 @@ const directResponse = { ...protocol, target_channel_id: channelIdSchema };
 const ownerBroadcast = { ...protocol, session_id: idSchema, leaf_id: leafIdSchema };
 const attachmentUploadRequest = { ...protocol, channel_id: channelIdSchema, session_id: idSchema, upload_scope: idSchema };
 const attachmentUploadResponse = { ...directResponse, in_reply_to: idSchema, session_id: idSchema, upload_scope: idSchema };
+// Published-file reads are scoped to channel/session only: they never carry leaf or upload_scope.
+const fileChannelRequest = { ...protocol, channel_id: channelIdSchema, session_id: idSchema };
+const fileResponse = { ...directResponse, in_reply_to: idSchema, session_id: idSchema };
 const safeOffsetSchema = z.number().int().nonnegative().finite().max(Number.MAX_SAFE_INTEGER);
 
 export const pairRequestFrameSchema = strictObject({ ...protocol, type: z.literal("pair_request"), id: idSchema, code: pairingCodeSchema, device_name: textSchema });
@@ -81,6 +96,10 @@ export const attachmentStatusRequestFrameSchema = strictObject({ ...protocol, ty
 export const attachmentCancelFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_cancel"), id: idSchema, ...attachmentUploadRequest, upload_id: idSchema });
 
 export const attachmentDiscardFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_discard"), id: idSchema, ...attachmentUploadRequest, attachment_id: idSchema });
+
+export const fileOpenFrameSchema = strictObject({ ...fileChannelRequest, type: z.literal("file_open"), id: idSchema, publication_id: idSchema });
+export const fileReadFrameSchema = strictObject({ ...fileChannelRequest, type: z.literal("file_read"), id: idSchema, transfer_id: idSchema, offset: fileOffsetSchema });
+export const fileCloseFrameSchema = strictObject({ ...fileChannelRequest, type: z.literal("file_close"), id: idSchema, transfer_id: idSchema });
 
 export const pairOkFrameSchema = strictObject({ ...protocol, type: z.literal("pair_ok"), in_reply_to: idSchema, session_name: textSchema, session_started_at: timestampSchema, endpoint_id: idSchema, harness: harnessSchema.optional(), hostname: textSchema.optional() });
 export const pairErrorFrameSchema = strictObject({ ...protocol, type: z.literal("pair_error"), in_reply_to: idSchema, code: z.enum(["token_expired", "token_consumed", "token_unknown", "internal_error"]), message: textSchema.min(1) });
@@ -156,8 +175,53 @@ export const attachmentErrorFrameSchema = strictObject({ ...attachmentUploadResp
   }
 });
 
-export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema]);
-export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema]);
+export const fileOpenedFrameSchema = strictObject({
+  ...fileResponse,
+  type: z.literal("file_opened"),
+  publication_id: idSchema,
+  transfer_id: idSchema,
+  file_name: fileFileNameSchema,
+  mime_type: fileMimeSchema,
+  byte_length: fileByteLengthSchema,
+  preview: filePreviewSchema,
+});
+
+const fileChunkFields = {
+  ...fileResponse,
+  type: z.literal("file_chunk"),
+  transfer_id: idSchema,
+  offset: fileOffsetSchema,
+};
+/** Final chunks carry the transfer digest; only a zero-length file has an empty final chunk. */
+export const fileChunkFrameSchema = z.union([
+  strictObject({ ...fileChunkFields, data_base64: fileChunkDataSchema, final: z.literal(false) }),
+  strictObject({ ...fileChunkFields, data_base64: fileChunkDataSchema, final: z.literal(true), total_bytes: fileByteLengthSchema, sha256: fileSha256Schema }),
+]).superRefine((frame, ctx) => {
+  const decoded = canonicalBase64ByteLength(frame.data_base64);
+  if (decoded === null) {
+    ctx.addIssue({ code: "custom", path: ["data_base64"], message: "data_base64 must be canonical Base64" });
+    return;
+  }
+  if (frame.final) {
+    if (decoded === 0 && (frame.offset !== 0 || frame.total_bytes !== 0)) {
+      ctx.addIssue({ code: "custom", path: ["data_base64"], message: "empty final chunk requires offset 0 and total_bytes 0" });
+    }
+    if (frame.offset + decoded !== frame.total_bytes) {
+      ctx.addIssue({ code: "custom", path: ["total_bytes"], message: "final chunk must end at total_bytes" });
+    }
+  } else if (decoded < 1) {
+    ctx.addIssue({ code: "custom", path: ["data_base64"], message: "non-final chunk data must be at least 1 byte" });
+  }
+  if (frame.offset + decoded > FILE_MAX_BYTES) {
+    ctx.addIssue({ code: "custom", path: ["offset"], message: `chunk must not exceed ${FILE_MAX_BYTES} bytes` });
+  }
+});
+
+export const fileClosedFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_closed"), transfer_id: idSchema });
+export const fileErrorFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_error"), transfer_id: idSchema.optional(), code: fileErrorCodeSchema });
+
+export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema]);
+export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema, fileOpenedFrameSchema, fileChunkFrameSchema, fileClosedFrameSchema, fileErrorFrameSchema]);
 
 export const ClientFrameSchema = clientFrameSchema;
 export const ServerFrameSchema = serverFrameSchema;

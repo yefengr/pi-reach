@@ -2,9 +2,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   DecodeError,
+  FILE_CHUNK_BYTES,
+  FILE_MAX_BYTES,
   MAX_FRAGMENT_BYTES,
   MAX_HISTORY_CHUNK_BYTES,
   MAX_WINDOW_BYTES,
+  PUBLISHED_FILE_TYPE,
   decodeClientFrameV2,
   decodeServerFrameV2,
   encodeClientFrameTextV2,
@@ -12,6 +15,7 @@ import {
   encodeServerFrameTextV2,
   encodeServerFrameV2,
   parseTimelineEventV2,
+  publishedFileFromEvent,
   validateFragmentSizeV2,
   validateHistoryChunkSizeV2,
   validateWindowSizeV2,
@@ -177,5 +181,45 @@ describe("shared session protocol sizes and encoding", () => {
     expect(new TextDecoder().decode(encodeClientFrameV2(client))).toBe(encodeClientFrameTextV2(client));
     expect(new TextDecoder().decode(encodeServerFrameV2(server))).toBe(encodeServerFrameTextV2(server));
     expect(decodeServerFrameV2(encodeServerFrameV2(server))).toEqual(server);
+  });
+});
+
+describe("published file protocol contract", () => {
+  const fileChannel = { channel_id: "channel-1", session_id: "session-1" };
+  const fileReply = { ...direct, in_reply_to: "open-1", session_id: "session-1" };
+
+  test("keeps file reads channel-scoped and chunks canonical", () => {
+    const open = { ...version, type: "file_open" as const, id: "open-1", ...fileChannel, publication_id: "event-1" };
+    const read = { ...version, type: "file_read" as const, id: "read-1", ...fileChannel, transfer_id: "transfer-1", offset: 0 };
+    expect(decodeClientFrameV2(open)).toEqual(open);
+    expect(decodeClientFrameV2(read)).toEqual(read);
+    expectCode(() => decodeClientFrameV2({ ...open, leaf_id: "generation-1" }), "schema");
+    expectCode(() => decodeServerFrameV2(open), "direction");
+
+    const digest = "a".repeat(64);
+    const final = { ...version, ...fileReply, type: "file_chunk" as const, transfer_id: "transfer-1", offset: 0, data_base64: "aGk=", final: true, total_bytes: 2, sha256: digest };
+    expect(decodeServerFrameV2(final)).toEqual(final);
+    expectCode(() => decodeServerFrameV2({ ...final, data_base64: "aGl=" }), "schema");
+    expectCode(() => decodeServerFrameV2({ ...final, total_bytes: 3 }), "schema");
+
+    const empty = { ...final, data_base64: "", total_bytes: 0 };
+    expect(decodeServerFrameV2(empty)).toEqual(empty);
+    expectCode(() => decodeServerFrameV2({ ...empty, offset: 2 }), "schema");
+    expectCode(() => decodeClientFrameV2(final), "direction");
+
+    expect(FILE_CHUNK_BYTES).toBe(64 * 1024);
+    expect(FILE_MAX_BYTES).toBe(50 * 1024 * 1024);
+  });
+
+  test("keeps source_path out of the wire payload", () => {
+    const published = {
+      event_id: "event-1", session_id: "session-1", leaf_id: "generation-1", timestamp: 0,
+      kind: "custom" as const,
+      payload: { custom_type: PUBLISHED_FILE_TYPE, data: { file_name: "report.txt", mime_type: "text/plain", byte_length: 3, tool_call_id: "tool-1" } },
+      truncated: false,
+    };
+    expect(publishedFileFromEvent(parseTimelineEventV2(published))).toMatchObject({ publication_id: "event-1", file_name: "report.txt" });
+    const leaked = { ...published, payload: { ...published.payload, data: { ...published.payload.data, source_path: "/tmp/report.txt" } } };
+    expect(publishedFileFromEvent(parseTimelineEventV2(leaked))).toBeNull();
   });
 });

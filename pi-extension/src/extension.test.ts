@@ -136,6 +136,7 @@ function makePi(): ExtensionAPI & { handlers: Map<string, Function>; commands: M
     commands,
     sent,
     registerCommand: vi.fn((name, definition) => commands.set(name, definition.handler)),
+    registerTool: vi.fn(),
     on: vi.fn((name, handler) => handlers.set(name, handler)),
     sendMessage: vi.fn((message) => sent.push(message)),
     getThinkingLevel: vi.fn(),
@@ -214,6 +215,15 @@ describe("Pi Reach endpoint extension", () => {
     expect(processEndpointIdentity()).toBe(processEndpointIdentity());
     expect(processEndpointIdentity().endpointId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(processEndpointIdentity().runtimeInstanceId).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  test("registers publish_file as a sequential single-file tool", () => {
+    const pi = makePi();
+    (extension as ExtensionFactory)(pi);
+    const tools = vi.mocked(pi.registerTool).mock.calls.map(([tool]) => tool);
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({ name: "publish_file", executionMode: "sequential" });
+    expect(tools[0]?.parameters).toMatchObject({ type: "object", required: ["path"] });
   });
 
   test("announces runtime readiness through Pi and RPC status", () => {

@@ -12,7 +12,10 @@ import { addPeer, conditionalRollbackPeer, getOrCreateEd25519Keypair, KeyringUna
 import { idSchema, type ClientFrame, type ServerFrame } from "./protocol/v2/index.js";
 import { RelayClient, type HostConnectOptions } from "./transport/relay_client.js";
 import { type HostRouteIdentity } from "./transport/peer_channel.js";
-import { AttachmentRuntime, handleAttachmentFrame, isAttachmentFrame } from "./runtime/attachment_binding.js";
+import { AttachmentRuntime } from "./runtime/attachment_binding.js";
+import { FileBinding } from "./runtime/file_binding.js";
+import { createSessionFrameRouter } from "./runtime/session_frame_router.js";
+import { createPublishFileTool } from "./files/publish-tool.js";
 import { createOwnerBinding, type OwnerBinding } from "./runtime/create_owner_binding.js";
 import { TimelineV2Service, type V2ActionFrame } from "./timeline/v2_service.js";
 import { TimelineRuntime } from "./timeline/runtime.js";
@@ -198,6 +201,8 @@ const attachmentRuntime = new AttachmentRuntime(endpointIdentity.runtimeInstance
 const attachments = () => attachmentRuntime.get();
 
 const activeOwners = new Map<string, OwnerBinding>();
+const files = new FileBinding({ runtimeId: endpointIdentity.runtimeInstanceId, getManager: () => currentSessionManager, getBinding: (id) => activeOwners.get(id) });
+const routeClientFrame = createSessionFrameRouter({ getBinding: (id) => activeOwners.get(id), getAttachments: () => attachments().store, files });
 const userDelivery = new UserDeliveryBinding({
   isIdle: () => lastEventCtx?.isIdle() ?? false,
   canAcceptNormal: () => piApi !== null && lastEventCtx !== null,
@@ -244,6 +249,7 @@ const relayLifecycle = new RelayLifecycle({
 function detachOwner(ownerId: string): void {
   const binding = activeOwners.get(ownerId);
   if (!binding) return;
+  files.closeOwner(ownerId);
   userDelivery.clearOwner(ownerId, binding.service);
   try { binding.channel.detach(); } catch { /* best effort */ }
   activeOwners.delete(ownerId);
@@ -296,6 +302,7 @@ function ensureTimeline(sessionManager: SessionManager): TimelineRuntime {
 }
 
 function refreshOwnerScopes(reason: "branch_changed" | "session_replaced"): void {
+  files.invalidate();
   userDelivery.clearAll();
   if (currentSessionManager) attachmentRuntime.reset(currentSessionManager.getSessionId());
   for (const { channel, service } of activeOwners.values()) {
@@ -360,19 +367,6 @@ function attachOwner(relayClient: RelayClient, ownerId: string): OwnerBinding | 
   return binding;
 }
 
-function routeClientFrame(ownerId: string, frame: ClientFrame): void {
-  const binding = activeOwners.get(ownerId);
-  if (!binding) return;
-  if (isAttachmentFrame(frame)) {
-    void handleAttachmentFrame(attachments().store, binding.service, ownerId, frame).then((responses) => {
-      if (activeOwners.get(ownerId) !== binding) return;
-      for (const response of responses) binding.channel.sendV2(response);
-    });
-    return;
-  }
-  for (const response of binding.service.handle(frame)) binding.channel.sendV2(response);
-}
-
 function installRouteListener(relayClient: RelayClient): () => void {
   return installOwnerRouter(relayClient, {
     isCurrent: (candidate) => relayLifecycle.isCurrent(candidate),
@@ -424,6 +418,7 @@ function handlePairRequest(relayClient: RelayClient, ownerId: string, frame: Ext
 }
 
 function closeRelay(reason?: "peer_stop" | "session_replaced" | "shutdown"): void {
+  files.invalidate();
   userDelivery.clearAll();
   attachmentRuntime.close();
   sessionNewBridge.clear("session replacement cancelled because the endpoint closed");
@@ -490,6 +485,7 @@ const extension: ExtensionFactory = (api): void => {
   const owner = new ExtensionOwner();
   const pi = owner.guard(api);
   registerCommands(pi, commandDependencies);
+  pi.registerTool(createPublishFileTool({ getManager: () => currentSessionManager, isCurrent: () => owner.isCurrent(), getGeneration: () => files.generation, getGroupId: () => timeline?.currentGroupId ?? null, inspect: (path) => files.reader.inspectForPublication(path) }));
 
   pi.on("input", (event) => {
     if (event.text.startsWith(CTRL_PREFIX)) {
@@ -558,6 +554,7 @@ const extension: ExtensionFactory = (api): void => {
     setCurrentModel(ctx.model);
     const manager = (ctx as unknown as { sessionManager?: SessionManager }).sessionManager;
     if (manager) {
+      files.invalidate();
       userDelivery.clearAll();
       currentSessionManager = manager;
       attachmentRuntime.reset(manager.getSessionId());
@@ -575,6 +572,7 @@ const extension: ExtensionFactory = (api): void => {
   pi.on("session_tree", () => refreshOwnerScopes("branch_changed"));
   api.on("session_shutdown", (event) => {
     if (!owner.isCurrent()) return;
+    files.invalidate();
     userDelivery.clearAll();
     footerCtx = null;
     if (event.reason !== "quit") {

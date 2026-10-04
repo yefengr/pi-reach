@@ -5,6 +5,8 @@ import { RenamePairingDialog } from "@/components/pwa/rename-pairing-dialog";
 import { ConfirmActionDialog } from "@/components/pwa/confirm-action-dialog";
 import { COMPOSER_THINKING_LEVELS, type ComposerCommandAction } from "@/components/pwa/composer-command-menu";
 import { MessageList } from "@/components/pwa/message-list";
+import { PublishedFilesProvider } from "./published-files-context";
+import { useSessionFiles } from "./use-session-files";
 import { isQueuedMessage, QueuedMessagesPanel } from "@/components/pwa/queued-messages-panel";
 import { decodeBase64 } from "@/lib/pi-reach/encoding";
 import { describeStartupFailure, StartupErrorView, StartupLoading, type StartupError } from "@/components/pwa/pwa-startup";
@@ -145,6 +147,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     loadingEarlier,
     reconnectPhase,
     catchupFailed,
+    catchingUp,
     followingOutput,
     unreadOutput,
     messageListRef,
@@ -197,6 +200,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   }, t.attachments);
   const attachmentComposer = attachments.composer;
   const addAttachmentFiles = attachments.addFiles;
+  const { controller: fileController, readyRef: filesReadyRef, view: fileView, onToolReading } = useSessionFiles({
+    ready: connection === "online" && selectedHistory === null && !catchingUp && !catchupFailed && !reconnectPhase,
+    items: timelineItems, runtimeRef: timelineRuntimeRef, channelRef, setReading: setReadingDetails,
+  });
 
   const onDeviceSelected = useCallback(() => {
     operationNotifications.clearSession();
@@ -285,6 +292,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   }, [activeDevice?.deviceId, activeEndpoint?.endpointId, liveEndpointSnapshot?.endpointId]);
 
   const clearSessionConnection = useCallback(() => {
+    fileController.disconnect();
+    filesReadyRef.current = false;
     connectionGenerationRef.current += 1;
     channelRef.current?.close();
     channelRef.current = null;
@@ -302,7 +311,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     setExtensionVersion(null);
     disconnectTimeline();
     attachmentComposer.disconnect();
-  }, [attachmentComposer, disconnectTimeline]);
+  }, [attachmentComposer, disconnectTimeline, fileController, filesReadyRef]);
   const finishRetry = useCallback(() => {
     retryPendingRef.current = false;
     retryDeviceIdRef.current = null;
@@ -458,11 +467,15 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const handleServerFrame = useCallback((frame: ServerFrame, context: ConnectionContext) => {
     const current = channelContextRef.current;
     if (!current || current.generation !== context.generation || current.deviceId !== context.deviceId || current.endpointId !== context.endpointId || current.runtimeInstanceId !== context.runtimeInstanceId || channelRef.current !== context.channel || relayRef.current !== context.relay) return;
+    if (fileController.receive(frame)) return;
     if (attachmentComposer.receive(frame)) return;
     if (frame.type === "reset" || frame.type === "bye") {
       const scope = timelineRuntimeRef.current.currentScope;
       if (!scope || scope.sessionId !== frame.session_id) return;
       if (frame.type === "bye" && scope.leafId !== frame.leaf_id) return;
+      if (frame.type === "reset" || frame.reason === "session_replaced") fileController.reset();
+      else fileController.disconnect();
+      filesReadyRef.current = false;
     }
     const recoveryAction = recoverServerFrame(frame, {
       invalidateScope: invalidateTimelineScope,
@@ -543,7 +556,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       },
       receiveRealtimeOutput, setError: reportSessionFailure, setLastSyncedAt, onHistoryChanged: refreshHistory,
     });
-  }, [attachmentComposer, applyTimelineChange, disconnectSession, finishRetry, fragmentAssemblerRef, historyLoaderRef, invalidateTimelineScope, operationNotifications, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionName, reportSessionFailure, restartSession, sendExtensionInfoRequest, sendModelsRequest, setLastSyncedAt, startLive, timelineRuntimeRef]);
+  }, [attachmentComposer, fileController, filesReadyRef, applyTimelineChange, disconnectSession, finishRetry, fragmentAssemblerRef, historyLoaderRef, invalidateTimelineScope, operationNotifications, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionName, reportSessionFailure, restartSession, sendExtensionInfoRequest, sendModelsRequest, setLastSyncedAt, startLive, timelineRuntimeRef]);
 
   useEffect(() => {
     const model = activeEndpoint?.model;
@@ -622,12 +635,14 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     return () => {
       cancelled = true;
       const channel = channelRef.current;
+      fileController.disconnect();
+      filesReadyRef.current = false;
       channel?.close();
       disconnectTimeline();
       attachmentComposer.disconnect();
       if (channelRef.current === channel) channelRef.current = null;
     };
-  }, [attachmentComposer, clearSessionConnection, closeRelayIntentionally, disconnectTimeline, handleServerFrame, identity, onlineRef, operationNotifications, relayConnectionGeneration, relayRef, reportProtocolFailure, sessionDeviceId, sessionEndpointId, sessionOnline, sessionRestartToken, sessionRuntimeInstanceId, startupState]);
+  }, [attachmentComposer, fileController, filesReadyRef, clearSessionConnection, closeRelayIntentionally, disconnectTimeline, handleServerFrame, identity, onlineRef, operationNotifications, relayConnectionGeneration, relayRef, reportProtocolFailure, sessionDeviceId, sessionEndpointId, sessionOnline, sessionRestartToken, sessionRuntimeInstanceId, startupState]);
 
   const sendMessage = useCallback(() => {
     const scope = timelineRuntimeRef.current.currentScope; const channel = channelRef.current; const text = draft.trim();
@@ -755,17 +770,26 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const { requestConfirmation, closeBackgroundOverlay, finishConfirmationTransition } = useConfirmationOverlay(setConfirmAction, setConfirmError, confirmPendingRef);
   const confirmRequestedAction = useCallback(async () => {
     if (!confirmAction) return;
-    if (confirmAction.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id)) attachmentComposer.cancelIntent();
+    if (confirmAction.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id)) {
+      attachmentComposer.cancelIntent();
+      if (confirmAction.kind === "new-session") fileController.cancel();
+      else { fileController.reset(); filesReadyRef.current = false; }
+    }
     await runConfirmAction(confirmAction, { startNewSession: () => sendCommandAction({ action: "session_new" }), removePairing, invalidateConnection: clearSessionConnection, clearLocalData, reload: reloadWorkspace }, { pendingRef: confirmPendingRef, setPending: setConfirmPending, setError: setConfirmError, onSuccess: () => setConfirmAction(null) });
-  }, [attachmentComposer, clearLocalData, clearSessionConnection, confirmAction, isActiveDevice, removePairing, sendCommandAction]);
+  }, [attachmentComposer, fileController, filesReadyRef, clearLocalData, clearSessionConnection, confirmAction, isActiveDevice, removePairing, sendCommandAction]);
   const navigate = (next: () => void) => {
-    if (attachmentComposer.snapshot().active) requestConfirmation({ kind: "leave-attachments", next });
-    else next();
+    const uploads = attachmentComposer.snapshot().active;
+    const files = fileController.snapshot().active;
+    const switchTarget = () => { fileController.reset(); filesReadyRef.current = false; next(); };
+    if (uploads || files) requestConfirmation({ kind: "leave-attachments", next: switchTarget, uploads, files });
+    else switchTarget();
   };
   const selectLiveEndpoint = (endpointId: string) => {
     if (selectedHistory !== null || endpointId !== activeEndpointId) navigate(() => openLiveEndpoint(endpointId));
   };
-  const selectHistory = (history: TimelineSessionSummary) => navigate(() => openHistory(history));
+  const selectHistory = (history: TimelineSessionSummary) => {
+    if (selectedHistory?.id !== history.id) navigate(() => openHistory(history));
+  };
   const onlinePis = useMemo(() => activePis.filter((endpoint) => endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right))), [activePis]);
   const placeholderKind: WorkspacePlaceholderKind = !activeDevice ? "choose-computer" : !snapshotReady ? "checking" : onlinePis.length === 0 ? "no-pi" : onlinePis.length > 1 ? "choose-pi" : "opening";
   // 在线 Pi 的当前会话只出现在「在线 Pi」分组：当前选中的 Pi 只隐藏已握手的实时会话；其他在线 Pi 隐藏它在本浏览器中
@@ -887,9 +911,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const emptySessionContext = displayEndpoint
     ? [cwdName(displayEndpoint.cwd), currentModel?.name ?? displayEndpoint.model ?? null, displayEndpoint.thinking ? t.commands.thinkingLevelValue(activeThinking) : null].filter(Boolean).join(" · ") || null
     : null;
-  const liveTimeline = <MessageList items={timelineItems.filter((item) => !isQueuedMessage(item))} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} onLoadEarlier={loadEarlier} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onScroll={handleScroll} isLive={connection === "online"} emptyContext={emptySessionContext} running={displayEndpoint?.working === true} onReadingChange={setReadingDetails} reconnectPhase={reconnectPhase} loading={sessionLoading || sessionSkeletonVisible} skeletonVisible={sessionSkeletonVisible} topNotice={sessionSwitched ? t.workspace.sessionSwitched : null} onRetryUnknown={(requestId) => { const retry = timelineRuntimeRef.current.retryUnknown(requestId); if (retry && channelRef.current?.send(retry.frame)) applyTimelineChange(retry.change); }} />;
+  const liveTimeline = <MessageList items={timelineItems.filter((item) => !isQueuedMessage(item))} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} onLoadEarlier={loadEarlier} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onScroll={handleScroll} isLive={connection === "online"} fileSourceCurrent emptyContext={emptySessionContext} running={displayEndpoint?.working === true} onReadingChange={onToolReading} reconnectPhase={reconnectPhase} loading={sessionLoading || sessionSkeletonVisible} skeletonVisible={sessionSkeletonVisible} topNotice={sessionSwitched ? t.workspace.sessionSwitched : null} onRetryUnknown={(requestId) => { const retry = timelineRuntimeRef.current.retryUnknown(requestId); if (retry && channelRef.current?.send(retry.frame)) applyTimelineChange(retry.change); }} />;
   const mainContent = selectedHistory
-    ? <HistoryWorkspace key={selectedHistory.id} items={historyItems} restoreScrollTop={historyRestoreScrollTop} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onBackToLive={historyEndpoint && historyEndpoint.online !== false ? () => openLiveEndpoint(historyEndpoint.endpointId) : undefined} />
+    ? <HistoryWorkspace key={selectedHistory.id} items={historyItems} restoreScrollTop={historyRestoreScrollTop} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onBackToLive={historyEndpoint && historyEndpoint.online !== false ? () => selectLiveEndpoint(historyEndpoint.endpointId) : undefined} />
     : activeDevice && displayEndpoint
       ? <LiveWorkspace timeline={liveTimeline} footer={exitedDisplay ? <div className="pwa-read-only-bar" role="note"><span>{t.workspace.exitedNote}</span>{onlinePis.length > 0 ? <Button variant="transparent" color="piReach" type="button" onClick={chooseOtherPi}>{t.workspace.chooseOtherPi}</Button> : null}</div> : <><PwaMessageActions show={connection === "offline" || catchupFailed || !followingOutput || unreadOutput > 0} showRetry={connection === "offline" || catchupFailed} showLatest={!followingOutput || unreadOutput > 0} unreadOutput={unreadOutput} onRetry={() => { if (catchupFailed) void retryCatchup(); else retryCurrentSession(); }} onLatest={showLatest} /><MessageComposer queuedMessages={<QueuedMessagesPanel items={timelineItems} isOnline={connection === "online"} runtimeRef={timelineRuntimeRef} channelRef={channelRef} applyChange={applyTimelineChange} onError={setError} />} attachments={attachments.items} canAttach={canAttach} sendingAttachments={attachments.snapshot.active} attachmentNotice={attachments.notice} isOnline={connection === "online"} isWorking={displayEndpoint.working === true} stopping={stopRequestId !== null} draft={draft} onDraftChange={(value) => { draftVersionRef.current += 1; setDraftFor(draftKey, value); }} onSend={sendMessage} onStop={stopCurrentTask} onAddFiles={attachments.addFiles} onRemoveAttachment={attachments.remove} onRetryAttachment={attachments.retry} commandModels={models} commandCurrentModel={currentModel} commandCurrentModelFallback={displayEndpoint.model ?? null} commandThinking={activeThinking} commandPendingAction={pendingAction?.action ?? null} onNewSession={() => requestConfirmation({ kind: "new-session" })} onCompactSession={() => sendCommandAction({ action: "session_compact" })} onSetModel={(model) => sendCommandAction({ action: "model_set", provider: model.provider, modelId: model.id })} onSetThinking={(level) => sendCommandAction({ action: "thinking_set", level })} onCommandsOpen={requestModels} /></>} />
       : skeletonVisible || mainLoading
@@ -901,7 +925,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
             : placeholderKind === "choose-pi"
               ? <ChoosePiWorkspace endpoints={onlinePis} completedEndpointIds={completedEndpointIds} onSelect={openLiveEndpoint} />
               : <NoPiWorkspace onViewHistory={openLatestHistory} />;
-  return <PwaWorkspaceLayout navigation={navigation} titleBar={titleBar} historyMode={selectedHistory !== null} connectionBanner={connectionBannerKind ? <PwaConnectionBanner kind={connectionBannerKind} connection={displayConnection} onRetry={retryCurrentSession} retryDisabled={retryPending} /> : null} toast={<PwaStatusToast message={selectedHistory ? historyError : error} onDismiss={() => { if (selectedHistory) setHistoryError(null); else setError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl={relayUrl} defaultRelayUrl={DEFAULT_RELAY} relayVersion={relayVersion} relayStatus={relayStatus} extensionVersion={extensionVersion} extensionStatus={connection} extensionTarget={sessionOnline && activeDevice && activeEndpoint ? `${displayDevice(activeDevice)} · ${displayPi(activeEndpoint)}` : null} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
+  return <PublishedFilesProvider value={fileView}><PwaWorkspaceLayout navigation={navigation} titleBar={titleBar} historyMode={selectedHistory !== null} connectionBanner={connectionBannerKind ? <PwaConnectionBanner kind={connectionBannerKind} connection={displayConnection} onRetry={retryCurrentSession} retryDisabled={retryPending} /> : null} toast={<PwaStatusToast message={selectedHistory ? historyError : error} onDismiss={() => { if (selectedHistory) setHistoryError(null); else setError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl={relayUrl} defaultRelayUrl={DEFAULT_RELAY} relayVersion={relayVersion} relayStatus={relayStatus} extensionVersion={extensionVersion} extensionStatus={connection} extensionTarget={sessionOnline && activeDevice && activeEndpoint ? `${displayDevice(activeDevice)} · ${displayPi(activeEndpoint)}` : null} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
     <PairingDialog opened={pairing.state !== "idle"} connecting={pairing.state === "pairing"} error={pairing.error} onSubmit={(code) => { void pairing.pairFromCode(code); }} onClearError={pairing.clearError} onClose={pairing.close} focusOrigin={pairingFocusOrigin} focusFallbackSelectors={[".pwa-session-trigger"]} />
-    <ConfirmActionDialog action={confirmAction?.kind === "remove-pairing" ? { kind: "remove-pairing", label: confirmAction.label } : confirmAction} pending={confirmPending} error={confirmError} onConfirm={() => { void confirmRequestedAction(); }} onClose={() => { if (!confirmPendingRef.current) { setConfirmAction(null); setConfirmError(null); } }} onExitTransitionEnd={finishConfirmationTransition} /></>} closeBackgroundOverlay={closeBackgroundOverlay}>{mainContent}</PwaWorkspaceLayout>;
+    <ConfirmActionDialog action={confirmAction?.kind === "remove-pairing" ? { kind: "remove-pairing", label: confirmAction.label } : confirmAction} fetchingFiles={fileView.active && (confirmAction?.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id))} pending={confirmPending} error={confirmError} onConfirm={() => { void confirmRequestedAction(); }} onClose={() => { if (!confirmPendingRef.current) { setConfirmAction(null); setConfirmError(null); } }} onExitTransitionEnd={finishConfirmationTransition} /></>} closeBackgroundOverlay={closeBackgroundOverlay}>{mainContent}</PwaWorkspaceLayout></PublishedFilesProvider>;
 }

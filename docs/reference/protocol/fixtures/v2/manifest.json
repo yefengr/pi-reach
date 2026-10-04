@@ -294,6 +294,349 @@
         "device_name": "Browser"
       },
       "expected_code": "schema"
+    },
+    {
+      "id": "file-open",
+      "direction": "client",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_open",
+        "id": "open-1",
+        "channel_id": "channel-1",
+        "session_id": "session-1",
+        "publication_id": "event-1"
+      }
+    },
+    {
+      "id": "file-open-with-leaf",
+      "direction": "client",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_open",
+        "id": "open-1",
+        "channel_id": "channel-1",
+        "session_id": "session-1",
+        "leaf_id": "generation-1",
+        "publication_id": "event-1"
+      }
+    },
+    {
+      "id": "file-read",
+      "direction": "client",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_read",
+        "id": "read-1",
+        "channel_id": "channel-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0
+      }
+    },
+    {
+      "id": "file-read-offset-out-of-range",
+      "direction": "client",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_read",
+        "id": "read-1",
+        "channel_id": "channel-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 52428801
+      }
+    },
+    {
+      "id": "file-close",
+      "direction": "client",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_close",
+        "id": "close-1",
+        "channel_id": "channel-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1"
+      }
+    },
+    {
+      "id": "file-opened-text",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_opened",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "open-1",
+        "session_id": "session-1",
+        "publication_id": "event-1",
+        "transfer_id": "transfer-1",
+        "file_name": "report.txt",
+        "mime_type": "text/plain",
+        "byte_length": 3,
+        "preview": { "kind": "text" }
+      }
+    },
+    {
+      "id": "file-opened-image",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_opened",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "open-1",
+        "session_id": "session-1",
+        "publication_id": "event-1",
+        "transfer_id": "transfer-1",
+        "file_name": "photo.png",
+        "mime_type": "image/png",
+        "byte_length": 3,
+        "preview": { "kind": "image", "width": 5000, "height": 4000 }
+      }
+    },
+    {
+      "id": "file-opened-source-path",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_opened",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "open-1",
+        "session_id": "session-1",
+        "publication_id": "event-1",
+        "transfer_id": "transfer-1",
+        "file_name": "report.txt",
+        "mime_type": "text/plain",
+        "byte_length": 3,
+        "preview": { "kind": "text" },
+        "source_path": "/tmp/report.txt"
+      }
+    },
+    {
+      "id": "file-opened-unknown-preview",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_opened",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "open-1",
+        "session_id": "session-1",
+        "publication_id": "event-1",
+        "transfer_id": "transfer-1",
+        "file_name": "clip.mp4",
+        "mime_type": "video/mp4",
+        "byte_length": 3,
+        "preview": { "kind": "video" }
+      }
+    },
+    {
+      "id": "file-chunk-non-final",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0,
+        "data_base64": "aGk=",
+        "final": false
+      }
+    },
+    {
+      "id": "file-chunk-final",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0,
+        "data_base64": "aGk=",
+        "final": true,
+        "total_bytes": 2,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "id": "file-chunk-empty-final",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0,
+        "data_base64": "",
+        "final": true,
+        "total_bytes": 0,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "id": "file-chunk-empty-non-zero-offset",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 2,
+        "data_base64": "",
+        "final": true,
+        "total_bytes": 0,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "id": "file-chunk-total-mismatch",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0,
+        "data_base64": "aGk=",
+        "final": true,
+        "total_bytes": 3,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "id": "file-chunk-non-canonical-base64",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0,
+        "data_base64": "aGl=",
+        "final": false
+      }
+    },
+    {
+      "id": "file-chunk-missing-sha256",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0,
+        "data_base64": "aGk=",
+        "final": true,
+        "total_bytes": 2
+      }
+    },
+    {
+      "id": "file-chunk-as-client",
+      "direction": "client",
+      "valid": false,
+      "expected_code": "direction",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_chunk",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "read-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "offset": 0,
+        "data_base64": "aGk=",
+        "final": false
+      }
+    },
+    {
+      "id": "file-closed",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_closed",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "close-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1"
+      }
+    },
+    {
+      "id": "file-error",
+      "direction": "server",
+      "valid": true,
+      "value": {
+        "protocol_version": 2,
+        "type": "file_error",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "open-1",
+        "session_id": "session-1",
+        "code": "not_available"
+      }
+    },
+    {
+      "id": "file-error-unknown-code",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_error",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "open-1",
+        "session_id": "session-1",
+        "code": "unknown"
+      }
+    },
+    {
+      "id": "file-error-with-retryable",
+      "direction": "server",
+      "valid": false,
+      "expected_code": "schema",
+      "value": {
+        "protocol_version": 2,
+        "type": "file_error",
+        "target_channel_id": "channel-1",
+        "in_reply_to": "open-1",
+        "session_id": "session-1",
+        "transfer_id": "transfer-1",
+        "code": "io_error",
+        "retryable": true
+      }
     }
   ]
 }
