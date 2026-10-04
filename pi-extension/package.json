@@ -1,6 +1,6 @@
 {
   "name": "@yefengr/pi-reach",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "publishConfig": {
     "access": "public"
   },
@@ -63,7 +63,6 @@
     "tsx": "^4.22.0",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "typebox": "^1.1.38",
     "vitest": "catalog:"
   },
   "peerDependencies": {
@@ -73,6 +72,7 @@
     "@napi-rs/keyring": "^1.3.0",
     "@noble/ed25519": "catalog:",
     "qrcode-terminal": "^0.12.0",
+    "typebox": "^1.1.38",
     "ws": "^8.21.0",
     "zod": "catalog:"
   }
