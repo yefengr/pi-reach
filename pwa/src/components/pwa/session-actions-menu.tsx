@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ActionIcon, Menu } from "@mantine/core";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { ActionIcon, Popover, Textarea } from "@mantine/core";
 import { MoreHorizontal } from "lucide-react";
 import { pwaFadeTransition, usePwaMotionDuration } from "./use-pwa-motion";
 import { useI18n } from "@/lib/i18n";
 
-/** 「更多」菜单只提供只读会话信息。 */
+/** 「更多」弹层只提供可访问的只读会话信息。 */
 export type SessionMenuInfo = {
   name: string;
   cwd?: string | null;
@@ -45,6 +45,13 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const focusFrameRef = useRef<number | null>(null);
+  const nameId = useId();
+  const metadataId = useId();
+  const setDropdownRef = useCallback((node: HTMLDivElement | null) => {
+    dropdownRef.current = node;
+    // 非模态信息弹层不困住 Tab；先让读屏读取会话信息，再由 Tab 进入原生只读路径字段。
+    if (node && openedRef.current) node.focus({ preventScroll: true });
+  }, []);
 
   const setMenuOpened = useCallback((nextOpened: boolean) => {
     const wasOpened = openedRef.current;
@@ -60,6 +67,11 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
 
     scheduleFocusReturn(focusFrameRef, triggerRef, () => !openedRef.current);
   }, []);
+
+  useLayoutEffect(() => {
+    // 退出淡化尚未结束时重开，Dropdown 不会重新挂载；也必须重新提供信息区焦点入口。
+    if (opened) dropdownRef.current?.focus({ preventScroll: true });
+  }, [opened]);
 
   useEffect(() => {
     if (!opened) return;
@@ -81,14 +93,11 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
   };
 
   return <div className="pwa-session-actions">
-    <Menu
+    <Popover
       opened={opened}
       onChange={setMenuOpened}
       trapFocus={false}
-      withInitialFocusPlaceholder={false}
-      menuItemTabIndex={0}
       returnFocus={false}
-      closeOnItemClick={false}
       clickOutsideEvents={["mousedown", "touchstart"]}
       closeOnClickOutside
       closeOnEscape
@@ -104,16 +113,16 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
       portalProps={{ target: ".pwa-root" }}
       zIndex={21}
     >
-      <Menu.Target>
-        <ActionIcon ref={triggerRef} className="pwa-session-actions-trigger" type="button" aria-label={t.actions.sessionActions} title={t.actions.sessionActions} onKeyDown={handleTriggerKeyDown}><MoreHorizontal size={20} /></ActionIcon>
-      </Menu.Target>
-      <Menu.Dropdown ref={dropdownRef} inert={!opened} className="pwa-command-menu-dropdown pwa-session-actions-dropdown" aria-label={t.actions.sessionActions}>
+      <Popover.Target>
+        <ActionIcon ref={triggerRef} className="pwa-session-actions-trigger" type="button" aria-label={t.actions.sessionInfo} title={t.actions.sessionInfo} onClick={() => setMenuOpened(!openedRef.current)} onKeyDown={handleTriggerKeyDown}><MoreHorizontal size={20} /></ActionIcon>
+      </Popover.Target>
+      <Popover.Dropdown ref={setDropdownRef} inert={!opened} className="pwa-command-menu-dropdown pwa-session-actions-dropdown" aria-label={t.actions.sessionInfo} aria-describedby={`${nameId} ${metadataId}`} aria-modal={false}>
         <div className="pwa-session-info" role="group" aria-label={t.actions.sessionInfo}>
-          <strong className="pwa-session-info-name">{info.name}</strong>
-          {info.cwd ? <code className="pwa-session-info-cwd">{info.cwd}</code> : null}
-          <span className="pwa-session-info-meta">{info.computer} · {info.status}</span>
+          <strong id={nameId} className="pwa-session-info-name">{info.name}</strong>
+          {info.cwd ? <Textarea autosize readOnly variant="unstyled" value={info.cwd} aria-label={t.actions.workingDirectory} classNames={{ input: "pwa-session-info-cwd" }} /> : null}
+          <span id={metadataId} className="pwa-session-info-meta">{info.computer} · {info.status}</span>
         </div>
-      </Menu.Dropdown>
-    </Menu>
+      </Popover.Dropdown>
+    </Popover>
   </div>;
 }

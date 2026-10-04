@@ -310,7 +310,7 @@ test.each([1280, 390])("focuses only a new empty desktop session, without openin
   const screen = await renderOnlineApp(() => renderPwa(<PwaApp />));
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: "Session actions" });
+    const action = screen.getByRole("button", { name: "Session details" });
     action.element().focus();
     channel.emit(readyFrame(channel, "empty-session"));
     const input = screen.getByRole("textbox", { name: /Message your agent/i });
@@ -325,7 +325,7 @@ test("does not focus the composer when opening a session with saved records", as
   const screen = await renderOnlineApp();
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: "Session actions" });
+    const action = screen.getByRole("button", { name: "Session details" });
     action.element().focus();
     channel.emit(readyFrame(channel, "existing-session", 2));
     await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeVisible();
@@ -1694,14 +1694,14 @@ test("routes session actions through the live channel with current model and thi
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [model], current: model });
 
-    const actions = screen.getByRole("button", { name: "Session actions" });
+    const actions = screen.getByRole("button", { name: "Session details" });
     await actions.click();
     // 「更多」只展示只读信息，不再请求模型列表或提供操作。
     await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(1);
     await userEvent.keyboard("{Escape}");
-    await expect.element(screen.getByRole("menu", { name: "Session actions" })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("dialog", { name: "Session details" })).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Pi commands" }).click();
     await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "session_compact", leaf_id: "generation-session-1" }));
@@ -1859,7 +1859,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(historyTrigger).toHaveTextContent("Saved session note");
     await expect.element(screen.getByRole("note")).toHaveTextContent("This is a read-only record saved in this browser.");
     await expect.element(screen.getByRole("textbox")).not.toBeInTheDocument();
-    await screen.getByRole("button", { name: "Session actions" }).click();
+    await screen.getByRole("button", { name: "Session details" }).click();
     await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     await userEvent.keyboard("{Escape}");
@@ -1887,7 +1887,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     expect(channelHarness.channels[1]?.channelId).toBe(originalChannel?.channelId);
     await expect.element(screen.getByRole("button", { name: "Open navigation" })).toHaveTextContent("Renamed live Pi");
     await expect.element(screen.getByRole("textbox")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Session actions" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Session details" })).toBeVisible();
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
@@ -2272,13 +2272,13 @@ test("keeps a stable session channel across reset and session replacement, with 
   expect(channelHarness.channels).toHaveLength(3);
   await expect.element(screen.getByLabelText("Offline")).toBeVisible();
   const modelRequestsBeforeRetry = thirdChannel?.frames.filter((frame) => frame.type === "list_models").length ?? 0;
-  await screen.getByRole("button", { name: "Session actions" }).click();
+  await screen.getByRole("button", { name: "Session details" }).click();
   // 「更多」只展示只读信息，不请求模型列表，也不提供重试；离线重试走既有输入区操作条。
   await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
   expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   expect(thirdChannel?.frames.filter((frame) => frame.type === "list_models")).toHaveLength(modelRequestsBeforeRetry);
   await userEvent.keyboard("{Escape}");
-  await expect.element(screen.getByRole("menu", { name: "Session actions" })).not.toBeInTheDocument();
+  await expect.element(screen.getByRole("dialog", { name: "Session details" })).not.toBeInTheDocument();
   await screen.getByRole("button", { name: "Try again" }).click();
   await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(4));
   expect(channelHarness.channels[3]?.channelId).toBe(firstChannel?.channelId);

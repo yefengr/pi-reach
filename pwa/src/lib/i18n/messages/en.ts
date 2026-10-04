@@ -171,6 +171,7 @@ export const en = {
     actions: "Actions",
     sessionUtilities: "Session utilities",
     sessionInfo: "Session details",
+    workingDirectory: "Working directory",
     idle: "Idle",
     running: "Running",
     retryConnection: "Retry connection",

@@ -176,8 +176,8 @@ async function openLegacyPage(context: BrowserContext): Promise<Page | null> {
 }
 
 async function startFreshSession(page: Page, previousSessionId: string): Promise<HostState> {
-  await page.getByRole("button", { name: "Session actions" }).click();
-  await page.getByRole("menuitem", { name: "New session", exact: true }).click();
+  await page.getByRole("button", { name: "Pi commands" }).click();
+  await page.getByRole("menuitem", { name: /\/new/ }).click();
   await expect(page.getByRole("dialog", { name: "Start a fresh session?" })).toBeVisible();
   await page.getByRole("button", { name: "Start fresh session", exact: true }).click();
   return waitForHostState("fresh session identity", (state) => typeof state.sessionId === "string" && state.sessionId.length > 0 && state.sessionId !== previousSessionId);

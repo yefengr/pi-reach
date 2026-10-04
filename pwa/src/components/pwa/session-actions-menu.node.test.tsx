@@ -14,8 +14,8 @@ function renderMenu(overrides: Partial<SessionActionsMenuProps> = {}): string {
 test("renders one borderless icon trigger with a stable accessible name", () => {
   const html = renderMenu();
 
-  expect(html).toMatch(/aria-label="Session actions"/);
-  expect(html).toMatch(/aria-haspopup="menu"/);
+  expect(html).toMatch(/aria-label="Session details"/);
+  expect(html).toMatch(/aria-haspopup="dialog"/);
   expect(html).toMatch(/pwa-icon-button/);
   expect(html).not.toMatch(/>Actions</);
   expect(html).not.toMatch(/Refresh app/);
@@ -25,6 +25,7 @@ test("renders one borderless icon trigger with a stable accessible name", () => 
 test("keeps only the read-only information contract without commands or separators", () => {
   const html = renderMenu();
 
+  expect(html).not.toMatch(/role="menu"/);
   expect(html).not.toMatch(/role="menuitem"/);
   expect(html).not.toMatch(/role="separator"/);
   expect(html).not.toMatch(/New session/);

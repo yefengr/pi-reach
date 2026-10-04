@@ -173,6 +173,7 @@ export const zh: Messages = {
     actions: "操作",
     sessionUtilities: "会话工具",
     sessionInfo: "会话信息",
+    workingDirectory: "工作目录",
     idle: "空闲",
     running: "运行中",
     retryConnection: "重新连接",

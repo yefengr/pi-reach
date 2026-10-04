@@ -94,10 +94,10 @@
 .pwa-root .pwa-sidebar-foot .pwa-button .mantine-Button-inner,
 .pwa-root .pwa-session-sheet-foot .pwa-button .mantine-Button-inner { justify-content: flex-start; }
 
-/* 会话「更多」菜单顶部的只读信息区：完整会话名换行不截断，路径可选中复制。 */
+/* 会话「更多」的只读信息弹层：完整会话名换行，原生只读路径字段支持键盘选择与复制。 */
 .pwa-session-info { display: grid; gap: 4px; padding: 8px 10px; }
 .pwa-session-info-name { color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; white-space: normal; }
-.pwa-session-info-cwd { color: var(--pwa-secondary); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-mono); overflow-wrap: anywhere; user-select: text; }
+.pwa-root .pwa-session-info-cwd { min-height: 0; padding: 0; border: 0; border-radius: 0; color: var(--pwa-secondary); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-mono); overflow-wrap: anywhere; resize: none; user-select: text; }
 .pwa-session-info-meta { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
 /* 主区与会话标题区。 */
