@@ -448,14 +448,15 @@ async function issueOperation({ screen, channel }: OperationHarness, action: Tes
     channelHarness.nextSendResults.push(sendResult);
     await screen.getByRole("menuitem", { name: "high", exact: true }).click();
   } else {
-    await screen.getByRole("button", { name: "Session actions" }).click();
+    // 新会话与压缩只从输入区的「/」菜单进入，会话菜单不再提供操作。
+    await screen.getByRole("button", { name: "Pi commands" }).click();
     if (action === "session_new") {
-      await screen.getByRole("menuitem", { name: "New session", exact: true }).click();
+      await screen.getByRole("menuitem", { name: /\/new/ }).click();
       channelHarness.nextSendResults.push(sendResult);
       await screen.getByRole("button", { name: "Start fresh session", exact: true }).click();
     } else {
       channelHarness.nextSendResults.push(sendResult);
-      await screen.getByRole("menuitem", { name: "Compact context", exact: true }).click();
+      await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     }
   }
   // 菜单动作在退出淡化结束后才交接，请求随之异步发出。
@@ -1694,8 +1695,14 @@ test("routes session actions through the live channel with current model and thi
 
     const actions = screen.getByRole("button", { name: "Session actions" });
     await actions.click();
-    expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(2);
-    await screen.getByRole("menuitem", { name: "Compact context" }).click();
+    // 「更多」只展示只读信息，不再请求模型列表或提供操作。
+    await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+    expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
+    expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(1);
+    await userEvent.keyboard("{Escape}");
+    await expect.element(screen.getByRole("menu", { name: "Session actions" })).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Pi commands" }).click();
+    await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "session_compact", leaf_id: "generation-session-1" }));
     const compact = channel.frames.at(-1);
     channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: compact?.id, action: "session_compact" });
@@ -1787,7 +1794,6 @@ test("uses the endpoint model as a unique capability fallback when current is om
 });
 
 test.each([
-  [1280, "Session actions"], [390, "Session actions"],
   [1280, "Pi commands"], [390, "Pi commands"],
 ] as const)("closes commands before confirmation and restores the trigger at %ipx from %s", async (width, entry) => {
   await page.viewport(width, 844);
@@ -1800,7 +1806,7 @@ test.each([
     actions.element().focus();
     await expect.element(actions).toHaveFocus();
     await userEvent.keyboard("{ArrowDown}");
-    const newSession = screen.getByRole("menuitem", { name: entry === "Pi commands" ? /\/new/ : "New session" });
+    const newSession = screen.getByRole("menuitem", { name: /\/new/ });
     await expect.element(newSession).toHaveFocus();
     await userEvent.keyboard("{Enter}");
     const confirmation = screen.getByRole("dialog", { name: "Start a fresh session?" });
@@ -2264,9 +2270,13 @@ test("keeps a stable session channel across reset and session replacement, with 
   await expect.element(screen.getByLabelText("Offline")).toBeVisible();
   const modelRequestsBeforeRetry = thirdChannel?.frames.filter((frame) => frame.type === "list_models").length ?? 0;
   await screen.getByRole("button", { name: "Session actions" }).click();
-  await expect.element(screen.getByRole("menuitem", { name: "New session" })).toBeDisabled();
+  // 「更多」只展示只读信息，不请求模型列表，也不提供重试；离线重试走既有输入区操作条。
+  await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+  expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   expect(thirdChannel?.frames.filter((frame) => frame.type === "list_models")).toHaveLength(modelRequestsBeforeRetry);
-  await screen.getByRole("menuitem", { name: "Retry connection" }).click();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(screen.getByRole("menu", { name: "Session actions" })).not.toBeInTheDocument();
+  await screen.getByRole("button", { name: "Try again" }).click();
   await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(4));
   expect(channelHarness.channels[3]?.channelId).toBe(firstChannel?.channelId);
   await screen.unmount();
