@@ -20,6 +20,8 @@ type ComposerHarnessProps = {
   initialWorking?: boolean;
   attachmentNotice?: string;
   commandModels?: WireModel[];
+  commandCurrentModel?: WireModel | null;
+  commandCurrentModelFallback?: string | null;
   onCommandsOpen?: () => void;
   onNewSession?: () => void;
   onSend?: () => void | Promise<void>;
@@ -38,6 +40,8 @@ function ComposerHarness({
   initialWorking = false,
   attachmentNotice,
   commandModels = [model],
+  commandCurrentModel = model,
+  commandCurrentModelFallback = null,
   onCommandsOpen = () => {},
   onNewSession = () => {},
   onSend = () => {},
@@ -85,8 +89,8 @@ function ComposerHarness({
         onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
         onRetryAttachment={() => {}}
         commandModels={commandModels}
-        commandCurrentModel={model}
-        commandCurrentModelFallback={null}
+        commandCurrentModel={commandCurrentModel}
+        commandCurrentModelFallback={commandCurrentModelFallback}
         commandThinking="medium"
         commandPendingAction={pendingAction}
         onNewSession={onNewSession}
@@ -227,7 +231,7 @@ test("opens commands only when / is typed at the start; preserves the draft, car
   expect(input.value).toBe("/notes/inside");
   expect(input.selectionStart).toBe(1);
   expect(input.selectionEnd).toBe(1);
-  expect(opens).toBe(1);
+  expect(opens).toBe(0);
   await expect.element(screen.getByRole("menu", { name: "Pi commands" })).toBeVisible();
   await expect.element(textbox).toHaveFocus();
   await userEvent.keyboard("{ArrowDown}");
@@ -242,10 +246,10 @@ test("opens commands only when / is typed at the start; preserves the draft, car
   input.setSelectionRange(input.value.length, input.value.length);
   await userEvent.keyboard("/");
   expect(input.value).toBe("/notes/inside/");
-  expect(opens).toBe(1);
+  expect(opens).toBe(0);
 });
 
-test("keeps slash menu typing, button entry, menu actions and image menu focus isolated", async () => {
+test("keeps slash menu typing, button entry, model settings actions and image menu focus isolated", async () => {
   let opens = 0;
   let thinking: ThinkingLevel | null = null;
   const screen = await renderPwa(<ComposerHarness onCommandsOpen={() => { opens += 1; }} onSetThinking={(value) => { thinking = value; }} />);
@@ -253,16 +257,26 @@ test("keeps slash menu typing, button entry, menu actions and image menu focus i
   const input = textbox.element() as HTMLTextAreaElement;
   input.focus();
   await userEvent.keyboard("/");
-  await userEvent.keyboard("{ArrowUp}");
-  await expect.element(screen.getByRole("menuitem", { name: /\/thinking/ })).toHaveFocus();
+  // 键入「/」只打开会话命令，不请求模型列表，也不提供模型或思考级别入口。
+  expect(opens).toBe(0);
+  await expect.element(screen.getByRole("menuitem", { name: /\/compact/ })).toBeVisible();
+  await expect.element(screen.getByRole("menuitem", { name: /\/thinking/ })).not.toBeInTheDocument();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(textbox).toHaveFocus();
+  expect(input.value).toBe("/");
+  expect(input.selectionStart).toBe(1);
+
+  // 思考级别只能从输入区模型标签进入，打开设置菜单时请求一次模型列表。
+  const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+  await chip.click();
+  expect(opens).toBe(1);
+  const thinkingEntry = screen.getByRole("menuitem", { name: /Thinking level/ });
+  thinkingEntry.element().focus();
   await userEvent.keyboard("{Enter}");
   await expect.element(screen.getByRole("menuitem", { name: "Back", exact: true })).toHaveFocus();
   await screen.getByRole("menuitem", { name: "high", exact: true }).click();
   await expect.poll(() => thinking).toBe("high");
-  await expect.element(textbox).toHaveFocus();
-  expect(input.value).toBe("/");
-  expect(input.selectionStart).toBe(1);
-  expect(opens).toBe(1);
+  await expect.element(chip).toHaveFocus();
 
   const trigger = screen.getByRole("button", { name: "Pi commands" });
   trigger.element().focus();
@@ -324,9 +338,9 @@ test("portals mutually exclusive image and Pi command menus, then returns focus 
   expect(commandsMenu.element().closest(".pwa-root")).not.toBeNull();
   await settleOverlayFocus();
   await expect.element(commandTrigger).toHaveFocus();
-  const modelCommand = screen.getByRole("menuitem", { name: /\/model/ });
-  modelCommand.element().focus();
-  await expect.element(modelCommand).toHaveFocus();
+  const newCommand = screen.getByRole("menuitem", { name: /\/new/ });
+  newCommand.element().focus();
+  await expect.element(newCommand).toHaveFocus();
   closePopoverFromOutside();
   await expect.element(commandsMenu).not.toBeInTheDocument();
   await expect.element(commandTrigger).toHaveFocus();
@@ -339,7 +353,7 @@ test("keeps both menu switch directions stable and does not steal valid outside 
   for (let cycle = 0; cycle < 2; cycle += 1) {
     commands.element().focus();
     await commands.click();
-    await screen.getByRole("menuitem", { name: /\/model/ }).click();
+    await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     image.element().focus();
     await image.click();
     await settleOverlayFocus();
@@ -360,36 +374,49 @@ test("keeps both menu switch directions stable and does not steal valid outside 
   }
 });
 
-test("navigates command keys and subview Back without closing or requesting models again", async () => {
+test("navigates slash command keys and the model settings subviews without requesting models again", async () => {
   let opens = 0;
-  const screen = await renderPwa(<ComposerHarness initialWorking onCommandsOpen={() => { opens += 1; }} />);
+  const screen = await renderPwa(<ComposerHarness onCommandsOpen={() => { opens += 1; }} />);
   const trigger = screen.getByRole("button", { name: "Pi commands" });
   trigger.element().focus();
   await userEvent.keyboard("{ArrowDown}");
-  const models = screen.getByRole("menuitem", { name: /\/model/ });
-  const thinking = screen.getByRole("menuitem", { name: /\/thinking/ });
-  await expect.element(models).toHaveFocus();
+  const newCommand = screen.getByRole("menuitem", { name: /\/new/ });
+  const compact = screen.getByRole("menuitem", { name: /\/compact/ });
+  await expect.element(newCommand).toHaveFocus();
   await userEvent.keyboard("{ArrowUp}");
-  await expect.element(thinking).toHaveFocus();
+  await expect.element(compact).toHaveFocus();
   await userEvent.keyboard("{Home}");
-  await expect.element(models).toHaveFocus();
+  await expect.element(newCommand).toHaveFocus();
   await userEvent.keyboard("{End}");
-  await expect.element(thinking).toHaveFocus();
-  for (const item of [thinking, models]) {
-    item.element().focus();
+  await expect.element(compact).toHaveFocus();
+  expect(opens).toBe(0);
+  await userEvent.keyboard("{Escape}");
+  await expect.element(trigger).toHaveFocus();
+
+  // 设置子视图的 Back 回到设置根并聚焦对应入口；切换子视图不重复请求模型。
+  const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+  chip.element().focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(opens).toBe(1);
+  const modelEntry = screen.getByRole("menuitem", { name: /Change model/ });
+  const thinkingEntry = screen.getByRole("menuitem", { name: /Thinking level/ });
+  await expect.element(modelEntry).toHaveFocus();
+  await userEvent.keyboard("{End}");
+  await expect.element(thinkingEntry).toHaveFocus();
+  for (const entry of [thinkingEntry, modelEntry]) {
+    entry.element().focus();
     await userEvent.keyboard("{Enter}");
     const back = screen.getByRole("menuitem", { name: "Back", exact: true });
     await expect.element(back).toHaveFocus();
     await userEvent.keyboard("{End}");
     await expect.element(back).not.toHaveFocus();
     await userEvent.keyboard("{Home}{Enter}");
-    await expect.element(item).toHaveFocus();
+    await expect.element(entry).toHaveFocus();
   }
   expect(opens).toBe(1);
   await userEvent.keyboard("{Escape}");
-  await expect.element(trigger).toHaveFocus();
-  await userEvent.keyboard("{ArrowUp}");
-  await expect.element(thinking).toHaveFocus();
+  await expect.element(chip).toHaveFocus();
+  await chip.click();
   expect(opens).toBe(2);
 });
 
@@ -410,13 +437,13 @@ test("uses 16px action text in composer menus and keeps the current model and th
   expect(getComputedStyle(choose.element()).fontSize).toBe("16px");
   await userEvent.keyboard("{Escape}");
 
-  await screen.getByRole("button", { name: "Pi commands" }).click();
-  const modelEntry = screen.getByRole("menuitem", { name: /\/model/ });
+  await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+  const modelEntry = screen.getByRole("menuitem", { name: /Change model/ });
   await expect.element(modelEntry).toBeVisible();
-  expect(getComputedStyle(modelEntry.element().querySelector("code")!).fontSize).toBe("16px");
+  expect(getComputedStyle(modelEntry.element()).fontSize).toBe("16px");
   expect(getComputedStyle(modelEntry.element().querySelector("small")!).fontSize).toBe("13px");
 
-  for (const [entry, current, alternative] of [[/\/model/, /Claude Sonnet 4/, /Other Model/], [/\/thinking/, /^medium/, /^high/]] as const) {
+  for (const [entry, current, alternative] of [[/Change model/, /Claude Sonnet 4/, /Other Model/], [/Thinking level/, /^medium/, /^high/]] as const) {
     await screen.getByRole("menuitem", { name: entry }).click();
     const selected = screen.getByRole("menuitem", { name: current }).element() as HTMLElement;
     const unselected = screen.getByRole("menuitem", { name: alternative }).element() as HTMLElement;
@@ -438,11 +465,11 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the Composer
   const models = Array.from({ length: 24 }, (_, index) => ({ ...model, id: `composer-${index}`, name: `Model ${index} ${"Long name ".repeat(15)}` }));
   const screen = await renderPwa(<div style={{ position: "fixed", bottom: "env(safe-area-inset-bottom, 0px)", left: 0, right: 0 }}><ComposerHarness commandModels={models} /></div>);
   try {
-    const trigger = screen.getByRole("button", { name: "Pi commands" });
-    trigger.element().focus();
-    await trigger.click();
-    await screen.getByRole("menuitem", { name: /\/model/ }).click();
-    const menu = screen.getByRole("menu", { name: "Pi commands" });
+    const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+    chip.element().focus();
+    await chip.click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
+    const menu = screen.getByRole("menu", { name: "Model and thinking" });
     await expect.poll(() => menu.element().getBoundingClientRect().top >= 0).toBe(true);
     const dropdown = menu.element() as HTMLElement;
     const box = dropdown.getBoundingClientRect();
@@ -464,7 +491,7 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the Composer
     await page.screenshot({ path: `../../../.vitest/screenshots/menu-composer-${width}x${height}.png` });
     await userEvent.keyboard("{Escape}");
     await settleOverlayFocus();
-    await expect.element(trigger).toHaveFocus();
+    await expect.element(chip).toHaveFocus();
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
@@ -598,7 +625,7 @@ test.each([1280, 390])("keeps the file input mounted after menu close and resets
   }
 });
 
-test("navigates Pi commands to model and thinking choices, reports opens, and closes after each selection", async () => {
+test("navigates model and thinking settings, reports opens once, and closes after each selection", async () => {
   let commandOpens = 0;
   const selectedModels: WireModel[] = [];
   const selectedThinking: ThinkingLevel[] = [];
@@ -609,38 +636,40 @@ test("navigates Pi commands to model and thinking choices, reports opens, and cl
       onSetThinking={(level) => selectedThinking.push(level)}
     />,
   );
-  const commandTrigger = screen.getByRole("button", { name: "Pi commands" });
+  const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
 
-  await commandTrigger.click();
+  await chip.click();
   expect(commandOpens).toBe(1);
-  await screen.getByRole("menuitem", { name: /\/model/ }).click();
+  await screen.getByRole("menuitem", { name: /Change model/ }).click();
   const modelGroup = screen.getByRole("group", { name: "Change model" });
   await expect.element(modelGroup).toBeVisible();
   await screen.getByRole("menuitem", { name: /anthropic \/ Claude Sonnet 4/ }).click();
   await expect.poll(() => selectedModels).toEqual([model]);
   await expect.element(modelGroup).not.toBeInTheDocument();
+  await expect.element(chip).toHaveFocus();
 
-  await commandTrigger.click();
+  await chip.click();
   expect(commandOpens).toBe(2);
-  await screen.getByRole("menuitem", { name: /\/thinking/ }).click();
+  await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
   const thinkingGroup = screen.getByRole("group", { name: "Thinking level" });
   await expect.element(thinkingGroup).toBeVisible();
   await expect.element(screen.getByLabelText("Current thinking level")).toBeVisible();
   await screen.getByRole("menuitem", { name: "high", exact: true }).click();
   await expect.poll(() => selectedThinking).toEqual(["high"]);
   await expect.element(thinkingGroup).not.toBeInTheDocument();
+  await expect.element(chip).toHaveFocus();
 });
 
-test("resets a closing subview even when reopened before the fade completes", async () => {
+test("resets a closing model settings subview even when reopened before the fade completes", async () => {
   const screen = await renderPwa(<ComposerHarness />);
-  const trigger = screen.getByRole("button", { name: "Pi commands" });
-  await trigger.click();
-  await screen.getByRole("menuitem", { name: /\/model/ }).click();
+  const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+  await chip.click();
+  await screen.getByRole("menuitem", { name: /Change model/ }).click();
   await expect.element(screen.getByRole("menuitem", { name: "Back", exact: true })).toBeVisible();
-  (trigger.element() as HTMLElement).click();
-  await expect.element(trigger).toHaveAttribute("aria-expanded", "false");
-  (trigger.element() as HTMLElement).click();
-  await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).toBeVisible();
+  (chip.element() as HTMLElement).click();
+  await expect.element(chip).toHaveAttribute("aria-expanded", "false");
+  (chip.element() as HTMLElement).click();
+  await expect.element(screen.getByRole("menuitem", { name: /Change model/ })).toBeVisible();
   await expect.element(screen.getByRole("menuitem", { name: "Back", exact: true })).not.toBeInTheDocument();
   await screen.unmount();
 });
@@ -664,26 +693,32 @@ test.each([false, true])("hands off a double-triggered action once after menu re
   }
 });
 
-test("gates root Pi commands while working and disables every command when an action is pending", async () => {
+test("gates session commands while working and disables model settings actions when an action is pending", async () => {
   const screen = await renderPwa(<ComposerHarness initialWorking />);
   await screen.getByRole("button", { name: "Pi commands" }).click();
-  const newSession = screen.getByRole("menuitem", { name: /\/new/ });
-  const modelCommand = screen.getByRole("menuitem", { name: /\/model/ });
-  await expect.element(newSession).toBeDisabled();
-  await expect.element(modelCommand).toBeEnabled();
+  await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).toBeDisabled();
+  await expect.element(screen.getByRole("menuitem", { name: /\/compact/ })).toBeDisabled();
+  await userEvent.keyboard("{Escape}");
+
+  const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+  await chip.click();
+  const changeModel = screen.getByRole("menuitem", { name: /Change model/ });
+  const thinkingLevel = screen.getByRole("menuitem", { name: /Thinking level/ });
+  await expect.element(changeModel).toBeEnabled();
+  await expect.element(thinkingLevel).toBeEnabled();
 
   screen.getByTestId("composer-set-command-pending").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-  await expect.element(modelCommand).toBeDisabled();
-  await expect.element(screen.getByRole("menuitem", { name: /\/thinking/ })).toBeDisabled();
+  await expect.element(changeModel).toBeDisabled();
+  await expect.element(thinkingLevel).toBeDisabled();
 });
 
 test("keeps Back enabled after thinking choices become pending", async () => {
   const screen = await renderPwa(<ComposerHarness />);
-  const trigger = screen.getByRole("button", { name: "Pi commands" });
-  trigger.element().focus();
+  const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+  chip.element().focus();
   await userEvent.keyboard("{ArrowUp}");
   // 等菜单把焦点移到最后一项再确认，避免负载较高时 Enter 先于焦点移动到达。
-  await expect.element(screen.getByRole("menuitem", { name: /\/thinking/ })).toHaveFocus();
+  await expect.element(screen.getByRole("menuitem", { name: /Thinking level/ })).toHaveFocus();
   await userEvent.keyboard("{Enter}");
   const back = screen.getByRole("menuitem", { name: "Back", exact: true });
   await expect.element(back).toHaveFocus();
@@ -695,7 +730,7 @@ test("keeps Back enabled after thinking choices become pending", async () => {
   await userEvent.keyboard("{Enter}");
   expect(document.activeElement).not.toBe(document.body);
   await userEvent.keyboard("{Escape}");
-  await expect.element(trigger).toHaveFocus();
+  await expect.element(chip).toHaveFocus();
 });
 
 test("updates Stop and Send client state through working, stopping, image sending, and offline transitions", async () => {
@@ -811,14 +846,15 @@ test("prevents duplicate native submits until an asynchronous send settles, then
   await expect.element(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
 });
 
-test.each([[1280, 900], [390, 844]])("shows the current model beside Send and opens its choices directly at %ix%i", async (width, height) => {
+test.each([[1280, 900], [390, 844]])("shows the current model beside Send and opens shared settings at %ix%i", async (width, height) => {
   await page.viewport(width, height);
   let modelChoices = 0;
+  let thinkingChoices = 0;
   let opens = 0;
   const other: WireModel = { ...model, id: "other-model", name: "Other Model" };
-  const screen = await renderPwa(<ComposerHarness commandModels={[model, other]} onCommandsOpen={() => { opens += 1; }} onSetModel={() => { modelChoices += 1; }} />);
+  const screen = await renderPwa(<ComposerHarness commandModels={[model, other]} onCommandsOpen={() => { opens += 1; }} onSetModel={() => { modelChoices += 1; }} onSetThinking={() => { thinkingChoices += 1; }} />);
   try {
-    const chip = screen.getByRole("button", { name: "Change model, current Claude Sonnet 4, thinking level medium" });
+    const chip = screen.getByRole("button", { name: "Model and thinking settings, current Claude Sonnet 4, thinking level medium" });
     await expect.element(chip).toBeVisible();
     const chipElement = chip.element();
     const send = screen.getByRole("button", { name: "Send message" }).element();
@@ -829,11 +865,26 @@ test.each([[1280, 900], [390, 844]])("shows the current model beside Send and op
     if (width < 768) expect(getComputedStyle(thinking).display).toBe("none");
     else expect(getComputedStyle(thinking).display).not.toBe("none");
     await chip.click();
-    await expect.element(screen.getByRole("group", { name: "Change model" })).toBeVisible();
+    await expect.element(screen.getByRole("group", { name: "Model and thinking" })).toBeVisible();
     expect(opens).toBe(1);
+    const settings = screen.getByRole("menu", { name: "Model and thinking" }).element();
+    expect(settings.querySelectorAll('[role="menuitem"]')).toHaveLength(2);
+    expect(settings.textContent).not.toMatch(/\/new|\/compact/);
+    await page.screenshot({ path: `../../../.vitest/screenshots/menu-settings-root-${width}x${height}.png` });
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
+    await expect.element(screen.getByRole("group", { name: "Change model" })).toBeVisible();
     await screen.getByRole("menuitem", { name: /anthropic \/ Other Model/ }).click();
     await expect.poll(() => modelChoices).toBe(1);
     await expect.element(screen.getByRole("group", { name: "Change model" })).not.toBeInTheDocument();
+    await expect.element(chip).toHaveFocus();
+
+    // 同一个唯一入口在桌面和移动都能进入思考级别列表，选择后焦点回到标签。
+    await chip.click();
+    await expect.element(screen.getByRole("group", { name: "Model and thinking" })).toBeVisible();
+    await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
+    await expect.element(screen.getByRole("group", { name: "Thinking level" })).toBeVisible();
+    await screen.getByRole("menuitem", { name: "high", exact: true }).click();
+    await expect.poll(() => thinkingChoices).toBe(1);
     await expect.element(chip).toHaveFocus();
   } finally {
     await screen.unmount();
@@ -841,17 +892,42 @@ test.each([[1280, 900], [390, 844]])("shows the current model beside Send and op
   }
 });
 
-test("keeps the model menu and the Pi command menu exclusive, closes on Escape, and disables the model chip offline", async () => {
+test.each([[1280, 900], [390, 844]])("keeps thinking settings reachable without model metadata at %ix%i", async (width, height) => {
+  await page.viewport(width, height);
+  const chosen: ThinkingLevel[] = [];
+  const screen = await renderPwa(<ComposerHarness commandModels={[]} commandCurrentModel={null} onSetThinking={(level) => chosen.push(level)} />);
+  try {
+    const chip = screen.getByRole("button", { name: /^Model and thinking settings, current Current model unavailable/ });
+    await expect.element(chip).toBeVisible();
+    await chip.click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
+    await expect.element(screen.getByText("No models available.", { exact: true })).toBeVisible();
+    await screen.getByRole("menuitem", { name: "Back", exact: true }).click();
+    const menu = screen.getByRole("menu", { name: "Model and thinking" }).element();
+    expect(menu.querySelectorAll('[role="menuitem"]')).toHaveLength(2);
+    expect(menu.textContent).not.toMatch(/\/new|\/compact/);
+    await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
+    await screen.getByRole("menuitem", { name: "high", exact: true }).click();
+    await expect.poll(() => chosen).toEqual(["high"]);
+    await expect.element(screen.getByRole("menu", { name: "Model and thinking" })).not.toBeInTheDocument();
+    await expect.element(chip).toHaveFocus();
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});
+
+test("keeps the model settings and the Pi command menu exclusive, closes on Escape, and disables the model chip offline", async () => {
   const screen = await renderPwa(<ComposerHarness />);
   try {
     await screen.getByRole("button", { name: "Pi commands" }).click();
     await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).toBeVisible();
-    const chip = screen.getByRole("button", { name: /^Change model, current/ });
+    const chip = screen.getByRole("button", { name: /^Model and thinking settings, current/ });
     await chip.click();
-    await expect.element(screen.getByRole("group", { name: "Change model" })).toBeVisible();
+    await expect.element(screen.getByRole("group", { name: "Model and thinking" })).toBeVisible();
     await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).not.toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
-    await expect.element(screen.getByRole("group", { name: "Change model" })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("group", { name: "Model and thinking" })).not.toBeInTheDocument();
     await expect.element(chip).toHaveFocus();
 
     screen.getByTestId("composer-go-offline").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));

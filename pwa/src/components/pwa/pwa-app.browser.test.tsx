@@ -437,14 +437,15 @@ async function issueOperation({ screen, channel }: OperationHarness, action: Tes
     await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
   }
   if (action === "model_set") {
-    // 模型从输入区的模型标签进入，菜单直接打开模型列表。
-    await screen.getByRole("button", { name: /^Change model, current/ }).click();
+    // 模型从输入区的模型标签进入设置根，再打开模型列表。
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
     channelHarness.nextSendResults.push(sendResult);
     await screen.getByRole("menuitem", { name: /test \/ Vision model/ }).click();
   } else if (action === "thinking_set") {
-    // 思考级别从输入区的「/」菜单进入；会话菜单不再重复这两项。
-    await screen.getByRole("button", { name: "Pi commands" }).click();
-    await screen.getByRole("menuitem", { name: /\/thinking/ }).click();
+    // 思考级别与模型共用输入区标签入口；会话菜单不再重复这两项。
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
     channelHarness.nextSendResults.push(sendResult);
     await screen.getByRole("menuitem", { name: "high", exact: true }).click();
   } else {
@@ -1707,15 +1708,16 @@ test("routes session actions through the live channel with current model and thi
     const compact = channel.frames.at(-1);
     channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: compact?.id, action: "session_compact" });
 
-    // 模型从输入区的模型标签进入，思考级别从「/」菜单进入；会话菜单不再重复这两项。
-    await screen.getByRole("button", { name: /^Change model, current Test Sonnet/ }).click();
+    // 模型与思考级别都从输入区的模型标签进入；会话菜单不再重复这两项。
+    await screen.getByRole("button", { name: /^Model and thinking settings, current Test Sonnet/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
     await screen.getByRole("menuitem", { name: /anthropic \/ Test Sonnet/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "model_set", provider: "anthropic", model_id: "test-sonnet" }));
     const modelSet = channel.frames.at(-1);
     channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: modelSet?.id, action: "model_set" });
 
-    await screen.getByRole("button", { name: "Pi commands" }).click();
-    await screen.getByRole("menuitem", { name: /\/thinking/ }).click();
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
     await screen.getByRole("menuitem", { name: "high", exact: true }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "thinking_set", level: "high" }));
   } finally {
@@ -1733,7 +1735,8 @@ test("keeps attachment capability independent of switching to a vision model", a
 
     const addImage = screen.getByRole("button", { name: "Add attachments" });
     await expect.element(addImage).toBeEnabled();
-    await screen.getByRole("button", { name: /^Change model, current Text model/ }).click();
+    await screen.getByRole("button", { name: /^Model and thinking settings, current Text model/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
     await screen.getByRole("menuitem", { name: /test \/ Vision model/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "model_set", provider: "test", model_id: "vision-model" }));
     const modelSet = channel.frames.at(-1);

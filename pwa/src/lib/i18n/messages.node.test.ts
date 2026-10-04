@@ -18,6 +18,13 @@ test("the Chinese dictionary covers every English entry with non-empty text of t
   }
 });
 
+test("the model chip describes the shared model and thinking settings in both languages", () => {
+  expect(en.commands.modelSettings).toBe("Model and thinking");
+  expect(zh.commands.modelSettings).toBe("模型与思考");
+  expect(en.commands.modelChipLabel("Example model", "high")).toBe("Model and thinking settings, current Example model, thinking level high");
+  expect(zh.commands.modelChipLabel("示例模型", "high")).toBe("模型与思考设置，当前 示例模型，思考级别 high");
+});
+
 test("every safe feedback message has a Chinese translation", () => {
   for (const message of safeFeedbackCatalog()) {
     expect(localizeFeedback(message, "zh-CN"), message).not.toBe(message);
