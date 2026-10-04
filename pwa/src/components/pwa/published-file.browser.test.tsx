@@ -1,4 +1,4 @@
-import { createRef, useState } from "react";
+import { createRef, useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -10,6 +10,16 @@ import { renderPwa } from "@/test/browser/render";
 import { PublishedFile } from "./published-file";
 import { MessageList } from "./message-list";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "./published-files-context";
+
+const readerCallbacks: { close: () => void; exit: () => void }[] = [];
+vi.mock("./published-file-reader", async importOriginal => {
+  const original = await importOriginal<typeof import("./published-file-reader")>();
+  return { PublishedFileReader: (props: ComponentProps<typeof original.PublishedFileReader>) => {
+    // 保留真实 Drawer 和 cleanup，只捕获边界回调以可重复验证迟到调用。
+    readerCallbacks.push({ close: props.onClose, exit: props.onExitTransitionEnd });
+    return <original.PublishedFileReader {...props} />;
+  } };
+});
 
 const descriptor: PublishedFileDescriptor = { publication_id: "publication", file_name: "说明.md", mime_type: "text/markdown", byte_length: 20, tool_call_id: "publish-tool" };
 const base = { session_id: "session", leaf_id: "leaf", group_id: "group", timestamp: 10 };
@@ -28,6 +38,7 @@ function visibility(visible: boolean) {
 }
 function blobUrl(blob = new Blob(["whole original"], { type: "text/plain" })) { const url = URL.createObjectURL(blob); urls.push(url); return url; }
 beforeEach(() => {
+  readerCallbacks.length = 0;
   observers = [];
   vi.stubGlobal("IntersectionObserver", class {
     constructor(private callback: IntersectionObserverCallback) {}
@@ -47,6 +58,8 @@ async function harness({ file = descriptor, initial, canFetch = true, active = f
   let fetch = canFetch;
   let busy = active;
   let records = items;
+  let scopeToken = {};
+  let provided = true;
   let showModal!: (value: boolean) => void;
   let update!: () => void;
   const onRead = vi.fn();
@@ -61,11 +74,11 @@ async function harness({ file = descriptor, initial, canFetch = true, active = f
     const [modalOpened, setModalOpened] = useState(false);
     update = () => flushSync(() => refresh(value => value + 1));
     showModal = value => flushSync(() => setModalOpened(value));
-    const view: PublishedFilesView = { canFetch: fetch, active: busy, getState, open, cancel, pin, unpin, onReadingChange: reading };
-    return <PublishedFilesProvider value={view}>{records ? <MessageList items={records} hasEarlier={false} listRef={createRef()} bottomSentinelRef={createRef()} onScroll={() => {}} isLive={live} /> : <PublishedFile file={file} live={live} onRead={onRead} />}{modal ? <Modal opened={modalOpened} onClose={() => setModalOpened(false)} title="Top confirmation" portalProps={{ target: ".pwa-root" }}><button>Confirm</button></Modal> : null}</PublishedFilesProvider>;
+    const view: PublishedFilesView = { scopeToken, canFetch: fetch, active: busy, getState, open, cancel, pin, unpin, onReadingChange: reading };
+    return <PublishedFilesProvider value={provided ? view : null!}>{records ? <MessageList items={records} hasEarlier={false} listRef={createRef()} bottomSentinelRef={createRef()} onScroll={() => {}} isLive={live} /> : <PublishedFile file={file} live={live} onRead={onRead} />}{modal ? <Modal opened={modalOpened} onClose={() => setModalOpened(false)} title="Top confirmation" portalProps={{ target: ".pwa-root" }}><button>Confirm</button></Modal> : null}</PublishedFilesProvider>;
   }
   const screen = await renderPwa(<Harness />);
-  return { screen, open, cancel, pin, unpin, reading, onRead, showModal, setItems: (next: TimelineViewItem[]) => { records = next; update(); }, update: (value: PublishedFileViewState | undefined = state, options: { canFetch?: boolean; active?: boolean } = {}) => { state = value; fetch = options.canFetch ?? fetch; busy = options.active ?? busy; update(); } };
+  return { screen, open, cancel, pin, unpin, reading, onRead, showModal, replaceScope: () => { scopeToken = {}; update(); }, removeProvider: () => { provided = false; update(); }, removeState: () => { state = undefined; update(); }, setItems: (next: TimelineViewItem[]) => { records = next; update(); }, update: (value: PublishedFileViewState | undefined = state, options: { canFetch?: boolean; active?: boolean } = {}) => { state = value; fetch = options.canFetch ?? fetch; busy = options.active ?? busy; update(); } };
 }
 
 test("legal custom is independent output and a summary boundary with one group completion", async () => {
@@ -238,6 +251,75 @@ test("system Back closes only the file reader without cancelling transfer", asyn
   window.history.back();
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
   expect(h.cancel).not.toHaveBeenCalled();
+  await h.screen.unmount();
+});
+
+test.each(["scope", "provider"] as const)("reused nonempty timeline destroys the old reader on %s loss without moving focus", async loss => {
+  const ready: PublishedFileViewState = { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "old scope", url: blobUrl() };
+  const h = await harness({ items: [event(published())], initial: ready });
+  const removedListener = vi.spyOn(window, "removeEventListener");
+  await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
+  const oldDialog = document.querySelector<HTMLElement>(".pwa-file-reader")!;
+  const staleCallbacks = readerCallbacks.at(-1)!;
+  expect(document.querySelectorAll(".pwa-scrim")).toHaveLength(1);
+  await expect.poll(() => document.body.hasAttribute("data-scroll-locked"), { timeout: 5000 }).toBe(true);
+  const trigger = h.screen.getByRole("button", { name: "View", exact: true }).element();
+  const focus = vi.spyOn(trigger, "focus");
+  const listFocus = vi.spyOn(document.querySelector<HTMLElement>(".pwa-message-list")!, "focus");
+  expect(h.reading).toHaveBeenLastCalledWith(true);
+  if (loss === "scope") h.replaceScope(); else h.removeProvider();
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+  expect(oldDialog.isConnected).toBe(false);
+  expect(document.querySelector(".pwa-scrim")).toBeNull();
+  await expect.poll(() => document.body.hasAttribute("data-scroll-locked"), { timeout: 5000 }).toBe(false);
+  expect(h.unpin).toHaveBeenCalledExactlyOnceWith("publication");
+  expect(h.reading).toHaveBeenLastCalledWith(false);
+  await expect.poll(() => window.history.state?.piReachFileReader, { timeout: 5000 }).toBeUndefined();
+  expect(removedListener.mock.calls.some(([type]) => String(type) === "popstate")).toBe(true);
+  expect(focus).not.toHaveBeenCalled();
+  expect(listFocus).not.toHaveBeenCalled();
+  if (loss === "scope") {
+    h.update({ ...ready, text: "new scope" });
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(h.screen.getByText("new scope", { exact: true })).toBeVisible();
+    const nextDialog = document.querySelector(".pwa-file-reader");
+    flushSync(() => { staleCallbacks.close(); staleCallbacks.exit(); });
+    expect(document.querySelector(".pwa-file-reader")).toBe(nextDialog);
+    expect(document.querySelectorAll(".pwa-file-reader")).toHaveLength(1);
+    expect(focus).not.toHaveBeenCalled();
+    expect(listFocus).not.toHaveBeenCalled();
+    expect(h.reading).toHaveBeenLastCalledWith(true);
+    expect(h.pin).toHaveBeenCalledTimes(2);
+    expect(h.unpin).toHaveBeenCalledTimes(1);
+    await h.screen.getByRole("button", { name: "Close file reader" }).click();
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+    expect(h.unpin).toHaveBeenCalledTimes(2);
+  }
+  focus.mockRestore(); listFocus.mockRestore(); removedListener.mockRestore();
+  await h.screen.unmount();
+});
+
+test("same scope keeps the reader and lock across item replacement, missing state and disconnection", async () => {
+  const ready: PublishedFileViewState = { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "cached", url: blobUrl() };
+  const h = await harness({ items: [event(published())], initial: ready });
+  await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  const dialog = document.querySelector(".pwa-file-reader");
+  await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
+  const marker = window.history.state.piReachFileReader;
+  h.setItems([event(published({ ...descriptor }))]);
+  h.update(undefined, { canFetch: false, active: false });
+  h.removeState();
+  expect(document.querySelector(".pwa-file-reader")).toBe(dialog);
+  h.update({ phase: "idle", receivedBytes: 0 }, { canFetch: false });
+  h.setItems([event(published({ ...descriptor, publication_id: "other" }))]);
+  expect(document.querySelector(".pwa-file-reader")).toBe(dialog);
+  expect(h.reading).toHaveBeenLastCalledWith(true);
+  expect(h.unpin).not.toHaveBeenCalled();
+  expect(window.history.state.piReachFileReader).toBe(marker);
+  await h.screen.getByRole("button", { name: "Close file reader" }).click();
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+  expect(h.reading).toHaveBeenLastCalledWith(false);
   await h.screen.unmount();
 });
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ThinkingContent, MarkdownContent } from "./timeline-content";
 import { ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
@@ -114,10 +114,18 @@ export function ConversationTimeline({ items, live, completions, running = false
   const [reader, setReader] = useState<ReaderState>(null);
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
-  const [fileReader, setFileReader] = useState<{ file: PublishedFileDescriptor; trigger: HTMLButtonElement } | null>(null);
+  const [fileReader, setFileReader] = useState<{ file: PublishedFileDescriptor; trigger: HTMLButtonElement; scopeToken: object } | null>(null);
   const [fileOpened, setFileOpened] = useState(false);
   const files = usePublishedFilesView();
   const fileReadingChange = files?.onReadingChange;
+  const scopedFileReader = fileReader?.scopeToken === files?.scopeToken ? fileReader : null;
+  // 真实目标失效直接卸载，复用 Reader 的 pin/history cleanup，不播放旧目标退出或回焦。
+  if (fileReader !== null && scopedFileReader === null) {
+    setFileReader(null);
+    setFileOpened(false);
+  }
+  const currentFileReader = useRef(scopedFileReader);
+  useLayoutEffect(() => { currentFileReader.current = scopedFileReader; }, [scopedFileReader]);
 
   let view = snapshot;
   if (snapshot.items !== items) {
@@ -137,17 +145,17 @@ export function ConversationTimeline({ items, live, completions, running = false
     || view.entries.some(entry => (entry.kind === "tool" || entry.kind === "thinking") && choices.get(entry.key) === true
       && !(groupedToolKeys.has(entry.key) && !groupExpanded(choices, groupedToolKeys.get(entry.key)!)));
   // 历史窗口替换可能移除已展开工具；阅读锁随可见内容同步，并保留到 Reader 退出结束。
-  const reading = reader !== null || fileReader !== null || readingInline(expansionChoices);
+  const reading = reader !== null || scopedFileReader !== null || readingInline(expansionChoices);
   useEffect(() => { onReadingChange?.(reading); fileReadingChange?.(reading); }, [onReadingChange, fileReadingChange, reading]);
   useEffect(() => () => { onReadingChange?.(false); fileReadingChange?.(false); }, [onReadingChange, fileReadingChange]);
 
   const chooseExpansion = (key: string, expanded: boolean) => {
     const choices = new Map(expansionChoices).set(key, expanded);
     setExpansionChoices(choices);
-    onReadingChange?.(reader !== null || fileReader !== null || readingInline(choices));
+    onReadingChange?.(reader !== null || scopedFileReader !== null || readingInline(choices));
   };
   const openReader = (key: string, trigger: HTMLButtonElement) => {
-    if (fileReader !== null) return;
+    if (scopedFileReader !== null) return;
     setReaderOrigin(trigger);
     onReadingChange?.(true);
     setReader({ key });
@@ -167,12 +175,18 @@ export function ConversationTimeline({ items, live, completions, running = false
   };
 
   const openFileReader: PublishedFileRead = (file, trigger) => {
-    if (reader !== null || fileReader !== null) return;
-    setFileReader({ file, trigger });
+    if (!files || reader !== null || scopedFileReader !== null) return;
+    setFileReader({ file, trigger, scopeToken: files.scopeToken });
     setFileOpened(true);
   };
+  // 旧退出/关闭回调不能碰新的阅读器；门面 getter 也能识别尚未提交 render 的 reset。
+  const ownsFileReader = () => scopedFileReader !== null && currentFileReader.current === scopedFileReader
+    && files?.scopeToken === scopedFileReader.scopeToken;
+  const closeFileReader = () => { if (ownsFileReader()) setFileOpened(false); };
   const finishFileReader = () => {
-    const trigger = fileReader?.trigger;
+    if (!ownsFileReader()) return;
+    const trigger = scopedFileReader?.trigger;
+    setFileOpened(false);
     setFileReader(null);
     if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
     else listRef.current?.focus({ preventScroll: true });
@@ -205,6 +219,6 @@ export function ConversationTimeline({ items, live, completions, running = false
     {rows}
     {waitingForReply ? <ThinkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
-    {fileReader ? <PublishedFileReader file={fileReader.file} opened={fileOpened} onClose={() => setFileOpened(false)} onExitTransitionEnd={finishFileReader} /> : null}
+    {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={fileOpened} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;
 }

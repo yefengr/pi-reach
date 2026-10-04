@@ -15,7 +15,12 @@ export type PublishedFileState = {
   result?: FileTransferResult;
   error?: FileTransferErrorCode;
 };
-export type FileTransferSnapshot = { active: boolean; files: ReadonlyMap<string, PublishedFileState> };
+export type FileTransferSnapshot = {
+  /** 页面内缓存所有权身份；短断线与传输进度不改变它。 */
+  readonly scopeToken: object;
+  active: boolean;
+  files: ReadonlyMap<string, PublishedFileState>;
+};
 export type FileTransferRequest = Extract<ClientFrame, { type: "file_open" | "file_read" }>;
 export type FileTransferResponse = Extract<ServerFrame, { type: "file_opened" | "file_chunk" }>;
 export type FileTransferTimers = {

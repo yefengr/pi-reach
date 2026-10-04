@@ -1031,6 +1031,78 @@ test("published files: verified ready result survives a short disconnect without
   } finally { anchorClick.mockRestore(); await screen.unmount(); }
 });
 
+test.each(["bye", "reset"] as const)("published files: %s closes the old reader while formal content stays mounted", async type => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  const revoke = vi.spyOn(URL, "revokeObjectURL");
+  try {
+    const url = await completePublishedReport(context);
+    const origin = screen.getByRole("button", { name: "View", exact: true }).element();
+    await screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(screen.getByRole("dialog", { name: "report.txt", exact: true })).toBeVisible();
+    await expect.poll(() => typeof window.history.state?.piReachFileReader).toBe("string");
+    const list = document.querySelector(".pwa-message-list");
+    channel.emit({ protocol_version: 2, type, session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced",
+      ...(type === "reset" ? { target_channel_id: channel.channelId, in_reply_to: "server-reset" } : {}) });
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+    expect(document.querySelector(".pwa-message-list")).toBe(list);
+    await expect.element(screen.getByText("report.txt", { exact: true })).toBeVisible();
+    await expect.poll(() => window.history.state?.piReachFileReader).toBeUndefined();
+    expect(document.activeElement).not.toBe(origin);
+    expect(revoke).toHaveBeenCalledWith(url);
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "session-2"));
+    emitEvent(next, { ...numberedEvents(1)[0]!, event_id: "new-scope-output", session_id: "session-2", leaf_id: "generation-session-2" });
+    await expect.element(screen.getByText("Record 1", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-file-reader")).toBeNull();
+  } finally { revoke.mockRestore(); await screen.unmount(); }
+});
+
+test("published files: selecting another Pi closes the reader before its new handshake", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen } = context;
+  try {
+    relayHarness.instances[0]!.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [
+      { endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } },
+      { endpoint_id: "second-endpoint", runtime_instance_id: "runtime-2", metadata: { kind: "interactive", name: "Second Pi", cwd: "/workspace/second" } },
+    ] });
+    await completePublishedReport(context);
+    await screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(screen.getByRole("dialog", { name: "report.txt", exact: true })).toBeVisible();
+    await expect.poll(() => [...document.querySelectorAll<HTMLButtonElement>(".pwa-nav-session")].find(row => row.textContent?.includes("Second Pi"))).not.toBeUndefined();
+    // 模拟外部目标选择，调用真实导航处理器；不把遮罩下的按钮可点击当产品承诺。
+    [...document.querySelectorAll<HTMLButtonElement>(".pwa-nav-session")].find(row => row.textContent?.includes("Second Pi"))!.click();
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    channelHarness.channels[1]!.emit(readyFrame(channelHarness.channels[1]!, "second-session"));
+    await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
+    expect(document.querySelector(".pwa-file-reader")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("published files: an open reader survives live updates and a short disconnect", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const url = await completePublishedReport(context);
+    await screen.getByRole("button", { name: "View", exact: true }).click();
+    const reader = screen.getByRole("dialog", { name: "report.txt", exact: true });
+    await expect.element(reader).toBeVisible();
+    const element = reader.element();
+    emitEvent(channel, { ...numberedEvents(1, 2)[0]!, event_id: "same-scope-update" });
+    await expect.element(screen.getByText("Record 2", { exact: true })).toBeInTheDocument();
+    relayHarness.instances[0]!.emitState("closed");
+    await expect.poll(() => screen.getByLabelText("Connected", { exact: true }).query()).toBeNull();
+    await expect.element(reader).toBeVisible();
+    expect(reader.element()).toBe(element);
+    await expect.element(screen.getByText("Complete published report", { exact: true })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Save file", exact: true }).last().element().getAttribute("href")).toBe(url);
+    await screen.getByRole("button", { name: "Close file reader", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
 test("published files: a rejected new-session action preserves the verified result until actual replacement", async () => {
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;

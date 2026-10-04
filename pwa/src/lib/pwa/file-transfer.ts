@@ -52,7 +52,7 @@ export class FileTransferController {
   private task?: Task;
   private disposed = false;
   private generation = 0;
-  private state: FileTransferSnapshot = { active: false, files: new Map() };
+  private state: FileTransferSnapshot = { scopeToken: {}, active: false, files: new Map() };
   private readonly listeners = new Set<() => void>();
   private readonly requests: FileTransferRequests;
   private readonly cache: FileTransferCache;
@@ -105,7 +105,7 @@ export class FileTransferController {
     this.requests.clearRetired();
     this.generation++;
     this.cache.reset();
-    this.state = { active: false, files: new Map() };
+    this.state = { scopeToken: {}, active: false, files: new Map() };
     this.notify();
   }
   dispose(): void {
@@ -265,7 +265,7 @@ export class FileTransferController {
   private replace(id: string, entry: PublishedFileState): void {
     const files = new Map(this.state.files);
     files.set(id, entry);
-    this.state = { active: !!this.task, files };
+    this.state = { scopeToken: this.state.scopeToken, active: !!this.task, files };
   }
   private publish(id: string, entry: PublishedFileState): void { this.replace(id, entry); this.notify(); }
   private notify(): void { for (const listener of this.listeners) listener(); }

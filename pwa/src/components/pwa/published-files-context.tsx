@@ -13,6 +13,7 @@ export type PublishedFileViewState = {
   error?: string;
 };
 export type PublishedFilesView = {
+  readonly scopeToken: object;
   canFetch: boolean;
   active: boolean;
   getState: (id: string) => PublishedFileViewState | undefined;

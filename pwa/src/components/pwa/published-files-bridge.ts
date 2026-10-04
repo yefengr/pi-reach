@@ -5,6 +5,7 @@ import type { PublishedFilesView } from "./published-files-context";
 export function publishedFilesView(controller: FileTransferController, _state: FileTransferSnapshot,
   canFetch: boolean, canFetchNow: () => boolean = () => canFetch, onReadingChange?: (reading: boolean) => void): PublishedFilesView {
   return {
+    get scopeToken() { return controller.snapshot().scopeToken; },
     canFetch, get active() { return controller.snapshot().active; }, onReadingChange,
     getState: (id) => {
       const entry = controller.snapshot().files.get(id);

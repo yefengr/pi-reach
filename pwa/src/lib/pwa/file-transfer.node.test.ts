@@ -77,6 +77,69 @@ function harness(options: FileTransferOptions = {}) {
 afterEach(() => { vi.useRealTimers(); });
 
 describe("FileTransferController", () => {
+  it("keeps cache ownership through transfer state, retries and same-target reconnection", async () => {
+    const h = harness();
+    const token = h.controller.snapshot().scopeToken;
+    const other = harness();
+    expect(token).toEqual({});
+    expect(other.controller.snapshot().scopeToken).not.toBe(token);
+    other.controller.dispose();
+    const observed: object[] = [];
+    const unsubscribe = h.controller.subscribe(() => observed.push(h.controller.snapshot().scopeToken));
+    const ready = await h.acquire("ready");
+    await h.controller.open(descriptor("ready"), "view");
+    const operation = h.controller.retry(descriptor("ready"), "view");
+    await drain();
+    h.controller.receive(h.opened());
+    await drain();
+    h.controller.receive(h.chunk());
+    await operation;
+    const refreshed = h.controller.snapshot().files.get("ready")!.result;
+    expect(refreshed).not.toBe(ready.result);
+    const cancelled = h.controller.open(descriptor("cancelled"), "download");
+    h.controller.cancel();
+    await cancelled;
+    h.controller.connect({ ...scope }, frame => h.frames.push(frame));
+    h.controller.connect({ ...scope, leafId: "next-leaf" }, frame => h.frames.push(frame));
+    h.controller.disconnect();
+    expect(h.controller.snapshot().files.get("ready")?.result).toBe(refreshed);
+    expect(h.controller.snapshot().scopeToken).toBe(token);
+    h.controller.connect({ ...scope, channelId: "new-channel" }, frame => h.frames.push(frame));
+    expect(h.controller.snapshot().scopeToken).toBe(token);
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.every(value => value === token)).toBe(true);
+    unsubscribe(); h.controller.dispose();
+  });
+
+  it.each(["deviceId", "endpointId", "runtimeInstanceId", "sessionId", "selfSenderRef"] as const)("changes ownership on a real %s switch and exposes it through an old bridge", field => {
+    const h = harness();
+    const old = h.controller.snapshot();
+    const view = publishedFilesView(h.controller, old, true);
+    expect(view.scopeToken).toBe(old.scopeToken);
+    h.controller.connect({ ...scope, [field]: "new-target" }, frame => h.frames.push(frame));
+    expect(h.controller.snapshot().scopeToken).not.toBe(old.scopeToken);
+    expect(view.scopeToken).toBe(h.controller.snapshot().scopeToken);
+    h.controller.dispose();
+  });
+
+  it("changes ownership on every explicit reset and dispose, not subsequent connects", () => {
+    const h = harness();
+    const old = h.controller.snapshot();
+    const view = publishedFilesView(h.controller, old, true);
+    h.controller.reset();
+    const reset = h.controller.snapshot().scopeToken;
+    expect(reset).not.toBe(old.scopeToken);
+    expect(view.scopeToken).toBe(reset);
+    h.controller.connect(scope, frame => h.frames.push(frame));
+    expect(h.controller.snapshot().scopeToken).toBe(reset);
+    h.controller.reset();
+    expect(h.controller.snapshot().scopeToken).not.toBe(reset);
+    const previous = h.controller.snapshot().scopeToken;
+    h.controller.dispose();
+    expect(h.controller.snapshot().scopeToken).not.toBe(previous);
+    expect(view.scopeToken).toBe(h.controller.snapshot().scopeToken);
+  });
+
   it("publishes synchronous stable snapshots, verifies bytes/hash, and exposes bounded safe text", async () => {
     const h = harness();
     const initial = h.controller.snapshot();
@@ -494,7 +557,7 @@ describe("FileTransferController", () => {
     await drain();
     const late = h.chunk();
     h.controller.reset();
-    expect(h.controller.snapshot()).toEqual({ active: false, files: new Map() });
+    expect(h.controller.snapshot()).toEqual({ scopeToken: expect.any(Object), active: false, files: new Map() });
     expect(h.revoke).toHaveBeenCalledTimes(1);
     expect(h.controller.receive(late)).toBe(false);
     await promise;
