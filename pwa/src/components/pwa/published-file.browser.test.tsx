@@ -145,6 +145,29 @@ test("current metadata decides large image and none, never old image MIME", asyn
   await h.screen.unmount();
 });
 
+test.each(["image/png", "image/gif", "image/webp"])("server-denied %s stays download-only even after becoming ready", async mimeType => {
+  const file = { ...image, mime_type: mimeType };
+  const h = await harness({ file, initial: { phase: "manual", receivedBytes: 0, preview: { kind: "none" }, mimeType } });
+  visibility(true);
+  expect(h.open).not.toHaveBeenCalled();
+  expect(document.querySelector(".pwa-published-file img")).toBeNull();
+  expect(h.screen.getByRole("button", { name: "Fetch image" }).query()).toBeNull();
+  expect(h.screen.getByRole("button", { name: "View", exact: true }).query()).toBeNull();
+  await h.screen.getByRole("button", { name: "Download", exact: true }).click();
+  expect(h.open).toHaveBeenCalledWith(file, "download");
+
+  const url = blobUrl(new Blob(["unchanged original"], { type: "application/octet-stream" }));
+  h.update({ phase: "ready", receivedBytes: file.byte_length, preview: { kind: "none" }, mimeType, url });
+  const save = h.screen.getByRole("link", { name: "Save file" });
+  await expect.element(save).toBeVisible();
+  expect(save.element().getAttribute("href")).toBe(url);
+  expect(save.element().getAttribute("download")).toBe(file.file_name);
+  expect(document.querySelector(".pwa-published-file img")).toBeNull();
+  expect(h.screen.getByRole("button", { name: "View", exact: true }).query()).toBeNull();
+  expect(h.onRead).not.toHaveBeenCalled();
+  await h.screen.unmount();
+});
+
 test("download completes as a fresh safe save anchor and ready survives disconnection", async () => {
   const h = await harness();
   const url = blobUrl();

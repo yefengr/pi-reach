@@ -336,7 +336,7 @@ PWA 在完成会话握手和历史同步后获取文件。Extension 每次打开
 | `file_close` / `file_closed` | 按 `transfer_id` 尽力释放句柄；取消、断线和失效先停止使用结果，再清理资源。无关闭回执不表示远端已释放。 |
 | `file_error` | 返回固定 code，可带关联的 `transfer_id`；不含路径、异常正文或原件。身份与会话错误仍走既有 `protocol_error/reset` 恢复，不降格为文件错误。 |
 
-原件最大 50 MiB，单片解码后最大 64 KiB。图片 preview 为 `{kind:"image", width, height}` 且最多 2000 万像素；文本为 `{kind:"text"}`，其他为 `{kind:"none"}`。机器可读约束与错误码见[共享文件 schema](../../../packages/protocol/src/session/files.ts)。Extension 同进程最多保有 8 个活文件资源，计入发布检查、打开中及关闭失败的句柄；空闲 30 秒回收。关闭失败仍占额度，不伪报释放。
+原件最大 50 MiB，单片解码后最大 64 KiB。只有通过有界结构检查、确认无动画且不超过 2000 万像素的静态图片才返回 `{kind:"image", width, height}`；动画图片或无法安全确认的图片返回 `{kind:"none"}`，仅可下载原件，不自动获取或进入图片阅读器。文本为 `{kind:"text"}`，其他为 `{kind:"none"}`。机器可读约束与错误码见[共享文件 schema](../../../packages/protocol/src/session/files.ts)。Extension 同进程最多保有 8 个活文件资源，计入发布检查、打开中及关闭失败的句柄；空闲 30 秒回收。关闭失败仍占额度，不伪报释放。
 
 读取沿用同一只读句柄，每片前后检查文件身份与属性；路径替换、读取中变化或取消后迟到结果不能完成任务。最后关闭成功后才发送完整摘要。摘要验证不承诺文件系统原子快照，也不保证硬取消已经进入内核的 I/O。
 

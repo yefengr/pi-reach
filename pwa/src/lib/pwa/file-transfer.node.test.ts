@@ -130,6 +130,37 @@ describe("FileTransferController", () => {
     h.controller.dispose();
   });
 
+  it.each([
+    ["image/png", "auto"], ["image/png", "view"],
+    ["image/gif", "auto"], ["image/gif", "view"],
+    ["image/webp", "auto"], ["image/webp", "view"],
+  ] as const)("keeps server-denied %s out of %s preview while downloading the unchanged original", async (mime, intent) => {
+    const h = harness();
+    const file = { ...descriptor(), mime_type: mime, file_name: "animation.bin", byte_length: bytes.length };
+    try {
+      const preview = h.controller.open(file, intent);
+      await drain();
+      expect(h.controller.receive(h.opened(bytes.length, { kind: "none" }, { mime_type: mime, file_name: file.file_name }))).toBe(true);
+      await preview;
+      expect(h.frames.map(frame => frame.type)).toEqual(["file_open", "file_close"]);
+      expect(h.controller.snapshot().files.get(file.publication_id)?.phase).toBe("manual");
+      expect(h.create).not.toHaveBeenCalled();
+
+      const download = h.controller.open(file, "download");
+      await drain();
+      expect(h.controller.receive(h.opened(bytes.length, { kind: "none" }, { mime_type: mime, file_name: file.file_name }))).toBe(true);
+      await drain();
+      expect(h.controller.receive(h.chunk())).toBe(true);
+      await download;
+      const result = h.controller.snapshot().files.get(file.publication_id)!;
+      expect(result.phase).toBe("ready");
+      expect(result.current?.mime_type).toBe(mime);
+      expect(result.result?.blob.type).toBe("application/octet-stream");
+      expect(result.result?.text).toBeUndefined();
+      expect(new Uint8Array(await result.result!.blob.arrayBuffer())).toEqual(bytes);
+    } finally { h.controller.dispose(); }
+  });
+
   it("automatically fetches only schema-qualified small images, not historical image metadata", async () => {
     const h = harness();
     const promise = h.controller.open(descriptor(), "auto");

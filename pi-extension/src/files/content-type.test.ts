@@ -36,14 +36,18 @@ function png(width: number, height: number): Buffer {
   head.writeUInt32BE(height, 20);
   head[24] = 8;
   head[25] = 6;
-  return head;
+  return Buffer.concat([head, Buffer.from("000000014944415400000000000000000049454e4400000000", "hex")]);
 }
 function gif(width: number, height: number): Buffer {
-  const head = Buffer.alloc(13);
+  const head = Buffer.alloc(19);
   head.write("GIF89a", 0, "ascii");
   head.writeUInt16LE(width, 6);
   head.writeUInt16LE(height, 8);
-  return head;
+  head[10] = 0x80;
+  const frame = Buffer.from("2c00000000000000000002024401003b", "hex");
+  frame.writeUInt16LE(width, 5);
+  frame.writeUInt16LE(height, 7);
+  return Buffer.concat([head, frame]);
 }
 function jpeg(width: number, height: number): Buffer {
   const head = Buffer.from("ffd8ffe000040000ffc0000b080000000001011100", "hex");
@@ -65,7 +69,13 @@ function webpx(width: number, height: number): Buffer {
   const data = Buffer.alloc(10);
   data.writeUIntLE(width - 1, 4, 3);
   data.writeUIntLE(height - 1, 7, 3);
-  return webp("VP8X", data);
+  const lossless = Buffer.alloc(5);
+  lossless[0] = 0x2f;
+  lossless.writeUInt32LE(((width - 1) | ((height - 1) << 14)) >>> 0, 1);
+  const extended = webp("VP8X", data);
+  const bytes = Buffer.concat([extended, webp("VP8L", lossless).subarray(12)]);
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  return bytes;
 }
 
 describe("inspectFile", () => {
@@ -120,7 +130,7 @@ describe("inspectFile", () => {
     const invalidPng = png(10, 10);
     invalidPng[24] = 3;
     const invalidGif = gif(10, 10);
-    invalidGif[10] = 0x80;
+    invalidGif[10] = 0x87;
     const invalidWebp = webpx(10, 10);
     invalidWebp[20] = 0x80;
     for (const bytes of [invalidPng, invalidGif, invalidWebp]) expect((await inspect(bytes)).preview.kind).toBe("none");
