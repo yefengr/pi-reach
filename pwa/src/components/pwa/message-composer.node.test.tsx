@@ -83,3 +83,14 @@ test("allows an attachment-only message but disables it when capability is unava
   expect(button(renderComposer({ attachments: [attachment] }), "Send message")).not.toContain('disabled=""');
   expect(button(renderComposer({ attachments: [attachment], canAttach: false }), "Send message")).toContain('disabled=""');
 });
+
+test("always renders the model and thinking chip, falling back to the settings label without model metadata", () => {
+  const html = renderComposer();
+  const chip = button(html, "Model and thinking settings, current Current model unavailable, thinking level off");
+  expect(chip).toMatch(/pwa-composer-model/);
+  expect(chip).toContain("Model and thinking");
+  expect(button(renderComposer({ isOnline: false }), "Model and thinking settings, current Current model unavailable, thinking level off")).toContain('disabled=""');
+
+  const known = renderComposer({ commandCurrentModel: { id: "claude-sonnet-4", name: "Claude Sonnet 4", provider: "anthropic", reasoning: true, context_window: 200000, vision: true } });
+  expect(button(known, "Model and thinking settings, current Claude Sonnet 4, thinking level off")).toContain("Claude Sonnet 4");
+});

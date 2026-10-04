@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type Clipbo
 import { ActionIcon, FileButton, Menu, Textarea, UnstyledButton } from "@mantine/core";
 import { ArrowUp, Camera, ChevronDown, Files, LoaderCircle, Plus, Slash, Square } from "lucide-react";
 import { AttachmentCards, type ComposerAttachmentItem } from "./attachment-cards";
-import { ComposerCommandMenu, type ComposerCommandAction } from "./composer-command-menu";
+import { ComposerCommandMenu, ComposerModelSettingsMenu, type ComposerCommandAction } from "./composer-command-menu";
 import { pwaFadeTransition, useMenuExitAction, usePwaMotionDuration } from "./use-pwa-motion";
 import { useComposerAutosize } from "./use-composer-autosize";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
@@ -143,7 +143,7 @@ export function MessageComposer({
   const sendPendingRef = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
-  // 输入区的模型标签：单独锚定的菜单，复用命令面板并直接进入模型列表。
+  // 模型标签是模型与思考级别的唯一入口，与会话命令菜单分别锚定。
   const modelAction = useMenuExitAction();
   const modelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modelDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -176,12 +176,12 @@ export function MessageComposer({
       setImageMenuOpened(false);
       modelMenuOpenRef.current = false;
       setModelMenuOpen(false);
-      onCommandsOpen();
+      // 「/」只提供会话命令，不请求模型列表；模型列表只在模型设置菜单打开时请求一次。
       return;
     }
     commandFocusIntentRef.current = null;
     scheduleFocusReturn(commandFocusFrameRef, commandFocusOriginRef.current === "textarea" ? textareaRef : commandTriggerRef, () => !commandMenuOpenRef.current);
-  }, [commandAction, onCommandsOpen, setImageMenuOpened]);
+  }, [commandAction, setImageMenuOpened]);
 
   const setModelMenuOpened = useCallback((opened: boolean) => {
     if (opened && modelAction.hasPending()) return;
@@ -399,50 +399,39 @@ export function MessageComposer({
                 </Menu.Target>
                 <Menu.Dropdown ref={commandDropdownRef} inert={!commandMenuOpen} className="pwa-command-menu-dropdown" aria-label={t.commands.piCommands}>
                   <ComposerCommandMenu
-                    opened={commandMenuOpen}
                     isOnline={isOnline}
                     isWorking={isWorking}
                     pendingAction={commandPendingAction}
-                    models={commandModels}
-                    currentModel={commandCurrentModel}
-                    currentModelFallback={commandCurrentModelFallback}
-                    thinking={commandThinking}
                     onNewSession={() => closeCommandThen(onNewSession)}
                     onCompactSession={() => closeCommandThen(onCompactSession)}
-                    onSetModel={(model) => closeCommandThen(() => onSetModel(model))}
-                    onSetThinking={(level) => closeCommandThen(() => onSetThinking(level))}
                   />
                 </Menu.Dropdown>
               </Menu>
             </div>
           </div>
           <div className="pwa-composer-actions">
-            {modelName ? <Menu width="var(--pwa-command-menu-width)" opened={modelMenuOpen} onChange={setModelMenuOpened} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-end" offset={8} transitionProps={{ transition: pwaFadeTransition, duration: menuDuration, onEnter: consumeModelFocusIntent }} onExitTransitionEnd={finishModelExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex={8}>
+            <Menu width="var(--pwa-command-menu-width)" opened={modelMenuOpen} onChange={setModelMenuOpened} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-end" offset={8} transitionProps={{ transition: pwaFadeTransition, duration: menuDuration, onEnter: consumeModelFocusIntent }} onExitTransitionEnd={finishModelExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex={8}>
               <Menu.Target>
-                <UnstyledButton ref={modelTriggerRef} className="pwa-composer-model" onKeyDown={handleModelTriggerKeyDown} disabled={!isOnline} aria-label={t.commands.modelChipLabel(modelName, commandThinking)} title={t.commands.modelChipLabel(modelName, commandThinking)}>
-                  <span className="pwa-composer-model-name">{modelName}</span>
+                <UnstyledButton ref={modelTriggerRef} className="pwa-composer-model" onKeyDown={handleModelTriggerKeyDown} disabled={!isOnline} aria-label={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)} title={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)}>
+                  <span className="pwa-composer-model-name">{modelName ?? t.commands.modelSettings}</span>
                   <span className="pwa-composer-model-thinking" aria-hidden="true"> · {commandThinking}</span>
                   <ChevronDown size={16} aria-hidden="true" />
                 </UnstyledButton>
               </Menu.Target>
-              <Menu.Dropdown ref={modelDropdownRef} inert={!modelMenuOpen} className="pwa-command-menu-dropdown" aria-label={t.commands.changeModel}>
-                <ComposerCommandMenu
+              <Menu.Dropdown ref={modelDropdownRef} inert={!modelMenuOpen} className="pwa-command-menu-dropdown" aria-label={t.commands.modelSettings}>
+                <ComposerModelSettingsMenu
                   opened={modelMenuOpen}
-                  initialView="models"
                   isOnline={isOnline}
-                  isWorking={isWorking}
                   pendingAction={commandPendingAction}
                   models={commandModels}
                   currentModel={commandCurrentModel}
                   currentModelFallback={commandCurrentModelFallback}
                   thinking={commandThinking}
-                  onNewSession={() => closeModelThen(onNewSession)}
-                  onCompactSession={() => closeModelThen(onCompactSession)}
                   onSetModel={(model) => closeModelThen(() => onSetModel(model))}
                   onSetThinking={(level) => closeModelThen(() => onSetThinking(level))}
                 />
               </Menu.Dropdown>
-            </Menu> : null}
+            </Menu>
             {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" color="piReach" type="button" onClick={onStop} disabled={stopping} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="submit" disabled={!isOnline || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
           </div>
         </div>

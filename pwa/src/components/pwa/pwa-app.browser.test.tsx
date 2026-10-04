@@ -310,7 +310,7 @@ test.each([1280, 390])("focuses only a new empty desktop session, without openin
   const screen = await renderOnlineApp(() => renderPwa(<PwaApp />));
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: "Session actions" });
+    const action = screen.getByRole("button", { name: "Session details" });
     action.element().focus();
     channel.emit(readyFrame(channel, "empty-session"));
     const input = screen.getByRole("textbox", { name: /Message your agent/i });
@@ -325,7 +325,7 @@ test("does not focus the composer when opening a session with saved records", as
   const screen = await renderOnlineApp();
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: "Session actions" });
+    const action = screen.getByRole("button", { name: "Session details" });
     action.element().focus();
     channel.emit(readyFrame(channel, "existing-session", 2));
     await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeVisible();
@@ -437,25 +437,27 @@ async function issueOperation({ screen, channel }: OperationHarness, action: Tes
     await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
   }
   if (action === "model_set") {
-    // 模型从输入区的模型标签进入，菜单直接打开模型列表。
-    await screen.getByRole("button", { name: /^Change model, current/ }).click();
+    // 模型从输入区的模型标签进入设置根，再打开模型列表。
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
     channelHarness.nextSendResults.push(sendResult);
     await screen.getByRole("menuitem", { name: /test \/ Vision model/ }).click();
   } else if (action === "thinking_set") {
-    // 思考级别从输入区的「/」菜单进入；会话菜单不再重复这两项。
-    await screen.getByRole("button", { name: "Pi commands" }).click();
-    await screen.getByRole("menuitem", { name: /\/thinking/ }).click();
+    // 思考级别与模型共用输入区标签入口；会话菜单不再重复这两项。
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
     channelHarness.nextSendResults.push(sendResult);
     await screen.getByRole("menuitem", { name: "high", exact: true }).click();
   } else {
-    await screen.getByRole("button", { name: "Session actions" }).click();
+    // 新会话与压缩只从输入区的「/」菜单进入，会话菜单不再提供操作。
+    await screen.getByRole("button", { name: "Pi commands" }).click();
     if (action === "session_new") {
-      await screen.getByRole("menuitem", { name: "New session", exact: true }).click();
+      await screen.getByRole("menuitem", { name: /\/new/ }).click();
       channelHarness.nextSendResults.push(sendResult);
       await screen.getByRole("button", { name: "Start fresh session", exact: true }).click();
     } else {
       channelHarness.nextSendResults.push(sendResult);
-      await screen.getByRole("menuitem", { name: "Compact context", exact: true }).click();
+      await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     }
   }
   // 菜单动作在退出淡化结束后才交接，请求随之异步发出。
@@ -1692,23 +1694,30 @@ test("routes session actions through the live channel with current model and thi
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [model], current: model });
 
-    const actions = screen.getByRole("button", { name: "Session actions" });
+    const actions = screen.getByRole("button", { name: "Session details" });
     await actions.click();
-    expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(2);
-    await screen.getByRole("menuitem", { name: "Compact context" }).click();
+    // 「更多」只展示只读信息，不再请求模型列表或提供操作。
+    await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+    expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
+    expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(1);
+    await userEvent.keyboard("{Escape}");
+    await expect.element(screen.getByRole("dialog", { name: "Session details" })).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Pi commands" }).click();
+    await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "session_compact", leaf_id: "generation-session-1" }));
     const compact = channel.frames.at(-1);
     channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: compact?.id, action: "session_compact" });
 
-    // 模型从输入区的模型标签进入，思考级别从「/」菜单进入；会话菜单不再重复这两项。
-    await screen.getByRole("button", { name: /^Change model, current Test Sonnet/ }).click();
+    // 模型与思考级别都从输入区的模型标签进入；会话菜单不再重复这两项。
+    await screen.getByRole("button", { name: /^Model and thinking settings, current Test Sonnet/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
     await screen.getByRole("menuitem", { name: /anthropic \/ Test Sonnet/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "model_set", provider: "anthropic", model_id: "test-sonnet" }));
     const modelSet = channel.frames.at(-1);
     channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: modelSet?.id, action: "model_set" });
 
-    await screen.getByRole("button", { name: "Pi commands" }).click();
-    await screen.getByRole("menuitem", { name: /\/thinking/ }).click();
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
     await screen.getByRole("menuitem", { name: "high", exact: true }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "thinking_set", level: "high" }));
   } finally {
@@ -1726,7 +1735,8 @@ test("keeps attachment capability independent of switching to a vision model", a
 
     const addImage = screen.getByRole("button", { name: "Add attachments" });
     await expect.element(addImage).toBeEnabled();
-    await screen.getByRole("button", { name: /^Change model, current Text model/ }).click();
+    await screen.getByRole("button", { name: /^Model and thinking settings, current Text model/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
     await screen.getByRole("menuitem", { name: /test \/ Vision model/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "model_set", provider: "test", model_id: "vision-model" }));
     const modelSet = channel.frames.at(-1);
@@ -1787,7 +1797,6 @@ test("uses the endpoint model as a unique capability fallback when current is om
 });
 
 test.each([
-  [1280, "Session actions"], [390, "Session actions"],
   [1280, "Pi commands"], [390, "Pi commands"],
 ] as const)("closes commands before confirmation and restores the trigger at %ipx from %s", async (width, entry) => {
   await page.viewport(width, 844);
@@ -1800,7 +1809,7 @@ test.each([
     actions.element().focus();
     await expect.element(actions).toHaveFocus();
     await userEvent.keyboard("{ArrowDown}");
-    const newSession = screen.getByRole("menuitem", { name: entry === "Pi commands" ? /\/new/ : "New session" });
+    const newSession = screen.getByRole("menuitem", { name: /\/new/ });
     await expect.element(newSession).toHaveFocus();
     await userEvent.keyboard("{Enter}");
     const confirmation = screen.getByRole("dialog", { name: "Start a fresh session?" });
@@ -1850,7 +1859,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(historyTrigger).toHaveTextContent("Saved session note");
     await expect.element(screen.getByRole("note")).toHaveTextContent("This is a read-only record saved in this browser.");
     await expect.element(screen.getByRole("textbox")).not.toBeInTheDocument();
-    await screen.getByRole("button", { name: "Session actions" }).click();
+    await screen.getByRole("button", { name: "Session details" }).click();
     await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     await userEvent.keyboard("{Escape}");
@@ -1878,7 +1887,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     expect(channelHarness.channels[1]?.channelId).toBe(originalChannel?.channelId);
     await expect.element(screen.getByRole("button", { name: "Open navigation" })).toHaveTextContent("Renamed live Pi");
     await expect.element(screen.getByRole("textbox")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Session actions" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Session details" })).toBeVisible();
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
@@ -2263,10 +2272,14 @@ test("keeps a stable session channel across reset and session replacement, with 
   expect(channelHarness.channels).toHaveLength(3);
   await expect.element(screen.getByLabelText("Offline")).toBeVisible();
   const modelRequestsBeforeRetry = thirdChannel?.frames.filter((frame) => frame.type === "list_models").length ?? 0;
-  await screen.getByRole("button", { name: "Session actions" }).click();
-  await expect.element(screen.getByRole("menuitem", { name: "New session" })).toBeDisabled();
+  await screen.getByRole("button", { name: "Session details" }).click();
+  // 「更多」只展示只读信息，不请求模型列表，也不提供重试；离线重试走既有输入区操作条。
+  await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+  expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   expect(thirdChannel?.frames.filter((frame) => frame.type === "list_models")).toHaveLength(modelRequestsBeforeRetry);
-  await screen.getByRole("menuitem", { name: "Retry connection" }).click();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(screen.getByRole("dialog", { name: "Session details" })).not.toBeInTheDocument();
+  await screen.getByRole("button", { name: "Try again" }).click();
   await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(4));
   expect(channelHarness.channels[3]?.channelId).toBe(firstChannel?.channelId);
   await screen.unmount();

@@ -1,218 +1,155 @@
 import { expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import type { WireModel } from "@/lib/pi-reach/types";
 import { SessionActionsMenu, type SessionActionsMenuProps } from "./session-actions-menu";
+import { PwaUiProvider } from "./pwa-ui-provider";
 
-const model: WireModel = {
-  id: "claude-sonnet-4",
-  name: "Claude Sonnet 4",
-  provider: "anthropic",
-  reasoning: true,
-  context_window: 200000,
-  vision: true,
-};
+const directory = "/Users/pi/Code/pi-reach/packages/protocol";
+const defaultInfo = { name: "Release check with a very long session name that wraps inside the information area", cwd: directory, computer: "Studio Mac", status: "Idle" };
 
-type MenuHarnessProps = Partial<SessionActionsMenuProps>;
-
-function MenuHarness({
-  info = { name: "Release check with a very long session name that wraps inside the information area", cwd: "/Users/pi/Code/pi-reach/packages/protocol", computer: "Studio Mac", status: "Idle" },
-  readOnly = false,
-  isOnline = true,
-  isWorking = false,
-  pendingAction = null,
-  models = [model],
-  currentModel = model,
-  currentModelFallback = null,
-  thinking = "medium",
-  onNewSession = () => {},
-  onCompactSession = () => {},
-  onSetModel = () => {},
-  onSetThinking = () => {},
-  onCommandsOpen = () => {},
-  onRetry,
-}: MenuHarnessProps) {
-  return <>
-    <SessionActionsMenu
-      info={info}
-      readOnly={readOnly}
-      isOnline={isOnline}
-      isWorking={isWorking}
-      pendingAction={pendingAction}
-      models={models}
-      currentModel={currentModel}
-      currentModelFallback={currentModelFallback}
-      thinking={thinking}
-      onNewSession={onNewSession}
-      onCompactSession={onCompactSession}
-      onSetModel={onSetModel}
-      onSetThinking={onSetThinking}
-      onCommandsOpen={onCommandsOpen}
-      onRetry={onRetry}
-    />
-    <button type="button">Outside focus</button>
-  </>;
+function InfoHarness({ info = defaultInfo }: Partial<SessionActionsMenuProps>) {
+  return <><SessionActionsMenu info={info} /><button type="button">Outside focus</button></>;
 }
 
-async function openMenu(screen: Awaited<ReturnType<typeof renderPwa>>) {
-  const trigger = screen.getByRole("button", { name: "Session actions" });
+async function openInfo(screen: Awaited<ReturnType<typeof renderPwa>>) {
+  const trigger = screen.getByRole("button", { name: "Session details" });
   await trigger.click();
-  const menu = screen.getByRole("menu", { name: "Session actions" });
-  await expect.element(menu).toBeVisible();
-  return { trigger, menu };
+  const dialog = screen.getByRole("dialog", { name: "Session details" });
+  await expect.element(dialog).toBeVisible();
+  await expect.element(dialog).toHaveFocus();
+  return { trigger, dialog };
 }
 
-async function settleOverlayFocus() {
-  await new Promise<void>((resolve) => window.setTimeout(resolve, 30));
-}
+const shortcutModifier = navigator.platform.includes("Mac") ? "Meta" : "Control";
 
-test("opens the icon trigger with one menu relationship and a 44px target", async () => {
-  const screen = await renderPwa(<MenuHarness />);
-  const trigger = screen.getByRole("button", { name: "Session actions" });
-  expect(trigger.element().getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
-  expect(trigger.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-  await trigger.click();
-  const menu = screen.getByRole("menu", { name: "Session actions" });
-  await expect.element(menu).toBeVisible();
-  await expect.element(trigger).toHaveAttribute("aria-haspopup", "menu");
+test("opens a named non-modal information dialog with a 44px trigger and description", async () => {
+  const screen = await renderPwa(<InfoHarness />);
+  const { trigger, dialog } = await openInfo(screen);
+  const box = trigger.element().getBoundingClientRect();
+  expect(Math.round(box.width)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
+  await expect.element(trigger).toHaveAttribute("aria-haspopup", "dialog");
   await expect.element(trigger).toHaveAttribute("aria-expanded", "true");
-  await expect.element(trigger).toHaveAttribute("aria-controls", menu.element().id);
-  expect(menu.element().closest(".pwa-root")).not.toBeNull();
+  await expect.element(trigger).toHaveAttribute("aria-controls", dialog.element().id);
+  await expect.element(dialog).toHaveAttribute("aria-modal", "false");
+  const describedIds = dialog.element().getAttribute("aria-describedby")!.split(" ");
+  expect(describedIds.map((id) => document.getElementById(id)?.textContent).join(" ")).toBe(`${defaultInfo.name} Studio Mac · Idle`);
+  expect(dialog.element().closest(".pwa-root")).not.toBeNull();
+  expect(dialog.element().querySelector('[role="menu"], [role="menuitem"], [role="separator"]')).toBeNull();
   await userEvent.keyboard("{Escape}");
-  await expect.element(menu).not.toBeInTheDocument();
-});
-
-test("requests command models once per open", async () => {
-  let commandOpens = 0;
-  const screen = await renderPwa(<MenuHarness onCommandsOpen={() => { commandOpens += 1; }} />);
-  const { trigger } = await openMenu(screen);
-  expect(commandOpens).toBe(1);
-
-  await userEvent.keyboard("{Escape}");
-  await trigger.click();
-  expect(commandOpens).toBe(2);
-});
-
-test("leaves model and thinking choices to the composer", async () => {
-  const screen = await renderPwa(<MenuHarness />);
-  const { menu } = await openMenu(screen);
-  await expect.element(menu.getByRole("menuitem", { name: "New session" })).toBeVisible();
-  await expect.element(menu.getByRole("menuitem", { name: "Compact context" })).toBeVisible();
-  // 模型与思考级别只从输入区的模型标签与「/」菜单进入，会话菜单不重复。
-  expect(menu.element().querySelector('[data-command-view="models"]')).toBeNull();
-  expect(menu.element().querySelector('[data-command-view="thinking"]')).toBeNull();
-  expect(menu.element().querySelectorAll('[role="menuitem"]')).toHaveLength(2);
-});
-
-test("navigates keyboard focus through root commands and closes on Escape", async () => {
-  const screen = await renderPwa(<MenuHarness />);
-  const trigger = screen.getByRole("button", { name: "Session actions" });
-  trigger.element().focus();
-  await userEvent.keyboard("{ArrowDown}");
-  const newSession = screen.getByRole("menuitem", { name: "New session" });
-  await expect.element(newSession).toHaveFocus();
-  await userEvent.keyboard("{ArrowDown}");
-  await expect.element(screen.getByRole("menuitem", { name: "Compact context" })).toHaveFocus();
-  await userEvent.keyboard("{Home}");
-  await expect.element(newSession).toHaveFocus();
-  await userEvent.keyboard("{End}");
-  await expect.element(screen.getByRole("menuitem", { name: "Compact context" })).toHaveFocus();
-  await userEvent.keyboard("{Escape}");
+  await expect.element(dialog).not.toBeInTheDocument();
   await expect.element(trigger).toHaveFocus();
 });
 
-test("closes before command callbacks and reopens at the root", async () => {
-  let newSessionCalls = 0;
-  let compactCalls = 0;
-  const callbackFocus: Array<Element | null> = [];
-  const callbackMenus: Array<Element | null> = [];
-  const screen = await renderPwa(
-    <MenuHarness
-      onNewSession={() => { callbackFocus.push(document.activeElement); callbackMenus.push(document.querySelector(".pwa-session-actions-dropdown")); newSessionCalls += 1; }}
-      onCompactSession={() => { callbackFocus.push(document.activeElement); callbackMenus.push(document.querySelector(".pwa-session-actions-dropdown")); compactCalls += 1; }}
-    />,
-  );
-  const { trigger } = await openMenu(screen);
-  await screen.getByRole("menuitem", { name: "New session" }).click();
-  await expect.poll(() => newSessionCalls).toBe(1);
-  await expect.element(screen.getByRole("menu", { name: "Session actions" })).not.toBeInTheDocument();
-
-  await trigger.click();
-  await screen.getByRole("menuitem", { name: "Compact context" }).click();
-  await expect.poll(() => compactCalls).toBe(1);
-  expect(callbackMenus).toEqual([null, null]);
-  expect(callbackFocus).toEqual([trigger.element(), trigger.element()]);
-  await expect.element(screen.getByRole("menu", { name: "Session actions" })).not.toBeInTheDocument();
-
-  await trigger.click();
-  await expect.element(screen.getByRole("menuitem", { name: "New session" })).toBeVisible();
+test("shows full read-only information with a native selectable working directory", async () => {
+  const screen = await renderPwa(<InfoHarness />);
+  const { dialog } = await openInfo(screen);
+  const name = dialog.getByText(defaultInfo.name, { exact: true });
+  await expect.element(name).toBeVisible();
+  expect(getComputedStyle(name.element()).whiteSpace).not.toBe("nowrap");
+  await expect.element(dialog.getByText("Studio Mac · Idle", { exact: true })).toBeVisible();
+  const path = dialog.getByRole("textbox", { name: "Working directory" });
+  await expect.element(path).toHaveValue(directory);
+  await expect.element(path).toHaveAttribute("readonly");
+  await userEvent.tab();
+  await expect.element(path).toHaveFocus();
+  await userEvent.keyboard(`{${shortcutModifier}>}a{/${shortcutModifier}}`);
+  const input = path.element() as HTMLTextAreaElement;
+  expect(input.selectionStart).toBe(0);
+  expect(input.selectionEnd).toBe(directory.length);
+  // 用真实快捷键验证原生 copy 事件与选中内容，不用 Clipboard API mock 冒充系统复制。
+  const copies: string[] = [];
+  let prevented = false;
+  input.addEventListener("copy", (event) => {
+    copies.push(input.value.slice(input.selectionStart, input.selectionEnd));
+    prevented = event.defaultPrevented;
+  }, { once: true });
+  await userEvent.keyboard(`{${shortcutModifier}>}c{/${shortcutModifier}}`);
+  await expect.poll(() => copies).toEqual([directory]);
+  expect(prevented).toBe(false);
+  await userEvent.keyboard("must not edit{Backspace}");
+  await expect.element(path).toHaveValue(directory);
+  await userEvent.keyboard("{Escape}");
+  await expect.element(dialog).not.toBeInTheDocument();
 });
 
-test("keeps New session and Compact context disabled while working", async () => {
-  const screen = await renderPwa(<MenuHarness isWorking />);
-  await openMenu(screen);
-  await expect.element(screen.getByRole("menuitem", { name: "New session" })).toBeDisabled();
-  await expect.element(screen.getByRole("menuitem", { name: "Compact context" })).toBeDisabled();
+test.each(["Enter", "Space", "ArrowDown", "ArrowUp"])("opens keyboard information access with %s and restores the trigger on Escape", async (key) => {
+  const screen = await renderPwa(<InfoHarness />);
+  const trigger = screen.getByRole("button", { name: "Session details" });
+  trigger.element().focus();
+  await userEvent.keyboard(key === "Space" ? " " : `{${key}}`);
+  const dialog = screen.getByRole("dialog", { name: "Session details" });
+  await expect.element(dialog).toHaveFocus();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(dialog).not.toBeInTheDocument();
+  await expect.element(trigger).toHaveFocus();
 });
 
-test.each([{ isOnline: false }, { pendingAction: "model_set" as const }])("disables every command while offline or an action is pending: %j", async (props) => {
-  const screen = await renderPwa(<MenuHarness {...props} />);
-  await openMenu(screen);
-  for (const name of ["New session", "Compact context"]) {
-    await expect.element(screen.getByRole("menuitem", { name })).toBeDisabled();
-  }
-});
-
-test("renders Retry and calls it after close", async () => {
-  let retries = 0;
-  const screen = await renderPwa(<MenuHarness onRetry={() => { retries += 1; }} />);
-  await openMenu(screen);
-  await expect.element(screen.getByRole("menuitem", { name: "Retry connection" })).toBeVisible();
-  await screen.getByRole("menuitem", { name: "Retry connection" }).click();
-  await expect.poll(() => retries).toBe(1);
-  await expect.element(screen.getByRole("menu", { name: "Session actions" })).not.toBeInTheDocument();
-});
-
-test("closes outside without stealing valid focus and returns the trigger after Escape", async () => {
-  const screen = await renderPwa(<MenuHarness />);
-  const { trigger, menu } = await openMenu(screen);
+test("does not trap Tab or steal focus after an outside click", async () => {
+  const screen = await renderPwa(<InfoHarness />);
+  const { trigger, dialog } = await openInfo(screen);
+  await userEvent.tab();
+  await expect.element(dialog.getByRole("textbox", { name: "Working directory" })).toHaveFocus();
+  await userEvent.tab();
+  expect(dialog.element().contains(document.activeElement)).toBe(false);
   const outside = screen.getByRole("button", { name: "Outside focus" });
   await outside.click();
-  await expect.element(menu).not.toBeInTheDocument();
-  await settleOverlayFocus();
+  await expect.element(dialog).not.toBeInTheDocument();
   await expect.element(outside).toHaveFocus();
-
   await trigger.click();
-  const newSession = screen.getByRole("menuitem", { name: "New session" });
-  newSession.element().focus();
+  await expect.element(screen.getByRole("dialog", { name: "Session details" })).toHaveFocus();
   await userEvent.keyboard("{Escape}");
   await expect.element(trigger).toHaveFocus();
 });
 
-test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the session menu themed and within %ix%i", async (width, height) => {
+test("keeps focused content through information updates and focuses a quickly reopened dialog", async () => {
+  const screen = await renderPwa(<InfoHarness />);
+  const { trigger, dialog } = await openInfo(screen);
+  const path = dialog.getByRole("textbox", { name: "Working directory" });
+  await userEvent.tab();
+  await expect.element(path).toHaveFocus();
+  await screen.rerender(<PwaUiProvider><div className="pwa-root"><InfoHarness info={{ ...defaultInfo, status: "Running" }} /></div></PwaUiProvider>);
+  await expect.element(path).toHaveFocus();
+  await expect.element(dialog.getByText("Studio Mac · Running", { exact: true })).toBeVisible();
+  (trigger.element() as HTMLButtonElement).click();
+  await expect.element(trigger).toHaveAttribute("aria-expanded", "false");
+  (trigger.element() as HTMLButtonElement).click();
+  await expect.element(dialog).toHaveFocus();
+  await screen.unmount();
+  await expect.poll(() => document.querySelector(".pwa-session-actions-dropdown")).toBeNull();
+});
+
+test("keeps saved history without a directory accessible and information-only", async () => {
+  const screen = await renderPwa(<InfoHarness info={{ name: "Saved session note", cwd: null, computer: "Studio Mac", status: "Read only" }} />);
+  const { dialog } = await openInfo(screen);
+  await expect.element(dialog.getByText("Saved session note", { exact: true })).toBeVisible();
+  await expect.element(dialog.getByText("Studio Mac · Read only", { exact: true })).toBeVisible();
+  expect(dialog.element().querySelector("textarea,button,[role=menuitem]")).toBeNull();
+});
+
+test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps themed information and the full directory within %ix%i", async (width, height) => {
   await page.viewport(width, height);
-  const screen = await renderPwa(<div className="pwa-live-actions"><MenuHarness /></div>);
+  const screen = await renderPwa(<div className="pwa-live-actions"><InfoHarness /></div>);
   const originalScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
   try {
-    const { menu, trigger } = await openMenu(screen);
-    await expect.poll(() => menu.element().getBoundingClientRect().right <= width).toBe(true);
+    const { dialog, trigger } = await openInfo(screen);
+    const path = dialog.getByRole("textbox", { name: "Working directory" }).element() as HTMLTextAreaElement;
     for (const scheme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
-      const dropdown = menu.element() as HTMLElement;
+      const dropdown = dialog.element() as HTMLElement;
+      await expect.poll(() => Math.round(dropdown.getBoundingClientRect().right)).toBeLessThanOrEqual(width);
       const box = dropdown.getBoundingClientRect();
-      expect(box.left).toBeGreaterThanOrEqual(0);
-      expect(box.top).toBeGreaterThanOrEqual(0);
-      expect(box.bottom).toBeLessThanOrEqual(height);
+      expect(Math.round(box.left)).toBeGreaterThanOrEqual(0);
+      expect(Math.round(box.top)).toBeGreaterThanOrEqual(0);
+      expect(Math.round(box.bottom)).toBeLessThanOrEqual(height);
       expect(dropdown.scrollWidth).toBeLessThanOrEqual(dropdown.clientWidth);
-      expect(dropdown.closest(".pwa-root")).not.toBeNull();
+      expect(path.scrollHeight).toBeLessThanOrEqual(path.clientHeight + 1);
+      expect(getComputedStyle(path).fontSize).toBe("16px");
       expect(getComputedStyle(dropdown).zIndex).toBe("21");
-      for (const item of dropdown.querySelectorAll<HTMLElement>('[role="menuitem"]')) {
-        expect(item.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-      }
-      await page.screenshot({ path: `../../../.vitest/screenshots/menu-session-${width}x${height}-${scheme}.png` });
+      expect(dropdown.querySelector("button,[role=menuitem]")).toBeNull();
+      await page.screenshot({ path: `../../../.vitest/screenshots/session-info-${width}x${height}-${scheme}.png` });
     }
     await userEvent.keyboard("{Escape}");
-    await settleOverlayFocus();
     await expect.element(trigger).toHaveFocus();
   } finally {
     if (originalScheme === null) document.documentElement.removeAttribute("data-mantine-color-scheme");
@@ -220,23 +157,4 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the session 
     await screen.unmount();
     await page.viewport(1280, 900);
   }
-});
-
-test("shows a read-only information area above the actions, and only the information area for history", async () => {
-  const screen = await renderPwa(<MenuHarness />);
-  const { menu } = await openMenu(screen);
-  const info = menu.getByRole("group", { name: "Session details" });
-  await expect.element(info).toBeVisible();
-  await expect.element(info.getByText("/Users/pi/Code/pi-reach/packages/protocol", { exact: true })).toBeVisible();
-  await expect.element(info.getByText("Studio Mac · Idle", { exact: true })).toBeVisible();
-  const name = info.getByText(/^Release check with a very long session name/).element();
-  expect(getComputedStyle(name).whiteSpace).not.toBe("nowrap");
-  expect(info.element().compareDocumentPosition(menu.getByRole("menuitem", { name: /New session/ }).element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  await userEvent.keyboard("{Escape}");
-  await screen.unmount();
-
-  const readOnly = await renderPwa(<MenuHarness readOnly />);
-  const { menu: readOnlyMenu } = await openMenu(readOnly);
-  await expect.element(readOnlyMenu.getByRole("group", { name: "Session details" })).toBeVisible();
-  expect(readOnlyMenu.element().querySelectorAll('[role="menuitem"]')).toHaveLength(0);
 });
