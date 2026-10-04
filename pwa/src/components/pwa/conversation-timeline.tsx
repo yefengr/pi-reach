@@ -2,6 +2,10 @@ import { Fragment, useEffect, useState, type ReactNode, type RefObject } from "r
 import { ThinkingContent, MarkdownContent } from "./timeline-content";
 import { ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
+import { PublishedFileReader } from "./published-file-reader";
+import { usePublishedFilesView } from "./published-files-context";
+import type { PublishedFileRead } from "./published-file";
+import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { entryGroupId, isPiOutputEntry, projectTimeline, type PresentationEntry, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import { LoaderCircle } from "lucide-react";
@@ -17,7 +21,7 @@ type ConversationTimelineProps = {
   running?: boolean;
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
-  renderRecord: (item: TimelineViewItem) => ReactNode;
+  renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead) => ReactNode;
 };
 
 type ReaderState = { key: string } | null;
@@ -73,12 +77,47 @@ function ThinkingStatus() {
   return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.piThinking}</p>;
 }
 
+function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], toolRuns: Map<string, ToolEntry[]>, groupedToolKeys: Map<string, string>, expanded: (key: string) => boolean, choose: (key: string, expanded: boolean) => void, render: (entry: PresentationEntry) => ReactNode) {
+  const rows: ReactNode[] = [];
+  let segmentGroup: string | undefined;
+  let hasOutput = false;
+  let interrupted = false;
+  const closeSegment = () => {
+    const completion = segmentGroup === undefined ? undefined : completions?.get(segmentGroup);
+    if (completion && hasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={interrupted} />);
+  };
+  for (const entry of entries) {
+    const groupId = entryGroupId(entry);
+    if (groupId !== segmentGroup) {
+      closeSegment();
+      segmentGroup = groupId;
+      hasOutput = false;
+      interrupted = false;
+    }
+    if (isPiOutputEntry(entry)) hasOutput = true;
+    if (entry.kind === "text" && entry.interrupted) interrupted = true;
+    const runKey = groupedToolKeys.get(entry.key);
+    if (runKey !== undefined) {
+      const run = toolRuns.get(runKey)!;
+      if (run[0]!.key === entry.key) rows.push(<ToolGroupCard key={runKey} values={run.map(tool => tool.value)} expanded={expanded(runKey)} onExpandedChange={value => choose(runKey, value)}>{run.map(render)}</ToolGroupCard>);
+      continue;
+    }
+    rows.push(render(entry));
+  }
+  closeSegment();
+  return { rows, hasOutput };
+}
+
 export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord }: ConversationTimelineProps) {
   const [snapshot, setSnapshot] = useState(() => projectTimeline([]));
   const [expansionChoices, setExpansionChoices] = useState<Map<string, boolean>>(() => new Map());
   const [reader, setReader] = useState<ReaderState>(null);
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
+  const [fileReader, setFileReader] = useState<{ file: PublishedFileDescriptor; trigger: HTMLButtonElement } | null>(null);
+  const [fileOpened, setFileOpened] = useState(false);
+  const files = usePublishedFilesView();
+  const fileReadingChange = files?.onReadingChange;
 
   let view = snapshot;
   if (snapshot.items !== items) {
@@ -98,16 +137,17 @@ export function ConversationTimeline({ items, live, completions, running = false
     || view.entries.some(entry => (entry.kind === "tool" || entry.kind === "thinking") && choices.get(entry.key) === true
       && !(groupedToolKeys.has(entry.key) && !groupExpanded(choices, groupedToolKeys.get(entry.key)!)));
   // 历史窗口替换可能移除已展开工具；阅读锁随可见内容同步，并保留到 Reader 退出结束。
-  const reading = reader !== null || readingInline(expansionChoices);
-  useEffect(() => { onReadingChange?.(reading); }, [onReadingChange, reading]);
-  useEffect(() => () => { onReadingChange?.(false); }, [onReadingChange]);
+  const reading = reader !== null || fileReader !== null || readingInline(expansionChoices);
+  useEffect(() => { onReadingChange?.(reading); fileReadingChange?.(reading); }, [onReadingChange, fileReadingChange, reading]);
+  useEffect(() => () => { onReadingChange?.(false); fileReadingChange?.(false); }, [onReadingChange, fileReadingChange]);
 
   const chooseExpansion = (key: string, expanded: boolean) => {
     const choices = new Map(expansionChoices).set(key, expanded);
     setExpansionChoices(choices);
-    onReadingChange?.(reader !== null || readingInline(choices));
+    onReadingChange?.(reader !== null || fileReader !== null || readingInline(choices));
   };
   const openReader = (key: string, trigger: HTMLButtonElement) => {
+    if (fileReader !== null) return;
     setReaderOrigin(trigger);
     onReadingChange?.(true);
     setReader({ key });
@@ -126,8 +166,19 @@ export function ConversationTimeline({ items, live, completions, running = false
     onReadingChange?.(readingInline(expansionChoices));
   };
 
+  const openFileReader: PublishedFileRead = (file, trigger) => {
+    if (reader !== null || fileReader !== null) return;
+    setFileReader({ file, trigger });
+    setFileOpened(true);
+  };
+  const finishFileReader = () => {
+    const trigger = fileReader?.trigger;
+    setFileReader(null);
+    if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
+    else listRef.current?.focus({ preventScroll: true });
+  };
   const renderEntry = (entry: PresentationEntry) => {
-      if (entry.kind === "record") return <Fragment key={entry.key}>{renderRecord(entry.item)}</Fragment>;
+      if (entry.kind === "record") return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader)}</Fragment>;
       if (entry.kind === "text") return <TextRow entry={entry} key={entry.key} />;
       if (entry.kind === "thinking") return <ThinkingContent
         key={entry.key}
@@ -146,45 +197,14 @@ export function ConversationTimeline({ items, live, completions, running = false
         onRead={trigger => openReader(entry.key, trigger)}
       />;
   };
-  // 按连续的同一轮分段：段末若该轮已结束且已有 Pi 输出，追加一次完成时间。
-  const rows: ReactNode[] = [];
-  let segmentGroup: string | undefined;
-  let segmentHasOutput = false;
-  let segmentInterrupted = false;
-  const closeSegment = () => {
-    const completion = segmentGroup === undefined ? undefined : completions?.get(segmentGroup);
-    if (completion && segmentHasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={segmentInterrupted} />);
-  };
-  for (const entry of view.entries) {
-    const groupId = entryGroupId(entry);
-    if (groupId !== segmentGroup) {
-      closeSegment();
-      segmentGroup = groupId;
-      segmentHasOutput = false;
-      segmentInterrupted = false;
-    }
-    if (isPiOutputEntry(entry)) segmentHasOutput = true;
-    if (entry.kind === "text" && entry.interrupted) segmentInterrupted = true;
-    const runKey = groupedToolKeys.get(entry.key);
-    if (runKey !== undefined) {
-      // 组内其余工具随第一个一起渲染在摘要行里。
-      const run = toolRuns.get(runKey)!;
-      if (run[0]!.key === entry.key) rows.push(<ToolGroupCard
-        key={runKey}
-        values={run.map(tool => tool.value)}
-        expanded={groupExpanded(expansionChoices, runKey)}
-        onExpandedChange={expanded => chooseExpansion(runKey, expanded)}
-      >{run.map(renderEntry)}</ToolGroupCard>);
-      continue;
-    }
-    rows.push(renderEntry(entry));
-  }
-  closeSegment();
-  const waitingForReply = live && running && view.entries.length > 0 && !segmentHasOutput;
+  // 发布记录保留 group_id，同一轮的完成时间仍只在段末追加一次。
+  const { rows, hasOutput } = conversationRows(view.entries, completions, toolRuns, groupedToolKeys, key => groupExpanded(expansionChoices, key), chooseExpansion, renderEntry);
+  const waitingForReply = live && running && view.entries.length > 0 && !hasOutput;
 
   return <>
     {rows}
     {waitingForReply ? <ThinkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
+    {fileReader ? <PublishedFileReader file={fileReader.file} opened={fileOpened} onClose={() => setFileOpened(false)} onExitTransitionEnd={finishFileReader} /> : null}
   </>;
 }

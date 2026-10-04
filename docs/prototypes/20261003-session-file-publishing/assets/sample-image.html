@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Pi Reach 文件回传链路</title>
+<style>
+  /* 独立静态图源，供父流程截图导出 sample-image.png；仅使用原生 HTML/CSS。 */
+  :root {
+    --ink: #2A2A2A;
+    --secondary: #606060;
+    --line: #E0E0E0;
+    --panel: #F7F7F7;
+    --accent: #446396;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 960px;
+    height: 540px;
+    overflow: hidden;
+    background: #FFFFFF;
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 16px;
+    line-height: 1.4;
+  }
+  .canvas {
+    width: 960px;
+    height: 540px;
+    box-sizing: border-box;
+    padding: 52px 64px 44px;
+    display: flex;
+    flex-direction: column;
+  }
+  .title { font-size: 28px; font-weight: 600; letter-spacing: 0.2px; }
+  .subtitle { margin-top: 8px; font-size: 16px; color: var(--secondary); }
+
+  .flow { margin-top: 54px; display: flex; align-items: center; }
+  .node {
+    width: 210px; flex: 0 0 210px; height: 132px;
+    border: 1px solid var(--line); border-radius: 12px; background: #FFFFFF;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  }
+  .node.accent { border-color: var(--accent); }
+  .node .ico { color: var(--accent); }
+  .node .name { font-size: 20px; font-weight: 600; }
+  .node .role { font-size: 14px; color: var(--secondary); }
+
+  .conn { flex: 0 0 91px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .conn .label { font-size: 13px; color: var(--secondary); white-space: nowrap; }
+  .conn svg { display: block; color: var(--accent); }
+
+  .footer {
+    margin-top: auto;
+    padding-top: 26px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    font-size: 17px;
+    color: var(--secondary);
+  }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="head">
+      <div class="title">Pi Reach · 文件回传链路</div>
+      <div class="subtitle">Pi 发布文件引用，PWA 通过 Relay 按会话权限获取电脑上的原件。</div>
+    </div>
+
+    <div class="flow">
+      <div class="node accent">
+        <span class="ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M7 6.5h.01"/></svg>
+        </span>
+        <span class="name">PWA</span>
+        <span class="role">浏览器端 · 展示与获取</span>
+      </div>
+
+      <div class="conn">
+        <span class="label">获取请求</span>
+        <svg width="91" height="12" viewBox="0 0 91 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h85"/><path d="m81 2 6 4-6 4"/></svg>
+        <svg width="91" height="12" viewBox="0 0 91 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h85"/><path d="m10 2-6 4 6 4"/></svg>
+        <span class="label">文件分片</span>
+      </div>
+
+      <div class="node">
+        <span class="ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h6l-2-2H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1H9"/><path d="M8 12h8"/><path d="m13 9 3 3-3 3"/></svg>
+        </span>
+        <span class="name">Relay</span>
+        <span class="role">只转发 · 不保存原件</span>
+      </div>
+
+      <div class="conn">
+        <span class="label">读取请求</span>
+        <svg width="91" height="12" viewBox="0 0 91 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h85"/><path d="m81 2 6 4-6 4"/></svg>
+        <svg width="91" height="12" viewBox="0 0 91 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h85"/><path d="m10 2-6 4 6 4"/></svg>
+        <span class="label">文件分片</span>
+      </div>
+
+      <div class="node">
+        <span class="ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M13 15h4"/></svg>
+        </span>
+        <span class="name">Pi + Extension</span>
+        <span class="role">电脑端 · 只读本地文件</span>
+      </div>
+    </div>
+
+    <div class="footer">引用随会话保存 · 原件留在电脑</div>
+  </div>
+</body>
+</html>

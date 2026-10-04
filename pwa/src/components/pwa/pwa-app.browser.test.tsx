@@ -8,7 +8,7 @@ import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
 import { encodeBase64 } from "@/lib/pi-reach/encoding";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_IN_FLIGHT, ATTACHMENT_MAX_MESSAGE_BYTES, type AttachmentDescriptor } from "@pi-reach/protocol/session";
+import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_IN_FLIGHT, ATTACHMENT_MAX_MESSAGE_BYTES, PUBLISHED_FILE_TYPE, fileChunkFrameSchema, fileOpenedFrameSchema, type AttachmentDescriptor } from "@pi-reach/protocol/session";
 import { toStoredKey } from "@/lib/pwa/runtime";
 import { listTimelineSessions, loadTimeline, mergeTimelineEvents, TimelineStoreConflictError } from "@/lib/pwa/timeline-store";
 import { PendingCapacityError, TimelineRuntime } from "@/lib/pwa/timeline-runtime";
@@ -805,6 +805,253 @@ test("confirms leaving an attachment send, preserves the original draft and reje
     const resumedInput = screen.getByPlaceholder("Message your agent…");
     await expect.element(resumedInput).toHaveValue("Keep scope-bound image draft");
     expect(resumedChannel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(0);
+  } finally { await screen.unmount(); }
+});
+
+const publishedReportBytes = new TextEncoder().encode("Complete published report");
+type FileOpenRequest = Extract<ClientFrame, { type: "file_open" }>;
+type FileReadRequest = Extract<ClientFrame, { type: "file_read" }>;
+
+function publishedReportEvent(publicationId = "published-report"): TimelineEvent & { kind: "custom" } {
+  return {
+    event_id: publicationId, event_seq: 1, session_id: "session-1", leaf_id: "generation-session-1",
+    timestamp: 1, group_id: "published-group", kind: "custom", truncated: false,
+    payload: { custom_type: PUBLISHED_FILE_TYPE, data: { file_name: "report.txt", mime_type: "text/plain", byte_length: publishedReportBytes.byteLength, tool_call_id: "publish-report-tool" } },
+  };
+}
+
+async function beginPublishedReport({ channel, screen }: OperationHarness): Promise<FileOpenRequest> {
+  emitEvent(channel, publishedReportEvent());
+  await expect.element(screen.getByText("report.txt", { exact: true })).toBeVisible();
+  await screen.getByRole("button", { name: "Download", exact: true }).click();
+  await expect.poll(() => channel.frames.filter(frame => frame.type === "file_open").length).toBe(1);
+  const request = channel.frames.findLast((frame): frame is FileOpenRequest => frame.type === "file_open")!;
+  expect(request).toMatchObject({ channel_id: channel.channelId, session_id: "session-1", publication_id: "published-report" });
+  return request;
+}
+
+function publishedReportOpened(request: FileOpenRequest) {
+  const frame = {
+    protocol_version: 2 as const, type: "file_opened" as const, target_channel_id: request.channel_id,
+    in_reply_to: request.id, session_id: request.session_id, publication_id: request.publication_id,
+    transfer_id: `transfer-${request.id}`, file_name: "report.txt", mime_type: "text/plain",
+    byte_length: publishedReportBytes.byteLength, preview: { kind: "text" as const },
+  };
+  expect(fileOpenedFrameSchema.safeParse(frame).success).toBe(true);
+  return frame;
+}
+
+async function acceptPublishedReportOpen(channel: OperationHarness["channel"], request: FileOpenRequest): Promise<FileReadRequest> {
+  const opened = publishedReportOpened(request);
+  channel.emit(opened);
+  await expect.poll(() => channel.frames.some(frame => frame.type === "file_read" && frame.transfer_id === opened.transfer_id)).toBe(true);
+  return channel.frames.findLast((frame): frame is FileReadRequest => frame.type === "file_read" && frame.transfer_id === opened.transfer_id)!;
+}
+
+async function completePublishedReport(context: OperationHarness) {
+  const request = await beginPublishedReport(context);
+  const read = await acceptPublishedReportOpen(context.channel, request);
+  const digest = await crypto.subtle.digest("SHA-256", publishedReportBytes);
+  const chunk = {
+    protocol_version: 2 as const, type: "file_chunk" as const, target_channel_id: read.channel_id,
+    in_reply_to: read.id, session_id: read.session_id, transfer_id: read.transfer_id, offset: read.offset,
+    data_base64: encodeBase64(publishedReportBytes), final: true as const, total_bytes: publishedReportBytes.byteLength,
+    sha256: [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join(""),
+  };
+  expect(fileChunkFrameSchema.safeParse(chunk).success).toBe(true);
+  context.channel.emit(chunk);
+  await expect.element(context.screen.getByRole("link", { name: "Save file", exact: true })).toBeVisible();
+  return context.screen.getByRole("link", { name: "Save file", exact: true }).element().getAttribute("href")!;
+}
+
+test("published files: nearby images automatically fetch one at a time without losing the deferred image", async () => {
+  await page.viewport(1280, 1800);
+  const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
+  const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1kAAAAASUVORK5CYII="), char => char.charCodeAt(0));
+  const sha256 = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  try {
+    for (const [index, id] of ["near-image-a", "near-image-b"].entries()) emitEvent(channel, {
+      ...publishedReportEvent(id), event_seq: index + 1,
+      payload: { custom_type: PUBLISHED_FILE_TYPE, data: { file_name: `${id}.png`, mime_type: "image/png", byte_length: bytes.byteLength, tool_call_id: id } },
+    });
+    for (let index = 0; index < 2; index++) {
+      await expect.poll(() => channel.frames.filter(frame => frame.type === "file_open").length, { timeout: 5000 }).toBe(index + 1);
+      const request = channel.frames.findLast((frame): frame is FileOpenRequest => frame.type === "file_open")!;
+      const opened = { protocol_version: 2 as const, type: "file_opened" as const, target_channel_id: request.channel_id, in_reply_to: request.id,
+        session_id: request.session_id, publication_id: request.publication_id, transfer_id: `transfer-${request.id}`,
+        file_name: `${request.publication_id}.png`, mime_type: "image/png", byte_length: bytes.byteLength, preview: { kind: "image" as const, width: 1, height: 1 } };
+      channel.emit(opened);
+      await expect.poll(() => channel.frames.some(frame => frame.type === "file_read" && frame.transfer_id === opened.transfer_id), { timeout: 5000 }).toBe(true);
+      const read = channel.frames.findLast((frame): frame is FileReadRequest => frame.type === "file_read" && frame.transfer_id === opened.transfer_id)!;
+      channel.emit({ protocol_version: 2, type: "file_chunk", target_channel_id: read.channel_id, in_reply_to: read.id, session_id: read.session_id,
+        transfer_id: read.transfer_id, offset: 0, data_base64: encodeBase64(bytes), final: true, total_bytes: bytes.byteLength, sha256 });
+    }
+    await expect.poll(() => document.querySelectorAll('.pwa-published-file a[download]').length, { timeout: 5000 }).toBe(2);
+    expect(channel.frames.filter(frame => frame.type === "file_open")).toHaveLength(2);
+    await expect.element(screen.getByRole("img", { name: "near-image-b.png", exact: true })).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
+test.each(["opening", "reading"] as const)("published files: history confirms %s, stays active and rejects late replies after switching", async phase => {
+  await seedArchivedSession();
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { channel, screen } = context;
+  try {
+    const request = await beginPublishedReport(context);
+    const read = phase === "reading" ? await acceptPublishedReportOpen(channel, request) : undefined;
+    await expect.poll(() => document.querySelector<HTMLButtonElement>(".pwa-history-row")).not.toBeNull();
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+    await expect.element(screen.getByRole("heading", { name: "Cancel file fetching?", exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "Stay", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    await expect.element(screen.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    expect(channel.frames.some(frame => frame.type === "file_close")).toBe(false);
+    expect(channel.closeCalls).toBe(0);
+    if (read) {
+      const chunk = { protocol_version: 2 as const, type: "file_chunk" as const, target_channel_id: read.channel_id, in_reply_to: read.id,
+        session_id: read.session_id, transfer_id: read.transfer_id, offset: 0, data_base64: encodeBase64(publishedReportBytes.slice(0, 4)), final: false as const };
+      expect(fileChunkFrameSchema.safeParse(chunk).success).toBe(true);
+      channel.emit(chunk);
+      await expect.poll(() => channel.frames.filter(frame => frame.type === "file_read").length).toBe(2);
+      expect(channel.frames.findLast(frame => frame.type === "file_read")).toMatchObject({ offset: 4, transfer_id: read.transfer_id });
+    }
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+    await screen.getByRole("button", { name: "Cancel and switch", exact: true }).click();
+    await expect.element(screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    const readCount = channel.frames.filter(frame => frame.type === "file_read").length;
+    channel.emit(publishedReportOpened(request));
+    await flushMicrotasks();
+    expect(channel.frames.filter(frame => frame.type === "file_read")).toHaveLength(readCount);
+    expect(document.querySelector(".pwa-published-file")).toBeNull();
+    if (read) expect(channel.frames.filter(frame => frame.type === "file_close")).toEqual([expect.objectContaining({ transfer_id: read.transfer_id })]);
+    await screen.getByRole("button", { name: "Back to live session", exact: true }).click();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1", 1));
+    await expect.element(screen.getByText("report.txt", { exact: true })).toBeVisible();
+    expect(resumed.frames.some(frame => frame.type === "file_open" || frame.type === "file_read")).toBe(false);
+    expect(screen.getByRole("link", { name: "Save file", exact: true }).query()).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("published files: upload and fetching share one mixed leave confirmation", async () => {
+  await seedArchivedSession();
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { channel, screen } = context;
+  try {
+    const request = await beginPublishedReport(context);
+    const read = await acceptPublishedReportOpen(channel, request);
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Keep the original upload draft");
+    pasteAttachments(input.element(), new File(["upload body"], "mixed-upload.txt", { type: "text/plain" }));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    await expect.poll(() => document.querySelector<HTMLButtonElement>(".pwa-history-row")).not.toBeNull();
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+    await expect.element(screen.getByRole("heading", { name: "Stop file transfers?", exact: true })).toBeVisible();
+    expect(document.querySelectorAll('.pwa-confirm-dialog[role="dialog"]')).toHaveLength(1);
+    await screen.getByRole("button", { name: "Stay", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    expect(channel.frames.some(frame => frame.type === "attachment_cancel" || frame.type === "file_close")).toBe(false);
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+    await screen.getByRole("button", { name: "Cancel and switch", exact: true }).click();
+    await expect.element(screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    expect(channel.frames.filter(frame => frame.type === "attachment_cancel")).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "file_close")).toEqual([expect.objectContaining({ transfer_id: read.transfer_id })]);
+    channelHarness.finishReplies[0]?.();
+    channel.emit(publishedReportOpened(request));
+    await flushMicrotasks();
+    expect(channel.frames.some(frame => frame.type === "user_message")).toBe(false);
+    await screen.getByRole("button", { name: "Back to live session", exact: true }).click();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    channelHarness.channels[1]!.emit(readyFrame(channelHarness.channels[1]!, "session-1", 1));
+    await expect.element(screen.getByPlaceholder("Message your agent…")).toHaveValue("Keep the original upload draft");
+  } finally { await screen.unmount(); }
+});
+
+test("published files: current computer, current Pi and settings do not cancel fetching", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const request = await beginPublishedReport(context);
+    await acceptPublishedReportOpen(channel, request);
+    await screen.getByRole("button", { name: "Choose computer, current test-host" }).click();
+    await expect.element(screen.getByRole("dialog", { name: "Choose computer" })).toBeVisible();
+    await page.elementLocator(document.querySelector(".pwa-computer-select")!).click();
+    await expect.poll(() => document.querySelector(".pwa-device-panel")).toBeNull();
+    await page.elementLocator(document.querySelector('.pwa-nav-session[aria-current="true"]')!).click();
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    await expect.element(screen.getByRole("main", { name: "Settings" })).toBeVisible();
+    expect(document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    expect(channel.frames.some(frame => frame.type === "file_close")).toBe(false);
+    expect(channel.closeCalls).toBe(0);
+    expect(channelHarness.channels).toHaveLength(1);
+    await screen.getByRole("button", { name: "Back to workspace", exact: true }).click();
+    await expect.element(screen.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    expect(channel.frames.filter(frame => frame.type === "file_open")).toHaveLength(1);
+  } finally { window.history.replaceState(null, "", "/app"); await screen.unmount(); }
+});
+
+test("published files: verified ready result survives a short disconnect without an automatic download", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click");
+  try {
+    const url = await completePublishedReport(context);
+    expect(url).toMatch(/^blob:/);
+    expect(await (await fetch(url)).text()).toBe(new TextDecoder().decode(publishedReportBytes));
+    expect(anchorClick).not.toHaveBeenCalled();
+    const save = screen.getByRole("link", { name: "Save file", exact: true });
+    expect(save.element().getAttribute("download")).toBe("report.txt");
+    relayHarness.instances[0]!.emitState("closed");
+    await expect.poll(() => screen.getByLabelText("Connected", { exact: true }).query()).toBeNull();
+    await expect.element(save).toBeVisible();
+    expect(save.element().getAttribute("href")).toBe(url);
+    await screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(screen.getByRole("heading", { name: "report.txt", exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Complete published report", { exact: true })).toBeVisible();
+    expect(channel.frames.filter(frame => frame.type === "file_open")).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "file_read")).toHaveLength(1);
+    expect(anchorClick).not.toHaveBeenCalled();
+    await screen.getByRole("button", { name: "Close file reader", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("open");
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1", 1));
+    await expect.element(screen.getByLabelText("Connected", { exact: true })).toBeVisible();
+    await expect.element(save).toBeVisible();
+    expect(save.element().getAttribute("href")).toBe(url);
+    expect(resumed.frames.some(frame => frame.type === "file_open" || frame.type === "file_read")).toBe(false);
+    expect(anchorClick).not.toHaveBeenCalled();
+  } finally { anchorClick.mockRestore(); await screen.unmount(); }
+});
+
+test("published files: a rejected new-session action preserves the verified result until actual replacement", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const url = await completePublishedReport(context);
+    const request = await issueOperation(context, "session_new");
+    replyOperation(channel, request);
+    await expect.element(screen.getByText("Could not start a new session. Try again.", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("link", { name: "Save file", exact: true })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Save file", exact: true }).element().getAttribute("href")).toBe(url);
+    await screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(screen.getByText("Complete published report", { exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "Close file reader", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+    expect(channel.frames.filter(frame => frame.type === "file_open")).toHaveLength(1);
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    channelHarness.channels[1]!.emit(readyFrame(channelHarness.channels[1]!, "session-2"));
+    await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Save file", exact: true }).query()).toBeNull();
+    expect(document.querySelector(".pwa-published-file")).toBeNull();
   } finally { await screen.unmount(); }
 });
 
