@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会话文件发布 · Pi Reach 效果稿</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body data-scene="chat" data-theme="light">
+<!-- 评审工具条：驱动静态场景与明暗，不属于产品内容 -->
+<header class="review-bar" aria-label="评审工具条">
+  <span class="rb-brand">效果稿 · 非真实传输</span>
+  <span class="rb-note">文件、进度与内容均为模拟，未接真实文件或 Relay</span>
+  <div class="rb-controls">
+    <span class="rb-group">
+      <label class="rb-label" for="scene-select">场景</label>
+      <select id="scene-select">
+        <option value="chat">会话主视图</option>
+        <option value="image">单张大图查看</option>
+        <option value="markdown">Markdown 阅读</option>
+        <option value="loading">获取中</option>
+        <option value="errors">失败与缺失</option>
+        <option value="confirm">切换确认</option>
+        <option value="large">大图待获取</option>
+        <option value="offline">离线本地历史</option>
+      </select>
+    </span>
+    <button type="button" class="rb-btn" id="theme-toggle" aria-label="切换到深色外观" aria-pressed="false">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="stage">
+  <!-- 产品区域外层：供截图裁剪 -->
+  <div class="device">
+    <div class="app-shell">
+      <aside class="app-sidebar" aria-label="会话导航">
+        <div class="sb-head">
+          <span class="sb-mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="20" height="20" fill="currentColor" focusable="false"><path d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></svg>
+          </span>
+          Pi Reach
+        </div>
+
+        <button type="button" class="sb-computer">
+          <span class="pi-dot" aria-hidden="true"></span>
+          <span class="pi-txt"><span class="sc-name">MacBook Pro</span><span class="sc-sub">当前电脑</span></span>
+          <svg class="sc-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+
+        <nav class="sb-section sb-online" aria-label="在线 Pi">
+          <p class="sb-label">在线 Pi</p>
+          <button type="button" class="pi-row" aria-current="true">
+            <span class="pi-dot"></span>
+            <span class="pi-txt"><span class="pi-name" title="会话文件发布验证">会话文件发布验证</span><span class="pi-sub">pi-reach · 运行中</span></span>
+          </button>
+          <button type="button" class="pi-row">
+            <span class="pi-dot"></span>
+            <span class="pi-txt"><span class="pi-name" title="另一个在线 Pi">另一个在线 Pi</span><span class="pi-sub">demo · 空闲</span></span>
+          </button>
+        </nav>
+
+        <nav class="sb-section sb-history" aria-label="本地历史">
+          <p class="sb-label">本地历史</p>
+          <button type="button" class="pi-row" aria-current="true">
+            <span class="pi-txt"><span class="pi-name" title="会话文件发布验证">会话文件发布验证</span><span class="pi-sub">昨天</span></span>
+          </button>
+          <button type="button" class="pi-row">
+            <span class="pi-txt"><span class="pi-name" title="会话附件上传排查">会话附件上传排查</span><span class="pi-sub">周一</span></span>
+          </button>
+        </nav>
+
+        <div class="sb-actions">
+          <button type="button" class="sb-action">配对电脑</button>
+          <button type="button" class="sb-action">设置</button>
+        </div>
+      </aside>
+
+      <div class="app-main">
+        <header class="app-topbar">
+          <button type="button" class="icon-btn nav-toggle" aria-label="打开会话导航">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <div class="tb-titles">
+            <span class="tb-history">本地历史 · 只读</span>
+            <h1 class="tb-title" title="pi-reach · 会话文件发布验证"><span class="tb-dir">pi-reach · </span>会话文件发布验证</h1>
+          </div>
+          <span class="tb-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-online">在线</span>
+            <span class="status-offline">离线</span>
+          </span>
+          <button type="button" class="icon-btn tb-refresh" aria-label="刷新" title="刷新">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+          <button type="button" class="icon-btn" aria-label="会话更多操作" title="更多">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+          </button>
+        </header>
+
+        <div class="app-scroll">
+          <div class="scroll-inner">
+
+            <!-- 会话主视图：图片与文件行，附大图/阅读器背景 -->
+            <div class="thread" data-thread="chat">
+              <div class="msg user"><div class="bubble">请画一张文件回传链路图，再整理一份说明。</div></div>
+              <div class="msg pi">
+                <div class="pi-turn">
+                  <p class="pi-text">好的，已发布回传链路示意图和实现说明。</p>
+
+                  <figure class="pub-image">
+                    <img src="assets/sample-image.png" alt="Pi Reach 文件回传链路示意图：PWA 与 Relay 与 Pi + Extension 之间的引用与分片方向">
+                    <figcaption class="pub-caption">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L5 20"/></svg>
+                      </span>
+                      <span class="file-body"><span class="file-name" title="文件回传链路.png">文件回传链路.png</span><span class="file-size">· 860 KiB</span></span>
+                      <button type="button" class="text-btn icon" aria-label="下载 文件回传链路.png" title="下载">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                      </button>
+                    </figcaption>
+                  </figure>
+
+                  <div class="file-list">
+                    <div class="file-row">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
+                      </span>
+                      <span class="file-body"><span class="file-name" title="实现说明.md">实现说明.md</span><span class="file-size">· 18 KiB</span></span>
+                      <span class="file-actions">
+                        <button type="button" class="text-btn">查看</button>
+                        <button type="button" class="text-btn">下载</button>
+                      </span>
+                    </div>
+                    <div class="file-row">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1"/><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+                      </span>
+                      <span class="file-body"><span class="file-name" title="交付材料.zip">交付材料.zip</span><span class="file-size">· 3 MiB</span></span>
+                      <span class="file-actions">
+                        <button type="button" class="text-btn">下载</button>
+                      </span>
+                    </div>
+                  </div>
+
+                  <p class="pi-text">其余材料我接着整理，发布后会逐项出现在这里。</p>
+                  <p class="run-hint"><span class="run-dot" aria-hidden="true"></span>Pi 仍在运行</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 大图待手动获取 -->
+            <div class="thread" data-thread="large">
+              <div class="msg user"><div class="bubble">把现场照片发我看看。</div></div>
+              <div class="msg pi">
+                <div class="pi-turn">
+                  <p class="pi-text">已发布现场照片。</p>
+                  <figure class="pub-image is-large">
+                    <div class="image-placeholder">
+                      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L5 20"/></svg>
+                      <p>图片较大，点击获取</p>
+                    </div>
+                    <figcaption class="pub-caption">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L5 20"/></svg>
+                      </span>
+                      <span class="file-body"><span class="file-name" title="现场照片.png">现场照片.png</span><span class="file-size">· 15 MiB</span></span>
+                      <button type="button" class="btn small">获取图片</button>
+                    </figcaption>
+                  </figure>
+                </div>
+              </div>
+            </div>
+
+            <!-- 获取中：文件局部进度与取消，附切换确认背景 -->
+            <div class="thread" data-thread="loading">
+              <div class="msg user"><div class="bubble">把交付材料发我。</div></div>
+              <div class="msg pi">
+                <div class="pi-turn">
+                  <p class="pi-text">文件已发布，可以查看或下载。</p>
+                  <div class="file-list">
+                    <div class="file-row">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L5 20"/></svg>
+                      </span>
+                      <span class="file-body"><span class="file-name" title="文件回传链路.png">文件回传链路.png</span><span class="file-size">· 860 KiB</span></span>
+                      <span class="file-actions">
+                        <button type="button" class="text-btn icon" aria-label="下载 文件回传链路.png" title="下载">
+                          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                        </button>
+                      </span>
+                    </div>
+                    <div class="file-row is-fetching">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1"/><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+                      </span>
+                      <div class="fetch-main">
+                        <div class="fetch-line"><span class="file-name" title="交付材料.zip">交付材料.zip</span><span class="file-size">· 3 MiB</span></div>
+                        <div class="progress" role="progressbar" aria-label="正在获取 交付材料.zip" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100"><span style="width:42%"></span></div>
+                        <span class="fetch-status">正在获取… 42%</span>
+                      </div>
+                      <button type="button" class="text-btn">取消</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 失败与缺失：断线重试、原件不存在、超限不可取 -->
+            <div class="thread" data-thread="errors">
+              <div class="msg user"><div class="bubble">把这几个文件都发我。</div></div>
+              <div class="msg pi">
+                <div class="pi-turn">
+                  <p class="pi-text">文件已发布，可以查看或下载。</p>
+                  <div class="file-list">
+                    <div class="file-row is-error">
+                      <span class="file-ico error" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                      </span>
+                      <div class="file-col">
+                        <div class="file-line"><span class="file-name" title="季度报告.pdf">季度报告.pdf</span><span class="file-size">· 4 MiB</span></div>
+                        <span class="file-status error">连接中断，未能获取</span>
+                      </div>
+                      <button type="button" class="text-btn">重试</button>
+                    </div>
+                    <div class="file-row is-error">
+                      <span class="file-ico error" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                      </span>
+                      <div class="file-col">
+                        <div class="file-line"><span class="file-name" title="会议纪要.md">会议纪要.md</span><span class="file-size">· 12 KiB</span></div>
+                        <span class="file-status error">电脑上的文件已不存在或无法读取</span>
+                      </div>
+                    </div>
+                    <div class="file-row is-error">
+                      <span class="file-ico error" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                      </span>
+                      <div class="file-col">
+                        <div class="file-line"><span class="file-name" title="演示录像.mp4">演示录像.mp4</span><span class="file-size">· 发布时 48 MiB</span></div>
+                        <span class="file-status error">文件超过 50 MiB，暂不支持获取</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 离线本地历史：只读，名称与大小保留 -->
+            <div class="thread" data-thread="offline">
+              <div class="msg user"><div class="bubble">请把链路图和说明发我。</div></div>
+              <div class="msg pi">
+                <div class="pi-turn">
+                  <p class="pi-text">已发布两份文件。</p>
+                  <div class="file-list">
+                    <div class="file-row is-offline">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L5 20"/></svg>
+                      </span>
+                      <div class="file-col">
+                        <div class="file-line"><span class="file-name" title="文件回传链路.png">文件回传链路.png</span><span class="file-size">· 860 KiB</span></div>
+                        <span class="file-status">连接并打开原会话后可获取</span>
+                      </div>
+                    </div>
+                    <div class="file-row is-offline">
+                      <span class="file-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
+                      </span>
+                      <div class="file-col">
+                        <div class="file-line"><span class="file-name" title="实现说明.md">实现说明.md</span><span class="file-size">· 18 KiB</span></div>
+                        <span class="file-status">连接并打开原会话后可获取</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="composer-wrap">
+          <form class="composer" novalidate>
+            <label class="sr-only" for="composer-input">消息输入</label>
+            <textarea id="composer-input" rows="2" placeholder="向 Pi 发送消息…"></textarea>
+            <div class="composer-actions">
+              <button type="button" class="icon-btn" aria-label="添加附件（本效果稿不实现）">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <button type="button" class="icon-btn" aria-label="斜杠命令入口（本效果稿不实现）">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 2 22"/></svg>
+              </button>
+              <span class="model-label"><span class="ml-name">默认模型</span><span class="ml-level"> · 思考 中</span></span>
+              <button type="submit" class="send-btn" aria-label="发送">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+              </button>
+              <button type="button" class="send-btn stop-btn" aria-label="停止">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="readonly-wrap">
+          <div class="readonly-bar" role="status">本地历史 · 只读。连接并打开原会话后可获取文件。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 单张大图查看器 -->
+    <div class="overlay" data-overlay="image" role="dialog" aria-modal="true" aria-label="图片查看器">
+      <div class="image-viewer">
+        <header class="iv-head">
+          <h2 class="iv-name" title="文件回传链路.png">文件回传链路.png</h2>
+          <div class="iv-actions">
+            <button type="button" class="icon-btn" aria-label="下载 文件回传链路.png" title="下载">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            </button>
+            <button type="button" class="icon-btn" aria-label="关闭查看器" title="关闭">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+        </header>
+        <div class="iv-body">
+          <img src="assets/sample-image.png" alt="Pi Reach 文件回传链路示意图">
+        </div>
+        <div class="iv-zoom">
+          <button type="button" class="icon-btn" aria-label="缩小" title="缩小">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+          </button>
+          <button type="button" class="icon-btn zoom-reset" aria-label="还原到 100%">100%</button>
+          <button type="button" class="icon-btn" aria-label="放大" title="放大">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Markdown 阅读器 -->
+    <div class="overlay" data-overlay="markdown" role="dialog" aria-modal="true" aria-label="Markdown 阅读器">
+      <div class="md-scrim"></div>
+      <section class="md-reader">
+        <header class="md-head">
+          <div class="md-title">
+            <span class="md-name" title="实现说明.md">实现说明.md</span>
+            <span class="md-size">18 KiB · Markdown</span>
+          </div>
+          <div class="md-actions">
+            <button type="button" class="icon-btn" aria-label="下载 实现说明.md" title="下载">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            </button>
+            <button type="button" class="icon-btn" aria-label="关闭阅读器" title="关闭">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+        </header>
+        <article class="md-body">
+          <h1>会话文件发布说明</h1>
+          <p>Pi 可以把电脑上的成果文件发布到会话。发布保存的是源文件引用，不是副本或历史版本；PWA 按会话权限获取原件。</p>
+
+          <h2>发布与获取</h2>
+          <ul>
+            <li>Pi 主动发布面向用户的交付文件，发布记录随原生会话保存。</li>
+            <li>图片在会话内直接展示，点击进入单张查看；其他文件以文件名、大小和操作组成的轻量文件行展示。</li>
+            <li>获取由 PWA 发起，Relay 只转发请求与分片，不保存文件内容。</li>
+          </ul>
+
+          <h2>获取上限</h2>
+          <table>
+            <thead>
+              <tr><th>文件类型</th><th>自动获取</th><th>手动获取</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>受支持图片</td><td>≤ 10 MiB</td><td>10–50 MiB</td></tr>
+              <tr><td>其他文件</td><td>不自动</td><td>手动点击</td></tr>
+              <tr><td>超过 50 MiB</td><td>不传输</td><td>不传输</td></tr>
+            </tbody>
+          </table>
+
+          <h2>发布记录示例</h2>
+          <pre><code>{
+  "customType": "pi-reach:published-file-v1",
+  "file_name": "文件回传链路.png",
+  "mime_type": "image/png",
+  "byte_length": 880640
+}</code></pre>
+
+          <p>读取过程只做只读访问，源文件不会被移动或修改；中断后从头发起新的获取。</p>
+        </article>
+      </section>
+    </div>
+
+    <!-- 切换确认 -->
+    <div class="overlay" data-overlay="confirm" role="dialog" aria-modal="true" aria-labelledby="cf-title" aria-describedby="cf-desc">
+      <div class="cf-scrim"></div>
+      <div class="cf-dialog">
+        <h2 class="cf-title" id="cf-title">切换将取消文件获取</h2>
+        <p class="cf-body" id="cf-desc">原会话正在获取「交付材料.zip」（42%）。切换会取消这次获取，未完成的文件需要从头重试；已完整获取的内容会保留。</p>
+        <div class="cf-actions">
+          <button type="button" class="btn">取消获取并切换</button>
+          <button type="button" class="btn primary">留下</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="shared.js"></script>
+</body>
+</html>
