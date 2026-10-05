@@ -87,7 +87,7 @@ jobs:
           {
             echo "### @yefengr/pi-reach@$VERSION 已提交到 npm 待审区"
             echo
-            echo "在 npmjs.com 的 Staged Packages 中核对并用 2FA 批准后才会上线。本版本依赖新的协议帧或事件时，批准前先确认 PWA 已部署。上线后 Extension GitHub Release 工作流会在 30 分钟内创建 Release。"
+            echo "在 npmjs.com 的 Staged Packages 中核对并用 2FA 批准后才会上线。本版本依赖新的协议帧或事件时，批准前先确认 PWA 已部署。上线后 Extension GitHub Release 工作流会定时检查并创建 Release，通常在 30 分钟到数小时内完成；急需时可在 Actions 页面手动运行。"
           } >> "$GITHUB_STEP_SUMMARY"
 
   tag:
