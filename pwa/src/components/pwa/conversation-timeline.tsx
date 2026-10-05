@@ -24,20 +24,25 @@ type ConversationTimelineProps = {
   renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead) => ReactNode;
 };
 
-type ReaderState = { key: string } | null;
+/** `grouped`：打开时该工具已在组内；只有打开时尚未合并的工具才延后合并。 */
+type ReaderState = { key: string; grouped: boolean } | null;
 
 const TOOL_GROUP_MINIMUM = 2;
 
+/** 已有定论的工具状态：成功、失败与中断都参与合并，状态未知的工具仍逐条显示。 */
+const GROUPABLE_STATUSES: ReadonlySet<string> = new Set(["complete", "error", "interrupted"]);
+
 /**
- * 已结束的一轮中，相邻且都已成功完成的工具（至少两条）合并为一行摘要；夹有正文、思考或其他记录时断开。
- * 运行中的一轮逐条显示，避免工具相继完成时时间线在眼前合并跳动；失败、中断与未知状态的工具不参与合并。组 key 取组内第一个工具。
+ * 已结束的一轮中，相邻且状态已有定论（成功、失败、中断）的工具（至少两条）合并为一行摘要；夹有正文、思考或其他记录时断开。
+ * 运行中的一轮逐条显示，避免工具相继完成时时间线在眼前合并跳动；状态未知的工具不参与合并。
+ * 阅读器正打开的工具所在的段暂不合并，退出后再合并，避免正在阅读的行消失。组 key 取组内第一个工具。
  */
-function completedToolRuns(entries: readonly PresentationEntry[], finished: (groupId: string | undefined) => boolean): Map<string, ToolEntry[]> {
+function completedToolRuns(entries: readonly PresentationEntry[], finished: (groupId: string | undefined) => boolean, pinnedKey?: string): Map<string, ToolEntry[]> {
   const runs = new Map<string, ToolEntry[]>();
   let run: ToolEntry[] = [];
   let runGroup: string | undefined;
   const flush = () => {
-    if (run.length >= TOOL_GROUP_MINIMUM) runs.set(`tools:${run[0]!.key}`, run);
+    if (run.length >= TOOL_GROUP_MINIMUM && !run.some(tool => tool.key === pinnedKey)) runs.set(`tools:${run[0]!.key}`, run);
     run = [];
   };
   for (const entry of entries) {
@@ -46,7 +51,7 @@ function completedToolRuns(entries: readonly PresentationEntry[], finished: (gro
       flush();
       runGroup = groupId;
     }
-    if (entry.kind === "tool" && entry.value.status === "complete" && finished(groupId)) {
+    if (entry.kind === "tool" && !("partial_id" in entry.value) && GROUPABLE_STATUSES.has(entry.value.status) && finished(groupId)) {
       run.push(entry);
       continue;
     }
@@ -135,7 +140,8 @@ export function ConversationTimeline({ items, live, completions, running = false
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader.key)?.value ?? null : null;
   // 仍有流式内容的一轮也视为未结束（working 状态可能晚于输出到达）。
   const streamingGroups = new Set(view.entries.flatMap(entry => (entry.kind === "tool" && "partial_id" in entry.value) || ((entry.kind === "text" || entry.kind === "thinking") && entry.streaming) ? [entryGroupId(entry)] : []));
-  const toolRuns = completedToolRuns(view.entries, groupId => groupId !== undefined && completions?.has(groupId) === true && !streamingGroups.has(groupId));
+  const runFinished = (groupId: string | undefined) => groupId !== undefined && completions?.has(groupId) === true && !streamingGroups.has(groupId);
+  const toolRuns = completedToolRuns(view.entries, runFinished, reader?.grouped === false ? reader.key : undefined);
   const groupedToolKeys = new Map<string, string>();
   for (const [runKey, run] of toolRuns) for (const tool of run) groupedToolKeys.set(tool.key, runKey);
   const groupExpanded = (choices: ReadonlyMap<string, boolean>, runKey: string) => choices.get(runKey) ?? false;
@@ -156,7 +162,7 @@ export function ConversationTimeline({ items, live, completions, running = false
     if (scopedFileReader !== null) return;
     setReaderOrigin(trigger);
     onReadingChange?.(true);
-    setReader({ key });
+    setReader({ key, grouped: groupedToolKeys.has(key) });
     setReaderOpen(true);
   };
   const finishReader = () => {
@@ -164,7 +170,9 @@ export function ConversationTimeline({ items, live, completions, running = false
     setReader(null);
     setReaderOrigin(null);
     // 背景位置由时间线锚点持续维护，退出时只回焦，避免旧 scrollTop 覆盖补偿。
-    if (readerValue !== null && readerOrigin?.isConnected && readerOrigin.getClientRects().length > 0) {
+    // 延后的合并此刻生效，原触发行会被收进组里，回焦到列表。
+    const regrouped = reader?.grouped === false && [...completedToolRuns(view.entries, runFinished).values()].some(run => run.some(tool => tool.key === reader.key));
+    if (!regrouped && readerValue !== null && readerOrigin?.isConnected && readerOrigin.getClientRects().length > 0) {
       readerOrigin.focus({ preventScroll: true });
     } else {
       listRef.current?.focus({ preventScroll: true });
