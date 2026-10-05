@@ -218,9 +218,17 @@ jobs:
             previous="$(git describe --tags --abbrev=0 --match "$component-v*" "$GITHUB_SHA" 2>/dev/null || true)"
             changes="$(git log --no-merges --format='- %s' "${previous:+$previous..}$GITHUB_SHA" -- "$@" | grep -v '^- chore: 发布' || true)"
             {
-              echo "线上地址：${url:-未配置}（镜像 \`$image\`）"
+              if [ -n "$url" ]; then
+                echo "线上地址：[$url]($url)"
+              else
+                echo "线上地址：未配置"
+              fi
               echo
-              echo "镜像摘要 \`$digest\`，部署记录：$RUN_URL"
+              echo "镜像：[\`$image\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pkgs/container/pi-reach-$component)"
+              echo
+              echo "镜像摘要：\`$digest\`"
+              echo
+              echo "部署记录：[查看工作流]($RUN_URL)"
               echo
               echo "## 变更"
               echo
