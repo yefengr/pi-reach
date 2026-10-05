@@ -1,5 +1,5 @@
 import { isValidElement, useId, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, LoaderCircle } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@mantine/core";
@@ -79,23 +79,31 @@ type ThinkingContentProps = {
   timelineKey?: string;
 };
 
+/** 推理文本里整行加粗（`**标题**`）的标题；结束后取第一个，流式阶段取目前最新的一个。标题是模型原文，不翻译。 */
+export function thinkingTitle(text: string, streaming: boolean): string | undefined {
+  const titles = [...text.matchAll(/^[ \t]*\*\*([^*\n]+?)\*\*[ \t]*$/gm)].map(match => match[1]!.trim()).filter(Boolean);
+  return streaming ? titles.at(-1) : titles[0];
+}
+
 export function ThinkingContent({ text, streaming = false, expanded: controlledExpanded, onExpandedChange, timelineKey }: ThinkingContentProps) {
   const { t } = useI18n();
   const [localExpanded, setLocalExpanded] = useState(false);
   const expanded = controlledExpanded ?? localExpanded;
   const id = useId();
   const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
+  const title = thinkingTitle(text, streaming) ?? t.timeline.thoughtProcess;
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
+      <span className="pwa-thinking-title" title={title}>{title}</span>
+      {streaming ? <span className="pwa-thinking-live" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.thinking}</span> : null}
       <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
-      <span className="pwa-thinking-title">{streaming ? t.timeline.thinking : t.timeline.thoughtProcess}</span>
     </button>
-    <Collapse open={expanded} id={id} className="pwa-thinking-content pwa-timeline-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" /></Collapse>
+    <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" /></Collapse>
   </section>;
 }
 
 export function AssistantBlocks({ blocks, streaming = false }: { blocks: readonly AssistantBlock[]; streaming?: boolean }) {
   return <div className="pwa-assistant-blocks">{adjacentBlocks(blocks).map((block, index) => block.type === "thinking"
     ? <ThinkingContent key={index} text={block.text} streaming={streaming} />
-    : <div className="pwa-timeline-content" key={index}><MarkdownContent text={block.text} /></div>)}</div>;
+    : <div key={index}><MarkdownContent text={block.text} /></div>)}</div>;
 }

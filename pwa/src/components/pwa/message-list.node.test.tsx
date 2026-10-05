@@ -5,6 +5,7 @@ import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/
 import type { TimelinePending } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
 import { PwaUiProvider } from "./pwa-ui-provider";
+import { thinkingTitle } from "./timeline-content";
 
 function renderList(items: Parameters<typeof MessageList>[0]["items"], overrides: Partial<Parameters<typeof MessageList>[0]> = {}): string {
   return renderToStaticMarkup(
@@ -123,7 +124,8 @@ test("keeps streaming thinking collapsed independently of the tools", () => {
   };
   const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
 
-  expect(html).toContain("Thinking…");
+  expect(html).toContain("Thought process");
+  expect(html).toContain("Thinking</span>");
   expect(html).not.toContain("Inspecting the request.");
   expect(html).not.toContain("pwa-tool-code");
   expect(html).toContain('aria-expanded="false"');
@@ -250,5 +252,21 @@ describe("turn presentation", () => {
     expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), { hasEarlier: false, running: true })).not.toContain("Pi is thinking…");
     expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false })).not.toContain("Pi is thinking…");
     expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true, isLive: false })).not.toContain("Pi is thinking…");
+  });
+});
+
+describe("thinkingTitle", () => {
+  const text = "**First step**\nSome reasoning.\n\n**Second step**\nMore reasoning.\nAn inline **bold** word stays text.";
+  test("takes the first whole-line bold heading once finished and the latest while streaming", () => {
+    expect(thinkingTitle(text, false)).toBe("First step");
+    expect(thinkingTitle(text, true)).toBe("Second step");
+  });
+  test("ignores inline bold, an unclosed heading and text without headings", () => {
+    expect(thinkingTitle("An inline **bold** word.", false)).toBeUndefined();
+    expect(thinkingTitle("**First step**\n\n**Unfinished", true)).toBe("First step");
+    expect(thinkingTitle("Plain reasoning.", true)).toBeUndefined();
+  });
+  test("keeps the model's original language", () => {
+    expect(thinkingTitle("**检查工具分组规则**\n正文", false)).toBe("检查工具分组规则");
   });
 });
