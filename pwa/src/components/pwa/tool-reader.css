@@ -3,18 +3,13 @@
 /* 工具状态行：命令、完成／运行等文字与图形状态，无横向分割线。 */
 .pwa-root .pwa-tool-card { padding: 0; border: 0; color: var(--pwa-ink); background: transparent; box-shadow: none; }
 .pwa-root .pwa-tool-head { width: 100%; }
+/* 仅工具行使用两列；思考保留左侧箭头的三列布局。 */
+.pwa-root .pwa-tool-action { grid-template-columns: minmax(0, 1fr) auto; }
 .pwa-root .pwa-tool-action-copy { min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
 .pwa-root .pwa-tool-action-copy strong { min-width: 0; max-width: 45%; flex: 0 1 auto; overflow: hidden; color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-action-copy strong:only-child { max-width: 100%; }
 .pwa-root .pwa-tool-action-copy span { min-width: 0; flex: 1 1 0; overflow: hidden; color: var(--pwa-secondary); font: 400 var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); text-overflow: ellipsis; white-space: nowrap; }
-/* 展开后的参数保留原始换行；箭头、名称与状态留在第一行。 */
-.pwa-root .pwa-tool-action[aria-expanded="true"] { align-items: start; }
-.pwa-root .pwa-tool-action[aria-expanded="true"] .pwa-tool-chevron { margin-top: 1px; }
-.pwa-root .pwa-tool-action[aria-expanded="true"] .pwa-tool-action-copy { align-items: baseline; overflow: visible; white-space: normal; }
-.pwa-root .pwa-tool-action[aria-expanded="true"] .pwa-tool-action-copy strong { flex-shrink: 0; }
-.pwa-root .pwa-tool-action[aria-expanded="true"] .pwa-tool-action-copy span { overflow: visible; text-overflow: clip; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pwa-root .pwa-tool-status { min-width: 0; display: inline-flex; align-items: center; gap: 4px; color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
-.pwa-root .pwa-tool-action[aria-expanded="true"] .pwa-tool-status { margin-top: 2px; }
 .pwa-root .pwa-tool-status-running { color: var(--pwa-running); }
 .pwa-root .pwa-tool-status-complete { color: var(--pwa-complete); }
 .pwa-root .pwa-tool-status-error, .pwa-root .pwa-tool-status-interrupted { color: var(--pwa-error); }

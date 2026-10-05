@@ -359,7 +359,7 @@ export const zh: Messages = {
   },
   tools: {
     status: { running: "运行中", complete: "完成", error: "出错", interrupted: "已中断", unknown: "状态未知" },
-    toggle: (expanded, tool) => `${expanded ? "收起" : "展开"} ${tool} 工具`,
+    viewDetails: (tool) => `查看 ${tool} 工具详情`,
     statusLabel: (tool, status) => `${tool}：${status}`,
     stillArriving: "输出仍在接收中。",
     truncatedByHost: "输出已被电脑端截断。",

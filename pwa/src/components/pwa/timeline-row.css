@@ -61,8 +61,8 @@
   transition-duration: var(--pwa-duration-expand-in);
 }
 
-/* 连续成功工具的摘要行：与工具行同一视觉，文字用界面字体；展开后的逐条工具与摘要文字左对齐。 */
+/* 连续成功工具的摘要行：文字用界面字体，箭头在右；组内工具保留少量缩进。 */
 .pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-summary { color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
-.pwa-tool-group-details { min-width: 0; padding-left: var(--pwa-timeline-indent, 24px); }
+.pwa-tool-group-details { min-width: 0; padding-left: 12px; }
 .pwa-tool-group-details > .pwa-timeline-row:first-child { margin-top: 0; }
 .pwa-tool-group-details > .pwa-timeline-row:last-child { margin-bottom: 0; }

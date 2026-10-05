@@ -178,27 +178,27 @@ test("asynchronous image layout above a reader compensates without a timeline up
   } finally { await screen.unmount(); }
 });
 
-test("closing the full reader preserves the compensated background position and focus", async () => {
+test.each([1280, 390])("closing the direct reader by Escape or history preserves compensated position and focus at %ipx", async width => {
+  await page.viewport(width, 844);
   const tool: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "tool", group_id: "tool", tool_call_id: "read-call", timestamp: 1, kind: "tool", tool: "read", args: { path: "file.txt" }, status: "complete", truncated: false, result: paragraphs("File", 80) } };
   const tail = answer("tail", paragraphs("Below"));
   const { screen, list, readAt, update, viewport } = await renderTimeline([partial("above", paragraphs("Above", 5)), tool, tail]);
   try {
-    const heading = screen.getByRole("button", { name: "Expand read tool" }).element();
+    const heading = list.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!;
     await readAt(heading);
-    await screen.getByRole("button", { name: "Expand read tool" }).click();
-    await settleLayout();
-    const origin = screen.getByRole("button", { name: /^View all/ });
-    origin.element().focus({ preventScroll: true });
+    heading.focus({ preventScroll: true });
     const top = offset(heading, list);
-    await origin.click();
+    await userEvent.click(heading);
     await expect.element(screen.getByRole("dialog")).toBeVisible();
     update([partial("above", paragraphs("Above", 12)), tool, tail]);
     await settleLayout();
     expect(offset(heading, list)).toBeCloseTo(top, 0);
-    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => window.history.state?.piReachToolReader).toBe(true);
+    if (width === 390) window.history.back();
+    else await userEvent.keyboard("{Escape}");
     await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
     await settleLayout();
-    expect(document.activeElement).toBe(origin.element());
+    expect(document.activeElement).toBe(heading);
     expect(offset(heading, list)).toBeCloseTo(top, 0);
     expect(viewport().followingOutput).toBe(false);
   } finally { await screen.unmount(); }
