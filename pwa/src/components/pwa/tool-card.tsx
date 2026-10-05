@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from "react";
-import { Check, ChevronRight, CircleAlert, CircleHelp, LoaderCircle } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 
 import { toolAction, toolHeaderSummary, toolInlineText, toolStatus, type ToolKind, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n, type Messages } from "@/lib/i18n";
@@ -22,13 +22,13 @@ export function ToolCard({ value, onRead, status: statusOverride }: ToolCardProp
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
         <span className="pwa-tool-action-copy"><strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}</span>
-        <span className={`pwa-tool-status pwa-tool-status-${status}`} role="status" aria-label={t.tools.statusLabel(value.tool, t.tools.status[status])}>{status === "running" ? <LoaderCircle className="pwa-tool-spinner" size={16} aria-hidden="true" /> : status === "complete" ? <Check size={16} aria-hidden="true" /> : status === "error" || status === "interrupted" ? <CircleAlert size={16} aria-hidden="true" /> : <CircleHelp size={16} aria-hidden="true" />}{status === "complete" ? null : <span>{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>}</span>
+        <span className={`pwa-tool-status pwa-tool-status-${status}`} role="status" aria-label={t.tools.statusLabel(value.tool, t.tools.status[status])}>{status === "running" ? <LoaderCircle className="pwa-tool-spinner" size={16} aria-hidden="true" /> : status === "complete" ? <Check size={16} aria-hidden="true" /> : status === "error" ? <CircleAlert size={16} aria-hidden="true" /> : status === "interrupted" ? <CircleStop size={16} aria-hidden="true" /> : <CircleHelp size={16} aria-hidden="true" />}{status === "complete" ? null : <span>{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>}</span>
       </button>
     </div>
   </article>;
 }
 
-/** 连续工具的摘要：按类别计数、按首次出现排序；读取、修改、写入按不同路径计数；有失败或中断时末尾追加失败数。 */
+/** 连续工具的摘要：按类别计数、按首次出现排序；读取、修改、写入按不同路径计数；有失败或中断时末尾分别追加失败数与中断数。 */
 export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tools"]): string {
   const order: ToolKind[] = [];
   const calls = new Map<ToolKind, number>();
@@ -41,17 +41,20 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
     paths.get(action.kind)!.add(action.detail);
   }
   const label = { read: t.groupRead, command: t.groupCommand, search: t.groupSearch, edit: t.groupEdit, write: t.groupWrite, generic: t.groupGeneric } satisfies Record<ToolKind, (count: number) => string>;
-  const failed = values.filter(value => ["error", "interrupted"].includes(toolStatus(value))).length;
+  const failed = values.filter(value => toolStatus(value) === "error").length;
+  const interrupted = values.filter(value => toolStatus(value) === "interrupted").length;
   const parts = order.map((kind) => label[kind](kind === "read" || kind === "edit" || kind === "write" ? paths.get(kind)!.size : calls.get(kind)!));
-  return (failed > 0 ? [...parts, t.groupFailed(failed)] : parts).join(" · ");
+  if (failed > 0) parts.push(t.groupFailed(failed));
+  if (interrupted > 0) parts.push(t.groupInterrupted(interrupted));
+  return parts.join(" · ");
 }
 
-/** 同一轮中相邻且状态已有定论的工具合并为一行摘要，展开后是逐条工具行；含失败时摘要旁显示错误图标。 */
+/** 同一轮中相邻且状态已有定论的工具合并为一行摘要，展开后是逐条工具行；含失败时摘要旁显示错误图标，仅有中断时不显示。 */
 export function ToolGroupCard({ values, expanded, onExpandedChange, children }: { values: readonly ToolValue[]; expanded: boolean; onExpandedChange: (expanded: boolean) => void; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
-  const hasFailure = values.some(value => ["error", "interrupted"].includes(toolStatus(value)));
+  const hasFailure = values.some(value => toolStatus(value) === "error");
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
   return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length}>
     <div className="pwa-tool-head">

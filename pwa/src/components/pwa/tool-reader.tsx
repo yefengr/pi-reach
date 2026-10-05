@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { Check, CircleAlert, CircleHelp, LoaderCircle, X } from "lucide-react";
+import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X } from "lucide-react";
 import { CopyButton } from "./copy-button";
 import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "./use-pwa-motion";
 import { ToolImage } from "./tool-output";
@@ -37,7 +37,8 @@ function NumberedText({ block }: { block: Extract<ToolContentBlock, { kind: "tex
 function StatusIcon({ status }: { status: ReturnType<typeof toolStatus> }) {
   if (status === "running") return <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />;
   if (status === "complete") return <Check size={16} aria-hidden="true" />;
-  if (status === "error" || status === "interrupted") return <CircleAlert size={16} aria-hidden="true" />;
+  if (status === "error") return <CircleAlert size={16} aria-hidden="true" />;
+  if (status === "interrupted") return <CircleStop size={16} aria-hidden="true" />;
   return <CircleHelp size={16} aria-hidden="true" />;
 }
 

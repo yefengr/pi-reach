@@ -86,7 +86,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   return <article ref={root} className={`pwa-published-file${image ? " is-image" : ""}`} data-publication-id={file.publication_id}>
     {ready && image && state?.url && !failed ? <button type="button" className="pwa-published-image" onClick={event => onRead(file, event.currentTarget)} aria-label={t.files.viewImage}>
       <img src={state.url} alt={name} onError={() => setDecodeFailure(state.url ?? null)} />
-    </button> : image && canFetch && !fetching ? <div className="pwa-published-placeholder"><ImageIcon size={24} aria-hidden="true" /><span>{failed ? errorText : size > FILE_AUTO_IMAGE_BYTES ? t.files.largeImage : t.files.imagePending}</span></div> : null}
+    </button> : image && canFetch && !fetching ? <div className="pwa-published-placeholder"><ImageIcon size={24} aria-hidden="true" /><span className={failed ? "pwa-published-error" : undefined}>{failed ? errorText : size > FILE_AUTO_IMAGE_BYTES ? t.files.largeImage : t.files.imagePending}</span></div> : null}
     <div className="pwa-published-row">
       {image ? <ImageIcon size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}
       <div className="pwa-published-info"><div className="pwa-published-name" title={name}>{name}</div><span className="pwa-published-meta">{format.number(displaySize)} {sizeUnit}</span>

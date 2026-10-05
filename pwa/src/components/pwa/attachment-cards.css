@@ -7,6 +7,7 @@
 .pwa-attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--pwa-weight-strong) var(--pwa-text-list)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-attachment-status, .pwa-attachment-progress { font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); color: var(--pwa-secondary); font-variant-numeric: tabular-nums; }
 .pwa-attachment-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwa-attachment-card[data-status="paused"] .pwa-attachment-status { color: var(--pwa-running); }
 .pwa-attachment-card[data-status="failed"] .pwa-attachment-status { color: var(--pwa-error); }
 .pwa-attachment-progress { display: flex; align-items: center; gap: 8px; }
 .pwa-attachment-progress > :first-child { flex: 1; min-width: 0; height: 6px; background: var(--pwa-neutral-active); }
