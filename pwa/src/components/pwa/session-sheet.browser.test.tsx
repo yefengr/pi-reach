@@ -177,7 +177,7 @@ test("shows online Pi and local history together and routes choices after exit",
 
   await expect.element(screen.getByText("Online Pi", { exact: true })).toBeVisible();
   await expect.element(screen.getByText("Local history", { exact: true })).toBeVisible();
-  await expect.element(screen.getByText("Saved in this browser only", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("This browser only", { exact: true })).toBeVisible();
   await expect.element(screen.getByText("Sprint recap", { exact: true })).toBeVisible();
   await expect.element(screen.getByText("Old cached Pi", { exact: true })).not.toBeInTheDocument();
   await expect.element(screen.getByText("Beta live Pi", { exact: true })).not.toBeInTheDocument();

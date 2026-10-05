@@ -119,7 +119,7 @@ test("renders online Pi rows with directory and run state, and history rows with
 
   expect(liveHtml).toContain("Online Pi");
   expect(liveHtml).toContain("Local history");
-  expect(liveHtml).toContain("Saved in this browser only");
+  expect(liveHtml).toContain("This browser only");
   expect(liveHtml).not.toMatch(/role="tab"|>Live<|>History</);
   expect(currentLive).toMatch(/current<span aria-hidden="true"> · <\/span><\/span><span class="pwa-pi-status">Idle</);
   expect(nextLive).toContain("pwa-pi-status-running");
