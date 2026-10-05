@@ -104,6 +104,47 @@ describe("session attachment message intent", () => {
     expect(onReady.mock.calls[0][0].text).toBe("retry");
   });
 
+  test.each(["sessionId", "endpointId"] as const)("switching %s without attachments stays silent on return", (property) => {
+    const { composer, client, onReady } = setup();
+    composer.connect({ ...scope, [property]: "other" }, () => true);
+    expect(composer.snapshot().issue).toBeUndefined();
+    composer.connect(scope, () => true);
+    expect(composer.snapshot().issue).toBeUndefined();
+    expect(composer.snapshot().items).toEqual([]);
+    expect(client.jobs.size).toBe(0);
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
+  test.each([false, true])("an idle lease change stays silent and allows a fresh upload (hasFile=%s)", async (hasFile) => {
+    const { composer, client, onReady } = setup();
+    if (hasFile) composer.addFiles([file("one")]);
+    client.changed({ status: "supported", uploadScope: "new-lease" });
+    expect(composer.snapshot().issue).toBeUndefined();
+    expect(composer.snapshot().active).toBe(false);
+    if (!hasFile) composer.addFiles([file("one")]);
+    expect(composer.start("fresh", context)).toBe(true);
+    await client.finish("one");
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  test("a new session accepts its own attachments without transferring the old draft", async () => {
+    const { composer, client, clients, onReady } = setup();
+    composer.addFiles([file("old")]);
+    composer.connect({ ...scope, sessionId: "other" }, () => true);
+    expect(composer.snapshot().items).toEqual([]);
+    expect(composer.snapshot().issue).toBeUndefined();
+    composer.addFiles([file("new")]);
+    expect(composer.start("new session", context)).toBe(true);
+    await clients[1].finish("new");
+    expect(onReady.mock.calls[0][0]).toMatchObject({
+      target: attachmentTargetKey({ ...scope, sessionId: "other" }), attachments: [descriptor("new")],
+    });
+    composer.connect(scope, () => true);
+    expect(composer.snapshot().issue).toBeUndefined();
+    expect(composer.snapshot().items[0]).toMatchObject({ fileName: "old", status: "draft" });
+    expect(client.jobs.size).toBe(0);
+  });
+
   test("target change cannot transfer files, returning restores the original local draft", async () => {
     const { composer, client, clients, onReady } = setup();
     composer.addFiles([file("one")]);
@@ -116,6 +157,8 @@ describe("session attachment message intent", () => {
     composer.connect({ ...scope, channelId: "new-channel" }, () => true);
     expect(composer.snapshot().items[0].status).toBe("draft");
     expect(composer.snapshot().active).toBe(false);
+    expect(composer.snapshot().issue).toBeUndefined();
+    expect(client.job("one").signal?.aborted).toBe(true);
   });
 
   test("disconnect preserves intent; normal leaf/channel advance does not cancel it", async () => {
@@ -162,7 +205,7 @@ describe("session attachment message intent", () => {
     if (all) composer.remove(composer.snapshot().items[0].id);
     client.changed({ status: "supported", uploadScope: "different" });
     expect(onReady).not.toHaveBeenCalled();
-    expect(composer.snapshot()).toMatchObject({ active: false, issue: "scope_changed" });
+    expect(composer.snapshot()).toMatchObject({ active: false, issue: "send_failed" });
     expect(composer.snapshot().items).toHaveLength(all ? 0 : 1);
     if (!all) expect(composer.snapshot().items[0]).toMatchObject({ status: "draft", fileName: "one" });
   });
@@ -199,7 +242,7 @@ describe("session attachment message intent", () => {
     composer.connect({ ...scope, channelId: "new" }, () => true);
     await client.finish("one");
     expect(onReady).not.toHaveBeenCalled();
-    expect(composer.snapshot()).toMatchObject({ active: false, issue: "scope_changed" });
+    expect(composer.snapshot()).toMatchObject({ active: false, issue: "send_failed" });
     expect(composer.snapshot().items[0].status).toBe("draft");
   });
 
