@@ -25,7 +25,7 @@ const items: TimelineViewItem[] = Array.from({ length: 30 }, (_, index) => ({
 function ShellHarness() {
   const [draft, setDraft] = useState("");
   const viewport = useTimelineViewport(items);
-  return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "pi-reach", prefix: "pi-reach", showTitle: true }} historyMode={false} toast={null} settingsRoute={{ open: false, origin: null, animate: false, change: 0 }} onOpenSettings={() => {}} renderSettings={() => null} overlays={null} closeBackgroundOverlay={(close) => close()}>
+  return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "pi-reach", prefix: "pi-reach", showTitle: true }} historyMode={false} toast={null} settingsRoute={{ open: false, origin: null, animate: false, change: 0 }} onOpenSettings={() => {}} onSettingsBack={() => {}} renderSettings={() => null} overlays={null} closeBackgroundOverlay={(close) => close()}>
     <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive />
     <textarea aria-label="Draft" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
   </PwaWorkspaceLayout></PwaAppShell>;

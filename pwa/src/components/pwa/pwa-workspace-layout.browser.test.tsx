@@ -76,6 +76,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
     connectionBanner={connectionBanner ? <PwaConnectionBanner kind={connectionBanner} connection="retrying" onRetry={() => events.push("retry")} /> : null}
     toast={unpaired ? null : <div data-testid="toast">Toast</div>}
     settingsRoute={route}
+    onSettingsBack={closeSettings}
     onOpenSettings={(origin) => { events.push(`settings:${origin.kind}`); openSettings(origin); }}
     renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.example.test" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmOpen(true)} onResetLayout={() => {}} />}
     overlays={<ConfirmActionDialog action={confirmOpen ? { kind: "clear-local-data" } : null} pending={false} error={null} onConfirm={() => {}} onClose={() => setConfirmOpen(false)} />}

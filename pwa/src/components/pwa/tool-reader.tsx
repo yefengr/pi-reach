@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X } from "lucide-react";
 import { CopyButton } from "./copy-button";
+import { useSwipe } from "./use-swipe";
 import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "./use-pwa-motion";
 import { ToolImage } from "./tool-output";
 import { toolAction, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
@@ -51,6 +52,8 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const enterDuration = usePwaMotionDuration("--pwa-duration-reader-in", 240);
   const exitDuration = usePwaMotionDuration("--pwa-duration-reader-out", 200);
   const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
+  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
+  useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: onClose });
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
   const onCloseRef = useRef(onClose);
@@ -109,7 +112,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     style={pwaOverlayEase(opened)}
   >
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content classNames={{ content: "pwa-tool-reader" }} aria-labelledby="pwa-tool-reader-title" aria-describedby="pwa-tool-reader-description">
+    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-tool-reader" }} aria-labelledby="pwa-tool-reader-title" aria-describedby="pwa-tool-reader-description">
       <Drawer.Header className="pwa-tool-reader-header">
         {/* 与会话内工具行同一读法：工具名＋命令在前，状态标签放在右侧操作区。 */}
         <div className="pwa-tool-reader-title-wrap">

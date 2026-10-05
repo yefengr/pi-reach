@@ -154,7 +154,9 @@
 @media (max-width: 767.98px) {
   .pwa-root { --pwa-gutter: 16px; }
   .pwa-root .pwa-layout { display: flex; transition: none; }
-  .pwa-root .pwa-main { flex: 1 1 auto; }
+  .pwa-root .pwa-main { flex: 1 1 auto; touch-action: pan-y; }
+  .pwa-root .pwa-workspace-state { touch-action: pan-y; }
+  .pwa-root .pwa-settings-view { touch-action: pan-y; }
   .pwa-root .pwa-desktop-navigation,
   .pwa-ui-scope .pwa-root .pwa-icon-button.pwa-sidebar-toggle { display: none; }
   /* 移动顶栏：菜单图标与会话名共同构成导航入口，不显示 Logo；避开状态栏。 */

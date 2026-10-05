@@ -1,10 +1,11 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
 import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "@/components/pwa/use-pwa-motion";
 import { WorkspaceDeviceControl } from "@/components/pwa/workspace-device-control";
 import { useI18n } from "@/lib/i18n";
 import { getActiveDevice, WorkspaceHistorySection, WorkspaceNavigationFooter, WorkspaceRunningPiSection, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { BrandMark } from "@/components/pwa/brand-mark";
+import { useSwipe } from "@/components/pwa/use-swipe";
 
 type SessionSheetProps = WorkspaceNavigationProps & {
   onClose: () => void;
@@ -22,6 +23,11 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
   const navigationDuration = usePwaMotionDuration("--pwa-duration-nav", 240);
   const { t } = useI18n();
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
+  const setContentRef = useCallback((element: HTMLDivElement | null) => {
+    contentRef.current = element;
+    setContentElement(element);
+  }, []);
   const chooserOpenRef = useRef(false);
   const focusOriginRef = useRef(focusOrigin);
   const pendingActionRef = useRef<(() => void) | null>(null);
@@ -85,6 +91,12 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     setCloseRequest((request) => request + 1);
     onClose();
   };
+  useSwipe(contentElement, {
+    direction: "left",
+    enabled: opened,
+    onSwipe: requestClose,
+    canSwipe: () => !chooserOpenRef.current,
+  });
   const closeAfter = (action: () => void) => {
     pendingActionRef.current = action;
     requestClose();
@@ -125,7 +137,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     styles={{ content: { width: "min(320px, 85vw)", height: "100dvh", maxWidth: "85vw", maxHeight: "100dvh", display: "flex", flexDirection: "column" } }}
   >
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content ref={contentRef} role="dialog" aria-modal="true">
+    <Drawer.Content ref={setContentRef} role="dialog" aria-modal="true">
       <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={24} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} /></Drawer.Header>
       <Drawer.Body>
         <div className="pwa-navigation-content">
