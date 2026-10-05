@@ -6,6 +6,7 @@ import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
 import { FILE_TEXT_PREVIEW_BYTES, fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
 import { FileTextContent } from "./file-text-content";
+import { useSwipe } from "./use-swipe";
 import { usePublishedFilesView } from "./published-files-context";
 import { IMAGE_RESET, imageGesture, zoomImage, type ImagePoint, type ImageTransform } from "./published-image-gesture";
 import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "./use-pwa-motion";
@@ -33,7 +34,7 @@ function PublishedImage({ url, name, onRetry, canRetry }: { url: string; name: s
   };
   const end = (event: PointerEvent<HTMLDivElement>) => { pointers.current.delete(event.pointerId); rebase(); };
   return <>
-    <div className="pwa-file-image-stage" onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
+    <div className="pwa-file-image-stage" data-swipe-ignore onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
       {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="subtle" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
     </div>
     <div className="pwa-file-zoom">
@@ -99,16 +100,29 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     if (document.querySelector('[role="dialog"][aria-modal="true"]:not(.pwa-file-reader)')) return;
     onClose();
   };
+  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
+  const [scroll, setScroll] = useState<HTMLDivElement | null>(null);
+  useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: requestClose });
+  useLayoutEffect(() => {
+    if (!scroll) return;
+    // 文件 Markdown 的原始围栏代码可能使正文自身横溢，不改变呈现来适配手势。
+    const measure = () => scroll.toggleAttribute("data-swipe-horizontal", scroll.scrollWidth > scroll.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroll);
+    if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
+    return () => observer.disconnect();
+  }, [scroll, preview, mobile]);
   return <Drawer.Root opened={opened} onClose={requestClose} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : 720} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration, exitDuration, timingFunction: "var(--pwa-overlay-ease)" }} style={pwaOverlayEase(opened)}>
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content classNames={{ content: "pwa-file-reader" }}>
+    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }}>
       <Drawer.Header className="pwa-file-reader-header">
         <Drawer.Title tabIndex={-1} data-autofocus title={name}>{name}</Drawer.Title>
         {state?.phase === "ready" && state.url ? <Button component="a" variant="subtle" href={state.url} download={fileSaveName(name)}>{t.files.save}</Button> : null}
         <Drawer.CloseButton className="pwa-icon-button" aria-label={t.files.closeReader} icon={<X size={20} />} />
       </Drawer.Header>
       <Drawer.Body className="pwa-file-reader-body">
-        {state?.phase === "ready" && state.preview?.kind === "image" && state.url ? <PublishedImage key={state.url} url={state.url} name={name} canRetry={files?.canFetch === true} onRetry={() => { void Promise.resolve().then(() => files?.retry?.(file, "view") ?? files?.open(file, "view")).catch(() => undefined); }} /> : preview ? <div className="pwa-file-reader-scroll"><FileTextContent text={preview.text} markdown={markdown} />{preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}</div> : state?.phase === "opening" || state?.phase === "reading" ? <p className="pwa-published-meta" role="status">{t.files.fetching}</p> : <p className="pwa-published-meta">{t.files.noPreview}</p>}
+        {state?.phase === "ready" && state.preview?.kind === "image" && state.url ? <PublishedImage key={state.url} url={state.url} name={name} canRetry={files?.canFetch === true} onRetry={() => { void Promise.resolve().then(() => files?.retry?.(file, "view") ?? files?.open(file, "view")).catch(() => undefined); }} /> : preview ? <div ref={setScroll} className="pwa-file-reader-scroll"><FileTextContent text={preview.text} markdown={markdown} />{preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}</div> : state?.phase === "opening" || state?.phase === "reading" ? <p className="pwa-published-meta" role="status">{t.files.fetching}</p> : <p className="pwa-published-meta">{t.files.noPreview}</p>}
       </Drawer.Body>
     </Drawer.Content>
   </Drawer.Root>;

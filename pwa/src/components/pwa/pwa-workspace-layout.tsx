@@ -8,6 +8,7 @@ import { PwaMobileNavigation } from "@/components/pwa/pwa-mobile-chrome";
 import { PwaRuntimeNoticeSlot } from "@/components/pwa/pwa-app-shell";
 import { WorkspaceTitleBar, type WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-bar";
 import { usePageTransition } from "@/components/pwa/use-page-transition";
+import { useSwipe } from "@/components/pwa/use-swipe";
 import type { SettingsOrigin, SettingsRoute } from "@/lib/pwa/settings-route";
 import { useI18n } from "@/lib/i18n";
 
@@ -27,6 +28,7 @@ type PwaWorkspaceLayoutProps = {
   operationNotifications?: ReactNode;
   settingsRoute: SettingsRoute;
   onOpenSettings: (origin: SettingsOrigin) => void;
+  onSettingsBack: () => void;
   /** 设置页内容；返回按钮文案由来源决定，故以函数接收。 */
   renderSettings: (props: { backLabel: string; titleRef: RefObject<HTMLHeadingElement | null> }) => ReactNode;
   overlays: ReactNode;
@@ -43,6 +45,7 @@ export function PwaWorkspaceLayout({
   operationNotifications,
   settingsRoute,
   onOpenSettings,
+  onSettingsBack,
   renderSettings,
   overlays,
   closeBackgroundOverlay,
@@ -52,6 +55,11 @@ export function PwaWorkspaceLayout({
   const noticesRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
+  const [settingsElement, setSettingsElement] = useState<HTMLDivElement | null>(null);
+  const setSettingsRef = useCallback((element: HTMLDivElement | null) => {
+    settingsRef.current = element;
+    setSettingsElement(element);
+  }, []);
   const settingsTitleRef = useRef<HTMLHeadingElement | null>(null);
   // 设置页在进入与返回转场期间保持挂载；返回转场结束后卸载。
   const [settingsMounted, setSettingsMounted] = useState(settingsRoute.open);
@@ -65,6 +73,22 @@ export function PwaWorkspaceLayout({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMounted, setSheetMounted] = useState(false);
   const [sheetFocusOrigin, setSheetFocusOrigin] = useState<HTMLElement | null>(null);
+  const [mainElement, setMainElement] = useState<HTMLElement | null>(null);
+  const openNavigation = useCallback((origin: HTMLElement | null) => {
+    setSheetFocusOrigin(origin);
+    setSheetMounted(true);
+    setSheetOpen(true);
+  }, []);
+  useSwipe(mainElement, {
+    direction: "right",
+    enabled: !settingsRoute.open && !transitioning && !sheetOpen,
+    onSwipe: () => openNavigation(mainElement?.querySelector<HTMLElement>(".pwa-session-trigger") ?? null),
+  });
+  useSwipe(settingsElement, {
+    direction: "right",
+    enabled: settingsRoute.open && !transitioning,
+    onSwipe: onSettingsBack,
+  });
   if (seenChange !== settingsRoute.change) {
     setSeenChange(settingsRoute.change);
     if (settingsRoute.open) setSettingsMounted(true);
@@ -174,8 +198,8 @@ export function PwaWorkspaceLayout({
       <ActionIcon ref={sidebarToggleRef} className="pwa-sidebar-toggle" type="button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="pwa-desktop-navigation" onPointerDown={(event) => { if (event.pointerType === "mouse") event.preventDefault(); }} onClick={toggleSidebar}>
         {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
       </ActionIcon>
-      <main className={`pwa-main${historyMode ? " pwa-history-main" : ""}`}>
-        <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={(origin) => { setSheetFocusOrigin(origin); setSheetMounted(true); setSheetOpen(true); }} />
+      <main ref={setMainElement} className={`pwa-main${historyMode ? " pwa-history-main" : ""}`}>
+        <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={openNavigation} />
         <div ref={noticesRef} className="pwa-main-notices">
           {historyMode ? null : connectionBanner}
           {toast}
@@ -187,7 +211,7 @@ export function PwaWorkspaceLayout({
     </div>
     {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} /> : null}
     </div>
-    {settingsMounted ? <div ref={settingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef })}</div> : null}
+    {settingsMounted ? <div ref={setSettingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef })}</div> : null}
     {overlays}
   </div>;
 }
