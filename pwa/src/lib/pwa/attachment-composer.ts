@@ -18,7 +18,7 @@ export type AttachmentUploadPort = {
   dispose(): void;
 };
 export type AttachmentComposerIssue = "too_many" | "too_large" | "total_too_large" | "invalid_file" |
-  "unsupported" | "failed" | "disconnected" | "scope_changed" | "send_failed";
+  "unsupported" | "failed" | "disconnected" | "send_failed";
 export type AttachmentDraftItem = {
   id: string;
   fileName: string;
@@ -107,7 +107,7 @@ export class AttachmentComposer {
     if (this.disposed) return;
     const key = attachmentTargetKey(scope);
     if (this.current && this.current.key !== key) {
-      this.stop(this.current, "scope_changed");
+      this.stop(this.current, true);
       this.current.client.disconnect();
     }
     let draft = this.drafts.get(key);
@@ -223,7 +223,7 @@ export class AttachmentComposer {
     const previous = draft.capability;
     // checking/断线不清除最后租约，恢复后仍须与它比对。
     if (capability.status === "supported" && previous.uploadScope && previous.uploadScope !== capability.uploadScope) {
-      this.stop(draft, "scope_changed");
+      this.stop(draft, true, draft.batch ? "send_failed" : undefined);
     }
     draft.capability = { ...capability, ...(capability.uploadScope ? {} : previous.uploadScope ? { uploadScope: previous.uploadScope } : {}) };
     if (capability.status === "unsupported") draft.issue = "unsupported";
@@ -273,7 +273,7 @@ export class AttachmentComposer {
         draft.capability.status !== "supported" || !draft.capability.uploadScope) return;
     if ([...draft.items.values()].some((item) => item.status !== "complete")) return;
     if ([...draft.items.values()].some((item) => item.uploadScope !== draft.capability.uploadScope)) {
-      this.stop(draft, "scope_changed");
+      this.stop(draft, true, "send_failed");
       this.options.onChange();
       return;
     }
@@ -320,13 +320,13 @@ export class AttachmentComposer {
     item.abort?.abort();
   }
 
-  private stop(draft: TargetDraft, issue?: AttachmentComposerIssue): void {
+  private stop(draft: TargetDraft, invalidateAttachments = false, issue?: AttachmentComposerIssue): void {
     draft.batch = undefined;
     draft.issue = issue;
     for (const item of draft.items.values()) {
       item.revision++;
       // 取消发送不是放弃原件：已完成（含恢复）的描述符仍可在同租约重发。
-      if (!issue && item.attachment) { item.status = "draft"; item.errorCode = undefined; continue; }
+      if (!invalidateAttachments && item.attachment) { item.status = "draft"; item.errorCode = undefined; continue; }
       this.discardItem(draft, item);
       item.uploadId = item.file ? crypto.randomUUID() : undefined;
       item.attachment = undefined;
@@ -340,7 +340,7 @@ export class AttachmentComposer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    for (const draft of this.drafts.values()) { this.stop(draft, "scope_changed"); draft.client.dispose(); }
+    for (const draft of this.drafts.values()) { this.stop(draft, true); draft.client.dispose(); }
     this.drafts.clear();
     this.current = null;
   }

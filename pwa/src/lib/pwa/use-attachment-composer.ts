@@ -91,7 +91,7 @@ export function useAttachmentComposer(onReady: (message: AttachmentReadyMessage)
   const notice = snapshot.committing ? t.committingNotice : snapshot.issue ? {
     too_many: t.tooMany, too_large: t.tooLarge, total_too_large: t.totalTooLarge, invalid_file: t.invalidFile,
     unsupported: t.upgrade, failed: t.failedNotice, disconnected: t.disconnectedNotice,
-    scope_changed: t.scopeChangedNotice, send_failed: t.sendFailedNotice,
+    send_failed: t.sendFailedNotice,
   }[snapshot.issue] : snapshot.capability.status === "unsupported" ? t.upgrade : null;
   const actions = useMemo(() => ({
     addFiles(files: readonly File[]) {
