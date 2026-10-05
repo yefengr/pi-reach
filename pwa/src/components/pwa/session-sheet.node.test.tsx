@@ -85,7 +85,7 @@ test("shows current computer, online Pi, and local history in the same navigatio
   expect(html).toContain("Online Pi");
   expect(html).toContain("Office Pi");
   expect(html).toContain("Local history");
-  expect(html).toContain("Saved in this browser only");
+  expect(html).toContain("This browser only");
   expect(html).toContain("Saved design review");
   expect(html).toContain('aria-current="true"');
   expect(html).not.toContain("OPEN");
