@@ -413,6 +413,8 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
   try {
     for (const theme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", theme);
+      // 旋转中 SVG 的包围盒会暂时变宽；等待最终姿态后再检查布局，不放宽几何容差。
+      await expect.poll(() => getComputedStyle(group.querySelector(".pwa-tool-chevron")!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
       const arrow = group.querySelector(".pwa-tool-chevron")!.getBoundingClientRect();
       const summary = group.querySelector(".pwa-tool-group-summary")!.getBoundingClientRect();
       expect(Math.round(arrow.left)).toBeGreaterThanOrEqual(Math.round(summary.right));
