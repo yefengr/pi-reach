@@ -84,6 +84,22 @@ test("thinking is independently collapsed and keyboard toggling leaves the answe
   await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
 });
 
+test("a thinking row is titled by its first bold heading and falls back to the localized label", async () => {
+  const titled: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text: "**Checking the group rules**\nInspecting the request." }, { type: "text", text: "The final answer." }] };
+  const screen = await renderMessageList([eventItem(titled)]);
+  await expect.element(screen.getByText("Checking the group rules")).toBeVisible();
+  await expect.element(screen.getByText("Thought process")).not.toBeInTheDocument();
+  expect(document.querySelector(".pwa-thinking-live")).toBeNull();
+});
+
+test("a streaming thinking row shows the latest heading with a live indicator", async () => {
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA.\n\n**Second step**\nB." };
+  const { screen } = await liveList([partialItem(thinking)]);
+  await expect.element(screen.getByText("Second step")).toBeVisible();
+  await expect.element(screen.getByText("First step")).not.toBeInTheDocument();
+  await expect.element(screen.getByRole("status").getByText("Thinking")).toBeVisible();
+});
+
 test("thinking, tool groups and reader merge their reading locks until the final reader exit", async () => {
   const reading: boolean[] = [];
   const second = eventItem({ ...toolEvent, event_id: "second", tool_call_id: "second" });
@@ -114,7 +130,8 @@ test("thinking, tool groups and reader merge their reading locks until the final
 test("streaming thinking starts collapsed and keeps a manual choice in the formal answer", async () => {
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "Inspecting the request." };
   const { screen, update } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByText("Thinking…")).toBeVisible();
+  await expect.element(screen.getByText("Thought process")).toBeVisible();
+  await expect.element(screen.getByRole("status").getByText("Thinking")).toBeVisible();
   await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
   const toggle = document.querySelector(".pwa-thinking .pwa-timeline-toggle");
@@ -346,8 +363,10 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
       }
       expect(Math.round(document.querySelector(".pwa-tool-action-copy strong")!.getBoundingClientRect().left)).toBe(replyLeft);
       const thinking = document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!;
-      expect(Math.round(thinking.querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().left)).toBe(replyLeft);
-      expect(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left)).toBe(replyLeft + 24);
+      // 思考与工具行一样：标题与 Pi 回复左缘对齐，折叠箭头在行右侧。
+      expect(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left)).toBe(replyLeft);
+      expect(Math.round(thinking.querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(thinking.getBoundingClientRect().right));
+      expect(Math.round(thinking.querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().left)).toBeGreaterThan(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().right) - 1);
       for (const card of document.querySelectorAll(".pwa-tool-card")) {
         expect(getComputedStyle(card).borderTopWidth).toBe("0px");
         expect(getComputedStyle(card).backgroundColor).toBe("rgba(0, 0, 0, 0)");
@@ -357,7 +376,11 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
       await expect.element(screen.getByText("Hidden error details")).not.toBeInTheDocument();
     }
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
-    expect(Math.round(document.querySelector(".pwa-thinking .pwa-text-plain")!.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left));
+    // 展开内容不整块缩进：左侧 2px 竖线（与引用同色）加 12px 内边距，竖线贴齐标题左缘。
+    const quote = document.querySelector<HTMLElement>(".pwa-thinking .pwa-long-text")!;
+    expect(Math.round(quote.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left));
+    expect(getComputedStyle(quote).borderLeftWidth).toBe("2px");
+    expect(Math.round(document.querySelector(".pwa-thinking .pwa-text-plain")!.getBoundingClientRect().left)).toBe(Math.round(quote.getBoundingClientRect().left) + 14);
     await expect.poll(() => getComputedStyle(document.querySelector(".pwa-thinking .pwa-timeline-chevron")!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
   } finally {
     if (originalTheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalTheme);
@@ -383,13 +406,18 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
   group.focus();
   await userEvent.keyboard("{Enter}");
   await expect.poll(() => document.querySelectorAll(".pwa-tool-group .pwa-tool-card").length).toBe(calls.length);
+  // 展开的子项不整块缩进：左侧 2px 竖线（与引用同色）加 12px 内边距，与思考展开内容同一规则。
+  const detailsInner = document.querySelector<HTMLElement>(".pwa-tool-group-details > .pwa-collapse-inner")!;
+  expect(getComputedStyle(detailsInner).borderLeftWidth).toBe("2px");
+  await expect.poll(() => Math.round(detailsInner.getBoundingClientRect().left)).toBe(Math.round(group.getBoundingClientRect().left));
   try {
     for (const theme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", theme);
       const arrow = group.querySelector(".pwa-tool-chevron")!.getBoundingClientRect();
       const summary = group.querySelector(".pwa-tool-group-summary")!.getBoundingClientRect();
       expect(Math.round(arrow.left)).toBeGreaterThanOrEqual(Math.round(summary.right));
-      expect(Math.round(arrow.right)).toBe(Math.round(group.getBoundingClientRect().right) - 6);
+      // 亚像素取整可能相差 1px。
+      expect(Math.abs(Math.round(arrow.right) - (Math.round(group.getBoundingClientRect().right) - 6))).toBeLessThanOrEqual(1);
       expect(group.querySelector("[role='status']")).toBeNull();
       expect(document.querySelectorAll(".pwa-tool-group .pwa-tool-status-complete")).toHaveLength(calls.length);
       const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
