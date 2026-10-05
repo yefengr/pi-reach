@@ -1966,7 +1966,7 @@ test("opens pairing above mobile navigation and restores focus after Escape", as
   }
 });
 
-test("preserves the session, draft, attachment, tool state and reader across layout breakpoints", async () => {
+test("preserves the session, draft, attachment, tool row and reader across layout breakpoints", async () => {
   const { channel, list, screen, scrollTo } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const relay = relayHarness.instances[0];
@@ -1995,9 +1995,9 @@ test("preserves the session, draft, attachment, tool state and reader across lay
       group_id: "layout-group", kind: "tool", tool_call_id: "layout-tool", tool: "read", args: { path: "README.md" },
       truncated: false, status: "complete", result: Array.from({ length: 45 }, (_, index) => `Reading line ${index + 1}`).join("\n"),
     } });
-    await screen.getByRole("button", { name: "Expand read tool" }).click();
-    const expandedTool = screen.getByRole("button", { name: "Collapse read tool" }).element();
-    await expect.element(screen.getByRole("button", { name: /^View all/ })).toBeVisible();
+    const toolRow = screen.getByRole("button", { name: "View read tool details" });
+    await expect.element(toolRow).toBeVisible();
+    const toolRowElement = toolRow.element();
     const subscriptions = relay.subscriptions.length;
     const frames = channel.frames.length;
     const assertSessionUnchanged = () => {
@@ -2019,11 +2019,11 @@ test("preserves the session, draft, attachment, tool state and reader across lay
       await page.viewport(width, 900);
       await expect.element(input).toHaveValue("Keep this draft across layouts");
       expect(image.element().getAttribute("src")).toBe(imageUrl);
-      expect(screen.getByRole("button", { name: "Collapse read tool" }).element()).toBe(expandedTool);
+      expect(screen.getByRole("button", { name: "View read tool details" }).element()).toBe(toolRowElement);
       await expect.element(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
       assertSessionUnchanged();
     }
-    await screen.getByRole("button", { name: /^View all/ }).click();
+    await screen.getByRole("button", { name: "View read tool details" }).click();
     const reader = screen.getByRole("dialog").element();
     for (const width of [390, 1280]) {
       await page.viewport(width, 900);
@@ -2032,7 +2032,7 @@ test("preserves the session, draft, attachment, tool state and reader across lay
     }
     await screen.getByRole("button", { name: "Close tool details" }).click();
     await expect.element(page.elementLocator(reader)).not.toBeInTheDocument();
-    await expect.element(screen.getByRole("button", { name: /^View all/ })).toHaveFocus();
+    await expect.element(screen.getByRole("button", { name: "View read tool details" })).toHaveFocus();
     assertSessionUnchanged();
   } finally {
     await screen.unmount();
