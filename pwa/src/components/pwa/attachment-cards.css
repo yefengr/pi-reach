@@ -15,5 +15,6 @@
 .pwa-attachment-actions button { flex: 0 0 44px; width: 44px; height: 44px; }
 .pwa-attachment-ready { margin-inline: 12px; color: var(--pwa-complete); }
 .pwa-ui-scope .pwa-attachment-toggle { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 8px; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); font-size: var(--pwa-text-meta); }
-.pwa-ui-scope .pwa-attachment-toggle:hover { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-attachment-toggle:hover { background: var(--pwa-hover); } }
+.pwa-ui-scope .pwa-attachment-toggle:active { background: var(--pwa-hover); }
 @media (max-width: 767.98px) { .pwa-attachment-list { grid-template-columns: minmax(0, 1fr); } }
