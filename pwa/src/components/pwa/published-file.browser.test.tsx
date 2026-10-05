@@ -237,8 +237,8 @@ test("reader pins through exit, releases reading lock, returns focus, and Escape
   await userEvent.keyboard("{Escape}");
   expect(h.unpin.mock.calls.length).toBe(unpins);
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
-  expect(h.unpin.mock.calls.length).toBe(unpins + 1);
-  expect(h.reading).toHaveBeenLastCalledWith(false);
+  await expect.poll(() => h.unpin.mock.calls.length).toBe(unpins + 1);
+  await expect.poll(() => h.reading.mock.lastCall?.[0]).toBe(false);
   expect(document.activeElement).toBe(trigger.element());
   expect(h.cancel).not.toHaveBeenCalled();
   await h.screen.unmount();
@@ -273,8 +273,9 @@ test.each(["scope", "provider"] as const)("reused nonempty timeline destroys the
   expect(oldDialog.isConnected).toBe(false);
   expect(document.querySelector(".pwa-scrim")).toBeNull();
   await expect.poll(() => document.body.hasAttribute("data-scroll-locked"), { timeout: 5000 }).toBe(false);
+  await expect.poll(() => h.unpin.mock.calls.length).toBe(1);
   expect(h.unpin).toHaveBeenCalledExactlyOnceWith("publication");
-  expect(h.reading).toHaveBeenLastCalledWith(false);
+  await expect.poll(() => h.reading.mock.lastCall?.[0]).toBe(false);
   await expect.poll(() => window.history.state?.piReachFileReader, { timeout: 5000 }).toBeUndefined();
   expect(removedListener.mock.calls.some(([type]) => String(type) === "popstate")).toBe(true);
   expect(focus).not.toHaveBeenCalled();
@@ -294,7 +295,7 @@ test.each(["scope", "provider"] as const)("reused nonempty timeline destroys the
     expect(h.unpin).toHaveBeenCalledTimes(1);
     await h.screen.getByRole("button", { name: "Close file reader" }).click();
     await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
-    expect(h.unpin).toHaveBeenCalledTimes(2);
+    await expect.poll(() => h.unpin.mock.calls.length).toBe(2);
   }
   focus.mockRestore(); listFocus.mockRestore(); removedListener.mockRestore();
   await h.screen.unmount();
@@ -319,7 +320,7 @@ test("same scope keeps the reader and lock across item replacement, missing stat
   expect(window.history.state.piReachFileReader).toBe(marker);
   await h.screen.getByRole("button", { name: "Close file reader" }).click();
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
-  expect(h.reading).toHaveBeenLastCalledWith(false);
+  await expect.poll(() => h.reading.mock.lastCall?.[0]).toBe(false);
   await h.screen.unmount();
 });
 
@@ -347,7 +348,7 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   await expect.poll(() => stage.querySelector("img")?.style.transform).toBe("translate(0px, 0px) scale(1)");
   await h.screen.getByRole("button", { name: "Close file reader" }).click();
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
-  expect(h.unpin).toHaveBeenCalledTimes(2);
+  await expect.poll(() => h.unpin.mock.calls.length).toBe(2);
   expect(h.open).not.toHaveBeenCalled();
   await h.screen.unmount();
 });
@@ -383,6 +384,6 @@ test("publishing during a run is visible immediately, singleton reader survives 
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
   expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
   expect(document.activeElement?.tagName).not.toBe("TEXTAREA");
-  expect(h.unpin).toHaveBeenCalledTimes(1);
+  await expect.poll(() => h.unpin.mock.calls.length).toBe(1);
   await h.screen.unmount();
 });
