@@ -12,8 +12,9 @@
 .pwa-root .pwa-tool-status { min-width: 0; display: inline-flex; align-items: center; gap: 4px; color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
 .pwa-root .pwa-tool-status-running { color: var(--pwa-running); }
 .pwa-root .pwa-tool-status-complete { color: var(--pwa-complete); }
-.pwa-root .pwa-tool-status-error, .pwa-root .pwa-tool-status-interrupted { color: var(--pwa-error); }
-.pwa-root .pwa-tool-status-unknown { color: var(--pwa-secondary); }
+.pwa-root .pwa-tool-status-error { color: var(--pwa-error); }
+/* 中断是用户主动停止，与未知状态同用中性色，不与失败混淆。 */
+.pwa-root .pwa-tool-status-interrupted, .pwa-root .pwa-tool-status-unknown { color: var(--pwa-secondary); }
 .pwa-root .pwa-tool-status > svg { flex-shrink: 0; }
 .pwa-root .pwa-tool-status-running > svg { animation: pwa-tool-reader-spin 1.2s linear infinite; }
 .pwa-root .pwa-tool-details .pwa-collapse-inner { padding-bottom: 4px; }
@@ -57,7 +58,9 @@
 .pwa-root .pwa-tool-text-notice,
 .pwa-root .pwa-tool-empty,
 .pwa-root .pwa-tool-live-note { margin: 0; color: var(--pwa-secondary); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); overflow-wrap: anywhere; white-space: normal; }
+/* 主机真实截断需要关注，用运行色；预览只是界面缩短、展开可见全部，用中性色。 */
 .pwa-root .pwa-tool-notice { margin: 4px 0 0; color: var(--pwa-running); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-root .pwa-tool-notice-preview { color: var(--pwa-secondary); }
 .pwa-root .pwa-tool-output-image { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; object-position: left top; border-radius: var(--pwa-radius-xs); background: var(--pwa-panel); }
 .pwa-root .pwa-image-omitted { margin: 0; color: var(--pwa-secondary); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); overflow-wrap: anywhere; }
 

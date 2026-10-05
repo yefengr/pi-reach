@@ -77,11 +77,25 @@ test("group heading retains collapse semantics with a trailing chevron and no gr
   expect(html).not.toContain("lucide-check");
 });
 
-test.each([[en, "1 failed", "2 failed"], [zh, "1 项失败", "2 项失败"]] as const)("group summary appends the failure count only when tools failed or were interrupted", (messages, one, two) => {
-  const read = { ...base, tool: "read", args: { path: "a.ts" }, status: "complete" as const, result: "ok" };
-  const failed = { ...base, tool: "bash", args: { command: "pnpm test" }, status: "error" as const, error: "failed" };
-  const interrupted = { ...base, tool: "bash", args: { command: "pnpm test" }, status: "interrupted" as const };
-  expect(toolGroupSummary([read, read], messages.tools)).not.toMatch(/失败|failed/);
-  expect(toolGroupSummary([read, failed], messages.tools).endsWith(` · ${one}`)).toBe(true);
-  expect(toolGroupSummary([read, failed, interrupted], messages.tools).endsWith(` · ${two}`)).toBe(true);
+const groupRead = { ...base, tool: "read", args: { path: "a.ts" }, status: "complete" as const, result: "ok" };
+const groupFailed = { ...base, tool: "bash", args: { command: "pnpm test" }, status: "error" as const, error: "failed" };
+const groupInterrupted = { ...base, tool: "bash", args: { command: "pnpm test" }, status: "interrupted" as const };
+
+test.each([[en, "1 failed", "2 failed", "1 interrupted"], [zh, "1 项失败", "2 项失败", "1 项已中断"]] as const)("group summary counts failures and interruptions separately", (messages, one, two, interrupted) => {
+  expect(toolGroupSummary([groupRead, groupRead], messages.tools)).not.toMatch(/失败|中断|failed|interrupted/);
+  expect(toolGroupSummary([groupRead, groupFailed], messages.tools).endsWith(` · ${one}`)).toBe(true);
+  expect(toolGroupSummary([groupRead, groupFailed, groupFailed], messages.tools).endsWith(` · ${two}`)).toBe(true);
+  expect(toolGroupSummary([groupRead, groupInterrupted], messages.tools).endsWith(` · ${interrupted}`)).toBe(true);
+  expect(toolGroupSummary([groupRead, groupInterrupted], messages.tools)).not.toMatch(/失败|failed/);
+  expect(toolGroupSummary([groupRead, groupFailed, groupInterrupted], messages.tools).endsWith(` · ${one} · ${interrupted}`)).toBe(true);
+});
+
+test("interrupted tools use a stop icon and only failures raise the group alert", () => {
+  const interrupted = renderCard(<ToolCard value={fixtures.interrupted} onRead={() => {}} />);
+  expect(interrupted).toContain("lucide-circle-stop");
+  expect(interrupted).not.toContain("lucide-circle-alert");
+  expect(renderCard(<ToolCard value={fixtures.error} onRead={() => {}} />)).toContain("lucide-circle-alert");
+  const group = (values: ToolValue[]) => renderCard(<ToolGroupCard values={values} expanded={false} onExpandedChange={() => {}}>{null}</ToolGroupCard>);
+  expect(group([groupRead, groupInterrupted])).not.toContain("pwa-tool-group-alert");
+  expect(group([groupRead, groupFailed, groupInterrupted])).toContain("pwa-tool-group-alert");
 });

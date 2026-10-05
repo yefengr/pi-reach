@@ -11,6 +11,8 @@ export type QueuedMessageView = {
   attachments?: readonly AttachmentDescriptor[];
   status: string;
   notice?: string;
+  /** 需要用户关注（如插入未确认）：状态与说明用运行色，普通排队保持中性。 */
+  attention?: boolean;
   dismissible?: boolean;
   canManage: boolean;
   busy?: boolean;
@@ -43,7 +45,7 @@ export function QueuedMessages({ items, isOnline, onInsert, onCancel, onDismissN
       {items.map((item, index) => {
         const disabled = !isOnline || !item.canManage || item.busy === true;
         const description = queuedMessageDescription(item, index, q);
-        return <article className="pwa-queued-message" key={item.id} title={item.text || undefined}>
+        return <article className="pwa-queued-message" key={item.id} title={item.text || undefined} data-attention={item.attention ? "" : undefined}>
           {item.images?.length ? <div className="pwa-queued-message-images">
             {item.images.map((image, imageIndex) => <img key={`${item.id}-${imageIndex}`} src={`data:${image.mime};base64,${image.data}`} alt={q.imageAlt(index + 1, imageIndex + 1)} />)}
           </div> : null}

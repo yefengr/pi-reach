@@ -26,7 +26,7 @@ export function ToolOutput({ value, preview = false, onContentSizeChange }: Tool
     <div className="pwa-tool-output-blocks">
       {blocks.map((block, index) => <ContentBlock key={`${block.kind}:${index}`} block={block} index={index} preview={preview} onContentSizeChange={onContentSizeChange} />)}
     </div>
-    {clipped ? <p className="pwa-tool-notice">{t.tools.previewShortened}</p> : null}
+    {clipped ? <p className="pwa-tool-notice pwa-tool-notice-preview">{t.tools.previewShortened}</p> : null}
     {!preview && toolWasTruncated(value) ? <p className="pwa-tool-notice">{t.tools.truncatedByHost}</p> : null}
   </div>;
 }

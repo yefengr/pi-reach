@@ -64,7 +64,7 @@ export function QueuedMessagesPanel({ items, isOnline, runtimeRef, channelRef, a
           : item.delivery === "unknown_delivery" ? q.waitingReconnect
             : item.queuedAction === "cancel" ? q.cancelling
               : item.cancelable ? q.queued : q.sending,
-      ...(item.insertionStatus === "unconfirmed" ? { notice: q.unconfirmedNotice, dismissible: true } : {}),
+      ...(item.insertionStatus === "unconfirmed" ? { notice: q.unconfirmedNotice, attention: true, dismissible: true } : {}),
       canManage: item.insertionStatus === undefined && item.cancelable === true && item.delivery !== "unknown_delivery",
       busy: item.queuedAction !== undefined || item.insertionStatus !== undefined,
     }))}

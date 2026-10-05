@@ -103,6 +103,11 @@
   overflow-wrap: anywhere;
 }
 
+.pwa-queued-message[data-attention] .pwa-queued-message-status,
+.pwa-queued-message[data-attention] .pwa-queued-message-notice {
+  color: var(--pwa-running);
+}
+
 .pwa-queued-message-images {
   flex: 0 0 auto;
   display: flex;

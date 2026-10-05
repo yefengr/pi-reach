@@ -379,6 +379,7 @@ export const zh: Messages = {
     groupWrite: (count) => `写入 ${count} 个文件`,
     groupGeneric: (count) => `调用 ${count} 次工具`,
     groupFailed: (count) => `${count} 项失败`,
+    groupInterrupted: (count) => `${count} 项已中断`,
     groupToggle: (expanded, summary) => `${expanded ? "收起" : "展开"}：${summary}`,
     groupStatus: (count) => `${count} 个工具已完成`,
     useTool: (tool) => (tool ? `使用 ${tool} 工具` : "使用工具"),

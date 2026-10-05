@@ -357,6 +357,7 @@ test("decode error never loops and retry is explicitly manual", async () => {
   const h = await harness({ file: image, initial: { phase: "ready", receivedBytes: 100, preview: imagePreview, url: blobUrl(new Blob(["not an image"])) } });
   visibility(true);
   await expect.element(h.screen.getByText("Couldn't display the image. Retry manually.").last()).toBeVisible();
+  for (const message of h.screen.getByText("Couldn't display the image. Retry manually.").elements()) expect(message.classList.contains("pwa-published-error")).toBe(true);
   expect(document.querySelector(".pwa-published-image")).toBeNull();
   visibility(false); visibility(true); h.update();
   expect(h.open).not.toHaveBeenCalled();

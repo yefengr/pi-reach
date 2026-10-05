@@ -34,7 +34,7 @@ function PublishedImage({ url, name, onRetry, canRetry }: { url: string; name: s
   const end = (event: PointerEvent<HTMLDivElement>) => { pointers.current.delete(event.pointerId); rebase(); };
   return <>
     <div className="pwa-file-image-stage" onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
-      {failed ? <div role="alert"><p>{t.files.decodeError}</p><Button variant="subtle" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
+      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="subtle" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
     </div>
     <div className="pwa-file-zoom">
       <ActionIcon variant="subtle" aria-label={t.files.zoomOut} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale / 1.5))}><Minus size={20} /></ActionIcon>
