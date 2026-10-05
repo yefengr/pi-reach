@@ -11,8 +11,14 @@ const SCRIPT = join(REPO_ROOT, 'scripts', 'extension-github-release.sh');
 const REPOSITORY = 'example/pi-reach';
 
 // curl 与 gh 的替身：记录调用；gh release create 时一并记下说明文件内容，便于断言 Release 文本。
+// FAKE_NPM_STATUS_MAP 按版本覆盖 npm 状态，如 "0.0.2=404"；其余版本返回 FAKE_NPM_STATUS。
 const FAKE_CURL = `#!/usr/bin/env bash
 printf 'curl %s\\n' "$*" >> "$FAKE_LOG"
+url="\${@: -1}"
+version="\${url##*/}"
+for pair in $FAKE_NPM_STATUS_MAP; do
+  if [ "\${pair%%=*}" = "$version" ]; then printf '%s' "\${pair#*=}"; exit 0; fi
+done
 printf '%s' "$FAKE_NPM_STATUS"
 `;
 const FAKE_GH = String.raw`#!/usr/bin/env node
@@ -86,7 +92,7 @@ function createFixture() {
   return { root, repo, v2, v3 };
 }
 
-function run(fixture, args, { npmStatus = '200', releaseExists = false } = {}) {
+function run(fixture, args, { npmStatus = '200', npmStatusMap = '', releaseExists = false } = {}) {
   const log = join(fixture.root, 'calls.log');
   const summary = join(fixture.root, 'summary.md');
   rmSync(log, { force: true });
@@ -98,6 +104,7 @@ function run(fixture, args, { npmStatus = '200', releaseExists = false } = {}) {
       PATH: `${join(fixture.root, 'bin')}:${process.env.PATH}`,
       FAKE_LOG: log,
       FAKE_NPM_STATUS: npmStatus,
+      FAKE_NPM_STATUS_MAP: npmStatusMap,
       FAKE_RELEASE_EXISTS: releaseExists ? '1' : '',
       GITHUB_REPOSITORY: REPOSITORY,
       GITHUB_STEP_SUMMARY: summary,
@@ -163,7 +170,8 @@ test('release：当前版本已上线时基于已有标签创建 Latest Release�
   tagV3(fixture);
   const { result, curl, gh } = run(fixture, ['release']);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(curl.length, 1);
+  // 先确认当前版本已上线，再确认起点标签 0.0.2 已上线。
+  assert.deepEqual(curl.map((line) => line.split('/').at(-1)), ['0.0.3', '0.0.2']);
   assert.ok(curl[0].includes('https://registry.npmjs.org/@yefengr%2fpi-reach/0.0.3'));
   assert.deepEqual(gh.map((call) => call.args.slice(0, 2)), [['release', 'view'], ['release', 'create']]);
   const release = gh[1];
@@ -192,6 +200,22 @@ test('release：补建历史版本时不标记 Latest，并去掉输入的首尾
   assert.ok(release.args.includes('--latest=false'));
   // 与其他组件无关的提交不进入说明。
   assert.ok(release.notes.endsWith('## 变更\n\n- feat(protocol): 新增事件\n- fix: 修复扩展重连\n'));
+}));
+
+test('release：跳过未获批准的版本标签，从上一个已上线版本列出变更', () => withFixture((fixture) => {
+  tagV3(fixture);
+  const { result, curl, gh } = run(fixture, ['release'], { npmStatusMap: '0.0.2=404' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(curl.map((line) => line.split('/').at(-1)), ['0.0.3', '0.0.2', '0.0.1']);
+  assert.ok(gh.at(-1).notes.endsWith('## 变更\n\n- docs: 更新扩展描述\n- feat(protocol): 新增事件\n- fix: 修复扩展重连\n'));
+}));
+
+test('release：无法确认起点标签是否上线时失败，不创建 Release', () => withFixture((fixture) => {
+  tagV3(fixture);
+  const { result, gh } = run(fixture, ['release'], { npmStatusMap: '0.0.2=503' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /无法确认 extension-v0\.0\.2 是否已在 npm 上线（HTTP 503）/);
+  assert.ok(gh.every((call) => call.args[1] === 'view'));
 }));
 
 test('release：Release 已存在时跳过，不查询 npm', () => withFixture((fixture) => {

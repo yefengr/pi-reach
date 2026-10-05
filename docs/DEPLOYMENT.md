@@ -426,7 +426,7 @@ npm view @yefengr/pi-reach version
 
 - PWA 与 Relay 在部署并核对后打标签。Extension 在提交 npm 待审时打标签，上线后才创建 Release，因此有标签而没有 Release 的 Extension 版本表示仍在待审或未获批准。同一提交可以同时带多个组件的标签。
 - Extension 的标签不能等到上线后再打：工作流的 `GITHUB_TOKEN` 没有 `workflows` 权限，目标提交的 `.github/workflows` 与 `main` 最新提交不一致时，GitHub 拒绝创建标签（HTTP 403 `Resource not accessible by integration`）。提交待审时本次提交仍是最新提交；待审期间若有其他改动工作流的提交合入，该步骤会失败，需手工打标签。
-- Extension GitHub Release 工作流每 30 分钟检查一次，也可在 Actions 页面手动运行。npm 上已有当前版本而 Release 缺失时，基于已有标签创建 Release 并标记 Latest；尚未批准时跳过，下次再查；已上线但缺少标签时失败。Release 说明包含 npm 链接，以及自上一个 `extension-v*` 标签以来涉及 `pi-extension/` 或 `packages/protocol/` 的非发布提交。手动运行时可填写历史版本补建，补建的 Release 不标记 Latest。
+- Extension GitHub Release 工作流每 30 分钟检查一次，也可在 Actions 页面手动运行。npm 上已有当前版本而 Release 缺失时，基于已有标签创建 Release 并标记 Latest；尚未批准时跳过，下次再查；已上线但缺少标签时失败。Release 说明包含 npm 链接，以及自上一个已在 npm 上线的 `extension-v*` 版本以来涉及 `pi-extension/` 或 `packages/protocol/` 的非发布提交；未获批准版本的标签不作为起点。手动运行时可填写历史版本补建，补建的 Release 不标记 Latest。
 - 缺少 Extension 标签时，由维护者用具备 `workflow` 权限的账号执行下方第一行命令打标签（`<commit>` 为 `pi-extension/package.json` 版本号变为该版本的提交），再手动运行 Extension GitHub Release 工作流创建 Release。
 - 仓库 60 天没有活动时，GitHub 会停用定时工作流，需在 Actions 页面重新启用。
 - Release 说明写该组件的变更与发布去向（npm 版本，或线上地址与镜像标签）。Extension 的 Release 标记为 Latest，其余不标记。

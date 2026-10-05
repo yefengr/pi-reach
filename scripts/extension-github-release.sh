@@ -42,9 +42,27 @@ npm_status() {
   curl -sS --retry 3 --max-time 30 -o /dev/null -w '%{http_code}' "$registry/${package_name/\//%2f}/$1" || true
 }
 
+# 返回提交之前最近一个已在 npm 上线的版本标签。标签在提交待审时创建，未获批准的版本也有标签；
+# 以它为起点会漏掉用户从未收到的改动，所以按版本从高到低跳过 npm 上不存在的标签。
+previous_published_tag() {
+  local commit="$1" candidate status
+  while read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    status="$(npm_status "${candidate#extension-v}")"
+    case "$status" in
+      200)
+        printf '%s' "$candidate"
+        return
+        ;;
+      404) ;;
+      *) fail "无法确认 $candidate 是否已在 npm 上线（HTTP ${status:-无响应}）" ;;
+    esac
+  done < <(git tag --merged "$commit^" --list 'extension-v*' --sort=-version:refname 2>/dev/null || true)
+}
+
 write_notes() {
   local version="$1" commit="$2" file="$3" previous changes
-  previous="$(git describe --tags --abbrev=0 --match 'extension-v*' "$commit^" 2>/dev/null || true)"
+  previous="$(previous_published_tag "$commit")"
   changes="$(git log --no-merges --format='- %s' "${previous:+$previous..}$commit" -- "${change_paths[@]}" \
     | grep -vE '^- chore(\(release\))?: 发布' || true)"
   {
