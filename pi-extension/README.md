@@ -1,62 +1,73 @@
-<h1 align="center">Pi Reach</h1>
+# Pi Reach
 
-> A Pi Extension for controlling the current Pi process from the browser through a Relay.
+Control your running Pi coding agent from your phone or any browser.
 
-`/pi-reach` connects the current Pi process to a Relay, supports Owner pairing, and exposes the live timeline plus typed session actions to the Pi Reach PWA.
+When you step away from your computer, Pi Reach lets you follow Pi's live responses and tool calls, send another prompt or a file, and stop the current task. Pi keeps running on your computer; the browser is its remote interface.
 
-## Endpoint model
+![Pi Reach desktop workspace with multiple online Pi sessions and a live conversation](https://raw.githubusercontent.com/yefengr/pi-reach/main/docs/assets/screenshot-desktop-en.png)
 
-```text
-device -> endpoint -> runtime -> session / history generation
-```
+## Features
 
-- **Device**: the computer's Ed25519 identity.
-- **Endpoint and runtime**: generated randomly when a Pi process loads the Extension. They remain stable across Extension reloads in that process and are regenerated for the next Pi process.
-- **Session / generation**: the active Pi conversation and its current history branch. Pi Reach does not list or resume historical sessions.
+- **Pair without an account**: scan a QR code or enter an 8-character pairing code. Pair each computer once; later Pi processes on that computer appear automatically.
+- **Switch between computers and Pi sessions**: connect to multiple computers and choose among the Pi processes currently running on each one.
+- **Follow and control a live conversation**: stream responses and tool calls, send prompts and file attachments, or stop the current task. Attachments reach your computer as original files for Pi to read; image previews do not automatically become model vision input.
+- **Manage the current session**: start a new conversation, compact context, or change the model and thinking level.
+- **Use an installable PWA**: add the browser app to your home screen, choose light or dark mode, and use English or Chinese. Previously received conversations remain available for read-only viewing in that browser while offline.
 
-The endpoint never derives from the working directory. Pairing QR codes target the current endpoint and runtime, while the resulting Owner authorization is stored at device scope. Later Pi processes on that computer are discovered without pairing again.
+![Pi Reach mobile conversation with tool activity and the message composer](https://raw.githubusercontent.com/yefengr/pi-reach/main/docs/assets/screenshot-mobile-en.png)
 
 ## Quick start
 
-Install the Extension once:
+1. Install the Extension:
 
-```bash
-pi install npm:@yefengr/pi-reach
-```
+   ```bash
+   pi install npm:@yefengr/pi-reach
+   ```
 
-Open Pi in the project you want to control. When the session starts, the Extension automatically connects to the configured Relay. Pair the browser device from Pi:
+2. Open Pi in the project you want to control. The Extension automatically connects to the configured Relay when the session starts.
+3. Open the public [Pi Reach PWA](https://pi-reach.yefengr.cn/app) on your phone or another browser.
+4. Run this command in Pi, then scan the terminal QR code from the PWA or enter the 8-character pairing code:
 
-```text
-/pi-reach pair
-```
+   ```text
+   /pi-reach pair
+   ```
 
-Open the public [Pi Reach PWA](https://pi-reach.yefengr.cn/app) on your phone or another browser, scan the QR code or type the 8-character pairing code, then pick an online Pi and send a prompt. Each computer only needs to be paired once, and pairings are local to the computer that creates them:
+5. Pick an online Pi in the PWA and send your first prompt.
 
-```text
-/pi-reach devices
-/pi-reach revoke <shortid>
-```
+Each computer only needs to be paired once. Pairings apply to the computer that creates them, not to every computer you use.
 
-The public PWA and the default Relay are run by the maintainer. For sensitive work, self-host both; see [Self-hosting](../README.en.md#self-hosting) and [Pairing and security](#pairing-and-security).
+The public PWA and the default Relay are run by the maintainer. For sensitive work, [self-host the PWA and Relay](https://github.com/yefengr/pi-reach/blob/main/README.en.md#self-hosting).
+
+## Security and limits
+
+**Pi Reach has no application-layer end-to-end encryption. The Relay is fully trusted.** TLS protects transport, but the Relay operator can read conversation content, including code, commands, and output. The operator could also impersonate a paired browser and send prompts that Pi executes on your computer. Use a Relay you control for sensitive work.
+
+- Pi must already be running with the Extension loaded. Pi Reach cannot remotely start, wake, or keep Pi running in the background.
+- Browser history is a local, read-only cache of received conversations, not a cloud backup or a way to browse and resume old Pi sessions on your computer.
+- Sending prompts and files requires a live connection. There is no offline send queue or push notifications, and phone lock-screen connectivity is not guaranteed.
+- Browser identity, pairings, and received history stay in that browser's local storage. Clearing site data removes them and requires pairing again. There are no cloud accounts or cross-browser history synchronization.
+- Revoke browsers you no longer use from Pi with `/pi-reach revoke <shortid>`; list them with `/pi-reach devices`.
+
+Report vulnerabilities through GitHub's [private vulnerability reporting](https://github.com/yefengr/pi-reach/security/advisories/new); see the [security policy](https://github.com/yefengr/pi-reach/blob/main/SECURITY.md).
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `/pi-reach` | Connect the current Pi endpoint after it was stopped |
-| `/pi-reach start` / `/pi-reach stop` | Connect or disconnect this endpoint |
-| `/pi-reach status` | Show Relay, endpoint, runtime, and Owner state |
-| `/pi-reach pair` | Show an endpoint-aware pairing QR |
-| `/pi-reach devices` | List locally paired Owners |
-| `/pi-reach revoke <shortid>` | Revoke one locally stored Owner |
-| `/pi-reach set-relay <url>` | Persist the Relay URL |
+| `/pi-reach` | Reconnect this Pi after `/pi-reach stop` |
+| `/pi-reach start` / `/pi-reach stop` | Connect or disconnect this Pi |
+| `/pi-reach status` | Show Relay, endpoint, runtime, and paired-browser state |
+| `/pi-reach pair` | Show a pairing QR code and pairing code for this Pi |
+| `/pi-reach devices` | List browsers paired with this computer |
+| `/pi-reach revoke <shortid>` | Revoke a browser's pairing on this computer |
+| `/pi-reach set-relay <url>` | Save the Relay URL |
 | `/pi-reach config` | Show the resolved Relay URL |
-
-The Extension handles remote `session_new` requests in-process through Pi's session API. There is no standalone `pi-reach` CLI, background process, scheduler, or service installation command.
 
 ## Relay configuration
 
-The effective Relay URL resolves in this order:
+Pi and the PWA must use the same Relay. The pairing QR code does not carry a Relay address.
+
+The Extension resolves its Relay URL in this order:
 
 1. `PI_REACH_RELAY`
 2. `~/.pi/pi-reach/config.json`
@@ -69,27 +80,30 @@ Set and inspect it from Pi:
 /pi-reach config
 ```
 
-Only `http://` and `https://` are accepted at the command boundary; WebSocket conversion happens inside the Extension. The Relay forwards opaque payloads and retains endpoint routing state in memory.
+In the PWA, set the same URL under **Settings → Connection → Relay URL**. Use `https://` for a deployed Relay; `http://` is accepted for local development. The Extension converts the URL to WebSocket form internally. The Relay retains routing state in memory and does not persist conversations.
 
-## Pairing and security
+## Endpoint model and local state
 
-- There is no application-layer end-to-end encryption, so the Relay is fully trusted. Its operator can read every conversation and, because Owner identity comes only from the Relay-injected `source_owner_id`, could impersonate a paired browser and send prompts that Pi executes on your computer.
-- Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/yefengr/pi-reach/security/advisories/new); see the [security policy](https://github.com/yefengr/pi-reach/blob/main/SECURITY.md).
-- `device_id` is the Host Ed25519 public key in canonical Base64 form.
-- Owner messages are trusted only through the Relay-injected `source_owner_id`.
-- Pairing and revocation update the Relay endpoint ACL with `authorized_owner_ids`.
-- Relay loss enters reconnecting state; the Extension does not restart Pi to recover.
-- Device private keys, pairing tokens, encrypted payloads, and message bodies are not logged.
-- Concurrent Pi processes coordinate device identity initialization through a local lock. If initialization is interrupted, follow the [identity storage and lock recovery rules](../docs/reference/protocol/pairing.md#host); do not delete identity or pairing data to retry.
+```text
+device -> endpoint -> runtime -> session / history generation
+```
 
-## Local state
+- **Device**: the computer's Ed25519 identity and the scope of pairing authorization.
+- **Endpoint and runtime**: generated randomly when a Pi process loads the Extension. They remain stable across Extension reloads in that process and are regenerated for the next Pi process. The endpoint is not derived from the working directory.
+- **Session / generation**: the active Pi conversation and its current history branch. Pi Reach does not list or resume historical Pi sessions.
 
-Pi Reach stores global configuration, identity files, and pairings under `~/.pi/pi-reach`, and project display configuration under `.pi/pi-reach`. Its platform keyring service is `dev.pireach.pi`.
+Pairing QR codes target the current endpoint and runtime; the resulting browser authorization is stored at device scope. Owner messages are trusted only through the Relay-injected `source_owner_id`. Pairing and revocation update the Relay endpoint ACL with `authorized_owner_ids`.
+
+The Extension handles remote `session_new` requests in-process through Pi's session API. There is no standalone `pi-reach` CLI, background process, scheduler, or service installation command. Relay loss triggers reconnection, not a Pi restart.
+
+Pi Reach stores global configuration, identity files, and pairings under `~/.pi/pi-reach`, and project display configuration under `.pi/pi-reach`. Its platform keyring service is `dev.pireach.pi`. Device private keys, pairing tokens, and message bodies are not logged.
+
+Concurrent Pi processes coordinate device identity initialization through a local lock. If initialization is interrupted, follow the [identity storage and lock recovery rules](https://github.com/yefengr/pi-reach/blob/main/docs/reference/protocol/pairing.md#host); do not delete identity or pairing data to retry.
 
 ## Development
 
 Install dependencies from the repository root with `pnpm install --frozen-lockfile`.
-The root workspace owns dependency catalogs, build approvals, and the lockfile. The private workspace package [`@pi-reach/protocol`](../packages/protocol/) provides the shared protocol build artifacts; the Extension uses it as a development dependency, while installed users receive vendored artifacts and need neither the workspace nor a separately published shared package. Its module and distribution boundary is defined in [ARCHITECTURE](../docs/ARCHITECTURE.md#工程与构建边界).
+The root workspace owns dependency catalogs, build approvals, and the lockfile. The private workspace package [`@pi-reach/protocol`](https://github.com/yefengr/pi-reach/tree/main/packages/protocol) provides the shared protocol build artifacts; the Extension uses it as a development dependency, while installed users receive vendored artifacts and need neither the workspace nor a separately published shared package. Its module and distribution boundary is defined in [ARCHITECTURE](https://github.com/yefengr/pi-reach/blob/main/docs/ARCHITECTURE.md#工程与构建边界).
 
 The root `prepare` script and an Extension `pnpm build` build the shared package first. After changing shared sources, run `pnpm --filter @pi-reach/protocol build` from the repository root before an Extension-only `typecheck` or `test`, or use the corresponding root command.
 

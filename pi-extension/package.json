@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Browser PWA remote control for Pi coding agent endpoints over a Relay.",
+  "description": "Control your running Pi coding agent from your phone or any browser. Stream responses, send prompts and files, and switch between active Pi sessions.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,7 +34,8 @@
   "pi": {
     "extensions": [
       "./dist"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/yefengr/pi-reach/main/docs/assets/screenshot-desktop-en.png"
   },
   "author": "yefeng",
   "license": "MIT",
