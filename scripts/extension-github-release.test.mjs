@@ -56,7 +56,7 @@ function commit(cwd, message, files) {
 
 const manifest = (version, description = 'Pi Reach') => JSON.stringify({ name: '@yefengr/pi-reach', version, description });
 
-// 0.0.1 已有标签；0.0.2 尚未打标签；当前版本为 0.0.3，其后还有未发布的提交。
+// 0.0.1 与 0.0.2 已在提交待审时打过标签；当前版本为 0.0.3，其后还有未发布的提交。
 function createFixture() {
   const root = mkdtempSync(join(tmpdir(), 'pi-reach-extension-release-'));
   const repo = join(root, 'repo');
@@ -70,13 +70,14 @@ function createFixture() {
 
   git(repo, 'init', '-q', '-b', 'main');
   commit(repo, 'chore(release): 发布 Extension 0.0.1', { 'pi-extension/package.json': manifest('0.0.1') });
-  git(repo, 'tag', 'extension-v0.0.1');
+  git(repo, 'tag', '-a', 'extension-v0.0.1', '-m', 'Extension 0.0.1');
   commit(repo, 'fix: 修复扩展重连', { 'pi-extension/src/index.ts': 'export {};\n' });
   commit(repo, 'fix(pwa): 与扩展无关', { 'pwa/src/app.ts': 'export {};\n' });
   commit(repo, 'feat(protocol): 新增事件', { 'packages/protocol/src/index.ts': 'export {};\n' });
   const v2 = commit(repo, 'chore(release): 发布 PWA 0.0.9 与 Extension 0.0.2', {
     'pi-extension/package.json': manifest('0.0.2'),
   });
+  git(repo, 'tag', '-a', 'extension-v0.0.2', '-m', 'Extension 0.0.2');
   commit(repo, 'docs: 更新扩展描述', { 'pi-extension/package.json': manifest('0.0.2', 'Pi Reach extension') });
   const v3 = commit(repo, 'chore(release): 发布 Extension 0.0.3', {
     'pi-extension/package.json': manifest('0.0.3', 'Pi Reach extension'),
@@ -85,7 +86,7 @@ function createFixture() {
   return { root, repo, v2, v3 };
 }
 
-function run(fixture, { args = [], npmStatus = '200', releaseExists = false } = {}) {
+function run(fixture, args, { npmStatus = '200', releaseExists = false } = {}) {
   const log = join(fixture.root, 'calls.log');
   const summary = join(fixture.root, 'summary.md');
   rmSync(log, { force: true });
@@ -119,26 +120,59 @@ function withFixture(fn) {
   }
 }
 
-test('当前版本已上线时在版本号变更提交上打标签，并创建 Latest Release', () => withFixture((fixture) => {
-  const { result, curl, gh } = run(fixture);
+const tagV3 = (fixture) => git(fixture.repo, 'tag', '-a', 'extension-v0.0.3', '-m', 'Extension 0.0.3', fixture.v3);
+
+test('tag：在提交待审的提交上创建注解标签', () => withFixture((fixture) => {
+  const { result, curl, gh } = run(fixture, ['tag', '0.0.3', fixture.v3]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(curl.length, 0);
+  assert.deepEqual(gh.map((call) => call.args), [
+    ['api', `repos/${REPOSITORY}/git/tags`, '-f', 'tag=extension-v0.0.3', '-f', 'message=Extension 0.0.3',
+      '-f', `object=${fixture.v3}`, '-f', 'type=commit', '--jq', '.sha'],
+    ['api', `repos/${REPOSITORY}/git/refs`, '-f', 'ref=refs/tags/extension-v0.0.3', '-f', 'sha=fake-tag-sha'],
+  ]);
+  assert.ok(readFileSync(join(fixture.root, 'summary.md'), 'utf8').includes('extension-v0.0.3'));
+}));
+
+test('tag：重跑时标签已指向同一提交则跳过，指向其他提交则失败', () => withFixture((fixture) => {
+  const same = run(fixture, ['tag', '0.0.2', fixture.v2]);
+  assert.equal(same.result.status, 0, same.result.stderr);
+  assert.equal(same.gh.length, 0);
+
+  git(fixture.repo, 'tag', '-f', '-a', 'extension-v0.0.2', '-m', 'Extension 0.0.2', 'HEAD~1');
+  const other = run(fixture, ['tag', '0.0.2', fixture.v2]);
+  assert.notEqual(other.result.status, 0);
+  assert.match(other.result.stderr, /已指向其他提交/);
+  assert.equal(other.gh.length, 0);
+}));
+
+test('tag：拒绝版本号与提交内容不符、格式无效的版本号或缩写 SHA', () => withFixture((fixture) => {
+  const mismatch = run(fixture, ['tag', '0.0.3', fixture.v2]);
+  assert.notEqual(mismatch.result.status, 0);
+  assert.match(mismatch.result.stderr, /版本为 0\.0\.2，不是 0\.0\.3/);
+
+  const invalid = run(fixture, ['tag', '0.0.3;touch x', fixture.v3]);
+  assert.match(invalid.result.stderr, /版本号格式无效/);
+
+  const short = run(fixture, ['tag', '0.0.3', fixture.v3.slice(0, 7)]);
+  assert.match(short.result.stderr, /完整的 40 位 SHA/);
+  assert.equal(mismatch.gh.length + invalid.gh.length + short.gh.length, 0);
+}));
+
+test('release：当前版本已上线时基于已有标签创建 Latest Release，不再创建标签', () => withFixture((fixture) => {
+  tagV3(fixture);
+  const { result, curl, gh } = run(fixture, ['release']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(curl.length, 1);
   assert.ok(curl[0].includes('https://registry.npmjs.org/@yefengr%2fpi-reach/0.0.3'));
-
-  assert.equal(gh.length, 3);
-  assert.deepEqual(gh[0].args, [
-    'api', `repos/${REPOSITORY}/git/tags`, '-f', 'tag=extension-v0.0.3', '-f', 'message=Extension 0.0.3',
-    '-f', `object=${fixture.v3}`, '-f', 'type=commit', '--jq', '.sha',
-  ]);
-  assert.deepEqual(gh[1].args, [
-    'api', `repos/${REPOSITORY}/git/refs`, '-f', 'ref=refs/tags/extension-v0.0.3', '-f', 'sha=fake-tag-sha',
-  ]);
-  assert.deepEqual(gh[2].args.filter((arg) => !arg.endsWith('.md')), [
+  assert.deepEqual(gh.map((call) => call.args.slice(0, 2)), [['release', 'view'], ['release', 'create']]);
+  const release = gh[1];
+  assert.deepEqual(release.args.filter((arg) => !arg.endsWith('.md')), [
     'release', 'create', 'extension-v0.0.3', '--repo', REPOSITORY, '--verify-tag', '--title', 'Extension 0.0.3',
     '--notes-file', '--latest',
   ]);
-  // 上一个标签是 0.0.1：列出其后涉及扩展或协议的提交，排除发布提交、其他组件与版本号之后的提交。
-  assert.equal(gh[2].notes, [
+  // 上一个标签是 0.0.2：列出其后涉及扩展或协议的提交，排除发布提交与版本号之后的提交。
+  assert.equal(release.notes, [
     'npm：[`@yefengr/pi-reach@0.0.3`](https://www.npmjs.com/package/@yefengr/pi-reach/v/0.0.3)',
     '',
     '发布记录：[查看工作流](https://github.com/example/pi-reach/actions/runs/123)',
@@ -146,59 +180,63 @@ test('当前版本已上线时在版本号变更提交上打标签，并创建 L
     '## 变更',
     '',
     '- docs: 更新扩展描述',
-    '- feat(protocol): 新增事件',
-    '- fix: 修复扩展重连',
     '',
   ].join('\n'));
-  assert.ok(readFileSync(join(fixture.root, 'summary.md'), 'utf8').includes('extension-v0.0.3'));
 }));
 
-test('补建历史版本时定位该版本的变更提交，且不标记 Latest', () => withFixture((fixture) => {
-  const { result, gh } = run(fixture, { args: ['0.0.2'] });
+test('release：补建历史版本时不标记 Latest，并去掉输入的首尾空白', () => withFixture((fixture) => {
+  const { result, gh } = run(fixture, ['release', ' 0.0.2 ']);
   assert.equal(result.status, 0, result.stderr);
-  assert.ok(gh[0].args.includes(`object=${fixture.v2}`));
   const release = gh.at(-1);
+  assert.equal(release.args[2], 'extension-v0.0.2');
   assert.ok(release.args.includes('--latest=false'));
+  // 与其他组件无关的提交不进入说明。
   assert.ok(release.notes.endsWith('## 变更\n\n- feat(protocol): 新增事件\n- fix: 修复扩展重连\n'));
 }));
 
-test('标签与 Release 都已存在时跳过，不查询 npm', () => withFixture((fixture) => {
-  git(fixture.repo, 'tag', 'extension-v0.0.3', fixture.v3);
-  const { result, curl, gh } = run(fixture, { releaseExists: true });
+test('release：Release 已存在时跳过，不查询 npm', () => withFixture((fixture) => {
+  tagV3(fixture);
+  const { result, curl, gh } = run(fixture, ['release'], { releaseExists: true });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(curl.length, 0);
   assert.deepEqual(gh.map((call) => call.args.slice(0, 2)), [['release', 'view']]);
 }));
 
-test('标签已存在但缺少 Release 时只补建 Release', () => withFixture((fixture) => {
-  git(fixture.repo, 'tag', 'extension-v0.0.3', fixture.v3);
-  const { result, gh } = run(fixture);
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(gh.map((call) => call.args.slice(0, 2)), [['release', 'view'], ['release', 'create']]);
+test('release：npm 上尚无该版本（待审）时跳过，不写入 GitHub', () => withFixture((fixture) => {
+  for (const tagged of [true, false]) {
+    if (tagged) tagV3(fixture);
+    else git(fixture.repo, 'tag', '-d', 'extension-v0.0.3');
+    const { result, gh } = run(fixture, ['release'], { npmStatus: '404' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /尚未在 npm 上线/);
+    assert.ok(gh.every((call) => call.args[1] === 'view'));
+  }
 }));
 
-test('npm 上尚无该版本（待审）时跳过，不写入 GitHub', () => withFixture((fixture) => {
-  const { result, gh } = run(fixture, { npmStatus: '404' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /尚未在 npm 上线/);
-  assert.equal(gh.length, 0);
-}));
-
-test('无法确认 npm 状态时失败，不写入 GitHub', () => withFixture((fixture) => {
-  const { result, gh } = run(fixture, { npmStatus: '503' });
+test('release：已上线但缺少标签时失败并提示手工打标签', () => withFixture((fixture) => {
+  const { result, gh } = run(fixture, ['release']);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /HTTP 503/);
+  assert.match(result.stderr, /缺少标签 extension-v0\.0\.3.*手工打标签/);
   assert.equal(gh.length, 0);
 }));
 
-test('拒绝格式无效的版本号与历史中不存在的版本', () => withFixture((fixture) => {
-  const invalid = run(fixture, { args: ['0.0.3;touch x'] });
-  assert.notEqual(invalid.result.status, 0);
+test('release：无法确认 npm 状态或版本号无效时失败，不写入 GitHub', () => withFixture((fixture) => {
+  tagV3(fixture);
+  const unknown = run(fixture, ['release'], { npmStatus: '503' });
+  assert.notEqual(unknown.result.status, 0);
+  assert.match(unknown.result.stderr, /HTTP 503/);
+  assert.ok(unknown.gh.every((call) => call.args[1] === 'view'));
+
+  const invalid = run(fixture, ['release', '0.0.3;touch x']);
   assert.match(invalid.result.stderr, /版本号格式无效/);
   assert.equal(invalid.curl.length + invalid.gh.length, 0);
+}));
 
-  const missing = run(fixture, { args: ['9.9.9'] });
-  assert.notEqual(missing.result.status, 0);
-  assert.match(missing.result.stderr, /没有把 pi-extension\/package.json 版本改为 9.9.9 的提交/);
-  assert.equal(missing.gh.length, 0);
+test('未知子命令或参数数量不符时失败', () => withFixture((fixture) => {
+  for (const args of [[], ['publish'], ['tag', '0.0.3'], ['release', '0.0.3', 'extra']]) {
+    const { result, gh } = run(fixture, args);
+    assert.notEqual(result.status, 0, args.join(' '));
+    assert.match(result.stderr, /用法/);
+    assert.equal(gh.length, 0);
+  }
 }));
