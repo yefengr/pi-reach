@@ -1,6 +1,6 @@
 # Pi Reach 自托管部署
 
-本文记录把 Relay/PWA 发布到远程 Linux 服务器的可重复流程：常规版本由 GitHub Actions 的 Deploy 工作流构建、经审批后部署（见「自动部署」），本机脚本用于备用发布、更新 Compose 文件与首次初始化。自 2026-09-30 起只保留一个环境：原隔离测试服务（`site-test`、`relay-test`）、test/promote 状态文件和旧域名均已移除，部署直接更新线上服务。本机部署命令只选择 scope：
+本文记录把 Relay/PWA 发布到远程 Linux 服务器的可重复流程：常规版本由 GitHub Actions 的 Deploy PWA & Relay 工作流构建、经审批后部署（见「自动部署」），本机脚本用于备用发布、更新 Compose 文件与首次初始化。自 2026-09-30 起只保留一个环境：原隔离测试服务（`site-test`、`relay-test`）、test/promote 状态文件和旧域名均已移除，部署直接更新线上服务。本机部署命令只选择 scope：
 
 ```text
 ./scripts/deploy-self-hosted.sh [pwa|relay|both]
@@ -108,7 +108,7 @@ docker-compose version
 
 ## 自动部署
 
-常规版本由 [Deploy 工作流](../.github/workflows/deploy.yml)发布，决策见 [ADR-20261001](adr/20261001-ci-deploy-ghcr.md)：
+常规版本由 [Deploy PWA & Relay 工作流](../.github/workflows/deploy.yml)发布，决策见 [ADR-20261001](adr/20261001-ci-deploy-ghcr.md)：
 
 1. 修改 `relay/package.json` 或 `pwa/package.json` 的 `version`，经 Pull Request 合并到 `main`；也可在 Actions 页面手动运行并选择组件。对应的 `relay-vX.Y.Z`／`pwa-vX.Y.Z` 标签已存在时跳过该组件。
 2. 工作流在 GitHub 托管 runner 上构建服务器架构的镜像，推送到 `ghcr.io/<owner>/pi-reach-relay`／`pi-reach-pwa:vX.Y.Z`，并附构建来源证明。
@@ -383,7 +383,7 @@ IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 
 ## Extension npm 发布
 
-Extension 以 `@yefengr/pi-reach` 发布到 npm。常规发布由 Release 工作流（`.github/workflows/release.yml`）完成：`pi-extension/package.json` 的版本号变更合并到 `main` 后，工作流以 npm trusted publishing（GitHub OIDC）认证，运行 `pi-extension/publish-npm.sh --stage` 把新版本提交到 npm 待审区，维护者在 npmjs.com 用双重验证批准后才正式上线。仓库和 GitHub 中不保存 npm token。版本号一经发布不可复用。
+Extension 以 `@yefengr/pi-reach` 发布到 npm。常规发布由 Extension npm 工作流（`.github/workflows/release.yml`）完成：`pi-extension/package.json` 的版本号变更合并到 `main` 后，工作流以 npm trusted publishing（GitHub OIDC）认证，运行 `pi-extension/publish-npm.sh --stage` 把新版本提交到 npm 待审区，维护者在 npmjs.com 用双重验证批准后才正式上线。仓库和 GitHub 中不保存 npm token。版本号一经发布不可复用。
 
 `publish-npm.sh` 确认该版本尚未发布，运行 Extension 的 `pnpm verify`，用 `pnpm pack` 打包并检查 tarball，再以公开访问上传这个 tarball。默认直接发布；`--stage` 改为执行 `npm stage publish` 提交待审，需要 npm 11.15.0 或更高版本。
 
@@ -391,13 +391,14 @@ Extension 以 `@yefengr/pi-reach` 发布到 npm。常规发布由 Release 工作
 
 1. 协议有变更时先部署 PWA，再发布 Extension（[ADR-20260927](adr/20260927-run-end-event.md)）；可核对线上 PWA 的脚本是否已包含新增的帧或事件类型。
 2. 修改 `pi-extension/package.json` 的 `version`，经 Pull Request 合并到 `main`。
-3. Release 工作流确认版本号确有变化且 npm 上尚无该版本后提交待审；版本号未变的推送（如只改依赖）或该版本已发布时跳过。也可在 Actions 页面手动运行，此时不比较版本号。
+3. Extension npm 工作流确认版本号确有变化且 npm 上尚无该版本后提交待审；版本号未变的推送（如只改依赖）或该版本已发布时跳过。也可在 Actions 页面手动运行，此时不比较版本号。
 4. 在 npmjs.com 的 Staged Packages 中核对并批准，或在交互式终端执行 `npm stage list @yefengr/pi-reach` 与 `npm stage approve <stage-id>`；批准需要双重验证。
+5. 上线后由 Extension GitHub Release 工作流自动创建标签与 Release，见「版本标签与 GitHub Release」。
 
 npm 侧一次性配置（需要网页登录与双重验证）：
 
-- 在包设置的 Trusted publishing 中添加 GitHub Actions：用户 `yefengr`、仓库 `pi-reach`、工作流文件 `release.yml`，Environment 留空，不勾选允许直接 `npm publish`（`npm stage publish` 始终允许）。工作流改名时同步修改此配置。
-- Release 工作流跑通后，把包设置的 Publishing access 改为 “Require two-factor authentication and disallow tokens”，并撤销可跳过双重验证的 token。
+- 在包设置的 Trusted publishing 中添加 GitHub Actions：用户 `yefengr`、仓库 `pi-reach`、工作流文件 `release.yml`，Environment 留空，不勾选允许直接 `npm publish`（`npm stage publish` 始终允许）。工作流文件改名时同步修改此配置；只改工作流显示名称不受影响。
+- Extension npm 工作流跑通后，把包设置的 Publishing access 改为 “Require two-factor authentication and disallow tokens”，并撤销可跳过双重验证的 token。
 
 本地发布（备用）：
 
@@ -415,7 +416,7 @@ npm view @yefengr/pi-reach version
 
 ## 版本标签与 GitHub Release
 
-各组件上线后，在其版本号所在的 `main` 提交上打注解标签，并创建同名 GitHub Release。PWA 与 Relay 经自动部署时由工作流创建；下面的手工命令用于 Extension 和本机备用部署：
+各组件上线后，在其版本号所在的 `main` 提交上打注解标签，并创建同名 GitHub Release。PWA 与 Relay 由 Deploy PWA & Relay 工作流在部署核对后创建，Extension 由 [Extension GitHub Release 工作流](../.github/workflows/extension-github-release.yml)在 npm 上线后创建；下面的手工命令只用于本机备用部署或工作流无法运行时：
 
 | 组件 | 标签 | 版本来源 |
 |---|---|---|
@@ -424,6 +425,8 @@ npm view @yefengr/pi-reach version
 | Relay | `relay-vX.Y.Z` | `relay/package.json`；部署时 `RELAY_VERSION` 使用 `vX.Y.Z` |
 
 - Extension 在 npm 批准上线后打标签，PWA 与 Relay 在部署并核对后打标签；同一提交可以同时带多个组件的标签。
+- Extension GitHub Release 工作流每 30 分钟检查一次，也可在 Actions 页面手动运行。npm 上已有当前版本而标签或 Release 缺失时，在 `pi-extension/package.json` 版本号变为该版本的提交上打标签并创建 Release；尚未批准时跳过，下次再查。Release 说明包含 npm 链接，以及自上一个 `extension-v*` 标签以来涉及 `pi-extension/` 或 `packages/protocol/` 的非发布提交。手动运行时可填写历史版本补建，补建的 Release 不标记 Latest。
+- 仓库 60 天没有活动时，GitHub 会停用定时工作流，需在 Actions 页面重新启用。
 - Release 说明写该组件的变更与发布去向（npm 版本，或线上地址与镜像标签）。Extension 的 Release 标记为 Latest，其余不标记。
 
 每个上线的组件各执行一组命令；各组件版本号相互独立，`--verify-tag` 要求标签已推送到远端：

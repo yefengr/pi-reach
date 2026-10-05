@@ -10,7 +10,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = readFileSync(join(REPO_ROOT, '.github/workflows/deploy.yml'), 'utf8');
 const releaseFunction = workflow.match(/^          release\(\) \{\n[\s\S]*?^          \}\n/m)?.[0]
   .replace(/^ {10}/gm, '');
-assert.ok(releaseFunction, 'Deploy 工作流必须包含 release 函数');
+assert.ok(releaseFunction, 'Deploy PWA & Relay 工作流必须包含 release 函数');
 
 function generateNotes(component, url) {
   const root = mkdtempSync(join(tmpdir(), 'pi-reach-release-notes-'));

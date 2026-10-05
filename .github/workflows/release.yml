@@ -1,4 +1,4 @@
-# Release：把 Extension（@yefengr/pi-reach）提交到 npm 待审区，维护者在 npmjs.com 用 2FA 批准后才上线。
+# Extension npm：把 Extension（@yefengr/pi-reach）提交到 npm 待审区，维护者在 npmjs.com 用 2FA 批准后才上线。
 # - 触发：推送到 main 且 pi-extension/package.json 的 version 发生变化；也可在 Actions 页面手动运行（不比较版本号）。
 #   版本号未变（如只改依赖）或该版本已在 npm 上时跳过。
 # - 认证：npm trusted publishing（GitHub OIDC），仓库和 GitHub 中不保存 npm token。npm 侧的 trusted publisher
@@ -6,8 +6,9 @@
 # - 上传：pi-extension/publish-npm.sh --stage 运行 Extension 的 verify、pnpm pack 与 tarball 检查后执行 npm stage publish。
 # - npm：使用 .node-version 对应 Node 附带的 npm，不在持有发布权限的作业里另装 npm。npm stage publish 需要
 #   npm 11.15.0 或更高版本，调整 Node 版本时确认其附带的 npm 满足要求；脚本开头也会检查并在不满足时立即失败。
+# - 上线后：标签与 GitHub Release 由 Extension GitHub Release 工作流（extension-github-release.yml）定时检查并创建。
 # 流程与一次性配置见 docs/DEPLOYMENT.md「Extension npm 发布」。
-name: Release
+name: Extension npm
 
 on:
   push:
@@ -80,5 +81,5 @@ jobs:
           {
             echo "### @yefengr/pi-reach@$VERSION 已提交到 npm 待审区"
             echo
-            echo "在 npmjs.com 的 Staged Packages 中核对并用 2FA 批准后才会上线。本版本依赖新的协议帧或事件时，批准前先确认 PWA 已部署。"
+            echo "在 npmjs.com 的 Staged Packages 中核对并用 2FA 批准后才会上线。本版本依赖新的协议帧或事件时，批准前先确认 PWA 已部署。上线后 Extension GitHub Release 工作流会在 30 分钟内创建标签与 Release。"
           } >> "$GITHUB_STEP_SUMMARY"

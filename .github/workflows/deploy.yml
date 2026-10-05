@@ -1,4 +1,4 @@
-# Deploy：构建 Relay 与 PWA 镜像并推送到 GHCR，经 production 环境审批后部署到自托管服务器。
+# Deploy PWA & Relay：构建 Relay 与 PWA 镜像并推送到 GHCR，经 production 环境审批后部署到自托管服务器。
 # - 触发：推送到 main 且 relay/package.json 或 pwa/package.json 的 version 发生变化；也可在 Actions 页面手动运行并
 #   选择组件（不比较版本号）。对应的 relay-vX.Y.Z／pwa-vX.Y.Z 标签已存在时跳过该组件。
 # - 构建：在 GitHub 托管 runner 上构建服务器架构（默认 linux/amd64，可用仓库变量 DEPLOY_PLATFORM 覆盖）的镜像，
@@ -7,7 +7,7 @@
 #   scripts/deploy-from-ci.sh：按摘要拉取镜像、只更新所选服务，健康检查失败时恢复原镜像。先 Relay 后 PWA。
 # - 收尾：公网检查通过后在本次提交上创建注解标签与 GitHub Release（不标记 Latest）。
 # 一次性配置、首次运行与本机备用流程见 docs/DEPLOYMENT.md「自动部署」。
-name: Deploy
+name: Deploy PWA & Relay
 
 on:
   push:
