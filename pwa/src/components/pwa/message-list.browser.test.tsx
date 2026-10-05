@@ -414,7 +414,7 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
   }
 });
 
-test("reader survives finished-turn regrouping and falls back to list focus when its trigger is hidden", async () => {
+test("finished-turn grouping waits for the open reader, then groups and falls back to list focus", async () => {
   const first = { ...toolEvent, args: { path: "a.ts" }, result: "First output" };
   const second = { ...toolEvent, event_id: "second", tool_call_id: "second", args: { path: "b.ts" }, result: "Second output" };
   const running = { ...toolPartial, partial_id: "tool:third", tool_call_id: "third", args: { path: "c.ts" } };
@@ -424,13 +424,17 @@ test("reader survives finished-turn regrouping and falls back to list focus when
   await userEvent.click(origin);
   await expect.element(screen.getByText("First output")).toBeVisible();
   await update([eventItem(first), eventItem(second), eventItem({ ...toolEvent, event_id: "third", tool_call_id: "third", args: { path: "c.ts" }, result: "Third output" }), runEndItem()]);
-  expect(groupButton().getAttribute("aria-expanded")).toBe("false");
-  expect(origin.isConnected).toBe(false);
+  // 阅读器打开期间不合并：触发行仍在，阅读内容不变。
+  expect(document.querySelector(".pwa-tool-group")).toBeNull();
+  expect(origin.isConnected).toBe(true);
   await expect.element(screen.getByRole("dialog")).toBeVisible();
   await expect.element(screen.getByText("First output")).toBeVisible();
   expect(reading.at(-1)).toBe(true);
   await closeReader("history");
   await expect.poll(() => reading.at(-1)).toBe(false);
+  // 退出后合并生效，原触发行收入组内，焦点回到列表。
+  await expect.poll(() => document.querySelector(".pwa-tool-group")).not.toBeNull();
+  expect(groupButton().getAttribute("aria-expanded")).toBe("false");
   expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
   await userEvent.click(groupButton());
   await userEvent.click(toolButton());
@@ -538,20 +542,30 @@ test("keeps inline code and tool names in neutral text while links keep the acce
   } finally { await screen.unmount(); }
 });
 
-test("groups only adjacent completed tools of one turn and keeps failures on their own rows", async () => {
+test("groups adjacent finished tools of one turn including failures, and marks the failure on the group", async () => {
   const read = (id: string, path: string): Extract<TimelineEvent, { kind: "tool" }> => ({ ...toolEvent, event_id: id, tool_call_id: id, args: { path }, result: "ok" });
   const failed: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "failed", tool_call_id: "failed", tool: "bash", args: { command: "pnpm lint" }, status: "error", error: "Lint failed" };
   const otherTurn: Extract<TimelineEvent, { kind: "tool" }> = { ...read("other-turn", "d.ts"), group_id: "group-2" };
   const reading: boolean[] = [];
   await liveList([...([read("a", "a.ts"), read("b", "b.ts"), failed, read("c", "c.ts"), read("d", "a.ts"), otherTurn].map(eventItem)), runEndItem()], { onReadingChange: value => reading.push(value) });
   const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
-  expect(list.querySelectorAll(":scope > .pwa-tool-group")).toHaveLength(2);
-  expect(list.querySelectorAll(":scope > .pwa-tool-card")).toHaveLength(2);
-  expect(list.querySelector(":scope > .pwa-tool-card .pwa-tool-status-error")?.textContent).toBe("Error");
-  expect(groupButton().getAttribute("aria-label")).toBe("Expand Read 2 files");
+  expect(list.querySelectorAll(":scope > .pwa-tool-group")).toHaveLength(1);
+  expect(list.querySelectorAll(":scope > .pwa-tool-card")).toHaveLength(1);
+  expect(groupButton().textContent).toBe("Read 3 files · Ran 1 command · 1 failed");
+  expect(groupButton().querySelector(".pwa-tool-group-alert")).not.toBeNull();
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand Read 3 files · Ran 1 command · 1 failed");
   await userEvent.click(groupButton());
-  expect(groupButton().getAttribute("aria-label")).toBe("Collapse Read 2 files");
+  expect(groupButton().getAttribute("aria-label")).toBe("Collapse Read 3 files · Ran 1 command · 1 failed");
+  expect(document.querySelectorAll(".pwa-tool-group .pwa-tool-card")).toHaveLength(5);
+  expect(document.querySelector(".pwa-tool-group .pwa-tool-status-error")?.textContent).toBe("Error");
   expect(reading.at(-1)).toBe(true);
   await userEvent.click(groupButton());
   expect(reading.at(-1)).toBe(false);
+});
+
+test("a group without failures shows no failure marker", async () => {
+  const read = (id: string, path: string): Extract<TimelineEvent, { kind: "tool" }> => ({ ...toolEvent, event_id: id, tool_call_id: id, args: { path }, result: "ok" });
+  await liveList([read("a", "a.ts"), read("b", "b.ts")].map(eventItem).concat(runEndItem()));
+  expect(groupButton().textContent).toBe("Read 2 files");
+  expect(groupButton().querySelector(".pwa-tool-group-alert")).toBeNull();
 });

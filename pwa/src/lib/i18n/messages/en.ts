@@ -377,6 +377,7 @@ export const en = {
     groupEdit: (count: number) => `Edited ${count} ${count === 1 ? "file" : "files"}`,
     groupWrite: (count: number) => `Wrote ${count} ${count === 1 ? "file" : "files"}`,
     groupGeneric: (count: number) => `Used tools ${count} ${count === 1 ? "time" : "times"}`,
+    groupFailed: (count: number) => `${count} failed`,
     groupToggle: (expanded: boolean, summary: string) => `${expanded ? "Collapse" : "Expand"} ${summary}`,
     groupStatus: (count: number) => `${count} tools complete`,
     readFile: "Read file",

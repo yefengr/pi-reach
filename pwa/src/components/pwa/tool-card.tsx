@@ -28,7 +28,7 @@ export function ToolCard({ value, onRead, status: statusOverride }: ToolCardProp
   </article>;
 }
 
-/** 连续成功工具的摘要：按类别计数、按首次出现排序；读取、修改、写入按不同路径计数。 */
+/** 连续工具的摘要：按类别计数、按首次出现排序；读取、修改、写入按不同路径计数；有失败或中断时末尾追加失败数。 */
 export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tools"]): string {
   const order: ToolKind[] = [];
   const calls = new Map<ToolKind, number>();
@@ -41,19 +41,22 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
     paths.get(action.kind)!.add(action.detail);
   }
   const label = { read: t.groupRead, command: t.groupCommand, search: t.groupSearch, edit: t.groupEdit, write: t.groupWrite, generic: t.groupGeneric } satisfies Record<ToolKind, (count: number) => string>;
-  return order.map((kind) => label[kind](kind === "read" || kind === "edit" || kind === "write" ? paths.get(kind)!.size : calls.get(kind)!)).join(" · ");
+  const failed = values.filter(value => ["error", "interrupted"].includes(toolStatus(value))).length;
+  const parts = order.map((kind) => label[kind](kind === "read" || kind === "edit" || kind === "write" ? paths.get(kind)!.size : calls.get(kind)!));
+  return (failed > 0 ? [...parts, t.groupFailed(failed)] : parts).join(" · ");
 }
 
-/** 同一轮中相邻且都已成功完成的工具合并为一行摘要，展开后是原有的逐条工具行。 */
+/** 同一轮中相邻且状态已有定论的工具合并为一行摘要，展开后是逐条工具行；含失败时摘要旁显示错误图标。 */
 export function ToolGroupCard({ values, expanded, onExpandedChange, children }: { values: readonly ToolValue[]; expanded: boolean; onExpandedChange: (expanded: boolean) => void; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
+  const hasFailure = values.some(value => ["error", "interrupted"].includes(toolStatus(value)));
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
   return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length}>
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, summary)} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
-        <span className="pwa-tool-action-copy"><span className="pwa-tool-group-summary" title={summary}>{summary}</span></span>
+        <span className="pwa-tool-action-copy"><span className="pwa-tool-group-summary" title={summary}>{summary}</span>{hasFailure ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}</span>
         <ChevronRight className="pwa-tool-chevron pwa-timeline-chevron" size={16} aria-hidden="true" />
       </button>
     </div>

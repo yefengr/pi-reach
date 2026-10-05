@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { PwaUiProvider } from "./pwa-ui-provider";
-import { ToolCard, ToolGroupCard } from "./tool-card";
+import { ToolCard, ToolGroupCard, toolGroupSummary } from "./tool-card";
 import type { ToolStatus, ToolValue } from "./tool-presentation";
 import { en } from "@/lib/i18n/messages/en";
 import { zh } from "@/lib/i18n/messages/zh";
@@ -75,4 +75,13 @@ test("group heading retains collapse semantics with a trailing chevron and no gr
   expect(html.indexOf("pwa-tool-group-summary")).toBeLessThan(html.indexOf("pwa-tool-chevron"));
   expect(html).not.toContain('role="status"');
   expect(html).not.toContain("lucide-check");
+});
+
+test.each([[en, "1 failed", "2 failed"], [zh, "1 项失败", "2 项失败"]] as const)("group summary appends the failure count only when tools failed or were interrupted", (messages, one, two) => {
+  const read = { ...base, tool: "read", args: { path: "a.ts" }, status: "complete" as const, result: "ok" };
+  const failed = { ...base, tool: "bash", args: { command: "pnpm test" }, status: "error" as const, error: "failed" };
+  const interrupted = { ...base, tool: "bash", args: { command: "pnpm test" }, status: "interrupted" as const };
+  expect(toolGroupSummary([read, read], messages.tools)).not.toMatch(/失败|failed/);
+  expect(toolGroupSummary([read, failed], messages.tools).endsWith(` · ${one}`)).toBe(true);
+  expect(toolGroupSummary([read, failed, interrupted], messages.tools).endsWith(` · ${two}`)).toBe(true);
 });
