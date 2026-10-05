@@ -156,20 +156,20 @@ body:has(.pwa-root) { overflow: hidden; }
   transition: background-color 120ms var(--pwa-ease-standard), border-color 120ms var(--pwa-ease-standard);
 }
 .pwa-ui-scope .pwa-icon-button:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -4px; }
-.pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; }
-.pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; } }
+@media (hover: hover) { .pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-icon-button:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-neutral-active); }
 /* 实心发送按钮：常显直径 36 的强调色圆。 */
-.pwa-ui-scope .pwa-icon-button[data-variant="filled"],
-.pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-on-accent); }
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"] { color: var(--pwa-on-accent); }
+@media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-on-accent); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]::before { background: var(--pwa-accent); }
-.pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-active); }
 /* 危险入口的图标按钮保留轮廓，不套用圆形浅底。 */
-.pwa-ui-scope .pwa-icon-button[data-variant="outline"],
-.pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-error); }
+.pwa-ui-scope .pwa-icon-button[data-variant="outline"] { color: var(--pwa-error); }
+@media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-error); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="outline"]::before { border-color: var(--pwa-error); }
-.pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-error-wash); }
+@media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-error-wash); } }
 .pwa-ui-scope .pwa-icon-button:disabled,
 .pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: not-allowed; }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:disabled::before,
@@ -193,24 +193,24 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 按钮层级：主操作实心强调色；次级为表面＋边线；文字按钮无底无框；危险入口为错误色轮廓。 */
 .pwa-ui-scope .pwa-button { min-height: 44px; height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color 120ms var(--pwa-ease-standard), border-color 120ms var(--pwa-ease-standard), color 120ms var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
-.pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
 .pwa-ui-scope .pwa-button[data-variant="default"],
 .pwa-ui-scope .pwa-button[data-variant="light"] { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
-.pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]),
-.pwa-ui-scope .pwa-button[data-variant="light"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]),
+.pwa-ui-scope .pwa-button[data-variant="light"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]),
 .pwa-ui-scope .pwa-button[data-variant="light"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
 .pwa-ui-scope .pwa-button[data-variant="transparent"] { padding: 0 10px; border-color: transparent; color: var(--pwa-accent); background: transparent; }
-.pwa-ui-scope .pwa-button[data-variant="transparent"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="transparent"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: var(--pwa-error); color: var(--pwa-error); background: transparent; }
-.pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash); } }
 .pwa-ui-scope .pwa-button:disabled,
 .pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: not-allowed; }
 .pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
 .pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
 .pwa-ui-scope .pwa-button.pwa-latest-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
-.pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); } }
 
 .pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-gutter), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-safe-bottom)); }
 .pwa-image-input { display: none; }
@@ -220,7 +220,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-preview img { display: block; max-width: min(240px, 100%); height: 76px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); object-fit: cover; background: var(--pwa-code-bg); }
 .pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
-.pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; }
+@media (hover: hover) { .pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; } }
 .pwa-composer-textarea { display: block; width: 100%; min-width: 0; }
 .pwa-ui-scope .pwa-composer .pwa-composer-input,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:hover,
@@ -235,9 +235,9 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 模型标签：发送按钮左侧的文字按钮，显示当前模型与思考级别；视觉高 32、点击区 44，手机只显示模型名。 */
 .pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
 .pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-sm); background: transparent; transition: background-color 120ms var(--pwa-ease-standard); }
-.pwa-ui-scope .pwa-composer-model:hover:not(:disabled)::before { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled)::before { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); }
-.pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); }
+@media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); } }
 .pwa-ui-scope .pwa-composer-model:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -6px; }
 .pwa-ui-scope .pwa-composer-model:disabled { cursor: not-allowed; }
 .pwa-ui-scope .pwa-composer-model > svg { flex: 0 0 auto; }
@@ -263,17 +263,17 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-composer-menu-panel { min-width: 190px; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-composer-menu-panel { bottom: calc(100% + 8px); left: 0; }
 .pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
-.pwa-composer-menu-panel button:hover { color: var(--pwa-ink); background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-composer-menu-panel button:hover { color: var(--pwa-ink); background: var(--pwa-hover); } }
 .pwa-root .pwa-command-menu-dropdown { --pwa-command-menu-width: min(340px, calc(100vw - 32px)); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-command-menu-panel { display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; }
 .pwa-command-row,
 .pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
 .pwa-command-menu-dropdown .mantine-Menu-itemLabel { min-width: 0; }
 .pwa-command-menu-dropdown .mantine-Menu-itemSection { flex-shrink: 0; margin: 0; }
-.pwa-command-row:hover:not(:disabled),
 .pwa-command-row:focus-visible:not(:disabled),
-.pwa-command-back:hover,
 .pwa-command-back:focus-visible { color: var(--pwa-ink); background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-command-row:hover:not(:disabled),
+.pwa-command-back:hover { color: var(--pwa-ink); background: var(--pwa-hover); } }
 .pwa-command-row:disabled { opacity: 0.45; cursor: not-allowed; }
 .pwa-command-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
 .pwa-command-copy code,
@@ -314,7 +314,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-version-target { margin-top: 12px; overflow-wrap: anywhere; }
 .pwa-appearance-options { display: block; margin-top: 16px; }
 .pwa-appearance-option { min-height: 72px; margin: 0; padding: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); transition: background 160ms ease, border-color 160ms ease; }
-.pwa-appearance-option:hover { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-appearance-option:hover { background: var(--pwa-hover); } }
 /* 选中项只加深描边；颜色只留给单选圆点。 */
 .pwa-appearance-option:has(input:checked) { border-color: var(--pwa-ink); background: var(--pwa-surface); }
 .pwa-appearance-option .mantine-Radio-inner { align-self: center; }
@@ -372,7 +372,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-rename-dialog { width: min(480px, 100%); }
 /* 危险确认：实心错误色，仅用于确认弹窗的最后一步。 */
 .pwa-ui-scope .pwa-button.pwa-danger-confirm { border-color: var(--pwa-error); color: var(--pwa-on-status); background: var(--pwa-error); }
-.pwa-ui-scope .pwa-button.pwa-danger-confirm:hover:not(:disabled) { border-color: var(--pwa-error-hover); background: var(--pwa-error-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-danger-confirm:hover:not(:disabled) { border-color: var(--pwa-error-hover); background: var(--pwa-error-hover); } }
 .pwa-ui-scope .pwa-button.pwa-danger-confirm:active:not(:disabled) { border-color: var(--pwa-error-active, var(--pwa-error-hover)); background: var(--pwa-error-active, var(--pwa-error-hover)); }
 /* Modal 标题行与弹窗同一表面，不用 Mantine 默认的标题底色。 */
 .pwa-ui-scope .mantine-Modal-header { background: transparent; }
@@ -470,11 +470,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-runtime-notice-description { grid-column: 1; min-width: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
 .pwa-runtime-notice-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pwa-runtime-notice .pwa-runtime-notice-dismiss { flex: 0 0 44px; align-self: center; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -4px -4px -4px 4px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); }
-.pwa-runtime-notice .pwa-runtime-notice-dismiss:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-runtime-notice .pwa-runtime-notice-dismiss:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-hover); } }
 .pwa-toast { position: relative; flex: 0 0 auto; max-width: min(680px, calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font-size: var(--pwa-text-meta); order: 3; align-self: center; margin: 8px auto; padding: 12px; border-color: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line)); color: var(--pwa-error); background: var(--pwa-error-wash); }
 .pwa-toast > span { min-width: 0; max-height: min(14dvh, 100px); overflow-y: auto; overflow-wrap: anywhere; }
 .pwa-ui-scope .pwa-toast-dismiss { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -6px -8px -6px 0; padding: 0; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: inherit; background: transparent; cursor: pointer; }
-.pwa-ui-scope .pwa-toast-dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pwa-error) 42%, var(--pwa-line)); background: var(--pwa-error-wash); }
+@media (hover: hover) { .pwa-ui-scope .pwa-toast-dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pwa-error) 42%, var(--pwa-line)); background: var(--pwa-error-wash); } }
 
 /* Toast：顶部居中、会话标题区与主区提示（连接提示条等）下方的最顶层浮层；surface 底、浮层阴影＋line 边框、圆角 8、最大宽 400。 */
 .pwa-operation-notifications { display: none; }
@@ -498,7 +498,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-operation-notifications .pwa-operation-notification-message { color: inherit; font: inherit; overflow-wrap: anywhere; }
 .pwa-operation-notifications .pwa-toast-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pwa-operation-notifications .pwa-toast-action { flex: 0 0 auto; white-space: nowrap; min-height: 36px; padding: 0 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
-.pwa-operation-notifications .pwa-toast-action:hover { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-operation-notifications .pwa-toast-action:hover { background: var(--pwa-hover); } }
 .pwa-operation-notifications .pwa-operation-notification-close { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; color: var(--pwa-secondary); }
 
 /* 密度取应用壳的实际可见高度；软键盘不改变 layout viewport 时也使用同一套规则。 */

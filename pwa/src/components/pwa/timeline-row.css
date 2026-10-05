@@ -30,7 +30,9 @@
   cursor: pointer;
   transition: background-color 120ms var(--pwa-ease-standard);
 }
-.pwa-timeline-toggle:hover { background: var(--pwa-hover); }
+/* 悬停底色只给有真实悬停的设备；触屏点击后不残留，按下时用 :active 给即时反馈。 */
+@media (hover: hover) { .pwa-timeline-toggle:hover { background: var(--pwa-hover); } }
+.pwa-timeline-toggle:active { background: var(--pwa-hover); }
 .pwa-timeline-toggle:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-timeline-chevron { width: 16px; height: 16px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-expand-in) var(--pwa-ease-standard); }
 .pwa-timeline-toggle[aria-expanded="true"] > .pwa-timeline-chevron { transform: rotate(90deg); }

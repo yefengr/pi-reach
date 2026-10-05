@@ -4,7 +4,7 @@
 
 /* 只配对一台电脑时收成无框的一行，悬停浅底；多台时保持卡片样式。 */
 .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: 44px; padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
-.pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact:hover:not(:disabled) { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact:hover:not(:disabled) { background: var(--pwa-hover); } }
 .pwa-root .pwa-device-trigger-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-secondary); }
 .pwa-root .pwa-device-trigger-dot.online { background: var(--pwa-accent); }
 
@@ -102,9 +102,9 @@
   background: var(--pwa-selected);
 }
 
-.pwa-root .pwa-peer-card:not(.active):hover {
+@media (hover: hover) { .pwa-root .pwa-peer-card:not(.active):hover {
   background: var(--pwa-hover);
-}
+} }
 
 .pwa-root .pwa-computer-select {
   width: auto;
@@ -235,10 +235,10 @@
   opacity: 1;
 }
 
-.pwa-root .pwa-peer-menu-trigger:hover:not(:disabled) {
+@media (hover: hover) { .pwa-root .pwa-peer-menu-trigger:hover:not(:disabled) {
   color: var(--pwa-ink);
   background: transparent;
-}
+} }
 
 .pwa-root .pwa-peer-menu-panel {
   min-width: 190px;

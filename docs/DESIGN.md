@@ -55,6 +55,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | 滚动条 | 会话消息区等主滚动区保持系统原生；侧栏、代码块、工具输出、宽表格、命令菜单等内部滚动区为 `scrollbar-width: thin`、`control-line` 颜色，不隐藏滚动条 |
 | 断点 | 单一断点 768px：视口宽度 ≥ 768px 为桌面布局，< 768px 为移动布局（CSS 写作 `max-width: 767.98px`，Mantine `sm` = 48em） |
 | 动效 | 曲线只用标准 `cubic-bezier(0.2, 0, 0, 1)`、进入 `cubic-bezier(0, 0, 0, 1)`、退出 `cubic-bezier(0.3, 0, 1, 1)`；时长以 `--pwa-duration-*` 定义（侧栏 220ms、移动导航 240ms 等）。减少动态效果只跟随系统 `prefers-reduced-motion`，由一处全局规则把位移、缩放与尺寸过渡改为约 120ms 的颜色与透明度淡化，并将 `--pwa-motion-shift` 置 0；加载指示器、运行中图形等状态动画照常运行 |
+| 悬停与触屏 | `:hover` 反馈（`hover` 浅底、颜色变化）只写在 `@media (hover: hover)` 内，避免触屏点击后残留悬停态；需要按下反馈的行（如折叠头）另用 `:active`，松手即消失。取消 Mantine 默认悬停样式的覆盖规则不受此限。键盘 `:focus-visible` 不受影响 |
 | 图标 | Lucide，经 `LucideProvider` 统一线宽 1.8；尺寸只用 16（按钮内、元数据、状态行）、20（图标按钮与导航）、24（空状态等大尺寸） |
 | Mantine | [`piReachTheme`](../pwa/src/lib/ui/pi-reach-theme.ts) 的字号、圆角、阴影、间距与断点取自上述 token；`piReachCssVariablesResolver` 把 Mantine 语义颜色变量（body、text、dimmed、default、primary、disabled、overlay 等）映射到同名角色，不维护平行色值 |
 

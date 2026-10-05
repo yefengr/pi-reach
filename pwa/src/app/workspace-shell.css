@@ -75,8 +75,8 @@
 .pwa-root .pwa-history-row .pwa-nav-link-description { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); opacity: 1; }
 .pwa-root .pwa-nav-session .pwa-nav-link-section { margin: 0 0 0 8px; }
 /* 当前项悬停时保持 selected，不跳回 hover。 */
-.pwa-root .pwa-nav-session:hover:not(:disabled):not([data-disabled]):not([data-active]),
-.pwa-root .pwa-history-row:hover:not(:disabled):not([data-disabled]):not([data-active]) { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-root .pwa-nav-session:hover:not(:disabled):not([data-disabled]):not([data-active]),
+.pwa-root .pwa-history-row:hover:not(:disabled):not([data-disabled]):not([data-active]) { background: var(--pwa-hover); } }
 .pwa-root .pwa-nav-session[data-active],
 .pwa-root .pwa-history-row[data-active] { color: var(--pwa-ink); background: var(--pwa-selected); cursor: default; opacity: 1; }
 .pwa-root .pwa-nav-session[data-disabled],
@@ -168,7 +168,7 @@
   .pwa-root .pwa-session-trigger-icon { position: relative; width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 50%; color: var(--pwa-secondary); }
   .pwa-root .pwa-session-trigger-icon::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: transparent; transition: background-color 120ms var(--pwa-ease-standard); }
   .pwa-root .pwa-session-trigger-icon > svg { position: relative; }
-  .pwa-root .pwa-session-trigger:hover .pwa-session-trigger-icon::before { background: var(--pwa-hover); }
+  @media (hover: hover) { .pwa-root .pwa-session-trigger:hover .pwa-session-trigger-icon::before { background: var(--pwa-hover); } }
   .pwa-root .pwa-session-trigger:focus-visible .pwa-session-trigger-icon { outline: 2px solid var(--pwa-accent); outline-offset: -4px; }
   .pwa-root .pwa-session-trigger-icon .pwa-notice-dot { position: absolute; top: 9px; right: 9px; }
   .pwa-root .pwa-session-trigger-copy { min-width: 0; display: grid; text-align: left; }
