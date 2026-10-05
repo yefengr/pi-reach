@@ -46,15 +46,16 @@ const unknownPending: TimelinePending = {
   delivery: "unknown_delivery",
 };
 
-test("keeps earlier and retry actions alongside an independently collapsed tool", () => {
+test("keeps earlier and retry actions alongside a tool details entry", () => {
   const html = renderList([{ kind: "event", event: toolEvent }, unknownPending], { onRetryUnknown: () => {} });
   const earlierButton = html.match(/<button[^>]*class="[^"]*pwa-earlier-button[^"]*"[^>]*>/)?.[0] ?? "";
-  const toolToggle = html.match(/<button[^>]*aria-label="Expand read tool"[^>]*>/)?.[0] ?? "";
+  const toolAction = html.match(/<button[^>]*aria-label="View read tool details"[^>]*>/)?.[0] ?? "";
   const retryAction = html.match(/<button[^>]*aria-label="Retry delivery"[^>]*>/)?.[0] ?? "";
 
   expect(earlierButton).toMatch(/pwa-button/);
   expect(earlierButton).toMatch(/data-variant="default"/);
-  expect(toolToggle).toMatch(/aria-expanded="false"/);
+  expect(toolAction).toMatch(/aria-haspopup="dialog"/);
+  expect(toolAction).not.toMatch(/aria-expanded|aria-controls/);
   expect(html).not.toContain("pwa-activity");
   // 投递状态行下方的文字按钮「重试」。
   expect(retryAction).toMatch(/data-variant="transparent"/);
@@ -74,10 +75,10 @@ test("keeps final answers visible while thinking is collapsed and skips empty as
   expect(html.match(/<article /g)).toHaveLength(1);
 });
 
-test("keeps failed tools collapsed with a visible error status", () => {
+test("keeps failed tool details out of the conversation with a visible error status", () => {
   const event: TimelineEvent = { ...toolEvent, status: "error", error: "Permission denied", args: { path: "file.txt" }, result: [{ type: "text", text: "Readable text" }] };
   const html = renderList([{ kind: "event", event }]);
-  expect(html).toContain("Expand read tool");
+  expect(html).toContain("View read tool details");
   expect(html).toContain('data-tool-status="error"');
   expect(html).toContain("Error");
   expect(html).not.toContain("Permission denied");
@@ -98,7 +99,7 @@ test("uses a Mantine cancel action only for cancelable queued messages", () => {
   expect(html).toContain(">Queued<");
 });
 
-test("summarizes common tools in the header while raw args stay in the collapsed details", () => {
+test("summarizes common tools in the header without mounting raw args", () => {
   // 分属不同轮次，避免相邻成功工具合并为摘要行，从而检查每条工具自己的标题。
   const read: TimelineEvent = { ...toolEvent, args: { path: "src/components/pwa/message-list.tsx" } };
   const run: TimelineEvent = { ...toolEvent, event_id: "bash", tool_call_id: "bash-1", group_id: "group-bash", tool: "bash", args: { command: "pnpm   test" }, result: "ok" };
@@ -106,9 +107,9 @@ test("summarizes common tools in the header while raw args stay in the collapsed
   const html = renderList([{ kind: "event", event: read }, { kind: "event", event: run }, { kind: "event", event: search }]);
 
   expect(html).toContain("src/components/pwa/message-list.tsx");
-  expect(html).toContain("Expand read tool");
-  expect(html).toContain("Expand bash tool");
-  expect(html).toContain("Expand grep tool");
+  expect(html).toContain("View read tool details");
+  expect(html).toContain("View bash tool details");
+  expect(html).toContain("View grep tool details");
   expect(html).toContain("pnpm   test");
   expect(html).toContain("ToolCard");
   expect(html).not.toContain("&quot;path&quot;");
@@ -140,7 +141,7 @@ const customEvent: TimelineEvent = { event_id: "custom-1", session_id: "session-
 
 test("hides extension custom events without rendering their raw payload", () => {
   const html = renderList([{ kind: "event", event: toolEvent }, { kind: "event", event: customEvent }]);
-  expect(html).toContain("Expand read tool");
+  expect(html).toContain("View read tool details");
   expect(html).not.toContain("notice");
   expect(html).not.toContain("System");
 });
@@ -239,7 +240,8 @@ describe("turn presentation", () => {
     const html = renderList(items, { hasEarlier: false, running, isLive });
     expect(html).not.toContain("pwa-turn-meta");
     expect(html).not.toContain("pwa-tool-group");
-    expect(html.match(/aria-label="Expand read tool"/g)).toHaveLength(2);
+    expect(html.match(/aria-label="View read tool details"/g)).toHaveLength(2);
+    expect(html).not.toContain("aria-expanded");
   });
 
   test("shows Pi is thinking only while running and before the turn has any output", () => {

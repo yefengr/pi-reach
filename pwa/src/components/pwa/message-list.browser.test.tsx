@@ -30,7 +30,15 @@ function runEndItem(): TimelineViewItem {
   return eventItem({ event_id: "run-end", session_id: toolEvent.session_id, leaf_id: toolEvent.leaf_id, group_id: toolEvent.group_id, timestamp: 10, kind: "run_end", status: "complete" });
 }
 function partialItem(partial: TimelinePartial): TimelineViewItem { return { kind: "partial", createdAt: 0, partial }; }
-
+function toolButton(index = 0): HTMLButtonElement { return document.querySelectorAll<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")[index]!; }
+function groupButton(index = 0): HTMLButtonElement { return document.querySelectorAll<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head .pwa-tool-action")[index]!; }
+async function closeReader(key: "escape" | "history" = "escape") {
+  await expect.poll(() => window.history.state?.piReachToolReader).toBe(true);
+  if (key === "history") window.history.back();
+  else await userEvent.keyboard("{Escape}");
+  await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
+  await expect.poll(() => window.history.state?.piReachToolReader === true).toBe(false);
+}
 afterEach(async () => { await page.viewport(1280, 900); });
 
 async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProps> = {}) {
@@ -60,14 +68,13 @@ test("supplements a readonly historical user row when metadata arrives after the
   await expect.element(screen.getByText("notes.txt", { exact: true })).toBeVisible();
   expect(document.querySelector(".pwa-attachment-cards button")).toBeNull();
   await expect.element(screen.getByText("Server fallback notes.txt")).not.toBeInTheDocument();
-  await screen.unmount();
 });
 
 test("thinking is independently collapsed and keyboard toggling leaves the answer visible", async () => {
   const screen = await renderMessageList([eventItem(assistantEvent)]);
   await expect.element(screen.getByText("The final answer.")).toBeVisible();
-  const toggle = screen.getByRole("button", { name: "Expand thinking" });
-  toggle.element().focus();
+  const toggle = document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!;
+  toggle.focus();
   await userEvent.keyboard("{Enter}");
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
   expect(document.querySelector(".pwa-thinking .pwa-text-plain")).not.toBeNull();
@@ -77,22 +84,29 @@ test("thinking is independently collapsed and keyboard toggling leaves the answe
   await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
 });
 
-test("thinking and tools share the reading lock without affecting each other", async () => {
+test("thinking, tool groups and reader merge their reading locks until the final reader exit", async () => {
   const reading: boolean[] = [];
-  const secondThinking: TimelineEvent = { ...assistantEvent, event_id: "second-thinking", blocks: [{ type: "thinking", text: "Another thought." }] };
-  const { screen, update } = await liveList([eventItem(assistantEvent), eventItem(secondThinking), eventItem(toolEvent)], { onReadingChange: value => reading.push(value) });
-  await screen.getByRole("button", { name: "Expand thinking" }).first().click();
+  const second = eventItem({ ...toolEvent, event_id: "second", tool_call_id: "second" });
+  const { screen, update } = await liveList([eventItem(assistantEvent), eventItem(toolEvent), second, runEndItem()], { onReadingChange: value => reading.push(value) });
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
+  await userEvent.click(groupButton());
   expect(reading.at(-1)).toBe(true);
-  await screen.getByRole("button", { name: "Expand thinking" }).first().click();
+  await userEvent.click(toolButton());
+  await expect.element(screen.getByRole("dialog")).toBeVisible();
+  await closeReader();
   expect(reading.at(-1)).toBe(true);
-  await screen.getByRole("button", { name: "Expand read tool" }).click();
+  // 组折叠后仍有展开的思考，读锁不能提早释放。
+  await userEvent.click(groupButton());
   expect(reading.at(-1)).toBe(true);
-  await screen.getByRole("button", { name: "Collapse thinking" }).first().click();
-  expect(reading.at(-1)).toBe(true);
-  await screen.getByRole("button", { name: "Collapse read tool" }).click();
-  expect(reading.at(-1)).toBe(true);
-  await update([eventItem(secondThinking)]);
-  expect(reading.at(-1)).toBe(true);
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
+  expect(reading.at(-1)).toBe(false);
+  await userEvent.click(groupButton());
+  await userEvent.click(toolButton());
+  // 移除整个组，只留思考；Reader 退出完成后才清掉最后一个读锁并回焦列表。
+  await update([eventItem(assistantEvent)]);
+  await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
+  await expect.poll(() => reading.at(-1)).toBe(false);
+  expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
   await update([]);
   expect(reading.at(-1)).toBe(false);
 });
@@ -102,10 +116,10 @@ test("streaming thinking starts collapsed and keeps a manual choice in the forma
   const { screen, update } = await liveList([partialItem(thinking)]);
   await expect.element(screen.getByText("Thinking…")).toBeVisible();
   await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
-  await screen.getByRole("button", { name: "Expand thinking" }).click();
-  const toggle = screen.getByRole("button", { name: "Collapse thinking" }).element();
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
+  const toggle = document.querySelector(".pwa-thinking .pwa-timeline-toggle");
   await update([eventItem(assistantEvent)]);
-  expect(screen.getByRole("button", { name: "Collapse thinking" }).element()).toBe(toggle);
+  expect(document.querySelector(".pwa-thinking .pwa-timeline-toggle")).toBe(toggle);
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
   await expect.element(screen.getByText("Thought process")).toBeVisible();
   await expect.element(screen.getByText("The final answer.")).toBeVisible();
@@ -115,278 +129,246 @@ test("streaming text keeps its timeline identity and reserved rows when it becom
   const partial: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:assistant:1", kind: "assistant", status: "delta", blocks: [{ type: "text", text: "Still writing" }] };
   const { screen, update } = await liveList([partialItem(partial)]);
   const row = document.querySelector<HTMLElement>("article[data-timeline-key]")!;
-  const rowHeight = row.getBoundingClientRect().height;
+  const rowHeight = Math.round(row.getBoundingClientRect().height);
   expect(row.dataset.timelineKey).toContain("answer");
-  // Pi 回复不显示逐条标签与时间，只保留读屏前缀。
   expect(row.querySelector("time")).toBeNull();
   expect(row.querySelector(".pwa-message-label")).toBeNull();
   await update([eventItem(assistantEvent)]);
-  const formalRow = document.querySelector<HTMLElement>("article[data-timeline-key]")!;
-  expect(formalRow).toBe(row);
-  expect(formalRow.getBoundingClientRect().height).toBeCloseTo(rowHeight, 0);
+  expect(document.querySelector("article[data-timeline-key]")).toBe(row);
+  expect(Math.round(row.getBoundingClientRect().height)).toBe(rowHeight);
   await expect.element(screen.getByText("The final answer.")).toBeVisible();
 });
 
-test("all tools start collapsed, including running, failed, interrupted and custom records", async () => {
+test("all tool states show only titles and status, never input, output, images or errors inline", async () => {
   const failed: TimelineEvent = { ...toolEvent, event_id: "failed", tool_call_id: "failed", status: "error", error: "Permission denied" };
-  const interrupted: TimelineEvent = { event_id: "interrupted", tool_call_id: "interrupted", session_id: "session-1", leaf_id: "history-1", timestamp: 2, group_id: "group-1", kind: "tool", tool: "bash", args: { command: "sleep 10" }, truncated: false, status: "interrupted" };
+  const interrupted: TimelineEvent = { event_id: "interrupted", tool_call_id: "interrupted", session_id: toolEvent.session_id, leaf_id: toolEvent.leaf_id, group_id: toolEvent.group_id, timestamp: 2, kind: "tool", tool: "bash", args: { command: "sleep 10" }, truncated: false, status: "interrupted" };
   const custom: TimelineEvent = { ...toolEvent, event_id: "custom", tool_call_id: "custom", tool: "custom", result: { secretPreview: "not visible" } };
-  const { screen } = await liveList([partialItem(toolPartial), eventItem({ ...toolEvent, tool_call_id: "complete", result: "Finished" }), eventItem(failed), eventItem(interrupted), eventItem(custom)]);
-  expect(document.querySelectorAll(".pwa-tool-card")).toHaveLength(5);
-  expect(document.querySelector(".pwa-activity-group")).toBeNull();
-  for (const action of document.querySelectorAll(".pwa-tool-action")) expect(action.getAttribute("aria-expanded")).toBe("false");
-  for (const label of ["Streaming output", "Permission denied", "Finished", "Tool execution was interrupted.", "not visible"]) {
-    await expect.element(screen.getByText(label, { exact: true })).not.toBeInTheDocument();
+  const image: TimelineEvent = { ...toolEvent, tool_call_id: "image", event_id: "image", tool: "write", args: { path: "file.txt", content: "INPUT_MARKER" }, result: [{ type: "image", mimeType: "image/png", data: "IMAGE_MARKER" }] };
+  const { screen } = await liveList([partialItem(toolPartial), eventItem({ ...toolEvent, tool_call_id: "complete", result: "Finished" }), eventItem(failed), eventItem(interrupted), eventItem(custom), eventItem(image)]);
+  expect(document.querySelectorAll(".pwa-tool-card")).toHaveLength(6);
+  for (const action of document.querySelectorAll(".pwa-tool-card .pwa-tool-action")) {
+    expect(action.hasAttribute("aria-expanded")).toBe(false);
+    expect(action.hasAttribute("aria-controls")).toBe(false);
+    expect(action.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(action.querySelector(".pwa-tool-chevron")).toBeNull();
   }
-  expect(document.querySelector("[aria-label='Tool input']")).toBeNull();
-  expect(document.querySelector("[aria-label='Tool output']")).toBeNull();
+  const list = document.querySelector(".pwa-message-list")!;
+  for (const hidden of ["Streaming output", "Permission denied", "Finished", "Tool execution was interrupted.", "not visible", "INPUT_MARKER", "IMAGE_MARKER"]) expect(list.textContent).not.toContain(hidden);
+  expect(list.querySelector("pre, img, .pwa-tool-details, .pwa-tool-preview")).toBeNull();
   await expect.element(screen.getByRole("status", { name: "read: Error" })).toBeVisible();
   await expect.element(screen.getByRole("status", { name: "bash: Interrupted" })).toBeVisible();
 });
 
-test("output and status updates never override manual tool expansion or focus", async () => {
+test("one keyboard action opens live output and partial updates and formalization keep the reader open", async () => {
   const reading: boolean[] = [];
   const { screen, update } = await liveList([partialItem(toolPartial)], { onReadingChange: value => reading.push(value) });
   await update([partialItem({ ...toolPartial, blocks: [{ type: "text", text: "New live output" }] })]);
   await expect.element(screen.getByText("New live output")).not.toBeInTheDocument();
-  const toggle = screen.getByRole("button", { name: "Expand read tool" });
-  const originalButton = toggle.element();
-  originalButton.focus();
+  const origin = toolButton();
+  expect(origin.getAttribute("aria-label")).toBe("View read tool details");
+  origin.focus();
   await userEvent.keyboard("{Enter}");
+  await expect.element(screen.getByRole("dialog")).toBeVisible();
   await expect.element(screen.getByText("New live output")).toBeVisible();
   expect(reading.at(-1)).toBe(true);
-  const completed: TimelineEvent = { ...toolEvent, args: toolPartial.args!, result: [{ type: "text", text: "Final file content" }] };
+  await update([partialItem({ ...toolPartial, blocks: [{ type: "text", text: "Additional live output" }] })]);
+  await expect.element(screen.getByText("Additional live output")).toBeVisible();
+  const completed: TimelineEvent = { ...toolEvent, args: toolPartial.args!, result: "Final file content" };
   await update([eventItem(completed)]);
-  expect(screen.getByRole("button", { name: "Collapse read tool" }).element()).toBe(originalButton);
-  expect(document.activeElement).toBe(originalButton);
+  expect(toolButton()).toBe(origin);
+  await expect.element(screen.getByRole("dialog")).toBeVisible();
   await expect.element(screen.getByText("Final file content")).toBeVisible();
-  await expect.element(screen.getByRole("status", { name: "read: Complete" })).toBeVisible();
-  // 完成状态只显示对勾，不显示文字；可访问名称保留。
-  expect(screen.getByRole("status", { name: "read: Complete" }).element().textContent).toBe("");
-  await userEvent.keyboard(" ");
+  expect(document.querySelector(".pwa-tool-card .pwa-tool-status-complete")?.textContent).toBe("");
+  await closeReader();
+  await expect.poll(() => document.activeElement).toBe(origin);
   expect(reading.at(-1)).toBe(false);
-  const failed: TimelineEvent = { ...toolEvent, args: toolPartial.args!, status: "error", error: "Permission denied" };
-  await update([eventItem(failed)]);
-  await expect.element(screen.getByRole("button", { name: "Expand read tool" })).toBeVisible();
-  // 失败等非完成状态保留图标＋文字。
+  await update([eventItem({ ...toolEvent, status: "error", error: "Permission denied" })]);
   expect(document.querySelector(".pwa-tool-card .pwa-tool-status-error")?.textContent).toBe("Error");
   await expect.element(screen.getByText("Permission denied")).not.toBeInTheDocument();
-  await screen.getByRole("button", { name: "Expand read tool" }).click();
+  await userEvent.click(toolButton());
   await expect.element(screen.getByText("Permission denied")).toBeVisible();
   expect(document.querySelectorAll(".pwa-tool-card")).toHaveLength(1);
+  await closeReader();
 });
 
-test("every tool stays reachable and expansion is independent across parallel completions", async () => {
+test("parallel completion preserves timeline order and reader content while other tools become a collapsed group", async () => {
   const before = { ...assistantEvent, event_id: "before", blocks: [{ type: "text" as const, text: "Before tools" }] };
   const between = { ...assistantEvent, event_id: "between", blocks: [{ type: "text" as const, text: "Between tools" }] };
   const laterTools = Array.from({ length: 6 }, (_, index) => eventItem({ ...toolEvent, event_id: `later-${index}`, tool_call_id: `later-${index}`, tool: "bash", args: { command: `echo ${index}` }, result: `Output ${index}` }));
   const { screen, update } = await liveList([eventItem(before), partialItem(toolPartial), eventItem(between), ...laterTools]);
   const originalOrder = [...document.querySelectorAll(".pwa-message-list > article")];
-  // 这一轮仍有工具在运行：每个工具逐条显示，不合并。
   expect(document.querySelectorAll(".pwa-tool-action")).toHaveLength(7);
-  await screen.getByRole("button", { name: "Expand read tool" }).click();
+  await userEvent.click(toolButton());
   await update([eventItem(before), eventItem(between), ...laterTools, eventItem({ ...toolEvent, args: toolPartial.args!, result: "Read completed last" }), runEndItem()]);
-  // 这一轮结束后，连续成功的 6 条命令合并为一行摘要；已展开的读取被正文隔开，保持原位与展开状态。
   expect([...document.querySelectorAll(".pwa-message-list > article")].slice(0, 3)).toEqual(originalOrder.slice(0, 3));
-  const group = screen.getByRole("button", { name: "Expand Ran 6 commands" });
-  await expect.element(group).toBeVisible();
-  expect(document.querySelectorAll('.pwa-tool-action[aria-expanded="true"]')).toHaveLength(1);
+  expect(groupButton().getAttribute("aria-expanded")).toBe("false");
   await expect.element(screen.getByText("Read completed last")).toBeVisible();
-  // 展开摘要即可看到全部命令，且各自独立展开。
-  await group.click();
+  await closeReader();
+  await userEvent.click(groupButton());
   await expect.poll(() => document.querySelectorAll(".pwa-tool-group .pwa-tool-card").length).toBe(6);
-  expect(document.querySelectorAll('.pwa-tool-group .pwa-tool-card .pwa-tool-action[aria-expanded="false"]')).toHaveLength(6);
-  expect(document.querySelector(".pwa-activity-earlier")).toBeNull();
+  expect(document.querySelectorAll(".pwa-tool-group .pwa-tool-action[aria-haspopup='dialog']")).toHaveLength(6);
+  expect(document.querySelector(".pwa-tool-group .pwa-tool-preview")).toBeNull();
 });
 
-test.each(["history-replacement", "empty"])("releases the reading lock when an expanded tool disappears (%s)", async (removal) => {
+test.each(["history-replacement", "empty"])("tool removal closes the reader and releases its reading lock (%s)", async removal => {
   const runtime = new TimelineRuntime();
   runtime.setScope({ deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: toolEvent.session_id, leafId: toolEvent.leaf_id, selfSenderRef: "self", channelId: "channel" });
   let updateItems!: (items: TimelineViewItem[]) => void;
   let viewport!: ReturnType<typeof useTimelineViewport>;
+  const reading: boolean[] = [];
   const initial = runtime.commit(toolEvent).items;
   function Harness() {
     const [items, setItems] = useState(initial);
     updateItems = setItems;
     viewport = useTimelineViewport();
-    return <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onReadingChange={viewport.setReadingDetails} />;
+    return <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onReadingChange={value => { viewport.setReadingDetails(value); reading.push(value); }} />;
   }
   const screen = await renderPwa(<Harness />);
-  await screen.getByRole("button", { name: "Expand read tool" }).click();
+  await userEvent.click(toolButton());
+  await expect.element(screen.getByRole("dialog")).toBeVisible();
+  expect(reading.at(-1)).toBe(true);
   expect(viewport.followingOutput).toBe(true);
-  // 展开仅暂停自动跟随，不改变仍在底部的阅读状态；移除展开工具会解除暂停。
+  await expect.poll(() => window.history.state?.piReachToolReader).toBe(true);
   const change = runtime.replaceHistory(removal === "empty" ? [] : [assistantEvent]);
-  expect(change.items.some(item => item.kind === "event" && item.event.kind === "tool")).toBe(false);
   flushSync(() => updateItems(change.items));
-  await expect.element(screen.getByRole("button", { name: "Collapse read tool" })).not.toBeInTheDocument();
+  await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
+  await expect.poll(() => reading.at(-1)).toBe(false);
+  await expect.poll(() => window.history.state?.piReachToolReader === true).toBe(false);
+  if (removal !== "empty") expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
   const list = viewport.messageListRef.current!;
   Object.defineProperties(list, { scrollHeight: { configurable: true, value: 1000 }, clientHeight: { configurable: true, value: 400 }, scrollTop: { configurable: true, writable: true, value: 600 } });
   flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
-  await expect.poll(() => viewport.followingOutput).toBe(true);
   flushSync(() => viewport.receiveRealtimeOutput("after-history"));
   expect(viewport.unreadOutput).toBe(0);
 });
 
-test("a historical or offline partial stays folded and is not labeled as running", async () => {
+test("an offline partial has an unknown status and hides its content until opened", async () => {
   const screen = await renderMessageList([partialItem(toolPartial)], { isLive: false });
   await expect.element(screen.getByRole("status", { name: "read: Status unknown" })).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Expand read tool" })).toBeVisible();
   await expect.element(screen.getByText("Streaming output")).not.toBeInTheDocument();
+  expect(toolButton().getAttribute("aria-label")).toBe("View read tool details");
 });
 
-test("a repeated tool id in a different session does not inherit expansion", async () => {
-  const { screen, update } = await liveList([eventItem(toolEvent)]);
-  await screen.getByRole("button", { name: "Expand read tool" }).click();
-  await update([eventItem({ ...toolEvent, session_id: "other-session" })]);
-  await expect.element(screen.getByRole("button", { name: "Expand read tool" })).toBeVisible();
-  expect(document.querySelector('[aria-label="Tool output"]')).toBeNull();
+test("a repeated tool id in another session cannot inherit the old reader", async () => {
+  const reading: boolean[] = [];
+  const { screen, update } = await liveList([eventItem({ ...toolEvent, result: "Old session output" })], { onReadingChange: value => reading.push(value) });
+  await userEvent.click(toolButton());
+  await expect.element(screen.getByText("Old session output")).toBeVisible();
+  await update([eventItem({ ...toolEvent, session_id: "other-session", result: "New session output" })]);
+  await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
+  await expect.poll(() => reading.at(-1)).toBe(false);
+  expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
+  expect(document.querySelector(".pwa-message-list")?.textContent).not.toContain("New session output");
 });
 
-test("tool images and structured output stay inline without a raw-data entry", async () => {
+test("images and structured output appear only in the direct reader without raw-data tabs", async () => {
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
   const screen = await renderMessageList([eventItem({ ...toolEvent, args: { path: "image.png" }, result: [{ type: "text", text: "Image result" }, { type: "image", mimeType: "image/png", data: png }] })]);
-  await screen.getByRole("button", { name: "Expand read tool" }).click();
-  await expect.element(screen.getByRole("img", { name: "Tool output image 2" })).toBeVisible();
-  await screen.getByRole("button", { name: /^View all/ }).click();
+  expect(document.querySelector(".pwa-message-list img")).toBeNull();
+  await userEvent.click(toolButton());
   await expect.element(screen.getByRole("dialog").getByRole("img", { name: "Tool output image 2" })).toBeVisible();
   expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
-  expect(document.querySelector(".pwa-tool-details")?.textContent).not.toContain(png);
+  expect(document.querySelector(".pwa-message-list")?.textContent).not.toContain(png);
+  await closeReader();
   await screen.unmount();
   const fallback = await renderMessageList([eventItem({ ...toolEvent, tool: "custom", result: { files: 3, ok: true } })]);
-  await fallback.getByRole("button", { name: "Expand custom tool" }).click();
-  expect(document.querySelector(".pwa-tool-content")?.textContent).toContain('"files": 3');
-  await expect.element(fallback.getByRole("button", { name: /^View all/ })).not.toBeInTheDocument();
+  await userEvent.click(toolButton());
+  expect(document.querySelector(".pwa-tool-reader-scroll")?.textContent).toContain('"files": 3');
   expect(document.body.textContent).not.toContain("Raw data");
+  await expect.element(fallback.getByRole("button", { name: /^View all/ })).not.toBeInTheDocument();
+  await closeReader();
 });
 
-test.each([1280, 390])("manual expansion and reader preserve layout, scroll and focus at %ipx", async (width) => {
+test.each([1280, 390])("one click opens short output or complete long write input and restores layout, scroll and focus at %ipx", async width => {
   await page.viewport(width, 844);
-  const output = `${"long-output\n".repeat(120)}END OF OUTPUT`;
-  const { screen } = await liveList([
-    eventItem(assistantEvent),
-    partialItem({ ...toolPartial, args: { path: `src/${"directory/".repeat(30)}file.ts` }, blocks: [{ type: "text", text: output }] }),
-  ]);
-  await screen.getByRole("button", { name: "Expand read tool" }).click();
-  const preview = document.querySelector<HTMLElement>(".pwa-tool-preview")!;
-  const previews = document.querySelectorAll<HTMLElement>(".pwa-tool-preview pre");
-  expect(previews.length).toBeGreaterThan(0);
-  expect(preview.getBoundingClientRect().height).toBeLessThanOrEqual(384);
-  for (const pre of previews) expect(getComputedStyle(pre).overflowY).not.toMatch(/auto|scroll/);
-  const control = screen.getByRole("button", { name: /^View all/ });
-  const origin = control.element();
-  origin.focus();
+  const calls: TimelineEvent[] = [
+    { ...toolEvent, args: { path: ".pi/tmp/logs/check.exit" }, result: "SHORT_EXIT_OUTPUT" },
+    { ...toolEvent, tool: "write", args: { path: `src/${"directory/".repeat(30)}file.ts`, content: `${"long-input\n".repeat(120)}FINAL_WRITE_LINE` }, result: "Wrote file" },
+  ];
+  const { screen, update } = await liveList([eventItem(calls[0])]);
   const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
-  const scrollTop = list.scrollTop;
-  await page.screenshot({ path: `../../../.vitest/screenshots/details-preview-${width}.png` });
-  await control.click();
-  await expect.element(screen.getByText("END OF OUTPUT").first()).toBeVisible();
-  const reader = document.querySelector(".pwa-tool-reader")!;
-  expect(document.querySelector(".pwa-root")?.contains(reader)).toBe(true);
-  await expect.poll(() => reader.getBoundingClientRect().right).toBeCloseTo(width, 0);
-  const readerWidth = width >= 768 ? 720 : width;
-  expect(reader.getBoundingClientRect().left).toBeCloseTo(width - readerWidth, 0);
-  expect(reader.getBoundingClientRect().width).toBeCloseTo(readerWidth, 0);
-  expect(reader.getBoundingClientRect().height).toBeCloseTo(844, 0);
-  expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
-  const detailScroll = reader.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
-  detailScroll.scrollTop = detailScroll.scrollHeight;
-  expect(detailScroll.scrollTop).toBeGreaterThan(0);
-  expect(detailScroll.scrollTop + detailScroll.clientHeight).toBeCloseTo(detailScroll.scrollHeight, 0);
-  expect(detailScroll.textContent).toContain("END OF OUTPUT");
-  await page.screenshot({ path: `../../../.vitest/screenshots/details-fullscreen-${width}.png` });
-  await userEvent.keyboard("{Escape}");
-  await expect.poll(() => document.activeElement).toBe(origin);
-  expect(list.scrollTop).toBe(scrollTop);
-  expect(document.querySelector('.pwa-tool-action[aria-expanded="true"]')).not.toBeNull();
-  expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+  for (let index = 0; index < calls.length; index += 1) {
+    await update([eventItem(calls[index])]);
+    const origin = toolButton();
+    origin.focus();
+    const scrollTop = list.scrollTop;
+    expect(list.querySelector(".pwa-tool-preview")).toBeNull();
+    await userEvent.click(origin);
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const reader = document.querySelector<HTMLElement>(".pwa-tool-reader")!;
+    const readerWidth = width >= 768 ? 720 : width;
+    await expect.poll(() => Math.round(reader.getBoundingClientRect().right)).toBe(width);
+    expect(Math.round(reader.getBoundingClientRect().left)).toBe(width - readerWidth);
+    expect(Math.round(reader.getBoundingClientRect().width)).toBe(readerWidth);
+    expect(Math.round(reader.getBoundingClientRect().height)).toBe(844);
+    expect(document.querySelector(".pwa-root")?.contains(reader)).toBe(true);
+    const detailScroll = reader.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
+    expect(detailScroll.textContent).toContain(index === 0 ? "SHORT_EXIT_OUTPUT" : "FINAL_WRITE_LINE");
+    if (index === 1) {
+      detailScroll.scrollTop = detailScroll.scrollHeight;
+      expect(detailScroll.scrollTop).toBeGreaterThan(0);
+      expect(Math.round(detailScroll.scrollTop + detailScroll.clientHeight)).toBe(Math.round(detailScroll.scrollHeight));
+    }
+    await closeReader(index === 0 ? "escape" : "history");
+    await expect.poll(() => document.activeElement).toBe(origin);
+    expect(list.scrollTop).toBe(scrollTop);
+    expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+    expect(origin.hasAttribute("aria-expanded")).toBe(false);
+  }
 });
 
-test.each([1280, 390])("reply, thinking and tools share typography and alignment in both themes at %ipx", async (width) => {
+test.each([1280, 390])("reply and tools align while thinking retains its own chevron and typography in both themes at %ipx", async width => {
   await page.viewport(width, 844);
-  const tools = [
+  const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  const { screen } = await liveList([
+    eventItem({ ...assistantEvent, blocks: [{ type: "text", text: "我会检查 `timeline`，每次工具调用独立显示。" }, { type: "thinking", text: "先核对路径，再检查输出。" }] }),
     eventItem({ ...toolEvent, args: { path: `src/${"directory/".repeat(30)}file.ts`, offset: 200, limit: 60 } }),
     partialItem({ ...toolPartial, tool: "bash", tool_call_id: "running", partial_id: "tool:running", args: { command: `pnpm build\n${"long-argument ".repeat(50)}` } }),
     eventItem({ ...toolEvent, tool: "edit", tool_call_id: "failed", event_id: "failed", args: { path: "src/component.tsx" }, status: "error", error: "Hidden error details" }),
-  ];
-  const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
-  const { screen } = await liveList([
-    { kind: "pending", id: "example-user", clientRequestId: "example", requestId: "example", createdAt: 0, delivery: "pending", text: "请检查消息与工具展示。" },
-    eventItem({ ...assistantEvent, blocks: [{ type: "text", text: "我会检查 `timeline`，每次工具调用独立显示。" }] }),
-    tools[0],
-    eventItem({ ...assistantEvent, event_id: "thinking-between", blocks: [{ type: "thinking", text: "先核对路径，再检查输出。" }] }),
-    ...tools.slice(1),
   ]);
-  const leftOfText = (element: Element) => {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode();
-    while (node && !node.textContent?.trim()) node = walker.nextNode();
-    expect(node).not.toBeNull();
-    const range = document.createRange();
-    range.selectNodeContents(node!);
-    return range.getBoundingClientRect().left;
-  };
   try {
     for (const theme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", theme);
+      const replyLeft = Math.round(document.querySelector(".pwa-message.assistant .pwa-markdown")!.getBoundingClientRect().left);
       for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-action")) {
         const rect = action.getBoundingClientRect();
-        expect(rect.height).toBeGreaterThanOrEqual(44);
-        expect(rect.height).toBeLessThanOrEqual(52);
-        expect(rect.left).toBeGreaterThanOrEqual(0);
-        expect(rect.right).toBeLessThanOrEqual(width);
-        const copy = action.querySelector<HTMLElement>(".pwa-tool-action-copy")!;
-        expect(getComputedStyle(copy).whiteSpace).toBe("nowrap");
-        expect(action.getAttribute("aria-expanded")).toBe("false");
+        expect(Math.round(rect.height)).toBe(44);
+        expect(Math.round(rect.left)).toBe(replyLeft);
+        expect(Math.round(rect.right)).toBeLessThanOrEqual(width);
+        expect(action.hasAttribute("aria-expanded")).toBe(false);
+        expect(action.querySelector(".pwa-tool-chevron")).toBeNull();
+        expect(getComputedStyle(action.querySelector(".pwa-tool-action-copy")!).whiteSpace).toBe("nowrap");
       }
-      const labels = [
-        document.querySelector(".pwa-thinking-title")!,
-        document.querySelector(".pwa-tool-action-copy strong")!,
-      ];
-      for (const label of labels) {
+      for (const label of document.querySelectorAll(".pwa-thinking-title, .pwa-tool-action-copy strong")) {
         expect(getComputedStyle(label).fontSize).toBe("16px");
         expect(getComputedStyle(label).fontStyle).toBe("normal");
         expect(getComputedStyle(label).fontWeight).toBe("600");
-        expect(leftOfText(label)).toBeCloseTo(leftOfText(labels[0]), 0);
       }
-      const thinkingToggle = screen.getByRole("button", { name: "Expand thinking" }).element();
-      const toolToggle = screen.getByRole("button", { name: "Expand read tool" }).element();
-      expect(thinkingToggle.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-      const thinkingArrow = thinkingToggle.querySelector("svg")!;
-      const toolArrow = toolToggle.querySelector("svg")!;
-      expect(thinkingArrow.getBoundingClientRect().left).toBeCloseTo(toolArrow.getBoundingClientRect().left, 0);
-      expect(thinkingArrow.getBoundingClientRect().right).toBeLessThan(leftOfText(labels[0]));
+      expect(Math.round(document.querySelector(".pwa-tool-action-copy strong")!.getBoundingClientRect().left)).toBe(replyLeft);
+      const thinking = document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!;
+      expect(Math.round(thinking.querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().left)).toBe(replyLeft);
+      expect(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left)).toBe(replyLeft + 24);
       for (const card of document.querySelectorAll(".pwa-tool-card")) {
-        expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(56);
         expect(getComputedStyle(card).borderTopWidth).toBe("0px");
         expect(getComputedStyle(card).backgroundColor).toBe("rgba(0, 0, 0, 0)");
       }
       const list = document.querySelector(".pwa-message-list")!;
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
       await expect.element(screen.getByText("Hidden error details")).not.toBeInTheDocument();
-      await page.screenshot({ path: `../../../.vitest/screenshots/unified-timeline-${width}-${theme}.png` });
     }
-    await screen.getByRole("button", { name: "Expand thinking" }).click();
-    await screen.getByRole("button", { name: "Expand read tool" }).click();
-    // Pi 回复占满阅读列、与状态行箭头左缘对齐；展开的思考和工具内容与标题文字对齐。
-    const replyLeft = document.querySelector(".pwa-message.assistant .pwa-markdown")!.getBoundingClientRect().left;
-    expect(document.querySelector(".pwa-thinking .pwa-timeline-toggle")!.getBoundingClientRect().left).toBeCloseTo(replyLeft, 0);
-    const bodyLeft = document.querySelector(".pwa-thinking .pwa-text-plain")!.getBoundingClientRect().left;
-    expect(bodyLeft).toBeCloseTo(replyLeft + 24, 0);
-    expect(document.querySelector(".pwa-tool-preview")!.getBoundingClientRect().left).toBeCloseTo(bodyLeft, 0);
-    for (const selector of [".pwa-thinking .pwa-timeline-chevron", ".pwa-tool-action[aria-expanded='true'] .pwa-timeline-chevron"]) {
-      await expect.poll(() => getComputedStyle(document.querySelector(selector)!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
-    }
-    await page.screenshot({ path: `../../../.vitest/screenshots/unified-timeline-expanded-${width}.png` });
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
+    expect(Math.round(document.querySelector(".pwa-thinking .pwa-text-plain")!.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left));
+    await expect.poll(() => getComputedStyle(document.querySelector(".pwa-thinking .pwa-timeline-chevron")!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
   } finally {
     if (originalTheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalTheme);
     else document.documentElement.removeAttribute("data-mantine-color-scheme");
   }
 });
 
-test.each([1280, 390])("expanded tools use direct TUI content in both themes at %ipx", async width => {
+test.each([1280, 390])("tool groups have a right chevron, no group check and clickable title-only children in both themes at %ipx", async width => {
   await page.viewport(width, 844);
   const calls: Extract<TimelineEvent, { kind: "tool" }>[] = [
-    { ...toolEvent, args: { path: ".pi/tmp/logs/check.exit" }, result: [{ type: "text", text: "0\n" }] },
+    { ...toolEvent, args: { path: ".pi/tmp/logs/check.exit" }, result: "0\n" },
     { ...toolEvent, event_id: "source", tool_call_id: "source", args: { path: "src/status.ts" }, result: "const status = 'ready';" },
     { ...toolEvent, event_id: "command", tool_call_id: "command", tool: "bash", args: { command: "pnpm test" }, result: "Tests passed: 12\nAll checks passed." },
     { ...toolEvent, event_id: "write", tool_call_id: "write", tool: "write", args: { path: "src/settings.ts", content: "export const enabled = true;" }, result: "Wrote file" },
@@ -394,40 +376,37 @@ test.each([1280, 390])("expanded tools use direct TUI content in both themes at 
   ];
   const { screen } = await liveList([...calls.map(eventItem), runEndItem()]);
   const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
-  // 连续成功的工具先合并为一行摘要：展开摘要后再逐条展开。
-  const groupToggle = document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head .pwa-tool-action")!;
-  expect(groupToggle.textContent).toBe("Read 2 files · Ran 1 command · Wrote 1 file · Edited 1 file");
-  groupToggle.focus();
+  const group = groupButton();
+  expect(group.textContent).toBe("Read 2 files · Ran 1 command · Wrote 1 file · Edited 1 file");
+  expect(group.querySelector(".pwa-tool-status, .lucide-check")).toBeNull();
+  expect(group.getAttribute("aria-expanded")).toBe("false");
+  group.focus();
   await userEvent.keyboard("{Enter}");
   await expect.poll(() => document.querySelectorAll(".pwa-tool-group .pwa-tool-card").length).toBe(calls.length);
-  for (const action of [...document.querySelectorAll<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")]) {
-    action.focus();
-    await userEvent.keyboard("{Enter}");
-  }
   try {
     for (const theme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", theme);
-      await expect.element(screen.getByText("0", { exact: true })).toBeVisible();
-      await expect.element(screen.getByText("Requested changes")).toBeVisible();
-      await expect.element(screen.getByRole("button", { name: /^View all/ })).not.toBeInTheDocument();
-      expect(document.querySelectorAll(".pwa-tool-content")).toHaveLength(calls.length);
-      for (const body of document.querySelectorAll<HTMLElement>(".pwa-tool-content")) {
-        expect(body.textContent).not.toContain('"path":');
-        expect(body.textContent).not.toContain('"command":');
-        expect(body.textContent).not.toContain('"oldText":');
+      const arrow = group.querySelector(".pwa-tool-chevron")!.getBoundingClientRect();
+      const summary = group.querySelector(".pwa-tool-group-summary")!.getBoundingClientRect();
+      expect(Math.round(arrow.left)).toBeGreaterThanOrEqual(Math.round(summary.right));
+      expect(Math.round(arrow.right)).toBe(Math.round(group.getBoundingClientRect().right) - 6);
+      expect(group.querySelector("[role='status']")).toBeNull();
+      expect(document.querySelectorAll(".pwa-tool-group .pwa-tool-status-complete")).toHaveLength(calls.length);
+      const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+      expect(list.querySelector(".pwa-tool-content, .pwa-tool-preview, .pwa-tool-details")).toBeNull();
+      expect(list.textContent).not.toContain("Requested changes");
+      expect(list.textContent).not.toContain("Tests passed: 12");
+      for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-card .pwa-tool-action")) {
+        expect(Math.round(action.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        expect(action.hasAttribute("aria-expanded")).toBe(false);
       }
-      expect(document.querySelector(".pwa-tool-detail-label")).toBeNull();
-      // 工具输出是原始文本，不做语法高亮。
-      expect(document.querySelector(".pwa-tool-content .hljs")).toBeNull();
-      for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-read-actions button")) {
-        expect(getComputedStyle(action).borderTopWidth).toBe("0px");
-        expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-      }
-      const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
-      list.scrollTop = 0;
-      await expect.poll(() => getComputedStyle(document.querySelector(".pwa-tool-chevron")!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
-      await page.screenshot({ path: `../../../.vitest/screenshots/tui-tools-${width}-${theme}.png` });
+      await userEvent.click(toolButton(4));
+      await expect.element(screen.getByText("Requested changes")).toBeVisible();
+      expect(document.querySelector(".pwa-tool-reader-scroll .hljs")).toBeNull();
+      await closeReader();
+      expect(document.activeElement).toBe(toolButton(4));
+      expect(group.getAttribute("aria-expanded")).toBe("true");
     }
   } finally {
     if (originalTheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalTheme);
@@ -435,30 +414,43 @@ test.each([1280, 390])("expanded tools use direct TUI content in both themes at 
   }
 });
 
-test("full reader shows write input and restores focus when streaming completion removes its entry button", async () => {
-  const partial = { ...toolPartial, tool: "write", args: { path: "file.txt", content: `${"line\n".repeat(50)}FINAL_WRITE_LINE` }, blocks: [] };
-  const { screen, update } = await liveList([partialItem(partial)]);
-  await screen.getByRole("button", { name: "Expand write tool" }).click();
-  const origin = screen.getByRole("button", { name: /^View all/ });
-  origin.element().focus();
-  await origin.click();
+test("reader survives finished-turn regrouping and falls back to list focus when its trigger is hidden", async () => {
+  const first = { ...toolEvent, args: { path: "a.ts" }, result: "First output" };
+  const second = { ...toolEvent, event_id: "second", tool_call_id: "second", args: { path: "b.ts" }, result: "Second output" };
+  const running = { ...toolPartial, partial_id: "tool:third", tool_call_id: "third", args: { path: "c.ts" } };
+  const reading: boolean[] = [];
+  const { screen, update } = await liveList([eventItem(first), eventItem(second), partialItem(running)], { onReadingChange: value => reading.push(value) });
+  const origin = toolButton();
+  await userEvent.click(origin);
+  await expect.element(screen.getByText("First output")).toBeVisible();
+  await update([eventItem(first), eventItem(second), eventItem({ ...toolEvent, event_id: "third", tool_call_id: "third", args: { path: "c.ts" }, result: "Third output" }), runEndItem()]);
+  expect(groupButton().getAttribute("aria-expanded")).toBe("false");
+  expect(origin.isConnected).toBe(false);
   await expect.element(screen.getByRole("dialog")).toBeVisible();
-  expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
-  await expect.element(screen.getByText("FINAL_WRITE_LINE").first()).toBeVisible();
-  await update([eventItem({ ...toolEvent, tool: "write", args: { path: "file.txt", content: "short" }, result: "Wrote file" })]);
-  await expect.element(screen.getByRole("button", { name: /^View all/ })).not.toBeInTheDocument();
-  await userEvent.keyboard("{Escape}");
-  await expect.poll(() => document.activeElement).toBe(document.querySelector(".pwa-message-list"));
-  await expect.element(screen.getByRole("button", { name: "Collapse write tool" })).toBeVisible();
+  await expect.element(screen.getByText("First output")).toBeVisible();
+  expect(reading.at(-1)).toBe(true);
+  await closeReader("history");
+  await expect.poll(() => reading.at(-1)).toBe(false);
+  expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
+  await userEvent.click(groupButton());
+  await userEvent.click(toolButton());
+  await expect.element(screen.getByText("First output")).toBeVisible();
+  await closeReader();
 });
 
-test("reduced motion keeps the running indicator animating as a status signal", async () => {
+test("reduced motion keeps the running indicator and uses a short reader fade", async () => {
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   try {
     const { screen } = await liveList([partialItem(toolPartial)]);
-    const spinner = document.querySelector(".pwa-tool-status-running > svg")!;
-    expect(getComputedStyle(spinner).animationName).not.toBe("none");
+    expect(getComputedStyle(document.querySelector(".pwa-tool-status-running > svg")!).animationName).not.toBe("none");
     await expect.element(screen.getByRole("status", { name: "read: Running" })).toBeVisible();
+    await userEvent.click(toolButton());
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const reader = document.querySelector<HTMLElement>(".pwa-tool-reader")!;
+    expect(getComputedStyle(reader).transitionProperty).not.toContain("transform");
+    expect(parseFloat(getComputedStyle(reader).transitionDuration)).toBeLessThanOrEqual(0.12);
+    await closeReader();
+    expect(document.activeElement).toBe(toolButton());
   } finally {
     await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   }
@@ -478,10 +470,10 @@ test("reports whether scrolling is within 32px of the latest output", async () =
 
 test("message list controls retain 44px touch targets", async () => {
   const screen = await renderMessageList([eventItem(toolEvent), eventItem(assistantEvent), unknownPending, { ...unknownPending, id: "pending-2", delivery: "accepted", cancelable: true }]);
-  for (const name of ["Expand read tool", "Expand thinking", "Retry delivery", "Cancel queued message"]) {
+  for (const name of ["View read tool details", "Expand thinking", "Retry delivery", "Cancel queued message"]) {
     const rect = screen.getByRole("button", { name }).element().getBoundingClientRect();
-    expect(rect.width).toBeGreaterThanOrEqual(44);
-    expect(rect.height).toBeGreaterThanOrEqual(44);
+    expect(Math.round(rect.width)).toBeGreaterThanOrEqual(44);
+    expect(Math.round(rect.height)).toBeGreaterThanOrEqual(44);
   }
 });
 
@@ -521,17 +513,13 @@ test("code blocks keep the copy button in a header so long lines stay readable o
     const pre = block.querySelector<HTMLElement>("pre")!;
     const code = pre.querySelector<HTMLElement>("code")!;
     expect(language.textContent).toBe("ts");
-    // 长行在代码区内横向滚动；复制按钮位于标题栏，不与任何代码行重叠。
     expect(pre.scrollWidth).toBeGreaterThan(pre.clientWidth);
-    expect(copy.getBoundingClientRect().bottom).toBeLessThanOrEqual(code.getBoundingClientRect().top + 1);
-    const copyRect = copy.getBoundingClientRect();
-    expect(copyRect.width).toBeGreaterThanOrEqual(44);
-    expect(copyRect.height).toBeGreaterThanOrEqual(44);
-    const list = document.querySelector<HTMLElement>(".pwa-message-list");
-    if (list) expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
-  } finally {
-    await screen.unmount();
-  }
+    expect(Math.round(copy.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(code.getBoundingClientRect().top) + 1);
+    expect(Math.round(copy.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44);
+    expect(Math.round(copy.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+    expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+  } finally { await screen.unmount(); }
 });
 
 test("keeps inline code and tool names in neutral text while links keep the accent", async () => {
@@ -547,9 +535,7 @@ test("keeps inline code and tool names in neutral text while links keep the acce
     expect(getComputedStyle(document.querySelector(".pwa-markdown p code")!).color).toBe(softInk);
     expect(getComputedStyle(document.querySelector(".pwa-markdown a")!).color).toBe(accent);
     expect(getComputedStyle(document.querySelector(".pwa-tool-action-copy strong")!).color).toBe(ink);
-  } finally {
-    await screen.unmount();
-  }
+  } finally { await screen.unmount(); }
 });
 
 test("groups only adjacent completed tools of one turn and keeps failures on their own rows", async () => {
@@ -557,30 +543,15 @@ test("groups only adjacent completed tools of one turn and keeps failures on the
   const failed: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "failed", tool_call_id: "failed", tool: "bash", args: { command: "pnpm lint" }, status: "error", error: "Lint failed" };
   const otherTurn: Extract<TimelineEvent, { kind: "tool" }> = { ...read("other-turn", "d.ts"), group_id: "group-2" };
   const reading: boolean[] = [];
-  const { screen } = await liveList([...([read("a", "a.ts"), read("b", "b.ts"), failed, read("c", "c.ts"), read("d", "a.ts"), otherTurn].map(eventItem)), runEndItem()], { onReadingChange: (value) => { reading.push(value); } });
+  await liveList([...([read("a", "a.ts"), read("b", "b.ts"), failed, read("c", "c.ts"), read("d", "a.ts"), otherTurn].map(eventItem)), runEndItem()], { onReadingChange: value => reading.push(value) });
   const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
-  // 失败的命令单独一行并把前后隔开；另一轮里只有一条工具，不合并。
   expect(list.querySelectorAll(":scope > .pwa-tool-group")).toHaveLength(2);
   expect(list.querySelectorAll(":scope > .pwa-tool-card")).toHaveLength(2);
   expect(list.querySelector(":scope > .pwa-tool-card .pwa-tool-status-error")?.textContent).toBe("Error");
-  await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" }).first()).toBeVisible();
-  await screen.getByRole("button", { name: "Expand Read 2 files" }).first().click();
-  await expect.element(screen.getByRole("button", { name: "Collapse Read 2 files" })).toBeVisible();
-  // 展开摘要与展开单条工具一样暂停自动跟随。
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand Read 2 files");
+  await userEvent.click(groupButton());
+  expect(groupButton().getAttribute("aria-label")).toBe("Collapse Read 2 files");
   expect(reading.at(-1)).toBe(true);
-});
-
-test("keeps a tool the user expanded visible when its finished turn is grouped", async () => {
-  const first: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "first", tool_call_id: "first", args: { path: "a.ts" }, result: "First output" };
-  const second: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "second", tool_call_id: "second", args: { path: "b.ts" }, result: "Second output" };
-  const running: Extract<TimelinePartial, { kind: "tool" }> = { ...toolPartial, partial_id: "tool:third", tool_call_id: "third", args: { path: "c.ts" } };
-  const { screen, update } = await liveList([eventItem(first), eventItem(second), partialItem(running)]);
-  // 这一轮还在运行：逐条显示，用户展开第一条。
-  expect(document.querySelector(".pwa-tool-group")).toBeNull();
-  await screen.getByRole("button", { name: "Expand read tool" }).first().click();
-  await expect.element(screen.getByText("First output")).toBeVisible();
-  await update([eventItem(first), eventItem(second), eventItem({ ...toolEvent, event_id: "third", tool_call_id: "third", args: { path: "c.ts" }, result: "Third output" }), runEndItem()]);
-  // 这一轮结束后合并为摘要；组内有已展开的工具，摘要默认展开，正在阅读的内容不被收起。
-  await expect.element(screen.getByRole("button", { name: "Collapse Read 3 files" })).toBeVisible();
-  await expect.element(screen.getByText("First output")).toBeVisible();
+  await userEvent.click(groupButton());
+  expect(reading.at(-1)).toBe(false);
 });

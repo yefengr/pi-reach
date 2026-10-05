@@ -357,7 +357,7 @@ export const en = {
   },
   tools: {
     status: { running: "Running", complete: "Complete", error: "Error", interrupted: "Interrupted", unknown: "Status unknown" },
-    toggle: (expanded: boolean, tool: string) => `${expanded ? "Collapse" : "Expand"} ${tool} tool`,
+    viewDetails: (tool: string) => `View ${tool} tool details`,
     statusLabel: (tool: string, status: string) => `${tool}: ${status}`,
     stillArriving: "Output is still arriving.",
     truncatedByHost: "Output was truncated by the host.",

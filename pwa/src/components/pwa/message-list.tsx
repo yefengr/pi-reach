@@ -3,7 +3,6 @@ import { Button } from "@mantine/core";
 import { CircleAlert } from "lucide-react";
 import { AssistantBlocks, MarkdownContent, ThinkingContent } from "./timeline-content";
 import { ConversationTimeline } from "./conversation-timeline";
-import { ToolCard } from "./tool-card";
 import "./timeline-reconnect.css";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelinePending, TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -103,11 +102,8 @@ function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["on
   }
   if (item.kind === "pending") return <PendingCard pending={item} key={item.id} onRetryUnknown={onRetryUnknown} onCancelQueued={onCancelQueued} />;
   const value = item.kind === "event" ? item.event : item.partial;
-  if (value.kind === "tool") {
-    // 流式与正式结果共用工具身份，保留手动展开状态及键盘焦点。
-    const key = JSON.stringify([value.session_id, value.leaf_id, value.group_id, value.tool_call_id]);
-    return <ToolCard value={value} key={key} />;
-  }
+  // projectTimeline 将全部工具投影为 ToolEntry，由 ConversationTimeline 提供详情入口。
+  if (value.kind === "tool") return null;
   if (item.kind === "event" && item.event.kind !== "tool") return <EventCard event={item.event} key={item.event.event_id} metadata={item.event.kind === "user" ? projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id)) : undefined} />;
   if (item.kind === "partial" && item.partial.kind !== "tool") return <PartialCard partial={item.partial} key={item.partial.partial_id} />;
   return null;

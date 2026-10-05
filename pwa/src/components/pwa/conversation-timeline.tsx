@@ -138,13 +138,11 @@ export function ConversationTimeline({ items, live, completions, running = false
   const toolRuns = completedToolRuns(view.entries, groupId => groupId !== undefined && completions?.has(groupId) === true && !streamingGroups.has(groupId));
   const groupedToolKeys = new Map<string, string>();
   for (const [runKey, run] of toolRuns) for (const tool of run) groupedToolKeys.set(tool.key, runKey);
-  // 组内有工具仍展开（如运行中展开后该轮结束）时摘要默认展开，正在阅读的内容不会被收起。
-  const groupExpanded = (choices: ReadonlyMap<string, boolean>, runKey: string) => choices.get(runKey) ?? toolRuns.get(runKey)!.some(tool => choices.get(tool.key) === true);
-  // 展开的工具组与单条展开的工具、思考一样暂停自动跟随；折叠组内的工具不算正在阅读。
+  const groupExpanded = (choices: ReadonlyMap<string, boolean>, runKey: string) => choices.get(runKey) ?? false;
+  // 只有展开的工具组与思考暂停行内自动跟随；工具详情由 Reader 独立持锁。
   const readingInline = (choices: ReadonlyMap<string, boolean>) => [...toolRuns.keys()].some(runKey => groupExpanded(choices, runKey))
-    || view.entries.some(entry => (entry.kind === "tool" || entry.kind === "thinking") && choices.get(entry.key) === true
-      && !(groupedToolKeys.has(entry.key) && !groupExpanded(choices, groupedToolKeys.get(entry.key)!)));
-  // 历史窗口替换可能移除已展开工具；阅读锁随可见内容同步，并保留到 Reader 退出结束。
+    || view.entries.some(entry => entry.kind === "thinking" && choices.get(entry.key) === true);
+  // 历史窗口替换可能移除阅读内容；阅读锁随可见内容同步，并保留到 Reader 退出结束。
   const reading = reader !== null || scopedFileReader !== null || readingInline(expansionChoices);
   useEffect(() => { onReadingChange?.(reading); fileReadingChange?.(reading); }, [onReadingChange, fileReadingChange, reading]);
   useEffect(() => () => { onReadingChange?.(false); fileReadingChange?.(false); }, [onReadingChange, fileReadingChange]);
@@ -206,8 +204,6 @@ export function ConversationTimeline({ items, live, completions, running = false
         key={entry.key}
         value={entry.value}
         status={"partial_id" in entry.value && !live ? "unknown" : undefined}
-        expanded={expansionChoices.get(entry.key) ?? false}
-        onExpandedChange={expanded => chooseExpansion(entry.key, expanded)}
         onRead={trigger => openReader(entry.key, trigger)}
       />;
   };
