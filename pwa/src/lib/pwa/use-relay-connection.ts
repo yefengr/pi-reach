@@ -6,6 +6,9 @@ import type { ControlFrame, OwnerKeyPair } from "@/lib/pi-reach/types";
 import { reconnectDelayMs, ReconnectState, type ReconnectTrigger } from "@/lib/pwa/reconnect-state";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 
+/** 回到前台后等待 Relay 回包的时限；超时视为连接已在后台失效。 */
+export const RELAY_PROBE_TIMEOUT_MS = 5_000;
+
 type UseRelayConnectionOptions = {
   identity: OwnerKeyPair | null;
   ready: boolean;
@@ -55,6 +58,11 @@ export function useRelayConnection({
     const relay = new RelayClient({ relayUrl, identity });
     relayRef.current = relay;
     let connectRelay: (token: number) => void = () => undefined;
+    let probeTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelProbe = () => {
+      if (probeTimer) clearTimeout(probeTimer);
+      probeTimer = null;
+    };
     // Relay 层的状态变化同时写入会话连接状态（保持原有行为）与独立的 Relay 状态。
     const reportRelay = (state: ConnectionViewState) => {
       setRelayStatus(state);
@@ -125,7 +133,24 @@ export function useRelayConnection({
     };
     reconnectNowRef.current = reconnectNow;
 
+    // 移动端切到后台后，Relay 可能已因心跳超时断开，而浏览器在回到前台时仍报告连接打开。
+    // 重新订阅必然得到每台电脑的 endpoints 回包；时限内收不到任何 Relay 帧就按失效连接立即重连。
+    // 没有已配对电脑时订阅没有回包，无从确认，保持原连接。
+    const resubscribeAndProbe = () => {
+      cancelProbe();
+      const deviceIds = devicesRef.current.map((device) => device.deviceId);
+      if (!relay.subscribeEndpoints(deviceIds) || deviceIds.length === 0) return;
+      probeTimer = setTimeout(() => {
+        probeTimer = null;
+        if (cancelled || relayRef.current !== relay || relay.state !== "open") return;
+        relay.close(1000, "Relay probe timed out");
+        reconnectNow();
+      }, RELAY_PROBE_TIMEOUT_MS);
+    };
+
+    const unsubscribeRoute = relay.on("route", cancelProbe);
     const unsubscribeControl = relay.on("control", (frame) => {
+      cancelProbe();
       if (cancelled || relayRef.current !== relay) return;
       if (frame.type === "relay_info") {
         setRelayVersion(frame.version);
@@ -135,6 +160,7 @@ export function useRelayConnection({
     });
     const unsubscribeState = relay.on("state", (state) => {
       if (cancelled || relayRef.current !== relay || state !== "closed") return;
+      cancelProbe();
       setRelayVersion(null);
       onSessionDisconnect(!intentionalCloseRef.current);
       onAllEndpointsOffline();
@@ -161,6 +187,7 @@ export function useRelayConnection({
     const handleOffline = () => {
       onlineRef.current = false;
       intentionalCloseRef.current = false;
+      cancelProbe();
       controller.cancel();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -177,12 +204,16 @@ export function useRelayConnection({
       retryAttemptRef.current = 0;
       setRetryAttempt(0);
       if (relay.state === "open") {
-        relay.subscribeEndpoints(devicesRef.current.map((device) => device.deviceId));
+        resubscribeAndProbe();
         setRelayStatus("online");
         setGeneration((current) => current + 1);
       } else reconnectNow();
     };
-    const handleVisibility = () => { if (document.visibilityState === "visible" && navigator.onLine) handleOnline(); };
+    const handleVisibility = () => {
+      // 后台计时器可能被挂起，回到前台时再重新确认。
+      if (document.visibilityState !== "visible") cancelProbe();
+      else if (navigator.onLine) handleOnline();
+    };
     const handlePageShow = () => { if (navigator.onLine) handleOnline(); };
 
     window.addEventListener("offline", handleOffline);
@@ -199,6 +230,7 @@ export function useRelayConnection({
 
     return () => {
       cancelled = true;
+      cancelProbe();
       controller.cancel();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -206,6 +238,7 @@ export function useRelayConnection({
       window.removeEventListener("online", handleOnline);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("pageshow", handlePageShow);
+      unsubscribeRoute();
       unsubscribeControl();
       unsubscribeState();
       unsubscribeError();
