@@ -15,6 +15,7 @@ import { PendingCapacityError, TimelineRuntime } from "@/lib/pwa/timeline-runtim
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { PwaApp } from "./pwa-app";
 import { connectionBannerTiming } from "./pwa-app-actions";
+import { RELAY_PROBE_TIMEOUT_MS } from "@/lib/pwa/use-relay-connection";
 
 const relayHarness = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -286,21 +287,24 @@ function renderWorkspaceApp() {
   return render(<PwaUiProvider><PwaAppShell runtimeNotice={null}><PwaApp /></PwaAppShell></PwaUiProvider>);
 }
 
-async function renderOnlineApp(renderApp = () => renderPwa(<PwaApp />)) {
-  const deviceId = "owner-device-key";
-  const screen = await renderApp();
-  await vi.waitFor(() => expect(relayHarness.instances).toHaveLength(1));
-  const relay = relayHarness.instances[0];
-  await vi.waitFor(() => expect(relay?.state).toBe("open"));
-  relay?.emitControl({
+function onlineEndpointsFrame() {
+  return {
     type: "endpoints",
-    device_id: deviceId,
+    device_id: "owner-device-key",
     endpoints: [{
       endpoint_id: "daemon-endpoint",
       runtime_instance_id: "runtime-1",
       metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" },
     }],
-  });
+  };
+}
+
+async function renderOnlineApp(renderApp = () => renderPwa(<PwaApp />)) {
+  const screen = await renderApp();
+  await vi.waitFor(() => expect(relayHarness.instances).toHaveLength(1));
+  const relay = relayHarness.instances[0];
+  await vi.waitFor(() => expect(relay?.state).toBe("open"));
+  relay?.emitControl(onlineEndpointsFrame());
   await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(1));
   return screen;
 }
@@ -1631,6 +1635,71 @@ test("counts error and close from one Owner Relay failure as one retry", async (
   }
 });
 
+function setPageVisibility(state: DocumentVisibilityState) {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+test("reconnects at once when the Relay does not answer after returning to the foreground", async () => {
+  const screen = await renderOnlineApp();
+  const relay = relayHarness.instances[0]!;
+  vi.useFakeTimers();
+  try {
+    const subscriptions = relay.subscriptions.length;
+    setPageVisibility("visible");
+    expect(relay.subscriptions.slice(subscriptions)).toEqual([["owner-device-key"]]);
+    vi.advanceTimersByTime(RELAY_PROBE_TIMEOUT_MS - 1);
+    expect(relay.closeCalls).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(relay.closeCalls).toBe(1);
+    expect(relay.connectCalls).toBe(2);
+    await flushMicrotasks();
+    // 立即重连取代了普通断线的退避重试，不会再多连一次。
+    vi.advanceTimersByTime(1_000);
+    expect(relay.connectCalls).toBe(2);
+  } finally {
+    vi.useRealTimers();
+    Reflect.deleteProperty(document, "visibilityState");
+    await screen.unmount();
+  }
+});
+
+test("keeps the Relay connection when it answers after returning to the foreground", async () => {
+  const screen = await renderOnlineApp();
+  const relay = relayHarness.instances[0]!;
+  vi.useFakeTimers();
+  try {
+    setPageVisibility("visible");
+    relay.emitControl(onlineEndpointsFrame());
+    vi.advanceTimersByTime(RELAY_PROBE_TIMEOUT_MS);
+    expect(relay.closeCalls).toBe(0);
+    expect(relay.connectCalls).toBe(1);
+  } finally {
+    vi.useRealTimers();
+    Reflect.deleteProperty(document, "visibilityState");
+    await screen.unmount();
+  }
+});
+
+test("waits for the next foreground return when the page hides again before the Relay answers", async () => {
+  const screen = await renderOnlineApp();
+  const relay = relayHarness.instances[0]!;
+  vi.useFakeTimers();
+  try {
+    setPageVisibility("visible");
+    setPageVisibility("hidden");
+    vi.advanceTimersByTime(RELAY_PROBE_TIMEOUT_MS);
+    expect(relay.closeCalls).toBe(0);
+    setPageVisibility("visible");
+    vi.advanceTimersByTime(RELAY_PROBE_TIMEOUT_MS);
+    expect(relay.closeCalls).toBe(1);
+  } finally {
+    vi.useRealTimers();
+    Reflect.deleteProperty(document, "visibilityState");
+    await screen.unmount();
+  }
+});
+
 test("shows readable connection feedback when the Owner Relay rejects a connection", async () => {
   relayHarness.nextConnectRejects = 1;
   const screen = await renderPwa(<PwaApp />);
@@ -2848,6 +2917,8 @@ test("a persisted pagehide and pageshow keep attachment selection and sending us
     await expect.element(screen.getByText("bfcache.txt", { exact: true })).toBeVisible();
     window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
     window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    // Relay 对恢复时的重新订阅回包，避免慢机器上触发失效连接重连。
+    relayHarness.instances[0]!.emitControl(onlineEndpointsFrame());
     // 既有 pageshow 恢复会重新握手；模拟当前 Pi 的真实 ready/能力响应。
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
     const restored = channelHarness.channels[1]!;

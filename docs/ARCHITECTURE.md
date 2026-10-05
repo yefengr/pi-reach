@@ -122,7 +122,7 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 
 | 状态来源 | 所有者与撤销边界 |
 | --- | --- |
-| 连接、重连和离线 | [`useRelayConnection`](../pwa/src/lib/pwa/use-relay-connection.ts) 另行持有 Relay 与网络本身的状态，`PwaApp` 持有包含会话握手的连接状态。打开实时会话时由后者驱动 Header 和 `PwaConnectionBanner`；未打开会话（没有在线 Pi、等待选择或等待快照）时由 Relay 状态驱动，没有可连接的 Pi 不视为连接故障。恢复后清除连接反馈。 |
+| 连接、重连和离线 | [`useRelayConnection`](../pwa/src/lib/pwa/use-relay-connection.ts) 另行持有 Relay 与网络本身的状态，`PwaApp` 持有包含会话握手的连接状态。打开实时会话时由后者驱动 Header 和 `PwaConnectionBanner`；未打开会话（没有在线 Pi、等待选择或等待快照）时由 Relay 状态驱动，没有可连接的 Pi 不视为连接故障。恢复后清除连接反馈。回到前台（含页面从缓存恢复）时若连接仍显示打开，重新订阅并等待 Relay 回包，限时内收不到任何 Relay 帧即视为已在后台失效，立即重连；没有已配对电脑时订阅没有回包，不做此确认。 |
 | 一次性全局反馈（Toast） | 每个 PWA Shell 持有独立的 [`OperationNotificationController`](../pwa/src/lib/pwa/operation-notifications.ts)，由 `PwaToastProvider` 共享给工作区 `PwaApp` 与入口级 `ServiceWorkerRegister`，唯一通知展示组件随工作区根节点定位，在启动／故障态使用 Shell fallback；单独挂载组件时使用各自控制器。控制器管理单槽 Toast：操作失败不自动消失，匹配成功回执、手动关闭或对应会话/实例清理撤销；普通反馈（已复制、设置已保存、连接已恢复、配对成功）4 秒后自动关闭，悬停或聚焦暂停，错误期间排队。Service Worker 更新状态由注册组件持有，更新提示通过同一控制器显示持久可关闭的「刷新」操作 Toast，普通提示不会挤掉待处理更新，错误结束后更新可恢复；旧实例回调不能写入新实例。 |
 | 设置页路由 | [`useSettingsRoute`](../pwa/src/lib/pwa/settings-route.ts) 以 history state 持有设置页记录及其来源（工作区或已展开的移动导航与滚动位置）；页内返回与浏览器后退统一由 `popstate` 恢复。工作区在设置页期间保持挂载（隐藏且 `inert`），会话、草稿与阅读位置不重建。 |
 | 表单、确认、历史加载与消息投递 | 各领域组件及 timeline 状态继续持有错误与重试条件；`PwaStatusToast` 仍用于现有局部错误，不是全局操作通知的统一状态容器。 |
