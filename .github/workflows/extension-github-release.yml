@@ -1,0 +1,44 @@
+# Extension GitHub Release：Extension 在 npm 上线后，创建 extension-vX.Y.Z 注解标签与 GitHub Release（当前版本标记 Latest）。
+# - 背景：Extension npm 工作流（release.yml）只把新版本提交到 npm 待审区，维护者在 npmjs.com 批准的时刻 GitHub 无法感知，
+#   因此定时检查：当前版本已在 npm 上而标签或 Release 缺失时补建；尚未批准时跳过，下次再查。
+# - 触发：每 30 分钟一次；也可在 Actions 页面手动运行，并可指定要补建的历史版本。
+# - 标签打在 pi-extension/package.json 版本号变为该版本的提交上；逻辑在 scripts/extension-github-release.sh。
+# 流程见 docs/DEPLOYMENT.md「版本标签与 GitHub Release」。
+name: Extension GitHub Release
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 要补建的历史版本（X.Y.Z），留空使用当前版本
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-github-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/extension-github-release.sh ${VERSION:+"$VERSION"}
