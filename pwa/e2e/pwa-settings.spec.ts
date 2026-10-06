@@ -40,6 +40,24 @@ test("opens settings as its own page, saves a local relay URL, and returns", asy
   await expect(page).toHaveTitle("Pi Reach App");
 });
 
+test("restores the entry metadata default after clearing a saved custom Relay", async ({ page, pwa }, testInfo) => {
+  await pwa.open();
+  const deploymentDefault = await page.locator('meta[name="pi-reach-default-relay-url"]').getAttribute("content");
+  if (!deploymentDefault) throw new Error("Missing runtime Relay metadata");
+  await openSettings(page, testInfo.project.name === "mobile");
+  const input = page.getByRole("textbox", { name: "Relay URL" });
+  await expect(input).toHaveValue(deploymentDefault);
+  await expect(input).toHaveAttribute("placeholder", deploymentDefault);
+  await input.fill(TEST_RELAY_URL);
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.reload();
+  await expect(input).toHaveValue(TEST_RELAY_URL);
+  await input.fill("   ");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.reload();
+  await expect(input).toHaveValue(deploymentDefault);
+});
+
 test("returns with browser back and re-enters with browser forward", async ({ page, pwa }, testInfo) => {
   const mobile = testInfo.project.name === "mobile";
   await pwa.open();

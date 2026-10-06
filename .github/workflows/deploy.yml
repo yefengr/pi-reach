@@ -1,12 +1,6 @@
-# Deploy PWA & Relay：构建 Relay 与 PWA 镜像并推送到 GHCR，经 production 环境审批后部署到自托管服务器。
-# - 触发：推送到 main 且 relay/package.json 或 pwa/package.json 的 version 发生变化；也可在 Actions 页面手动运行并
-#   选择组件（不比较版本号）。对应的 relay-vX.Y.Z／pwa-vX.Y.Z 标签已存在时跳过该组件。
-# - 构建：在 GitHub 托管 runner 上构建服务器架构（默认 linux/amd64，可用仓库变量 DEPLOY_PLATFORM 覆盖）的镜像，
-#   以 GITHUB_TOKEN 推送到 ghcr.io/<owner>/pi-reach-relay|pi-reach-pwa:vX.Y.Z，并附 GitHub 构建来源证明。
-# - 部署：production Environment 需维护者批准，其 Secrets 提供受限 SSH 密钥。服务器的 authorized_keys 只允许该密钥执行
-#   scripts/deploy-from-ci.sh：按摘要拉取镜像、只更新所选服务，健康检查失败时恢复原镜像。先 Relay 后 PWA。
-# - 收尾：公网检查通过后在本次提交上创建注解标签与 GitHub Release（不标记 Latest）。
-# 一次性配置、首次运行与本机备用流程见 docs/DEPLOYMENT.md「自动部署」。
+# 单次构建 → staging 自动检查与真机验收 → production 审批 → 同 digest 晋升 → Release。
+# 仅 main 版本变化或手动触发；候选修复合入 main 后手动重新构建同一个未发布版本。
+# Environment/服务器的一次性配置与排队补跑见 docs/DEPLOYMENT.md。
 name: Deploy PWA & Relay
 
 on:
@@ -24,6 +18,7 @@ on:
 permissions:
   contents: read
 
+# 包含审批等待期，防止另一候选覆盖 staging。GitHub 只保留一个 pending run；被替换者需手动补跑。
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -40,6 +35,11 @@ jobs:
       pwa-version: ${{ steps.decide.outputs.pwa-version }}
       image-prefix: ${{ steps.decide.outputs.image-prefix }}
     steps:
+      - name: Require main
+        env:
+          REF: ${{ github.ref }}
+        run: test "$REF" = refs/heads/main
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -77,8 +77,8 @@ jobs:
             echo "$component=$selected" >> "$GITHUB_OUTPUT"
             echo "$component-version=$version" >> "$GITHUB_OUTPUT"
           done
-          # GHCR 镜像名必须小写。
           echo "image-prefix=ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          note "若排队运行被替换或候选被拒：修复合并 main 后手动运行，再完成 staging 与真机验收；不得沿用旧 digest 证据。"
 
   build:
     name: build
@@ -101,15 +101,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
       - uses: docker/setup-buildx-action@v4
-
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build and push Relay
         id: relay
         if: needs.plan.outputs.relay == 'true'
@@ -125,7 +122,6 @@ jobs:
             org.opencontainers.image.source=${{ env.SOURCE }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ needs.plan.outputs.relay-version }}
-
       - name: Attest Relay
         if: needs.plan.outputs.relay == 'true'
         uses: actions/attest-build-provenance@v4
@@ -133,7 +129,6 @@ jobs:
           subject-name: ${{ needs.plan.outputs.image-prefix }}/pi-reach-relay
           subject-digest: ${{ steps.relay.outputs.digest }}
           push-to-registry: true
-
       - name: Build and push PWA
         id: pwa
         if: needs.plan.outputs.pwa == 'true'
@@ -149,7 +144,6 @@ jobs:
             org.opencontainers.image.source=${{ env.SOURCE }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ needs.plan.outputs.pwa-version }}
-
       - name: Attest PWA
         if: needs.plan.outputs.pwa == 'true'
         uses: actions/attest-build-provenance@v4
@@ -158,9 +152,52 @@ jobs:
           subject-digest: ${{ steps.pwa.outputs.digest }}
           push-to-registry: true
 
-  deploy:
-    name: deploy
+  staging:
+    name: staging
     needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: staging
+      url: ${{ vars.PWA_URL }}
+    permissions:
+      contents: read
+    outputs:
+      baseline: ${{ steps.test.outputs.baseline }}
+      tested: ${{ steps.test.outputs.tested }}
+      target: ${{ steps.test.outputs.target }}
+    env:
+      IMAGE_PREFIX: ${{ needs.plan.outputs.image-prefix }}
+      SELECT_RELAY: ${{ needs.plan.outputs.relay }}
+      SELECT_PWA: ${{ needs.plan.outputs.pwa }}
+      RELAY_IMAGE: ${{ needs.plan.outputs.image-prefix }}/pi-reach-relay:v${{ needs.plan.outputs.relay-version }}@${{ needs.build.outputs.relay-digest }}
+      PWA_IMAGE: ${{ needs.plan.outputs.image-prefix }}/pi-reach-pwa:v${{ needs.plan.outputs.pwa-version }}@${{ needs.build.outputs.pwa-digest }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      PWA_URL: ${{ vars.PWA_URL }}
+      RELAY_URL: ${{ vars.RELAY_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Align, deploy and smoke staging
+        id: test
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: node scripts/deploy-ci.mjs staging
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/pi-reach-deploy-*
+
+  production:
+    name: production
+    needs: [plan, build, staging]
+    # 默认 success() 依赖，失败/取消/跳过的 staging 不能进入生产。
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -169,12 +206,19 @@ jobs:
     permissions:
       contents: write
     env:
-      PREFIX: ${{ needs.plan.outputs.image-prefix }}
+      IMAGE_PREFIX: ${{ needs.plan.outputs.image-prefix }}
+      SELECT_RELAY: ${{ needs.plan.outputs.relay }}
+      SELECT_PWA: ${{ needs.plan.outputs.pwa }}
+      RELAY_IMAGE: ${{ needs.plan.outputs.image-prefix }}/pi-reach-relay:v${{ needs.plan.outputs.relay-version }}@${{ needs.build.outputs.relay-digest }}
+      PWA_IMAGE: ${{ needs.plan.outputs.image-prefix }}/pi-reach-pwa:v${{ needs.plan.outputs.pwa-version }}@${{ needs.build.outputs.pwa-digest }}
+      BASELINE: ${{ needs.staging.outputs.baseline }}
+      TESTED: ${{ needs.staging.outputs.tested }}
+      STAGING_TARGET: ${{ needs.staging.outputs.target }}
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
-      RELAY_URL: ${{ vars.RELAY_URL }}
       PWA_URL: ${{ vars.PWA_URL }}
+      RELAY_URL: ${{ vars.RELAY_URL }}
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -182,89 +226,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Prepare SSH
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Verify candidate, promote immutable images and check production
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          for name in DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_HOST DEPLOY_USER; do
-            if [ -z "${!name}" ]; then echo "production 环境缺少 Secret：$name"; exit 1; fi
-          done
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          cat > "$RUNNER_TEMP/deploy-lib.sh" <<'EOF'
-          # 服务器端的 authorized_keys 把这把密钥限定为执行 deploy-from-ci.sh，这里发送的只是请求参数。
-          remote_deploy() {
-            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
-              -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ConnectTimeout=15 -o ServerAliveInterval=30 \
-              -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "deploy $1 $2"
-          }
-          # 重新运行时，已在本次运行中部署并打过标签的组件直接跳过。
-          released() {
-            gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1-v$2" >/dev/null 2>&1
-          }
-          check_url() {
-            [ -n "$1" ] || return 0
-            curl -fsS --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 10 --max-time 30 "$1" >/dev/null
-          }
-          # 在本次提交上创建注解标签与 Release；说明列出自上一个同组件标签以来涉及该组件的提交。
-          release() {
-            local component="$1" title="$2" version="$3" image="$4" digest="$5" url="$6"
-            shift 6
-            local tag="$component-v$version" previous changes tag_sha
-            previous="$(git describe --tags --abbrev=0 --match "$component-v*" "$GITHUB_SHA" 2>/dev/null || true)"
-            changes="$(git log --no-merges --format='- %s' "${previous:+$previous..}$GITHUB_SHA" -- "$@" | grep -v '^- chore: 发布' || true)"
-            {
-              if [ -n "$url" ]; then
-                echo "线上地址：[$url]($url)"
-              else
-                echo "线上地址：未配置"
-              fi
-              echo
-              echo "镜像：[\`$image\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pkgs/container/pi-reach-$component)"
-              echo
-              echo "镜像摘要：\`$digest\`"
-              echo
-              echo "部署记录：[查看工作流]($RUN_URL)"
-              echo
-              echo "## 变更"
-              echo
-              echo "${changes:-- 自 ${previous:-首个版本} 以来没有涉及该组件的提交。}"
-            } > "$RUNNER_TEMP/$tag.md"
-            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags" -f tag="$tag" -f message="$title $version" -f object="$GITHUB_SHA" -f type=commit --jq .sha)"
-            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$tag_sha" >/dev/null
-            gh release create "$tag" --verify-tag --title "$title $version" --notes-file "$RUNNER_TEMP/$tag.md" --latest=false
-            echo "- $title $version 已部署：\`$image\`" >> "$GITHUB_STEP_SUMMARY"
-          }
-          EOF
-
-      - name: Deploy Relay
-        if: needs.plan.outputs.relay == 'true'
-        env:
-          VERSION: ${{ needs.plan.outputs.relay-version }}
-          DIGEST: ${{ needs.build.outputs.relay-digest }}
-        run: |
-          . "$RUNNER_TEMP/deploy-lib.sh"
-          if released relay "$VERSION"; then echo "relay-v$VERSION 已发布，跳过。"; exit 0; fi
-          remote_deploy relay "$PREFIX/pi-reach-relay:v$VERSION@$DIGEST"
-          check_url "${RELAY_URL:+${RELAY_URL%/}/health}"
-          release relay Relay "$VERSION" "$PREFIX/pi-reach-relay:v$VERSION" "$DIGEST" "$RELAY_URL" relay packages/protocol
-
-      - name: Deploy PWA
-        if: needs.plan.outputs.pwa == 'true'
-        env:
-          VERSION: ${{ needs.plan.outputs.pwa-version }}
-          DIGEST: ${{ needs.build.outputs.pwa-digest }}
-        run: |
-          . "$RUNNER_TEMP/deploy-lib.sh"
-          if released pwa "$VERSION"; then echo "pwa-v$VERSION 已发布，跳过。"; exit 0; fi
-          remote_deploy pwa "$PREFIX/pi-reach-pwa:v$VERSION@$DIGEST"
-          check_url "$PWA_URL"
-          release pwa PWA "$VERSION" "$PREFIX/pi-reach-pwa:v$VERSION" "$DIGEST" "$PWA_URL" pwa packages/protocol
-
-      - name: Remove SSH key
+        run: node scripts/deploy-ci.mjs production
+      - name: Create or repair production tags and Releases
+        run: bash scripts/deploy-release.sh
+      - name: Remove temporary SSH material
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: rm -rf "$RUNNER_TEMP"/pi-reach-deploy-*

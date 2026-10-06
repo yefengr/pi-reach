@@ -212,7 +212,60 @@ acquire_deploy_lock() {
 
 compose_remote() {
   local compose_args="$1"
-  remote "cd '$REMOTE_DIR' && export RELAY_IMAGE='$CONFIG_RELAY_IMAGE' PWA_IMAGE='$CONFIG_PWA_IMAGE' && docker-compose $compose_args"
+  remote "cd '$REMOTE_DIR' && unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES && export RELAY_IMAGE='$CONFIG_RELAY_IMAGE' PWA_IMAGE='$CONFIG_PWA_IMAGE' && docker-compose --env-file /dev/null -f '$REMOTE_DIR/docker-compose.yml' $compose_args"
+}
+
+# 本机备用入口仍只允许固定生产结构；用 Compose 自身规范化完整契约。
+production_compose_contract() {
+  cat <<'EOF'
+name: pi-reach
+
+services:
+  relay:
+    image: ${RELAY_IMAGE:?RELAY_IMAGE must be set}
+    container_name: pi-reach-relay
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PI_REACH_RELAY_PORT: "3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+  pwa:
+    image: ${PWA_IMAGE:?PWA_IMAGE must be set}
+    container_name: pi-reach-pwa
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+EOF
+}
+VALIDATE_PROGRAM="$(declare -f production_compose_contract)"$'\n''set -Eeuo pipefail
+shift
+REMOTE_DIR="$1"
+export RELAY_IMAGE="$2" PWA_IMAGE="$3"
+unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
+cd "$REMOTE_DIR"
+TEMPLATE="$(mktemp "$REMOTE_DIR/.pi-reach-compose-contract.XXXXXX")"
+trap '\''rm -f "$TEMPLATE"'\'' EXIT
+production_compose_contract > "$TEMPLATE"
+ACTUAL="$(docker-compose --env-file /dev/null --project-directory "$REMOTE_DIR" -f "$REMOTE_DIR/docker-compose.yml" config --format json 2>/dev/null)" || exit 1
+EXPECTED="$(docker-compose --env-file /dev/null --project-directory "$REMOTE_DIR" -f "$TEMPLATE" config --format json 2>/dev/null)" || exit 1
+[[ "$ACTUAL" == "$EXPECTED" ]]'
+
+validate_remote_compose() {
+  remote "bash -s -- compose-contract '$REMOTE_DIR' '$CONFIG_RELAY_IMAGE' '$CONFIG_PWA_IMAGE'" <<< "$VALIDATE_PROGRAM" || fail "Unable to parse the remote Compose configuration or production contract mismatch"
 }
 
 wait_for_health() {
@@ -224,8 +277,7 @@ wait_for_health() {
     if [ \"\$state\" = healthy ]; then exit 0; fi
     sleep 2
   done
-  docker inspect '$container' 2>/dev/null || true
-  cd '$REMOTE_DIR' && export RELAY_IMAGE='$CONFIG_RELAY_IMAGE' PWA_IMAGE='$CONFIG_PWA_IMAGE' && docker-compose logs --tail=80 '$service'
+  printf 'Service health check failed\n' >&2
   exit 1"
 }
 
@@ -327,6 +379,9 @@ info "Preparing remote deployment directory"
 remote "mkdir -p '$REMOTE_DIR'"
 scp -q "$ROOT_DIR/docker-compose.yml" "$SSH_TARGET:$REMOTE_DIR/docker-compose.yml"
 
+info "Validating remote production Compose contract"
+validate_remote_compose
+
 info "Transferring selected local images to the server"
 if [[ "$KEEP_IMAGE_ARCHIVE" == 1 ]]; then
   ARCHIVE_DIR="$ROOT_DIR/.pi/tmp"
@@ -345,6 +400,7 @@ fi
 for index in "${!IMAGE_REFS[@]}"; do
   image_id="$(get_remote_image_id "${IMAGE_REFS[$index]}")"
   info "${IMAGE_LABELS[$index]} image: ${IMAGE_REFS[$index]} (${image_id:0:19})"
+  if [[ "${SERVICES[$index]}" == relay ]]; then CONFIG_RELAY_IMAGE="$image_id"; else CONFIG_PWA_IMAGE="$image_id"; fi
 done
 
 info "Validating remote Compose configuration"

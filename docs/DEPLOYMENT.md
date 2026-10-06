@@ -1,15 +1,17 @@
 # Pi Reach 自托管部署
 
-本文记录把 Relay/PWA 发布到远程 Linux 服务器的可重复流程：常规版本由 GitHub Actions 的 Deploy PWA & Relay 工作流构建、经审批后部署（见「自动部署」），本机脚本用于备用发布、更新 Compose 文件与首次初始化。自 2026-09-30 起只保留一个环境：原隔离测试服务（`site-test`、`relay-test`）、test/promote 状态文件和旧域名均已移除，部署直接更新线上服务。本机部署命令只选择 scope：
+本文记录 Relay/PWA 的仓库部署入口和服务器准备要求。Deploy PWA & Relay 工作流采用单次构建、staging 验证、production 审批后同 digest 晋升；本机脚本仍只用于生产备用部署、同步根 Compose 和首次初始化，不自动经过 staging。
+
+这套 staging 能力需要先手工安装新版服务器入口、独立 Compose、受限密钥、GitHub Environment 和 Caddy 路由。仓库代码存在不代表远程环境已初始化或真机验收已通过；在这些准备完成前，不触发包含新流程的版本发布。2026-09-30 移除的旧 `site-test`／`relay-test` 和 test/promote 状态文件不恢复。当前本机命令仍只选择 scope：
 
 ```text
 ./scripts/deploy-self-hosted.sh [pwa|relay|both]
   本机构建 -> SSH 传输 -> 更新所选服务 -> 健康检查与公网检查 -> 清理旧镜像
 ```
 
-省略 scope 时默认 `both`。部署没有隔离测试阶段，发布前须完成受影响的验证（见仓库根 `AGENTS.md` 的常用验证）。本机脚本默认不推送 Docker Hub，镜像经 SSH 传输，不要求服务器从镜像仓库拉取应用镜像；自动部署则由服务器从 GHCR 按摘要拉取。本机 Buildx 构建仍需能够取得 Dockerfile 使用的基础镜像和构建依赖。Caddy 只在首次初始化或域名/端口变化时调整，普通版本部署不修改 Caddy。
+省略 scope 时默认 `both`。本机备用部署没有隔离测试阶段，须单独授权并在执行前完成受影响验证（见仓库根 `AGENTS.md` 的常用验证）。本机脚本默认不推送 Docker Hub，镜像经 SSH 传输，不要求服务器从镜像仓库拉取应用镜像；自动部署则由服务器从 GHCR 按摘要拉取。本机 Buildx 构建仍需能够取得 Dockerfile 使用的基础镜像和构建依赖。Caddy 只在首次初始化或域名/端口变化时调整，普通版本部署不修改 Caddy。
 
-Node 工程使用根 pnpm workspace；开发工具链由根 `package.json`、`.node-version` 和 `pnpm-workspace.yaml` 固定。私有共享包 `packages/protocol` 由根安装的 `prepare` 与 workspace 构建流程产出；PWA 及 E2E Host、Owner 的 Docker 构建输入均包含其源码，并通过根 workspace 安装和构建，不依赖独立发布的共享包。PWA Dockerfile 位于 `pwa/`，构建上下文必须是仓库根，由 `pwa/Dockerfile.dockerignore` 限定可复制的输入。PWA 在 Node 构建阶段生成 `pwa/dist/`，运行镜像以非 root Nginx 托管 `/usr/share/nginx/html`，不运行 Node 应用服务器。配置真源为 [`pwa/nginx.conf.template`](../pwa/nginx.conf.template)，由容器入口使用 `PORT` 渲染，默认端口仍为 3000；保留 curl 和根路径健康检查，现有 Compose 端口及外层 Caddy 反向代理不变。
+Node 工程使用根 pnpm workspace；开发工具链由根 `package.json`、`.node-version` 和 `pnpm-workspace.yaml` 固定。私有共享包 `packages/protocol` 由根安装的 `prepare` 与 workspace 构建流程产出；PWA 及 E2E Host、Owner 的 Docker 构建输入均包含其源码，并通过根 workspace 安装和构建，不依赖独立发布的共享包。PWA Dockerfile 位于 `pwa/`，构建上下文必须是仓库根，由 `pwa/Dockerfile.dockerignore` 限定可复制的输入。PWA 在 Node 构建阶段生成 `pwa/dist/`，运行镜像以非 root Nginx 托管 `/usr/share/nginx/html`，不运行 Node 应用服务器。Nginx 配置真源为 [`pwa/nginx.conf.template`](../pwa/nginx.conf.template)，由容器入口使用 `PORT` 渲染，默认端口仍为 3000；保留 curl 和根路径健康检查。入口 HTML 的公开默认 Relay 由启动脚本注入，生产和测试使用同一镜像，见「PWA 运行时配置」。
 
 PWA 根路径返回 307 到 `/app`；`/app/` 规范化到 `/app`，`/app/<子路径>`（如 `/app/settings`）返回应用入口 HTML 并由前端识别；其他缺失页面和资源返回 404，不统一回退到 HTML。HTML、`/sw.js` 和 `/manifest.webmanifest` 使用 `Cache-Control: no-cache`，存在的 `/assets/` 哈希资源使用长期 immutable 缓存。`pnpm start` 和 E2E 启动脚本仅供本地 Vite preview，生产运行方式以 Dockerfile 为准。
 
@@ -19,11 +21,15 @@ PWA 根路径返回 307 到 `/app`；`/app/` 规范化到 `/app`，`/app/<子路
 
 | 文件 | 作用 | 是否提交 |
 |---|---|---|
-| `docker-compose.yml` | Relay 与 PWA 的运行编排，Compose 项目名固定为 `pi-reach` | 是 |
+| `docker-compose.yml` | 生产 Relay 与 PWA，固定项目 `pi-reach` | 是 |
+| `docker/staging/compose.yml` | 测试 Relay 与 PWA，固定项目 `pi-reach-staging`；手工安装为测试目录的 `docker-compose.yml` | 是 |
 | `deploy.env.example` | 部署变量模板，不含真实值 | 是 |
 | `deploy.env` | 本机真实 SSH/服务器配置 | 否，已加入 `.gitignore` |
 | `scripts/deploy-self-hosted.sh` | 本机按 scope 部署并验收 | 是 |
-| `.github/workflows/deploy.yml` | 自动部署：构建并推送 GHCR 镜像，审批后部署，创建标签与 Release | 是 |
+| `.github/workflows/deploy.yml` | 单次构建、staging、production 审批与晋升 | 是 |
+| `scripts/deploy-ci.mjs`、`scripts/deploy-smoke.mjs` | runner 端组件对齐、快照核对、HTTPS/WebSocket smoke | 是 |
+| `scripts/deploy-release.sh` | 上线核对后创建或修复标签与 Release | 是 |
+| `pwa/docker-entrypoint.d/40-runtime-config.sh` | 非 root 容器启动时校验并注入公开 Relay metadata | 是 |
 | `scripts/deploy-from-ci.sh` | 自动部署的服务器端入口，只能由受限 SSH 密钥触发；由维护者手工安装到服务器 | 是 |
 | `/etc/caddy/Caddyfile` | 服务器 HTTPS 与反向代理 | 服务器 root 配置，不由部署脚本修改 |
 
@@ -108,25 +114,30 @@ docker-compose version
 
 ## 自动部署
 
-常规版本由 [Deploy PWA & Relay 工作流](../.github/workflows/deploy.yml)发布，决策见 [ADR-20261001](adr/20261001-ci-deploy-ghcr.md)：
+常规版本由 [Deploy PWA & Relay 工作流](../.github/workflows/deploy.yml)发布，GHCR 基础决策见 [ADR-20261001](adr/20261001-ci-deploy-ghcr.md)，当前 staging 晋升决策见下方 ADR-20261006：
 
-1. 修改 `relay/package.json` 或 `pwa/package.json` 的 `version`，经 Pull Request 合并到 `main`；也可在 Actions 页面手动运行并选择组件。对应的 `relay-vX.Y.Z`／`pwa-vX.Y.Z` 标签已存在时跳过该组件。
-2. 工作流在 GitHub 托管 runner 上构建服务器架构的镜像，推送到 `ghcr.io/<owner>/pi-reach-relay`／`pi-reach-pwa:vX.Y.Z`，并附构建来源证明。
-3. 部署作业进入 `production` Environment，等待维护者批准。
-4. 批准后以受限 SSH 密钥连接服务器，`deploy-from-ci.sh` 按摘要拉取镜像，只更新所选服务；健康检查失败时恢复部署前的镜像，工作流以失败结束。两者都部署时先 Relay 后 PWA。
-5. 公网检查通过后，在本次提交上创建注解标签与 GitHub Release（不标记 Latest）。说明列出自上一个同组件标签以来涉及该组件的提交，必要时再手工补充。
+1. 版本 PR 完成 CI 和评审后合入 `main`；也可手动选择组件运行，但非 `main` 一律拒绝。已有正式标签的组件在 plan 跳过。
+2. GitHub 托管 runner 只构建所选组件一次，推送 GHCR 并附来源证明，输出不可变 digest。
+3. staging 用受限密钥读取生产当前两个健康组件的快照。所选组件使用本次 build digest；未选组件对齐生产实际 digest，先 Relay 后 PWA。部署后再次核对 staging 两组件的 image/source，并执行 HTTPS、路由、缓存、运行时 Relay、静态资源、Worker/manifest、404 和 WebSocket challenge 检查。地址缺失不跳过。
+4. staging 成功后，production Environment 等待维护者审批。审批人先核对本次 run/提交/digest 的真实 iOS、Android 配对、消息、文件、手势、后台恢复及同 origin 缓存升级记录；smoke 不替代真机。
+5. 审批后重新核对 staging 组合和未选生产组件，漂移则停止并重新测试。production 直接使用 build digest，不重新构建。健康检查或 `up` 失败按实际旧 image ID 回滚，并使工作流失败。
+6. 生产两组件镜像/source 与受测组合一致，且公网 smoke 通过后，才创建所选组件的注解标签和 Release。staging 不创建正式标签/Release。
+
+staging 晋升决策见 [ADR-20261006](adr/20261006-staging-promotion.md)。不维护长期 test/release 分支。
 
 协议有变更时，仍须在 PWA 部署完成后再批准 Extension 的 npm 待审版本（见「Extension npm 发布」）。部署 Relay 会让在线连接短暂断开，可选择合适的时机批准。
 
-自动部署与本机脚本共用服务器上的部署锁，二者不会同时更新服务。自动部署不上传 `docker-compose.yml`，也不更新服务器上的 `deploy-from-ci.sh`；这两个文件变更后，先用本机脚本部署一次或手工复制，再依赖自动部署。
+production 与本机备用入口共用生产目录的 `.pi-reach-deploy-lock`。staging 固定先取得生产目录锁，再取得测试目录锁，保护共享镜像存储中的回滚窗口；已有锁直接拒绝，不自动等待或抢占。staging 不清理镜像，生产仍保留当前及最新若干标签并保护任意容器使用的镜像。部署或快照期间会暂时阻止另一环境操作，这是同机安全取舍。
+
+自动部署不上传 Compose 或服务器入口。脚本变更后，维护者单独同步新版生产入口和测试入口，确认生产固定命令兼容后再触发新流程。严格 Compose 契约与根／测试 Compose 必须同步维护；自定义字段、隐式 `.env`、Compose override 都不能绕过绑定检查。
 
 ### 一次性配置
 
 GitHub（仓库 Settings → Environments）：
 
-- 新建 `production`：Required reviewers 选维护者；Deployment branches 选 Protected branches only（本仓库只有 `main` 受保护），或 Selected branches 指定 `main`。
-- Environment secrets：`DEPLOY_SSH_KEY`（下文专用私钥全文）、`DEPLOY_KNOWN_HOSTS`（服务器主机公钥行）、`DEPLOY_HOST`、`DEPLOY_USER`。仓库公开，Actions 日志所有人可见，主机与账号也放在 Secrets 中，由日志遮盖。
-- Environment variables：`PWA_URL`、`RELAY_URL`（公网检查地址，留空则跳过）；SSH 端口不是 22 时设 `DEPLOY_PORT`。
+- 配置 `staging`、`production` 两个 Environment，均只允许 `main`；production 设置维护者 Required reviewers。未信任 PR 不得获得密钥。
+- 每个 Environment 分别设置 Secrets：`DEPLOY_SSH_KEY`、`DEPLOY_KNOWN_HOSTS`、`DEPLOY_HOST`、`DEPLOY_USER`。两套密钥独立，不复用个人密钥；staging 只有 `contents: read`，production 在审批后才使用标签/Release 写权限。
+- 每个 Environment 分别设置必填 Variables：`PWA_URL`（HTTPS `/app`）和 `RELAY_URL`（HTTPS Relay 基地址）；SSH 非 22 端口设置 `DEPLOY_PORT`。留空立即失败，不产生假绿灯。测试地址不能填写生产域名，既有 production 配置需另行核对。
 - 服务器不是 `linux/amd64` 时，设仓库变量 `DEPLOY_PLATFORM`（如 `linux/arm64`）。
 
 本机生成专用密钥，不复用个人密钥；私钥只放进上面的 Secret：
@@ -153,7 +164,9 @@ ssh your-deploy-user@your-ssh-alias 'chmod 755 /home/your-deploy-user/pi-reach/b
 restrict,command="PI_REACH_REMOTE_DIR=/home/your-deploy-user/pi-reach PI_REACH_IMAGE_PREFIX=ghcr.io/your-github-owner /home/your-deploy-user/pi-reach/bin/deploy-from-ci.sh" ssh-ed25519 AAAA... pi-reach-github-deploy
 ```
 
-`restrict` 关闭端口转发、终端与用户 rc 文件，`command=` 让这把密钥无论请求什么都只运行 `deploy-from-ci.sh`。脚本只接受 `deploy <pwa|relay> <前缀>/pi-reach-<pwa|relay>:vX.Y.Z@sha256:<摘要>`，其余请求一律拒绝，不调用 Docker。可选的 `PI_REACH_KEEP_IMAGE_VERSIONS` 控制保留的镜像数（默认 3），写在同一个 `command=` 中。
+`restrict` 禁止端口转发、终端和用户 rc 文件，`command=` 固定服务器入口。生产旧固定命令未指定环境时仍为 production；未知环境值拒绝。入口接受严格的三字段 `deploy <pwa|relay> <前缀>/pi-reach-<组件>:vX.Y.Z@sha256:<摘要>`，以及两字段 `snapshot <production|staging>`。快照只读固定健康容器对应实际 image ID 的版本、来源 revision、允许仓库 RepoDigest，stdout 仅完整 JSON，不返回容器环境或秘密；无法核验的本地备用镜像会阻止晋升。
+
+`deploy` 的写入环境不接受客户端选择。Compose 使用 `仓库@digest`，版本标签仅保留用于展示/清理；回滚使用更新前实际 image ID，不重新解析可变标签。可选 `PI_REACH_KEEP_IMAGE_VERSIONS` 控制生产保留数（默认 3）。
 
 配置后用这把密钥自检，确认它拿不到 shell，也不能转发端口：
 
@@ -169,14 +182,49 @@ ssh -i ~/.ssh/pi-reach-github-deploy -o IdentitiesOnly=yes -o ExitOnForwardFailu
 
 ### 首次运行
 
-GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运行时，在构建完成、部署作业等待审批期间，到 GitHub 个人主页的 Packages 中把 `pi-reach-relay` 与 `pi-reach-pwa` 的可见性改为 Public（改为公开后不能再改回私有），确认它们关联到本仓库，再批准部署。两个镜像只含开源代码与构建产物，不含配置或密钥。
+GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次 staging 前，维护者在 GitHub Packages 确认 `pi-reach-relay` 与 `pi-reach-pwa` 已设为 Public 并关联本仓库（公开后不能再改回私有）；这项变更单独授权。若新包直到首次构建后才出现，staging 拉取会失败，设为公开后重新运行 staging，不能绕过测试直接批准生产。两个镜像只含开源代码与构建产物，不含配置或密钥。
 
-### 失败处理
+### 失败、修复与重跑
 
-- 构建失败或审批前取消：线上不受影响，修复后重新运行。
-- 服务器端健康检查失败：脚本已恢复原镜像，工作流失败且不打标签；排查后重新运行失败的作业，已打过标签的组件会跳过。输出提示恢复也失败时，立即按「容器不是 healthy」检查服务器。
-- 公网检查失败：服务已更新但没有打标签；确认线上状态后重新运行，或按「版本标签与 GitHub Release」手工补标签。
-- 部署锁冲突与遗留锁的处理同本机脚本（见「部署」）。
+- staging 失败或审批前取消不写生产。失败候选的版本号可能已在 `main`：修复 PR 合入后手动运行工作流，构建同一个未发布版本的新 digest，重新完成 staging 与真机验收；旧 run 的通过结果不能复用。
+- 整条流水线串行，包括审批等待期。GitHub 同一 concurrency group 只保留一个运行中和一个 pending run，新 pending 会替换旧 pending；被取消版本须从当前 `main` 手动补跑并重新验收。
+- 重跑 production 先核对本次 build 输出、staging 当前组合与生产未选组件。staging 被覆盖、来源变更或生产未选组件漂移时，重新运行完整候选流程，不能生产直达。
+- 已上线且镜像/source 仍与本次 run 一致的组件不重复重启，但仍进行公网检查。若所有所选正式标签均指向本次提交且完整受测组合仍在线，可进行仅 Release 补建：不写 Docker、不使用旧 staging 作为新验收证据。标签已创建、Release 创建失败时，重跑失败 production 作业可以补建；标签属于其他提交则拒绝。
+- `up` 或容器健康失败会尝试恢复实际旧 image ID；恢复失败须立即检查服务器。公网失败可能意味着镜像已上线，但没有标签/Release；不把工作流失败当作已经恢复生产。
+- 多组件不是原子事务：先成功的组件可能已上线，后续失败不自动撤回前一个组件；运行摘要按组件记录实际更新。快照、部署请求之间不构成持锁的跨组件事务，备用部署须避免在晋升期间执行；最终快照会检测组合漂移并阻止 Release。
+- 镜像清理失败只警告。锁冲突和遗留锁先确认没有进程再人工处理，不能自动删锁。
+
+### staging 一次性初始化
+
+此节必须另获服务器/GitHub 操作授权；不由普通版本工作流执行。
+
+1. 核验 DNS/TLS、Compose 兼容能力、端口、目录、磁盘/CPU/内存余量和权限。测试使用 `127.0.0.1:3002`／`3003`；发现占用先重新确认映射并同步严格契约，不直接改端口。
+2. 创建独立测试目录，把 `docker/staging/compose.yml` 安装为该目录的 `docker-compose.yml`。维护者安装并保护新版入口；不允许 CI 上传执行脚本。根生产 Compose 不必新增默认 Relay 变量，但生产入口必须在首个候选晋升前同步新版。
+3. 新建独立 staging SSH 密钥，其 `authorized_keys` 固定命令设置 `PI_REACH_DEPLOY_ENVIRONMENT=staging`、`PI_REACH_REMOTE_DIR=<测试目录>`、`PI_REACH_PRODUCTION_DIR=<生产目录>`、`PI_REACH_IMAGE_PREFIX=<允许前缀>`。客户端不能传这些值；路径实际解析后必须不同。
+4. staging 固定服务器环境还须提供 `PI_REACH_DEFAULT_RELAY_URL` 和以下实测限额；Compose 不读取隐式 `.env`，变量须由维护者保护的固定命令或入口 wrapper 提供，不能由 CI 请求注入：
+
+   | 变量 | 用途 |
+   | --- | --- |
+   | `PI_REACH_STAGING_RELAY_CPUS` / `PI_REACH_STAGING_PWA_CPUS` | 正数 CPU 限额 |
+   | `PI_REACH_STAGING_RELAY_MEMORY` / `PI_REACH_STAGING_PWA_MEMORY` | Docker 内存单位的限额 |
+   | `PI_REACH_STAGING_RELAY_PIDS_LIMIT` / `PI_REACH_STAGING_PWA_PIDS_LIMIT` | PID 限额 |
+
+   数值由实际资源和 smoke 决定，不把测试 fixture 数字当作部署建议。
+5. 使用核验过的生产 Relay 版本和 digest 初始化测试 Relay。旧 PWA 镜像没有运行时 Relay 能力，不部署为测试 PWA；首个候选必须包含新版 PWA（选择 pwa 或 both），由候选流程首次启动它。
+6. 保留生产所有 Caddy 路由，新增测试 PWA/Relay 域名分别代理 loopback `3003`／`3002`；validate 完整配置后 reload。共享 Caddy reload 有生产影响风险，不能当作零风险操作。
+7. 配置两套 Environment，核对 host key 指纹、分支限制和密钥拒绝 shell/转发。测试 Relay 验证 HTTPS 与 WebSocket；测试 PWA 在首个候选时补验 HTTPS、实际默认 Relay 与配置拒绝路径。最后核对生产容器、镜像和路由未变化。
+
+测试 Pi/身份、浏览器 profile、配对存储应独立。不同 origin 隔离 SW/IndexedDB，但不隔离生产 Pi；不复制生产身份或浏览器数据库。
+
+## PWA 运行时配置
+
+`PI_REACH_DEFAULT_RELAY_URL` 是公开地址，不包含密钥。未设置时镜像沿用 `https://pi-reach-relay.yefengr.cn`，生产根 Compose 无需变更；显式空值或非法值拒绝启动。staging Compose 用必填插值拦截漏配，且首个受测 PWA 启动后 smoke 核对实际地址，不能回落生产。
+
+非 root 启动脚本校验 URL 并原子替换入口 HTML 的 `meta[name="pi-reach-default-relay-url"]`。接受绝对 HTTP(S)/WS(S) 与合法自托管路径/query，拒绝凭据、fragment、空白和注入字符；公网两环境必须 HTTPS/WSS。meta 缺失、重复、非法或不可写时拒绝启动，不打印原配置。dev/preview 的源入口包含公开生产默认 meta。
+
+浏览器默认值只有这个 meta 入口：初始化、旧默认迁移、空输入回退和设置页默认展示一致，用户显式保存的自定义 Relay/配对语义不改变。Service Worker 预缓存实际 `/app` 注入 HTML，并为运行时入口使用独立、按构建 revision 的导航缓存；全新离线启动和旧 worker 交接不能读取旧无配置导航壳。配置不新增 fetch，也不按环境重新构建镜像。
+
+本地真实镜像验收使用 `node pwa/scripts/verify-runtime-image.mjs <已构建镜像>`，固定同一个 image ID，启动生产、测试和缺省配置并检查入口，验证非法值、缺 meta、只读注入失败后清理临时容器。它不连接 Relay，不证明真机、远程 HTTPS 或生产晋升。
 
 ## 部署
 
@@ -195,7 +243,7 @@ GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运
 1. 读取未提交的 `deploy.env`，检查 SSH、Docker 与 Compose；
 2. 只为所选 scope 构建对应服务器架构的镜像，可选推送远程镜像；
 3. 上传 `docker-compose.yml`，只压缩并传输所选镜像，并记录远端镜像 ID 摘要；
-4. 使用 scope 对应的镜像插值运行远端 `docker-compose config --quiet`，解析失败时不更新任何服务；
+4. 用 Compose 规范化配置，与服务器入口内的完整生产契约比较；禁止隐式 `.env`／Compose override，解析或匹配失败时不传输应用镜像、不更新服务；
 5. 只更新所选服务，并等待每个容器变为 `healthy`；
 6. 按 scope 检查 `RELAY_URL` 的 `/health` 与 `PWA_URL`，变量留空时跳过对应检查；
 7. 在服务器和本机分别清理所选服务的旧镜像：每个镜像仓库保留本次部署的标签及最新的其他标签，共 `KEEP_IMAGE_VERSIONS` 个（默认 3），删除更旧的标签和带 `pi-reach.image` 标签的悬空镜像。
@@ -223,7 +271,7 @@ GHCR 上新建的镜像包默认私有，服务器无法匿名拉取。首次运
 PUBLISH_IMAGES=0
 ```
 
-镜像只在本机 Buildx 和服务器 Docker 中存在，标签由 `IMAGE_NAMESPACE`、`RELAY_VERSION` 和 `PWA_VERSION` 组成；构建时附加 `pi-reach.image=relay|pwa` 镜像标签，供清理步骤识别被新版本顶替后失去标签的本项目镜像。每次部署递增所选服务的版本，避免同一标签指向不同构建。服务器 Compose 使用脚本注入的 `RELAY_IMAGE`、`PWA_IMAGE`，不会把本机命名空间写入仓库文件。
+镜像只在本机 Buildx 和服务器 Docker 中存在，标签由 `IMAGE_NAMESPACE`、`RELAY_VERSION` 和 `PWA_VERSION` 组成；构建时附加 `pi-reach.image=relay|pwa` 镜像标签，供清理步骤识别被新版本顶替后失去标签的本项目镜像。每次部署递增所选服务的版本，避免同一标签指向不同构建。服务器 Compose 使用脚本注入的 `RELAY_IMAGE`、`PWA_IMAGE`；本机入口在加载后解析并使用实际 image ID 运行，版本标签仅用于追溯和清理，不会把本机命名空间写入仓库文件。
 
 如服务器是 `x86_64`，脚本相当于构建：
 
@@ -249,11 +297,7 @@ docker save \
   | ssh your-deploy-user@your-ssh-alias 'gzip -dc | docker load'
 ```
 
-服务器启动时使用：
-
-```bash
-docker-compose up -d --pull never --remove-orphans
-```
+服务器启动由脚本显式指定 Compose 文件、禁用隐式 `.env`，并注入实际 image ID；`up -d --pull never` 只更新所选服务。不要通过手工标签插值替代这些检查。
 
 ### 可选：同时推送远程镜像
 
@@ -281,7 +325,7 @@ IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 
 ## Compose 运行结构
 
-当前 Compose 项目名固定为 `pi-reach`，包含两个服务：
+根生产 Compose 项目固定为 `pi-reach`，包含两个服务：
 
 ```text
 Relay: 127.0.0.1:3000 -> 容器 3000（容器 pi-reach-relay）
@@ -290,7 +334,7 @@ PWA:   127.0.0.1:3001 -> 容器 3000（容器 pi-reach-pwa）
 
 当前 [Compose](../docker-compose.yml) 的 Relay 服务没有业务卷或 SQLite membership 存储。Relay 的 endpoint registry 和 ACL 仅保存在内存中，重启后由 Host/Owner 重连重建；旧环境是否残留历史 volume 不在本流程中自动清理。PWA 不保存服务端业务会话数据，浏览器本地使用 IndexedDB；Host 身份、配对和 Pi 会话保存在运行 Pi 的电脑上，而不是这些 Relay/PWA 容器中。
 
-PWA 的 Compose 服务名、容器名与镜像名均为 `pwa`／`pi-reach-pwa`，部署变量为 `PWA_VERSION`／`PWA_IMAGE`。2026-10-01 之前使用的 `site`／`pi-reach-site`／`SITE_VERSION` 已停用：本机脚本遇到 `SITE_VERSION` 会提示改名；部署时 `docker-compose up` 带 `--remove-orphans`，会移除 Compose 文件中已不存在的旧服务容器，释放其端口。
+PWA 的 Compose 服务名、容器名与镜像名为 `pwa`／`pi-reach-pwa`，部署变量为 `PWA_VERSION`／`PWA_IMAGE`。2026-10-01 之前的 `site`／`pi-reach-site`／`SITE_VERSION` 已停用，本机脚本遇到 `SITE_VERSION` 会提示改名。现有入口不自动移除 orphan 容器；若服务器仍有旧容器，先核对归属与端口并单独授权清理。
 
 服务器上查看状态。Compose 文件的镜像变量只由部署脚本注入，手工排查直接按容器名查看，避免 `docker-compose ps` 因变量未设置而解析失败：
 
@@ -416,7 +460,7 @@ npm view @yefengr/pi-reach version
 
 ## 版本标签与 GitHub Release
 
-各组件上线后，在其版本号所在的 `main` 提交上打注解标签，并创建同名 GitHub Release。PWA 与 Relay 由 Deploy PWA & Relay 工作流在部署核对后创建，Extension 的标签由 Extension npm 工作流在提交待审时创建，Release 由 [Extension GitHub Release 工作流](../.github/workflows/extension-github-release.yml)在 npm 上线后创建；下面的手工命令只用于本机备用部署或工作流无法运行时：
+PWA 与 Relay 在上线核对后，由 Deploy PWA & Relay 工作流在实际受测的 `main` 源提交上打注解标签并创建同名 Release；同版本修复候选的标签指向修复后的受测提交，不沿用被拒候选。Extension 的标签仍由 Extension npm 工作流在提交待审时创建，Release 由 [Extension GitHub Release 工作流](../.github/workflows/extension-github-release.yml)在 npm 上线后创建；下面的手工命令只用于本机备用部署或工作流无法运行时，仍须单独授权：
 
 | 组件 | 标签 | 版本来源 |
 |---|---|---|
@@ -454,7 +498,7 @@ gh release create relay-vX.Y.Z --verify-tag --title "Relay X.Y.Z" --notes-file r
 docker-compose version
 ```
 
-部署脚本使用 `docker-compose`，与当前服务器环境一致。
+服务器入口使用 `docker-compose`，要求支持 `--env-file`、`--project-directory` 与 `config --format json` 的 Compose v2 或更新兼容版本。初始化前用实际命令核验；仅有旧 Compose v1 时停止，不自动安装或替换工具。JSON 仅由 Compose 规范化后整体比较，不要求服务器安装 Node/jq。
 
 ### Docker Hub 超时
 
@@ -501,4 +545,6 @@ sudo journalctl -u caddy -n 100 --no-pager
 - 执行 `docker system prune`，或删除本项目镜像仓库和 `pi-reach.image` 标签以外的镜像；
 - 在默认模式下向 Docker Hub 推送应用镜像，或要求服务器拉取这些应用镜像。
 
-自动部署的服务器端脚本只接受固定格式的单个部署请求，不执行其他命令，不修改 Compose 文件、Caddy 或自身；GitHub 中的专用私钥只在 `production` Environment 批准后的作业中可用，不能用于登录终端或转发端口。
+服务器入口仅接受严格的部署和固定容器只读快照请求，不执行任意命令，不修改 Compose、Caddy 或自身。staging、production 使用各自 Environment 密钥；production 在维护者审批后可用，均不能登录终端或转发端口。staging 密钥可读取固定生产镜像快照，但写入环境只由服务器固定命令指定。
+
+受限命令不是 Docker 权限沙箱：同机共享内核、磁盘和高权限部署账号仍有风险。入口、Compose 与固定命令必须由维护者安装并保护，不能允许 CI 上传任意脚本后执行。

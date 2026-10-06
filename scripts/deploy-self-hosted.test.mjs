@@ -21,7 +21,7 @@ const SCRIPT = join(REPO_ROOT, 'scripts', 'deploy-self-hosted.sh');
 const COMPOSE = join(REPO_ROOT, 'docker-compose.yml');
 const SECRET_MARKER = 'deploy-env-secret-must-not-leak';
 const REMOTE_PATH = '/srv/pi-reach';
-const UP_COMMAND = 'docker-compose up -d --pull never --remove-orphans ';
+const UP_COMMAND = `docker-compose --env-file /dev/null -f '${REMOTE_PATH}/docker-compose.yml' up -d --pull never --remove-orphans `;
 const PWA_URL = `https://pwa.example.invalid/app?token=${SECRET_MARKER}`;
 const RELAY_HEALTH_URL = 'https://relay.example.invalid/health';
 const RELAY_REPO = 'example.invalid/team/pi-reach-relay';
@@ -67,6 +67,17 @@ record({ name, args });
 function fail(message, code = 91) {
   process.stderr.write(message + '\n');
   process.exit(code);
+}
+
+if (name === 'docker-compose') {
+  if (process.env.FAKE_CONFIG_ERROR) process.exit(47);
+  const file = args[args.indexOf('-f') + 1];
+  const text = fs.readFileSync(file, 'utf8').replace(/\$\{([^}:]+)(?::\?[^}]*)?\}/g, (_, key) => {
+    if (!process.env[key]) process.exit(1);
+    return process.env[key];
+  });
+  process.stdout.write(JSON.stringify(text.split('\n').filter(line => line.trim() && !line.trim().startsWith('#')).map(line => line.trim())));
+  process.exit(0);
 }
 
 if (name === 'docker') {
@@ -190,16 +201,24 @@ if (command.includes('for attempt in $(seq 1 30)')) {
   if (process.env.FAKE_HEALTH_ERROR) fail('injected health failure', 49);
   process.exit(0);
 }
-if (command.includes('docker-compose config --quiet')) {
+if (command.includes('config --quiet')) {
   if (process.env.FAKE_CONFIG_ERROR) fail('injected compose config parse failure', 47);
   if (!fs.existsSync(composeFile)) fail('remote compose file is missing', 48);
   process.exit(0);
 }
-if (command.includes('docker-compose up -d --pull never ')) {
+if (command.includes('up -d --pull never ')) {
   process.exit(0);
 }
-if (command.includes('docker-compose ps ')) {
+if (command.includes(' ps ')) {
   process.exit(0);
+}
+if (command.startsWith('bash -s -- compose-contract ')) {
+  const program = readStdin();
+  const values = [...command.matchAll(/'([^']+)'/g)].map(match => match[1]);
+  const result = require('node:child_process').spawnSync('bash', ['-s', '--', 'compose-contract', remoteDir, ...values.slice(1)], {
+    input: program, encoding: 'utf8', env: { ...process.env, FAKE_HOST: 'remote' }, cwd: remoteDir,
+  });
+  process.stdout.write(result.stdout); process.stderr.write(result.stderr); process.exit(result.status ?? 1);
 }
 if (command.startsWith('bash -s -- ')) {
   // Run the pruning program the way the server would, against the server's fake image store.
@@ -258,7 +277,7 @@ function makeFixture(t) {
     ].join('\n'),
   );
 
-  for (const command of ['docker', 'ssh', 'scp', 'gzip', 'curl']) {
+  for (const command of ['docker', 'docker-compose', 'ssh', 'scp', 'gzip', 'curl']) {
     const target = join(fakeBin, command);
     writeFileSync(target, FAKE_CLI);
     chmodSync(target, 0o755);
@@ -367,7 +386,7 @@ function readImageStore(fixture, host) {
 }
 
 function pruneCommands(fixture) {
-  return sshCommands(fixture).filter((command) => command.startsWith('bash -s'));
+  return sshCommands(fixture).filter((command) => command.startsWith('bash -s') && !command.startsWith('bash -s -- compose-contract '));
 }
 
 test('default command deploys both services and preserves CLI-owned settings', (t) => {
@@ -481,8 +500,8 @@ test('pwa scope builds, transfers, and updates only the PWA', (t) => {
   assert.equal(upServices(fixture), 'pwa');
 
   const commands = sshCommands(fixture);
-  const configCommand = commands.find((command) => command.includes('docker-compose config --quiet'));
-  assert.match(configCommand, /RELAY_IMAGE='invalid\.invalid\/pi-reach-relay-unselected:never'/);
+  const configCommand = commands.find((command) => command.includes('compose-contract '));
+  assert.match(configCommand, /'invalid\.invalid\/pi-reach-relay-unselected:never'/);
   assert.ok(commands.some((command) => command.includes("'pi-reach-pwa'")));
   assert.doesNotMatch(records(fixture).map(JSON.stringify).join('\n'), /pi-reach-relay:relay-v1/);
   assert.deepEqual(curlTargets(fixture), [PWA_URL]);
@@ -499,8 +518,8 @@ test('relay scope builds, transfers, and updates only the Relay', (t) => {
   assert.equal(upServices(fixture), 'relay');
 
   const commands = sshCommands(fixture);
-  const configCommand = commands.find((command) => command.includes('docker-compose config --quiet'));
-  assert.match(configCommand, /PWA_IMAGE='invalid\.invalid\/pi-reach-pwa-unselected:never'/);
+  const configCommand = commands.find((command) => command.includes('compose-contract '));
+  assert.match(configCommand, /'invalid\.invalid\/pi-reach-pwa-unselected:never'/);
   assert.ok(commands.some((command) => command.includes("'pi-reach-relay'")));
   assert.doesNotMatch(records(fixture).map(JSON.stringify).join('\n'), /pi-reach-pwa:pwa-v1/);
   assert.deepEqual(curlTargets(fixture), [RELAY_HEALTH_URL]);
@@ -533,7 +552,7 @@ test('unhealthy services fail the deployment before public checks', (t) => {
   const healthCommand = sshCommands(fixture).find((command) =>
     command.includes('for attempt in $(seq 1 30)'),
   );
-  assert.match(healthCommand, /export RELAY_IMAGE='[^']+' PWA_IMAGE='[^']+' && docker-compose logs --tail=80/);
+  assert.doesNotMatch(healthCommand, /logs --tail|docker inspect 'pi-reach/);
   assert.deepEqual(pruneCommands(fixture), []);
 });
 
@@ -632,6 +651,29 @@ test('help prints usage without loading the deployment config', (t) => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Usage:/);
   assert.equal(records(fixture).length, 0);
+});
+
+test('production contract rejects staging, ports, and unexpected volumes before remote image load', (t) => {
+  for (const mutate of [text => text.replace('name: pi-reach', 'name: pi-reach-staging'), text => text.replace('127.0.0.1:3000', '0.0.0.0:3000'), text => text + '\nvolumes:\n  secret-marker: {}\n']) {
+    const fixture = makeFixture(t);
+    const compose = join(fixture.root, 'docker-compose.yml');
+    writeFileSync(compose, mutate(readFileSync(compose, 'utf8')));
+    const result = runDeploy(fixture, ['relay']);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /production contract mismatch/);
+    assert.ok(!sshCommands(fixture).includes('gzip -dc | docker load'));
+    assert.ok(!sshCommands(fixture).some(command => command.includes(UP_COMMAND)));
+    assert.doesNotMatch(result.stdout + result.stderr, /secret-marker/);
+    assert.equal(existsSync(fixture.lockDir), false);
+  }
+});
+
+test('selected local deployment runs actual loaded image IDs rather than mutable tags', (t) => {
+  const fixture = makeFixture(t), result = runDeploy(fixture, ['pwa']);
+  assertSuccessful(result);
+  const up = sshCommands(fixture).find(command => command.includes(UP_COMMAND));
+  assert.match(up, /PWA_IMAGE='sha256:[a-f0-9]{64}'/);
+  assert.match(up, /RELAY_IMAGE='invalid\.invalid\/pi-reach-relay-unselected:never'/);
 });
 
 test('invalid or removed CLI values are rejected before any remote work', (t) => {

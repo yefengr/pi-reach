@@ -7,10 +7,9 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const workflow = readFileSync(join(REPO_ROOT, '.github/workflows/deploy.yml'), 'utf8');
-const releaseFunction = workflow.match(/^          release\(\) \{\n[\s\S]*?^          \}\n/m)?.[0]
-  .replace(/^ {10}/gm, '');
-assert.ok(releaseFunction, 'Deploy PWA & Relay 工作流必须包含 release 函数');
+const source = readFileSync(join(REPO_ROOT, 'scripts/deploy-release.sh'), 'utf8');
+const releaseFunction = source.match(/^release\(\) \{\n[\s\S]*?^\}\n/m)?.[0];
+assert.ok(releaseFunction, '正式 Release helper 必须包含 release 函数');
 
 function generateNotes(component, url) {
   const root = mkdtempSync(join(tmpdir(), 'pi-reach-release-notes-'));
@@ -24,7 +23,12 @@ function generateNotes(component, url) {
           *) return 1 ;;
         esac
       }
-      gh() { printf '%s\\n' 'fake-tag-sha'; }
+      gh() {
+        case "$2" in
+          */git/ref/tags/*|*/releases/tags/*) echo 'HTTP 404' >&2; return 1 ;;
+          *) printf '%s\\n' 'fake-tag-sha' ;;
+        esac
+      }
       ${releaseFunction}
       release "$COMPONENT" "$COMPONENT" 1.2.3 "ghcr.io/example/pi-reach-$COMPONENT:v1.2.3" sha256:example "$ONLINE_URL" "$COMPONENT"
     `], {
