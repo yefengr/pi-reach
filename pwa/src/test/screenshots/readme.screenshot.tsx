@@ -2,7 +2,7 @@
 // screenshot-mobile-showcase-en.png 把浅色、深色手机截图并排放在宽画布上，供只按原始像素显示图片的商店页使用。
 // 使用真实的 PwaApp 界面与演示数据；Relay 与会话通道由本文件模拟，不连接真实 Relay、Pi 或模型。
 // 文件名不匹配 *.browser.test.tsx，不会随 `pnpm test` 运行。
-import { expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { commands, page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
@@ -17,6 +17,12 @@ import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { toStoredKey } from "@/lib/pwa/runtime";
 import { mergeTimelineEvents } from "@/lib/pwa/timeline-store";
+
+const fixtureMetadata = document.createElement("meta");
+fixtureMetadata.name = "pi-reach-default-relay-url";
+fixtureMetadata.content = "https://pi-reach-relay.yefengr.cn";
+beforeEach(() => { document.head.append(fixtureMetadata); });
+afterEach(() => { fixtureMetadata.remove(); });
 
 /** commands.writeFile 相对 pwa/ 项目根解析，指向仓库根的 docs/assets/。 */
 const OUTPUT_DIR = "../docs/assets";

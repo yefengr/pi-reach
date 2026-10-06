@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { pwaRoutingPlugin } from "./pwa-routing.mjs";
 
-const INDEX_HTML = "<!doctype html><title>Pi Reach</title>";
+const INDEX_HTML = '<!doctype html><title>Pi Reach</title><meta name="pi-reach-default-relay-url" content="https://staging.example.test/relay?tenant=one&amp;region=two" />';
 const ASSET_SOURCE = "console.log('pi-reach');";
 
 function fixtureStaticMiddleware(request, response) {
@@ -98,6 +98,11 @@ test("applies the shared PWA routing and cache contract over HTTP", async () => 
     assert.equal(app.headers.get("cache-control"), "no-cache");
     assert.match(app.headers.get("content-type") ?? "", /^text\/html\b/);
     assert.equal(await app.text(), INDEX_HTML);
+
+    const precachedApp = await request(fixture.baseUrl, "/app?__WB_REVISION__=build-hash");
+    assert.equal(precachedApp.status, 200);
+    assert.equal(precachedApp.headers.get("cache-control"), "no-cache");
+    assert.equal(await precachedApp.text(), INDEX_HTML);
 
     const settings = await request(fixture.baseUrl, "/app/settings?pair=five");
     assert.equal(settings.status, 200);

@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
@@ -230,7 +230,18 @@ vi.mock("@/lib/pi-reach/peer-channel", () => ({
   },
 }));
 
+const fixtureMetadata = document.createElement("meta");
+fixtureMetadata.name = "pi-reach-default-relay-url";
+
+afterEach(() => {
+  fixtureMetadata.remove();
+  // 设置页写入 history state；组件测试 URL 不变也必须清理，避免下一例被当作已打开设置。
+  window.history.replaceState(null, "");
+});
+
 beforeEach(async () => {
+  fixtureMetadata.content = "https://pi-reach-relay.yefengr.cn";
+  document.head.append(fixtureMetadata);
   // 连接提示条默认在断线 10 秒后出现；集成测试立即显示，延迟本身由 use-delayed-visibility 测试覆盖。
   connectionBannerTiming.delayMs = 0;
   vi.mocked(loadTimeline).mockClear();
@@ -266,6 +277,50 @@ beforeEach(async () => {
     db.endpoints.put({ id: makePwaEndpointId(deviceId, endpointId), deviceId, endpointId, runtimeInstanceId: "runtime-1", kind: "interactive", cwd: "/workspace", updatedAt: Date.now() }),
     db.settings.put({ key: `active_endpoint:${makePwaDeviceId(deviceId)}`, value: endpointId }),
   ]);
+});
+
+test("uses deployment metadata for migration, settings defaults and empty saves", async () => {
+  fixtureMetadata.content = "https://staging.example.test/relay?tenant=public";
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: "relay_url", value: "https://relay-pi.yefengr.cn" });
+  const screen = await renderPwa(<PwaApp />);
+  try {
+    await expect.element(screen.getByRole("button", { name: "Open settings", exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    const input = screen.getByRole("textbox", { name: "Relay URL" });
+    await expect.element(input).toHaveValue(fixtureMetadata.content);
+    await expect.element(input).toHaveAttribute("placeholder", fixtureMetadata.content);
+    await input.fill("");
+    await screen.getByRole("button", { name: "Save settings" }).click();
+    await expect.poll(async () => (await db.settings.get("relay_url"))?.value).toBe(fixtureMetadata.content);
+    expect((await db.devices.toArray()).every((device) => device.relayUrl === fixtureMetadata.content)).toBe(true);
+  } finally { await screen.unmount(); }
+});
+
+test("keeps custom Relay settings even when the deployment default changes", async () => {
+  fixtureMetadata.content = "https://staging.example.test/relay";
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: "relay_url", value: "https://custom.example.test/private-path" });
+  const screen = await renderPwa(<PwaApp />);
+  try {
+    await expect.element(screen.getByRole("button", { name: "Open settings", exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    await expect.element(screen.getByRole("textbox", { name: "Relay URL" })).toHaveValue("https://custom.example.test/private-path");
+    expect((await db.devices.toArray())[0].relayUrl).toBe("https://relay.example.test");
+  } finally { await screen.unmount(); }
+});
+
+test("fails closed before connecting when deployment metadata is absent or invalid", async () => {
+  for (const invalid of [null, "https://user:secret@relay.example.test"]) {
+    if (invalid === null) fixtureMetadata.remove();
+    else { fixtureMetadata.content = invalid; document.head.append(fixtureMetadata); }
+    const screen = await renderPwa(<PwaApp />);
+    try {
+      await expect.element(screen.getByRole("button", { name: "Reload", exact: true })).toBeVisible();
+      expect(relayHarness.instances).toHaveLength(0);
+      expect(document.body.textContent).not.toContain("user:secret");
+    } finally { await screen.unmount(); }
+  }
 });
 
 test("keeps the Owner Relay alive while endpoint discovery is still checking", async () => {

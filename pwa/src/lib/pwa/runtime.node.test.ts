@@ -18,6 +18,15 @@ test("migrates only missing or legacy default Relay URLs", () => {
   expect(migrateLegacyDefaultRelay("https://custom.example.com", LEGACY_RELAYS, CURRENT_RELAY)).toBe("https://custom.example.com");
 });
 
+test("uses the deployment default without rewriting explicit production or custom settings", () => {
+  const deploymentDefault = "https://staging.example.test/relay/path";
+  expect(migrateLegacyDefaultRelay(undefined, LEGACY_RELAYS, deploymentDefault)).toBe(deploymentDefault);
+  expect(migrateLegacyDefaultRelay("", LEGACY_RELAYS, deploymentDefault)).toBe(deploymentDefault);
+  expect(migrateLegacyDefaultRelay(LEGACY_RELAYS[0], LEGACY_RELAYS, deploymentDefault)).toBe(deploymentDefault);
+  expect(migrateLegacyDefaultRelay(CURRENT_RELAY, LEGACY_RELAYS, deploymentDefault)).toBe(CURRENT_RELAY);
+  expect(migrateLegacyDefaultRelay("https://custom.example.test/relay", LEGACY_RELAYS, deploymentDefault)).toBe("https://custom.example.test/relay");
+});
+
 test("rejects a late event from a runtime that already lost endpoint takeover", () => {
   const history = new Map<string, Set<string>>();
   const oldRuntime = { ...endpoint, runtimeInstanceId: "runtime-old" };

@@ -1,0 +1,46 @@
+# Dedicated loopback-only staging instances; limits must be measured during initialization.
+name: pi-reach-staging
+
+services:
+  relay:
+    image: ${RELAY_IMAGE:?RELAY_IMAGE must be set}
+    container_name: pi-reach-staging-relay
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:3002:3000"
+
+    environment:
+      PI_REACH_RELAY_PORT: "3000"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    cpus: ${PI_REACH_STAGING_RELAY_CPUS:?staging Relay CPU limit is required}
+    mem_limit: ${PI_REACH_STAGING_RELAY_MEMORY:?staging Relay memory limit is required}
+    pids_limit: ${PI_REACH_STAGING_RELAY_PIDS_LIMIT:?staging Relay PID limit is required}
+
+  pwa:
+    image: ${PWA_IMAGE:?PWA_IMAGE must be set}
+    container_name: pi-reach-staging-pwa
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:3003:3000"
+
+    environment:
+      PORT: "3000"
+      PI_REACH_DEFAULT_RELAY_URL: ${PI_REACH_DEFAULT_RELAY_URL:?staging public Relay URL is required}
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    cpus: ${PI_REACH_STAGING_PWA_CPUS:?staging PWA CPU limit is required}
+    mem_limit: ${PI_REACH_STAGING_PWA_MEMORY:?staging PWA memory limit is required}
+    pids_limit: ${PI_REACH_STAGING_PWA_PIDS_LIMIT:?staging PWA PID limit is required}
