@@ -65,20 +65,84 @@ test('public endpoint and HTML metadata validation fail closed', () => {
   assert.equal(runtimeRelay(html), relayUrl);
 });
 
-function fakeSocket(frame, closed) {
-  return class {
+function fakeSocket(frame, { closedBeforeOpen = false, connectionError = false, sendError = false, respond = true } = {}) {
+  const sockets = [];
+  class Socket {
+    sent = [];
+    closeCalls = 0;
+
     constructor(url) {
       assert.equal(url.protocol, 'wss:');
-      queueMicrotask(() => { if (closed) this.onclose(); else this.onmessage({ data: JSON.stringify(frame) }); });
+      sockets.push(this);
+      queueMicrotask(() => {
+        if (closedBeforeOpen) this.onclose();
+        else if (connectionError) this.onerror();
+        else this.onopen();
+      });
     }
-    close() {}
-  };
+
+    send(data) {
+      const hello = JSON.parse(data);
+      this.sent.push(hello);
+      assert.deepEqual(Object.keys(hello).sort(), ['protocol_version', 'pubkey', 'role', 'type']);
+      assert.equal(hello.type, 'hello');
+      assert.equal(hello.protocol_version, 2);
+      assert.equal(hello.role, 'owner');
+      assert.ok(typeof hello.pubkey === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(hello.pubkey), 'hello must have a canonical public key');
+      const publicKey = Buffer.from(hello.pubkey, 'base64');
+      assert.equal(publicKey.length, 32);
+      assert.ok(publicKey.toString('base64') === hello.pubkey, 'hello public key must round-trip canonically');
+      if (sendError) throw new Error('transport details must not escape');
+      if (respond) queueMicrotask(() => this.onmessage({ data: JSON.stringify(frame) }));
+    }
+
+    close() { this.closeCalls += 1; }
+  }
+  return { Socket, sockets };
 }
 
-test('WebSocket smoke validates a real-shaped challenge and never authenticates', async () => {
-  await websocketChallenge(relayUrl, fakeSocket({ type: 'challenge', nonce: Buffer.alloc(32).toString('base64') }));
+function assertSocketCleanup(h, sentTypes = ['hello']) {
+  assert.equal(h.sockets.length, 1);
+  const [socket] = h.sockets;
+  assert.deepEqual(socket.sent.map((frame) => frame.type), sentTypes);
+  assert.equal(socket.closeCalls, 1);
+  for (const event of ['onopen', 'onmessage', 'onerror', 'onclose']) assert.equal(socket[event], null);
+}
+
+test('WebSocket smoke sends one owner hello before validating the challenge and never authenticates', async () => {
+  const h = fakeSocket({ type: 'challenge', nonce: Buffer.alloc(32).toString('base64') });
+  await websocketChallenge(relayUrl, h.Socket);
+  assertSocketCleanup(h);
+});
+
+test('WebSocket smoke rejects invalid challenges and cleans up after hello', async () => {
   for (const frame of [{ type: 'relay_info' }, { type: 'challenge', nonce: 'wrong' }]) {
-    await assert.rejects(() => websocketChallenge(relayUrl, fakeSocket(frame)), /valid challenge/);
+    const h = fakeSocket(frame);
+    await assert.rejects(() => websocketChallenge(relayUrl, h.Socket), /valid challenge/);
+    assertSocketCleanup(h);
   }
-  await assert.rejects(() => websocketChallenge(relayUrl, fakeSocket({}, true)), /closed/);
+});
+
+test('WebSocket smoke rejects early close and connection error without sending', async () => {
+  for (const [options, error] of [[{ closedBeforeOpen: true }, /closed/], [{ connectionError: true }, /connection failed/]]) {
+    const h = fakeSocket({}, options);
+    await assert.rejects(() => websocketChallenge(relayUrl, h.Socket), error);
+    assertSocketCleanup(h, []);
+  }
+});
+
+test('WebSocket smoke sanitizes hello send failures and cleans up', async () => {
+  const h = fakeSocket({}, { sendError: true });
+  await assert.rejects(() => websocketChallenge(relayUrl, h.Socket), { message: 'Relay WebSocket hello send failed' });
+  assertSocketCleanup(h);
+});
+
+test('WebSocket smoke times out and cleans up while waiting for the challenge', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = fakeSocket({}, { respond: false });
+  const rejected = assert.rejects(() => websocketChallenge(relayUrl, h.Socket), /challenge timed out/);
+  await Promise.resolve();
+  t.mock.timers.tick(30_000);
+  await rejected;
+  assertSocketCleanup(h);
 });
