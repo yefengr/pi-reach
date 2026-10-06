@@ -1,7 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const WEBSOCKET_TIMEOUT_MS = 15_000;
+const PROTOCOL_VERSION = 2;
+const PUBLIC_KEY_BYTES = 32;
+const CHALLENGE_NONCE_BYTES = 32;
 
 export function publicUrl(value, name) {
   let url;
@@ -38,15 +42,21 @@ export async function websocketChallenge(url, WebSocketClass = WebSocket) {
     const socket = new WebSocketClass(endpoint);
     const finish = (error) => {
       clearTimeout(timer);
-      socket.onmessage = socket.onerror = socket.onclose = null;
+      socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null;
       socket.close();
       if (error) reject(error); else resolve();
     };
     const timer = setTimeout(() => finish(new Error('Relay WebSocket challenge timed out')), WEBSOCKET_TIMEOUT_MS);
+    socket.onopen = () => {
+      try {
+        // 仅提供 hello 所需的临时身份形状；不生成私钥，也不继续认证。
+        socket.send(JSON.stringify({ type: 'hello', protocol_version: PROTOCOL_VERSION, role: 'owner', pubkey: randomBytes(PUBLIC_KEY_BYTES).toString('base64') }));
+      } catch { finish(new Error('Relay WebSocket hello send failed')); }
+    };
     socket.onmessage = (event) => {
       try {
         const frame = JSON.parse(event.data);
-        if (frame.type !== 'challenge' || typeof frame.nonce !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(frame.nonce) || Buffer.from(frame.nonce, 'base64').length !== 32) {
+        if (frame.type !== 'challenge' || typeof frame.nonce !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(frame.nonce) || Buffer.from(frame.nonce, 'base64').length !== CHALLENGE_NONCE_BYTES) {
           throw new Error('Relay WebSocket did not return a valid challenge');
         }
         finish();
