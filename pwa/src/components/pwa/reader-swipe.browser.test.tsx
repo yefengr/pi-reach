@@ -189,23 +189,36 @@ test("G5 real Markdown table stays independently horizontal and excluded", async
   expect(window.history.state?.piReachFileReader).toBeTruthy();
   expect(h.unpin).not.toHaveBeenCalled();
 });
-test("G5 wide fenced code uses outer horizontal exception and updates after content/viewport changes", async () => {
+test("G5 wide fenced code scrolls inside its block and leaves the body swipeable", async () => {
   const h = await fileHarness({ text: codeText, markdown: true });
   const scroll = element(".pwa-file-reader-scroll");
-  expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+  const pre = element(".pwa-file-markdown pre");
+  expect(pre.scrollWidth).toBeGreaterThan(pre.clientWidth);
+  expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+  expect(scroll.hasAttribute("data-swipe-horizontal")).toBe(false);
+  expect(getComputedStyle(scroll).touchAction).toBe("pan-y");
+  expect(getComputedStyle(pre).touchAction).toBe("auto");
+  // 从代码块内起手属于它自己的横滚，不关闭；从正文其他位置起手可以关闭。
+  syntheticSwipe(pre);
+  expect(window.history.state?.piReachFileReader).toBeTruthy();
+  expect(h.unpin).not.toHaveBeenCalled();
+  syntheticSwipe(element(".pwa-file-markdown strong"));
+  await fileClosed(h);
+});
+test("G5 content that still overflows the body keeps the outer horizontal exception and tracks changes", async () => {
+  const h = await fileHarness({ text: "Body **child text**.", markdown: true });
+  const scroll = element(".pwa-file-reader-scroll");
+  expect(getComputedStyle(scroll).touchAction).toBe("pan-y");
+  // 用 DOM 注入稳定地制造正文自身横溢（Markdown 本身已不会产生）。
+  const wide = document.createElement("div");
+  wide.style.cssText = "width: 800px; height: 10px";
+  element(".pwa-file-markdown").append(wide);
   await expect.poll(() => getComputedStyle(scroll).touchAction).toBe("auto");
   expect(scroll.hasAttribute("data-swipe-horizontal")).toBe(true);
   syntheticSwipe(element(".pwa-file-markdown strong"));
   expect(window.history.state?.piReachFileReader).toBeTruthy();
-  h.updateText("Body **short child**.");
+  wide.remove();
   await expect.poll(() => getComputedStyle(scroll).touchAction).toBe("pan-y");
-  h.updateText(`\`\`\`text\n${"x".repeat(55)}\n\`\`\``);
-  await expect.poll(() => scroll.scrollWidth > scroll.clientWidth).toBe(true);
-  await page.viewport(740, 844);
-  await expect.poll(() => scroll.scrollWidth === scroll.clientWidth).toBe(true);
-  await expect.poll(() => getComputedStyle(scroll).touchAction).toBe("pan-y");
-  await page.viewport(390, 844);
-  await expect.poll(() => getComputedStyle(scroll).touchAction).toBe("auto");
   expect(h.unpin).not.toHaveBeenCalled();
 });
 test("G5 image single pan and two-finger pinch do not close", async () => {
@@ -252,12 +265,17 @@ test("G5 CDP real Markdown table scrolls horizontally without closing", async ()
   expect(window.history.state?.piReachFileReader).toBeTruthy();
   expect(h.unpin).not.toHaveBeenCalled();
 }, 15000);
-test("G5 CDP outer fenced-code scroll remains horizontal without closing", async () => {
+test("G5 CDP fenced code scrolls horizontally inside its block without closing", async () => {
   await fileHarness({ text: codeText, markdown: true, synthetic: false });
-  const scroll = element(".pwa-file-reader-scroll");
-  await touchDrag(touchOrigin(element(".pwa-file-markdown pre"), 180), -130, 0);
-  await expect.poll(() => scroll.scrollLeft).toBeGreaterThan(20);
+  const pre = element(".pwa-file-markdown pre");
+  await touchDrag(touchOrigin(pre, 180), -130, 0);
+  await expect.poll(() => pre.scrollLeft).toBeGreaterThan(20);
   expect(window.history.state?.piReachFileReader).toBeTruthy();
+}, 15000);
+test("G5 CDP body text next to a fenced code block still closes on right swipe", async () => {
+  const h = await fileHarness({ text: codeText, markdown: true, synthetic: false });
+  await touchDrag(touchOrigin(element(".pwa-file-markdown strong"), 10), 110, 0);
+  await fileClosed(h);
 }, 15000);
 test("G5 CDP native image capture handles pan and pinch without closing", async () => {
   const h = await fileHarness({ image: true, synthetic: false });

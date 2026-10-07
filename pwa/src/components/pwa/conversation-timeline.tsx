@@ -120,14 +120,15 @@ export function ConversationTimeline({ items, live, completions, running = false
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
   const [fileReader, setFileReader] = useState<{ file: PublishedFileDescriptor; trigger: HTMLButtonElement; scopeToken: object } | null>(null);
-  const [fileOpened, setFileOpened] = useState(false);
+  // 记录已打开的是哪一个阅读器：挂载与打开分两步，期间被关闭或换目标时旧的打开请求自然失效。
+  const [fileOpenedFor, setFileOpenedFor] = useState<object | null>(null);
   const files = usePublishedFilesView();
   const fileReadingChange = files?.onReadingChange;
   const scopedFileReader = fileReader?.scopeToken === files?.scopeToken ? fileReader : null;
   // 真实目标失效直接卸载，复用 Reader 的 pin/history cleanup，不播放旧目标退出或回焦。
   if (fileReader !== null && scopedFileReader === null) {
     setFileReader(null);
-    setFileOpened(false);
+    setFileOpenedFor(null);
   }
   const currentFileReader = useRef(scopedFileReader);
   useLayoutEffect(() => { currentFileReader.current = scopedFileReader; }, [scopedFileReader]);
@@ -182,17 +183,20 @@ export function ConversationTimeline({ items, live, completions, running = false
 
   const openFileReader: PublishedFileRead = (file, trigger) => {
     if (!files || reader !== null || scopedFileReader !== null) return;
-    setFileReader({ file, trigger, scopeToken: files.scopeToken });
-    setFileOpened(true);
+    const next = { file, trigger, scopeToken: files.scopeToken };
+    setFileReader(next);
+    // 阅读器随 opened=true 一起挂载时 Mantine 的过渡初始即“已进入”，不播放进入动画；
+    // 先以收起态挂载，下一帧再打开。期间被关闭或换目标则放弃。
+    requestAnimationFrame(() => setFileOpenedFor(next));
   };
   // 旧退出/关闭回调不能碰新的阅读器；门面 getter 也能识别尚未提交 render 的 reset。
   const ownsFileReader = () => scopedFileReader !== null && currentFileReader.current === scopedFileReader
     && files?.scopeToken === scopedFileReader.scopeToken;
-  const closeFileReader = () => { if (ownsFileReader()) setFileOpened(false); };
+  const closeFileReader = () => { if (ownsFileReader()) setFileOpenedFor(null); };
   const finishFileReader = () => {
     if (!ownsFileReader()) return;
     const trigger = scopedFileReader?.trigger;
-    setFileOpened(false);
+    setFileOpenedFor(null);
     setFileReader(null);
     if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
     else listRef.current?.focus({ preventScroll: true });
@@ -223,6 +227,6 @@ export function ConversationTimeline({ items, live, completions, running = false
     {rows}
     {waitingForReply ? <ThinkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
-    {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={fileOpened} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
+    {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;
 }
