@@ -267,3 +267,19 @@ test.each(["running", "queued", "held"] as const)("cancels %s animations on unmo
   });
   expect(harness.settled).toEqual(phase === "held" ? [1] : []);
 });
+
+test("takes the page transition easing from the standard easing token", async () => {
+  const harness = await renderTransition(false);
+  // 只在本用例内改写 token，证明曲线来自 --pwa-ease-standard 而非写死的常量。
+  const tokenEase = "cubic-bezier(0.1, 0.2, 0.3, 0.4)";
+  document.documentElement.style.setProperty("--pwa-ease-standard", tokenEase);
+  try {
+    harness.controls().switchView(true);
+    const animations = harness.root.getAnimations({ subtree: true });
+    expect(animations).toHaveLength(2);
+    animations.forEach((animation) => expect(animation.effect!.getTiming().easing).toBe(tokenEase));
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-ease-standard");
+    await harness.screen.unmount();
+  }
+});
