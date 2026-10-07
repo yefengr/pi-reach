@@ -106,7 +106,8 @@ test("reduced motion fades the computer Drawer without movement and returns focu
     const drawer = dialog.element();
     await expect.poll(() => getComputedStyle(drawer).transitionDuration).toBe("0.12s");
     expect(getComputedStyle(drawer).transitionProperty.split(",").map((name) => name.trim())).toContain("opacity");
-    expect(getComputedStyle(drawer).transform).toBe("none");
+    // Drawer 的静止态是 translate(0)：计算值为单位矩阵而非 none，只要求没有位移。
+    expect(new DOMMatrix(getComputedStyle(drawer).transform).m41).toBe(0);
     const overlay = document.querySelector<HTMLElement>(".mantine-Drawer-overlay")!;
     await expect.poll(() => getComputedStyle(overlay).transitionDuration).toBe("0.12s");
     await userEvent.keyboard("{Escape}");

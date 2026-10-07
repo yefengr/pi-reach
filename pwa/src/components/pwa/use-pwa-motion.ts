@@ -25,27 +25,22 @@ export const pwaFadeTransition = {
   transitionProperty: "opacity",
 } as MantineTransition;
 
+/** Drawer 与设置页转场一致：面板全程不透明的纯位移；减少动态效果时 --pwa-motion-shift 为 0，位移消失并改为淡化。 */
+const drawerSlide = (axis: "X" | "Y", sign: "" | "-"): MantineTransition => ({
+  in: { opacity: 1, transform: `translate${axis}(0)` },
+  out: { opacity: "var(--pwa-motion-shift, 1)", transform: `translate${axis}(calc(${sign}100% * var(--pwa-motion-shift, 1)))` },
+  // 减少动态效果的全局规则会把属性改写为 opacity 等，位移属性只在常规动效下生效。
+  transitionProperty: "transform, opacity",
+} as MantineTransition);
+
+/** 曲线与时长由 Drawer 的 transitionProps 统一提供（标准曲线、--pwa-duration-drawer），遮罩沿用同一组值。 */
 export const pwaDrawerTransitions = {
-  left: {
-    in: { opacity: 1, transform: "translateX(0)", transitionTimingFunction: "var(--pwa-ease-enter)" },
-    out: { opacity: 0, transform: "translateX(-100%)", transitionTimingFunction: "var(--pwa-ease-exit)" },
-    transitionProperty: "opacity, transform",
-  },
-  right: {
-    in: { opacity: 1, transform: "translateX(0)", transitionTimingFunction: "var(--pwa-ease-enter)" },
-    out: { opacity: 0, transform: "translateX(100%)", transitionTimingFunction: "var(--pwa-ease-exit)" },
-    transitionProperty: "opacity, transform",
-  },
-  bottom: {
-    in: { opacity: 1, transform: "translateY(0)", transitionTimingFunction: "var(--pwa-ease-enter)" },
-    out: { opacity: 0, transform: "translateY(100%)", transitionTimingFunction: "var(--pwa-ease-exit)" },
-    transitionProperty: "opacity, transform",
-  },
+  left: drawerSlide("X", "-"),
+  right: drawerSlide("X", ""),
+  bottom: drawerSlide("Y", ""),
 } satisfies Record<"left" | "right" | "bottom", MantineTransition>;
 
-export function pwaOverlayEase(opened: boolean) {
-  return { "--pwa-overlay-ease": opened ? "var(--pwa-ease-enter)" : "var(--pwa-ease-exit)" };
-}
+export const PWA_DRAWER_EASE = "var(--pwa-ease-standard)";
 
 /** 菜单的业务动作在退出卸载后交接，避免仍在退出的 Menu 挡住随后的确认框。 */
 export function useMenuExitAction() {

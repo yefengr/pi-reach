@@ -670,7 +670,8 @@ test("fades navigation and settings without movement under reduced motion and pr
     const drawer = sheet.element();
     await expect.poll(() => getComputedStyle(drawer).transitionDuration).toBe("0.12s");
     expect(getComputedStyle(drawer).transitionProperty.split(",").map((name) => name.trim())).toContain("opacity");
-    expect(getComputedStyle(drawer).transform).toBe("none");
+    // Drawer 的静止态是 translate(0)：计算值为单位矩阵而非 none，只要求没有位移。
+    expect(new DOMMatrix(getComputedStyle(drawer).transform).m41).toBe(0);
     expect(drawer.closest(".pwa-root")).not.toBeNull();
     const overlay = document.querySelector<HTMLElement>(".mantine-Drawer-overlay")!;
     await expect.poll(() => getComputedStyle(overlay).transitionDuration).toBe("0.12s");
@@ -773,11 +774,11 @@ test.each([false, true])("restores native navigation back without page animation
     nativePopstate(null);
     await expect.element(sheet.getByRole("button", { name: "Open settings" })).toHaveFocus();
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.24s");
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.2s");
     await expect.element(sheet).not.toBeInTheDocument();
     await expect.element(trigger).toHaveFocus();
     await trigger.click();
-    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.24s");
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.2s");
     await settleAnimations();
     await sheet.getByRole("button", { name: "Open settings" }).click();
     const animations = document.querySelector(".pwa-settings-view")!.getAnimations();
@@ -858,7 +859,7 @@ test.each([
     await expect.element(close).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     // 静止的 entered 状态可为 0s；验证真正退出阶段仍使用正常导航时长。
-    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.24s");
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.2s");
     await expect.element(sheet).not.toBeInTheDocument();
   } finally {
     await screen.unmount();

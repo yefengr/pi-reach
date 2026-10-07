@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X } from "lucide-react";
 import { CopyButton } from "./copy-button";
 import { useSwipe } from "./use-swipe";
-import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "./use-pwa-motion";
+import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
+import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
 import { toolAction, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
@@ -49,38 +50,13 @@ function StatusIcon({ status }: { status: ReturnType<typeof toolStatus> }) {
  */
 export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
   const { t } = useI18n();
-  const enterDuration = usePwaMotionDuration("--pwa-duration-reader-in", 240);
-  const exitDuration = usePwaMotionDuration("--pwa-duration-reader-out", 200);
+  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: onClose });
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
-  const onCloseRef = useRef(onClose);
-  useLayoutEffect(() => { onCloseRef.current = onClose; }, [onClose]);
-
-  useEffect(() => {
-    if (!opened) return;
-    let pushed = false;
-    let closedByHistory = false;
-    // 推迟到下一轮任务再写历史，避免开发模式的重复挂载写入两条记录。
-    const timer = window.setTimeout(() => {
-      window.history.pushState({ ...(window.history.state ?? {}), piReachToolReader: true }, "");
-      pushed = true;
-    }, 0);
-    const onPopState = () => {
-      if (!pushed) return;
-      closedByHistory = true;
-      onCloseRef.current();
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("popstate", onPopState);
-      // 通过按钮、Escape 或遮罩关闭时撤回压入的记录，保持后退行为一致。
-      if (pushed && !closedByHistory && window.history.state?.piReachToolReader) window.history.back();
-    };
-  }, [opened]);
+  const { instant } = useReaderHistory({ opened, stateKey: "piReachToolReader", marker: true, onClose });
 
   const outputKey = value ? JSON.stringify([value.tool_call_id, "blocks" in value ? value.blocks : null, "result" in value ? value.result : null]) : "";
   useLayoutEffect(() => {
@@ -108,8 +84,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     zIndex={30}
     trapFocus
     returnFocus={false}
-    transitionProps={{ transition: pwaDrawerTransitions.right, duration: enterDuration, exitDuration, timingFunction: "var(--pwa-overlay-ease)" }}
-    style={pwaOverlayEase(opened)}
+    transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}
   >
     <Drawer.Overlay className="pwa-scrim" />
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-tool-reader" }} aria-labelledby="pwa-tool-reader-title" aria-describedby="pwa-tool-reader-description">
