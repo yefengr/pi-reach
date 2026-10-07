@@ -28,7 +28,7 @@
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: background-color 120ms var(--pwa-ease-standard);
+  transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 /* 悬停底色只给有真实悬停的设备；触屏点击后不残留，按下时用 :active 给即时反馈。 */
 @media (hover: hover) { .pwa-timeline-toggle:hover { background: var(--pwa-hover); } }

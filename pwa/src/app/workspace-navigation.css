@@ -94,7 +94,7 @@
   margin-bottom: 4px;
   border: 1px solid transparent;
   border-radius: var(--pwa-radius-sm);
-  transition: background 160ms ease, border-color 160ms ease;
+  transition: background var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 
 .pwa-root .pwa-peer-card.active {
