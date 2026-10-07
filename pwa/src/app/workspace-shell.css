@@ -41,7 +41,7 @@
   z-index: 7;
   top: 6px;
   left: calc(var(--pwa-sidebar-width) - 52px);
-  transition: left var(--pwa-sidebar-motion) var(--pwa-ease-standard), color 120ms var(--pwa-ease-standard);
+  transition: left var(--pwa-sidebar-motion) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 .pwa-ui-scope .pwa-root[data-sidebar-collapsed] .pwa-icon-button.pwa-sidebar-toggle { left: 8px; }
 
@@ -62,7 +62,7 @@
 
 /* 会话行：上下 6、左右 10，行间 2；悬停 hover，选中 selected＋ink。 */
 .pwa-root .pwa-nav-session,
-.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: 6px 10px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color 120ms var(--pwa-ease-standard); }
+.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: 6px 10px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-nav-session .pwa-nav-link-body,
 .pwa-root .pwa-history-row .pwa-nav-link-body { min-width: 0; display: grid; gap: 2px; }
 .pwa-root .pwa-nav-session .pwa-nav-link-label,
@@ -168,7 +168,7 @@
   .pwa-root .pwa-session-trigger { min-width: 0; min-height: 44px; flex: 1 1 auto; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
   .pwa-root .pwa-session-trigger:focus-visible { outline: none; }
   .pwa-root .pwa-session-trigger-icon { position: relative; width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 50%; color: var(--pwa-secondary); }
-  .pwa-root .pwa-session-trigger-icon::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: transparent; transition: background-color 120ms var(--pwa-ease-standard); }
+  .pwa-root .pwa-session-trigger-icon::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
   .pwa-root .pwa-session-trigger-icon > svg { position: relative; }
   @media (hover: hover) { .pwa-root .pwa-session-trigger:hover .pwa-session-trigger-icon::before { background: var(--pwa-hover); } }
   .pwa-root .pwa-session-trigger:focus-visible .pwa-session-trigger-icon { outline: 2px solid var(--pwa-accent); outline-offset: -4px; }

@@ -4,7 +4,8 @@ import { usePwaMotionDuration } from "./use-pwa-motion";
 export { usePwaMotionDuration } from "./use-pwa-motion";
 
 const PAGE_DURATION_MS = 200;
-const EASE_STANDARD = "cubic-bezier(0.2, 0, 0, 1)";
+/** 读取失败时的回退；WAAPI 的 easing 不支持 var()，正常取 --pwa-ease-standard 的计算值。 */
+const EASE_STANDARD_FALLBACK = "cubic-bezier(0.2, 0, 0, 1)";
 
 type PageTransitionOptions = {
   /** 设置页是否为当前视图。 */
@@ -45,12 +46,13 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
       return;
     }
     let animations: Animation[];
+    const easing = getComputedStyle(root).getPropertyValue("--pwa-ease-standard").trim() || EASE_STANDARD_FALLBACK;
     // 全局媒体查询同时控制时长与位移；这里仅选择设置页必需的交叉淡化轨迹。
     if (getComputedStyle(root).getPropertyValue("--pwa-motion-shift").trim() === "0") {
       const workspaceStart = running.length ? Number(getComputedStyle(workspace).opacity) : open ? 1 : 0;
       const settingsStart = running.length ? Number(getComputedStyle(settings).opacity) : open ? 0 : 1;
       running.forEach((animation) => animation.cancel());
-      const timing = { duration, easing: EASE_STANDARD, fill: "forwards" as const };
+      const timing = { duration, easing, fill: "forwards" as const };
       animations = [
         workspace.animate([{ opacity: workspaceStart }, { opacity: open ? 0 : 1 }], timing),
         settings.animate([{ opacity: settingsStart }, { opacity: open ? 1 : 0 }], timing),
@@ -63,7 +65,7 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
         : open ? [0, width] : [-width, 0];
       running.forEach((animation) => animation.cancel());
       const [workspaceEnd, settingsEnd] = open ? [-width, 0] : [0, width];
-      const timing = { duration, easing: EASE_STANDARD, fill: "forwards" as const };
+      const timing = { duration, easing, fill: "forwards" as const };
       animations = [
         workspace.animate([{ transform: `translateX(${workspaceStart}px)` }, { transform: `translateX(${workspaceEnd}px)` }], timing),
         settings.animate([{ transform: `translateX(${settingsStart}px)` }, { transform: `translateX(${settingsEnd}px)` }], timing),

@@ -1,6 +1,6 @@
 .pwa-message-list {
   opacity: 1;
-  transition: opacity 160ms ease;
+  transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 
 .pwa-message-list[data-reconnect-phase="fade-out"],

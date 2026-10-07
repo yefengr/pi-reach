@@ -254,6 +254,22 @@ test("system Back closes only the file reader without cancelling transfer", asyn
   await h.screen.unmount();
 });
 
+test("native Back closes the file reader before popstate returns without cancelling transfer", async () => {
+  const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() } });
+  await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
+  // 注入 UA 信号但仍使用真实 React 与 Drawer；不模拟 Safari 的原生转场。
+  const popstate = new PopStateEvent("popstate", { state: window.history.state });
+  Object.defineProperty(popstate, "hasUAVisualTransition", { value: true });
+  window.dispatchEvent(popstate);
+  expect(document.querySelector(".pwa-file-reader")).toBeNull();
+  expect(document.querySelector(".mantine-Drawer-overlay")).toBeNull();
+  expect(h.cancel).not.toHaveBeenCalled();
+  await h.screen.unmount();
+  // 合成事件没有真正弹出已压入的记录，清掉标记以免影响后续用例。
+  window.history.replaceState(null, "");
+});
+
 test.each(["scope", "provider"] as const)("reused nonempty timeline destroys the old reader on %s loss without moving focus", async loss => {
   const ready: PublishedFileViewState = { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "old scope", url: blobUrl() };
   const h = await harness({ items: [event(published())], initial: ready });

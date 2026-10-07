@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Badge, Button, Drawer, Menu, NavLink, Popover } from "@mantine/core";
-import { usePwaMotionDuration, pwaDrawerTransitions, pwaFadeTransition, pwaOverlayEase, useMenuExitAction } from "@/components/pwa/use-pwa-motion";
+import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, pwaFadeTransition, useMenuExitAction } from "@/components/pwa/use-pwa-motion";
 import { ChevronDown, Computer, Link2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
@@ -116,7 +116,7 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
 }
 
 export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresence = {}, onPair, onSelectDevice, onRename, onRemove, variant = "desktop", purpose = "choose", onOverlayChange }: WorkspaceDeviceControlProps) {
-  const chooserDuration = usePwaMotionDuration("--pwa-duration-chooser", 220);
+  const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   const popoverDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
   const { t } = useI18n();
   const [opened, setOpened] = useState(false);
@@ -207,8 +207,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
         event.stopPropagation();
         dismissPanel();
       }}
-      transitionProps={{ transition: pwaDrawerTransitions.bottom, duration: chooserDuration, timingFunction: "var(--pwa-overlay-ease)" }}
-      style={pwaOverlayEase(opened)}
+      transitionProps={{ transition: pwaDrawerTransitions.bottom, duration: chooserDuration, timingFunction: PWA_DRAWER_EASE }}
     >{panel}</Drawer>
   </>;
 
