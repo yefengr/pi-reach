@@ -27,6 +27,7 @@ type PageTransitionOptions = {
 export function usePageTransition({ open, change, animate, rootRef, workspaceRef, settingsRef, onSettled }: PageTransitionOptions) {
   const duration = usePwaMotionDuration("--pwa-duration-page", PAGE_DURATION_MS);
   const animationsRef = useRef<Animation[]>([]);
+  const settledRef = useRef<{ animations: Animation[]; change: number; open: boolean; settings: HTMLElement } | null>(null);
   const onSettledRef = useRef(onSettled);
   useLayoutEffect(() => { onSettledRef.current = onSettled; }, [onSettled]);
 
@@ -36,6 +37,7 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
     const settings = settingsRef.current;
     const root = rootRef.current;
     const running = animationsRef.current;
+    settledRef.current = null;
     if (!animate || !workspace || !settings || !root || typeof workspace.animate !== "function") {
       running.forEach((animation) => animation.cancel());
       animationsRef.current = [];
@@ -70,14 +72,26 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
     animationsRef.current = animations;
     void Promise.all(animations.map((animation) => animation.finished)).then(() => {
       if (animationsRef.current !== animations) return;
-      animationsRef.current = [];
+      // finished 只证明动画结束；父级静止态尚未提交时仍须保持两层的末帧。
+      settledRef.current = { animations, change, open, settings };
       onSettledRef.current(change);
-      // 静止状态交由 CSS 决定，动画保留的末帧随后撤销。
-      requestAnimationFrame(() => animations.forEach((animation) => animation.cancel()));
     }, () => {});
   }, [animate, change, duration, open, rootRef, settingsRef, workspaceRef]);
 
+  useLayoutEffect(() => {
+    const settled = settledRef.current;
+    const root = rootRef.current;
+    if (!settled || settled.change !== change || settled.open !== open || !root) return;
+    if (root.dataset.view !== (open ? "settings" : "workspace") || root.hasAttribute("data-view-transition")) return;
+    // 返回时只撤销已卸载设置层的 fill；进入时静止 CSS 已在本次提交隐藏工作区。
+    if (!open && settled.settings.isConnected) return;
+    settledRef.current = null;
+    animationsRef.current = [];
+    settled.animations.forEach((animation) => animation.cancel());
+  });
+
   useLayoutEffect(() => () => {
+    settledRef.current = null;
     animationsRef.current.forEach((animation) => animation.cancel());
     animationsRef.current = [];
   }, []);
