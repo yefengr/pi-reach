@@ -19,11 +19,52 @@ type SessionSheetProps = WorkspaceNavigationProps & {
   portalTarget?: string;
 };
 
+const NAVIGATION_SETTINGS_SELECTOR = ".pwa-nav-settings";
+
+function useNavigationSettingsFocus(opened: boolean, requested: boolean, content: HTMLDivElement | null) {
+  // 初始焦点标记是渲染状态，不能在 render 中读写 ref；父级提前收尾时仍保留给晚挂载的 Portal。
+  const [autoFocusSettings, setAutoFocusSettings] = useState(opened && requested);
+  const [seenRequest, setSeenRequest] = useState({ opened, requested });
+  if (seenRequest.opened !== opened || seenRequest.requested !== requested) {
+    setSeenRequest({ opened, requested });
+    if (!opened) setAutoFocusSettings(false);
+    else if (requested) setAutoFocusSettings(true);
+  }
+  const pendingRef = useRef(opened && requested);
+  const previousRef = useRef({ opened, requested });
+  useLayoutEffect(() => {
+    const previous = previousRef.current;
+    previousRef.current = { opened, requested };
+    if (!opened) {
+      pendingRef.current = false;
+      return;
+    }
+    if (!requested || (previous.opened && previous.requested)) return;
+    pendingRef.current = true;
+    // 新请求到达已有内容时直接消费；首次挂载继续交给 FocusTrap 的初始化链。
+    const settings = content?.querySelector<HTMLElement>(NAVIGATION_SETTINGS_SELECTOR);
+    if (!settings) return;
+    settings.focus({ preventScroll: true });
+    if (document.activeElement === settings) pendingRef.current = false;
+  }, [content, opened, requested]);
+  const onFocusedElement = (element: HTMLElement) => {
+    if (element.matches(NAVIGATION_SETTINGS_SELECTOR)) {
+      pendingRef.current = false;
+      return;
+    }
+    // 不在首次 autofocus 后立即移除标记，以免 FocusTrap 的第二次初始化转而聚焦关闭按钮。
+    // 用户主动移开焦点后移除；普通重渲染不再改变用户的选择。
+    if (!pendingRef.current) setAutoFocusSettings(false);
+  };
+  return { autoFocusSettings, onFocusedElement };
+}
+
 export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true, opened = true, onExitTransitionEnd, instant = false, restoreScrollTop, focusSettings = false, portalTarget = ".pwa-root", ...navigation }: SessionSheetProps) {
   const navigationDuration = usePwaMotionDuration("--pwa-duration-nav", 240);
   const { t } = useI18n();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
+  const { autoFocusSettings, onFocusedElement } = useNavigationSettingsFocus(opened, focusSettings, contentElement);
   const setContentRef = useCallback((element: HTMLDivElement | null) => {
     contentRef.current = element;
     setContentElement(element);
@@ -53,10 +94,23 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
   const duration = instant ? 0 : navigationDuration;
   // Drawer 内容可能晚于本组件挂载，在滚动区挂载时恢复位置。
   const restoreScrollRef = useRef(restoreScrollTop);
-  useLayoutEffect(() => { restoreScrollRef.current = restoreScrollTop; }, [restoreScrollTop]);
-  const scrollRef = (element: HTMLDivElement | null) => {
-    if (element && restoreScrollRef.current !== undefined) element.scrollTop = restoreScrollRef.current;
-  };
+  const seenRestoreScrollRef = useRef(restoreScrollTop);
+  useLayoutEffect(() => {
+    if (seenRestoreScrollRef.current !== restoreScrollTop) {
+      seenRestoreScrollRef.current = restoreScrollTop;
+      if (restoreScrollTop !== undefined) restoreScrollRef.current = restoreScrollTop;
+    }
+    // 快速反向时滚动区没有重新挂载，新恢复请求也必须在现存 DOM 上消费。
+    const scroll = contentElement?.querySelector<HTMLElement>(".pwa-navigation-scroll");
+    if (!scroll || restoreScrollRef.current === undefined) return;
+    scroll.scrollTop = restoreScrollRef.current;
+    restoreScrollRef.current = undefined;
+  }, [contentElement, restoreScrollTop]);
+  const scrollRef = useCallback((element: HTMLDivElement | null) => {
+    if (!element || restoreScrollRef.current === undefined) return;
+    element.scrollTop = restoreScrollRef.current;
+    restoreScrollRef.current = undefined;
+  }, []);
 
   const canFocus = (element: HTMLElement | null): element is HTMLElement => Boolean(
     element?.isConnected
@@ -137,7 +191,9 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     styles={{ content: { width: "min(320px, 85vw)", height: "100dvh", maxWidth: "85vw", maxHeight: "100dvh", display: "flex", flexDirection: "column" } }}
   >
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content ref={setContentRef} role="dialog" aria-modal="true">
+    <Drawer.Content ref={setContentRef} role="dialog" aria-modal="true" onFocusCapture={(event) => {
+      if (event.target instanceof HTMLElement) onFocusedElement(event.target);
+    }}>
       <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={24} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} /></Drawer.Header>
       <Drawer.Body>
         <div className="pwa-navigation-content">
@@ -148,7 +204,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
             <WorkspaceRunningPiSection activeDevice={activeDevice} endpoints={navigation.endpoints} activeEndpointId={navigation.activeEndpointId} selectedHistoryId={navigation.selectedHistoryId} snapshotReady={navigation.snapshotReady} completedEndpointIds={navigation.completedEndpointIds} onSelectEndpoint={wrappedEndpoint} headingId="pwa-sheet-running-heading" variant="sheet" />
             <WorkspaceHistorySection activeDevice={activeDevice} history={navigation.history} selectedHistoryId={navigation.selectedHistoryId} onSelectHistory={wrappedHistory} headingId="pwa-sheet-history-heading" variant="sheet" />
           </div>
-          <WorkspaceNavigationFooter className="pwa-session-sheet-foot" onPair={wrappedPair} onSettings={wrappedSettings} autoFocusSettings={focusSettings} />
+          <WorkspaceNavigationFooter className="pwa-session-sheet-foot" onPair={wrappedPair} onSettings={wrappedSettings} autoFocusSettings={autoFocusSettings} />
         </div>
       </Drawer.Body>
     </Drawer.Content>
