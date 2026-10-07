@@ -91,7 +91,11 @@ export function PwaWorkspaceLayout({
   });
   if (seenChange !== settingsRoute.change) {
     setSeenChange(settingsRoute.change);
-    if (settingsRoute.open) setSettingsMounted(true);
+    if (settingsRoute.open) {
+      setSettingsMounted(true);
+      // 重新进入即结束前次恢复请求；连续反向即使值相同，也必须形成新的恢复边界。
+      setSheetRestore(null);
+    }
     setTransitioning(settingsRoute.animate);
     const origin = settingsRoute.origin;
     if (!settingsRoute.open && origin?.kind === "navigation" && typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches) {

@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useState } from "react";
+import { flushSync } from "react-dom";
 
 export const APP_PATH = "/app";
 export const SETTINGS_PATH = "/app/settings";
@@ -90,10 +91,14 @@ export function useSettingsRoute() {
   useLayoutEffect(() => {
     const onPopState = (event: PopStateEvent) => {
       const entry = settingsEntry(event.state);
-      setRoute((current) => {
-        if (entry) return current.open ? current : { open: true, origin: entry.origin, animate: true, change: current.change + 1 };
-        return current.open ? { open: false, origin: current.origin, animate: true, change: current.change + 1 } : current;
+      const nativeTransition = event.hasUAVisualTransition === true;
+      const updateRoute = () => setRoute((current) => {
+        if (entry) return current.open ? current : { open: true, origin: entry.origin, animate: !nativeTransition, change: current.change + 1 };
+        return current.open ? { open: false, origin: current.origin, animate: !nativeTransition, change: current.change + 1 } : current;
       });
+      // UA 已提供视觉转场：在事件返回前提交目标界面，不再叠加应用转场。
+      if (nativeTransition) flushSync(updateRoute);
+      else updateRoute();
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);

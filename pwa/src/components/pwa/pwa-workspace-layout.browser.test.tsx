@@ -705,6 +705,198 @@ test("fades navigation and settings without movement under reduced motion and pr
   }
 });
 
+// 注入 UA 信号但仍使用真实 React、Portal 与动画；不模拟 Safari 的原生转场。
+function nativePageAnimations(root: HTMLElement) {
+  return root.getAnimations({ subtree: true }).filter((animation) => {
+    const target = (animation.effect as KeyframeEffect | null)?.target;
+    return target instanceof Element && target.matches(".pwa-workspace-view, .pwa-settings-view, .pwa-session-sheet, .mantine-Drawer-overlay");
+  });
+}
+
+function nativePopstate(state: unknown) {
+  window.history.replaceState(state, "");
+  const event = new PopStateEvent("popstate", { state });
+  Object.defineProperty(event, "hasUAVisualTransition", { value: true });
+  window.dispatchEvent(event);
+}
+
+test.each([false, true])("restores native navigation back without page animations or lost Portal hints (reduced=%s)", async (reduced) => {
+  await page.viewport(390, 700);
+  if (reduced) await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  const screen = await renderLayout({ events: [], savedHistory: longHistory });
+  try {
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    trigger.element().focus();
+    await trigger.click();
+    await settleAnimations();
+    const scroll = document.querySelector<HTMLElement>(".pwa-session-sheet .pwa-navigation-scroll")!;
+    scroll.scrollTop = 120;
+    const scrollTop = scroll.scrollTop;
+    expect(scrollTop).toBeGreaterThan(0);
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    const settingsState = window.history.state;
+    await settleAnimations();
+    await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+
+    nativePopstate(null);
+    const root = document.querySelector<HTMLElement>(".pwa-root")!;
+    expect(root.dataset.view).toBe("workspace");
+    expect(root.dataset.viewTransition).toBeUndefined();
+    expect(document.querySelector(".pwa-settings-view")).toBeNull();
+    expect(document.querySelector(".pwa-workspace-view")!.getAnimations()).toHaveLength(0);
+    await expect.poll(() => document.querySelector<HTMLElement>(".pwa-session-sheet .pwa-navigation-scroll")?.scrollTop).toBe(scrollTop);
+    const sheet = screen.getByRole("dialog", { name: /Workspace/ });
+    const entry = sheet.getByRole("button", { name: "Open settings" });
+    await expect.element(entry).toHaveFocus();
+    expect(Math.round(sheet.element().getBoundingClientRect().left)).toBe(0);
+    expect(nativePageAnimations(root)).toHaveLength(0);
+
+    // 恢复提示只消费一次；用户滚动与后续 rerender 不应回滚或抢焦点。
+    const restoredScroll = document.querySelector<HTMLElement>(".pwa-session-sheet .pwa-navigation-scroll")!;
+    restoredScroll.scrollTop = 240;
+    const userScrollTop = restoredScroll.scrollTop;
+    const close = sheet.getByRole("button", { name: "Close navigation" });
+    close.element().focus();
+    await screen.rerender(<PwaUiProvider><LayoutHarness events={[]} savedHistory={longHistory} title="Updated Pi" /></PwaUiProvider>);
+    expect(restoredScroll.scrollTop).toBe(userScrollTop);
+    expect(entry.element().hasAttribute("data-autofocus")).toBe(false);
+    await settleAnimations();
+    await expect.element(close).toHaveFocus();
+
+    // 原生 forward 同步进入、无页面动画；随后原生 back 再次恢复。
+    nativePopstate(settingsState);
+    expect(root.dataset.view).toBe("settings");
+    expect(root.dataset.viewTransition).toBeUndefined();
+    expect(document.querySelector(".pwa-session-sheet")).toBeNull();
+    expect(nativePageAnimations(root)).toHaveLength(0);
+    await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toHaveFocus();
+    nativePopstate(null);
+    await expect.element(sheet.getByRole("button", { name: "Open settings" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.24s");
+    await expect.element(sheet).not.toBeInTheDocument();
+    await expect.element(trigger).toHaveFocus();
+    await trigger.click();
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.24s");
+    await settleAnimations();
+    await sheet.getByRole("button", { name: "Open settings" }).click();
+    const animations = document.querySelector(".pwa-settings-view")!.getAnimations();
+    expect(animations).toHaveLength(1);
+    expect(animations[0].effect!.getTiming().duration).toBe(reduced ? 120 : 200);
+    await settleAnimations();
+  } finally {
+    await screen.unmount();
+    await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+  }
+});
+
+test.each([
+  { reduced: false, settled: true },
+  { reduced: true, settled: true },
+  { reduced: false, settled: false },
+  { reduced: true, settled: false },
+])("restores a mounted mobile navigation on native back during ordinary forward (reduced=$reduced, firstReturnSettled=$settled)", async ({ reduced, settled }) => {
+  await page.viewport(390, 700);
+  if (reduced) await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  const screen = await renderLayout({ events: [], savedHistory: longHistory });
+  try {
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await settleAnimations();
+    document.querySelector<HTMLElement>(".pwa-session-sheet .pwa-navigation-scroll")!.scrollTop = 120;
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await settleAnimations();
+    await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+    await screen.getByRole("button", { name: "Back to navigation" }).click();
+    if (settled) {
+      await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
+      await settleAnimations();
+    } else {
+      // 首次返回还未收尾，相同滚动值/焦点提示不能吞掉下一次返回请求。
+      const root = document.querySelector<HTMLElement>(".pwa-root")!;
+      await expect.poll(() => {
+        const animations = nativePageAnimations(root);
+        animations.forEach((animation) => { animation.pause(); animation.currentTime = 60; });
+        return animations.length;
+      }).toBe(2);
+    }
+    const sheet = screen.getByRole("dialog", { name: /Workspace/ });
+    const drawer = sheet.element();
+    const entry = sheet.getByRole("button", { name: "Open settings" });
+    const close = sheet.getByRole("button", { name: "Close navigation" });
+    const scroll = drawer.querySelector<HTMLElement>(".pwa-navigation-scroll")!;
+    expect(scroll.scrollTop).toBe(120);
+    await expect.element(entry).toHaveFocus();
+    scroll.scrollTop = 240;
+    close.element().focus();
+    await expect.element(close).toHaveFocus();
+
+    window.history.forward();
+    const root = document.querySelector<HTMLElement>(".pwa-root")!;
+    await expect.poll(() => root.dataset.view).toBe("settings");
+    await expect.poll(() => {
+      const animations = nativePageAnimations(root);
+      animations.forEach((animation) => { animation.pause(); animation.currentTime = 60; });
+      return animations.length;
+    }).toBe(2);
+    expect(document.querySelector(".pwa-session-sheet")).toBe(drawer);
+    expect(scroll.scrollTop).toBe(240);
+    nativePopstate(null);
+    expect(document.querySelector(".pwa-session-sheet")).toBe(drawer);
+    expect(root.dataset.view).toBe("workspace");
+    expect(document.querySelector(".pwa-settings-view")).toBeNull();
+    expect.soft(scroll.scrollTop).toBe(120);
+    await expect.element(entry).toHaveFocus();
+    expect(nativePageAnimations(root)).toHaveLength(0);
+
+    // 同一 DOM 上的新请求只消费一次，之后用户操作及 rerender 不应被恢复提示覆盖。
+    scroll.scrollTop = 240;
+    close.element().focus();
+    await screen.rerender(<PwaUiProvider><LayoutHarness events={[]} savedHistory={longHistory} title="Updated Pi" /></PwaUiProvider>);
+    await settleAnimations();
+    expect(scroll.scrollTop).toBe(240);
+    expect(entry.element().hasAttribute("data-autofocus")).toBe(false);
+    await expect.element(close).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    // 静止的 entered 状态可为 0s；验证真正退出阶段仍使用正常导航时长。
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.24s");
+    await expect.element(sheet).not.toBeInTheDocument();
+  } finally {
+    await screen.unmount();
+    await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+  }
+});
+
+test.each(["running", "queued"] as const)("settles a native back synchronously during a $0 enter without stale animation cleanup", async (phase) => {
+  const screen = await renderLayout({ events: [] });
+  try {
+    const entry = screen.getByRole("button", { name: "Open settings" });
+    await entry.click();
+    const settingsState = window.history.state;
+    const root = document.querySelector<HTMLElement>(".pwa-root")!;
+    const animations = nativePageAnimations(root);
+    expect(animations).toHaveLength(2);
+    animations.forEach((animation) => {
+      if (phase === "queued") animation.finish();
+      else { animation.pause(); animation.currentTime = 80; }
+    });
+    nativePopstate(null);
+    expect(root.dataset.view).toBe("workspace");
+    expect(root.dataset.viewTransition).toBeUndefined();
+    expect(document.querySelector(".pwa-settings-view")).toBeNull();
+    expect(animations.every((animation) => animation.playState === "idle")).toBe(true);
+    expect(document.activeElement).toBe(entry.element());
+    // 在旧 finished Promise 执行前立即反向；旧完成通知不能卸载新设置页。
+    nativePopstate(settingsState);
+    expect(root.dataset.view).toBe("settings");
+    expect(root.dataset.viewTransition).toBeUndefined();
+    expect(nativePageAnimations(root)).toHaveLength(0);
+    await settleAnimations();
+    await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toHaveFocus();
+    expect(root.dataset.view).toBe("settings");
+    expect(nativePageAnimations(root)).toHaveLength(0);
+  } finally { await screen.unmount(); }
+});
+
 async function settleAnimations() {
   await Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished));
   await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
