@@ -1,7 +1,7 @@
 import { createRef, useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { cdp, page, userEvent } from "vitest/browser";
 import { Modal } from "@mantine/core";
 import { PUBLISHED_FILE_TYPE, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
@@ -254,6 +254,43 @@ test("system Back closes only the file reader without cancelling transfer", asyn
   await h.screen.unmount();
 });
 
+test.each([390, 1280].flatMap(width => [false, true].map(reduce => ({ width, reduce }))))("file reader plays its enter motion when opened at $width (reduce=$reduce)", async ({ width, reduce }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: reduce ? "reduce" : "no-preference" }] });
+  const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() } });
+  try {
+    const seen = { minOpacity: 1, maxLeft: 0, finalLeft: 0 };
+    let stop = false;
+    const tick = () => {
+      const node = document.querySelector<HTMLElement>(".pwa-file-reader");
+      if (node) {
+        seen.minOpacity = Math.min(seen.minOpacity, Number(getComputedStyle(node).opacity));
+        seen.finalLeft = Math.round(node.getBoundingClientRect().left);
+        seen.maxLeft = Math.max(seen.maxLeft, seen.finalLeft);
+      }
+      if (!stop) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    stop = true;
+    if (reduce) {
+      // 减少动态效果：无位移，只淡入。
+      expect(seen.maxLeft).toBe(seen.finalLeft);
+      expect(seen.minOpacity).toBeLessThan(1);
+    } else {
+      // 阅读器必须从屏外滑入，而不是直接出现在终点；面板全程不透明。
+      expect(seen.maxLeft).toBeGreaterThan(seen.finalLeft);
+      expect(seen.minOpacity).toBe(1);
+    }
+    await h.screen.unmount();
+  } finally {
+    await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+    window.history.replaceState(null, "");
+  }
+});
+
 test("native Back closes the file reader before popstate returns without cancelling transfer", async () => {
   const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() } });
   await h.screen.getByRole("button", { name: "View", exact: true }).click();
@@ -276,6 +313,8 @@ test.each(["scope", "provider"] as const)("reused nonempty timeline destroys the
   const removedListener = vi.spyOn(window, "removeEventListener");
   await h.screen.getByRole("button", { name: "View", exact: true }).click();
   await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
+  // 阅读器先收起挂载、随后才进入，等对话框真正渲染后再取引用。
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).not.toBeNull();
   const oldDialog = document.querySelector<HTMLElement>(".pwa-file-reader")!;
   const staleCallbacks = readerCallbacks.at(-1)!;
   expect(document.querySelectorAll(".pwa-scrim")).toHaveLength(1);
@@ -321,6 +360,8 @@ test("same scope keeps the reader and lock across item replacement, missing stat
   const ready: PublishedFileViewState = { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "cached", url: blobUrl() };
   const h = await harness({ items: [event(published())], initial: ready });
   await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  // 阅读器先以收起态挂载、下一帧才打开，等对话框出现后再取引用。
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).not.toBeNull();
   const dialog = document.querySelector(".pwa-file-reader");
   await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
   const marker = window.history.state.piReachFileReader;
