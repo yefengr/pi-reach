@@ -178,15 +178,12 @@
   --pwa-ease-enter: cubic-bezier(0, 0, 0, 1);
   --pwa-ease-exit: cubic-bezier(0.3, 0, 1, 1);
   --pwa-duration-sidebar: 220ms;
-  --pwa-duration-nav: 240ms;
-  --pwa-duration-chooser: 220ms;
   --pwa-duration-page: 200ms;
+  --pwa-duration-drawer: 200ms;
   --pwa-duration-modal-in: 180ms;
   --pwa-duration-modal-out: 140ms;
   --pwa-duration-expand-in: 160ms;
   --pwa-duration-expand-out: 120ms;
-  --pwa-duration-reader-in: 240ms;
-  --pwa-duration-reader-out: 200ms;
   --pwa-duration-toast: 180ms;
   --pwa-duration-fade: 120ms;
   /* 位移类动效乘以该系数；减少动态效果时为 0，只保留透明度淡化。 */
@@ -213,15 +210,12 @@
   :root {
     --pwa-motion-shift: 0;
     --pwa-duration-sidebar: var(--pwa-duration-fade);
-    --pwa-duration-nav: var(--pwa-duration-fade);
-    --pwa-duration-chooser: var(--pwa-duration-fade);
     --pwa-duration-page: var(--pwa-duration-fade);
+    --pwa-duration-drawer: var(--pwa-duration-fade);
     --pwa-duration-modal-in: var(--pwa-duration-fade);
     --pwa-duration-modal-out: var(--pwa-duration-fade);
     --pwa-duration-expand-in: var(--pwa-duration-fade);
     --pwa-duration-expand-out: var(--pwa-duration-fade);
-    --pwa-duration-reader-in: var(--pwa-duration-fade);
-    --pwa-duration-reader-out: var(--pwa-duration-fade);
     --pwa-duration-toast: var(--pwa-duration-fade);
   }
 
@@ -231,12 +225,5 @@
     scroll-behavior: auto !important;
     transition-property: opacity, color, background-color, border-color, outline-color, visibility !important;
     transition-timing-function: var(--pwa-ease-standard) !important;
-  }
-
-  .pwa-root .pwa-navigation-drawer,
-  .pwa-root .pwa-device-drawer,
-  .pwa-root .pwa-tool-reader {
-    /* Mantine 的 slide 终态写在内联样式上；全局禁用 transform 过渡还需取消位移终态。 */
-    transform: none !important;
   }
 }

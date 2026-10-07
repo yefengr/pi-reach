@@ -9,7 +9,8 @@ import { FileTextContent } from "./file-text-content";
 import { useSwipe } from "./use-swipe";
 import { usePublishedFilesView } from "./published-files-context";
 import { IMAGE_RESET, imageGesture, zoomImage, type ImagePoint, type ImageTransform } from "./published-image-gesture";
-import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "./use-pwa-motion";
+import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
+import { useReaderHistory } from "./use-reader-history";
 import "./published-files.css";
 
 function PublishedImage({ url, name, onRetry, canRetry }: { url: string; name: string; onRetry: () => void; canRetry: boolean }) {
@@ -45,6 +46,9 @@ function PublishedImage({ url, name, onRetry, canRetry }: { url: string; name: s
   </>;
 }
 
+/** 阅读器之上存在其他模态（确认框等）时，返回与关闭交给上层处理。 */
+const hasOtherModal = () => document.querySelector('[role="dialog"][aria-modal="true"]:not(.pwa-file-reader)') !== null;
+
 /** file 保留至退出结束，pin 不随 opened=false 提前释放。 */
 export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd }: { file: PublishedFileDescriptor; opened: boolean; onClose: () => void; onExitTransitionEnd: () => void }) {
   const { t } = useI18n();
@@ -52,38 +56,21 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
   const state = files?.getState(file.publication_id);
   const name = state?.fileName ?? file.file_name;
   const headingId = useId();
-  const close = useRef(onClose);
-  useLayoutEffect(() => { close.current = onClose; }, [onClose]);
   const pin = files?.pin;
   const unpin = files?.unpin;
   const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
-  const duration = usePwaMotionDuration("--pwa-duration-reader-in", 240);
-  const exitDuration = usePwaMotionDuration("--pwa-duration-reader-out", 200);
+  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   useEffect(() => {
     pin?.(file.publication_id);
     return () => unpin?.(file.publication_id);
   }, [pin, unpin, file.publication_id]);
-  useEffect(() => {
-    if (!opened) return;
-    let pushed = false;
-    let byHistory = false;
-    const marker = `${file.publication_id}:${headingId}`;
-    const timer = window.setTimeout(() => {
-      window.history.pushState({ ...(window.history.state ?? {}), piReachFileReader: marker }, "");
-      pushed = true;
-    }, 0);
-    const pop = () => {
-      if (!pushed || document.querySelector('[role="dialog"][aria-modal="true"]:not(.pwa-file-reader)')) return;
-      byHistory = true;
-      close.current();
-    };
-    window.addEventListener("popstate", pop);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("popstate", pop);
-      if (pushed && !byHistory && window.history.state?.piReachFileReader === marker) window.history.back();
-    };
-  }, [opened, file.publication_id, headingId]);
+  const { instant } = useReaderHistory({
+    opened,
+    stateKey: "piReachFileReader",
+    marker: `${file.publication_id}:${headingId}`,
+    onClose,
+    ignorePop: hasOtherModal,
+  });
   const previewKind = state?.preview?.kind;
   const previewText = state?.text;
   const previewSize = state?.byteLength;
@@ -97,7 +84,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
   const mime = state?.mimeType ?? file.mime_type;
   const markdown = mime === "text/markdown" || mime === "text/plain" && /\.(md|markdown)$/i.test(name);
   const requestClose = () => {
-    if (document.querySelector('[role="dialog"][aria-modal="true"]:not(.pwa-file-reader)')) return;
+    if (hasOtherModal()) return;
     onClose();
   };
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
@@ -113,7 +100,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
     return () => observer.disconnect();
   }, [scroll, preview, mobile]);
-  return <Drawer.Root opened={opened} onClose={requestClose} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : 720} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration, exitDuration, timingFunction: "var(--pwa-overlay-ease)" }} style={pwaOverlayEase(opened)}>
+  return <Drawer.Root opened={opened} onClose={requestClose} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : 720} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim" />
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }}>
       <Drawer.Header className="pwa-file-reader-header">

@@ -484,12 +484,12 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 进出只做轻微位移＋淡化；Mantine 通知状态变量区分退出，不使用整段滑入与回弹。 */
 .pwa-operation-notifications .pwa-operation-notification { transform: translateY(calc((1 - var(--notifications-state-opacity, 1)) * -8px * var(--pwa-motion-shift, 1))) !important; transition-timing-function: var(--pwa-ease-enter) !important; }
 .pwa-operation-notifications .pwa-operation-notification[style*="--notifications-state-opacity: 0"] { transition-timing-function: var(--pwa-ease-exit) !important; }
-/* Mantine 的遮罩与内容是兄弟节点，不能继承内容 in/out 上的曲线变量。 */
-.pwa-scrim[style] { transition-timing-function: var(--pwa-ease-enter) !important; }
-.pwa-scrim[style*="opacity: 0;"] { transition-timing-function: var(--pwa-ease-exit) !important; }
+/* Mantine 的遮罩与内容是兄弟节点，不能继承内容 in/out 上的曲线变量；Drawer 遮罩沿用 transitionProps 的标准曲线，只有 Modal 遮罩区分进入／退出。 */
+.mantine-Modal-overlay.pwa-scrim[style] { transition-timing-function: var(--pwa-ease-enter) !important; }
+.mantine-Modal-overlay.pwa-scrim[style*="opacity: 0;"] { transition-timing-function: var(--pwa-ease-exit) !important; }
 @media (prefers-reduced-motion: reduce) {
   .pwa-operation-notifications .pwa-operation-notification[style],
-  .pwa-scrim[style] { transition-timing-function: var(--pwa-ease-standard) !important; }
+  .mantine-Modal-overlay.pwa-scrim[style] { transition-timing-function: var(--pwa-ease-standard) !important; }
 }
 .pwa-operation-notifications .pwa-toast-icon { width: 16px; min-width: 16px; height: 16px; margin-right: 8px; border-radius: 0; background: transparent; }
 .pwa-operation-notifications .pwa-toast-success .pwa-toast-icon { color: var(--pwa-complete); }

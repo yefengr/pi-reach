@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
-import { pwaDrawerTransitions, pwaOverlayEase, usePwaMotionDuration } from "@/components/pwa/use-pwa-motion";
+import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "@/components/pwa/use-pwa-motion";
 import { WorkspaceDeviceControl } from "@/components/pwa/workspace-device-control";
 import { useI18n } from "@/lib/i18n";
 import { getActiveDevice, WorkspaceHistorySection, WorkspaceNavigationFooter, WorkspaceRunningPiSection, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
@@ -60,7 +60,7 @@ function useNavigationSettingsFocus(opened: boolean, requested: boolean, content
 }
 
 export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true, opened = true, onExitTransitionEnd, instant = false, restoreScrollTop, focusSettings = false, portalTarget = ".pwa-root", ...navigation }: SessionSheetProps) {
-  const navigationDuration = usePwaMotionDuration("--pwa-duration-nav", 240);
+  const navigationDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   const { t } = useI18n();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
@@ -185,8 +185,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
       event.stopPropagation();
       requestClose();
     }}
-    transitionProps={{ transition: pwaDrawerTransitions.left, duration, timingFunction: "var(--pwa-overlay-ease)" }}
-    style={pwaOverlayEase(opened)}
+    transitionProps={{ transition: pwaDrawerTransitions.left, duration, timingFunction: PWA_DRAWER_EASE }}
     classNames={{ content: "pwa-session-sheet pwa-navigation-drawer", header: "pwa-session-sheet-head", body: "pwa-session-sheet-body", close: "pwa-icon-button" }}
     styles={{ content: { width: "min(320px, 85vw)", height: "100dvh", maxWidth: "85vw", maxHeight: "100dvh", display: "flex", flexDirection: "column" } }}
   >
