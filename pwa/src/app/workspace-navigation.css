@@ -347,3 +347,6 @@
 .pwa-root .pwa-session-sheet-head .pwa-sidebar-brand { min-height: 0; padding: 0; }
 .pwa-root .pwa-session-sheet .pwa-navigation-content { padding: 0 8px; }
 .pwa-scrim { background: var(--pwa-scrim) !important; backdrop-filter: none !important; }
+/* 跟手拖动的 WAAPI 动画必须压过 Mantine 的 CSS 过渡：过渡的层叠优先级高于脚本动画，
+   外部关闭时否则面板会先跳回起点再由过渡滑出。属性由 swipe-drag 在动画存续期间设置。 */
+[data-swipe-drag-active] { transition: none !important; }

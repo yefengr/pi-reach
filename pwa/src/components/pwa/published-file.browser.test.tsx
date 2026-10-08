@@ -247,8 +247,12 @@ test("reader pins through exit, releases reading lock, returns focus, and Escape
 test("system Back closes only the file reader without cancelling transfer", async () => {
   const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() } });
   await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  // 历史标记可能早于 Portal 挂载；先确认打开态，避免把尚未挂载误判为返回后的卸载。
+  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
   await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
   window.history.back();
+  // 等原生返回提交后再卸载，防止 cleanup 对尚未撤回的记录再次调用 history.back()。
+  await expect.poll(() => window.history.state?.piReachFileReader).toBeUndefined();
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
   expect(h.cancel).not.toHaveBeenCalled();
   await h.screen.unmount();
