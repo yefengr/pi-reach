@@ -1,5 +1,5 @@
 // 生成 README 截图（docs/assets/screenshot-*.png）：运行 `pnpm --filter pwa screenshots`。
-// screenshot-mobile-showcase-en.png 把浅色、深色手机截图并排放在宽画布上，供只按原始像素显示图片的商店页使用。
+// screenshot-hero-en.png 把桌面截图与深色手机截图叠放在一张横幅上，供把图片铺满正文宽度的商店页与 Pi 包缩略图使用。
 // 使用真实的 PwaApp 界面与演示数据；Relay 与会话通道由本文件模拟，不连接真实 Relay、Pi 或模型。
 // 文件名不匹配 *.browser.test.tsx，不会随 `pnpm test` 运行。
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -32,15 +32,20 @@ const API = "endpoint-api-server";
 const SESSION = "session-demo";
 const LEAF = "leaf-demo";
 const SENDER = "sender-demo";
-/** 手机截图占宽幅图宽度的比例：README 正文约 920px 宽时，手机约 330px，接近真机字号。 */
-const SHOWCASE_PHONE_WIDTH_RATIO = 0.36;
-const SHOWCASE_PADDING = 120;
-const SHOWCASE_GAP = 120;
-const SHOWCASE_RADIUS = 36;
-const SHOWCASE_BORDER_WIDTH = 2;
-/** 与浅色主题 --pwa-panel、--pwa-line 一致。 */
-const SHOWCASE_BACKGROUND = "#F7F7F7";
-const SHOWCASE_BORDER = "#E0E0E0";
+const HERO_PADDING = 96;
+/** 手机与桌面截图等高；手机左侧按自身宽度的该比例压在桌面截图上。 */
+const HERO_PHONE_OVERLAP_RATIO = 0.35;
+/** 手机相对桌面截图下移的距离，让两者错落而不是顶边对齐。 */
+const HERO_PHONE_DROP = 96;
+const HERO_DESKTOP_RADIUS = 24;
+const HERO_PHONE_RADIUS = 40;
+const HERO_BORDER_WIDTH = 2;
+const HERO_SHADOW_BLUR = 64;
+const HERO_SHADOW_COLOR = "rgba(0, 0, 0, 0.16)";
+/** 与浅色主题 --pwa-panel、--pwa-line 及深色主题 --pwa-line 一致。 */
+const HERO_BACKGROUND = "#F7F7F7";
+const HERO_DESKTOP_BORDER = "#E0E0E0";
+const HERO_PHONE_BORDER = "#464646";
 
 type Relay = { state: string; emitControl: (frame: unknown) => void };
 type Channel = { channelId: string; frames: ClientFrame[]; emit: (frame: unknown) => void };
@@ -233,41 +238,56 @@ function loadImage(base64: string): Promise<HTMLImageElement> {
   });
 }
 
-/** 把同尺寸的手机截图并排画到宽画布上，返回 PNG 的 base64。 */
-async function composeShowcase(screens: string[]): Promise<string> {
-  const images = await Promise.all(screens.map(loadImage));
-  const { naturalWidth: phoneWidth, naturalHeight: phoneHeight } = images[0]!;
-  const rowWidth = images.length * phoneWidth + (images.length - 1) * SHOWCASE_GAP;
+type Frame = { image: HTMLImageElement; x: number; y: number; width: number; height: number; radius: number; border: string };
+
+/** 先画带阴影的底板，再按圆角裁剪绘制截图并描边。 */
+function drawFrame(context: CanvasRenderingContext2D, { image, x, y, width, height, radius, border }: Frame) {
+  context.save();
+  context.shadowBlur = HERO_SHADOW_BLUR;
+  context.shadowColor = HERO_SHADOW_COLOR;
+  context.fillStyle = border;
+  context.beginPath();
+  context.roundRect(x, y, width, height, radius);
+  context.fill();
+  context.restore();
+  context.save();
+  context.beginPath();
+  context.roundRect(x, y, width, height, radius);
+  context.clip();
+  context.drawImage(image, x, y, width, height);
+  context.restore();
+  context.lineWidth = HERO_BORDER_WIDTH;
+  context.strokeStyle = border;
+  context.beginPath();
+  context.roundRect(x, y, width, height, radius);
+  context.stroke();
+}
+
+/** 桌面截图按原尺寸居左，手机截图缩放到同高后压在右下方，返回 PNG 的 base64。 */
+async function composeHero(desktopScreen: string, phoneScreen: string): Promise<string> {
+  const [desktop, phone] = await Promise.all([loadImage(desktopScreen), loadImage(phoneScreen)]);
+  const { naturalWidth: desktopWidth, naturalHeight: desktopHeight } = desktop;
+  const phoneHeight = desktopHeight;
+  const phoneWidth = Math.round(phone.naturalWidth * phoneHeight / phone.naturalHeight);
+  const phoneX = HERO_PADDING + desktopWidth - Math.round(phoneWidth * HERO_PHONE_OVERLAP_RATIO);
+  const phoneY = HERO_PADDING + HERO_PHONE_DROP;
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(Math.round(phoneWidth / SHOWCASE_PHONE_WIDTH_RATIO), rowWidth + 2 * SHOWCASE_PADDING);
-  canvas.height = phoneHeight + 2 * SHOWCASE_PADDING;
+  canvas.width = phoneX + phoneWidth + HERO_PADDING;
+  canvas.height = phoneY + phoneHeight + HERO_PADDING;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas 2D context is unavailable.");
-  context.fillStyle = SHOWCASE_BACKGROUND;
+  context.fillStyle = HERO_BACKGROUND;
   context.fillRect(0, 0, canvas.width, canvas.height);
-  let x = (canvas.width - rowWidth) / 2;
-  for (const image of images) {
-    context.save();
-    context.beginPath();
-    context.roundRect(x, SHOWCASE_PADDING, phoneWidth, phoneHeight, SHOWCASE_RADIUS);
-    context.clip();
-    context.drawImage(image, x, SHOWCASE_PADDING, phoneWidth, phoneHeight);
-    context.restore();
-    context.lineWidth = SHOWCASE_BORDER_WIDTH;
-    context.strokeStyle = SHOWCASE_BORDER;
-    context.beginPath();
-    context.roundRect(x, SHOWCASE_PADDING, phoneWidth, phoneHeight, SHOWCASE_RADIUS);
-    context.stroke();
-    x += phoneWidth + SHOWCASE_GAP;
-  }
+  drawFrame(context, { image: desktop, x: HERO_PADDING, y: HERO_PADDING, width: desktopWidth, height: desktopHeight, radius: HERO_DESKTOP_RADIUS, border: HERO_DESKTOP_BORDER });
+  drawFrame(context, { image: phone, x: phoneX, y: phoneY, width: phoneWidth, height: phoneHeight, radius: HERO_PHONE_RADIUS, border: HERO_PHONE_BORDER });
   return canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
 }
 
 test("desktop zh", async () => { await writePng("desktop-zh", await capture("zh", 1440, 900)); });
 test("mobile zh", async () => { await writePng("mobile-zh", await capture("zh", 430, 932)); });
-test("desktop en", async () => { await writePng("desktop-en", await capture("en", 1440, 900)); });
-test("mobile en", async () => {
-  const light = await capture("en", 430, 932);
-  await writePng("mobile-en", light);
-  await writePng("mobile-showcase-en", await composeShowcase([light, await capture("en", 430, 932, "dark")]));
+test("desktop en", async () => {
+  const desktop = await capture("en", 1440, 900);
+  await writePng("desktop-en", desktop);
+  await writePng("hero-en", await composeHero(desktop, await capture("en", 430, 932, "dark")));
 });
+test("mobile en", async () => { await writePng("mobile-en", await capture("en", 430, 932)); });
