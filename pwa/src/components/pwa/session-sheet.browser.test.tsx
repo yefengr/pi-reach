@@ -1,11 +1,28 @@
 import { useEffect, useRef, useState } from "react";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { flushSync } from "react-dom";
 import { page, userEvent } from "vitest/browser";
 import { SessionSheet } from "./session-sheet";
 import { renderPwa } from "@/test/browser/render";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 import type { PairingPresence } from "./workspace-view";
+
+const sheetLifecycle = vi.hoisted(() => ({ exit: undefined as (() => void) | undefined }));
+vi.mock("@mantine/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mantine/core")>();
+  const DrawerRoot = actual.Drawer.Root;
+  return {
+    ...actual,
+    Drawer: Object.assign((props: Parameters<typeof actual.Drawer>[0]) => <actual.Drawer {...props} />, {
+      ...actual.Drawer,
+      Root: (props: Parameters<typeof DrawerRoot>[0]) => {
+        if (props.position === "left") sheetLifecycle.exit = props.onExitTransitionEnd;
+        return <DrawerRoot {...props} />;
+      },
+    }),
+  };
+});
 
 const alphaDevice: PwaDeviceRecord = {
   id: "device:alpha",
@@ -64,9 +81,10 @@ type HarnessProps = {
   selectedHistoryId?: string | null;
   historyItems?: TimelineSessionSummary[];
   conditionallyUnmount?: boolean;
+  exits?: string[];
 };
 
-function SessionSheetHarness({ events, renamed = [], removed = [], rejectClose = false, activeEndpointId = "alpha-live", selectedHistoryId = null, historyItems = [history], conditionallyUnmount = false }: HarnessProps) {
+function SessionSheetHarness({ events, renamed = [], removed = [], rejectClose = false, activeEndpointId = "alpha-live", selectedHistoryId = null, historyItems = [history], conditionallyUnmount = false, exits }: HarnessProps) {
   const [mounted, setMounted] = useState(false);
   const [opened, setOpened] = useState(false);
   const [focusOrigin, setFocusOrigin] = useState<HTMLElement | null>(null);
@@ -107,14 +125,18 @@ function SessionSheetHarness({ events, renamed = [], removed = [], rejectClose =
       onClose={close}
       focusOrigin={focusOrigin}
       opened={opened}
+      onExitTransitionEnd={() => exits?.push("exit")}
     /> : null}
   </>;
 }
 
 beforeEach(async () => { await page.viewport(1280, 900); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 async function openSheet(screen: Awaited<ReturnType<typeof renderPwa>>) {
   const trigger = screen.getByRole("button", { name: "Open navigation" });
+  // production React 的 render 不借助 act 同步提交，先等待可观察的挂载结果。
+  await expect.element(trigger).toBeVisible();
   trigger.element().focus();
   await trigger.click();
   const dialog = screen.getByRole("dialog", { name: "Workspace" });
@@ -126,6 +148,87 @@ async function openSheet(screen: Awaited<ReturnType<typeof renderPwa>>) {
 async function waitForClosed(screen: Awaited<ReturnType<typeof renderPwa>>) {
   await expect.element(screen.getByRole("dialog", { name: "Workspace" })).not.toBeInTheDocument();
 }
+
+test("stale Drawer exit cannot steal focus after reopening", async () => {
+  const exits: string[] = [];
+  const screen = await renderPwa(<SessionSheetHarness events={[]} exits={exits} />);
+  const { trigger, dialog } = await openSheet(screen);
+  await expect.poll(() => dialog.element().contains(document.activeElement)).toBe(true);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  flushSync(() => (screen.getByRole("button", { name: "Close navigation" }).element() as HTMLElement).click());
+  const oldExit = sheetLifecycle.exit!;
+  trigger.element().focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.runOnlyPendingTimersAsync();
+  vi.useRealTimers();
+  await expect.poll(() => dialog.element().contains(document.activeElement)).toBe(true);
+  flushSync(oldExit);
+  expect(dialog.element().contains(document.activeElement)).toBe(true);
+  expect(exits).toEqual([]);
+});
+
+test("stale Drawer epoch cannot consume the next close action and current exit runs once", async () => {
+  const events: string[] = [];
+  const exits: string[] = [];
+  const screen = await renderPwa(<SessionSheetHarness events={events} exits={exits} />);
+  const { trigger } = await openSheet(screen);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  flushSync(() => (screen.getByRole("button", { name: "Close navigation" }).element() as HTMLElement).click());
+  const oldExit = sheetLifecycle.exit!;
+  trigger.element().focus();
+  await userEvent.keyboard("{Enter}");
+  flushSync(() => (screen.getByRole("button", { name: "Pair a computer" }).element() as HTMLElement).click());
+  const currentExit = sheetLifecycle.exit!;
+  expect(events).toEqual(["close", "close"]);
+  flushSync(oldExit);
+  expect(events).toEqual(["close", "close"]);
+  expect(exits).toEqual([]);
+  flushSync(currentExit);
+  flushSync(currentExit);
+  expect(events).toEqual(["close", "close", "pair"]);
+  expect(exits).toEqual(["exit"]);
+});
+
+test("completed Drawer action RAF cannot steal focus from a reopened navigation", async () => {
+  const events: string[] = [];
+  const screen = await renderPwa(<SessionSheetHarness events={events} />);
+  const { trigger, dialog } = await openSheet(screen);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  flushSync(() => (screen.getByRole("button", { name: "Pair a computer" }).element() as HTMLElement).click());
+  const currentExit = sheetLifecycle.exit!;
+  const pendingFrames: FrameRequestCallback[] = [];
+  const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    pendingFrames.push(callback);
+    return 0;
+  });
+  flushSync(currentExit);
+  frame.mockRestore();
+  expect(pendingFrames).toHaveLength(1);
+  expect(events).toEqual(["close", "pair"]);
+  trigger.element().focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.runOnlyPendingTimersAsync();
+  vi.useRealTimers();
+  await expect.poll(() => dialog.element().contains(document.activeElement)).toBe(true);
+  pendingFrames[0](performance.now());
+  expect(dialog.element().contains(document.activeElement)).toBe(true);
+});
+
+test("unmounted Drawer ignores old exits while cleanup hands off its action once", async () => {
+  const events: string[] = [];
+  const exits: string[] = [];
+  const screen = await renderPwa(<SessionSheetHarness events={events} exits={exits} />);
+  await openSheet(screen);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  flushSync(() => (screen.getByRole("button", { name: "Pair a computer" }).element() as HTMLElement).click());
+  const oldExit = sheetLifecycle.exit!;
+  await screen.unmount();
+  expect(events).toEqual(["close", "pair"]);
+  flushSync(oldExit);
+  flushSync(oldExit);
+  expect(events).toEqual(["close", "pair"]);
+  expect(exits).toEqual([]);
+});
 
 test("portals the full-height Drawer and restores focus for each plain close path", async () => {
   const events: string[] = [];

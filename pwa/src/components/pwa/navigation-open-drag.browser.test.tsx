@@ -21,21 +21,29 @@ const navigation: WorkspaceNavigationProps = {
 };
 const LOCK_STEP = 12;
 
-// 保留真实导航实现，仅记录父级回调，才能定向重放旧退出通知。
+// 记录组件库真正收到的退出入口，保留完整 Drawer 和 SessionSheet 副作用链。
 const navigationLifecycle = vi.hoisted(() => ({ exit: undefined as (() => void) | undefined }));
-vi.mock("./pwa-mobile-chrome", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./pwa-mobile-chrome")>();
+vi.mock("@mantine/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@mantine/core")>();
+  const DrawerRoot = actual.Drawer.Root;
   return {
     ...actual,
-    PwaMobileNavigation: (props: Parameters<typeof actual.PwaMobileNavigation>[0]) => {
-      navigationLifecycle.exit = props.onExitTransitionEnd;
-      return <actual.PwaMobileNavigation {...props} />;
-    },
+    Drawer: Object.assign((props: Parameters<typeof actual.Drawer>[0]) => <actual.Drawer {...props} />, {
+      ...actual.Drawer,
+      Root: (props: Parameters<typeof actual.Drawer.Root>[0]) => {
+        if (props.position === "left") navigationLifecycle.exit = props.onExitTransitionEnd;
+        return <DrawerRoot {...props} />;
+      },
+    }),
   };
 });
 
 let mounted: Awaited<ReturnType<typeof render>> | undefined;
 let showConfirmation: () => void;
+let lastTouchPointerId: number | null = null;
+const rememberTouchPointer = (event: PointerEvent) => {
+  if (event.pointerType === "touch") lastTouchPointerId = event.pointerId;
+};
 
 function Harness() {
   const { route, openSettings, closeSettings } = useSettingsRoute();
@@ -102,10 +110,13 @@ beforeEach(async () => {
   window.localStorage.removeItem("pi-reach-sidebar-collapsed");
   await page.viewport(390, 700);
   await enableTouch();
+  lastTouchPointerId = null;
+  document.addEventListener("pointerdown", rememberTouchPointer, true);
 });
 afterEach(async () => {
   vi.useRealTimers();
   await resetTouch();
+  document.removeEventListener("pointerdown", rememberTouchPointer, true);
   document.querySelectorAll("body > button").forEach((button) => button.remove());
   await mounted?.unmount();
   mounted = undefined;
@@ -121,8 +132,22 @@ async function committedNavigation() {
   await expect.poll(scrollLocked).toBe(true);
 }
 async function closeNavigation(method: "button" | "scrim" | "swipe") {
-  if (method === "button") await touchTap(touchOrigin(document.querySelector(".pwa-navigation-close")!));
-  else if (method === "scrim") await touchTap({ x: 365, y: DOWN_Y, id: 1 });
+  if (method === "button") {
+    // fake timers 不推进原生 CSS/WAAPI；焦点进入及取整后的几何归零也不代表动画已结束。
+    await expect.poll(() => [sheet()?.getAnimations().length, scrim()?.getAnimations().length]).toEqual([0, 0]);
+    const button = document.querySelector<HTMLButtonElement>(".pwa-navigation-close")!;
+    const point = touchOrigin(button);
+    expect(button.disabled).toBe(false);
+    expect(button.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    expect(getComputedStyle(button).pointerEvents).not.toBe("none");
+    expect(button.contains(document.elementFromPoint(point.x, point.y))).toBe(true);
+    expect(sheet()!.hasAttribute("data-swipe-drag-active")).toBe(false);
+    if (lastTouchPointerId !== null) {
+      expect(sheet()!.hasPointerCapture(lastTouchPointerId)).toBe(false);
+      expect(document.querySelector(".pwa-main")!.hasPointerCapture(lastTouchPointerId)).toBe(false);
+    }
+    await touchTap(point);
+  } else if (method === "scrim") await touchTap({ x: 365, y: DOWN_Y, id: 1 });
   else await touchDrag(touchOrigin(sheet()!, sheetWidth() - 40, 500), -140, 0);
   await expect.poll(navigationOpen).toBe(false);
   await expect.poll(sheet).toBeNull();
@@ -157,21 +182,24 @@ test("D5 fast reopen survives a stale exit callback without releasing the new ge
   await touchTap(touchOrigin(trigger()));
   await committedNavigation();
   const original = sheet()!;
-  const oldExit = navigationLifecycle.exit!;
   // 只冻结 Mantine 退出定时器；CDP、RAF 与原生动画继续工作。
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   await touchTap(touchOrigin(document.querySelector(".pwa-navigation-close")!));
   expect(navigationOpen()).toBe(false);
   expect(sheet()).toBe(original);
+  const oldExit = navigationLifecycle.exit!;
   trigger().focus();
   await userEvent.keyboard("{Enter}");
   expect(navigationOpen()).toBe(true);
-  flushSync(oldExit);
-  expect(sheet()).toBe(original);
   await frames();
   await vi.runOnlyPendingTimersAsync();
   vi.useRealTimers();
   await committedNavigation();
+  flushSync(oldExit);
+  expect(sheet()).toBe(original);
+  expect(sheet()!.contains(document.activeElement)).toBe(true);
+  expect(navigationOpen()).toBe(true);
+  expect(scrollLocked()).toBe(true);
   await closeNavigation("button");
   trigger().focus();
   await dragRight(112);
