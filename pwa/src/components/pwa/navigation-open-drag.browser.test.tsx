@@ -20,6 +20,8 @@ const navigation: WorkspaceNavigationProps = {
   onPair: () => {}, onSettings: () => {}, onSelectDevice: () => {}, onSelectEndpoint: () => {}, onSelectHistory: () => {}, onRename: () => {}, onRemove: () => {},
 };
 const LOCK_STEP = 12;
+// 本用例验证静止提交后的关闭；停稳采样避免 CDP 末段速度进入 Chromium 原生 fling。
+const TOUCH_STOP_WINDOW_MS = 250;
 
 // 记录组件库真正收到的退出入口，保留完整 Drawer 和 SessionSheet 副作用链。
 const navigationLifecycle = vi.hoisted(() => ({ exit: undefined as (() => void) | undefined }));
@@ -212,6 +214,14 @@ test("D5 fast reopen survives a stale exit callback without releasing the new ge
   expect(scrollLocked()).toBe(false);
   await moveTouch(origin, 140);
   expect(sheetLeft()).toBe(-sheetWidth() + 128);
+  // 保持同一真实触点并发送静止采样，模拟停稳后松手；不把下一次 tap 用于停止原生 fling。
+  const stopUntil = performance.now() + TOUCH_STOP_WINDOW_MS;
+  while (performance.now() < stopUntil) {
+    await moveTouch(origin, 140);
+    expect(sheet()).toBe(preview);
+    expect(preview.hasAttribute("data-swipe-drag")).toBe(true);
+    expect(sheetLeft()).toBe(-sheetWidth() + 128);
+  }
   await release();
   await committedNavigation();
   await closeNavigation("button");
