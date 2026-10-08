@@ -6,10 +6,13 @@
   --pwa-sidebar-motion: var(--pwa-duration-sidebar);
 }
 
-/* 工作区与设置页两层视图：设置页为当前视图时工作区隐藏但保持挂载，保留会话、草稿与阅读位置。 */
+/* 工作区与设置页两层视图：设置页为当前视图时工作区隐藏但保持挂载，保留会话、草稿与阅读位置。
+   转场与右侧 Drawer 同一模型：工作区不动，设置层带模态阴影滑入，遮罩只在转场中由脚本淡入淡出。 */
 .pwa-root { position: relative; }
 .pwa-root .pwa-workspace-view { position: relative; isolation: isolate; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.pwa-root .pwa-page-scrim { position: absolute; z-index: 20; inset: 0; background: var(--pwa-scrim); opacity: 0; pointer-events: none; }
 .pwa-root .pwa-settings-view { position: absolute; z-index: 20; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--pwa-surface); }
+.pwa-root[data-view-transition] .pwa-settings-view { box-shadow: var(--pwa-shadow-modal); }
 .pwa-root[data-view="settings"]:not([data-view-transition]) .pwa-workspace-view { visibility: hidden; }
 
 .pwa-root .pwa-layout {

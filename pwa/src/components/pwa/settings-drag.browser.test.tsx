@@ -42,6 +42,8 @@ const workspace = () => document.querySelector<HTMLElement>(".pwa-workspace-view
 const settingsOpen = () => root().dataset.view === "settings";
 const settingsLeft = () => Math.round(settings()!.getBoundingClientRect().left);
 const workspaceLeft = () => Math.round(workspace().getBoundingClientRect().left);
+const scrim = () => document.querySelector<HTMLElement>(".pwa-page-scrim");
+const scrimOpacity = () => Number(getComputedStyle(scrim()!).opacity);
 const trigger = () => document.querySelector<HTMLElement>(".pwa-session-trigger")!;
 const sheet = () => document.querySelector<HTMLElement>(".pwa-session-sheet");
 const inTransition = () => root().hasAttribute("data-view-transition");
@@ -88,7 +90,7 @@ async function returned() {
   expect(window.location.pathname).toBe("/app");
   expect(window.history.state).toEqual({ swipeBase: marker });
 }
-const layerAnimations = () => [...(settings()?.getAnimations() ?? []), ...workspace().getAnimations()];
+const layerAnimations = () => [...(settings()?.getAnimations() ?? []), ...(scrim()?.getAnimations() ?? []), ...workspace().getAnimations()];
 
 beforeEach(async () => {
   window.history.replaceState({ swipeBase: marker }, "", "/app");
@@ -109,11 +111,15 @@ afterEach(async () => {
   await page.viewport(1280, 900);
 });
 
-test("D4 settings follow the finger while the workspace layer is revealed alongside", async () => {
+test("D4 settings follow the finger over the stationary workspace while the scrim fades", async () => {
   const origin = await openFromWorkspace();
   await dragTo(origin, 112);
   expect(settingsLeft()).toBe(100);
-  expect(workspaceLeft()).toBe(100 - window.innerWidth);
+  expect(workspaceLeft()).toBe(0);
+  expect(workspace().getAnimations()).toHaveLength(0);
+  expect(scrimOpacity()).toBeCloseTo(1 - 100 / window.innerWidth, 2);
+  expect(getComputedStyle(scrim()!).pointerEvents).toBe("none");
+  expect(getComputedStyle(settings()!).boxShadow).not.toBe("none");
   expect(inTransition()).toBe(true);
   expect(getComputedStyle(workspace()).visibility).toBe("visible");
   expect(settingsOpen()).toBe(true);

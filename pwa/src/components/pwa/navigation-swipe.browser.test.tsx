@@ -158,7 +158,7 @@ test("G3 stays disabled while page transition is paused, then works once state s
   flushSync(() => {
     enterSettings();
   });
-  const animations = [...settings().getAnimations(), ...document.querySelector(".pwa-workspace-view")!.getAnimations()];
+  const animations = [...settings().getAnimations(), ...document.querySelector(".pwa-page-scrim")!.getAnimations()];
   expect(animations.length).toBeGreaterThan(0);
   animations.forEach((animation) => animation.pause());
   expect(root().hasAttribute("data-view-transition")).toBe(true);

@@ -15,7 +15,7 @@ description: 在 Pi Reach PWA 中实现或审查 Mantine Modal、Drawer、Menu�
 ## Procedure
 
 1. 先读[根项目规范](../../../AGENTS.md)、[PWA 规范](../../../pwa/AGENTS.md)与[当前设计](../../../docs/DESIGN.md)，核对目标组件、真实父组件、主题、样式和直接测试。按风险选择下方矩阵，不从历史方案推断当前结构；版本与行为从当前依赖、类型和实现取得。
-2. 盘点叠层的所属根、Portal 父节点、层级、遮罩、焦点陷阱、滚动锁及关闭入口。一般 Portal 位于 `.pwa-root` 内；移动导航挂在 `.pwa-workspace-view` 内随设置页转场移动。层级与单层遮罩按 DESIGN 验证，不能机械要求 Modal 高于 Toast。
+2. 盘点叠层的所属根、Portal 父节点、层级、遮罩、焦点陷阱、滚动锁及关闭入口。一般 Portal 位于 `.pwa-root` 内；移动导航挂在 `.pwa-workspace-view` 内，设置页转场时随工作区保持原位、被设置层覆盖。层级与单层遮罩按 DESIGN 验证，不能机械要求 Modal 高于 Toast。
 3. 保持依赖 Mantine `returnFocus` 的 Modal 实例可观察到 `opened` 的打开到关闭变化，不在关闭时直接卸载整个实例。调用需要新叠层的动作前记录有效焦点来源与动作专属后备控件；复用既有同步 ref、确认门禁和动作路由，不另建平行状态机。
 4. 关闭后的焦点先检查 Mantine 是否已返回有效控件；只有焦点仍在 body、html、旧 Dialog 或已失效来源时才补救。候选须已连接、可见、可用、非 `inert` 或 `aria-hidden`，使用 `preventScroll` 聚焦；不得覆盖用户已移到有效控件的焦点。按组件既有关闭开始、退出结束或卸载生命周期执行，不统一延迟到任意一帧。
 5. 验证最上层独占本次 Escape、遮罩及关闭动作。Modal 叠在 Drawer 时，底层同步门禁不得因 React 闭包滞后而一起关闭；连续逐层 Escape 则按实际事件转发与既有契约消费，不能靠短计时器或退出中的 DOM 长期阻挡下一次按键。

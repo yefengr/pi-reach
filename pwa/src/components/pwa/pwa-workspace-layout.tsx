@@ -62,6 +62,7 @@ export function PwaWorkspaceLayout({
     settingsRef.current = element;
     setSettingsElement(element);
   }, []);
+  const scrimRef = useRef<HTMLDivElement | null>(null);
   const settingsTitleRef = useRef<HTMLHeadingElement | null>(null);
   // 设置页在进入与返回转场期间保持挂载；返回转场结束后卸载。
   const [settingsMounted, setSettingsMounted] = useState(settingsRoute.open);
@@ -129,7 +130,7 @@ export function PwaWorkspaceLayout({
     if (change !== settingsRoute.change) return;
     setTransitioning(false);
     if (settingsRoute.open) {
-      // 从导航进入：导航叠层随推入转场直接关闭，不单独播放关闭动画；状态已记入设置页记录。
+      // 从导航进入：导航叠层被设置层覆盖后直接关闭，不单独播放关闭动画；状态已记入设置页记录。
       setSheetOpen(false);
       setSheetMounted(false);
     } else {
@@ -138,7 +139,7 @@ export function PwaWorkspaceLayout({
       setSheetRestore(null);
     }
   }, [settingsRoute.change, settingsRoute.open]);
-  const pageTransition = usePageTransition({ open: settingsRoute.open, change: settingsRoute.change, animate: settingsRoute.animate, rootRef, workspaceRef, settingsRef, onSettled });
+  const pageTransition = usePageTransition({ open: settingsRoute.open, change: settingsRoute.change, animate: settingsRoute.animate, rootRef, workspaceRef, settingsRef, scrimRef, onSettled });
   const beginNavigationPreview = useCallback((scrollTop: number) => {
     // 与返回导航的路由分支一致：展开态直接呈现并恢复滚动位置，但工作区仍 inert，导航只是返回预览。
     setSheetInstant(true);
@@ -152,7 +153,7 @@ export function PwaWorkspaceLayout({
     setSheetInstant(false);
     setSheetRestore(null);
   }, []);
-  const workspaceDrag = useWorkspaceDrag({ settingsRoute, transitioning, rootRef, workspaceRef, settingsRef, pageTransition, onSettingsBack, beginNavigationPreview, endNavigationPreview });
+  const workspaceDrag = useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settingsRef, scrimRef, pageTransition, onSettingsBack, beginNavigationPreview, endNavigationPreview });
   useSwipe(settingsElement, {
     direction: "right",
     enabled: settingsRoute.open && (!transitioning || workspaceDrag.dragging),
@@ -247,6 +248,7 @@ export function PwaWorkspaceLayout({
     </div>
     {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={navigationDrag.gesture === "rollback" ? null : sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={onNavigationExitTransitionEnd} /> : null}
     </div>
+    {settingsMounted ? <div ref={scrimRef} className="pwa-page-scrim" aria-hidden="true" /> : null}
     {settingsMounted ? <div ref={setSettingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef })}</div> : null}
     {overlays}
   </div>;
