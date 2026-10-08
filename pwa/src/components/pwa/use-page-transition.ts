@@ -15,16 +15,19 @@ type PageTransitionOptions = {
   rootRef: RefObject<HTMLElement | null>;
   workspaceRef: RefObject<HTMLElement | null>;
   settingsRef: RefObject<HTMLElement | null>;
+  /** 设置层下方的页面遮罩；缺失时只移动设置层。 */
+  scrimRef: RefObject<HTMLElement | null>;
   onSettled: (change: number) => void;
 };
 
 /* 已由 --pwa-motion-shift 全局 token 判定，不再单独读取媒体查询。 */
 
 /**
- * 设置页整页水平推入／返回（200ms，标准曲线）：进入时工作区向左离场、设置页从右滑入，返回时反向。
- * 中途再次切换从两层的当前位置继续，不从头重播。减少动态效果时改为交叉淡化。
+ * 设置页覆盖滑入／滑出（200ms，标准曲线），与右侧 Drawer 同一模型：工作区保持原位，
+ * 设置层从右滑入并盖住工作区，遮罩同步淡入；返回时反向。
+ * 中途再次切换从设置层与遮罩的当前状态继续，不从头重播。减少动态效果时改为交叉淡化。
  */
-export function usePageTransition({ open, change, animate, rootRef, workspaceRef, settingsRef, onSettled }: PageTransitionOptions) {
+export function usePageTransition({ open, change, animate, rootRef, workspaceRef, settingsRef, scrimRef, onSettled }: PageTransitionOptions) {
   const duration = usePwaMotionDuration("--pwa-duration-page", PAGE_DURATION_MS);
   const animationsRef = useRef<Animation[]>([]);
   // 跟手拖动中的暂停动画：路由变化时与 animationsRef 同样被接管，从当前位置续播。
@@ -40,6 +43,7 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
     const workspace = workspaceRef.current;
     const settings = settingsRef.current;
     const root = rootRef.current;
+    const scrim = scrimRef.current;
     const running = animationsRef.current;
     const drag = dragRef.current;
     const handOff = handOffRef.current;
@@ -71,17 +75,13 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
       ];
     } else {
       const width = root.clientWidth;
-      const left = root.getBoundingClientRect().left;
-      const [workspaceStart, settingsStart] = inFlight
-        ? [workspace.getBoundingClientRect().left - left, settings.getBoundingClientRect().left - left]
-        : open ? [0, width] : [-width, 0];
+      const settingsStart = inFlight ? settings.getBoundingClientRect().left - root.getBoundingClientRect().left : open ? width : 0;
+      const scrimStart = scrim && inFlight ? Number(getComputedStyle(scrim).opacity) : open ? 0 : 1;
       cancelInFlight();
-      const [workspaceEnd, settingsEnd] = open ? [-width, 0] : [0, width];
-      const timing = { duration: handOff ? settleDuration(Math.abs(workspaceEnd - workspaceStart), handOff.velocity, duration) : duration, easing, fill: "forwards" as const };
-      animations = [
-        workspace.animate([{ transform: `translateX(${workspaceStart}px)` }, { transform: `translateX(${workspaceEnd}px)` }], timing),
-        settings.animate([{ transform: `translateX(${settingsStart}px)` }, { transform: `translateX(${settingsEnd}px)` }], timing),
-      ];
+      const settingsEnd = open ? 0 : width;
+      const timing = { duration: handOff ? settleDuration(Math.abs(settingsEnd - settingsStart), handOff.velocity, duration) : duration, easing, fill: "forwards" as const };
+      animations = [settings.animate([{ transform: `translateX(${settingsStart}px)` }, { transform: `translateX(${settingsEnd}px)` }], timing)];
+      if (scrim) animations.push(scrim.animate([{ opacity: scrimStart }, { opacity: open ? 1 : 0 }], timing));
     }
     animationsRef.current = animations;
     void Promise.all(animations.map((animation) => animation.finished)).then(() => {
@@ -90,7 +90,7 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
       settledRef.current = { animations, change, open, settings };
       onSettledRef.current(change);
     }, () => {});
-  }, [animate, change, duration, open, rootRef, settingsRef, workspaceRef]);
+  }, [animate, change, duration, open, rootRef, scrimRef, settingsRef, workspaceRef]);
 
   useLayoutEffect(() => {
     const settled = settledRef.current;

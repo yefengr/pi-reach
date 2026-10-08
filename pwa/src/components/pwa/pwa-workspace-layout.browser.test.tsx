@@ -710,7 +710,7 @@ test("fades navigation and settings without movement under reduced motion and pr
 function nativePageAnimations(root: HTMLElement) {
   return root.getAnimations({ subtree: true }).filter((animation) => {
     const target = (animation.effect as KeyframeEffect | null)?.target;
-    return target instanceof Element && target.matches(".pwa-workspace-view, .pwa-settings-view, .pwa-session-sheet, .mantine-Drawer-overlay");
+    return target instanceof Element && target.matches(".pwa-workspace-view, .pwa-settings-view, .pwa-page-scrim, .pwa-session-sheet, .mantine-Drawer-overlay");
   });
 }
 

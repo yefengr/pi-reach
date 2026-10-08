@@ -22,6 +22,7 @@ async function renderTransition(initialOpen: boolean) {
     const rootRef = useRef<HTMLDivElement>(null);
     const workspaceRef = useRef<HTMLDivElement>(null);
     const settingsRef = useRef<HTMLDivElement>(null);
+    const scrimRef = useRef<HTMLDivElement>(null);
     controls = {
       switchView(open, animate = true) {
         flushSync(() => {
@@ -40,9 +41,10 @@ async function renderTransition(initialOpen: boolean) {
       rerender() { flushSync(() => setRevision((value) => value + 1)); },
     };
     // 将完成通知和静止态提交分开，确定性模拟父组件尚未提交的窗口。
-    usePageTransition({ ...route, rootRef, workspaceRef, settingsRef, onSettled: (change) => settled.push(change) });
+    usePageTransition({ ...route, rootRef, workspaceRef, settingsRef, scrimRef, onSettled: (change) => settled.push(change) });
     return <div ref={rootRef} className="pwa-root" data-testid="transition-root" data-view={route.open ? "settings" : "workspace"} data-view-transition={transitioning || undefined} style={{ width: 390, height: 300, overflow: "hidden", display: "flex", flex: "none" }}>
       <div ref={workspaceRef} className="pwa-workspace-view">Workspace</div>
+      {mounted ? <div ref={scrimRef} className="pwa-page-scrim" /> : null}
       {mounted ? <div ref={settingsRef} className="pwa-settings-view">Settings</div> : null}
     </div>;
   }
@@ -55,6 +57,9 @@ async function renderTransition(initialOpen: boolean) {
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 const left = (element: HTMLElement, root: HTMLElement) => Math.round(element.getBoundingClientRect().left - root.getBoundingClientRect().left);
 const settingsOf = (root: HTMLElement) => root.querySelector<HTMLElement>(".pwa-settings-view")!;
+const scrimOpacity = (root: HTMLElement) => Number(getComputedStyle(root.querySelector<HTMLElement>(".pwa-page-scrim")!).opacity);
+/** 覆盖模型下只有设置层与遮罩在动：以两者的当前状态描述转场位置。 */
+const overlayState = (root: HTMLElement) => [left(settingsOf(root), root), scrimOpacity(root)];
 
 async function finish(animations: Animation[]) {
   expect(animations).toHaveLength(2);
@@ -87,10 +92,12 @@ test("holds the return end frame until React commits the settings unmount", asyn
       expect(harness.root.hasAttribute("data-view-transition")).toBe(true);
       expect(settings.isConnected).toBe(true);
       expect(left(settings, harness.root)).toBe(390);
+      expect(scrimOpacity(harness.root)).toBe(0);
       expect(left(harness.workspace, harness.root)).toBe(0);
     });
     harness.controls().commit(1);
     expect(settings.isConnected).toBe(false);
+    expect(harness.root.querySelector(".pwa-page-scrim")).toBeNull();
     expect(harness.root.hasAttribute("data-view-transition")).toBe(false);
     expect(animations.every((animation) => animation.playState === "idle")).toBe(true);
     expect(harness.root.getAnimations({ subtree: true })).toHaveLength(0);
@@ -109,8 +116,9 @@ test("holds the enter end frame until React commits the CSS-hidden workspace", a
     await expectHeldFrames(() => {
       expect(harness.root.hasAttribute("data-view-transition")).toBe(true);
       expect(getComputedStyle(harness.workspace).visibility).toBe("visible");
-      expect(left(harness.workspace, harness.root)).toBe(-390);
+      expect(left(harness.workspace, harness.root)).toBe(0);
       expect(left(settings, harness.root)).toBe(0);
+      expect(scrimOpacity(harness.root)).toBe(1);
     });
     harness.controls().commit(1);
     expect(getComputedStyle(harness.workspace).visibility).toBe("hidden");
@@ -148,13 +156,16 @@ test.each([false, true])("reverses from the current position without settling an
     const interrupted = harness.root.getAnimations({ subtree: true });
     expect(interrupted).toHaveLength(2);
     interrupted.forEach((animation) => { animation.pause(); animation.currentTime = 80; });
-    const before = [left(harness.workspace, harness.root), left(settings, harness.root)];
+    const before = overlayState(harness.root);
+    expect(before[0]).toBeGreaterThan(0);
+    expect(before[0]).toBeLessThan(390);
     expect(before[1]).toBeGreaterThan(0);
-    expect(before[1]).toBeLessThan(390);
+    expect(before[1]).toBeLessThan(1);
+    expect(left(harness.workspace, harness.root)).toBe(0);
     harness.controls().switchView(initialOpen);
     const reversed = harness.root.getAnimations({ subtree: true });
     reversed.forEach((animation) => { animation.pause(); animation.currentTime = 0; });
-    expect([left(harness.workspace, harness.root), left(settings, harness.root)]).toEqual(before);
+    expect(overlayState(harness.root)).toEqual(before);
     expect(interrupted.every((animation) => animation.playState === "idle")).toBe(true);
     await nextFrame();
     expect(harness.settled).toEqual([]);
@@ -196,21 +207,22 @@ test.each([false, true])("reverses a held end frame without replaying or stale c
     await finish(old);
     harness.controls().rerender();
     expect(harness.root.getAnimations({ subtree: true })).toEqual(old);
-    const before = [left(harness.workspace, harness.root), left(settings, harness.root)];
+    const before = overlayState(harness.root);
     harness.controls().switchView(initialOpen);
     const current = harness.root.getAnimations({ subtree: true });
     current.forEach((animation) => { animation.pause(); animation.currentTime = 0; });
-    expect([left(harness.workspace, harness.root), left(settings, harness.root)]).toEqual(before);
+    expect(overlayState(harness.root)).toEqual(before);
     harness.controls().commit(1);
     await expectHeldFrames(() => {
       expect(harness.root.hasAttribute("data-view-transition")).toBe(true);
       expect(current.every((animation) => animation.playState === "paused")).toBe(true);
-      expect([left(harness.workspace, harness.root), left(settings, harness.root)]).toEqual(before);
+      expect(overlayState(harness.root)).toEqual(before);
     });
     await finish(current);
     expect(harness.settled).toEqual([1, 2]);
     harness.controls().commit(2);
     expect(current.every((animation) => animation.playState === "idle")).toBe(true);
+    expect(settings.isConnected).toBe(initialOpen);
   } finally { await harness.screen.unmount(); }
 });
 
