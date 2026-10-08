@@ -73,6 +73,8 @@ export function PwaWorkspaceLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage<boolean>({ key: "pi-reach-sidebar-collapsed", defaultValue: false });
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const sheetOpenRef = useRef(sheetOpen);
+  useLayoutEffect(() => { sheetOpenRef.current = sheetOpen; }, [sheetOpen]);
   const [sheetMounted, setSheetMounted] = useState(false);
   const [sheetFocusOrigin, setSheetFocusOrigin] = useState<HTMLElement | null>(null);
   const [mainElement, setMainElement] = useState<HTMLElement | null>(null);
@@ -82,6 +84,14 @@ export function PwaWorkspaceLayout({
     setSheetOpen(true);
   }, []);
   const navigationDrag = useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation });
+  const releaseNavigationDrag = navigationDrag.onExitTransitionEnd;
+  const onNavigationExitTransitionEnd = useCallback(() => {
+    // 旧退出通知不得释放新一轮手势或卸载快速重开的导航。
+    if (sheetOpenRef.current) return;
+    releaseNavigationDrag();
+    // 完整退出后释放实例，让下一轮跟手打开同步挂载全新的 Drawer。
+    setSheetMounted(false);
+  }, [releaseNavigationDrag]);
   useSwipe(mainElement, {
     direction: "right",
     // 只豁免本次拖动自己设置的 sheetOpen；设置页、转场等其余门禁照常生效。
@@ -235,7 +245,7 @@ export function PwaWorkspaceLayout({
         {children}
       </main>
     </div>
-    {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={navigationDrag.onExitTransitionEnd} /> : null}
+    {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={navigationDrag.gesture === "rollback" ? null : sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={onNavigationExitTransitionEnd} /> : null}
     </div>
     {settingsMounted ? <div ref={setSettingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef })}</div> : null}
     {overlays}
