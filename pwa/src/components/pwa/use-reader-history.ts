@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 type ReaderHistoryOptions = {
@@ -17,13 +17,18 @@ type ReaderHistoryOptions = {
  * 系统已提供原生返回转场（`hasUAVisualTransition`，如 iOS 边缘手势）时，同步提交关闭并返回 `instant`，
  * 由调用方把退出时长置 0，避免在原生转场之上再播放一次退出动画。
  */
-export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop }: ReaderHistoryOptions): { instant: boolean } {
+export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop }: ReaderHistoryOptions): { instant: boolean; skipExit: () => void; resetSkipExit: () => void } {
   const [instant, setInstant] = useState(false);
+  // 跟手拖动已把面板移出屏幕时的即时退出标记；与系统原生转场的 instant 各自独立，互不清除。
+  const [gestureInstant, setGestureInstant] = useState(false);
   const [seenOpened, setSeenOpened] = useState(opened);
   if (seenOpened !== opened) {
     setSeenOpened(opened);
     // 重新打开后恢复正常退出动画。
-    if (opened) setInstant(false);
+    if (opened) {
+      setInstant(false);
+      setGestureInstant(false);
+    }
   }
   const onCloseRef = useRef(onClose);
   const ignorePopRef = useRef(ignorePop);
@@ -61,5 +66,7 @@ export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop 
     };
   }, [opened, stateKey, marker]);
 
-  return { instant };
+  const skipExit = useCallback(() => setGestureInstant(true), []);
+  const resetSkipExit = useCallback(() => setGestureInstant(false), []);
+  return { instant: instant || gestureInstant, skipExit, resetSkipExit };
 }

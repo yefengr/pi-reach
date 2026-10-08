@@ -8,6 +8,8 @@ import { PwaMobileNavigation } from "@/components/pwa/pwa-mobile-chrome";
 import { PwaRuntimeNoticeSlot } from "@/components/pwa/pwa-app-shell";
 import { WorkspaceTitleBar, type WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-bar";
 import { usePageTransition } from "@/components/pwa/use-page-transition";
+import { useWorkspaceDrag } from "@/components/pwa/use-workspace-drag";
+import { useNavigationDrag } from "@/components/pwa/use-navigation-drag";
 import { useSwipe } from "@/components/pwa/use-swipe";
 import type { SettingsOrigin, SettingsRoute } from "@/lib/pwa/settings-route";
 import { useI18n } from "@/lib/i18n";
@@ -79,15 +81,14 @@ export function PwaWorkspaceLayout({
     setSheetMounted(true);
     setSheetOpen(true);
   }, []);
+  const navigationDrag = useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation });
   useSwipe(mainElement, {
     direction: "right",
-    enabled: !settingsRoute.open && !transitioning && !sheetOpen,
+    // 只豁免本次拖动自己设置的 sheetOpen；设置页、转场等其余门禁照常生效。
+    enabled: !settingsRoute.open && !transitioning && (!sheetOpen || navigationDrag.gesture === "dragging"),
     onSwipe: () => openNavigation(mainElement?.querySelector<HTMLElement>(".pwa-session-trigger") ?? null),
-  });
-  useSwipe(settingsElement, {
-    direction: "right",
-    enabled: settingsRoute.open && !transitioning,
-    onSwipe: onSettingsBack,
+    canSwipe: navigationDrag.canSwipe,
+    drag: navigationDrag.drag,
   });
   if (seenChange !== settingsRoute.change) {
     setSeenChange(settingsRoute.change);
@@ -127,7 +128,28 @@ export function PwaWorkspaceLayout({
       setSheetRestore(null);
     }
   }, [settingsRoute.change, settingsRoute.open]);
-  usePageTransition({ open: settingsRoute.open, change: settingsRoute.change, animate: settingsRoute.animate, rootRef, workspaceRef, settingsRef, onSettled });
+  const pageTransition = usePageTransition({ open: settingsRoute.open, change: settingsRoute.change, animate: settingsRoute.animate, rootRef, workspaceRef, settingsRef, onSettled });
+  const beginNavigationPreview = useCallback((scrollTop: number) => {
+    // 与返回导航的路由分支一致：展开态直接呈现并恢复滚动位置，但工作区仍 inert，导航只是返回预览。
+    setSheetInstant(true);
+    setSheetRestore({ scrollTop });
+    setSheetMounted(true);
+    setSheetOpen(true);
+  }, []);
+  const endNavigationPreview = useCallback(() => {
+    setSheetOpen(false);
+    setSheetMounted(false);
+    setSheetInstant(false);
+    setSheetRestore(null);
+  }, []);
+  const workspaceDrag = useWorkspaceDrag({ settingsRoute, transitioning, rootRef, workspaceRef, settingsRef, pageTransition, onSettingsBack, beginNavigationPreview, endNavigationPreview });
+  useSwipe(settingsElement, {
+    direction: "right",
+    enabled: settingsRoute.open && (!transitioning || workspaceDrag.dragging),
+    onSwipe: onSettingsBack,
+    canSwipe: workspaceDrag.canSwipe,
+    drag: workspaceDrag.drag,
+  });
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -194,7 +216,7 @@ export function PwaWorkspaceLayout({
   const backLabel = settingsRoute.origin?.kind === "navigation" ? t.settings.backToNavigation : t.settings.backToWorkspace;
   const settingsView = settingsRoute.open ? "settings" : "workspace";
 
-  return <div ref={rootRef} className="pwa-root" data-view={settingsView} data-view-transition={transitioning || undefined} data-sidebar-collapsed={sidebarCollapsed || undefined}>
+  return <div ref={rootRef} className="pwa-root" data-view={settingsView} data-view-transition={transitioning || workspaceDrag.dragging || undefined} data-sidebar-collapsed={sidebarCollapsed || undefined}>
     <div ref={workspaceRef} className="pwa-workspace-view" inert={settingsRoute.open || undefined}>
     <div className="pwa-layout">
       <div id="pwa-desktop-navigation" className="pwa-desktop-navigation" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed || undefined}><PwaDesktopNavigation navigation={desktopNavigation} collapsed={sidebarCollapsed} /></div>
@@ -213,7 +235,7 @@ export function PwaWorkspaceLayout({
         {children}
       </main>
     </div>
-    {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} /> : null}
+    {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={navigationDrag.onExitTransitionEnd} /> : null}
     </div>
     {settingsMounted ? <div ref={setSettingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef })}</div> : null}
     {overlays}

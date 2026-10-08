@@ -43,3 +43,7 @@ pi-extension/test/.pi/
 graphify-out
 
 openspec
+
+# Project agent resources are shared repository content, including hidden files.
+!/.agents/
+!/.agents/**

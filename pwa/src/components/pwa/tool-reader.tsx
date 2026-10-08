@@ -4,6 +4,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X } from "lucide-react";
 import { CopyButton } from "./copy-button";
 import { useSwipe } from "./use-swipe";
+import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
@@ -53,10 +54,11 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
-  useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: onClose });
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
-  const { instant } = useReaderHistory({ opened, stateKey: "piReachToolReader", marker: true, onClose });
+  const { instant, skipExit, resetSkipExit } = useReaderHistory({ opened, stateKey: "piReachToolReader", marker: true, onClose });
+  const { drag, canSwipe } = useDrawerSwipeClose({ surface, opened, direction: 1, requestClose: onClose, skipExit, resetSkipExit });
+  useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: onClose, canSwipe, drag });
 
   const outputKey = value ? JSON.stringify([value.tool_call_id, "blocks" in value ? value.blocks : null, "result" in value ? value.result : null]) : "";
   useLayoutEffect(() => {

@@ -1,11 +1,10 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
-import { usePwaMotionDuration } from "./use-pwa-motion";
+import { useCallback, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
+import { settleDuration, type SwipeDrag } from "./swipe-drag";
+import { pwaMotionShiftDisabled, pwaStandardEasing, usePwaMotionDuration } from "./use-pwa-motion";
 
 export { usePwaMotionDuration } from "./use-pwa-motion";
 
 const PAGE_DURATION_MS = 200;
-/** 读取失败时的回退；WAAPI 的 easing 不支持 var()，正常取 --pwa-ease-standard 的计算值。 */
-const EASE_STANDARD_FALLBACK = "cubic-bezier(0.2, 0, 0, 1)";
 
 type PageTransitionOptions = {
   /** 设置页是否为当前视图。 */
@@ -28,6 +27,10 @@ type PageTransitionOptions = {
 export function usePageTransition({ open, change, animate, rootRef, workspaceRef, settingsRef, onSettled }: PageTransitionOptions) {
   const duration = usePwaMotionDuration("--pwa-duration-page", PAGE_DURATION_MS);
   const animationsRef = useRef<Animation[]>([]);
+  // 跟手拖动中的暂停动画：路由变化时与 animationsRef 同样被接管，从当前位置续播。
+  const dragRef = useRef<SwipeDrag | null>(null);
+  // 拖动松手后的一次性交接：续播时长按剩余位移与松手速度缩短，其余来源保持全程时长。
+  const handOffRef = useRef<{ velocity: number } | null>(null);
   const settledRef = useRef<{ animations: Animation[]; change: number; open: boolean; settings: HTMLElement } | null>(null);
   const onSettledRef = useRef(onSettled);
   useLayoutEffect(() => { onSettledRef.current = onSettled; }, [onSettled]);
@@ -38,20 +41,29 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
     const settings = settingsRef.current;
     const root = rootRef.current;
     const running = animationsRef.current;
+    const drag = dragRef.current;
+    const handOff = handOffRef.current;
+    const inFlight = running.length > 0 || drag !== null;
+    dragRef.current = null;
+    handOffRef.current = null;
     settledRef.current = null;
-    if (!animate || !workspace || !settings || !root || typeof workspace.animate !== "function") {
+    const cancelInFlight = () => {
       running.forEach((animation) => animation.cancel());
+      drag?.dispose();
+    };
+    if (!animate || !workspace || !settings || !root || typeof workspace.animate !== "function") {
+      cancelInFlight();
       animationsRef.current = [];
       onSettledRef.current(change);
       return;
     }
     let animations: Animation[];
-    const easing = getComputedStyle(root).getPropertyValue("--pwa-ease-standard").trim() || EASE_STANDARD_FALLBACK;
+    const easing = pwaStandardEasing(root);
     // 全局媒体查询同时控制时长与位移；这里仅选择设置页必需的交叉淡化轨迹。
-    if (getComputedStyle(root).getPropertyValue("--pwa-motion-shift").trim() === "0") {
-      const workspaceStart = running.length ? Number(getComputedStyle(workspace).opacity) : open ? 1 : 0;
-      const settingsStart = running.length ? Number(getComputedStyle(settings).opacity) : open ? 0 : 1;
-      running.forEach((animation) => animation.cancel());
+    if (pwaMotionShiftDisabled(root)) {
+      const workspaceStart = inFlight ? Number(getComputedStyle(workspace).opacity) : open ? 1 : 0;
+      const settingsStart = inFlight ? Number(getComputedStyle(settings).opacity) : open ? 0 : 1;
+      cancelInFlight();
       const timing = { duration, easing, fill: "forwards" as const };
       animations = [
         workspace.animate([{ opacity: workspaceStart }, { opacity: open ? 0 : 1 }], timing),
@@ -60,12 +72,12 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
     } else {
       const width = root.clientWidth;
       const left = root.getBoundingClientRect().left;
-      const [workspaceStart, settingsStart] = running.length
+      const [workspaceStart, settingsStart] = inFlight
         ? [workspace.getBoundingClientRect().left - left, settings.getBoundingClientRect().left - left]
         : open ? [0, width] : [-width, 0];
-      running.forEach((animation) => animation.cancel());
+      cancelInFlight();
       const [workspaceEnd, settingsEnd] = open ? [-width, 0] : [0, width];
-      const timing = { duration, easing, fill: "forwards" as const };
+      const timing = { duration: handOff ? settleDuration(Math.abs(workspaceEnd - workspaceStart), handOff.velocity, duration) : duration, easing, fill: "forwards" as const };
       animations = [
         workspace.animate([{ transform: `translateX(${workspaceStart}px)` }, { transform: `translateX(${workspaceEnd}px)` }], timing),
         settings.animate([{ transform: `translateX(${settingsStart}px)` }, { transform: `translateX(${settingsEnd}px)` }], timing),
@@ -96,5 +108,17 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
     settledRef.current = null;
     animationsRef.current.forEach((animation) => animation.cancel());
     animationsRef.current = [];
+    dragRef.current?.dispose();
+    dragRef.current = null;
   }, []);
+
+  const beginDrag = useCallback((drag: SwipeDrag) => { dragRef.current = drag; }, []);
+  /** 回弹完成或保险超时：撤销拖动动画并放弃待交接的速度。 */
+  const endDrag = useCallback(() => {
+    dragRef.current?.dispose();
+    dragRef.current = null;
+    handOffRef.current = null;
+  }, []);
+  const handOff = useCallback((velocity: number) => { handOffRef.current = { velocity }; }, []);
+  return useMemo(() => ({ beginDrag, endDrag, handOff }), [beginDrag, endDrag, handOff]);
 }

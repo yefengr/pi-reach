@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { FILE_TEXT_PREVIEW_BYTES, fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
 import { FileTextContent } from "./file-text-content";
 import { useSwipe } from "./use-swipe";
+import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { usePublishedFilesView } from "./published-files-context";
 import { IMAGE_RESET, imageGesture, zoomImage, type ImagePoint, type ImageTransform } from "./published-image-gesture";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
@@ -64,7 +65,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     pin?.(file.publication_id);
     return () => unpin?.(file.publication_id);
   }, [pin, unpin, file.publication_id]);
-  const { instant } = useReaderHistory({
+  const { instant, skipExit, resetSkipExit } = useReaderHistory({
     opened,
     stateKey: "piReachFileReader",
     marker: `${file.publication_id}:${headingId}`,
@@ -89,7 +90,8 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
   };
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   const [scroll, setScroll] = useState<HTMLDivElement | null>(null);
-  useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: requestClose });
+  const { drag, canSwipe } = useDrawerSwipeClose({ surface, opened, direction: 1, requestClose, skipExit, resetSkipExit });
+  useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: requestClose, canSwipe, drag });
   useLayoutEffect(() => {
     if (!scroll) return;
     // 文件 Markdown 的原始围栏代码可能使正文自身横溢，不改变呈现来适配手势。

@@ -6,6 +6,9 @@ import { useI18n } from "@/lib/i18n";
 import { getActiveDevice, WorkspaceHistorySection, WorkspaceNavigationFooter, WorkspaceRunningPiSection, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { BrandMark } from "@/components/pwa/brand-mark";
 import { useSwipe } from "@/components/pwa/use-swipe";
+import { useDrawerSwipeClose } from "@/components/pwa/use-drawer-swipe-close";
+import type { NavigationGesture } from "@/components/pwa/use-navigation-drag";
+import { swipeBlocked } from "@/components/pwa/swipe-guards";
 
 type SessionSheetProps = WorkspaceNavigationProps & {
   onClose: () => void;
@@ -16,12 +19,16 @@ type SessionSheetProps = WorkspaceNavigationProps & {
   instant?: boolean;
   restoreScrollTop?: number;
   focusSettings?: boolean;
+  /** 返回预览：工作区仍 inert，暂不启用焦点陷阱与滚动锁，也不主动聚焦设置入口。 */
+  preview?: boolean;
+  /** 导航打开的跟手拖动：dragging 为预览态，rollback 为回弹后的即时关闭（不回焦）。 */
+  gesture?: NavigationGesture | null;
   portalTarget?: string;
 };
 
 const NAVIGATION_SETTINGS_SELECTOR = ".pwa-nav-settings";
 
-function useNavigationSettingsFocus(opened: boolean, requested: boolean, content: HTMLDivElement | null) {
+function useNavigationSettingsFocus(opened: boolean, requested: boolean, content: HTMLDivElement | null, previewing: boolean) {
   // 初始焦点标记是渲染状态，不能在 render 中读写 ref；父级提前收尾时仍保留给晚挂载的 Portal。
   const [autoFocusSettings, setAutoFocusSettings] = useState(opened && requested);
   const [seenRequest, setSeenRequest] = useState({ opened, requested });
@@ -31,22 +38,29 @@ function useNavigationSettingsFocus(opened: boolean, requested: boolean, content
     else if (requested) setAutoFocusSettings(true);
   }
   const pendingRef = useRef(opened && requested);
-  const previousRef = useRef({ opened, requested });
+  const previousRef = useRef({ opened, requested, previewing });
   useLayoutEffect(() => {
     const previous = previousRef.current;
-    previousRef.current = { opened, requested };
+    previousRef.current = { opened, requested, previewing };
     if (!opened) {
       pendingRef.current = false;
       return;
     }
-    if (!requested || (previous.opened && previous.requested)) return;
+    if (!requested) return;
+    const fresh = !(previous.opened && previous.requested);
+    // 返回预览期间只保留请求；预览结束（工作区解除 inert）后明确消费一次，不依赖 Drawer 再次初始化。
+    if (previewing) {
+      if (fresh) pendingRef.current = true;
+      return;
+    }
+    if (!fresh && !(previous.previewing && pendingRef.current)) return;
     pendingRef.current = true;
     // 新请求到达已有内容时直接消费；首次挂载继续交给 FocusTrap 的初始化链。
     const settings = content?.querySelector<HTMLElement>(NAVIGATION_SETTINGS_SELECTOR);
     if (!settings) return;
     settings.focus({ preventScroll: true });
     if (document.activeElement === settings) pendingRef.current = false;
-  }, [content, opened, requested]);
+  }, [content, opened, requested, previewing]);
   const onFocusedElement = (element: HTMLElement) => {
     if (element.matches(NAVIGATION_SETTINGS_SELECTOR)) {
       pendingRef.current = false;
@@ -59,12 +73,16 @@ function useNavigationSettingsFocus(opened: boolean, requested: boolean, content
   return { autoFocusSettings, onFocusedElement };
 }
 
-export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true, opened = true, onExitTransitionEnd, instant = false, restoreScrollTop, focusSettings = false, portalTarget = ".pwa-root", ...navigation }: SessionSheetProps) {
+export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true, opened = true, onExitTransitionEnd, instant = false, restoreScrollTop, focusSettings = false, preview = false, gesture = null, portalTarget = ".pwa-root", ...navigation }: SessionSheetProps) {
   const navigationDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   const { t } = useI18n();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
-  const { autoFocusSettings, onFocusedElement } = useNavigationSettingsFocus(opened, focusSettings, contentElement);
+  const { autoFocusSettings, onFocusedElement } = useNavigationSettingsFocus(opened, focusSettings, contentElement, preview);
+  const dragPreview = gesture === "dragging";
+  // 拖动打开的预览、回弹与外部关闭收尾期间都不启用焦点陷阱与滚动锁；进入时长同时置 0，
+  // 否则 Mantine 会在关闭后按进入时长延迟释放内部的锁状态，手势状态一清除锁就短暂亮起。
+  const gestureActive = gesture !== null;
   const setContentRef = useCallback((element: HTMLDivElement | null) => {
     contentRef.current = element;
     setContentElement(element);
@@ -92,6 +110,15 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
   }, []);
   const activeDevice = getActiveDevice(navigation.devices, navigation.activeDeviceId);
   const duration = instant ? 0 : navigationDuration;
+  // 跟手关闭收尾到终点后只让本次退出即时；现有 instant 同时作用于进入和退出，不能复用。重新打开时复位。
+  const [exitInstant, setExitInstant] = useState(false);
+  const [seenOpened, setSeenOpened] = useState(opened);
+  if (seenOpened !== opened) {
+    setSeenOpened(opened);
+    if (opened) setExitInstant(false);
+  }
+  const skipExit = useCallback(() => setExitInstant(true), []);
+  const resetSkipExit = useCallback(() => setExitInstant(false), []);
   // Drawer 内容可能晚于本组件挂载，在滚动区挂载时恢复位置。
   const restoreScrollRef = useRef(restoreScrollTop);
   const seenRestoreScrollRef = useRef(restoreScrollTop);
@@ -137,19 +164,37 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     } else restoreFocus();
   };
   const handleExitTransitionEnd = () => {
-    finishPendingAction();
+    // 未提交的打开手势保留原焦点：回弹后的关闭不执行回焦，也不交接待执行动作。
+    if (gesture !== "rollback") finishPendingAction();
     onExitTransitionEnd?.();
   };
-  const requestClose = () => {
+  const requestClose = useCallback(() => {
     if (chooserOpenRef.current) return;
     setCloseRequest((request) => request + 1);
     onClose();
-  };
+  }, [onClose, setCloseRequest]);
+  useLayoutEffect(() => {
+    // 打开跟手与打开收尾都保留外部焦点；只补这段窗口，普通导航仍由局部键盘路由处理。
+    if (gesture !== "dragging" || preview || !opened || !contentElement) return;
+    const escapeFromOutside = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing || event.defaultPrevented || event.cancelBubble
+        || event.composedPath().includes(contentElement) || chooserOpenRef.current
+        || !contentElement.isConnected || !contentElement.closest(".pwa-root")
+        || contentElement.closest('[inert], [aria-hidden="true"]') || contentElement.getClientRects().length === 0
+        || swipeBlocked(contentElement)) return;
+      event.stopPropagation();
+      requestClose();
+    };
+    document.addEventListener("keydown", escapeFromOutside);
+    return () => document.removeEventListener("keydown", escapeFromOutside);
+  }, [contentElement, gesture, opened, preview, requestClose]);
+  const { drag, canSwipe: dragCanSwipe } = useDrawerSwipeClose({ surface: contentElement, opened, direction: -1, requestClose, skipExit, resetSkipExit });
   useSwipe(contentElement, {
     direction: "left",
     enabled: opened,
     onSwipe: requestClose,
-    canSwipe: () => !chooserOpenRef.current,
+    canSwipe: () => !chooserOpenRef.current && dragCanSwipe(),
+    drag,
   });
   const closeAfter = (action: () => void) => {
     pendingActionRef.current = action;
@@ -179,18 +224,20 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     zIndex={200}
     padding={0}
     returnFocus={false}
+    trapFocus={!preview && !gestureActive}
+    lockScroll={!preview && !gestureActive}
     closeOnEscape={false}
     onKeyDown={(event) => {
       if (event.key !== "Escape" || event.nativeEvent.isComposing || !opened || chooserOpenRef.current) return;
       event.stopPropagation();
       requestClose();
     }}
-    transitionProps={{ transition: pwaDrawerTransitions.left, duration, timingFunction: PWA_DRAWER_EASE }}
+    transitionProps={{ transition: pwaDrawerTransitions.left, duration: gestureActive ? 0 : duration, exitDuration: exitInstant || gesture === "rollback" ? 0 : duration, timingFunction: PWA_DRAWER_EASE }}
     classNames={{ content: "pwa-session-sheet pwa-navigation-drawer", header: "pwa-session-sheet-head", body: "pwa-session-sheet-body", close: "pwa-icon-button" }}
     styles={{ content: { width: "min(320px, 85vw)", height: "100dvh", maxWidth: "85vw", maxHeight: "100dvh", display: "flex", flexDirection: "column" } }}
   >
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content ref={setContentRef} role="dialog" aria-modal="true" onFocusCapture={(event) => {
+    <Drawer.Content ref={setContentRef} role="dialog" aria-modal="true" data-swipe-drag={dragPreview ? "" : undefined} onFocusCapture={(event) => {
       if (event.target instanceof HTMLElement) onFocusedElement(event.target);
     }}>
       <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={24} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} /></Drawer.Header>

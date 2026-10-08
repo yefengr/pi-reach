@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, type SwipeDirection, type SwipeState } from "./swipe-gesture";
+import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, trackedDistance, type SwipeDirection, type SwipeState } from "./swipe-gesture";
 
 const point = (x: number, time: number, y = 0, pointerId = 1) => ({ x, y, time, pointerId });
 const start = (direction: SwipeDirection = "right") => beginSwipe(IDLE_SWIPE, point(0, 0), direction, "touch", true);
@@ -54,4 +54,39 @@ test("cancellation is idle and following events cannot commit", () => {
   expect(state).toEqual(IDLE_SWIPE);
   expect(moveSwipe(state, point(100, 30))).toBe(state);
   expect(finishSwipe(state, point(100, 40)).committed).toBe(false);
+});
+
+test.each(["right", "left"] as const)("tracked distance starts at zero on the locking frame for %s", (direction) => {
+  const sign = direction === "right" ? 1 : -1;
+  let state = start(direction);
+  expect(trackedDistance(state, point(8 * sign, 5))).toBe(0);
+  state = moveSwipe(state, point(8 * sign, 5));
+  expect(trackedDistance(state, point(8 * sign, 5))).toBe(0);
+  // 越过 slop 的这一帧锁定方向，面板位移不得从约 10px 起跳。
+  const locked = moveSwipe(state, point(14 * sign, 10));
+  expect(locked.phase).toBe("tracking");
+  expect(trackedDistance(locked, point(14 * sign, 10))).toBe(0);
+  expect(trackedDistance(locked, point(64 * sign, 30))).toBe(50);
+});
+
+test("tracked distance is clamped at zero when reversing and ignores non-tracking states", () => {
+  let state = start();
+  state = moveSwipe(state, point(14, 10));
+  expect(trackedDistance(state, point(-30, 20))).toBe(0);
+  expect(trackedDistance(IDLE_SWIPE, point(50, 20))).toBe(0);
+  expect(trackedDistance(moveSwipe(start(), point(0, 10, 20)), point(80, 20))).toBe(0);
+});
+
+test("finish reports the tracked release distance", () => {
+  expect(release([[14, 10], [90, 200]]).distance).toBe(76);
+  expect(release([[14, 10], [4, 200]]).distance).toBe(0);
+});
+
+test("reversed is set only when the release velocity flicks back past the threshold", () => {
+  // 已越过提交阈值后迅速甩回：触发式判定不变，跟手模式靠 reversed 回弹。
+  const back = release([[90, 20], [60, 160], [20, 200]]);
+  expect(back.reversed).toBe(true);
+  expect(release([[90, 20], [88, 60], [86, 140]]).reversed).toBe(false);
+  expect(release([[90, 20], [100, 60]]).reversed).toBe(false);
+  expect(release([[90, 20], [90, 140]]).reversed).toBe(false);
 });
