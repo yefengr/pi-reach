@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { flushSync } from "react-dom";
 import { ThinkingContent, MarkdownContent } from "./timeline-content";
 import { ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
@@ -184,9 +185,10 @@ export function ConversationTimeline({ items, live, completions, running = false
   const openFileReader: PublishedFileRead = (file, trigger) => {
     if (!files || reader !== null || scopedFileReader !== null) return;
     const next = { file, trigger, scopeToken: files.scopeToken };
-    setFileReader(next);
     // 阅读器随 opened=true 一起挂载时 Mantine 的过渡初始即“已进入”，不播放进入动画；
     // 先以收起态挂载，下一帧再打开。期间被关闭或换目标则放弃。
+    // 首次查看在获取完成的 await 之后调用，已脱离点击事件；须同步提交挂载，否则帧到期时打开会与挂载合并。
+    flushSync(() => setFileReader(next));
     requestAnimationFrame(() => setFileOpenedFor(next));
   };
   // 旧退出/关闭回调不能碰新的阅读器；门面 getter 也能识别尚未提交 render 的 reset。
