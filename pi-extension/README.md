@@ -4,17 +4,7 @@ Control your running Pi coding agent from your phone or any browser.
 
 When you step away from your computer, Pi Reach lets you follow Pi's live responses and tool calls, send another prompt or a file, and stop the current task. Pi keeps running on your computer; the browser is its remote interface.
 
-![Pi Reach desktop workspace with multiple online Pi sessions and a live conversation](https://raw.githubusercontent.com/yefengr/pi-reach/main/docs/assets/screenshot-desktop-en.png)
-
-## Features
-
-- **Pair without an account**: scan a QR code or enter an 8-character pairing code. Pair each computer once; later Pi processes on that computer appear automatically.
-- **Switch between computers and Pi sessions**: connect to multiple computers and choose among the Pi processes currently running on each one.
-- **Follow and control a live conversation**: stream responses and tool calls, send prompts and file attachments, or stop the current task. Attachments reach your computer as original files for Pi to read; image previews do not automatically become model vision input.
-- **Manage the current session**: start a new conversation, compact context, or change the model and thinking level.
-- **Use an installable PWA**: add the browser app to your home screen, choose light or dark mode, and use English or Chinese. Previously received conversations remain available for read-only viewing in that browser while offline.
-
-![Pi Reach on a phone in light and dark mode, showing a conversation with tool activity and the message composer](https://raw.githubusercontent.com/yefengr/pi-reach/main/docs/assets/screenshot-mobile-showcase-en.png)
+![Pi Reach on desktop with multiple online Pi sessions and a live conversation, next to the same conversation on a phone in dark mode](https://raw.githubusercontent.com/yefengr/pi-reach/main/docs/assets/screenshot-hero-en.png)
 
 ## Quick start
 
@@ -38,6 +28,14 @@ Each computer only needs to be paired once. Pairings apply to the computer that 
 
 The public PWA and the default Relay are run by the maintainer. For sensitive work, [self-host the PWA and Relay](https://github.com/yefengr/pi-reach/blob/main/README.en.md#self-hosting).
 
+## Features
+
+- **Pair without an account**: scan a QR code or enter an 8-character pairing code. Pair each computer once; later Pi processes on that computer appear automatically.
+- **Switch between computers and Pi sessions**: connect to multiple computers and choose among the Pi processes currently running on each one.
+- **Follow and control a live conversation**: stream responses and tool calls, send prompts and file attachments, or stop the current task. Attachments reach your computer as original files for Pi to read; image previews do not automatically become model vision input.
+- **Manage the current session**: start a new conversation, compact context, or change the model and thinking level.
+- **Use an installable PWA**: add the browser app to your home screen, choose light or dark mode, and use English or Chinese. Previously received conversations remain available for read-only viewing in that browser while offline.
+
 ## Security and limits
 
 **Pi Reach has no application-layer end-to-end encryption. The Relay is fully trusted.** TLS protects transport, but the Relay operator can read conversation content, including code, commands, and output. The operator could also impersonate a paired browser and send prompts that Pi executes on your computer. Use a Relay you control for sensitive work.
@@ -54,8 +52,8 @@ Report vulnerabilities through GitHub's [private vulnerability reporting](https:
 
 | Command | Description |
 |---|---|
-| `/pi-reach` | Reconnect this Pi after `/pi-reach stop` |
-| `/pi-reach start` / `/pi-reach stop` | Connect or disconnect this Pi |
+| `/pi-reach` or `/pi-reach start` | Connect this Pi, for example after `/pi-reach stop` |
+| `/pi-reach stop` | Disconnect this Pi |
 | `/pi-reach status` | Show Relay, endpoint, runtime, and paired-browser state |
 | `/pi-reach pair` | Show a pairing QR code and pairing code for this Pi |
 | `/pi-reach devices` | List browsers paired with this computer |
