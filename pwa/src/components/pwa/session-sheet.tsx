@@ -91,34 +91,45 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
   const focusOriginRef = useRef(focusOrigin);
   const pendingActionRef = useRef<(() => void) | null>(null);
   const [closeRequest, setCloseRequest] = useState(0);
+  const [seenOpened, setSeenOpened] = useState({ opened, epoch: 0 });
+  const [exitInstant, setExitInstant] = useState(false);
+  if (seenOpened.opened !== opened) {
+    setSeenOpened({ opened, epoch: seenOpened.epoch + 1 });
+    if (opened) setExitInstant(false);
+  }
+  const exitEpoch = seenOpened.epoch;
+  const lifecycleRef = useRef({ active: true, opened, epoch: exitEpoch, completedEpoch: -1 });
+  useLayoutEffect(() => {
+    lifecycleRef.current.opened = opened;
+    lifecycleRef.current.epoch = exitEpoch;
+  }, [opened, exitEpoch]);
   useLayoutEffect(() => {
     focusOriginRef.current = focusOrigin;
     // 与父组件的关闭更新一起提交后再判断拒绝，避免 rAF 先于 React 提交而丢失动作。
     if (closeRequest > 0 && opened) pendingActionRef.current = null;
   }, [closeRequest, opened, focusOrigin]);
-  useLayoutEffect(() => () => {
-    const action = pendingActionRef.current;
-    pendingActionRef.current = null;
-    const origin = focusOriginRef.current;
-    // 条件卸载不会完成 Drawer 退出动画，动作改在卸载提交完成后交接。
-    queueMicrotask(() => {
-      action?.();
-      if (document.activeElement === document.body && origin?.isConnected
-        && !origin.matches(':disabled') && !origin.closest('[aria-hidden="true"], [inert]')
-        && origin.getClientRects().length > 0) origin.focus({ preventScroll: true });
-    });
+  useLayoutEffect(() => {
+    const lifecycle = lifecycleRef.current;
+    lifecycle.active = true;
+    return () => {
+      lifecycle.active = false;
+      const action = pendingActionRef.current;
+      pendingActionRef.current = null;
+      const origin = focusOriginRef.current;
+      // 条件卸载不会完成 Drawer 退出动画，动作改在卸载提交完成后交接。
+      queueMicrotask(() => {
+        action?.();
+        if (document.activeElement === document.body && origin?.isConnected
+          && !origin.matches(':disabled') && !origin.closest('[aria-hidden="true"], [inert]')
+          && origin.getClientRects().length > 0) origin.focus({ preventScroll: true });
+      });
+    };
   }, []);
   const activeDevice = getActiveDevice(navigation.devices, navigation.activeDeviceId);
   const duration = instant ? 0 : navigationDuration;
   // 跟手关闭收尾到终点后只让本次退出即时；现有 instant 同时作用于进入和退出，不能复用。重新打开时复位。
-  const [exitInstant, setExitInstant] = useState(false);
-  const [seenOpened, setSeenOpened] = useState(opened);
-  if (seenOpened !== opened) {
-    setSeenOpened(opened);
-    if (opened) setExitInstant(false);
-  }
-  const skipExit = useCallback(() => setExitInstant(true), []);
-  const resetSkipExit = useCallback(() => setExitInstant(false), []);
+  const skipExit = useCallback(() => setExitInstant(true), [setExitInstant]);
+  const resetSkipExit = useCallback(() => setExitInstant(false), [setExitInstant]);
   // Drawer 内容可能晚于本组件挂载，在滚动区挂载时恢复位置。
   const restoreScrollRef = useRef(restoreScrollTop);
   const seenRestoreScrollRef = useRef(restoreScrollTop);
@@ -155,18 +166,25 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     if (hasExternalFocus) return;
     if (canFocus(focusOrigin)) focusOrigin.focus({ preventScroll: true });
   };
+  const isCurrentExit = () => {
+    const lifecycle = lifecycleRef.current;
+    return lifecycle.active && !lifecycle.opened && lifecycle.epoch === exitEpoch;
+  };
   const finishPendingAction = () => {
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
     if (action) {
       action();
-      requestAnimationFrame(restoreFocus);
+      requestAnimationFrame(() => { if (isCurrentExit()) restoreFocus(); });
     } else restoreFocus();
   };
   const handleExitTransitionEnd = () => {
+    // 每次打开边界变化都会使旧退出失效，包括重开后再次关闭；卸载及重复通知也不能产生副作用。
+    if (!isCurrentExit() || lifecycleRef.current.completedEpoch === exitEpoch) return;
+    lifecycleRef.current.completedEpoch = exitEpoch;
     // 未提交的打开手势保留原焦点：回弹后的关闭不执行回焦，也不交接待执行动作。
     if (gesture !== "rollback") finishPendingAction();
-    onExitTransitionEnd?.();
+    if (isCurrentExit()) onExitTransitionEnd?.();
   };
   const requestClose = useCallback(() => {
     if (chooserOpenRef.current) return;
