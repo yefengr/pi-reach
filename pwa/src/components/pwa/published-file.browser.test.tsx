@@ -298,6 +298,9 @@ test.each([390, 1280].flatMap(width => [false, true].map(reduce => ({ width, red
   }
 });
 
+/** 获取后打开阅读器前有 600ms 完成态停留，为慢机器留出余量。 */
+const FETCH_SETTLE_WAIT = { timeout: 3000 };
+
 /** 首次查看：先经历获取再就绪；就绪后主线程忙于重渲染，模拟真机上帧已到期才继续打开阅读器。 */
 function fetchOnFirstView(h: Awaited<ReturnType<typeof harness>>) {
   const ready: PublishedFileViewState = { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() };
@@ -329,7 +332,7 @@ test("first view after fetching still slides the reader in", async () => {
     };
     requestAnimationFrame(tick);
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
-    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
     await new Promise(resolve => setTimeout(resolve, 500));
     stop = true;
     expect(h.open).toHaveBeenCalledWith(descriptor, "view");
@@ -347,7 +350,7 @@ test("first view returns focus to the View button that started the fetch", async
   fetchOnFirstView(h);
   const trigger = h.screen.getByRole("button", { name: "View", exact: true });
   await trigger.click();
-  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
   await expect.poll(() => document.activeElement?.tagName).toBe("H2");
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
@@ -372,7 +375,7 @@ test("first view settles a full progress bar before the reader covers the card, 
   observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
   try {
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
-    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
     // 进度补满并停留后才交给阅读器；阅读器打开后卡片不再保留进度。
     expect(seen.indexOf("Fetched:100")).toBeGreaterThan(-1);
     expect(seen.indexOf("Fetched:100")).toBeLessThan(seen.indexOf("reader"));
@@ -549,7 +552,7 @@ test("decode error never loops and retry is explicitly manual", async () => {
   expect(h.onRead).not.toHaveBeenCalled();
   await h.screen.getByRole("button", { name: "Retry", exact: true }).click();
   // 重试经过一次重新获取，完成态停留后才交给阅读器。
-  await expect.poll(() => h.onRead.mock.calls.length).toBe(1);
+  await expect.poll(() => h.onRead.mock.calls.length, FETCH_SETTLE_WAIT).toBe(1);
   await h.screen.unmount();
 });
 

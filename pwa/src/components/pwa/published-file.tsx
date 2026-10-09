@@ -24,7 +24,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   const [decodeFailure, setDecodeFailure] = useState<string | null>(null);
   const [settling, setSettling] = useState(false);
   const settleTimer = useRef<number | undefined>(undefined);
-  const settleDuration = usePwaMotionDuration("--pwa-duration-fetch-settle", 200);
+  const settleDuration = usePwaMotionDuration("--pwa-duration-fetch-settle", 600);
   const name = state?.fileName ?? file.file_name;
   const size = state?.byteLength ?? file.byte_length;
   const sizeUnit = size < 1024 ? "B" : size < 1024 * 1024 ? "KiB" : "MiB";
