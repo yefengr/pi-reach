@@ -18,6 +18,6 @@ type PwaMobileNavigationProps = {
 };
 
 export function PwaMobileNavigation({ navigation, opened, onClose, focusOrigin, instant, restoreScrollTop, focusSettings, preview, gesture, onExitTransitionEnd }: PwaMobileNavigationProps) {
-  // 导航挂在工作区视图内，设置页推入／返回时随工作区一起移动。
+  // 导航挂在工作区视图内，设置页覆盖滑入／滑出时随工作区保持原位。
   return <SessionSheet {...navigation} opened={opened} onClose={onClose} focusOrigin={focusOrigin} instant={instant} restoreScrollTop={restoreScrollTop} focusSettings={focusSettings} preview={preview} gesture={gesture} onExitTransitionEnd={onExitTransitionEnd} portalTarget=".pwa-workspace-view" />;
 }

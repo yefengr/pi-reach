@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { flushSync } from "react-dom";
 import { ActionIcon } from "@mantine/core";
 import { useLocalStorage } from "@mantine/hooks";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -77,6 +78,8 @@ export function PwaWorkspaceLayout({
   const sheetOpenRef = useRef(sheetOpen);
   useLayoutEffect(() => { sheetOpenRef.current = sheetOpen; }, [sheetOpen]);
   const [sheetMounted, setSheetMounted] = useState(false);
+  const sheetMountedRef = useRef(sheetMounted);
+  useLayoutEffect(() => { sheetMountedRef.current = sheetMounted; }, [sheetMounted]);
   const [sheetFocusOrigin, setSheetFocusOrigin] = useState<HTMLElement | null>(null);
   const [mainElement, setMainElement] = useState<HTMLElement | null>(null);
   const openNavigation = useCallback((origin: HTMLElement | null) => {
@@ -84,20 +87,44 @@ export function PwaWorkspaceLayout({
     setSheetMounted(true);
     setSheetOpen(true);
   }, []);
+  const presentFrameRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (presentFrameRef.current !== null) cancelAnimationFrame(presentFrameRef.current);
+  }, []);
+  /**
+   * 点击图标或触发式滑动打开导航。Drawer 随 opened=true 一起挂载时 Mantine 视为初始已进入、不播放进入动画，
+   * 因此未挂载时先同步挂载收起态，下一帧再打开；跟手拖动需要同步打开，仍直接调用 openNavigation。
+   */
+  const presentNavigation = useCallback((origin: HTMLElement | null) => {
+    if (presentFrameRef.current !== null) return;
+    if (sheetMountedRef.current) {
+      openNavigation(origin);
+      return;
+    }
+    flushSync(() => {
+      setSheetFocusOrigin(origin);
+      setSheetMounted(true);
+    });
+    presentFrameRef.current = requestAnimationFrame(() => {
+      presentFrameRef.current = null;
+      // 等待的一帧内已切到桌面布局则放弃；收起态实例保留，下次打开直接过渡。
+      if (window.matchMedia(MOBILE_QUERY).matches) setSheetOpen(true);
+    });
+  }, [openNavigation]);
   const navigationDrag = useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation });
   const releaseNavigationDrag = navigationDrag.onExitTransitionEnd;
   const onNavigationExitTransitionEnd = useCallback(() => {
     // 旧退出通知不得释放新一轮手势或卸载快速重开的导航。
     if (sheetOpenRef.current) return;
     releaseNavigationDrag();
-    // 完整退出后释放实例，让下一轮跟手打开同步挂载全新的 Drawer。
+    // 完整退出后释放实例，让下一轮跟手打开同步挂载全新的 Drawer；点击打开由 presentNavigation 先挂载再打开。
     setSheetMounted(false);
   }, [releaseNavigationDrag]);
   useSwipe(mainElement, {
     direction: "right",
     // 只豁免本次拖动自己设置的 sheetOpen；设置页、转场等其余门禁照常生效。
     enabled: !settingsRoute.open && !transitioning && (!sheetOpen || navigationDrag.gesture === "dragging"),
-    onSwipe: () => openNavigation(mainElement?.querySelector<HTMLElement>(".pwa-session-trigger") ?? null),
+    onSwipe: () => presentNavigation(mainElement?.querySelector<HTMLElement>(".pwa-session-trigger") ?? null),
     canSwipe: navigationDrag.canSwipe,
     drag: navigationDrag.drag,
   });
@@ -236,7 +263,7 @@ export function PwaWorkspaceLayout({
         {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
       </ActionIcon>
       <main ref={setMainElement} className={`pwa-main${historyMode ? " pwa-history-main" : ""}`}>
-        <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={openNavigation} />
+        <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={presentNavigation} />
         <div ref={noticesRef} className="pwa-main-notices">
           {historyMode ? null : connectionBanner}
           {toast}
