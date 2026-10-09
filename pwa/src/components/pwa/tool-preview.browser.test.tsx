@@ -119,16 +119,33 @@ test("the reader shows the full call as the first body block, not in the header"
   }
 });
 
-test("the reader call keeps extra arguments even when the path equals the tool name", async () => {
-  const current: ToolValue = { ...base, args: { path: "read", offset: 20, limit: 10 }, result: [{ type: "text", text: "line 20" }] };
+test("the reader shows the call whenever arguments exist, even when the path equals the tool name", async () => {
+  const cases: { args: { path: string; offset?: number; limit?: number }; expected: string[] }[] = [
+    { args: { path: "read", offset: 20, limit: 10 }, expected: ["offset: 20", "limit: 10"] },
+    // 没有额外参数时调用文本恰为 "read"，仍须显示被读取的路径。
+    { args: { path: "read" }, expected: [] },
+  ];
+  for (const { args, expected } of cases) {
+    const current: ToolValue = { ...base, args, result: [{ type: "text", text: "line 20" }] };
+    const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+    try {
+      await expect.element(screen.getByRole("dialog")).toBeVisible();
+      const call = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
+      expect(call.matches(".pwa-tool-reader-command")).toBe(true);
+      expect(call.textContent?.startsWith("read")).toBe(true);
+      for (const text of expected) expect(call.textContent).toContain(text);
+    } finally {
+      await screen.unmount();
+    }
+  }
+});
+
+test("the reader omits the call block for a generic tool without arguments", async () => {
+  const current: ToolValue = { ...base, tool: "status", args: {}, result: [{ type: "text", text: "ok" }] };
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
   try {
-    await expect.element(screen.getByRole("dialog")).toBeVisible();
-    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
-    expect(call.matches(".pwa-tool-reader-command")).toBe(true);
-    expect(call.textContent?.startsWith("read")).toBe(true);
-    expect(call.textContent).toContain("offset: 20");
-    expect(call.textContent).toContain("limit: 10");
+    await expect.element(screen.getByRole("dialog", { name: "status", exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-tool-reader-command")).toBeNull();
   } finally {
     await screen.unmount();
   }

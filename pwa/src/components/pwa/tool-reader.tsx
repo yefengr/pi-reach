@@ -8,7 +8,7 @@ import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
-import { toolCallText, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { toolAction, toolCallText, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import "./tool-reader.css";
 
@@ -74,9 +74,10 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
-  // 完整调用（命令、路径及其余参数）放在正文首块，不截断；无参数时只剩工具名，与标题重复则不显示。
-  const call = value ? toolCallText(value, { prompt: false }) : "";
-  const callText = call && call !== value?.tool ? call : null;
+  // 完整调用（命令、路径及其余参数）放在正文首块，不截断。只有无参数的通用工具才与标题重复；
+  // 按参数判断而不比较文本，路径等参数值恰为工具名时仍须显示。
+  const action = value ? toolAction(value) : null;
+  const callText = value && action && (action.kind !== "generic" || action.detail) ? toolCallText(value, { prompt: false }) : null;
 
   return <Drawer.Root
     opened={opened}
