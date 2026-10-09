@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { JsonValue, TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCallText, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary } from "./tool-presentation";
+import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary, toolReaderCall } from "./tool-presentation";
 
 const base = { event_id: "e", session_id: "s", leaf_id: "g", group_id: "group", timestamp: 1, kind: "tool" as const, tool_call_id: "call", truncated: false, status: "complete" as const };
 function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool" }> {
@@ -54,13 +54,27 @@ test("keeps one command title form and echoes the full call only into expanded c
   expect(toolContentBlocks(value).some((block) => block.kind === "text" && block.text.startsWith("$ "))).toBe(false);
 });
 
-test("the reader call keeps every argument and drops only the command prompt", () => {
-  const command = event("bash", { command: "pwd\nls -al", timeout: 30 }, "result");
-  expect(toolCallText(command)).toBe("$ pwd\nls -al\ntimeout: 30");
-  expect(toolCallText(command, { prompt: false })).toBe("pwd\nls -al\ntimeout: 30");
-  // 只有命令类有提示符；其他工具不受该选项影响。
-  const read = event("read", { path: "src/file.ts", offset: 20, limit: 10 }, "text");
-  expect(toolCallText(read, { prompt: false })).toBe(toolCallText(read));
+test("the reader call line follows the Pi native call format without a prompt", () => {
+  const cases: [string, Record<string, JsonValue>, string | undefined][] = [
+    ["bash", { command: "pwd\nls -al" }, "pwd\nls -al"],
+    ["bash", { command: "pnpm test", timeout: 30 }, "pnpm test (timeout 30s)"],
+    ["read", { path: "src/file.ts" }, "src/file.ts"],
+    ["read", { path: "src/file.ts", offset: 20, limit: 10 }, "src/file.ts:20-29"],
+    ["read", { path: "src/file.ts", offset: 20 }, "src/file.ts:20"],
+    ["read", { path: "src/file.ts", limit: 10 }, "src/file.ts:1-10"],
+    // 路径恰为工具名时照常显示。
+    ["read", { path: "read" }, "read"],
+    ["edit", { path: "src/file.ts", oldText: "a", newText: "b" }, "src/file.ts"],
+    ["write", { path: "src/file.ts", content: "body" }, "src/file.ts"],
+    ["grep", { pattern: "TODO", path: "src", glob: "*.ts", limit: 5 }, "/TODO/ in src (*.ts) limit 5"],
+    ["grep", { pattern: "TODO" }, "/TODO/ in ."],
+    ["find", { pattern: "*.ts", path: "src", limit: 5 }, "*.ts in src (limit 5)"],
+    // 通用工具由正文的完整参数块承担调用展示。
+    ["deploy", { target: "prod" }, undefined],
+  ];
+  for (const [tool, args, expected] of cases) {
+    expect(toolReaderCall(event(tool, args, "result")), `${tool} ${JSON.stringify(args)}`).toBe(expected);
+  }
 });
 
 test("bounds the preview command echo so the real result keeps its budget", () => {

@@ -275,10 +275,10 @@ export function toolCommandLead(value: ToolValue): string | undefined {
   return action.kind === "command" ? `$ ${action.detail}` : undefined;
 }
 
-/** 完整调用上下文以原始换行显示；大正文在同一内容流内单独呈现。阅读器正文首块不回显 `$` 提示符。 */
-export function toolCallText(value: ToolValue, { prompt = true }: { prompt?: boolean } = {}): string {
+/** 完整调用上下文以原始换行显示；大正文在同一内容流内单独呈现。 */
+export function toolCallText(value: ToolValue): string {
   const action = toolAction(value);
-  const heading = action.kind === "command" && !prompt ? action.detail : toolCommandLead(value) ?? toolHeaderSummary(value);
+  const heading = toolCommandLead(value) ?? toolHeaderSummary(value);
   const args = toolInput(value);
   if (action.kind === "generic") return `${value.tool}${heading ? ` ${heading}` : ""}`;
   if (!isRecord(args)) return heading;
@@ -292,6 +292,48 @@ export function toolCallText(value: ToolValue, { prompt = true }: { prompt?: boo
   // 已返回 diff 时，正文优先展示真实修改；完整调用仍保留原始请求供对照。
   if (requested !== undefined && reliableToolDiff(value)) extra.push(`${getMessages().tools.requestedChanges}\n${requested}`);
   return [heading, ...extra].join("\n");
+}
+
+/** Pi 原生的行范围写法：`:起始行-结束行`，只有起始行时为 `:起始行`。 */
+function readLineRange(value: ToolValue): string {
+  const args = toolInput(value);
+  const offset = readLineOffset(value);
+  const limit = isRecord(args) && typeof args.limit === "number" && Number.isSafeInteger(args.limit) && args.limit > 0 ? args.limit : undefined;
+  if (offset === undefined && limit === undefined) return "";
+  const start = offset ?? 1;
+  return limit === undefined ? `:${start}` : `:${start}-${start + limit - 1}`;
+}
+
+/**
+ * 详情阅读器正文首块的调用行，与 Pi 原生终端的调用行一致：工具名已在顶栏，命令不加 `$`。
+ * 通用工具返回 undefined，由正文中的完整「参数」块承担，与 Pi 原生「工具名＋参数 JSON」对应。
+ */
+export function toolReaderCall(value: ToolValue): string | undefined {
+  const action = toolAction(value);
+  const args = toolInput(value);
+  const field = (key: string) => isRecord(args) ? args[key] : undefined;
+  const rawLimit = field("limit");
+  const limit = typeof rawLimit === "number" ? rawLimit : undefined;
+  switch (action.kind) {
+    case "command": {
+      const timeout = field("timeout");
+      return typeof timeout === "number" ? `${action.detail} (timeout ${timeout}s)` : action.detail;
+    }
+    case "read":
+      return `${action.detail}${readLineRange(value)}`;
+    case "edit":
+    case "write":
+      return action.detail;
+    case "search": {
+      const path = stringField(args, PATH_KEYS) ?? ".";
+      if (hasName(value.tool, ["find"], ["glob"])) return `${action.detail} in ${path}${limit === undefined ? "" : ` (limit ${limit})`}`;
+      const glob = field("glob");
+      const globText = typeof glob === "string" && glob && glob !== action.detail ? ` (${glob})` : "";
+      return `/${action.detail}/ in ${path}${globText}${limit === undefined ? "" : ` limit ${limit}`}`;
+    }
+    default:
+      return undefined;
+  }
 }
 
 function requestedToolDiff(value: ToolValue): string | undefined {

@@ -98,7 +98,7 @@ test.each([
   expect(getComputedStyle(inner).flexDirection).toBe("row");
 });
 
-test("the reader shows the full call as the first body block, not in the header", async () => {
+test("the reader shows the call as the first body block on the main background", async () => {
   const command = "pnpm --filter pwa test:unit --reporter=verbose --coverage --project browser --project node";
   const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
@@ -114,16 +114,24 @@ test("the reader shows the full call as the first body block, not in the header"
     expect(call.scrollHeight).toBeLessThanOrEqual(call.clientHeight);
     expect(body.textContent).not.toContain("$ pnpm");
     expect(body.textContent).toContain("3 passed");
+    // 顶栏与正文同用主界面底色，状态栏与主界面一致。
+    const probe = document.createElement("div");
+    probe.style.background = "var(--pwa-bg)";
+    document.querySelector(".pwa-root")!.append(probe);
+    const main = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    for (const element of [header, body, document.querySelector<HTMLElement>(".pwa-tool-reader")!]) {
+      expect(getComputedStyle(element).backgroundColor).toBe(main);
+    }
   } finally {
     await screen.unmount();
   }
 });
 
-test("the reader shows the call whenever arguments exist, even when the path equals the tool name", async () => {
-  const cases: { args: { path: string; offset?: number; limit?: number }; expected: string[] }[] = [
-    { args: { path: "read", offset: 20, limit: 10 }, expected: ["offset: 20", "limit: 10"] },
-    // 没有额外参数时调用文本恰为 "read"，仍须显示被读取的路径。
-    { args: { path: "read" }, expected: [] },
+test("the reader shows the Pi-style read call even when the path equals the tool name", async () => {
+  const cases: { args: { path: string; offset?: number; limit?: number }; expected: string }[] = [
+    { args: { path: "read", offset: 20, limit: 10 }, expected: "read:20-29" },
+    { args: { path: "read" }, expected: "read" },
   ];
   for (const { args, expected } of cases) {
     const current: ToolValue = { ...base, args, result: [{ type: "text", text: "line 20" }] };
@@ -132,8 +140,7 @@ test("the reader shows the call whenever arguments exist, even when the path equ
       await expect.element(screen.getByRole("dialog")).toBeVisible();
       const call = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
       expect(call.matches(".pwa-tool-reader-command")).toBe(true);
-      expect(call.textContent?.startsWith("read")).toBe(true);
-      for (const text of expected) expect(call.textContent).toContain(text);
+      expect(call.textContent).toBe(expected);
     } finally {
       await screen.unmount();
     }

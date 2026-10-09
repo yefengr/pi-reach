@@ -8,7 +8,7 @@ import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
-import { toolAction, toolCallText, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { toolContentBlocks, toolError, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import "./tool-reader.css";
 
@@ -74,10 +74,8 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
-  // 完整调用（命令、路径及其余参数）放在正文首块，不截断；按工具类型判断而不比较文本，路径恰为工具名时仍须显示。
-  // 通用工具的调用文本只有参数名，正文已有完整的「参数」块作为首块，不再重复。
-  const action = value ? toolAction(value) : null;
-  const callText = value && action && action.kind !== "generic" ? toolCallText(value, { prompt: false }) : null;
+  // 正文首块为 Pi 原生格式的调用行，不截断；通用工具由正文中的完整「参数」块承担。
+  const callText = value ? toolReaderCall(value) : undefined;
 
   return <Drawer.Root
     opened={opened}

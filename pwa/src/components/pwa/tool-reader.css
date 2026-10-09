@@ -65,17 +65,18 @@
 .pwa-root .pwa-tool-output-image { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; object-position: left top; border-radius: var(--pwa-radius-xs); background: var(--pwa-panel); }
 .pwa-root .pwa-image-omitted { margin: 0; color: var(--pwa-secondary); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); overflow-wrap: anywhere; }
 
-/* 工具详情阅读器：桌面右侧 720px Drawer，移动端全屏；输出带行号、长行自动换行。 */
-.pwa-root .pwa-tool-reader { max-width: 100vw; display: flex; flex-direction: column; overflow: hidden; color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
-.pwa-root .pwa-tool-reader-header { padding-right: 8px; padding-left: var(--pwa-gutter); background: var(--pwa-surface); }
+/* 工具详情阅读器：桌面右侧 720px Drawer，移动端全屏；输出带行号、长行自动换行。
+   顶栏与正文同用主界面 bg，状态栏与主界面同色；桌面 Drawer 靠阴影与遮罩和主区分开。 */
+.pwa-root .pwa-tool-reader { max-width: 100vw; display: flex; flex-direction: column; overflow: hidden; color: var(--pwa-ink); background: var(--pwa-bg); box-shadow: var(--pwa-shadow-modal); }
+.pwa-root .pwa-tool-reader-header { padding-right: 8px; padding-left: var(--pwa-gutter); background: var(--pwa-bg); }
 .pwa-root .pwa-tool-reader-title { min-width: 0; flex: 1 1 auto; margin: 0; overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-title)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-reader-title:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-root .pwa-tool-reader-status { flex: none; display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
-/* 正文首块的完整调用：不截断、自动换行，可选中复制。 */
+/* 正文首块的调用行（Pi 原生格式）：不截断、自动换行，可选中复制。 */
 .pwa-root .pwa-tool-reader-command { margin: 0; color: var(--pwa-code-text); font: var(--pwa-weight-strong) var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .pwa-root .pwa-tool-reader-actions { flex: 0 0 auto; display: flex; align-items: center; }
 .pwa-root .pwa-tool-reader-body { min-height: 0; display: flex; flex: 1 1 auto; flex-direction: column; padding: 0; overflow: hidden; }
-.pwa-root .pwa-tool-reader-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px max(20px, var(--pwa-safe-bottom)); background: var(--pwa-code-surface); }
+.pwa-root .pwa-tool-reader-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px max(20px, var(--pwa-safe-bottom)); background: var(--pwa-bg); }
 .pwa-root .pwa-tool-reader-scroll > * + * { margin-top: 12px; }
 .pwa-root .pwa-reader-error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--pwa-radius-md); color: var(--pwa-error); background: var(--pwa-error-wash); }
 .pwa-root .pwa-reader-error > svg { flex: 0 0 auto; margin-top: 2px; }
