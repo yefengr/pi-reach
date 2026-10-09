@@ -5,6 +5,7 @@ import { FILE_AUTO_IMAGE_BYTES, type PublishedFileDescriptor } from "@pi-reach/p
 import { useI18n } from "@/lib/i18n";
 import { fileSaveName } from "@/lib/pwa/file-preview";
 import { usePublishedFilesView } from "./published-files-context";
+import { usePwaMotionDuration } from "./use-pwa-motion";
 import "./published-files.css";
 
 export type PublishedFileRead = (file: PublishedFileDescriptor, trigger: HTMLButtonElement) => void;
@@ -21,6 +22,9 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   const [visible, setVisible] = useState(false);
   const [failure, setFailure] = useState(false);
   const [decodeFailure, setDecodeFailure] = useState<string | null>(null);
+  const [settling, setSettling] = useState(false);
+  const settleTimer = useRef<number | undefined>(undefined);
+  const settleDuration = usePwaMotionDuration("--pwa-duration-fetch-settle", 200);
   const name = state?.fileName ?? file.file_name;
   const size = state?.byteLength ?? file.byte_length;
   const sizeUnit = size < 1024 ? "B" : size < 1024 * 1024 ? "KiB" : "MiB";
@@ -44,6 +48,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
     visibleObserver.observe(element);
     return () => { nearObserver.disconnect(); visibleObserver.disconnect(); };
   }, []);
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
   useEffect(() => {
     if (!visible || !ready || !pin || !unpin) return;
     pin(file.publication_id);
@@ -67,13 +72,26 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
     setFailure(false);
     setDecodeFailure(null);
     try {
-      if (!ready || intent === "download" || failed) {
+      const fetchNow = !ready || intent === "download" || failed;
+      if (fetchNow) {
         if (!canFetch && !ready) return;
         if (failed && ready && files.retry) await files.retry(file, intent);
         else await files.open(file, intent);
       }
-      const result = files.getState(file.publication_id);
-      if (intent === "view" && trigger && result?.phase === "ready" && result.preview?.kind !== "none") onRead(file, trigger);
+      const readable = () => {
+        const result = files.getState(file.publication_id);
+        return result?.phase === "ready" && result.preview?.kind !== "none";
+      };
+      if (intent !== "view" || !trigger || !readable()) return;
+      if (fetchNow) {
+        // 刚获取完时最后一段进度来不及绘制就会被阅读器盖住；先补满进度并停留片刻，再交给阅读器。
+        setSettling(true);
+        await new Promise<void>(resolve => { settleTimer.current = window.setTimeout(resolve, settleDuration); });
+        setSettling(false);
+        // 停留期间可能被取消、逐出或切换目标。
+        if (!readable()) return;
+      }
+      onRead(file, trigger);
     } catch { setFailure(true); }
   };
   const cancel = () => {
@@ -82,7 +100,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   };
   const errorText = state?.error === "too_large" ? t.files.tooLarge : state?.error === "not_available" || state?.error === "permission_denied" ? t.files.unavailable : decodeFailure === state?.url && decodeFailure !== null ? t.files.decodeError : t.files.failed;
   const disabled = !canFetch || files?.active === true;
-  const progress = size > 0 ? Math.min(100, Math.round((state?.receivedBytes ?? 0) / size * 100)) : 0;
+  const progress = settling && ready ? 100 : size > 0 ? Math.min(100, Math.round((state?.receivedBytes ?? 0) / size * 100)) : 0;
   return <article ref={root} className={`pwa-published-file${image ? " is-image" : ""}`} data-publication-id={file.publication_id}>
     {ready && image && state?.url && !failed ? <button type="button" className="pwa-published-image" onClick={event => onRead(file, event.currentTarget)} aria-label={t.files.viewImage}>
       <img src={state.url} alt={name} onError={() => setDecodeFailure(state.url ?? null)} />
@@ -90,7 +108,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
     <div className="pwa-published-row">
       {image ? <ImageIcon size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}
       <div className="pwa-published-info"><div className="pwa-published-name" title={name}>{name}</div><span className="pwa-published-meta">{format.number(displaySize)} {sizeUnit}</span>
-        {fetching ? <><Progress value={progress} aria-label={t.files.fetching} /><span className="pwa-published-meta" role="status">{t.files.fetching} {progress}%</span></> : failed ? <span className="pwa-published-error" role="alert">{errorText}</span> : !canFetch && !ready ? <span className="pwa-published-meta">{t.files.offline}</span> : null}
+        {fetching ? <><Progress value={progress} aria-label={t.files.fetching} /><span className="pwa-published-meta" role="status">{t.files.fetching} {progress}%</span></> : settling && ready ? <><Progress value={progress} aria-label={t.files.fetched} /><span className="pwa-published-meta" role="status">{t.files.fetched}</span></> : failed ? <span className="pwa-published-error" role="alert">{errorText}</span> : !canFetch && !ready ? <span className="pwa-published-meta">{t.files.offline}</span> : null}
       </div>
       <div className="pwa-published-actions">
         {fetching ? <Button variant="subtle" onClick={cancel}>{t.common.cancel}</Button> : <>

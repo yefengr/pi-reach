@@ -357,6 +357,68 @@ test("first view returns focus to the View button that started the fetch", async
   await h.screen.unmount();
 });
 
+test("first view settles a full progress bar before the reader covers the card, cached views open at once", async () => {
+  const h = await harness({ items: [event(published())] });
+  fetchOnFirstView(h);
+  const seen: string[] = [];
+  const record = () => {
+    if (document.querySelector(".pwa-file-reader") && !seen.includes("reader")) seen.push("reader");
+    const status = document.querySelector(".pwa-published-file [role=status]")?.textContent;
+    const value = document.querySelector(".pwa-published-file [role=progressbar]")?.getAttribute("aria-valuenow");
+    const entry = status ? `${status}:${value}` : null;
+    if (entry && seen.at(-1) !== entry) seen.push(entry);
+  };
+  const observer = new MutationObserver(record);
+  observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  try {
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    // 进度补满并停留后才交给阅读器；阅读器打开后卡片不再保留进度。
+    expect(seen.indexOf("Fetched:100")).toBeGreaterThan(-1);
+    expect(seen.indexOf("Fetched:100")).toBeLessThan(seen.indexOf("reader"));
+    expect(document.querySelector(".pwa-published-file [role=status], .pwa-published-file [role=progressbar]")).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+    seen.length = 0;
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    expect(seen).toEqual(["reader"]);
+    expect(h.open).toHaveBeenCalledTimes(1);
+    await h.screen.unmount();
+  } finally {
+    observer.disconnect();
+    window.history.replaceState(null, "");
+  }
+});
+
+test("reader mounts text only after its enter motion ends", async () => {
+  const width = 390;
+  await page.viewport(width, 844);
+  const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, mimeType: "text/markdown", text: "# Report\nbody", url: blobUrl() } });
+  let pendingSeen = false;
+  let contentLeft: number | null = null;
+  const observer = new MutationObserver(() => {
+    const reader = document.querySelector<HTMLElement>(".pwa-file-reader");
+    if (!reader) return;
+    if (reader.querySelector(".pwa-file-reader-scroll[aria-busy]") && !reader.querySelector("h1")) pendingSeen = true;
+    if (contentLeft === null && reader.querySelector("h1")) contentLeft = Math.round(reader.getBoundingClientRect().left);
+  });
+  observer.observe(document.body, { subtree: true, childList: true });
+  try {
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(h.screen.getByRole("heading", { name: "Report" })).toBeVisible();
+    // 滑入期间只有占位，正文在进入动画结束时才挂载，解析不推迟滑入起点。
+    // 过渡计时与 CSS 时钟可能差一帧，只要求面板已基本到位（不足屏宽一成）。
+    expect(pendingSeen).toBe(true);
+    expect(contentLeft).not.toBeNull();
+    expect(contentLeft!).toBeLessThan(width / 10);
+    await h.screen.unmount();
+  } finally {
+    observer.disconnect();
+    window.history.replaceState(null, "");
+  }
+});
+
 test("native Back closes the file reader before popstate returns without cancelling transfer", async () => {
   const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() } });
   await h.screen.getByRole("button", { name: "View", exact: true }).click();
@@ -486,7 +548,8 @@ test("decode error never loops and retry is explicitly manual", async () => {
   expect(h.open).not.toHaveBeenCalled();
   expect(h.onRead).not.toHaveBeenCalled();
   await h.screen.getByRole("button", { name: "Retry", exact: true }).click();
-  expect(h.onRead).toHaveBeenCalledTimes(1);
+  // 重试经过一次重新获取，完成态停留后才交给阅读器。
+  await expect.poll(() => h.onRead.mock.calls.length).toBe(1);
   await h.screen.unmount();
 });
 

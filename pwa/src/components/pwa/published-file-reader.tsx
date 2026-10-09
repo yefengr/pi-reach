@@ -72,16 +72,19 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     onClose,
     ignorePop: hasOtherModal,
   });
+  // 长文本解析与排版是同步长任务，放在进入动画结束后，避免推迟面板滑入的起点。
+  const [entered, setEntered] = useState(false);
   const previewKind = state?.preview?.kind;
   const previewText = state?.text;
   const previewSize = state?.byteLength;
+  const textPending = !entered && previewKind === "text" && previewText !== undefined;
   const preview = useMemo(() => {
-    if (previewKind !== "text" || previewText === undefined) return null;
+    if (!entered || previewKind !== "text" || previewText === undefined) return null;
     // 门面 text 仍按 UTF-8/DOM 双重预算处理，完整原件始终由 Blob URL 保存。
     const bytes = new TextEncoder().encode(previewText.slice(0, FILE_TEXT_PREVIEW_BYTES + 1));
     const result = textFilePreview(bytes);
     return result && { ...result, truncated: result.truncated || (previewSize ?? 0) > bytes.byteLength };
-  }, [previewKind, previewText, previewSize]);
+  }, [entered, previewKind, previewText, previewSize]);
   const mime = state?.mimeType ?? file.mime_type;
   const markdown = mime === "text/markdown" || mime === "text/plain" && /\.(md|markdown)$/i.test(name);
   const requestClose = () => {
@@ -102,7 +105,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
     return () => observer.disconnect();
   }, [scroll, preview, mobile]);
-  return <Drawer.Root opened={opened} onClose={requestClose} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : 720} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
+  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => setEntered(true)} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : 720} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim" />
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }}>
       <Drawer.Header className="pwa-file-reader-header">
@@ -111,7 +114,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
         <Drawer.CloseButton className="pwa-icon-button" aria-label={t.files.closeReader} icon={<X size={20} />} />
       </Drawer.Header>
       <Drawer.Body className="pwa-file-reader-body">
-        {state?.phase === "ready" && state.preview?.kind === "image" && state.url ? <PublishedImage key={state.url} url={state.url} name={name} canRetry={files?.canFetch === true} onRetry={() => { void Promise.resolve().then(() => files?.retry?.(file, "view") ?? files?.open(file, "view")).catch(() => undefined); }} /> : preview ? <div ref={setScroll} className="pwa-file-reader-scroll"><FileTextContent text={preview.text} markdown={markdown} />{preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}</div> : state?.phase === "opening" || state?.phase === "reading" ? <p className="pwa-published-meta" role="status">{t.files.fetching}</p> : <p className="pwa-published-meta">{t.files.noPreview}</p>}
+        {state?.phase === "ready" && state.preview?.kind === "image" && state.url ? <PublishedImage key={state.url} url={state.url} name={name} canRetry={files?.canFetch === true} onRetry={() => { void Promise.resolve().then(() => files?.retry?.(file, "view") ?? files?.open(file, "view")).catch(() => undefined); }} /> : textPending ? <div className="pwa-file-reader-scroll" aria-busy="true" /> : preview ? <div ref={setScroll} className="pwa-file-reader-scroll"><FileTextContent text={preview.text} markdown={markdown} />{preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}</div> : state?.phase === "opening" || state?.phase === "reading" ? <p className="pwa-published-meta" role="status">{t.files.fetching}</p> : <p className="pwa-published-meta">{t.files.noPreview}</p>}
       </Drawer.Body>
     </Drawer.Content>
   </Drawer.Root>;

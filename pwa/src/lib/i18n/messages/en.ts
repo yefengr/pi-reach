@@ -20,6 +20,7 @@ export const en = {
     imagePending: "Image available to fetch",
     largeImage: "Large image — click to fetch",
     fetching: "Fetching…",
+    fetched: "Fetched",
     offline: "Connect and open the original session to fetch",
     failed: "Couldn't fetch the file. Try again.",
     unavailable: "The file on the computer is missing or unreadable",
