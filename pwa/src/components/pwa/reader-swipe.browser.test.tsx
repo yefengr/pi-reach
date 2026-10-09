@@ -66,7 +66,7 @@ async function toolHarness(synthetic = true) {
   const scroll = element(".pwa-tool-reader-scroll");
   scroll.scrollTop = 0;
   if (synthetic) syntheticCapture(surface);
-  return { screen, surface, scroll, child: element(".pwa-reader-line-text"), close, modal };
+  return { screen, surface, scroll, child: element(".pwa-reader-text"), close, modal };
 }
 async function fileHarness({ text = longText, markdown = false, image = false, synthetic = true }: { text?: string; markdown?: boolean; image?: boolean; synthetic?: boolean } = {}) {
   const file = { ...descriptor, file_name: image ? "image.png" : markdown ? "notes.md" : "notes.txt", mime_type: image ? "image/png" : markdown ? "text/markdown" : "text/plain" };
@@ -138,9 +138,9 @@ test("G4 top modal blocks a right swipe", async () => {
   expect(h.close).not.toHaveBeenCalled();
   expect(window.history.state?.piReachToolReader).toBe(true);
 });
-test("G4 CDP numbered child transfers capture and closes", async () => {
+test("G4 CDP output child transfers capture and closes", async () => {
   const h = await toolHarness(false);
-  await touchDrag(touchOrigin(h.child, 40), 110, 0);
+  await touchDrag(touchOrigin(h.child, 40, 10), 110, 0);
   await toolClosed(h);
 }, 15000);
 test("G4 CDP vertical drag scrolls without closing", async () => {

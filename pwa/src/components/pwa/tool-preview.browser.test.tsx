@@ -147,6 +147,44 @@ test("the reader shows the Pi-style read call even when the path equals the tool
   }
 });
 
+test("reader output has no line numbers and shares the call line's left edge", async () => {
+  const current: ToolValue = { ...base, args: { path: "notes.txt", offset: 20, limit: 2 }, result: [{ type: "text", text: "alpha\nbeta" }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
+    const output = document.querySelector<HTMLElement>(".pwa-reader-text")!;
+    // 与 Pi 原生一致不带行号：正文即原始输出。
+    expect(output.textContent).toBe("alpha\nbeta");
+    expect(Math.round(output.getBoundingClientRect().left)).toBe(Math.round(call.getBoundingClientRect().left));
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("the reader call line fills its first line before wrapping a hyphenated path", async () => {
+  await page.viewport(390, 844);
+  const path = "docs/plans/active/20260824-pwa-hardening.md";
+  const current: ToolValue = { ...base, args: { path, offset: 1, limit: 60 }, result: [{ type: "text", text: "body" }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
+    const range = document.createRange();
+    range.selectNodeContents(call);
+    const lines = [...range.getClientRects()];
+    expect(lines.length).toBeGreaterThan(1);
+    // 首行排到距右缘不足一个字符宽才换行，不在 "pwa-" 的连字符处提前断开。
+    const character = document.createRange();
+    character.setStart(call.firstChild!, 0);
+    character.setEnd(call.firstChild!, 1);
+    const characterWidth = character.getBoundingClientRect().width;
+    expect(call.getBoundingClientRect().right - lines[0].right).toBeLessThan(characterWidth);
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("a generic tool reader opens with the full parameters instead of a lossy call summary", async () => {
   const cases: { tool: string; args: { target?: string; force?: boolean } }[] = [
     { tool: "deploy", args: { target: "prod", force: true } },

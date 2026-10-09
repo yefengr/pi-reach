@@ -39,7 +39,7 @@
 | 会话详情是 Popover，`role="dialog"` 且 `aria-modal="false"`，内部没有 menu 角色 | [`session-actions-menu.tsx`](../../../pwa/src/components/pwa/session-actions-menu.tsx)、`session-actions-menu.browser.test.tsx` |
 | 消息列表本身是滚动容器，已设 `touch-action: pan-y`；body 设 `overscroll-behavior-y: none`；viewport 设 `user-scalable=no`；manifest 为 `standalone` | [`globals.css`](../../../pwa/src/app/globals.css)、[`index.html`](../../../pwa/index.html)、[`manifest.webmanifest`](../../../pwa/public/manifest.webmanifest) |
 | 会话时间线中的横向滚动区包括 Markdown 表格 `.pwa-markdown-table`、代码块 `.pwa-code-block pre`、工具 diff 预览 `.pwa-tool-diff-output`（由 `tool-preview.tsx` → `tool-output.tsx` 渲染）；文件阅读器的 Markdown 表格也使用 `.pwa-markdown-table`，可独立横向滚动 | `timeline-content.css`、`tool-reader.css`、[`tool-output.tsx`](../../../pwa/src/components/pwa/tool-output.tsx)、[`file-text-content.tsx`](../../../pwa/src/components/pwa/file-text-content.tsx) |
-| 工具详情阅读器用 `NumberedText` 渲染，长行 `pre-wrap` 自动换行，不渲染 `.pwa-tool-diff-output`，没有横向滚动区 | [`tool-reader.tsx`](../../../pwa/src/components/pwa/tool-reader.tsx)、`tool-reader.css` 中的 `.pwa-reader-line-text` |
+| 工具详情阅读器用 `OutputText` 渲染，长行 `pre-wrap` 自动换行，不渲染 `.pwa-tool-diff-output`，没有横向滚动区 | [`tool-reader.tsx`](../../../pwa/src/components/pwa/tool-reader.tsx)、`tool-reader.css` 中的 `.pwa-reader-text` |
 | 文件阅读器的图片舞台 `.pwa-file-image-stage` 设 `touch-action: none`，自己处理拖动；纯文本 `.pwa-file-plain` 自动换行 | [`published-files.css`](../../../pwa/src/components/pwa/published-files.css) |
 | `pwa-app.tsx` 已有 930 行，超过单文件 600 行原则 | 实现时不要把手势逻辑加进这个文件 |
 

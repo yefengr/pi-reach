@@ -27,13 +27,12 @@ function diffLineClass(line: string): string {
   return "pwa-reader-line";
 }
 
-/** 带行号的原始输出：长行自动换行，行号使用 secondary。 */
-function NumberedText({ block }: { block: Extract<ToolContentBlock, { kind: "text" }> }) {
-  const lines = block.text.split("\n");
-  const diff = block.style === "diff";
+/** 原始输出与 Pi 原生一致不带行号，与调用行同一左边线；diff 逐行以轻底和左侧色条区分增删。 */
+function OutputText({ block }: { block: Extract<ToolContentBlock, { kind: "text" }> }) {
+  const lines = block.style === "diff" ? block.text.split("\n") : null;
   return <section className="pwa-reader-block" aria-label={block.label}>
     {block.label ? <p className="pwa-reader-block-label">{block.label}</p> : null}
-    <pre className="pwa-reader-text">{lines.map((line, index) => <span key={index} className={diff ? diffLineClass(line) : "pwa-reader-line"}><span className="pwa-reader-line-number" aria-hidden="true">{index + 1}</span><span className="pwa-reader-line-text">{line}{index < lines.length - 1 ? "\n" : ""}</span></span>)}</pre>
+    <pre className="pwa-reader-text">{lines ? lines.map((line, index) => <span key={index} className={diffLineClass(line)}>{line}{index < lines.length - 1 ? "\n" : ""}</span>) : block.text}</pre>
   </section>;
 }
 
@@ -114,7 +113,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
             {error ? <div className="pwa-reader-error" role="alert"><CircleAlert size={16} aria-hidden="true" /><pre>{error}</pre></div> : null}
             {bodyBlocks.map((block, index) => block.kind === "image"
               ? <ToolImage key={`image:${index}`} block={block} index={index} preview={false} />
-              : <NumberedText key={`text:${index}`} block={block} />)}
+              : <OutputText key={`text:${index}`} block={block} />)}
             {toolWasTruncated(value) ? <p className="pwa-tool-notice">{t.tools.outputTruncated}</p> : null}
           </>}
         </div>
