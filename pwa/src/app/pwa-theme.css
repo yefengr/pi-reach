@@ -193,6 +193,8 @@
 
   --pwa-safe-top: env(safe-area-inset-top, 0px);
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* 应用整体高度；独立窗口见下方覆盖。 */
+  --pwa-app-height: 100dvh;
   --maxw: 1180px;
 
   /* Tailwind 工具类使用的别名。 */
@@ -202,6 +204,14 @@
   --muted: var(--pwa-secondary);
   --surface: var(--pwa-panel);
   --border-soft: var(--pwa-line);
+}
+
+/*
+ * 主屏 PWA 的状态栏为 black-translucent 时，iOS 把初始包含块（height: 100%、inset: 0）缩短一个状态栏高度，
+ * 并在该高度裁切 fixed 盒，底部露出一条空白。独立窗口没有浏览器工具栏，100lvh 即整屏高度。
+ */
+@media (display-mode: standalone) {
+  :root { --pwa-app-height: 100lvh; }
 }
 
 /*
