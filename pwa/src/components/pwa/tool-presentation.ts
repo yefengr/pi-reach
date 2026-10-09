@@ -29,8 +29,16 @@ export type SearchMatch = {
 const PATH_KEYS = ["path", "file_path", "filePath"] as const;
 const COMMAND_KEYS = ["command", "cmd"] as const;
 const QUERY_KEYS = ["pattern", "query", "search", "glob"] as const;
-// 阅读器调用行只按名称精确匹配 Pi 内置工具；插件的同类别名可能带额外参数，以完整参数块展示。
-const PI_NATIVE_TOOLS: ReadonlySet<string> = new Set(["bash", "read", "edit", "write", "grep", "find"]);
+// 阅读器调用行能完整表达的 Pi 内置工具参数（edit 的修改与 write 的内容在正文显示）。
+// 插件的同类别名、同名覆盖后新增的参数或调用行不显示的选项，都改以完整参数块展示，不丢参数。
+const PI_NATIVE_CALL_KEYS: ReadonlyMap<string, readonly string[]> = new Map([
+  ["bash", ["command", "timeout"]],
+  ["read", ["path", "offset", "limit"]],
+  ["edit", ["path", "edits", "oldText", "newText"]],
+  ["write", ["path", "content"]],
+  ["grep", ["pattern", "path", "glob", "limit"]],
+  ["find", ["pattern", "path", "limit"]],
+]);
 const DIFF_LINE = /^[+-](?![+-])/m;
 const DIFF_HEADER = /^(?:diff --git |--- .+\n\+\+\+ )/m;
 
@@ -308,12 +316,13 @@ function readLineRange(value: ToolValue): string {
 
 /**
  * 详情阅读器正文首块的调用行，与 Pi 原生终端的调用行一致：工具名已在顶栏，命令不加 `$`。
- * 只用于 Pi 内置工具；其他工具返回 undefined，由完整「参数」块承担，与 Pi 原生「工具名＋参数 JSON」对应。
+ * 只用于参数都能完整表达的 Pi 内置工具；其余返回 undefined，由完整「参数」块承担，与 Pi 原生「工具名＋参数 JSON」对应。
  */
 export function toolReaderCall(value: ToolValue): string | undefined {
-  if (!PI_NATIVE_TOOLS.has(value.tool)) return undefined;
-  const action = toolAction(value);
+  const keys = PI_NATIVE_CALL_KEYS.get(value.tool);
   const args = toolInput(value);
+  if (!keys || !isRecord(args) || Object.keys(args).some((key) => !keys.includes(key))) return undefined;
+  const action = toolAction(value);
   const field = (key: string) => isRecord(args) ? args[key] : undefined;
   const rawLimit = field("limit");
   const limit = typeof rawLimit === "number" ? rawLimit : undefined;
@@ -339,11 +348,11 @@ export function toolReaderCall(value: ToolValue): string | undefined {
   }
 }
 
-/** 详情阅读器正文：Pi 内置工具以调用行开头，其余工具以完整「参数」块开头。 */
+/** 详情阅读器正文：参数都能完整表达的 Pi 内置工具以调用行开头，其余以完整「参数」块开头。 */
 export function toolReaderContent(value: ToolValue): { call?: string; blocks: ToolContentBlock[] } {
   const call = toolReaderCall(value);
   const blocks = toolContentBlocks(value);
-  // 通用工具的参数块已在 toolContentBlocks 中；别名工具在会话内按专用类型展示，阅读器仍须保留全部参数。
+  // 通用工具的参数块已在 toolContentBlocks 中；别名或同名覆盖的工具在会话内按专用类型展示，阅读器仍须保留全部参数。
   if (call !== undefined || toolAction(value).kind === "generic") return { call, blocks };
   const parameters = parametersBlock(value);
   return { blocks: parameters ? [parameters, ...blocks] : blocks };

@@ -74,13 +74,17 @@ test("the reader call line follows the Pi native call format without a prompt", 
     ["shell", { command: "build", cwd: "/tmp" }, undefined],
     ["rg", { pattern: "TODO" }, undefined],
     ["glob", { pattern: "*.ts" }, undefined],
+    // 同名覆盖的内置工具新增参数，或调用行不显示的选项，同样改以完整参数块展示。
+    ["bash", { command: "build", cwd: "/tmp" }, undefined],
+    ["grep", { pattern: "TODO", ignoreCase: true }, undefined],
+    ["read", { file_path: "src/file.ts" }, undefined],
   ];
   for (const [tool, args, expected] of cases) {
     expect(toolReaderCall(event(tool, args, "result")), `${tool} ${JSON.stringify(args)}`).toBe(expected);
   }
 });
 
-test("reader content keeps every argument of an aliased tool and does not duplicate generic parameters", () => {
+test("reader content keeps every argument of aliased or overridden tools and does not duplicate generic parameters", () => {
   const alias = toolReaderContent(event("shell", { command: "build", cwd: "/tmp" }, "built"));
   expect(alias.call).toBeUndefined();
   expect(alias.blocks[0]).toMatchObject({ kind: "text", style: "json" });
@@ -89,6 +93,10 @@ test("reader content keeps every argument of an aliased tool and does not duplic
 
   const generic = toolReaderContent(event("deploy", { target: "prod" }, "ok"));
   expect(generic.blocks.filter((block) => block.kind === "text" && block.style === "json" && block.text.includes('"target"'))).toHaveLength(1);
+
+  const overridden = toolReaderContent(event("bash", { command: "build", cwd: "/tmp" }, "built"));
+  expect(overridden.call).toBeUndefined();
+  expect(overridden.blocks[0].kind === "text" && overridden.blocks[0].text).toContain('"cwd": "/tmp"');
 
   const native = toolReaderContent(event("bash", { command: "pwd" }, "/home"));
   expect(native.call).toBe("pwd");
