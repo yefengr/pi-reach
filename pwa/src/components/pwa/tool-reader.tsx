@@ -74,10 +74,10 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
-  // 完整调用（命令、路径及其余参数）放在正文首块，不截断。只有无参数的通用工具才与标题重复；
-  // 按参数判断而不比较文本，路径等参数值恰为工具名时仍须显示。
+  // 完整调用（命令、路径及其余参数）放在正文首块，不截断；按工具类型判断而不比较文本，路径恰为工具名时仍须显示。
+  // 通用工具的调用文本只有参数名，正文已有完整的「参数」块作为首块，不再重复。
   const action = value ? toolAction(value) : null;
-  const callText = value && action && (action.kind !== "generic" || action.detail) ? toolCallText(value, { prompt: false }) : null;
+  const callText = value && action && action.kind !== "generic" ? toolCallText(value, { prompt: false }) : null;
 
   return <Drawer.Root
     opened={opened}

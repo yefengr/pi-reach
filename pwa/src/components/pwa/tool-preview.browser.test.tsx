@@ -140,14 +140,24 @@ test("the reader shows the call whenever arguments exist, even when the path equ
   }
 });
 
-test("the reader omits the call block for a generic tool without arguments", async () => {
-  const current: ToolValue = { ...base, tool: "status", args: {}, result: [{ type: "text", text: "ok" }] };
-  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
-  try {
-    await expect.element(screen.getByRole("dialog", { name: "status", exact: true })).toBeVisible();
-    expect(document.querySelector(".pwa-tool-reader-command")).toBeNull();
-  } finally {
-    await screen.unmount();
+test("a generic tool reader opens with the full parameters instead of a lossy call summary", async () => {
+  const cases: { tool: string; args: { target?: string; force?: boolean } }[] = [
+    { tool: "deploy", args: { target: "prod", force: true } },
+    { tool: "status", args: {} },
+  ];
+  for (const { tool, args } of cases) {
+    const current: ToolValue = { ...base, tool, args, result: [{ type: "text", text: "ok" }] };
+    const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+    try {
+      await expect.element(screen.getByRole("dialog", { name: tool, exact: true })).toBeVisible();
+      expect(document.querySelector(".pwa-tool-reader-command")).toBeNull();
+      const first = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
+      for (const [key, item] of Object.entries(args)) {
+        expect(first.textContent).toContain(`"${key}": ${JSON.stringify(item)}`);
+      }
+    } finally {
+      await screen.unmount();
+    }
   }
 });
 
