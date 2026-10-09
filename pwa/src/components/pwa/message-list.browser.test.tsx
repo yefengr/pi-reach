@@ -432,7 +432,10 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
       }
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
       await userEvent.click(toolButton(4));
-      await expect.element(screen.getByText("Requested changes")).toBeVisible();
+      // 阅读器首块原样列出参数，正文只放真实结果，不再拼出请求修改。
+      await expect.element(screen.getByText("Successfully replaced text")).toBeVisible();
+      expect(document.querySelector(".pwa-tool-reader-command")?.textContent).toBe("path: src/settings.ts\noldText: enabled = false\nnewText: enabled = true");
+      expect(document.querySelector(".pwa-tool-reader-scroll")!.textContent).not.toContain("Requested changes");
       expect(document.querySelector(".pwa-tool-reader-scroll .hljs")).toBeNull();
       await closeReader();
       expect(document.activeElement).toBe(toolButton(4));

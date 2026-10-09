@@ -67,9 +67,9 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   }, [outputKey]);
 
   const status = value ? toolStatus(value) : "unknown";
-  // 正文首块原样列出全部参数（不截断），其后为结果；参数不再以单独的「参数」块重复。
+  // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
   const callText = value ? toolReaderCall(value) : undefined;
-  const blocks = value ? toolContentBlocks(value, { parameters: false }) : [];
+  const blocks = value ? toolContentBlocks(value, { input: false }) : [];
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");

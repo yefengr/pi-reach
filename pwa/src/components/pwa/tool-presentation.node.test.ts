@@ -70,13 +70,20 @@ test("the reader call lists every argument as is: text raw, other values as JSON
   }
 });
 
-test("the reader leaves out the separate parameters block that the session view keeps", () => {
-  const value = event("deploy", { target: "prod" }, "ok");
-  const parameters = (blocks: ReturnType<typeof toolContentBlocks>) => blocks.filter((block) => block.kind === "text" && block.style === "json" && block.text.includes('"target"'));
-  expect(parameters(toolContentBlocks(value))).toHaveLength(1);
-  expect(parameters(toolContentBlocks(value, { parameters: false }))).toHaveLength(0);
-});
+test("the reader keeps only real results, without blocks copied from the input", () => {
+  const texts = (blocks: ReturnType<typeof toolContentBlocks>) => blocks.flatMap((block) => block.kind === "text" ? [block.text] : []);
+  const generic = event("deploy", { target: "prod" }, "ok");
+  expect(texts(toolContentBlocks(generic)).some((text) => text.includes('"target"'))).toBe(true);
+  expect(texts(toolContentBlocks(generic, { input: false })).some((text) => text.includes('"target"'))).toBe(false);
 
+  // 会话内展开仍显示写入内容与请求修改；阅读器只保留工具真实返回的结果。
+  const write = event("write", { path: "a.txt", content: "FILE BODY" }, "Wrote a.txt");
+  expect(texts(toolContentBlocks(write))).toContain("FILE BODY");
+  expect(texts(toolContentBlocks(write, { input: false }))).toEqual(["Wrote a.txt"]);
+  const edit = event("edit", { path: "a.txt", oldText: "old", newText: "new" }, "Edited a.txt");
+  expect(texts(toolContentBlocks(edit)).some((text) => text.includes("+new"))).toBe(true);
+  expect(texts(toolContentBlocks(edit, { input: false }))).toEqual(["Edited a.txt"]);
+});
 test("bounds the preview command echo so the real result keeps its budget", () => {
   const command = Array.from({ length: 30 }, (_, index) => `step ${index + 1}`).join("\n");
   const value = event("bash", { command }, "REAL_RESULT");

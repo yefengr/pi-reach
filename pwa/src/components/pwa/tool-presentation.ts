@@ -321,8 +321,11 @@ function requestedToolDiff(value: ToolValue): string | undefined {
 }
 
 /** 真实结果优先保留；请求 diff 不代表执行成功，也不覆盖失败和中断输出。 */
-/** 通用工具默认以「参数」块开头；详情阅读器已在首块列出全部参数，传 parameters: false 避免重复。 */
-export function toolContentBlocks(value: ToolValue, { parameters: withParameters = true }: { parameters?: boolean } = {}): ToolContentBlock[] {
+/**
+ * 默认包含从输入派生的块：通用工具的「参数」、write 的内容与 edit 的请求修改。
+ * 详情阅读器已在首块原样列出全部参数，传 input: false 只保留真实结果，避免同一内容出现两次。
+ */
+export function toolContentBlocks(value: ToolValue, { input: withInput = true }: { input?: boolean } = {}): ToolContentBlock[] {
   const action = toolAction(value);
   const output = toolResult(value);
   const error = toolError(value);
@@ -332,9 +335,9 @@ export function toolContentBlocks(value: ToolValue, { parameters: withParameters
   if (error && !errorInResult) blocks.push({ kind: "text", text: error, style: "error", label: getMessages().tools.toolError });
   if (toolStatus(value) === "interrupted") blocks.push({ kind: "text", text: getMessages().tools.interruptedNotice, style: "notice" });
   const diff = action.kind === "edit" ? reliableToolDiff(value) : undefined;
-  const requested = action.kind === "edit" && !diff ? requestedToolDiff(value) : undefined;
+  const requested = withInput && action.kind === "edit" && !diff ? requestedToolDiff(value) : undefined;
   const matches = action.kind === "search" ? searchMatches(value) : undefined;
-  if (action.kind === "write" && !error && toolStatus(value) !== "interrupted" && isRecord(value.args) && typeof value.args.content === "string") {
+  if (withInput && action.kind === "write" && !error && toolStatus(value) !== "interrupted" && isRecord(value.args) && typeof value.args.content === "string") {
     blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
   }
   if (matches !== undefined) {
@@ -360,10 +363,10 @@ export function toolContentBlocks(value: ToolValue, { parameters: withParameters
   }
   if (diff) blocks.push({ kind: "text", text: diff, style: "diff", label: getMessages().tools.returnedDiff });
   if (requested !== undefined) blocks.push({ kind: "text", text: requested, style: "diff", label: getMessages().tools.requestedChanges });
-  if (action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(value.args) && typeof value.args.content === "string") {
+  if (withInput && action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(value.args) && typeof value.args.content === "string") {
     blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
   }
-  const parameters = withParameters && action.kind === "generic" ? parametersBlock(value) : undefined;
+  const parameters = withInput && action.kind === "generic" ? parametersBlock(value) : undefined;
   if (parameters) blocks.unshift(parameters);
   if (!blocks.length) blocks.push({ kind: "text", text: output === undefined ? getMessages().tools.noOutputYet : getMessages().tools.noTextOutput, style: "notice" });
   return blocks;

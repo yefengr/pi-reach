@@ -172,12 +172,14 @@ test("the reader call line fills its first line before wrapping a hyphenated pat
   }
 });
 
-test("every tool lists its arguments as is in the first block, without a duplicate parameters block", async () => {
+test("every tool lists its arguments as is in the first block, without duplicating them in the body", async () => {
   const cases: { tool: string; args: Record<string, string | boolean | number>; expected?: string }[] = [
     { tool: "deploy", args: { target: "prod", force: true }, expected: "target: prod\nforce: true" },
     { tool: "read", args: { path: "read", offset: 20, limit: 10 }, expected: "path: read\noffset: 20\nlimit: 10" },
     { tool: "bash", args: { command: "build", cwd: "/tmp" }, expected: "command: build\ncwd: /tmp" },
     { tool: "status", args: {} },
+    // 写入内容只在参数中出现一次，正文只放真实结果。
+    { tool: "write", args: { path: "a.txt", content: "FILE BODY" }, expected: "path: a.txt\ncontent: FILE BODY" },
   ];
   for (const { tool, args, expected } of cases) {
     const current: ToolValue = { ...base, tool, args, result: [{ type: "text", text: "ok" }] };
@@ -187,7 +189,9 @@ test("every tool lists its arguments as is in the first block, without a duplica
       const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command");
       expect(call?.textContent).toBe(expected);
       if (call) expect(call).toBe(document.querySelector(".pwa-tool-reader-scroll")!.firstElementChild);
-      expect(document.querySelector(".pwa-tool-reader-scroll")!.textContent).not.toContain('"target"');
+      const body = document.querySelector(".pwa-tool-reader-scroll")!.textContent ?? "";
+      expect(body).not.toContain('"target"');
+      expect(body.split("FILE BODY").length).toBeLessThanOrEqual(2);
     } finally {
       await screen.unmount();
     }
