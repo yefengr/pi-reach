@@ -149,3 +149,62 @@ test('workflow wires mandatory staging dependency, environment permissions, immu
   for (const job of [staging, production]) assert.match(job, /if: always\(\)\n        run: rm -rf "\$RUNNER_TEMP"\/pi-reach-deploy-\*/);
   assert.ok(production.indexOf('deploy-ci.mjs production') < production.indexOf('deploy-release.sh'));
 });
+
+const branchEnv = { GITHUB_REF: 'refs/heads/bugfix/261009-example' };
+
+test('branch staging deploys the same aligned combination but emits no promotion evidence', async () => {
+  const h = stage({}, branchEnv);
+  const notes = [];
+  await deployStage({ ...h, mode: 'staging-branch', env: { ...env, ...branchEnv }, note: (message) => notes.push(message), output: (key, value) => { h.outputs[key] = value; } });
+  assert.deepEqual([...h.calls], ['snapshot production', `deploy relay ${baseline.relay.image}`, `deploy pwa ${tested.pwa.image}`, 'snapshot staging', `smoke ${env.PWA_URL}`]);
+  assert.deepEqual(h.outputs, {});
+  assert.ok(notes.some((message) => message.includes('bugfix/261009-example') && message.includes('not a release candidate')));
+});
+
+for (const ref of ['refs/heads/main', 'refs/heads/dependabot/npm/x', 'refs/heads/bugfix/a/b', 'refs/heads/feature/', 'refs/tags/feature/x']) {
+  test(`branch staging rejects ${ref} before SSH`, async () => {
+    const h = stage({}, { GITHUB_REF: ref });
+    await assert.rejects(deployStage({ ...h, mode: 'staging-branch', env: { ...env, GITHUB_REF: ref } }), /bugfix\/\* or feature\/\*/);
+    assert.equal(h.calls.length, 0);
+  });
+}
+
+test('release staging and production still accept only main', async () => {
+  await assert.rejects(stage({}, branchEnv).run, /main commit/);
+  const h = production({}, branchEnv);
+  await assert.rejects(h.run, /main commit/);
+  assert.equal(h.calls.length, 0);
+});
+
+test('branch staging workflow is owner-only, staging-only, digest-only and never cancels a running deploy', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/deploy-staging.yml', import.meta.url), 'utf8');
+  const build = workflow.split('  build:\n')[1].split('  staging:\n')[0];
+  const staging = workflow.split('  staging:\n')[1];
+  const ownerOnly = /github\.actor == github\.repository_owner && github\.triggering_actor == github\.repository_owner/;
+  assert.match(build, ownerOnly);
+  assert.match(staging, ownerOnly);
+  assert.match(build, /group: staging-branch-build\n      cancel-in-progress: true/);
+  assert.doesNotMatch(staging, /needs\.build\.outputs\.(relay|pwa) ==/);
+  assert.match(staging, /group: deploy-staging-branch\n      cancel-in-progress: false/);
+  assert.match(staging, /name: staging\n/);
+  assert.doesNotMatch(workflow, /name: production|contents: write|deploy-release|^\s+tags:/m);
+  assert.equal(build.match(/push-by-digest=true/g)?.length, 2);
+  assert.match(staging, /run: node scripts\/deploy-ci\.mjs staging-branch/);
+  assert.match(staging, /if: always\(\)\n        run: rm -rf "\$RUNNER_TEMP"\/pi-reach-deploy-\*/);
+});
+
+test('branch staging with no component difference realigns staging with production', async () => {
+  const noneEnv = { ...branchEnv, SELECT_PWA: 'false', SELECT_RELAY: 'false' };
+  const h = stage({ staging: tested }, noneEnv);
+  const notes = [];
+  const result = await deployStage({ ...h, mode: 'staging-branch', env: { ...env, ...noneEnv }, note: (message) => notes.push(message) });
+  assert.deepEqual(result, baseline);
+  assert.deepEqual([...h.calls].slice(0, 4), ['snapshot production', `deploy relay ${baseline.relay.image}`, `deploy pwa ${baseline.pwa.image}`, 'snapshot staging']);
+  assert.ok(notes.includes('no component differs from main; staging is aligned with production'));
+});
+
+test('release staging and production still require a selected component', async () => {
+  const none = { SELECT_PWA: 'false', SELECT_RELAY: 'false' };
+  await assert.rejects(stage({}, none).run, /No selected components/);
+  await assert.rejects(production({}, none).run, /No selected components/);
+});

@@ -6,6 +6,9 @@ import { publicUrl, smoke } from './deploy-smoke.mjs';
 
 const COMPONENTS = ['relay', 'pwa'];
 const DIGEST = 'sha256:[a-f0-9]{64}';
+// 功能分支只能写 staging，不产生晋升凭据；production 仍只接受 main。
+const BRANCH_STAGING = 'staging-branch';
+const BRANCH_REF = /^refs\/heads\/(?:bugfix|feature)\/[A-Za-z0-9._-]+$/;
 
 export function imageRef(value, prefix, component) {
   const repository = `${prefix}/pi-reach-${component}`;
@@ -29,12 +32,12 @@ export function snapshotJson(value, prefix) {
   return parsed;
 }
 
-export function selectedComponents(env) {
+export function selectedComponents(env, { allowEmpty = false } = {}) {
   for (const name of ['SELECT_RELAY', 'SELECT_PWA']) {
     if (!['true', 'false'].includes(env[name])) throw new Error(`Missing or invalid ${name}`);
   }
   const selected = COMPONENTS.filter((component) => env[`SELECT_${component.toUpperCase()}`] === 'true');
-  if (!selected.length) throw new Error('No selected components');
+  if (!selected.length && !allowEmpty) throw new Error('No selected components');
   return selected;
 }
 
@@ -46,8 +49,11 @@ export function verifyCombination(current, tested, components = COMPONENTS) {
   }
 }
 
-function validateContext(env) {
-  if (env.GITHUB_REF !== 'refs/heads/main' || !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '')) throw new Error('Deployment only accepts a main commit');
+function validateContext(env, mode) {
+  if (!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '')) throw new Error('Invalid GITHUB_SHA');
+  if (mode === BRANCH_STAGING) {
+    if (!BRANCH_REF.test(env.GITHUB_REF ?? '')) throw new Error('Branch staging only accepts bugfix/* or feature/* branches');
+  } else if (env.GITHUB_REF !== 'refs/heads/main') throw new Error('Deployment only accepts a main commit');
   if (!/^ghcr\.io\/[a-z0-9._-]+(?:\/[a-z0-9._-]+)*$/.test(env.IMAGE_PREFIX ?? '')) throw new Error('Invalid IMAGE_PREFIX');
   publicUrl(env.PWA_URL, 'PWA_URL');
   publicUrl(env.RELAY_URL, 'RELAY_URL');
@@ -62,9 +68,10 @@ function desiredCombination(env, baseline, selected) {
 }
 
 export async function deployStage({ mode, env, remote, runSmoke = smoke, note = () => {}, output = () => {}, published = () => false }) {
-  validateContext(env);
-  const selected = selectedComponents(env);
-  if (mode === 'staging') {
+  validateContext(env, mode);
+  // 分支已无组件差异时仍需部署，把 staging 从旧分支镜像对齐回生产组合。
+  const selected = selectedComponents(env, { allowEmpty: mode === BRANCH_STAGING });
+  if (mode === 'staging' || mode === BRANCH_STAGING) {
     const baseline = snapshotJson(await remote('snapshot production'), env.IMAGE_PREFIX);
     const tested = desiredCombination(env, baseline, selected);
     // The first PWA capable of runtime configuration must itself be a candidate.
@@ -75,10 +82,15 @@ export async function deployStage({ mode, env, remote, runSmoke = smoke, note = 
     }
     verifyCombination(snapshotJson(await remote('snapshot staging'), env.IMAGE_PREFIX), tested);
     await runSmoke({ pwaUrl: env.PWA_URL, relayUrl: env.RELAY_URL });
+    note(`staging endpoints: ${env.PWA_URL}; default Relay ${env.RELAY_URL}`);
+    if (mode === BRANCH_STAGING) {
+      if (!selected.length) note('no component differs from main; staging is aligned with production');
+      note(`staging now runs ${env.GITHUB_REF.slice('refs/heads/'.length)} at ${env.GITHUB_SHA} for pre-merge testing; it is not a release candidate and invalidates any pending production approval.`);
+      return tested;
+    }
     output('baseline', JSON.stringify(baseline));
     output('tested', JSON.stringify(tested));
     output('target', JSON.stringify({ pwaUrl: env.PWA_URL, relayUrl: env.RELAY_URL }));
-    note(`staging endpoints: ${env.PWA_URL}; default Relay ${env.RELAY_URL}`);
     note(`staging passed for source ${env.GITHUB_SHA}; approve production only after real iOS and Android evidence for this run and digest.`);
     return tested;
   }
@@ -171,7 +183,7 @@ async function main() {
     console.log(message);
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `- ${message}\n`);
   };
-  validateContext(env);
+  validateContext(env, process.argv[2]);
   const ssh = sshRemote(env);
   try {
     await deployStage({ mode: process.argv[2], env, remote: ssh.remote,

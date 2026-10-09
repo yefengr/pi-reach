@@ -1,6 +1,6 @@
 # Pi Reach 自托管部署
 
-本文记录 Relay/PWA 的仓库部署入口和服务器准备要求。Deploy PWA & Relay 工作流采用单次构建、staging 验证、production 审批后同 digest 晋升；本机脚本仍只用于生产备用部署、同步根 Compose 和首次初始化，不自动经过 staging。
+本文记录 Relay/PWA 的仓库部署入口和服务器准备要求。Deploy PWA & Relay 工作流采用单次构建、staging 验证、production 审批后同 digest 晋升；功能分支推送由 Deploy branch to staging 工作流自动部署 staging，供合并前测试；本机脚本仍只用于生产备用部署、同步根 Compose 和首次初始化，不自动经过 staging。
 
 这套 staging 能力需要先手工安装新版服务器入口、独立 Compose、受限密钥、GitHub Environment 和 Caddy 路由。仓库代码存在不代表远程环境已初始化或真机验收已通过；在这些准备完成前，不触发包含新流程的版本发布。2026-09-30 移除的旧 `site-test`／`relay-test` 和 test/promote 状态文件不恢复。当前本机命令仍只选择 scope：
 
@@ -27,6 +27,7 @@ PWA 根路径返回 307 到 `/app`；`/app/` 规范化到 `/app`，`/app/<子路
 | `deploy.env` | 本机真实 SSH/服务器配置 | 否，已加入 `.gitignore` |
 | `scripts/deploy-self-hosted.sh` | 本机按 scope 部署并验收 | 是 |
 | `.github/workflows/deploy.yml` | 单次构建、staging、production 审批与晋升 | 是 |
+| `.github/workflows/deploy-staging.yml`、`scripts/deploy-branch.mjs` | 功能分支推送后选择改动组件、构建并只部署 staging | 是 |
 | `scripts/deploy-ci.mjs`、`scripts/deploy-smoke.mjs` | runner 端组件对齐、快照核对、HTTPS/WebSocket smoke | 是 |
 | `scripts/deploy-release.sh` | 上线核对后创建或修复标签与 Release | 是 |
 | `pwa/docker-entrypoint.d/40-runtime-config.sh` | 非 root 容器启动时校验并注入公开 Relay metadata | 是 |
@@ -125,6 +126,18 @@ docker-compose version
 
 staging 晋升决策见 [ADR-20261006](adr/20261006-staging-promotion.md)。不维护长期 test/release 分支。
 
+### 功能分支部署 staging
+
+合并前的真机测试由 [Deploy branch to staging 工作流](../.github/workflows/deploy-staging.yml)完成，决策见 [ADR-20261009](adr/20261009-branch-staging.md)：
+
+1. 仓库所有者推送 `bugfix/<名称>` 或 `feature/<名称>`（单层）分支，且改动了 PWA 或 Relay 的构建输入时自动运行；只改文档等其他文件不触发。也可在这些分支上手动运行 workflow_dispatch，重新部署当前提交。
+2. `scripts/deploy-branch.mjs` 按分支相对 `main` 分叉点的全部改动选组件：`pwa/`、`pi-extension/install.sh` 选 PWA，`relay/` 选 Relay，`packages/protocol/`、根 `package.json`、锁文件、workspace 配置、`.npmrc`、`pi-extension/package.json` 两者都选。触发路径与这份清单由测试保持一致。
+3. 构建只按 digest 推送 GHCR，不移动公开版本标签；镜像版本取分支上的 `package.json`，来源 revision 为分支提交，无需改版本号。
+4. 部署沿用 staging 的对齐、部署、快照核对和 smoke：未选组件对齐生产当前实际 digest；撤销全部改动等导致两个组件都与 `main` 无差异时，staging 整体对齐生产，不停留在旧分支镜像。运行摘要记录分支和提交；不输出晋升凭据、不进入 production、不创建标签或 Release。
+5. staging 只有一个：任一功能分支的新推送都会取消其他仍在构建的运行；已开始的部署不取消，排队中的部署只保留最新一次，staging 最终是最后一次推送的内容。
+
+分支部署会覆盖 staging：等待审批的发布在批准时会检测到漂移并停止，需要从 `main` 重新运行发布；发布候选做真机验收期间不要推送功能分支。分支部署与发布的 staging 作业同时写入时，服务器锁拒绝后到者，重新运行即可。分支部署不等待 CI，结果只用于测试，不能作为发布验收证据。被替换的分支镜像在服务器上成为悬空镜像，下次 production 部署清理时删除。
+
 协议有变更时，仍须在 PWA 部署完成后再批准 Extension 的 npm 待审版本（见「Extension npm 发布」）。部署 Relay 会让在线连接短暂断开，可选择合适的时机批准。
 
 production 与本机备用入口共用生产目录的 `.pi-reach-deploy-lock`。staging 固定先取得生产目录锁，再取得测试目录锁，保护共享镜像存储中的回滚窗口；已有锁直接拒绝，不自动等待或抢占。staging 不清理镜像，生产仍保留当前及最新若干标签并保护任意容器使用的镜像。部署或快照期间会暂时阻止另一环境操作，这是同机安全取舍。
@@ -135,7 +148,8 @@ production 与本机备用入口共用生产目录的 `.pi-reach-deploy-lock`。
 
 GitHub（仓库 Settings → Environments）：
 
-- 配置 `staging`、`production` 两个 Environment，均只允许 `main`；production 设置维护者 Required reviewers。未信任 PR 不得获得密钥。
+- 配置 `staging`、`production` 两个 Environment。production 只允许 `main` 并设置维护者 Required reviewers；staging 允许 `main`、`bugfix/*`、`feature/*`，不设审批人。未信任 PR 不得获得密钥。
+- 仓库 Ruleset `staging-branches` 作用于 `refs/heads/bugfix/*`、`refs/heads/feature/*`，限制创建和更新，只允许仓库 admin 绕过；不限制删除，合并后可正常删除分支。它保证只有 admin 能用这两类分支部署 staging；增加非 admin 协作者前先核对。
 - 每个 Environment 分别设置 Secrets：`DEPLOY_SSH_KEY`、`DEPLOY_KNOWN_HOSTS`、`DEPLOY_HOST`、`DEPLOY_USER`。两套密钥独立，不复用个人密钥；staging 只有 `contents: read`，production 在审批后才使用标签/Release 写权限。
 - 每个 Environment 分别设置必填 Variables：`PWA_URL`（HTTPS `/app`）和 `RELAY_URL`（HTTPS Relay 基地址）；SSH 非 22 端口设置 `DEPLOY_PORT`。留空立即失败，不产生假绿灯。测试地址不能填写生产域名，既有 production 配置需另行核对。
 - 服务器不是 `linux/amd64` 时，设仓库变量 `DEPLOY_PLATFORM`（如 `linux/arm64`）。

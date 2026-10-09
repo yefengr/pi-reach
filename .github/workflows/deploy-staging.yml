@@ -1,0 +1,159 @@
+# 功能分支推送后自动构建改动的组件并部署 staging，合并前即可真机测试。
+# 只写 staging：不进入 production 审批、不移动 GHCR 版本标签、不创建 Release；正式发布仍走 deploy.yml。
+# 只有仓库所有者能触发；staging Environment 分支策略与分支 Ruleset 的配置见 docs/DEPLOYMENT.md。
+# 覆盖 staging 后，等待审批的发布会在批准时检测到漂移并停止，需要重新运行发布。
+name: Deploy branch to staging
+
+on:
+  push:
+    branches: ['bugfix/*', 'feature/*']
+    # 与 scripts/deploy-branch.mjs 的 COMPONENT_INPUTS 保持一致；只改文档等其他文件时不触发。
+    paths:
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .npmrc
+      - pi-extension/package.json
+      - pi-extension/install.sh
+      - packages/protocol/**
+      - relay/**
+      - pwa/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    # 推送者与触发者都必须是仓库所有者；部署作业再次检查，防止他人重跑失败作业。
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.event.deleted != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # staging 只有一个：任一功能分支的新推送都取消仍在构建的旧运行，避免较慢的旧构建随后覆盖新部署。
+    # 部署作业不在此组内，不会被中途打断。
+    concurrency:
+      group: staging-branch-build
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      relay: ${{ steps.select.outputs.relay }}
+      pwa: ${{ steps.select.outputs.pwa }}
+      relay-version: ${{ steps.versions.outputs.relay-version }}
+      pwa-version: ${{ steps.versions.outputs.pwa-version }}
+      image-prefix: ${{ steps.versions.outputs.image-prefix }}
+      relay-digest: ${{ steps.relay.outputs.digest }}
+      pwa-digest: ${{ steps.pwa.outputs.digest }}
+    env:
+      PLATFORM: ${{ vars.DEPLOY_PLATFORM || 'linux/amd64' }}
+      SOURCE: ${{ github.server_url }}/${{ github.repository }}
+    steps:
+      - name: Require feature branch
+        env:
+          REF: ${{ github.ref }}
+        run: '[[ "$REF" =~ ^refs/heads/(bugfix|feature)/[A-Za-z0-9._-]+$ ]]'
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Select changed components
+        id: select
+        run: node scripts/deploy-branch.mjs
+
+      - name: Read versions
+        id: versions
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          for component in relay pwa; do
+            echo "$component-version=$(jq -r .version "$component/package.json")" >> "$GITHUB_OUTPUT"
+          done
+          echo "image-prefix=ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+        if: steps.select.outputs.relay == 'true' || steps.select.outputs.pwa == 'true'
+      - uses: docker/login-action@v4
+        if: steps.select.outputs.relay == 'true' || steps.select.outputs.pwa == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # 只按 digest 推送：服务器按 digest 拉取，公开的 vX.Y.Z 标签仍指向正式发布的镜像。
+      - name: Build and push Relay
+        id: relay
+        if: steps.select.outputs.relay == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: relay/Dockerfile
+          platforms: ${{ env.PLATFORM }}
+          outputs: type=image,name=${{ steps.versions.outputs.image-prefix }}/pi-reach-relay,push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            pi-reach.image=relay
+            org.opencontainers.image.source=${{ env.SOURCE }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.versions.outputs.relay-version }}
+      - name: Build and push PWA
+        id: pwa
+        if: steps.select.outputs.pwa == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: pwa/Dockerfile
+          platforms: ${{ env.PLATFORM }}
+          outputs: type=image,name=${{ steps.versions.outputs.image-prefix }}/pi-reach-pwa,push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            pi-reach.image=pwa
+            org.opencontainers.image.source=${{ env.SOURCE }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.versions.outputs.pwa-version }}
+
+  staging:
+    name: staging
+    needs: build
+    # 两个组件都与 main 无差异（如撤销全部改动）时仍运行，把 staging 对齐生产，不停留在旧分支镜像。
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 不取消进行中的部署，避免服务器锁或容器停在中途；GitHub 只保留最新的等待者，staging 最终是最后一次推送。
+    concurrency:
+      group: deploy-staging-branch
+      cancel-in-progress: false
+    environment:
+      name: staging
+      url: ${{ vars.PWA_URL }}
+    permissions:
+      contents: read
+    env:
+      IMAGE_PREFIX: ${{ needs.build.outputs.image-prefix }}
+      SELECT_RELAY: ${{ needs.build.outputs.relay }}
+      SELECT_PWA: ${{ needs.build.outputs.pwa }}
+      RELAY_IMAGE: ${{ needs.build.outputs.image-prefix }}/pi-reach-relay:v${{ needs.build.outputs.relay-version }}@${{ needs.build.outputs.relay-digest }}
+      PWA_IMAGE: ${{ needs.build.outputs.image-prefix }}/pi-reach-pwa:v${{ needs.build.outputs.pwa-version }}@${{ needs.build.outputs.pwa-digest }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      PWA_URL: ${{ vars.PWA_URL }}
+      RELAY_URL: ${{ vars.RELAY_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Align, deploy and smoke staging
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: node scripts/deploy-ci.mjs staging-branch
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/pi-reach-deploy-*
