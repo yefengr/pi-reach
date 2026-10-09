@@ -130,3 +130,20 @@ test("the reader header reads like the tool row: tool and command first, status 
     await screen.unmount();
   }
 });
+
+test("the desktop reader header clears a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(1024, 768);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const screen = await renderPwa(<ToolReader value={value("done")} opened onClose={() => {}} />);
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!;
+    // 阅读器贯通全高，顶栏内容在安全区之下仍保留原有 12px 上边距。
+    const children = [...header.children].filter(child => child.getBoundingClientRect().height > 0);
+    expect(children.length).toBeGreaterThan(0);
+    for (const child of children) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop + 12);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+  }
+});

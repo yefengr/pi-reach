@@ -424,6 +424,26 @@ test("a failed fetch replaces the size line in place and every action is an icon
   await h.screen.unmount();
 });
 
+test("the desktop file reader header clears a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(1024, 768);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, mimeType: "text/markdown", text: "# Report", url: blobUrl() } });
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    const header = document.querySelector<HTMLElement>(".pwa-file-reader-header")!;
+    // 阅读器贯通全高，标题、保存与关闭在安全区之下仍保留原有 12px 上边距。
+    const children = [...header.children].filter(child => child.getBoundingClientRect().height > 0);
+    expect(children.length).toBe(3);
+    for (const child of children) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop + 12);
+    await h.screen.unmount();
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+    window.history.replaceState(null, "");
+  }
+});
+
 test("reader mounts text only after its enter motion ends", async () => {
   const width = 390;
   await page.viewport(width, 844);
