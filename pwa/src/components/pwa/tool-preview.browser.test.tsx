@@ -165,8 +165,9 @@ test("the reader call line fills its first line before wrapping a hyphenated pat
     const character = document.createRange();
     character.setStart(call.firstChild!, 0);
     character.setEnd(call.firstChild!, 1);
-    const characterWidth = character.getBoundingClientRect().width;
-    expect(call.getBoundingClientRect().right - lines[0].right).toBeLessThan(characterWidth);
+    // 按整像素比较，避免 Linux CI 字体栅格化带来的亚像素差异。
+    const characterWidth = Math.ceil(character.getBoundingClientRect().width);
+    expect(Math.round(call.getBoundingClientRect().right - lines[0].right)).toBeLessThanOrEqual(characterWidth);
   } finally {
     await screen.unmount();
   }
