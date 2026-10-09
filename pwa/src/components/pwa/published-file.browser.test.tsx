@@ -62,6 +62,7 @@ async function harness({ file = descriptor, initial, canFetch = true, active = f
   let provided = true;
   let showModal!: (value: boolean) => void;
   let update!: () => void;
+  let notify!: () => void;
   const onRead = vi.fn();
   const pin = vi.fn();
   const unpin = vi.fn();
@@ -73,12 +74,14 @@ async function harness({ file = descriptor, initial, canFetch = true, active = f
     const [, refresh] = useState(0);
     const [modalOpened, setModalOpened] = useState(false);
     update = () => flushSync(() => refresh(value => value + 1));
+    // 真实控制器在事件之外通知，React 按普通优先级调度，不同步提交。
+    notify = () => refresh(value => value + 1);
     showModal = value => flushSync(() => setModalOpened(value));
     const view: PublishedFilesView = { scopeToken, canFetch: fetch, active: busy, getState, open, cancel, pin, unpin, onReadingChange: reading };
     return <PublishedFilesProvider value={provided ? view : null!}>{records ? <MessageList items={records} hasEarlier={false} listRef={createRef()} bottomSentinelRef={createRef()} onScroll={() => {}} isLive={live} /> : <PublishedFile file={file} live={live} onRead={onRead} />}{modal ? <Modal opened={modalOpened} onClose={() => setModalOpened(false)} title="Top confirmation" portalProps={{ target: ".pwa-root" }}><button>Confirm</button></Modal> : null}</PublishedFilesProvider>;
   }
   const screen = await renderPwa(<Harness />);
-  return { screen, open, cancel, pin, unpin, reading, onRead, showModal, replaceScope: () => { scopeToken = {}; update(); }, removeProvider: () => { provided = false; update(); }, removeState: () => { state = undefined; update(); }, setItems: (next: TimelineViewItem[]) => { records = next; update(); }, update: (value: PublishedFileViewState | undefined = state, options: { canFetch?: boolean; active?: boolean } = {}) => { state = value; fetch = options.canFetch ?? fetch; busy = options.active ?? busy; update(); } };
+  return { screen, publish: (value: PublishedFileViewState) => { state = value; notify(); }, open, cancel, pin, unpin, reading, onRead, showModal, replaceScope: () => { scopeToken = {}; update(); }, removeProvider: () => { provided = false; update(); }, removeState: () => { state = undefined; update(); }, setItems: (next: TimelineViewItem[]) => { records = next; update(); }, update: (value: PublishedFileViewState | undefined = state, options: { canFetch?: boolean; active?: boolean } = {}) => { state = value; fetch = options.canFetch ?? fetch; busy = options.active ?? busy; update(); } };
 }
 
 test("legal custom is independent output and a summary boundary with one group completion", async () => {
@@ -293,6 +296,65 @@ test.each([390, 1280].flatMap(width => [false, true].map(reduce => ({ width, red
     await cdp().send("Emulation.setEmulatedMedia", { features: [] });
     window.history.replaceState(null, "");
   }
+});
+
+/** 首次查看：先经历获取再就绪；就绪后主线程忙于重渲染，模拟真机上帧已到期才继续打开阅读器。 */
+function fetchOnFirstView(h: Awaited<ReturnType<typeof harness>>) {
+  const ready: PublishedFileViewState = { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() };
+  h.open.mockImplementation(async () => {
+    h.publish({ phase: "opening", receivedBytes: 0 });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    h.publish({ phase: "reading", receivedBytes: 10 });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    h.publish(ready);
+    const busyUntil = performance.now() + 40;
+    while (performance.now() < busyUntil) { /* 占住主线程直到下一帧到期 */ }
+  });
+}
+
+test("first view after fetching still slides the reader in", async () => {
+  await page.viewport(390, 844);
+  const h = await harness({ items: [event(published())] });
+  fetchOnFirstView(h);
+  try {
+    const seen = { maxLeft: 0, finalLeft: 0 };
+    let stop = false;
+    const tick = () => {
+      const node = document.querySelector<HTMLElement>(".pwa-file-reader");
+      if (node) {
+        seen.finalLeft = Math.round(node.getBoundingClientRect().left);
+        seen.maxLeft = Math.max(seen.maxLeft, seen.finalLeft);
+      }
+      if (!stop) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    stop = true;
+    expect(h.open).toHaveBeenCalledWith(descriptor, "view");
+    // 挂载与打开不得合并到同一次提交，否则阅读器直接出现在终点。
+    expect(seen.maxLeft).toBeGreaterThan(seen.finalLeft);
+    expect(seen.finalLeft).toBe(0);
+    await h.screen.unmount();
+  } finally {
+    window.history.replaceState(null, "");
+  }
+});
+
+test("first view returns focus to the View button that started the fetch", async () => {
+  const h = await harness({ items: [event(published())] });
+  fetchOnFirstView(h);
+  const trigger = h.screen.getByRole("button", { name: "View", exact: true });
+  await trigger.click();
+  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+  await expect.poll(() => document.activeElement?.tagName).toBe("H2");
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+  // 获取期间同一按钮元素暂显示为「取消」，就绪后复原为「查看」，回焦不落到消息列表。
+  await expect.poll(() => document.activeElement).toBe(trigger.element());
+  expect(trigger.element().textContent).toBe("View");
+  await h.screen.unmount();
 });
 
 test("native Back closes the file reader before popstate returns without cancelling transfer", async () => {
