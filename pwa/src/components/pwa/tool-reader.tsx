@@ -8,7 +8,7 @@ import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
-import { toolError, toolReaderContent, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { toolContentBlocks, toolError, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import "./tool-reader.css";
 
@@ -67,8 +67,9 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   }, [outputKey]);
 
   const status = value ? toolStatus(value) : "unknown";
-  // 正文首块：Pi 内置工具为原生格式的调用行，不截断；其余工具为完整「参数」块。
-  const { call: callText, blocks } = value ? toolReaderContent(value) : { call: undefined, blocks: [] };
+  // 正文首块原样列出全部参数（不截断），其后为结果；参数不再以单独的「参数」块重复。
+  const callText = value ? toolReaderCall(value) : undefined;
+  const blocks = value ? toolContentBlocks(value, { parameters: false }) : [];
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");

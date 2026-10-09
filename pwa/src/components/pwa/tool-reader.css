@@ -72,8 +72,8 @@
 .pwa-root .pwa-tool-reader-title { min-width: 0; flex: 1 1 auto; margin: 0; overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-title)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-reader-title:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-root .pwa-tool-reader-status { flex: none; display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
-/* 正文首块的调用行（Pi 原生格式）：不截断，排满一行再按字符断开，不在路径中的连字符处提前换行；可选中复制。
-   下方以 1px line 分割线与输出分开，长命令折行后也不与输出混在一起。 */
+/* 正文首块的调用参数（每个参数一行「名称: 值」）：不截断，排满一行再按字符断开，不在路径中的连字符处提前换行；可选中复制。
+   下方以 1px line 分割线与输出分开，长参数折行后也不与输出混在一起。 */
 .pwa-root .pwa-tool-reader-command { margin: 0; padding-bottom: 12px; border-bottom: 1px solid var(--pwa-line); color: var(--pwa-code-text); font: var(--pwa-weight-strong) var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); white-space: pre-wrap; word-break: break-all; user-select: text; }
 .pwa-root .pwa-tool-reader-actions { flex: 0 0 auto; display: flex; align-items: center; }
 .pwa-root .pwa-tool-reader-body { min-height: 0; display: flex; flex: 1 1 auto; flex-direction: column; padding: 0; overflow: hidden; }

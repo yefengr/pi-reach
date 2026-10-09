@@ -109,8 +109,8 @@ test("the reader shows the call as the first body block on the main background",
     const body = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
     const call = body.firstElementChild as HTMLElement;
     expect(call.matches(".pwa-tool-reader-command")).toBe(true);
-    // 完整调用不截断：文字全部在块内，没有被裁切。
-    expect(call.textContent).toBe(command);
+    // 参数原样列出且不截断：文字全部在块内，没有被裁切。
+    expect(call.textContent).toBe(`command: ${command}`);
     expect(call.scrollHeight).toBeLessThanOrEqual(call.clientHeight);
     expect(body.textContent).not.toContain("$ pnpm");
     expect(body.textContent).toContain("3 passed");
@@ -131,25 +131,6 @@ test("the reader shows the call as the first body block on the main background",
     }
   } finally {
     await screen.unmount();
-  }
-});
-
-test("the reader shows the Pi-style read call even when the path equals the tool name", async () => {
-  const cases: { args: { path: string; offset?: number; limit?: number }; expected: string }[] = [
-    { args: { path: "read", offset: 20, limit: 10 }, expected: "read:20-29" },
-    { args: { path: "read" }, expected: "read" },
-  ];
-  for (const { args, expected } of cases) {
-    const current: ToolValue = { ...base, args, result: [{ type: "text", text: "line 20" }] };
-    const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
-    try {
-      await expect.element(screen.getByRole("dialog")).toBeVisible();
-      const call = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
-      expect(call.matches(".pwa-tool-reader-command")).toBe(true);
-      expect(call.textContent).toBe(expected);
-    } finally {
-      await screen.unmount();
-    }
   }
 });
 
@@ -191,23 +172,22 @@ test("the reader call line fills its first line before wrapping a hyphenated pat
   }
 });
 
-test("a generic tool reader opens with the full parameters instead of a lossy call summary", async () => {
-  const cases: { tool: string; args: Record<string, string | boolean> }[] = [
-    { tool: "deploy", args: { target: "prod", force: true } },
+test("every tool lists its arguments as is in the first block, without a duplicate parameters block", async () => {
+  const cases: { tool: string; args: Record<string, string | boolean | number>; expected?: string }[] = [
+    { tool: "deploy", args: { target: "prod", force: true }, expected: "target: prod\nforce: true" },
+    { tool: "read", args: { path: "read", offset: 20, limit: 10 }, expected: "path: read\noffset: 20\nlimit: 10" },
+    { tool: "bash", args: { command: "build", cwd: "/tmp" }, expected: "command: build\ncwd: /tmp" },
     { tool: "status", args: {} },
-    // 插件的命令别名不套用 Pi 内置格式，额外参数照常显示。
-    { tool: "shell", args: { command: "build", cwd: "/tmp" } },
   ];
-  for (const { tool, args } of cases) {
+  for (const { tool, args, expected } of cases) {
     const current: ToolValue = { ...base, tool, args, result: [{ type: "text", text: "ok" }] };
     const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
     try {
       await expect.element(screen.getByRole("dialog", { name: tool, exact: true })).toBeVisible();
-      expect(document.querySelector(".pwa-tool-reader-command")).toBeNull();
-      const first = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
-      for (const [key, item] of Object.entries(args)) {
-        expect(first.textContent).toContain(`"${key}": ${JSON.stringify(item)}`);
-      }
+      const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command");
+      expect(call?.textContent).toBe(expected);
+      if (call) expect(call).toBe(document.querySelector(".pwa-tool-reader-scroll")!.firstElementChild);
+      expect(document.querySelector(".pwa-tool-reader-scroll")!.textContent).not.toContain('"target"');
     } finally {
       await screen.unmount();
     }

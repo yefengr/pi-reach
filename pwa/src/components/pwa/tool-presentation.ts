@@ -29,16 +29,6 @@ export type SearchMatch = {
 const PATH_KEYS = ["path", "file_path", "filePath"] as const;
 const COMMAND_KEYS = ["command", "cmd"] as const;
 const QUERY_KEYS = ["pattern", "query", "search", "glob"] as const;
-// 阅读器调用行能完整表达的 Pi 内置工具参数（edit 的修改与 write 的内容在正文显示）。
-// 插件的同类别名、同名覆盖后新增的参数或调用行不显示的选项，都改以完整参数块展示，不丢参数。
-const PI_NATIVE_CALL_KEYS: ReadonlyMap<string, readonly string[]> = new Map([
-  ["bash", ["command", "timeout"]],
-  ["read", ["path", "offset", "limit"]],
-  ["edit", ["path", "edits", "oldText", "newText"]],
-  ["write", ["path", "content"]],
-  ["grep", ["pattern", "path", "glob", "limit"]],
-  ["find", ["pattern", "path", "limit"]],
-]);
 const DIFF_LINE = /^[+-](?![+-])/m;
 const DIFF_HEADER = /^(?:diff --git |--- .+\n\+\+\+ )/m;
 
@@ -304,65 +294,14 @@ export function toolCallText(value: ToolValue): string {
   return [heading, ...extra].join("\n");
 }
 
-/** Pi 原生的行范围写法：`:起始行-结束行`，只有起始行时为 `:起始行`。 */
-function readLineRange(value: ToolValue): string {
-  const args = toolInput(value);
-  const offset = readLineOffset(value);
-  const limit = isRecord(args) && typeof args.limit === "number" && Number.isSafeInteger(args.limit) && args.limit > 0 ? args.limit : undefined;
-  if (offset === undefined && limit === undefined) return "";
-  const start = offset ?? 1;
-  return limit === undefined ? `:${start}` : `:${start}-${start + limit - 1}`;
-}
-
-/**
- * 详情阅读器正文首块的调用行，与 Pi 原生终端的调用行一致：工具名已在顶栏，命令不加 `$`。
- * 只用于参数都能完整表达的 Pi 内置工具；其余返回 undefined，由完整「参数」块承担，与 Pi 原生「工具名＋参数 JSON」对应。
- */
+/** 详情阅读器正文首块：所有工具一致，每个参数一行「名称: 值」；文本值原样显示，其他值显示为 JSON。 */
 export function toolReaderCall(value: ToolValue): string | undefined {
-  const keys = PI_NATIVE_CALL_KEYS.get(value.tool);
   const args = toolInput(value);
-  if (!keys || !isRecord(args) || Object.keys(args).some((key) => !keys.includes(key))) return undefined;
-  // 直接按 Pi schema 字段取值：不同字段恰好同值时各自显示，必填字段缺失则交给完整参数块。
-  const text = (key: string) => typeof args[key] === "string" && args[key] ? args[key] as string : undefined;
-  const limit = typeof args.limit === "number" ? args.limit : undefined;
-  const path = text("path");
-  switch (value.tool) {
-    case "bash": {
-      const command = text("command");
-      if (command === undefined) return undefined;
-      return typeof args.timeout === "number" ? `${command} (timeout ${args.timeout}s)` : command;
-    }
-    case "read":
-      return path === undefined ? undefined : `${path}${readLineRange(value)}`;
-    case "edit":
-      // 修改内容以 diff 在正文显示；无法组成 diff 时调用行不足以表达参数。
-      return path === undefined || requestedToolDiff(value) === undefined ? undefined : path;
-    case "write":
-      return path === undefined || typeof args.content !== "string" ? undefined : path;
-    case "grep": {
-      const pattern = text("pattern");
-      const glob = text("glob");
-      if (pattern === undefined) return undefined;
-      return `/${pattern}/ in ${path ?? "."}${glob === undefined ? "" : ` (${glob})`}${limit === undefined ? "" : ` limit ${limit}`}`;
-    }
-    case "find": {
-      const pattern = text("pattern");
-      if (pattern === undefined) return undefined;
-      return `${pattern} in ${path ?? "."}${limit === undefined ? "" : ` (limit ${limit})`}`;
-    }
-    default:
-      return undefined;
-  }
-}
-
-/** 详情阅读器正文：参数都能完整表达的 Pi 内置工具以调用行开头，其余以完整「参数」块开头。 */
-export function toolReaderContent(value: ToolValue): { call?: string; blocks: ToolContentBlock[] } {
-  const call = toolReaderCall(value);
-  const blocks = toolContentBlocks(value);
-  // 通用工具的参数块已在 toolContentBlocks 中；别名或同名覆盖的工具在会话内按专用类型展示，阅读器仍须保留全部参数。
-  if (call !== undefined || toolAction(value).kind === "generic") return { call, blocks };
-  const parameters = parametersBlock(value);
-  return { blocks: parameters ? [parameters, ...blocks] : blocks };
+  if (args === undefined) return undefined;
+  if (!isRecord(args)) return typeof args === "string" ? args : safeJsonText(args);
+  const entries = Object.entries(args);
+  if (!entries.length) return undefined;
+  return entries.map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item)}`).join("\n");
 }
 
 function parametersBlock(value: ToolValue): ToolContentBlock | undefined {
@@ -382,7 +321,8 @@ function requestedToolDiff(value: ToolValue): string | undefined {
 }
 
 /** 真实结果优先保留；请求 diff 不代表执行成功，也不覆盖失败和中断输出。 */
-export function toolContentBlocks(value: ToolValue): ToolContentBlock[] {
+/** 通用工具默认以「参数」块开头；详情阅读器已在首块列出全部参数，传 parameters: false 避免重复。 */
+export function toolContentBlocks(value: ToolValue, { parameters: withParameters = true }: { parameters?: boolean } = {}): ToolContentBlock[] {
   const action = toolAction(value);
   const output = toolResult(value);
   const error = toolError(value);
@@ -423,7 +363,7 @@ export function toolContentBlocks(value: ToolValue): ToolContentBlock[] {
   if (action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(value.args) && typeof value.args.content === "string") {
     blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
   }
-  const parameters = action.kind === "generic" ? parametersBlock(value) : undefined;
+  const parameters = withParameters && action.kind === "generic" ? parametersBlock(value) : undefined;
   if (parameters) blocks.unshift(parameters);
   if (!blocks.length) blocks.push({ kind: "text", text: output === undefined ? getMessages().tools.noOutputYet : getMessages().tools.noTextOutput, style: "notice" });
   return blocks;
