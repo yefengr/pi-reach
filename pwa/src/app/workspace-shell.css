@@ -35,14 +35,15 @@
   /* 展开时立即可见；只在收起时延迟到过渡结束再隐藏，避免从设置页返回时继承的隐藏状态被过渡拖住而无法聚焦。 */
   transition: transform var(--pwa-sidebar-motion) var(--pwa-ease-standard), opacity var(--pwa-sidebar-motion) var(--pwa-ease-standard), visibility 0s;
 }
-.pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; }
+/* 主屏 PWA 的状态栏透明，桌面断点（如 iPad）同样避让安全区，侧栏底色延伸到状态栏下方。 */
+.pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: var(--pwa-safe-top); }
 .pwa-root[data-sidebar-collapsed] .pwa-desktop-navigation { transform: translateX(calc(-100% * var(--pwa-motion-shift))); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, var(--pwa-sidebar-motion); }
 
 /* 收展入口：展开时位于侧栏品牌行右端，收起后停在会话标题区左端；与导航列表不重叠。 */
 .pwa-ui-scope .pwa-root .pwa-icon-button.pwa-sidebar-toggle {
   position: absolute;
   z-index: 7;
-  top: 6px;
+  top: calc(6px + var(--pwa-safe-top));
   left: calc(var(--pwa-sidebar-width) - 52px);
   transition: left var(--pwa-sidebar-motion) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
@@ -105,7 +106,7 @@
 
 /* 主区与会话标题区。 */
 .pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--pwa-bg); }
-.pwa-root .pwa-title-bar { flex: 0 0 auto; min-width: 0; min-height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 var(--pwa-gutter); }
+.pwa-root .pwa-title-bar { flex: 0 0 auto; min-width: 0; min-height: calc(56px + var(--pwa-safe-top)); display: flex; align-items: center; gap: 8px; padding: var(--pwa-safe-top) 8px 0 var(--pwa-gutter); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: 56px; }
 .pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; }
 .pwa-root .pwa-title-bar-kicker { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
