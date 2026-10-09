@@ -48,7 +48,8 @@ test("portals one floating card under the title area, preserves focus and readin
     const root = notice.closest<HTMLElement>(".pwa-operation-notifications")!;
     expect(getComputedStyle(root).zIndex).toBe("400");
     expect(getComputedStyle(root).position).toBe("absolute");
-    await expect.poll(() => notice.getBoundingClientRect().top).toBeGreaterThanOrEqual(64);
+    // 位于 48px 顶栏下方 8px。
+    await expect.poll(() => notice.getBoundingClientRect().top).toBeGreaterThanOrEqual(56);
     const box = notice.getBoundingClientRect();
     expect(box.width).toBeLessThanOrEqual(400);
     expect(box.left + box.width / 2).toBeCloseTo(document.querySelector(".pwa-root")!.getBoundingClientRect().width / 2, 0);

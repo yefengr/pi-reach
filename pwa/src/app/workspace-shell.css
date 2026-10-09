@@ -104,7 +104,7 @@
 .pwa-root .pwa-session-info-cwd { min-height: 0; padding: 0; border: 0; border-radius: 0; color: var(--pwa-secondary); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-mono); overflow-wrap: anywhere; resize: none; user-select: text; }
 .pwa-session-info-meta { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
-/* 顶栏：页面与全屏叠层共用 56px 首行，安全区叠加在上内边距，内容垂直居中；多行内容按需增高。左右内边距与底色由各顶栏决定。 */
+/* 顶栏：页面与全屏叠层共用 48px 单行，安全区叠加在上内边距，内容垂直居中。左右内边距与底色由各顶栏决定。 */
 .pwa-root .pwa-topbar { flex: 0 0 auto; min-width: 0; min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); display: flex; align-items: center; gap: 8px; margin: 0; padding-top: var(--pwa-safe-top); padding-bottom: 0; }
 /* 左侧返回按钮与标题相距 4px，与移动标题区、设置页一致。 */
 .pwa-ui-scope .pwa-root .pwa-topbar > .pwa-topbar-back { flex: none; margin-right: -4px; }

@@ -193,15 +193,21 @@ test("the mobile settings top bar stays fixed below a translucent status bar", a
     expect(view.scrollHeight).toBeGreaterThan(view.clientHeight);
     view.scrollTop = 200;
     await expect.poll(() => view.scrollTop).toBe(200);
-    // 与会话标题区同一规格：安全区之下 56px 首行、铺满屏宽，返回按钮距左缘 4px 并垂直居中。
+    // 与会话标题区同一规格：安全区之下 48px 首行、铺满屏宽，返回按钮距左缘 4px 并垂直居中。
     const box = header.getBoundingClientRect();
     expect(Math.round(box.top)).toBe(0);
-    expect(Math.round(box.height)).toBe(56 + safeTop);
+    expect(Math.round(box.height)).toBe(48 + safeTop);
     expect(Math.round(box.left)).toBe(0);
     expect(Math.round(box.width)).toBe(390);
     const backBox = back.element().getBoundingClientRect();
     expect(Math.round(backBox.left)).toBe(4);
-    expect(Math.abs(backBox.top + backBox.height / 2 - (safeTop + 28))).toBeLessThanOrEqual(1);
+    // 只剩箭头时与其他图标按钮同为 secondary，而不是强调色。
+    const secondary = document.createElement("span");
+    secondary.style.color = "var(--pwa-secondary)";
+    header.append(secondary);
+    expect(getComputedStyle(back.element()).color).toBe(getComputedStyle(secondary).color);
+    secondary.remove();
+    expect(Math.abs(backBox.top + backBox.height / 2 - (safeTop + 24))).toBeLessThanOrEqual(1);
     // 状态栏区域内命中的是顶栏，而不是滚上来的设置内容。
     expect(document.elementFromPoint(195, safeTop / 2)).toBe(header);
   } finally {

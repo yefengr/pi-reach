@@ -538,7 +538,9 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-root .pwa-settings-inner { padding: 0 16px calc(48px + var(--pwa-safe-bottom, 0px)); }
   .pwa-root .pwa-settings-header { position: sticky; z-index: 2; top: 0; min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 4px; margin: 0 -16px; padding: var(--pwa-safe-top) 16px 0 4px; background: var(--pwa-bg); }
   .pwa-root .pwa-status-bar-shield { display: none; }
-  .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { width: 44px; height: 44px; margin: 0; padding: 0; border-radius: 50%; }
+  /* 只剩箭头时与其他图标按钮同色：常态 secondary、悬停 ink；桌面带文字时仍为强调色文字按钮。 */
+  .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { width: 44px; height: 44px; margin: 0; padding: 0; border-radius: 50%; color: var(--pwa-secondary); }
+  @media (hover: hover) { .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; } }
   .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back .mantine-Button-section { margin: 0; }
   .pwa-root .pwa-settings-back-label { display: none; }
   .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); }

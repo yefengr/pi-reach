@@ -433,13 +433,13 @@ test("the desktop file reader header clears a translucent status bar", async () 
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
     await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
     const header = document.querySelector<HTMLElement>(".pwa-file-reader-header")!;
-    // 阅读器贯通全高，顶栏与会话标题区同为安全区之下 56px，标题、保存与关闭垂直居中。
+    // 阅读器贯通全高，顶栏与会话标题区同为安全区之下 48px，标题、保存与关闭垂直居中。
     const children = [...header.children].filter(child => child.getBoundingClientRect().height > 0);
     expect(children.length).toBe(3);
-    expect(Math.round(header.getBoundingClientRect().height)).toBe(56 + safeTop);
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48 + safeTop);
     for (const child of children) {
       const box = child.getBoundingClientRect();
-      expect(Math.abs(box.top + box.height / 2 - (safeTop + 28)), child.className).toBeLessThanOrEqual(1);
+      expect(Math.abs(box.top + box.height / 2 - (safeTop + 24)), child.className).toBeLessThanOrEqual(1);
     }
     await h.screen.unmount();
   } finally {
@@ -464,7 +464,7 @@ test("the mobile file reader header starts with a back button and keeps the name
     expect(Math.round(title.getBoundingClientRect().left)).toBe(52);
     expect(getComputedStyle(title).whiteSpace).toBe("nowrap");
     expect(getComputedStyle(title).textOverflow).toBe("ellipsis");
-    expect(Math.round(header.getBoundingClientRect().height)).toBe(56);
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48);
     await h.screen.unmount();
   } finally {
     await page.viewport(1280, 900);

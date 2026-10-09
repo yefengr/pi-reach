@@ -74,6 +74,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
   const title = value?.tool ?? t.tools.noToolSelected;
+  const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
   // 完整调用（命令、路径等）放在正文首块，不截断；与工具名相同则不重复。
   const call = action?.detail || action?.label;
   const callText = call && call !== value?.tool ? call : null;
@@ -99,7 +100,8 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
         {/* Mantine 只在使用 Drawer.Title 时为对话框设置 aria-labelledby，自定义标题会让对话框失去可访问名称。 */}
         <Drawer.Title className="pwa-tool-reader-title" tabIndex={-1} data-autofocus title={title}>{title}</Drawer.Title>
         <div className="pwa-tool-reader-actions">
-          <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`}><StatusIcon status={status} />{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>
+          {/* 与会话内工具行一致只显示彩色图标，文字仅供读屏与悬停提示。 */}
+          <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`} title={statusLabel}><StatusIcon status={status} /><span className="pwa-sr-only">{statusLabel}</span></span>
           {allText ? <CopyButton text={allText} label={t.tools.copyAll} /> : null}
           {mobile ? null : <Drawer.CloseButton className="pwa-icon-button pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<X size={20} />} />}
         </div>

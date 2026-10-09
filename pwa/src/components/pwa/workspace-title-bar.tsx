@@ -23,7 +23,7 @@ export type WorkspaceTitleBarProps = {
 };
 
 /**
- * 会话标题区：桌面为主区顶部 56px 的一行，移动端即工作区顶栏（菜单图标与会话名共同构成导航入口）。
+ * 会话标题区：桌面为主区顶部 48px 的一行，移动端即工作区顶栏（菜单图标与会话名共同构成导航入口）。
  */
 export function WorkspaceTitleBar({ title, showTitle, prefix, kicker, status, moreMenu, navigationNotice = false, navigationExpanded, onOpenNavigation, onRefresh = refreshPwaApp }: WorkspaceTitleBarProps) {
   const { t } = useI18n();

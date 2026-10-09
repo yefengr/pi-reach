@@ -134,7 +134,9 @@ test("the desktop reader header is a left-aligned tool name with status, copy an
     expect(Math.round(title.getBoundingClientRect().left - header.left)).toBe(20);
     expect(title.querySelector(".pwa-tool-reader-status")).toBeNull();
     const status = document.querySelector<HTMLElement>(".pwa-tool-reader-actions .pwa-tool-reader-status")!;
+    // 与会话内工具行一致只显示图标：文字仍供读屏，但不占可见宽度。
     expect(status.textContent).toBe("Complete");
+    expect(Math.round(status.getBoundingClientRect().width)).toBe(16);
     expect(status.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.getBoundingClientRect().right);
     expect(document.querySelector(".pwa-tool-reader-actions .pwa-tool-reader-close")).not.toBeNull();
     expect(document.querySelector(".pwa-topbar-back")).toBeNull();
@@ -159,7 +161,7 @@ test("the mobile reader header starts with a back button like the settings top b
     const backBox = back.element().getBoundingClientRect();
     expect(Math.round(backBox.left)).toBe(4);
     expect(Math.round(document.querySelector(".pwa-tool-reader-title")!.getBoundingClientRect().left)).toBe(52);
-    expect(Math.round(header.getBoundingClientRect().height)).toBe(56);
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48);
     await back.click();
     expect(events).toEqual(["close"]);
   } finally {
@@ -175,13 +177,13 @@ test("the desktop reader header clears a translucent status bar", async () => {
     const screen = await renderPwa(<ToolReader value={value("done")} opened onClose={() => {}} />);
     await expect.element(screen.getByRole("dialog")).toBeVisible();
     const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!;
-    // 阅读器贯通全高，顶栏与会话标题区同为安全区之下 56px，关闭按钮垂直居中。
+    // 阅读器贯通全高，顶栏与会话标题区同为安全区之下 48px，关闭按钮垂直居中。
     const children = [...header.children].filter(child => child.getBoundingClientRect().height > 0);
     expect(children.length).toBeGreaterThan(0);
     for (const child of children) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
-    expect(Math.round(header.getBoundingClientRect().height)).toBe(56 + safeTop);
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48 + safeTop);
     const close = header.querySelector(".pwa-tool-reader-close")!.getBoundingClientRect();
-    expect(Math.abs(close.top + close.height / 2 - (safeTop + 28))).toBeLessThanOrEqual(1);
+    expect(Math.abs(close.top + close.height / 2 - (safeTop + 24))).toBeLessThanOrEqual(1);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
