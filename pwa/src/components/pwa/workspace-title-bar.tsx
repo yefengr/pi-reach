@@ -27,7 +27,7 @@ export type WorkspaceTitleBarProps = {
  */
 export function WorkspaceTitleBar({ title, showTitle, prefix, kicker, status, moreMenu, navigationNotice = false, navigationExpanded, onOpenNavigation, onRefresh = refreshPwaApp }: WorkspaceTitleBarProps) {
   const { t } = useI18n();
-  return <header className="pwa-title-bar">
+  return <header className="pwa-topbar pwa-title-bar">
     <UnstyledButton
       className="pwa-session-trigger"
       onClick={(event) => onOpenNavigation(event.currentTarget)}

@@ -251,7 +251,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
       requestClose();
     }}
     transitionProps={{ transition: pwaDrawerTransitions.left, duration: gestureActive ? 0 : duration, exitDuration: exitInstant || gesture === "rollback" ? 0 : duration, timingFunction: PWA_DRAWER_EASE }}
-    classNames={{ content: "pwa-session-sheet pwa-navigation-drawer", header: "pwa-session-sheet-head", body: "pwa-session-sheet-body", close: "pwa-icon-button" }}
+    classNames={{ content: "pwa-session-sheet pwa-navigation-drawer", header: "pwa-topbar pwa-session-sheet-head", body: "pwa-session-sheet-body", close: "pwa-icon-button" }}
     styles={{ content: { width: "min(320px, 85vw)", height: "var(--pwa-app-height)", maxWidth: "85vw", maxHeight: "var(--pwa-app-height)", display: "flex", flexDirection: "column" } }}
   >
     <Drawer.Overlay className="pwa-scrim" />

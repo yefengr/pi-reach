@@ -179,3 +179,55 @@ test("the desktop settings header clears a translucent status bar", async () => 
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
 });
+
+test("the mobile settings top bar stays fixed below a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(390, 480);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const screen = await renderPwa(<SettingsHarness />);
+    const back = screen.getByRole("button", { name: "Back to workspace" });
+    await expect.element(back).toBeVisible();
+    const header = document.querySelector<HTMLElement>(".pwa-settings-header")!;
+    const view = document.querySelector<HTMLElement>(".pwa-settings-view")!;
+    expect(view.scrollHeight).toBeGreaterThan(view.clientHeight);
+    view.scrollTop = 200;
+    await expect.poll(() => view.scrollTop).toBe(200);
+    // 与会话标题区同一规格：安全区之下 56px 首行、铺满屏宽，返回按钮距左缘 4px 并垂直居中。
+    const box = header.getBoundingClientRect();
+    expect(Math.round(box.top)).toBe(0);
+    expect(Math.round(box.height)).toBe(56 + safeTop);
+    expect(Math.round(box.left)).toBe(0);
+    expect(Math.round(box.width)).toBe(390);
+    const backBox = back.element().getBoundingClientRect();
+    expect(Math.round(backBox.left)).toBe(4);
+    expect(Math.abs(backBox.top + backBox.height / 2 - (safeTop + 28))).toBeLessThanOrEqual(1);
+    // 状态栏区域内命中的是顶栏，而不是滚上来的设置内容。
+    expect(document.elementFromPoint(195, safeTop / 2)).toBe(header);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+  }
+});
+
+test("scrolled desktop settings content stays below a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(1024, 480);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const screen = await renderPwa(<SettingsHarness />);
+    await expect.element(screen.getByRole("button", { name: "Back to workspace" })).toBeVisible();
+    // 遮挡条不占布局高度：内容区仍从页面顶端开始，由自身上内边距避让安全区。
+    expect(Math.round(document.querySelector(".pwa-settings-inner")!.getBoundingClientRect().top)).toBe(0);
+    const view = document.querySelector<HTMLElement>(".pwa-settings-view")!;
+    expect(view.scrollHeight).toBeGreaterThan(view.clientHeight);
+    view.scrollTop = 200;
+    await expect.poll(() => view.scrollTop).toBe(200);
+    const shield = document.querySelector(".pwa-status-bar-shield")!;
+    expect(Math.round(shield.getBoundingClientRect().top)).toBe(0);
+    expect(Math.round(shield.getBoundingClientRect().height)).toBe(safeTop);
+    // 状态栏区域内命中的是遮挡条，而不是滚上来的设置内容。
+    expect(document.elementFromPoint(512, safeTop / 2)).toBe(shield);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+  }
+});

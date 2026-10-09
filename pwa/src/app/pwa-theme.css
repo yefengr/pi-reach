@@ -192,6 +192,8 @@
   --pwa-motion-shift: 1;
 
   --pwa-safe-top: env(safe-area-inset-top, 0px);
+  /* 顶栏首行高度，不含安全区；会话标题区、导航、阅读器与移动设置页共用。 */
+  --pwa-topbar-height: 56px;
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
   /* 应用整体高度；独立窗口见下方覆盖。 */
   --pwa-app-height: 100dvh;

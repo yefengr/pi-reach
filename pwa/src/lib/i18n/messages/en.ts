@@ -399,7 +399,6 @@ export const en = {
     parameters: "Parameters",
     copyAll: "Copy all output",
     outputTruncated: "Output was too long and has been truncated.",
-    readerKicker: "Tool details",
     noToolSelected: "No tool selected",
     closeReader: "Close tool details",
     noDetails: "No tool details selected.",

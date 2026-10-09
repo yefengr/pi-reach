@@ -166,6 +166,38 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
   }
 });
 
+test("mobile title bar and navigation head share the top bar below a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const screen = await renderLayout({ events: [] });
+    const open = screen.getByRole("button", { name: "Open navigation" });
+    await expect.element(open).toBeVisible();
+    const center = (rect: DOMRect) => rect.top + rect.height / 2;
+    const titleBar = document.querySelector(".pwa-title-bar")!.getBoundingClientRect();
+    expect(Math.round(titleBar.height)).toBe(56 + safeTop);
+    const menuIcon = document.querySelector(".pwa-session-trigger-icon")!.getBoundingClientRect();
+    expect(Math.round(menuIcon.left)).toBe(4);
+    expect(Math.abs(center(menuIcon) - (safeTop + 28))).toBeLessThanOrEqual(1);
+    await open.click();
+    await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+    // 等进入动画落位后再量：导航头与标题区同一规格；品牌与下方导航列表左缘对齐。
+    await expect.poll(() => Math.round(document.querySelector(".pwa-session-sheet")!.getBoundingClientRect().left)).toBe(0);
+    const head = document.querySelector(".pwa-session-sheet-head")!.getBoundingClientRect();
+    expect(Math.round(head.height)).toBe(56 + safeTop);
+    const brand = document.querySelector(".pwa-session-sheet-head .pwa-brand-mark")!.getBoundingClientRect();
+    expect(Math.round(brand.left)).toBe(16);
+    expect(Math.abs(center(brand) - (safeTop + 28))).toBeLessThanOrEqual(1);
+    const close = document.querySelector(".pwa-session-sheet-head .pwa-icon-button")!.getBoundingClientRect();
+    expect(Math.abs(center(close) - (safeTop + 28))).toBeLessThanOrEqual(1);
+    const heading = document.querySelector(".pwa-session-sheet .pwa-nav-section-heading")!.getBoundingClientRect();
+    expect(Math.round(heading.left)).toBe(8);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+  }
+});
+
 test.each([[1280, 844], [844, 390]])("real clicks on the right edge of every visible history row select it without collapsing the sidebar at %ix%i", async (width, height) => {
   await page.viewport(width, height);
   const events: string[] = [];

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X } from "lucide-react";
 import { CopyButton } from "./copy-button";
 import { useSwipe } from "./use-swipe";
 import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
@@ -73,7 +73,10 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
-  const heading = action?.detail || action?.label || value?.tool || t.tools.readerKicker;
+  const title = value?.tool ?? t.tools.noToolSelected;
+  // 完整调用（命令、路径等）放在正文首块，不截断；与工具名相同则不重复。
+  const call = action?.detail || action?.label;
+  const callText = call && call !== value?.tool ? call : null;
 
   return <Drawer.Root
     opened={opened}
@@ -89,19 +92,16 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}
   >
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-tool-reader" }} aria-labelledby="pwa-tool-reader-title" aria-describedby="pwa-tool-reader-description">
-      <Drawer.Header className="pwa-tool-reader-header">
-        {/* 与会话内工具行同一读法：工具名＋命令在前，状态标签放在右侧操作区。 */}
-        <div className="pwa-tool-reader-title-wrap">
-          <h2 id="pwa-tool-reader-title" className="pwa-tool-reader-title" tabIndex={-1} data-autofocus>
-            <strong className="pwa-tool-reader-tool">{value?.tool ?? t.tools.noToolSelected}</strong>
-            <span className="pwa-tool-reader-command" title={heading}>{heading}</span>
-          </h2>
-        </div>
+    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-tool-reader" }} aria-describedby="pwa-tool-reader-description">
+      <Drawer.Header className="pwa-topbar pwa-tool-reader-header">
+        {/* 移动全屏与设置页同为左侧返回；桌面右侧 Drawer 保留右上角关闭。 */}
+        {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<ArrowLeft size={20} />} /> : null}
+        {/* Mantine 只在使用 Drawer.Title 时为对话框设置 aria-labelledby，自定义标题会让对话框失去可访问名称。 */}
+        <Drawer.Title className="pwa-tool-reader-title" tabIndex={-1} data-autofocus title={title}>{title}</Drawer.Title>
         <div className="pwa-tool-reader-actions">
           <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`}><StatusIcon status={status} />{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>
           {allText ? <CopyButton text={allText} label={t.tools.copyAll} /> : null}
-          <Drawer.CloseButton className="pwa-icon-button pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<X size={20} />} />
+          {mobile ? null : <Drawer.CloseButton className="pwa-icon-button pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<X size={20} />} />}
         </div>
       </Drawer.Header>
       <Drawer.Body className="pwa-tool-reader-body">
@@ -110,6 +110,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
           followRef.current = target.scrollHeight - target.scrollTop - target.clientHeight <= FOLLOW_THRESHOLD_PX;
         }}>
           {value === null ? <p className="pwa-tool-empty">{t.tools.noDetails}</p> : <>
+            {callText ? <pre className="pwa-tool-reader-command">{callText}</pre> : null}
             {error ? <div className="pwa-reader-error" role="alert"><CircleAlert size={16} aria-hidden="true" /><pre>{error}</pre></div> : null}
             {bodyBlocks.map((block, index) => block.kind === "image"
               ? <ToolImage key={`image:${index}`} block={block} index={index} preview={false} />

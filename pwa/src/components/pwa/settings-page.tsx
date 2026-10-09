@@ -56,6 +56,7 @@ export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relaySta
   };
 
   return <div className="pwa-settings-page">
+    <div className="pwa-status-bar-shield" aria-hidden="true" />
     <div className="pwa-settings-inner">
       <header className="pwa-settings-header">
         <Button className="pwa-settings-back" variant="transparent" color="piReach" type="button" onClick={onBack} aria-label={backLabel} title={backLabel} leftSection={<ArrowLeft size={20} aria-hidden="true" />}>
