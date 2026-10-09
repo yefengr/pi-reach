@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Progress } from "@mantine/core";
-import { FileText, Image as ImageIcon } from "lucide-react";
+import { Download, Eye, FileText, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { FILE_AUTO_IMAGE_BYTES, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
 import { fileSaveName } from "@/lib/pwa/file-preview";
 import { usePublishedFilesView } from "./published-files-context";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import "./published-files.css";
+
+const iconAction = (label: string) => ({ className: "pwa-published-icon-action", "aria-label": label, title: label });
 
 export type PublishedFileRead = (file: PublishedFileDescriptor, trigger: HTMLButtonElement) => void;
 const IMAGE_MIME = /^image\/(png|jpeg|webp|gif)$/;
@@ -24,7 +26,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   const [decodeFailure, setDecodeFailure] = useState<string | null>(null);
   const [settling, setSettling] = useState(false);
   const settleTimer = useRef<number | undefined>(undefined);
-  const settleDuration = usePwaMotionDuration("--pwa-duration-fetch-settle", 200);
+  const settleDuration = usePwaMotionDuration("--pwa-duration-fetch-settle", 600);
   const name = state?.fileName ?? file.file_name;
   const size = state?.byteLength ?? file.byte_length;
   const sizeUnit = size < 1024 ? "B" : size < 1024 * 1024 ? "KiB" : "MiB";
@@ -100,6 +102,11 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   };
   const errorText = state?.error === "too_large" ? t.files.tooLarge : state?.error === "not_available" || state?.error === "permission_denied" ? t.files.unavailable : decodeFailure === state?.url && decodeFailure !== null ? t.files.decodeError : t.files.failed;
   const disabled = !canFetch || files?.active === true;
+  // 操作只显示图标，名称交给 aria-label 与 title；同一位置始终是 Button，状态切换时保留焦点。
+  const viewLabel = failed ? t.common.retry : image && !ready ? t.files.fetchImage : t.files.view;
+  const downloadRetry = failed && !image && !text;
+  // 图片占位区已显示错误时，状态行保留大小，避免重复提示。
+  const slotError = failed && !(image && canFetch);
   const progress = settling && ready ? 100 : size > 0 ? Math.min(100, Math.round((state?.receivedBytes ?? 0) / size * 100)) : 0;
   return <article ref={root} className={`pwa-published-file${image ? " is-image" : ""}`} data-publication-id={file.publication_id}>
     {ready && image && state?.url && !failed ? <button type="button" className="pwa-published-image" onClick={event => onRead(file, event.currentTarget)} aria-label={t.files.viewImage}>
@@ -107,13 +114,15 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
     </button> : image && canFetch && !fetching ? <div className="pwa-published-placeholder"><ImageIcon size={24} aria-hidden="true" /><span className={failed ? "pwa-published-error" : undefined}>{failed ? errorText : size > FILE_AUTO_IMAGE_BYTES ? t.files.largeImage : t.files.imagePending}</span></div> : null}
     <div className="pwa-published-row">
       {image ? <ImageIcon size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}
-      <div className="pwa-published-info"><div className="pwa-published-name" title={name}>{name}</div><span className="pwa-published-meta">{format.number(displaySize)} {sizeUnit}</span>
-        {fetching ? <><Progress value={progress} aria-label={t.files.fetching} /><span className="pwa-published-meta" role="status">{t.files.fetching} {progress}%</span></> : settling && ready ? <><Progress value={progress} aria-label={t.files.fetched} /><span className="pwa-published-meta" role="status">{t.files.fetched}</span></> : failed ? <span className="pwa-published-error" role="alert">{errorText}</span> : !canFetch && !ready ? <span className="pwa-published-meta">{t.files.offline}</span> : null}
+      <div className="pwa-published-info"><div className="pwa-published-name" title={name}>{name}</div>
+        {/* 进度与错误原地替换大小行，状态变化时卡片高度不变，消息列表不跳动。 */}
+        {fetching || settling && ready ? <span className="pwa-published-meta pwa-published-progress"><Progress size="xs" value={progress} aria-label={t.files.fetching} /><span role="status">{fetching ? `${t.files.fetchProgress} ${progress}%` : t.files.fetched}</span></span> : slotError ? <span className="pwa-published-error pwa-published-slot" role="alert" title={errorText}>{errorText}</span> : <span className="pwa-published-meta">{format.number(displaySize)} {sizeUnit}</span>}
+        {fetching || settling && ready || failed ? null : !canFetch && !ready ? <span className="pwa-published-meta">{t.files.offline}</span> : null}
       </div>
       <div className="pwa-published-actions">
-        {fetching ? <Button variant="subtle" onClick={cancel}>{t.common.cancel}</Button> : <>
-          {(image || text) && (canFetch || ready) ? <Button variant="subtle" disabled={!ready && disabled} onClick={event => { void acquire("view", event.currentTarget); }}>{failed ? t.common.retry : image && !ready ? t.files.fetchImage : t.files.view}</Button> : null}
-          {ready && state?.url ? <Button component="a" variant="subtle" href={state.url} download={fileSaveName(name)}>{t.files.save}</Button> : canFetch ? <Button variant="subtle" disabled={disabled} onClick={() => { void acquire("download"); }}>{failed && !image && !text ? t.common.retry : t.files.download}</Button> : null}
+        {fetching ? <Button {...iconAction(t.common.cancel)} variant="subtle" onClick={cancel}><X size={20} aria-hidden="true" /></Button> : <>
+          {(image || text) && (canFetch || ready) ? <Button {...iconAction(viewLabel)} variant="subtle" disabled={!ready && disabled} onClick={event => { void acquire("view", event.currentTarget); }}>{failed ? <RotateCw size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}</Button> : null}
+          {ready && state?.url ? <Button {...iconAction(t.files.save)} component="a" variant="subtle" href={state.url} download={fileSaveName(name)}><Download size={20} aria-hidden="true" /></Button> : canFetch ? <Button {...iconAction(downloadRetry ? t.common.retry : t.files.download)} variant="subtle" disabled={disabled} onClick={() => { void acquire("download"); }}>{downloadRetry ? <RotateCw size={20} aria-hidden="true" /> : <Download size={20} aria-hidden="true" />}</Button> : null}
         </>}
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { ActionIcon, Button, Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { Minus, Plus, RotateCcw, X } from "lucide-react";
+import { Download, Minus, Plus, RotateCcw, X } from "lucide-react";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
 import { FILE_TEXT_PREVIEW_BYTES, fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
@@ -110,7 +110,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }}>
       <Drawer.Header className="pwa-file-reader-header">
         <Drawer.Title tabIndex={-1} data-autofocus title={name}>{name}</Drawer.Title>
-        {state?.phase === "ready" && state.url ? <Button component="a" variant="subtle" href={state.url} download={fileSaveName(name)}>{t.files.save}</Button> : null}
+        {state?.phase === "ready" && state.url ? <ActionIcon component="a" className="pwa-icon-button" href={state.url} download={fileSaveName(name)} aria-label={t.files.save} title={t.files.save}><Download size={20} aria-hidden="true" /></ActionIcon> : null}
         <Drawer.CloseButton className="pwa-icon-button" aria-label={t.files.closeReader} icon={<X size={20} />} />
       </Drawer.Header>
       <Drawer.Body className="pwa-file-reader-body">

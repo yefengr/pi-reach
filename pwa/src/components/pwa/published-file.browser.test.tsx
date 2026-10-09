@@ -298,6 +298,9 @@ test.each([390, 1280].flatMap(width => [false, true].map(reduce => ({ width, red
   }
 });
 
+/** 获取后打开阅读器前有 600ms 完成态停留，为慢机器留出余量。 */
+const FETCH_SETTLE_WAIT = { timeout: 3000 };
+
 /** 首次查看：先经历获取再就绪；就绪后主线程忙于重渲染，模拟真机上帧已到期才继续打开阅读器。 */
 function fetchOnFirstView(h: Awaited<ReturnType<typeof harness>>) {
   const ready: PublishedFileViewState = { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe content", url: blobUrl() };
@@ -329,7 +332,7 @@ test("first view after fetching still slides the reader in", async () => {
     };
     requestAnimationFrame(tick);
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
-    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
     await new Promise(resolve => setTimeout(resolve, 500));
     stop = true;
     expect(h.open).toHaveBeenCalledWith(descriptor, "view");
@@ -347,13 +350,13 @@ test("first view returns focus to the View button that started the fetch", async
   fetchOnFirstView(h);
   const trigger = h.screen.getByRole("button", { name: "View", exact: true });
   await trigger.click();
-  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
   await expect.poll(() => document.activeElement?.tagName).toBe("H2");
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
   // 获取期间同一按钮元素暂显示为「取消」，就绪后复原为「查看」，回焦不落到消息列表。
   await expect.poll(() => document.activeElement).toBe(trigger.element());
-  expect(trigger.element().textContent).toBe("View");
+  expect(trigger.element().getAttribute("aria-label")).toBe("View");
   await h.screen.unmount();
 });
 
@@ -361,7 +364,10 @@ test("first view settles a full progress bar before the reader covers the card, 
   const h = await harness({ items: [event(published())] });
   fetchOnFirstView(h);
   const seen: string[] = [];
+  const heights = new Set<number>();
   const record = () => {
+    const card = document.querySelector<HTMLElement>(".pwa-published-file");
+    if (card) heights.add(Math.round(card.getBoundingClientRect().height));
     if (document.querySelector(".pwa-file-reader") && !seen.includes("reader")) seen.push("reader");
     const status = document.querySelector(".pwa-published-file [role=status]")?.textContent;
     const value = document.querySelector(".pwa-published-file [role=progressbar]")?.getAttribute("aria-valuenow");
@@ -370,12 +376,16 @@ test("first view settles a full progress bar before the reader covers the card, 
   };
   const observer = new MutationObserver(record);
   observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  record();
   try {
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
-    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
     // 进度补满并停留后才交给阅读器；阅读器打开后卡片不再保留进度。
     expect(seen.indexOf("Fetched:100")).toBeGreaterThan(-1);
     expect(seen.indexOf("Fetched:100")).toBeLessThan(seen.indexOf("reader"));
+    // 进度原地替换大小行，获取前后卡片高度不变。
+    expect(seen.some(entry => entry.startsWith("Fetching "))).toBe(true);
+    expect([...heights]).toHaveLength(1);
     expect(document.querySelector(".pwa-published-file [role=status], .pwa-published-file [role=progressbar]")).toBeNull();
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
@@ -389,6 +399,25 @@ test("first view settles a full progress bar before the reader covers the card, 
     observer.disconnect();
     window.history.replaceState(null, "");
   }
+});
+
+test("a failed fetch replaces the size line in place and every action is an icon", async () => {
+  await page.viewport(390, 844);
+  const h = await harness();
+  const card = () => Math.round(document.querySelector(".pwa-published-file")!.getBoundingClientRect().height);
+  const idle = card();
+  h.open.mockRejectedValue(new Error("private path /secret"));
+  await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  const alert = h.screen.getByRole("alert");
+  await expect.element(alert).toHaveTextContent("Couldn't fetch the file. Try again.");
+  // 错误占用大小行而不是追加一行，卡片高度不变。
+  expect(alert.element().closest(".pwa-published-info")?.children).toHaveLength(2);
+  expect(card()).toBe(idle);
+  const actions = [...document.querySelectorAll(".pwa-published-actions > *")];
+  expect(actions.map(action => action.getAttribute("aria-label"))).toEqual(["Retry", "Download"]);
+  expect(actions.every(action => action.textContent === "" && action.querySelector("svg"))).toBe(true);
+  expect(document.body.textContent).not.toContain("/secret");
+  await h.screen.unmount();
 });
 
 test("reader mounts text only after its enter motion ends", async () => {
@@ -549,7 +578,7 @@ test("decode error never loops and retry is explicitly manual", async () => {
   expect(h.onRead).not.toHaveBeenCalled();
   await h.screen.getByRole("button", { name: "Retry", exact: true }).click();
   // 重试经过一次重新获取，完成态停留后才交给阅读器。
-  await expect.poll(() => h.onRead.mock.calls.length).toBe(1);
+  await expect.poll(() => h.onRead.mock.calls.length, FETCH_SETTLE_WAIT).toBe(1);
   await h.screen.unmount();
 });
 
