@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { JsonValue, TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary, toolReaderCall } from "./tool-presentation";
+import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary, toolReaderCall, toolReaderContent } from "./tool-presentation";
 
 const base = { event_id: "e", session_id: "s", leaf_id: "g", group_id: "group", timestamp: 1, kind: "tool" as const, tool_call_id: "call", truncated: false, status: "complete" as const };
 function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool" }> {
@@ -69,12 +69,30 @@ test("the reader call line follows the Pi native call format without a prompt", 
     ["grep", { pattern: "TODO", path: "src", glob: "*.ts", limit: 5 }, "/TODO/ in src (*.ts) limit 5"],
     ["grep", { pattern: "TODO" }, "/TODO/ in ."],
     ["find", { pattern: "*.ts", path: "src", limit: 5 }, "*.ts in src (limit 5)"],
-    // 通用工具由正文的完整参数块承担调用展示。
+    // 通用工具和插件的同类别名由正文的完整参数块承担调用展示。
     ["deploy", { target: "prod" }, undefined],
+    ["shell", { command: "build", cwd: "/tmp" }, undefined],
+    ["rg", { pattern: "TODO" }, undefined],
+    ["glob", { pattern: "*.ts" }, undefined],
   ];
   for (const [tool, args, expected] of cases) {
     expect(toolReaderCall(event(tool, args, "result")), `${tool} ${JSON.stringify(args)}`).toBe(expected);
   }
+});
+
+test("reader content keeps every argument of an aliased tool and does not duplicate generic parameters", () => {
+  const alias = toolReaderContent(event("shell", { command: "build", cwd: "/tmp" }, "built"));
+  expect(alias.call).toBeUndefined();
+  expect(alias.blocks[0]).toMatchObject({ kind: "text", style: "json" });
+  expect(alias.blocks[0].kind === "text" && alias.blocks[0].text).toContain('"cwd": "/tmp"');
+  expect(alias.blocks.some((block) => block.kind === "text" && block.text.includes("built"))).toBe(true);
+
+  const generic = toolReaderContent(event("deploy", { target: "prod" }, "ok"));
+  expect(generic.blocks.filter((block) => block.kind === "text" && block.style === "json" && block.text.includes('"target"'))).toHaveLength(1);
+
+  const native = toolReaderContent(event("bash", { command: "pwd" }, "/home"));
+  expect(native.call).toBe("pwd");
+  expect(native.blocks.some((block) => block.kind === "text" && block.style === "json")).toBe(false);
 });
 
 test("bounds the preview command echo so the real result keeps its budget", () => {

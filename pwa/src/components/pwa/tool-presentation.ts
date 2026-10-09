@@ -29,6 +29,8 @@ export type SearchMatch = {
 const PATH_KEYS = ["path", "file_path", "filePath"] as const;
 const COMMAND_KEYS = ["command", "cmd"] as const;
 const QUERY_KEYS = ["pattern", "query", "search", "glob"] as const;
+// 阅读器调用行只按名称精确匹配 Pi 内置工具；插件的同类别名可能带额外参数，以完整参数块展示。
+const PI_NATIVE_TOOLS: ReadonlySet<string> = new Set(["bash", "read", "edit", "write", "grep", "find"]);
 const DIFF_LINE = /^[+-](?![+-])/m;
 const DIFF_HEADER = /^(?:diff --git |--- .+\n\+\+\+ )/m;
 
@@ -306,9 +308,10 @@ function readLineRange(value: ToolValue): string {
 
 /**
  * 详情阅读器正文首块的调用行，与 Pi 原生终端的调用行一致：工具名已在顶栏，命令不加 `$`。
- * 通用工具返回 undefined，由正文中的完整「参数」块承担，与 Pi 原生「工具名＋参数 JSON」对应。
+ * 只用于 Pi 内置工具；其他工具返回 undefined，由完整「参数」块承担，与 Pi 原生「工具名＋参数 JSON」对应。
  */
 export function toolReaderCall(value: ToolValue): string | undefined {
+  if (!PI_NATIVE_TOOLS.has(value.tool)) return undefined;
   const action = toolAction(value);
   const args = toolInput(value);
   const field = (key: string) => isRecord(args) ? args[key] : undefined;
@@ -326,7 +329,7 @@ export function toolReaderCall(value: ToolValue): string | undefined {
       return action.detail;
     case "search": {
       const path = stringField(args, PATH_KEYS) ?? ".";
-      if (hasName(value.tool, ["find"], ["glob"])) return `${action.detail} in ${path}${limit === undefined ? "" : ` (limit ${limit})`}`;
+      if (value.tool === "find") return `${action.detail} in ${path}${limit === undefined ? "" : ` (limit ${limit})`}`;
       const glob = field("glob");
       const globText = typeof glob === "string" && glob && glob !== action.detail ? ` (${glob})` : "";
       return `/${action.detail}/ in ${path}${globText}${limit === undefined ? "" : ` limit ${limit}`}`;
@@ -334,6 +337,21 @@ export function toolReaderCall(value: ToolValue): string | undefined {
     default:
       return undefined;
   }
+}
+
+/** 详情阅读器正文：Pi 内置工具以调用行开头，其余工具以完整「参数」块开头。 */
+export function toolReaderContent(value: ToolValue): { call?: string; blocks: ToolContentBlock[] } {
+  const call = toolReaderCall(value);
+  const blocks = toolContentBlocks(value);
+  // 通用工具的参数块已在 toolContentBlocks 中；别名工具在会话内按专用类型展示，阅读器仍须保留全部参数。
+  if (call !== undefined || toolAction(value).kind === "generic") return { call, blocks };
+  const parameters = parametersBlock(value);
+  return { blocks: parameters ? [parameters, ...blocks] : blocks };
+}
+
+function parametersBlock(value: ToolValue): ToolContentBlock | undefined {
+  if (toolInput(value) === undefined) return undefined;
+  return { kind: "text", text: typeof value.args === "string" ? value.args : safeJsonText(value.args), style: "json", label: getMessages().tools.parameters };
 }
 
 function requestedToolDiff(value: ToolValue): string | undefined {
@@ -389,7 +407,8 @@ export function toolContentBlocks(value: ToolValue): ToolContentBlock[] {
   if (action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(value.args) && typeof value.args.content === "string") {
     blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
   }
-  if (action.kind === "generic" && toolInput(value) !== undefined) blocks.unshift({ kind: "text", text: typeof value.args === "string" ? value.args : safeJsonText(value.args), style: "json", label: getMessages().tools.parameters });
+  const parameters = action.kind === "generic" ? parametersBlock(value) : undefined;
+  if (parameters) blocks.unshift(parameters);
   if (!blocks.length) blocks.push({ kind: "text", text: output === undefined ? getMessages().tools.noOutputYet : getMessages().tools.noTextOutput, style: "notice" });
   return blocks;
 }

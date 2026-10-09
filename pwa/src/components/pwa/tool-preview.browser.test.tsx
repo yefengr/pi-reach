@@ -192,9 +192,11 @@ test("the reader call line fills its first line before wrapping a hyphenated pat
 });
 
 test("a generic tool reader opens with the full parameters instead of a lossy call summary", async () => {
-  const cases: { tool: string; args: { target?: string; force?: boolean } }[] = [
+  const cases: { tool: string; args: Record<string, string | boolean> }[] = [
     { tool: "deploy", args: { target: "prod", force: true } },
     { tool: "status", args: {} },
+    // 插件的命令别名不套用 Pi 内置格式，额外参数照常显示。
+    { tool: "shell", args: { command: "build", cwd: "/tmp" } },
   ];
   for (const { tool, args } of cases) {
     const current: ToolValue = { ...base, tool, args, result: [{ type: "text", text: "ok" }] };
