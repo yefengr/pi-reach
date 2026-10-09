@@ -295,7 +295,7 @@ body:has(.pwa-root) { overflow: hidden; }
 
 /* 独立设置页：与工作区同为 bg 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
 .pwa-root .pwa-settings-page { min-height: 100%; color: var(--pwa-ink); background: var(--pwa-bg); }
-.pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: 32px 20px calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
+.pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) 20px calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
 .pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }
 .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { margin-left: -8px; padding-inline: 8px; }
 .pwa-root .pwa-settings-title { margin: 0; font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }

@@ -116,7 +116,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
       {image ? <ImageIcon size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}
       <div className="pwa-published-info"><div className="pwa-published-name" title={name}>{name}</div>
         {/* 进度与错误原地替换大小行，状态变化时卡片高度不变，消息列表不跳动。 */}
-        {fetching || settling && ready ? <span className="pwa-published-meta pwa-published-progress"><Progress size="xs" value={progress} aria-label={t.files.fetching} /><span role="status">{fetching ? `${t.files.fetchProgress} ${progress}%` : t.files.fetched}</span></span> : slotError ? <span className="pwa-published-error pwa-published-slot" role="alert" title={errorText}>{errorText}</span> : <span className="pwa-published-meta">{format.number(displaySize)} {sizeUnit}</span>}
+        {fetching || settling && ready ? <span className="pwa-published-meta pwa-published-progress"><Progress size="xs" value={progress} aria-label={fetching ? t.files.fetching : t.files.fetched} /><span role="status">{fetching ? `${t.files.fetchProgress} ${progress}%` : t.files.fetched}</span></span> : slotError ? <span className="pwa-published-error pwa-published-slot" role="alert" title={errorText}>{errorText}</span> : <span className="pwa-published-meta">{format.number(displaySize)} {sizeUnit}</span>}
         {fetching || settling && ready || failed ? null : !canFetch && !ready ? <span className="pwa-published-meta">{t.files.offline}</span> : null}
       </div>
       <div className="pwa-published-actions">

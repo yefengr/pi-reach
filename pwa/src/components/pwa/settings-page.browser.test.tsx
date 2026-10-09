@@ -164,3 +164,18 @@ test("copies only versions and statuses, excluding the current Pi identity and R
   expect(writeText.mock.calls[0]?.[0]).not.toContain(relayUrl);
   await expect.element(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
 });
+
+test("the desktop settings header clears a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(1024, 768);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const screen = await renderPwa(<SettingsHarness />);
+    const back = screen.getByRole("button", { name: "Back to workspace" });
+    await expect.element(back).toBeVisible();
+    // 设置页在安全区之下仍保留桌面原有 32px 上边距。
+    expect(Math.round(document.querySelector(".pwa-settings-header")!.getBoundingClientRect().top)).toBe(safeTop + 32);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+  }
+});

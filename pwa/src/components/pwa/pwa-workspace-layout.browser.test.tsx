@@ -138,6 +138,34 @@ test.each([[1280, 844], [844, 390]])("keeps the sidebar toggle clear of brand an
   }
 });
 
+test("keeps desktop brand, toggle and title bar below a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(1024, 768);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const screen = await renderLayout({ events: [] });
+    const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+    await expect.element(toggle).toBeVisible();
+    const center = (element: Element) => { const rect = element.getBoundingClientRect(); return rect.top + rect.height / 2; };
+    const brand = document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!;
+    const titleBar = document.querySelector(".pwa-title-bar")!;
+    // 安全区内只留侧栏与标题区的底色，品牌行、收展入口和标题区内容整体下移。
+    expect(Math.round(brand.getBoundingClientRect().top)).toBe(safeTop);
+    expect(Math.round(toggle.element().getBoundingClientRect().top)).toBeGreaterThanOrEqual(safeTop);
+    expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(56 + safeTop);
+    const visible = [...titleBar.children].filter(child => child.getBoundingClientRect().height > 0);
+    expect(visible.length).toBeGreaterThan(0);
+    for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
+    expect(Math.abs(center(toggle.element()) - center(brand))).toBeLessThanOrEqual(1);
+    await toggle.click();
+    const expand = screen.getByRole("button", { name: "Expand sidebar" });
+    await expect.element(expand).toBeVisible();
+    expect(Math.abs(center(expand.element()) - (safeTop + 28))).toBeLessThanOrEqual(1);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+  }
+});
+
 test.each([[1280, 844], [844, 390]])("real clicks on the right edge of every visible history row select it without collapsing the sidebar at %ix%i", async (width, height) => {
   await page.viewport(width, height);
   const events: string[] = [];
