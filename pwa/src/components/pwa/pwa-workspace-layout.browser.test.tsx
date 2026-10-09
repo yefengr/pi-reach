@@ -303,6 +303,8 @@ test.each([1280, 390])("keeps the notice below navigation/settings and confirmat
     await expect.element(dialog).not.toBeInTheDocument();
     await expect.element(navigation).toHaveFocus();
     await navigation.click();
+    // 点击打开先挂载收起态、下一帧才打开，等导航可见再操作其中的入口。
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
   }
   const settingsButton = screen.getByRole("button", { name: "Open settings" });
   settingsButton.element().focus();
@@ -974,4 +976,51 @@ test("returns from settings to the expanded mobile navigation with its scroll po
   await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
   await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
   expect(events).toEqual(["settings:navigation"]);
+});
+
+test("the navigation icon slides the drawer in on every open, including after returning from settings", async () => {
+  await page.viewport(390, 700);
+  const screen = await renderLayout({ events: [] });
+  // 逐帧记录导航左缘：随 opened=true 一起挂载时 Mantine 跳过进入过渡，导航会直接停在 0。
+  const openAndSample = async () => {
+    const lefts: number[] = [];
+    let stop = false;
+    const tick = () => {
+      const sheet = document.querySelector<HTMLElement>(".pwa-session-sheet");
+      if (sheet) lefts.push(Math.round(sheet.getBoundingClientRect().left));
+      if (!stop) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+    // 过渡在打开后的下一帧才开始，不能用当时的动画列表判断结束；等导航真正到达终点。
+    await expect.poll(() => Math.round(document.querySelector<HTMLElement>(".pwa-session-sheet")!.getBoundingClientRect().left)).toBe(0);
+    await settleAnimations();
+    stop = true;
+    return lefts;
+  };
+  const closeNavigation = async () => {
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+  };
+  try {
+    for (let round = 0; round < 2; round += 1) {
+      const lefts = await openAndSample();
+      expect(Math.min(...lefts)).toBeLessThan(0);
+      await closeNavigation();
+    }
+    // 从导航进入设置后导航实例被卸载，返回工作区再点图标仍须滑入。
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await settleAnimations();
+    await screen.getByRole("button", { name: "Back to navigation" }).click();
+    await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
+    await settleAnimations();
+    await closeNavigation();
+    const lefts = await openAndSample();
+    expect(Math.min(...lefts)).toBeLessThan(0);
+  } finally {
+    await screen.unmount();
+  }
 });

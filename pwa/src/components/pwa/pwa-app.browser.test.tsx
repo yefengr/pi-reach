@@ -2304,7 +2304,11 @@ test.each([1280, 390])("keeps the settings page beneath confirmation and restore
     replyOperation(context.channel, request);
     await expect.element(screen.getByText("Could not compact the conversation. Try again.")).toBeVisible();
     const notice = operationFeedback();
-    if (width < 768) await screen.getByRole("button", { name: "Open navigation" }).click();
+    if (width < 768) {
+      await screen.getByRole("button", { name: "Open navigation" }).click();
+      // 点击打开先挂载收起态、下一帧才打开；下面同步取元素，须先等导航可见。
+      await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+    }
     const settingsTrigger = screen.getByRole("button", { name: "Open settings" });
     settingsTrigger.element().focus();
     await settingsTrigger.click();
