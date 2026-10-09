@@ -119,6 +119,21 @@ test("the reader shows the full call as the first body block, not in the header"
   }
 });
 
+test("the reader call keeps extra arguments even when the path equals the tool name", async () => {
+  const current: ToolValue = { ...base, args: { path: "read", offset: 20, limit: 10 }, result: [{ type: "text", text: "line 20" }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
+    expect(call.matches(".pwa-tool-reader-command")).toBe(true);
+    expect(call.textContent?.startsWith("read")).toBe(true);
+    expect(call.textContent).toContain("offset: 20");
+    expect(call.textContent).toContain("limit: 10");
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("the desktop reader header is a left-aligned tool name with status, copy and close on the right", async () => {
   const command = "pnpm --filter pwa test:unit";
   const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };

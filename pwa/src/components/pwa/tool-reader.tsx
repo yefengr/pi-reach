@@ -8,7 +8,7 @@ import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
-import { toolAction, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { toolCallText, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import "./tool-reader.css";
 
@@ -67,7 +67,6 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     if (scroll && followRef.current) scroll.scrollTop = scroll.scrollHeight;
   }, [outputKey]);
 
-  const action = value ? toolAction(value) : null;
   const status = value ? toolStatus(value) : "unknown";
   const blocks = value ? toolContentBlocks(value) : [];
   const error = value ? toolError(value) : undefined;
@@ -75,8 +74,8 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
-  // 完整调用（命令、路径等）放在正文首块，不截断；与工具名相同则不重复。
-  const call = action?.detail || action?.label;
+  // 完整调用（命令、路径及其余参数）放在正文首块，不截断；无参数时只剩工具名，与标题重复则不显示。
+  const call = value ? toolCallText(value, { prompt: false }) : "";
   const callText = call && call !== value?.tool ? call : null;
 
   return <Drawer.Root

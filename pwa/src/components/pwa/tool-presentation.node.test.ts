@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { JsonValue, TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary } from "./tool-presentation";
+import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCallText, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary } from "./tool-presentation";
 
 const base = { event_id: "e", session_id: "s", leaf_id: "g", group_id: "group", timestamp: 1, kind: "tool" as const, tool_call_id: "call", truncated: false, status: "complete" as const };
 function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool" }> {
@@ -52,6 +52,15 @@ test("keeps one command title form and echoes the full call only into expanded c
   expect(toolContentView(value, false).blocks[0]).not.toEqual(preview.blocks[0]);
   // 阅读器正文只保留真实结果，命令回显留在展开预览首行。
   expect(toolContentBlocks(value).some((block) => block.kind === "text" && block.text.startsWith("$ "))).toBe(false);
+});
+
+test("the reader call keeps every argument and drops only the command prompt", () => {
+  const command = event("bash", { command: "pwd\nls -al", timeout: 30 }, "result");
+  expect(toolCallText(command)).toBe("$ pwd\nls -al\ntimeout: 30");
+  expect(toolCallText(command, { prompt: false })).toBe("pwd\nls -al\ntimeout: 30");
+  // 只有命令类有提示符；其他工具不受该选项影响。
+  const read = event("read", { path: "src/file.ts", offset: 20, limit: 10 }, "text");
+  expect(toolCallText(read, { prompt: false })).toBe(toolCallText(read));
 });
 
 test("bounds the preview command echo so the real result keeps its budget", () => {
