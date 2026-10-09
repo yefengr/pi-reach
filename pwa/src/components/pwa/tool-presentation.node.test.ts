@@ -63,6 +63,8 @@ test("the reader call lists every argument as is: text raw, other values as JSON
     ["grep", { pattern: "*.ts", glob: "*.ts" }, "pattern: *.ts\nglob: *.ts"],
     ["deploy", { target: "prod", force: true, tags: ["a", "b"] }, 'target: prod\nforce: true\ntags: [\n  "a",\n  "b"\n]'],
     ["custom", "raw input", "raw input"],
+    // 参数里的图片不会在输出中渲染，只标明已省略，不误写成「已在输出中渲染」。
+    ["attach", { asset: { type: "image", data: "AAAA" } }, 'asset: {\n  "type": "image",\n  "data": "[image data omitted]"\n}'],
     ["status", {}, undefined],
   ];
   for (const [tool, args, expected] of cases) {

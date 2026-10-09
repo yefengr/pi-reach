@@ -144,12 +144,16 @@ export function toolWasTruncated(value: ToolValue): boolean {
   return !isToolPartial(value) && value.truncated;
 }
 
-export function safeJsonText(value: unknown): string {
+const OUTPUT_IMAGE_PLACEHOLDER = "[image data omitted; rendered in Output]";
+// 参数里的图片不会在输出中渲染；base64 可达数 MB，原样放进阅读器会拖慢移动端，只标明已省略。
+const INPUT_IMAGE_PLACEHOLDER = "[image data omitted]";
+
+export function safeJsonText(value: unknown, imagePlaceholder = OUTPUT_IMAGE_PLACEHOLDER): string {
   if (value === undefined) return "undefined";
   try {
     const text = JSON.stringify(value, (_key, item: unknown) => {
       if (isRecord(item) && item.type === "image" && typeof item.data === "string") {
-        return { ...item, data: "[image data omitted; rendered in Output]" };
+        return { ...item, data: imagePlaceholder };
       }
       return item;
     }, 2);
@@ -179,7 +183,7 @@ function safeSlice(text: string, maximumCharacters: number): string {
 
 export function inputPreview(value: ToolValue): string {
   const input = toolInput(value);
-  return previewText(typeof input === "string" ? input : safeJsonText(input));
+  return previewText(typeof input === "string" ? input : safeJsonText(input, INPUT_IMAGE_PLACEHOLDER));
 }
 
 export function outputPreview(value: ToolValue): string {
@@ -288,7 +292,7 @@ export function toolCallText(value: ToolValue): string {
   if (requested !== undefined) {
     for (const key of ["edits", "oldText", "newText"]) consumed.add(key);
   }
-  const extra = Object.entries(args).filter(([key]) => !consumed.has(key)).map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item)}`);
+  const extra = Object.entries(args).filter(([key]) => !consumed.has(key)).map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item, INPUT_IMAGE_PLACEHOLDER)}`);
   // 已返回 diff 时，正文优先展示真实修改；完整调用仍保留原始请求供对照。
   if (requested !== undefined && reliableToolDiff(value)) extra.push(`${getMessages().tools.requestedChanges}\n${requested}`);
   return [heading, ...extra].join("\n");
@@ -298,15 +302,15 @@ export function toolCallText(value: ToolValue): string {
 export function toolReaderCall(value: ToolValue): string | undefined {
   const args = toolInput(value);
   if (args === undefined) return undefined;
-  if (!isRecord(args)) return typeof args === "string" ? args : safeJsonText(args);
+  if (!isRecord(args)) return typeof args === "string" ? args : safeJsonText(args, INPUT_IMAGE_PLACEHOLDER);
   const entries = Object.entries(args);
   if (!entries.length) return undefined;
-  return entries.map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item)}`).join("\n");
+  return entries.map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item, INPUT_IMAGE_PLACEHOLDER)}`).join("\n");
 }
 
 function parametersBlock(value: ToolValue): ToolContentBlock | undefined {
   if (toolInput(value) === undefined) return undefined;
-  return { kind: "text", text: typeof value.args === "string" ? value.args : safeJsonText(value.args), style: "json", label: getMessages().tools.parameters };
+  return { kind: "text", text: typeof value.args === "string" ? value.args : safeJsonText(value.args, INPUT_IMAGE_PLACEHOLDER), style: "json", label: getMessages().tools.parameters };
 }
 
 function requestedToolDiff(value: ToolValue): string | undefined {
