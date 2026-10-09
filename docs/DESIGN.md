@@ -177,8 +177,8 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 - 键盘焦点始终可见；Drawer/Modal 关闭后回到有效的来源控件或已定义后备控件。
 - 异步输出不强制滚动阅读中的用户；“Latest”入口提示未读输出。
 - 使用 `prefers-reduced-motion: reduce` 时取消位移、缩放、尺寸过渡与平滑滚动，只保留约 120ms 短淡化；设置页转场与各 Drawer（移动导航、电脑选择、工具与文件阅读器）共用 `--pwa-duration-*` token 与 `--pwa-motion-shift` 判断，加载与运行中等状态动画照常运行（见「基础层」）。
-- 移动布局使用 `100dvh` 和 `safe-area-inset` token，Drawer、Composer、对话框及列表必须保持可滚动且不遮挡。
-- **软键盘**：viewport 声明 `interactive-widget=resizes-content`，支持的浏览器直接缩小布局视口；只缩小 visual viewport 的浏览器（如 iOS）由 `useKeyboardViewport` 兜底，在文本输入聚焦且 visual viewport 被遮挡时把 `.pwa-app-shell` 高度与顶部偏移改为 `visualViewport` 的高度和 `offsetTop`，使顶栏保持可见、输入区贴在键盘上方；布局视口已缩小时不重复扣减，缩放（`scale ≠ 1`）不视为键盘，键盘收起、卸载或 API 不可用时恢复 `100dvh`。补偿不依赖 768px 断点，手机横屏与平板同样适用；贴底与阅读锚点沿用时间线既有的容器尺寸观察，不另设滚动规则。
+- 移动布局使用 `--pwa-app-height`（浏览器标签页为 `100dvh`，随工具栏伸缩；主屏 PWA 为 `100lvh`，即整屏，避开 iOS 缩短的初始包含块）和 `safe-area-inset` token，Drawer、Composer、对话框及列表必须保持可滚动且不遮挡。
+- **软键盘**：viewport 声明 `interactive-widget=resizes-content`，支持的浏览器直接缩小布局视口；只缩小 visual viewport 的浏览器（如 iOS）由 `useKeyboardViewport` 兜底，在文本输入聚焦且 visual viewport 被遮挡时把 `.pwa-app-shell` 高度与顶部偏移改为 `visualViewport` 的高度和 `offsetTop`，使顶栏保持可见、输入区贴在键盘上方；布局视口已缩小时不重复扣减，缩放（`scale ≠ 1`）不视为键盘，键盘收起、卸载或 API 不可用时恢复 `--pwa-app-height`。补偿不依赖 768px 断点，手机横屏与平板同样适用；贴底与阅读锚点沿用时间线既有的容器尺寸观察，不另设滚动规则。
 - **输入区高度**：文字行高 `1.4`，按视觉行增长，高度充足时最多 6 行后内部滚动；上限由实际布局计算（扣除顶栏、通知、队列、附件与输入区非文字部分），不使用固定视口阈值。空间不足时提前内部滚动，textarea 不低于 44px，消息区至少保留一行正文与上下各 8px 留白；仍无法容纳时标记为布局冲突，不隐藏内容或缩小触控目标。
 
 ## 相关文档
