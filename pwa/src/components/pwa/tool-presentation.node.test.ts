@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { JsonValue, TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCallText, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary } from "./tool-presentation";
+import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary, toolReaderCall } from "./tool-presentation";
 
 const base = { event_id: "e", session_id: "s", leaf_id: "g", group_id: "group", timestamp: 1, kind: "tool" as const, tool_call_id: "call", truncated: false, status: "complete" as const };
 function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool" }> {
@@ -54,15 +54,38 @@ test("keeps one command title form and echoes the full call only into expanded c
   expect(toolContentBlocks(value).some((block) => block.kind === "text" && block.text.startsWith("$ "))).toBe(false);
 });
 
-test("the reader call keeps every argument and drops only the command prompt", () => {
-  const command = event("bash", { command: "pwd\nls -al", timeout: 30 }, "result");
-  expect(toolCallText(command)).toBe("$ pwd\nls -al\ntimeout: 30");
-  expect(toolCallText(command, { prompt: false })).toBe("pwd\nls -al\ntimeout: 30");
-  // 只有命令类有提示符；其他工具不受该选项影响。
-  const read = event("read", { path: "src/file.ts", offset: 20, limit: 10 }, "text");
-  expect(toolCallText(read, { prompt: false })).toBe(toolCallText(read));
+test("the reader call lists every argument as is: text raw, other values as JSON", () => {
+  const cases: [string, JsonValue, string | undefined][] = [
+    ["bash", { command: "pwd\nls -al", timeout: 30 }, "command: pwd\nls -al\ntimeout: 30"],
+    // 名称与内置工具相同或类型不合常规的值同样原样显示，不做任何推断或省略。
+    ["bash", { command: "build", timeout: "slow", cwd: "/tmp" }, "command: build\ntimeout: slow\ncwd: /tmp"],
+    ["read", { path: "a", limit: -1 }, "path: a\nlimit: -1"],
+    ["grep", { pattern: "*.ts", glob: "*.ts" }, "pattern: *.ts\nglob: *.ts"],
+    ["deploy", { target: "prod", force: true, tags: ["a", "b"] }, 'target: prod\nforce: true\ntags: [\n  "a",\n  "b"\n]'],
+    ["custom", "raw input", "raw input"],
+    // 参数里的图片不会在输出中渲染，只标明已省略，不误写成「已在输出中渲染」。
+    ["attach", { asset: { type: "image", data: "AAAA" } }, 'asset: {\n  "type": "image",\n  "data": "[image data omitted]"\n}'],
+    ["status", {}, undefined],
+  ];
+  for (const [tool, args, expected] of cases) {
+    expect(toolReaderCall(event(tool, args, "result")), `${tool} ${JSON.stringify(args)}`).toBe(expected);
+  }
 });
 
+test("the reader keeps only real results, without blocks copied from the input", () => {
+  const texts = (blocks: ReturnType<typeof toolContentBlocks>) => blocks.flatMap((block) => block.kind === "text" ? [block.text] : []);
+  const generic = event("deploy", { target: "prod" }, "ok");
+  expect(texts(toolContentBlocks(generic)).some((text) => text.includes('"target"'))).toBe(true);
+  expect(texts(toolContentBlocks(generic, { input: false })).some((text) => text.includes('"target"'))).toBe(false);
+
+  // 会话内展开仍显示写入内容与请求修改；阅读器只保留工具真实返回的结果。
+  const write = event("write", { path: "a.txt", content: "FILE BODY" }, "Wrote a.txt");
+  expect(texts(toolContentBlocks(write))).toContain("FILE BODY");
+  expect(texts(toolContentBlocks(write, { input: false }))).toEqual(["Wrote a.txt"]);
+  const edit = event("edit", { path: "a.txt", oldText: "old", newText: "new" }, "Edited a.txt");
+  expect(texts(toolContentBlocks(edit)).some((text) => text.includes("+new"))).toBe(true);
+  expect(texts(toolContentBlocks(edit, { input: false }))).toEqual(["Edited a.txt"]);
+});
 test("bounds the preview command echo so the real result keeps its budget", () => {
   const command = Array.from({ length: 30 }, (_, index) => `step ${index + 1}`).join("\n");
   const value = event("bash", { command }, "REAL_RESULT");

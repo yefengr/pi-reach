@@ -424,7 +424,7 @@ test("a failed fetch replaces the size line in place and every action is an icon
   await h.screen.unmount();
 });
 
-test("the desktop file reader header clears a translucent status bar", async () => {
+test("the desktop file reader header clears a translucent status bar on the main background", async () => {
   const safeTop = 24;
   await page.viewport(1024, 768);
   document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
@@ -440,6 +440,15 @@ test("the desktop file reader header clears a translucent status bar", async () 
     for (const child of children) {
       const box = child.getBoundingClientRect();
       expect(Math.abs(box.top + box.height / 2 - (safeTop + 24)), child.className).toBeLessThanOrEqual(1);
+    }
+    // 顶栏与阅读器同用主界面底色，状态栏与主界面一致。
+    const probe = document.createElement("div");
+    probe.style.background = "var(--pwa-bg)";
+    document.querySelector(".pwa-root")!.append(probe);
+    const main = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    for (const element of [header, document.querySelector<HTMLElement>(".pwa-file-reader")!]) {
+      expect(getComputedStyle(element).backgroundColor).toBe(main);
     }
     await h.screen.unmount();
   } finally {

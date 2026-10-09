@@ -8,7 +8,7 @@ import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
-import { toolAction, toolCallText, toolContentBlocks, toolError, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { toolContentBlocks, toolError, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import "./tool-reader.css";
 
@@ -27,13 +27,12 @@ function diffLineClass(line: string): string {
   return "pwa-reader-line";
 }
 
-/** 带行号的原始输出：长行自动换行，行号使用 secondary。 */
-function NumberedText({ block }: { block: Extract<ToolContentBlock, { kind: "text" }> }) {
-  const lines = block.text.split("\n");
-  const diff = block.style === "diff";
+/** 原始输出与 Pi 原生一致不带行号，与调用行同一左边线；diff 逐行以轻底和左侧色条区分增删。 */
+function OutputText({ block }: { block: Extract<ToolContentBlock, { kind: "text" }> }) {
+  const lines = block.style === "diff" ? block.text.split("\n") : null;
   return <section className="pwa-reader-block" aria-label={block.label}>
     {block.label ? <p className="pwa-reader-block-label">{block.label}</p> : null}
-    <pre className="pwa-reader-text">{lines.map((line, index) => <span key={index} className={diff ? diffLineClass(line) : "pwa-reader-line"}><span className="pwa-reader-line-number" aria-hidden="true">{index + 1}</span><span className="pwa-reader-line-text">{line}{index < lines.length - 1 ? "\n" : ""}</span></span>)}</pre>
+    <pre className="pwa-reader-text">{lines ? lines.map((line, index) => <span key={index} className={diffLineClass(line)}>{line}{index < lines.length - 1 ? "\n" : ""}</span>) : block.text}</pre>
   </section>;
 }
 
@@ -68,16 +67,14 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   }, [outputKey]);
 
   const status = value ? toolStatus(value) : "unknown";
-  const blocks = value ? toolContentBlocks(value) : [];
+  // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
+  const callText = value ? toolReaderCall(value) : undefined;
+  const blocks = value ? toolContentBlocks(value, { input: false }) : [];
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
   const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
-  // 完整调用（命令、路径及其余参数）放在正文首块，不截断；按工具类型判断而不比较文本，路径恰为工具名时仍须显示。
-  // 通用工具的调用文本只有参数名，正文已有完整的「参数」块作为首块，不再重复。
-  const action = value ? toolAction(value) : null;
-  const callText = value && action && action.kind !== "generic" ? toolCallText(value, { prompt: false }) : null;
 
   return <Drawer.Root
     opened={opened}
@@ -116,7 +113,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
             {error ? <div className="pwa-reader-error" role="alert"><CircleAlert size={16} aria-hidden="true" /><pre>{error}</pre></div> : null}
             {bodyBlocks.map((block, index) => block.kind === "image"
               ? <ToolImage key={`image:${index}`} block={block} index={index} preview={false} />
-              : <NumberedText key={`text:${index}`} block={block} />)}
+              : <OutputText key={`text:${index}`} block={block} />)}
             {toolWasTruncated(value) ? <p className="pwa-tool-notice">{t.tools.outputTruncated}</p> : null}
           </>}
         </div>

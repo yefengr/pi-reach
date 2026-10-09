@@ -105,6 +105,13 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
     }
   });
 
+  test("keeps tool reader text readable on the main background", () => {
+    // 工具详情阅读器与主界面同用 bg，正文沿用代码文字色。
+    for (const foreground of ["code-text", "code-dim", "syntax-error"]) {
+      expect(ratio(theme, foreground, "bg"), `${foreground} on bg`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   test("uses dark-theme accents on the always-dark code background", () => {
     for (const foreground of ["code-ink", "code-muted", "code-accent", "code-complete", "code-running", "code-error"]) {
       expect(ratio(theme, foreground, "code-bg"), `${foreground} on code-bg`).toBeGreaterThanOrEqual(4.5);

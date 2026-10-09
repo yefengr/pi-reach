@@ -144,12 +144,16 @@ export function toolWasTruncated(value: ToolValue): boolean {
   return !isToolPartial(value) && value.truncated;
 }
 
-export function safeJsonText(value: unknown): string {
+const OUTPUT_IMAGE_PLACEHOLDER = "[image data omitted; rendered in Output]";
+// 参数里的图片不会在输出中渲染；base64 可达数 MB，原样放进阅读器会拖慢移动端，只标明已省略。
+const INPUT_IMAGE_PLACEHOLDER = "[image data omitted]";
+
+export function safeJsonText(value: unknown, imagePlaceholder = OUTPUT_IMAGE_PLACEHOLDER): string {
   if (value === undefined) return "undefined";
   try {
     const text = JSON.stringify(value, (_key, item: unknown) => {
       if (isRecord(item) && item.type === "image" && typeof item.data === "string") {
-        return { ...item, data: "[image data omitted; rendered in Output]" };
+        return { ...item, data: imagePlaceholder };
       }
       return item;
     }, 2);
@@ -179,7 +183,7 @@ function safeSlice(text: string, maximumCharacters: number): string {
 
 export function inputPreview(value: ToolValue): string {
   const input = toolInput(value);
-  return previewText(typeof input === "string" ? input : safeJsonText(input));
+  return previewText(typeof input === "string" ? input : safeJsonText(input, INPUT_IMAGE_PLACEHOLDER));
 }
 
 export function outputPreview(value: ToolValue): string {
@@ -275,10 +279,10 @@ export function toolCommandLead(value: ToolValue): string | undefined {
   return action.kind === "command" ? `$ ${action.detail}` : undefined;
 }
 
-/** 完整调用上下文以原始换行显示；大正文在同一内容流内单独呈现。阅读器正文首块不回显 `$` 提示符。 */
-export function toolCallText(value: ToolValue, { prompt = true }: { prompt?: boolean } = {}): string {
+/** 完整调用上下文以原始换行显示；大正文在同一内容流内单独呈现。 */
+export function toolCallText(value: ToolValue): string {
   const action = toolAction(value);
-  const heading = action.kind === "command" && !prompt ? action.detail : toolCommandLead(value) ?? toolHeaderSummary(value);
+  const heading = toolCommandLead(value) ?? toolHeaderSummary(value);
   const args = toolInput(value);
   if (action.kind === "generic") return `${value.tool}${heading ? ` ${heading}` : ""}`;
   if (!isRecord(args)) return heading;
@@ -288,10 +292,25 @@ export function toolCallText(value: ToolValue, { prompt = true }: { prompt?: boo
   if (requested !== undefined) {
     for (const key of ["edits", "oldText", "newText"]) consumed.add(key);
   }
-  const extra = Object.entries(args).filter(([key]) => !consumed.has(key)).map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item)}`);
+  const extra = Object.entries(args).filter(([key]) => !consumed.has(key)).map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item, INPUT_IMAGE_PLACEHOLDER)}`);
   // 已返回 diff 时，正文优先展示真实修改；完整调用仍保留原始请求供对照。
   if (requested !== undefined && reliableToolDiff(value)) extra.push(`${getMessages().tools.requestedChanges}\n${requested}`);
   return [heading, ...extra].join("\n");
+}
+
+/** 详情阅读器正文首块：所有工具一致，每个参数一行「名称: 值」；文本值原样显示，其他值显示为 JSON。 */
+export function toolReaderCall(value: ToolValue): string | undefined {
+  const args = toolInput(value);
+  if (args === undefined) return undefined;
+  if (!isRecord(args)) return typeof args === "string" ? args : safeJsonText(args, INPUT_IMAGE_PLACEHOLDER);
+  const entries = Object.entries(args);
+  if (!entries.length) return undefined;
+  return entries.map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item, INPUT_IMAGE_PLACEHOLDER)}`).join("\n");
+}
+
+function parametersBlock(value: ToolValue): ToolContentBlock | undefined {
+  if (toolInput(value) === undefined) return undefined;
+  return { kind: "text", text: typeof value.args === "string" ? value.args : safeJsonText(value.args, INPUT_IMAGE_PLACEHOLDER), style: "json", label: getMessages().tools.parameters };
 }
 
 function requestedToolDiff(value: ToolValue): string | undefined {
@@ -306,7 +325,11 @@ function requestedToolDiff(value: ToolValue): string | undefined {
 }
 
 /** 真实结果优先保留；请求 diff 不代表执行成功，也不覆盖失败和中断输出。 */
-export function toolContentBlocks(value: ToolValue): ToolContentBlock[] {
+/**
+ * 默认包含从输入派生的块：通用工具的「参数」、write 的内容与 edit 的请求修改。
+ * 详情阅读器已在首块原样列出全部参数，传 input: false 只保留真实结果，避免同一内容出现两次。
+ */
+export function toolContentBlocks(value: ToolValue, { input: withInput = true }: { input?: boolean } = {}): ToolContentBlock[] {
   const action = toolAction(value);
   const output = toolResult(value);
   const error = toolError(value);
@@ -316,9 +339,9 @@ export function toolContentBlocks(value: ToolValue): ToolContentBlock[] {
   if (error && !errorInResult) blocks.push({ kind: "text", text: error, style: "error", label: getMessages().tools.toolError });
   if (toolStatus(value) === "interrupted") blocks.push({ kind: "text", text: getMessages().tools.interruptedNotice, style: "notice" });
   const diff = action.kind === "edit" ? reliableToolDiff(value) : undefined;
-  const requested = action.kind === "edit" && !diff ? requestedToolDiff(value) : undefined;
+  const requested = withInput && action.kind === "edit" && !diff ? requestedToolDiff(value) : undefined;
   const matches = action.kind === "search" ? searchMatches(value) : undefined;
-  if (action.kind === "write" && !error && toolStatus(value) !== "interrupted" && isRecord(value.args) && typeof value.args.content === "string") {
+  if (withInput && action.kind === "write" && !error && toolStatus(value) !== "interrupted" && isRecord(value.args) && typeof value.args.content === "string") {
     blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
   }
   if (matches !== undefined) {
@@ -344,10 +367,11 @@ export function toolContentBlocks(value: ToolValue): ToolContentBlock[] {
   }
   if (diff) blocks.push({ kind: "text", text: diff, style: "diff", label: getMessages().tools.returnedDiff });
   if (requested !== undefined) blocks.push({ kind: "text", text: requested, style: "diff", label: getMessages().tools.requestedChanges });
-  if (action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(value.args) && typeof value.args.content === "string") {
+  if (withInput && action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(value.args) && typeof value.args.content === "string") {
     blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
   }
-  if (action.kind === "generic" && toolInput(value) !== undefined) blocks.unshift({ kind: "text", text: typeof value.args === "string" ? value.args : safeJsonText(value.args), style: "json", label: getMessages().tools.parameters });
+  const parameters = withInput && action.kind === "generic" ? parametersBlock(value) : undefined;
+  if (parameters) blocks.unshift(parameters);
   if (!blocks.length) blocks.push({ kind: "text", text: output === undefined ? getMessages().tools.noOutputYet : getMessages().tools.noTextOutput, style: "notice" });
   return blocks;
 }

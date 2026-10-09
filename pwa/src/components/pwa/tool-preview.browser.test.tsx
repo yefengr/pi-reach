@@ -98,7 +98,7 @@ test.each([
   expect(getComputedStyle(inner).flexDirection).toBe("row");
 });
 
-test("the reader shows the full call as the first body block, not in the header", async () => {
+test("the reader shows the call as the first body block on the main background", async () => {
   const command = "pnpm --filter pwa test:unit --reporter=verbose --coverage --project browser --project node";
   const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
@@ -109,52 +109,90 @@ test("the reader shows the full call as the first body block, not in the header"
     const body = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
     const call = body.firstElementChild as HTMLElement;
     expect(call.matches(".pwa-tool-reader-command")).toBe(true);
-    // 完整调用不截断：文字全部在块内，没有被裁切。
-    expect(call.textContent).toBe(command);
+    // 参数原样列出且不截断：文字全部在块内，没有被裁切。
+    expect(call.textContent).toBe(`command: ${command}`);
     expect(call.scrollHeight).toBeLessThanOrEqual(call.clientHeight);
     expect(body.textContent).not.toContain("$ pnpm");
     expect(body.textContent).toContain("3 passed");
+    // 顶栏与正文同用主界面底色，状态栏与主界面一致；调用行与输出之间是 1px line 分割线。
+    const probe = document.createElement("div");
+    probe.style.background = "var(--pwa-bg)";
+    probe.style.borderColor = "var(--pwa-line)";
+    document.querySelector(".pwa-root")!.append(probe);
+    const main = getComputedStyle(probe).backgroundColor;
+    const line = getComputedStyle(probe).borderTopColor;
+    probe.remove();
+    expect(getComputedStyle(call).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(call).borderBottomColor).toBe(line);
+    const output = call.nextElementSibling!.getBoundingClientRect();
+    expect(output.top).toBeGreaterThan(call.getBoundingClientRect().bottom);
+    for (const element of [header, body, document.querySelector<HTMLElement>(".pwa-tool-reader")!]) {
+      expect(getComputedStyle(element).backgroundColor).toBe(main);
+    }
   } finally {
     await screen.unmount();
   }
 });
 
-test("the reader shows the call whenever arguments exist, even when the path equals the tool name", async () => {
-  const cases: { args: { path: string; offset?: number; limit?: number }; expected: string[] }[] = [
-    { args: { path: "read", offset: 20, limit: 10 }, expected: ["offset: 20", "limit: 10"] },
-    // 没有额外参数时调用文本恰为 "read"，仍须显示被读取的路径。
-    { args: { path: "read" }, expected: [] },
-  ];
-  for (const { args, expected } of cases) {
-    const current: ToolValue = { ...base, args, result: [{ type: "text", text: "line 20" }] };
-    const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
-    try {
-      await expect.element(screen.getByRole("dialog")).toBeVisible();
-      const call = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
-      expect(call.matches(".pwa-tool-reader-command")).toBe(true);
-      expect(call.textContent?.startsWith("read")).toBe(true);
-      for (const text of expected) expect(call.textContent).toContain(text);
-    } finally {
-      await screen.unmount();
-    }
+test("reader output has no line numbers and shares the call line's left edge", async () => {
+  const current: ToolValue = { ...base, args: { path: "notes.txt", offset: 20, limit: 2 }, result: [{ type: "text", text: "alpha\nbeta" }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
+    const output = document.querySelector<HTMLElement>(".pwa-reader-text")!;
+    // 与 Pi 原生一致不带行号：正文即原始输出。
+    expect(output.textContent).toBe("alpha\nbeta");
+    expect(Math.round(output.getBoundingClientRect().left)).toBe(Math.round(call.getBoundingClientRect().left));
+  } finally {
+    await screen.unmount();
   }
 });
 
-test("a generic tool reader opens with the full parameters instead of a lossy call summary", async () => {
-  const cases: { tool: string; args: { target?: string; force?: boolean } }[] = [
-    { tool: "deploy", args: { target: "prod", force: true } },
+test("the reader call line fills its first line before wrapping a hyphenated path", async () => {
+  await page.viewport(390, 844);
+  const path = "docs/plans/active/20260824-pwa-hardening.md";
+  const current: ToolValue = { ...base, args: { path, offset: 1, limit: 60 }, result: [{ type: "text", text: "body" }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
+    const range = document.createRange();
+    range.selectNodeContents(call);
+    const lines = [...range.getClientRects()];
+    expect(lines.length).toBeGreaterThan(1);
+    // 首行排到距右缘不足一个字符宽才换行，不在 "pwa-" 的连字符处提前断开。
+    const character = document.createRange();
+    character.setStart(call.firstChild!, 0);
+    character.setEnd(call.firstChild!, 1);
+    // 按整像素比较，避免 Linux CI 字体栅格化带来的亚像素差异。
+    const characterWidth = Math.ceil(character.getBoundingClientRect().width);
+    expect(Math.round(call.getBoundingClientRect().right - lines[0].right)).toBeLessThanOrEqual(characterWidth);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("every tool lists its arguments as is in the first block, without duplicating them in the body", async () => {
+  const cases: { tool: string; args: Record<string, string | boolean | number>; expected?: string }[] = [
+    { tool: "deploy", args: { target: "prod", force: true }, expected: "target: prod\nforce: true" },
+    { tool: "read", args: { path: "read", offset: 20, limit: 10 }, expected: "path: read\noffset: 20\nlimit: 10" },
+    { tool: "bash", args: { command: "build", cwd: "/tmp" }, expected: "command: build\ncwd: /tmp" },
     { tool: "status", args: {} },
+    // 写入内容只在参数中出现一次，正文只放真实结果。
+    { tool: "write", args: { path: "a.txt", content: "FILE BODY" }, expected: "path: a.txt\ncontent: FILE BODY" },
   ];
-  for (const { tool, args } of cases) {
+  for (const { tool, args, expected } of cases) {
     const current: ToolValue = { ...base, tool, args, result: [{ type: "text", text: "ok" }] };
     const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
     try {
       await expect.element(screen.getByRole("dialog", { name: tool, exact: true })).toBeVisible();
-      expect(document.querySelector(".pwa-tool-reader-command")).toBeNull();
-      const first = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
-      for (const [key, item] of Object.entries(args)) {
-        expect(first.textContent).toContain(`"${key}": ${JSON.stringify(item)}`);
-      }
+      const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command");
+      expect(call?.textContent).toBe(expected);
+      if (call) expect(call).toBe(document.querySelector(".pwa-tool-reader-scroll")!.firstElementChild);
+      const body = document.querySelector(".pwa-tool-reader-scroll")!.textContent ?? "";
+      expect(body).not.toContain('"target"');
+      expect(body.split("FILE BODY").length).toBeLessThanOrEqual(2);
     } finally {
       await screen.unmount();
     }
