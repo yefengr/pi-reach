@@ -8,6 +8,13 @@
 .pwa-root .pwa-published-error { color: var(--pwa-error); }
 .pwa-root .pwa-published-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
 .pwa-root .pwa-published-actions .mantine-Button-root { min-height: 44px; padding-inline: 8px; }
+.pwa-root .pwa-published-actions .pwa-published-icon-action { width: 44px; padding-inline: 0; }
+/* 进度占用大小行：行高与大小文字一致，状态文字等宽数字避免百分比变化时抖动。 */
+.pwa-root .pwa-published-progress { display: flex; align-items: center; gap: 8px; }
+.pwa-root .pwa-published-progress .mantine-Progress-root { flex: 1; min-width: 48px; max-width: 160px; }
+.pwa-root .pwa-published-progress [role="status"] { flex: none; font-variant-numeric: tabular-nums; }
+/* 状态行固定一行：错误文字截断，完整内容由 title 提供。 */
+.pwa-root .pwa-published-slot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .pwa-root .pwa-published-image { display: block; width: 100%; border: 0; padding: 0; background: var(--pwa-panel); cursor: zoom-in; border-radius: var(--pwa-radius-md); overflow: hidden; }
 .pwa-root .pwa-published-image img { display: block; width: 100%; max-height: 420px; object-fit: contain; }
 .pwa-root .pwa-published-placeholder { min-height: 160px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; padding: 20px; border-radius: var(--pwa-radius-md); background: var(--pwa-panel); color: var(--pwa-secondary); text-align: center; }
