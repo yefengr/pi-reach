@@ -437,6 +437,46 @@ test("routes mobile navigation choices and closes the chooser before rename", as
   await expect.poll(() => events).toEqual(["close-request", "endpoint:other", "close-request", "rename:device:office"]);
 });
 
+/** Chromium 的媒体模拟不支持 display-mode；取出 standalone 媒体查询内的规则直接生效，模拟主屏 PWA。 */
+function applyStandaloneRules() {
+  const blocks: string[] = [];
+  for (const sheet of document.styleSheets) {
+    for (const rule of sheet.cssRules) {
+      if (rule instanceof CSSMediaRule && rule.conditionText.includes("display-mode: standalone")) blocks.push([...rule.cssRules].map(inner => inner.cssText).join("\n"));
+    }
+  }
+  const style = document.createElement("style");
+  style.textContent = blocks.join("\n");
+  document.head.append(style);
+  return { blocks: blocks.length, remove: () => style.remove() };
+}
+
+test("standalone overlays fill the app height instead of the clipped initial containing block", async () => {
+  await page.viewport(390, 844);
+  const screen = await renderLayout({ events: [] });
+  await screen.getByRole("button", { name: "Open navigation" }).click();
+  await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+  const inner = () => getComputedStyle(document.querySelector(".pwa-root .mantine-Drawer-inner")!).position;
+  // 浏览器标签页保持 fixed 定位与 100dvh。
+  expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-app-height").trim()).toBe("100dvh");
+  expect(inner()).toBe("fixed");
+  const standalone = applyStandaloneRules();
+  try {
+    expect(standalone.blocks).toBeGreaterThanOrEqual(2);
+    // iOS 透明状态栏会缩短 fixed 叠层的包含块；独立窗口改以整屏高的 .pwa-root 定位。浏览器不能复现缩短，只校验叠层仍铺满整屏。
+    expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-app-height").trim()).toBe("100lvh");
+    expect(inner()).toBe("absolute");
+    const bottom = (selector: string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().bottom);
+    for (const selector of [".pwa-root", ".pwa-session-sheet", ".pwa-root .mantine-Drawer-overlay", ".pwa-root .mantine-Drawer-inner"]) expect(bottom(selector), selector).toBe(window.innerHeight);
+    expect(Math.round(document.querySelector(".pwa-session-sheet")!.getBoundingClientRect().top)).toBe(0);
+    await screen.getByRole("button", { name: "Choose computer, current Office Pi" }).click();
+    await expect.element(screen.getByRole("dialog", { name: "Choose computer" })).toBeVisible();
+    await expect.poll(() => bottom(".pwa-device-drawer")).toBe(window.innerHeight);
+  } finally {
+    standalone.remove();
+  }
+});
+
 const computerDevices = [
   { ...device, nickname: "Office Pi" },
   { ...device, id: "device:offline", deviceId: "offline-device", nickname: "Offline workstation with a very long computer name that must stay truncated even across the wide landscape navigation drawer" },

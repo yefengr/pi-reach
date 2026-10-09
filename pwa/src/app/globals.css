@@ -80,6 +80,15 @@ html:has(.pwa-root),
 body:has(.pwa-root) { overscroll-behavior-y: none; }
 
 body:has(.pwa-root) { overflow: hidden; }
+/* 独立窗口的 fixed 叠层会被缩短的初始包含块裁切；改为相对整屏高的 .pwa-root（或工作区视图）定位。 */
+@media (display-mode: standalone) {
+  html:has(.pwa-root),
+  body:has(.pwa-root) { height: var(--pwa-app-height); }
+  .pwa-root .mantine-Drawer-overlay,
+  .pwa-root .mantine-Drawer-inner,
+  .pwa-root .mantine-Modal-overlay,
+  .pwa-root .mantine-Modal-inner { position: absolute !important; }
+}
 
 .pwa-root,
 .pwa-root *,
@@ -91,7 +100,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root {
   width: 100%;
   max-width: 100%;
-  height: 100dvh;
+  height: var(--pwa-app-height);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -101,7 +110,7 @@ body:has(.pwa-root) { overflow: hidden; }
   font-family: var(--pwa-font-ui);
 }
 
-.pwa-app-shell { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--pwa-bg); }
+.pwa-app-shell { height: var(--pwa-app-height); min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--pwa-bg); }
 .pwa-runtime-notice-fallback,
 .pwa-runtime-notice-slot { flex: 0 0 auto; min-width: 0; min-height: 0; }
 .pwa-runtime-notice-slot { order: 5; }
@@ -403,7 +412,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-scan-corner-br { right: 18%; bottom: 18%; border-width: 0 3px 3px 0; }
 
 .pwa-startup-error,
-.pwa-loading { min-height: 100dvh; display: grid; place-items: center; padding: calc(24px + var(--pwa-safe-top)) 24px calc(24px + var(--pwa-safe-bottom)); color: var(--pwa-ink); background: var(--pwa-bg); text-align: center; }
+.pwa-loading { min-height: var(--pwa-app-height); display: grid; place-items: center; padding: calc(24px + var(--pwa-safe-top)) 24px calc(24px + var(--pwa-safe-bottom)); color: var(--pwa-ink); background: var(--pwa-bg); text-align: center; }
 .pwa-startup-card { width: min(520px, 100%); padding: 32px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); }
 .pwa-startup-icon,
 .pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--pwa-running) 44%, var(--pwa-line)); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
