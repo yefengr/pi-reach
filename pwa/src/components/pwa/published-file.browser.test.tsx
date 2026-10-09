@@ -365,12 +365,14 @@ test("first view settles a full progress bar before the reader covers the card, 
   fetchOnFirstView(h);
   const seen: string[] = [];
   const heights = new Set<number>();
+  const doneLabels = new Set<string | null>();
   const record = () => {
     const card = document.querySelector<HTMLElement>(".pwa-published-file");
     if (card) heights.add(Math.round(card.getBoundingClientRect().height));
     if (document.querySelector(".pwa-file-reader") && !seen.includes("reader")) seen.push("reader");
     const status = document.querySelector(".pwa-published-file [role=status]")?.textContent;
     const value = document.querySelector(".pwa-published-file [role=progressbar]")?.getAttribute("aria-valuenow");
+    if (status === "Fetched") doneLabels.add(document.querySelector(".pwa-published-file [role=progressbar]")?.getAttribute("aria-label") ?? null);
     const entry = status ? `${status}:${value}` : null;
     if (entry && seen.at(-1) !== entry) seen.push(entry);
   };
@@ -386,6 +388,8 @@ test("first view settles a full progress bar before the reader covers the card, 
     // 进度原地替换大小行，获取前后卡片高度不变。
     expect(seen.some(entry => entry.startsWith("Fetching "))).toBe(true);
     expect([...heights]).toHaveLength(1);
+    // 完成态的进度条名称与状态文字一致，读屏不会同时听到「正在获取」和「完成」。
+    expect([...doneLabels]).toEqual(["Fetched"]);
     expect(document.querySelector(".pwa-published-file [role=status], .pwa-published-file [role=progressbar]")).toBeNull();
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
