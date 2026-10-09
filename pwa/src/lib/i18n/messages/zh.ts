@@ -22,6 +22,7 @@ export const zh: Messages = {
     imagePending: "图片可获取",
     largeImage: "图片较大，点击获取",
     fetching: "正在获取…",
+    fetched: "获取完成",
     offline: "连接并打开原会话后可获取",
     failed: "未能获取文件，请重试。",
     unavailable: "电脑上的文件已不存在或无法读取",
