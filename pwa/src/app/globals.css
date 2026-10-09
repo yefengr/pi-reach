@@ -304,6 +304,8 @@ body:has(.pwa-root) { overflow: hidden; }
 
 /* 独立设置页：与工作区同为 bg 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
 .pwa-root .pwa-settings-page { min-height: 100%; color: var(--pwa-ink); background: var(--pwa-bg); }
+/* 桌面设置页没有固定顶栏，顶部吸附一条与页面同底色的遮挡条，内容不滚入透明状态栏；负外边距使其不占布局高度。 */
+.pwa-root .pwa-status-bar-shield { position: sticky; z-index: 1; top: 0; height: var(--pwa-safe-top); margin-bottom: calc(-1 * var(--pwa-safe-top)); background: var(--pwa-bg); }
 .pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) 20px calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
 .pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }
 .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { margin-left: -8px; padding-inline: 8px; }
@@ -487,7 +489,7 @@ body:has(.pwa-root) { overflow: hidden; }
 
 /* Toast：顶部居中、会话标题区与主区提示（连接提示条等）下方的最顶层浮层；surface 底、浮层阴影＋line 边框、圆角 8、最大宽 400。 */
 .pwa-operation-notifications { display: none; }
-.pwa-operation-notifications[data-position="top-center"]:has(.pwa-operation-notification) { display: block; position: absolute; top: max(calc(var(--pwa-safe-top) + 64px), calc(var(--pwa-main-notices-bottom, 0px) + 8px)); left: var(--pwa-main-center, 50%); right: auto; bottom: auto; width: min(400px, calc(var(--pwa-main-width, 100%) - 32px)); max-width: 400px; margin: 0; padding: 0; transform: translateX(-50%); pointer-events: none; }
+.pwa-operation-notifications[data-position="top-center"]:has(.pwa-operation-notification) { display: block; position: absolute; top: max(calc(var(--pwa-safe-top) + var(--pwa-topbar-height) + 8px), calc(var(--pwa-main-notices-bottom, 0px) + 8px)); left: var(--pwa-main-center, 50%); right: auto; bottom: auto; width: min(400px, calc(var(--pwa-main-width, 100%) - 32px)); max-width: 400px; margin: 0; padding: 0; transform: translateX(-50%); pointer-events: none; }
 .pwa-operation-notifications .pwa-operation-notification { min-height: 44px; padding: 4px 4px 4px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: auto; }
 .pwa-operation-notifications .pwa-operation-notification::before { display: none; }
 /* 进出只做轻微位移＋淡化；Mantine 通知状态变量区分退出，不使用整段滑入与回弹。 */
@@ -532,10 +534,13 @@ body:has(.pwa-root) { overflow: hidden; }
 
 @media (max-width: 767.98px) {
   /* 移动端与桌面保持同一块输入表面的内边距。 */
-  /* 移动设置页：返回箭头与标题同一行，不设固定顶栏。 */
-  .pwa-root .pwa-settings-inner { padding: calc(6px + var(--pwa-safe-top)) 16px calc(48px + var(--pwa-safe-bottom, 0px)); }
-  .pwa-root .pwa-settings-header { grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 4px; margin-left: -10px; }
-  .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { width: 44px; height: 44px; margin: 0; padding: 0; border-radius: 50%; }
+  /* 移动设置页：返回箭头与标题组成固定顶栏，尺寸同 .pwa-topbar；左右各让出内容区 16px 铺满屏宽，由顶栏遮挡状态栏。 */
+  .pwa-root .pwa-settings-inner { padding: 0 16px calc(48px + var(--pwa-safe-bottom, 0px)); }
+  .pwa-root .pwa-settings-header { position: sticky; z-index: 2; top: 0; min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 4px; margin: 0 -16px; padding: var(--pwa-safe-top) 16px 0 4px; background: var(--pwa-bg); }
+  .pwa-root .pwa-status-bar-shield { display: none; }
+  /* 只剩箭头时与其他图标按钮同色：常态 secondary、悬停 ink；桌面带文字时仍为强调色文字按钮。 */
+  .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { width: 44px; height: 44px; margin: 0; padding: 0; border-radius: 50%; color: var(--pwa-secondary); }
+  @media (hover: hover) { .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; } }
   .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back .mantine-Button-section { margin: 0; }
   .pwa-root .pwa-settings-back-label { display: none; }
   .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); }

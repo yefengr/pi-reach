@@ -401,7 +401,6 @@ export const zh: Messages = {
     parameters: "参数",
     copyAll: "复制全部输出",
     outputTruncated: "输出过长，已截断",
-    readerKicker: "工具详情",
     noToolSelected: "未选择工具",
     closeReader: "关闭工具详情",
     noDetails: "未选择工具详情。",

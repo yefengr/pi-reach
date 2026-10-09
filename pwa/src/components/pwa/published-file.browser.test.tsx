@@ -433,13 +433,41 @@ test("the desktop file reader header clears a translucent status bar", async () 
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
     await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
     const header = document.querySelector<HTMLElement>(".pwa-file-reader-header")!;
-    // 阅读器贯通全高，标题、保存与关闭在安全区之下仍保留原有 12px 上边距。
+    // 阅读器贯通全高，顶栏与会话标题区同为安全区之下 48px，标题、保存与关闭垂直居中。
     const children = [...header.children].filter(child => child.getBoundingClientRect().height > 0);
     expect(children.length).toBe(3);
-    for (const child of children) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop + 12);
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48 + safeTop);
+    for (const child of children) {
+      const box = child.getBoundingClientRect();
+      expect(Math.abs(box.top + box.height / 2 - (safeTop + 24)), child.className).toBeLessThanOrEqual(1);
+    }
     await h.screen.unmount();
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-top");
+    window.history.replaceState(null, "");
+  }
+});
+
+test("the mobile file reader header starts with a back button and keeps the name on one line", async () => {
+  await page.viewport(390, 844);
+  try {
+    const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, mimeType: "text/markdown", text: "# Report", url: blobUrl() } });
+    await h.screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+    const header = document.querySelector<HTMLElement>(".pwa-file-reader-header")!;
+    await expect.poll(() => Math.round(header.getBoundingClientRect().left)).toBe(0);
+    const back = h.screen.getByRole("button", { name: "Close file reader" });
+    expect(header.firstElementChild).toBe(back.element());
+    // 与设置页同一位置：返回按钮距左缘 4px，标题紧随其后 4px，单行省略。
+    expect(Math.round(back.element().getBoundingClientRect().left)).toBe(4);
+    const title = header.querySelector("h2")!;
+    expect(Math.round(title.getBoundingClientRect().left)).toBe(52);
+    expect(getComputedStyle(title).whiteSpace).toBe("nowrap");
+    expect(getComputedStyle(title).textOverflow).toBe("ellipsis");
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48);
+    await h.screen.unmount();
+  } finally {
+    await page.viewport(1280, 900);
     window.history.replaceState(null, "");
   }
 });

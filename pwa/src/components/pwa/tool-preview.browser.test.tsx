@@ -98,34 +98,114 @@ test.each([
   expect(getComputedStyle(inner).flexDirection).toBe("row");
 });
 
-test("the reader keeps the full call in its header instead of repeating it in the numbered body", async () => {
-  const command = "pnpm --filter pwa test:unit";
-  const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
-  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
-  await expect.element(screen.getByRole("dialog")).toBeVisible();
-  await expect.element(screen.getByText(command)).toBeVisible();
-  const body = document.querySelector(".pwa-tool-reader-scroll")!;
-  expect(body.textContent).not.toContain("$ pnpm");
-  expect(body.textContent).toContain("3 passed");
-});
-
-test("the reader header reads like the tool row: tool and command first, status beside the actions", async () => {
-  const command = "pnpm --filter pwa test:unit";
+test("the reader shows the full call as the first body block, not in the header", async () => {
+  const command = "pnpm --filter pwa test:unit --reporter=verbose --coverage --project browser --project node";
   const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
   try {
     await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!;
+    expect(header.textContent).not.toContain(command);
+    const body = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
+    const call = body.firstElementChild as HTMLElement;
+    expect(call.matches(".pwa-tool-reader-command")).toBe(true);
+    // 完整调用不截断：文字全部在块内，没有被裁切。
+    expect(call.textContent).toBe(command);
+    expect(call.scrollHeight).toBeLessThanOrEqual(call.clientHeight);
+    expect(body.textContent).not.toContain("$ pnpm");
+    expect(body.textContent).toContain("3 passed");
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("the reader shows the call whenever arguments exist, even when the path equals the tool name", async () => {
+  const cases: { args: { path: string; offset?: number; limit?: number }; expected: string[] }[] = [
+    { args: { path: "read", offset: 20, limit: 10 }, expected: ["offset: 20", "limit: 10"] },
+    // 没有额外参数时调用文本恰为 "read"，仍须显示被读取的路径。
+    { args: { path: "read" }, expected: [] },
+  ];
+  for (const { args, expected } of cases) {
+    const current: ToolValue = { ...base, args, result: [{ type: "text", text: "line 20" }] };
+    const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+    try {
+      await expect.element(screen.getByRole("dialog")).toBeVisible();
+      const call = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
+      expect(call.matches(".pwa-tool-reader-command")).toBe(true);
+      expect(call.textContent?.startsWith("read")).toBe(true);
+      for (const text of expected) expect(call.textContent).toContain(text);
+    } finally {
+      await screen.unmount();
+    }
+  }
+});
+
+test("a generic tool reader opens with the full parameters instead of a lossy call summary", async () => {
+  const cases: { tool: string; args: { target?: string; force?: boolean } }[] = [
+    { tool: "deploy", args: { target: "prod", force: true } },
+    { tool: "status", args: {} },
+  ];
+  for (const { tool, args } of cases) {
+    const current: ToolValue = { ...base, tool, args, result: [{ type: "text", text: "ok" }] };
+    const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+    try {
+      await expect.element(screen.getByRole("dialog", { name: tool, exact: true })).toBeVisible();
+      expect(document.querySelector(".pwa-tool-reader-command")).toBeNull();
+      const first = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!.firstElementChild as HTMLElement;
+      for (const [key, item] of Object.entries(args)) {
+        expect(first.textContent).toContain(`"${key}": ${JSON.stringify(item)}`);
+      }
+    } finally {
+      await screen.unmount();
+    }
+  }
+});
+
+test("the desktop reader header is a left-aligned tool name with status, copy and close on the right", async () => {
+  const command = "pnpm --filter pwa test:unit";
+  const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    // 对话框以工具名为可访问名称。
+    await expect.element(screen.getByRole("dialog", { name: "bash", exact: true })).toBeVisible();
+    const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!.getBoundingClientRect();
     const title = document.querySelector<HTMLElement>(".pwa-tool-reader-title")!;
-    const tool = title.querySelector<HTMLElement>(".pwa-tool-reader-tool")!;
-    const heading = title.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
-    expect(tool.textContent).toBe("bash");
-    expect(heading.textContent).toBe(command);
-    // 工具名在命令左侧同一行；状态不在标题里，而是放在右侧操作区。
-    expect(tool.getBoundingClientRect().right).toBeLessThanOrEqual(heading.getBoundingClientRect().left);
+    expect(title.textContent).toBe("bash");
+    expect(getComputedStyle(title).fontSize).toBe("18px");
+    // 标题靠左，从 20px 左边距开始，不水平居中。
+    expect(Math.round(title.getBoundingClientRect().left - header.left)).toBe(20);
     expect(title.querySelector(".pwa-tool-reader-status")).toBeNull();
     const status = document.querySelector<HTMLElement>(".pwa-tool-reader-actions .pwa-tool-reader-status")!;
+    // 与会话内工具行一致只显示图标：文字仍供读屏，但不占可见宽度。
     expect(status.textContent).toBe("Complete");
+    expect(Math.round(status.getBoundingClientRect().width)).toBe(16);
     expect(status.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.getBoundingClientRect().right);
+    expect(document.querySelector(".pwa-tool-reader-actions .pwa-tool-reader-close")).not.toBeNull();
+    expect(document.querySelector(".pwa-topbar-back")).toBeNull();
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("the mobile reader header starts with a back button like the settings top bar", async () => {
+  await page.viewport(390, 844);
+  const current: ToolValue = { ...base, tool: "bash", args: { command: "pnpm test" }, result: [{ type: "text", text: "3 passed" }] };
+  const events: string[] = [];
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => events.push("close")} />);
+  try {
+    const back = screen.getByRole("button", { name: "Close tool details" });
+    await expect.element(back).toBeVisible();
+    const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!;
+    await expect.poll(() => Math.round(header.getBoundingClientRect().left)).toBe(0);
+    expect(back.element().closest(".pwa-tool-reader-actions")).toBeNull();
+    expect(header.firstElementChild).toBe(back.element());
+    // 返回按钮距左缘 4px，标题与其相距 4px：与移动标题区、设置页同一位置。
+    const backBox = back.element().getBoundingClientRect();
+    expect(Math.round(backBox.left)).toBe(4);
+    expect(Math.round(document.querySelector(".pwa-tool-reader-title")!.getBoundingClientRect().left)).toBe(52);
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48);
+    await back.click();
+    expect(events).toEqual(["close"]);
   } finally {
     await screen.unmount();
   }
@@ -139,10 +219,13 @@ test("the desktop reader header clears a translucent status bar", async () => {
     const screen = await renderPwa(<ToolReader value={value("done")} opened onClose={() => {}} />);
     await expect.element(screen.getByRole("dialog")).toBeVisible();
     const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!;
-    // 阅读器贯通全高，顶栏内容在安全区之下仍保留原有 12px 上边距。
+    // 阅读器贯通全高，顶栏与会话标题区同为安全区之下 48px，关闭按钮垂直居中。
     const children = [...header.children].filter(child => child.getBoundingClientRect().height > 0);
     expect(children.length).toBeGreaterThan(0);
-    for (const child of children) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop + 12);
+    for (const child of children) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
+    expect(Math.round(header.getBoundingClientRect().height)).toBe(48 + safeTop);
+    const close = header.querySelector(".pwa-tool-reader-close")!.getBoundingClientRect();
+    expect(Math.abs(close.top + close.height / 2 - (safeTop + 24))).toBeLessThanOrEqual(1);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }

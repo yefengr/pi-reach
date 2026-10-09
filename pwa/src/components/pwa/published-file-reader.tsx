@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { ActionIcon, Button, Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { Download, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, Download, Minus, Plus, RotateCcw, X } from "lucide-react";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
 import { FILE_TEXT_PREVIEW_BYTES, fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
@@ -108,10 +108,12 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
   return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => setEntered(true)} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : 720} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim" />
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }}>
-      <Drawer.Header className="pwa-file-reader-header">
+      <Drawer.Header className="pwa-topbar pwa-file-reader-header">
+        {/* 移动全屏与设置页同为左侧返回；桌面右侧 Drawer 保留右上角关闭。 */}
+        {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back" aria-label={t.files.closeReader} icon={<ArrowLeft size={20} />} /> : null}
         <Drawer.Title tabIndex={-1} data-autofocus title={name}>{name}</Drawer.Title>
         {state?.phase === "ready" && state.url ? <ActionIcon component="a" className="pwa-icon-button" href={state.url} download={fileSaveName(name)} aria-label={t.files.save} title={t.files.save}><Download size={20} aria-hidden="true" /></ActionIcon> : null}
-        <Drawer.CloseButton className="pwa-icon-button" aria-label={t.files.closeReader} icon={<X size={20} />} />
+        {mobile ? null : <Drawer.CloseButton className="pwa-icon-button" aria-label={t.files.closeReader} icon={<X size={20} />} />}
       </Drawer.Header>
       <Drawer.Body className="pwa-file-reader-body">
         {state?.phase === "ready" && state.preview?.kind === "image" && state.url ? <PublishedImage key={state.url} url={state.url} name={name} canRetry={files?.canFetch === true} onRetry={() => { void Promise.resolve().then(() => files?.retry?.(file, "view") ?? files?.open(file, "view")).catch(() => undefined); }} /> : textPending ? <div className="pwa-file-reader-scroll" aria-busy="true" /> : preview ? <div ref={setScroll} className="pwa-file-reader-scroll"><FileTextContent text={preview.text} markdown={markdown} />{preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}</div> : state?.phase === "opening" || state?.phase === "reading" ? <p className="pwa-published-meta" role="status">{t.files.fetching}</p> : <p className="pwa-published-meta">{t.files.noPreview}</p>}

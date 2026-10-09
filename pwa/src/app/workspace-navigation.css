@@ -343,7 +343,8 @@
 
 
 /* 移动导航：左侧 min(320px, 85vw)，顶部为品牌与关闭按钮，内容与桌面侧栏一致。 */
-.pwa-root .pwa-session-sheet-head { min-height: calc(56px + var(--pwa-safe-top)); flex: 0 0 auto; display: flex; align-items: center; padding: var(--pwa-safe-top) 4px 0 8px; background: var(--pwa-panel); }
+/* 品牌与下方导航列表左缘对齐（内容区 8px + 行内 8px）。 */
+.pwa-root .pwa-session-sheet-head { padding-right: 4px; padding-left: 16px; background: var(--pwa-panel); }
 .pwa-root .pwa-session-sheet-head .pwa-sidebar-brand { min-height: 0; padding: 0; }
 .pwa-root .pwa-session-sheet .pwa-navigation-content { padding: 0 8px; }
 .pwa-scrim { background: var(--pwa-scrim) !important; backdrop-filter: none !important; }

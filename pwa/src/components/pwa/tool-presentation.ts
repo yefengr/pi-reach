@@ -275,10 +275,10 @@ export function toolCommandLead(value: ToolValue): string | undefined {
   return action.kind === "command" ? `$ ${action.detail}` : undefined;
 }
 
-/** 完整调用上下文以原始换行显示；大正文在同一内容流内单独呈现。 */
-export function toolCallText(value: ToolValue): string {
+/** 完整调用上下文以原始换行显示；大正文在同一内容流内单独呈现。阅读器正文首块不回显 `$` 提示符。 */
+export function toolCallText(value: ToolValue, { prompt = true }: { prompt?: boolean } = {}): string {
   const action = toolAction(value);
-  const heading = toolCommandLead(value) ?? toolHeaderSummary(value);
+  const heading = action.kind === "command" && !prompt ? action.detail : toolCommandLead(value) ?? toolHeaderSummary(value);
   const args = toolInput(value);
   if (action.kind === "generic") return `${value.tool}${heading ? ` ${heading}` : ""}`;
   if (!isRecord(args)) return heading;

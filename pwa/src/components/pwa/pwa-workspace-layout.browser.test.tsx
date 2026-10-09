@@ -152,7 +152,7 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
     // 安全区内只留侧栏与标题区的底色，品牌行、收展入口和标题区内容整体下移。
     expect(Math.round(brand.getBoundingClientRect().top)).toBe(safeTop);
     expect(Math.round(toggle.element().getBoundingClientRect().top)).toBeGreaterThanOrEqual(safeTop);
-    expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(56 + safeTop);
+    expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(48 + safeTop);
     const visible = [...titleBar.children].filter(child => child.getBoundingClientRect().height > 0);
     expect(visible.length).toBeGreaterThan(0);
     for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
@@ -160,7 +160,39 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
     await toggle.click();
     const expand = screen.getByRole("button", { name: "Expand sidebar" });
     await expect.element(expand).toBeVisible();
-    expect(Math.abs(center(expand.element()) - (safeTop + 28))).toBeLessThanOrEqual(1);
+    expect(Math.abs(center(expand.element()) - (safeTop + 24))).toBeLessThanOrEqual(1);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+  }
+});
+
+test("mobile title bar and navigation head share the top bar below a translucent status bar", async () => {
+  const safeTop = 24;
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  try {
+    const screen = await renderLayout({ events: [] });
+    const open = screen.getByRole("button", { name: "Open navigation" });
+    await expect.element(open).toBeVisible();
+    const center = (rect: DOMRect) => rect.top + rect.height / 2;
+    const titleBar = document.querySelector(".pwa-title-bar")!.getBoundingClientRect();
+    expect(Math.round(titleBar.height)).toBe(48 + safeTop);
+    const menuIcon = document.querySelector(".pwa-session-trigger-icon")!.getBoundingClientRect();
+    expect(Math.round(menuIcon.left)).toBe(4);
+    expect(Math.abs(center(menuIcon) - (safeTop + 24))).toBeLessThanOrEqual(1);
+    await open.click();
+    await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+    // 等进入动画落位后再量：导航头与标题区同一规格；品牌与下方导航列表左缘对齐。
+    await expect.poll(() => Math.round(document.querySelector(".pwa-session-sheet")!.getBoundingClientRect().left)).toBe(0);
+    const head = document.querySelector(".pwa-session-sheet-head")!.getBoundingClientRect();
+    expect(Math.round(head.height)).toBe(48 + safeTop);
+    const brand = document.querySelector(".pwa-session-sheet-head .pwa-brand-mark")!.getBoundingClientRect();
+    expect(Math.round(brand.left)).toBe(16);
+    expect(Math.abs(center(brand) - (safeTop + 24))).toBeLessThanOrEqual(1);
+    const close = document.querySelector(".pwa-session-sheet-head .pwa-icon-button")!.getBoundingClientRect();
+    expect(Math.abs(center(close) - (safeTop + 24))).toBeLessThanOrEqual(1);
+    const heading = document.querySelector(".pwa-session-sheet .pwa-nav-section-heading")!.getBoundingClientRect();
+    expect(Math.round(heading.left)).toBe(8);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
@@ -236,7 +268,7 @@ test("keeps the toggle in the header band and on top throughout both sidebar tra
       frames += 1;
       const box = toggle.getBoundingClientRect();
       expect(box.top).toBe(start.top);
-      expect(box.bottom).toBeLessThanOrEqual(56);
+      expect(box.bottom).toBeLessThanOrEqual(48);
       expect(toggle.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
       for (const element of [...brandCopy, ...rows]) {
         if (getComputedStyle(element).visibility === "hidden") continue;
@@ -265,7 +297,7 @@ test.each(toastCases)("keeps the $width×$height toast (long: $long, safe top: $
     if (safeTop) {
       // 渲染后才出现的安全区只让标题区变高，用来验证提示区位移时 Toast 仍会重新避让。
       document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
-      await expect.poll(() => Math.round(document.querySelector(".pwa-title-bar")!.getBoundingClientRect().height)).toBe(56 + safeTop);
+      await expect.poll(() => Math.round(document.querySelector(".pwa-title-bar")!.getBoundingClientRect().height)).toBe(48 + safeTop);
     }
     const retry = screen.getByRole("button", { name: "Retry now" });
     await expect.element(retry).toBeVisible();
