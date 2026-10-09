@@ -10,11 +10,11 @@ ADR-20261006 只允许 `main` 的版本候选进入 staging。每次界面或交
 
 ## 决策
 
-1. 新增 Deploy branch to staging 工作流：推送 `bugfix/*`、`feature/*` 分支且改动了 PWA 或 Relay 的构建输入时，自动构建改动的组件并部署 staging，也可在这些分支上手动运行。组件按分支相对 `main` 分叉点的全部改动选择，未选组件仍对齐生产当前实际 digest。
+1. 新增 Deploy branch to staging 工作流：推送 `bugfix/*`、`feature/*` 分支且改动了 PWA 或 Relay 的构建输入时，自动构建改动的组件并部署 staging，也可在这些分支上手动运行。组件按分支相对 `main` 分叉点的全部改动选择，未选组件仍对齐生产当前实际 digest；两个组件都无差异时 staging 整体对齐生产。
 2. 分支构建只按 digest 推送 GHCR，不移动 `vX.Y.Z` 标签；镜像版本标签仍取分支上的 `package.json`，来源 revision 为分支提交。服务器入口与请求格式不变。
 3. 分支部署只写 staging，不输出晋升凭据，不进入 production 审批，不创建标签或 Release。`deploy-ci.mjs` 的分支模式只接受单层 `bugfix/`、`feature/` 引用，staging 候选与 production 仍只接受 `main`。
 4. 只有仓库所有者能部署：工作流的构建与部署作业都要求推送者和触发者为仓库所有者；staging Environment 只允许 `main`、`bugfix/*`、`feature/*`；分支 Ruleset 只允许仓库 admin 创建和更新这两类分支。前两层防误触发，Ruleset 是写权限边界。
-5. staging 始终是最后一次部署的内容。同一分支的新推送取消仍在构建的旧运行；已开始的部署不取消，避免服务器锁或容器停在中途。分支部署与发布候选不排队等待对方，同时写入时由服务器锁拒绝其中一个。
+5. staging 始终是最后一次部署的内容。任一功能分支的新推送都取消其他仍在构建的运行，较慢的旧构建不会随后覆盖新部署；已开始的部署不取消，避免服务器锁或容器停在中途。分支部署与发布候选不排队等待对方，同时写入时由服务器锁拒绝其中一个。
 
 ## 备选方案
 

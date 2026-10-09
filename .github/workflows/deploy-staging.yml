@@ -30,9 +30,10 @@ jobs:
     if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.event.deleted != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # 同一分支的新推送取消仍在构建的旧运行；部署作业不在此组内，不会被中途打断。
+    # staging 只有一个：任一功能分支的新推送都取消仍在构建的旧运行，避免较慢的旧构建随后覆盖新部署。
+    # 部署作业不在此组内，不会被中途打断。
     concurrency:
-      group: staging-branch-build-${{ github.ref }}
+      group: staging-branch-build
       cancel-in-progress: true
     permissions:
       contents: read
@@ -117,9 +118,8 @@ jobs:
   staging:
     name: staging
     needs: build
-    if: >-
-      github.actor == github.repository_owner && github.triggering_actor == github.repository_owner &&
-      (needs.build.outputs.relay == 'true' || needs.build.outputs.pwa == 'true')
+    # 两个组件都与 main 无差异（如撤销全部改动）时仍运行，把 staging 对齐生产，不停留在旧分支镜像。
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # 不取消进行中的部署，避免服务器锁或容器停在中途；GitHub 只保留最新的等待者，staging 最终是最后一次推送。

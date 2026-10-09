@@ -183,11 +183,28 @@ test('branch staging workflow is owner-only, staging-only, digest-only and never
   const ownerOnly = /github\.actor == github\.repository_owner && github\.triggering_actor == github\.repository_owner/;
   assert.match(build, ownerOnly);
   assert.match(staging, ownerOnly);
-  assert.match(build, /cancel-in-progress: true/);
+  assert.match(build, /group: staging-branch-build\n      cancel-in-progress: true/);
+  assert.doesNotMatch(staging, /needs\.build\.outputs\.(relay|pwa) ==/);
   assert.match(staging, /group: deploy-staging-branch\n      cancel-in-progress: false/);
   assert.match(staging, /name: staging\n/);
   assert.doesNotMatch(workflow, /name: production|contents: write|deploy-release|^\s+tags:/m);
   assert.equal(build.match(/push-by-digest=true/g)?.length, 2);
   assert.match(staging, /run: node scripts\/deploy-ci\.mjs staging-branch/);
   assert.match(staging, /if: always\(\)\n        run: rm -rf "\$RUNNER_TEMP"\/pi-reach-deploy-\*/);
+});
+
+test('branch staging with no component difference realigns staging with production', async () => {
+  const noneEnv = { ...branchEnv, SELECT_PWA: 'false', SELECT_RELAY: 'false' };
+  const h = stage({ staging: tested }, noneEnv);
+  const notes = [];
+  const result = await deployStage({ ...h, mode: 'staging-branch', env: { ...env, ...noneEnv }, note: (message) => notes.push(message) });
+  assert.deepEqual(result, baseline);
+  assert.deepEqual([...h.calls].slice(0, 4), ['snapshot production', `deploy relay ${baseline.relay.image}`, `deploy pwa ${baseline.pwa.image}`, 'snapshot staging']);
+  assert.ok(notes.includes('no component differs from main; staging is aligned with production'));
+});
+
+test('release staging and production still require a selected component', async () => {
+  const none = { SELECT_PWA: 'false', SELECT_RELAY: 'false' };
+  await assert.rejects(stage({}, none).run, /No selected components/);
+  await assert.rejects(production({}, none).run, /No selected components/);
 });

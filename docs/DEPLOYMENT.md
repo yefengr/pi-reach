@@ -133,8 +133,8 @@ staging 晋升决策见 [ADR-20261006](adr/20261006-staging-promotion.md)。不�
 1. 仓库所有者推送 `bugfix/<名称>` 或 `feature/<名称>`（单层）分支，且改动了 PWA 或 Relay 的构建输入时自动运行；只改文档等其他文件不触发。也可在这些分支上手动运行 workflow_dispatch，重新部署当前提交。
 2. `scripts/deploy-branch.mjs` 按分支相对 `main` 分叉点的全部改动选组件：`pwa/`、`pi-extension/install.sh` 选 PWA，`relay/` 选 Relay，`packages/protocol/`、根 `package.json`、锁文件、workspace 配置、`.npmrc`、`pi-extension/package.json` 两者都选。触发路径与这份清单由测试保持一致。
 3. 构建只按 digest 推送 GHCR，不移动公开版本标签；镜像版本取分支上的 `package.json`，来源 revision 为分支提交，无需改版本号。
-4. 部署沿用 staging 的对齐、部署、快照核对和 smoke：未选组件对齐生产当前实际 digest。运行摘要记录分支和提交；不输出晋升凭据、不进入 production、不创建标签或 Release。
-5. 同一分支的新推送取消仍在构建的旧运行；已开始的部署不取消，排队中的部署只保留最新一次，staging 最终是最后一次推送的内容。
+4. 部署沿用 staging 的对齐、部署、快照核对和 smoke：未选组件对齐生产当前实际 digest；撤销全部改动等导致两个组件都与 `main` 无差异时，staging 整体对齐生产，不停留在旧分支镜像。运行摘要记录分支和提交；不输出晋升凭据、不进入 production、不创建标签或 Release。
+5. staging 只有一个：任一功能分支的新推送都会取消其他仍在构建的运行；已开始的部署不取消，排队中的部署只保留最新一次，staging 最终是最后一次推送的内容。
 
 分支部署会覆盖 staging：等待审批的发布在批准时会检测到漂移并停止，需要从 `main` 重新运行发布；发布候选做真机验收期间不要推送功能分支。分支部署与发布的 staging 作业同时写入时，服务器锁拒绝后到者，重新运行即可。分支部署不等待 CI，结果只用于测试，不能作为发布验收证据。被替换的分支镜像在服务器上成为悬空镜像，下次 production 部署清理时删除。
 

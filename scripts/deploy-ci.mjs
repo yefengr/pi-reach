@@ -32,12 +32,12 @@ export function snapshotJson(value, prefix) {
   return parsed;
 }
 
-export function selectedComponents(env) {
+export function selectedComponents(env, { allowEmpty = false } = {}) {
   for (const name of ['SELECT_RELAY', 'SELECT_PWA']) {
     if (!['true', 'false'].includes(env[name])) throw new Error(`Missing or invalid ${name}`);
   }
   const selected = COMPONENTS.filter((component) => env[`SELECT_${component.toUpperCase()}`] === 'true');
-  if (!selected.length) throw new Error('No selected components');
+  if (!selected.length && !allowEmpty) throw new Error('No selected components');
   return selected;
 }
 
@@ -69,7 +69,8 @@ function desiredCombination(env, baseline, selected) {
 
 export async function deployStage({ mode, env, remote, runSmoke = smoke, note = () => {}, output = () => {}, published = () => false }) {
   validateContext(env, mode);
-  const selected = selectedComponents(env);
+  // 分支已无组件差异时仍需部署，把 staging 从旧分支镜像对齐回生产组合。
+  const selected = selectedComponents(env, { allowEmpty: mode === BRANCH_STAGING });
   if (mode === 'staging' || mode === BRANCH_STAGING) {
     const baseline = snapshotJson(await remote('snapshot production'), env.IMAGE_PREFIX);
     const tested = desiredCombination(env, baseline, selected);
@@ -83,6 +84,7 @@ export async function deployStage({ mode, env, remote, runSmoke = smoke, note = 
     await runSmoke({ pwaUrl: env.PWA_URL, relayUrl: env.RELAY_URL });
     note(`staging endpoints: ${env.PWA_URL}; default Relay ${env.RELAY_URL}`);
     if (mode === BRANCH_STAGING) {
+      if (!selected.length) note('no component differs from main; staging is aligned with production');
       note(`staging now runs ${env.GITHUB_REF.slice('refs/heads/'.length)} at ${env.GITHUB_SHA} for pre-merge testing; it is not a release candidate and invalidates any pending production approval.`);
       return tested;
     }
