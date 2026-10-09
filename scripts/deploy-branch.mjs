@@ -34,7 +34,8 @@ function main() {
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `- ${message}\n`);
   };
   const base = git(['merge-base', 'origin/main', 'HEAD']);
-  const files = git(['diff', '--name-only', base, 'HEAD']).split('\n').filter(Boolean);
+  // 关闭重命名检测：移动文件时源路径也要参与选择，否则移出组件目录的改动会被漏选。
+  const files = git(['diff', '--no-renames', '--name-only', base, 'HEAD']).split('\n').filter(Boolean);
   const selected = branchComponents(files);
   for (const [component, value] of Object.entries(selected)) {
     note(value ? `部署 ${component}：分支相对 main 改动了其构建输入。` : `${component} 无改动，staging 对齐生产当前版本。`);
