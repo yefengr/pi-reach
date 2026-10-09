@@ -322,26 +322,33 @@ export function toolReaderCall(value: ToolValue): string | undefined {
   const keys = PI_NATIVE_CALL_KEYS.get(value.tool);
   const args = toolInput(value);
   if (!keys || !isRecord(args) || Object.keys(args).some((key) => !keys.includes(key))) return undefined;
-  const action = toolAction(value);
-  const field = (key: string) => isRecord(args) ? args[key] : undefined;
-  const rawLimit = field("limit");
-  const limit = typeof rawLimit === "number" ? rawLimit : undefined;
-  switch (action.kind) {
-    case "command": {
-      const timeout = field("timeout");
-      return typeof timeout === "number" ? `${action.detail} (timeout ${timeout}s)` : action.detail;
+  // 直接按 Pi schema 字段取值：不同字段恰好同值时各自显示，必填字段缺失则交给完整参数块。
+  const text = (key: string) => typeof args[key] === "string" && args[key] ? args[key] as string : undefined;
+  const limit = typeof args.limit === "number" ? args.limit : undefined;
+  const path = text("path");
+  switch (value.tool) {
+    case "bash": {
+      const command = text("command");
+      if (command === undefined) return undefined;
+      return typeof args.timeout === "number" ? `${command} (timeout ${args.timeout}s)` : command;
     }
     case "read":
-      return `${action.detail}${readLineRange(value)}`;
+      return path === undefined ? undefined : `${path}${readLineRange(value)}`;
     case "edit":
+      // 修改内容以 diff 在正文显示；无法组成 diff 时调用行不足以表达参数。
+      return path === undefined || requestedToolDiff(value) === undefined ? undefined : path;
     case "write":
-      return action.detail;
-    case "search": {
-      const path = stringField(args, PATH_KEYS) ?? ".";
-      if (value.tool === "find") return `${action.detail} in ${path}${limit === undefined ? "" : ` (limit ${limit})`}`;
-      const glob = field("glob");
-      const globText = typeof glob === "string" && glob && glob !== action.detail ? ` (${glob})` : "";
-      return `/${action.detail}/ in ${path}${globText}${limit === undefined ? "" : ` limit ${limit}`}`;
+      return path === undefined || typeof args.content !== "string" ? undefined : path;
+    case "grep": {
+      const pattern = text("pattern");
+      const glob = text("glob");
+      if (pattern === undefined) return undefined;
+      return `/${pattern}/ in ${path ?? "."}${glob === undefined ? "" : ` (${glob})`}${limit === undefined ? "" : ` limit ${limit}`}`;
+    }
+    case "find": {
+      const pattern = text("pattern");
+      if (pattern === undefined) return undefined;
+      return `${pattern} in ${path ?? "."}${limit === undefined ? "" : ` (limit ${limit})`}`;
     }
     default:
       return undefined;

@@ -69,6 +69,8 @@ test("the reader call line follows the Pi native call format without a prompt", 
     ["grep", { pattern: "TODO", path: "src", glob: "*.ts", limit: 5 }, "/TODO/ in src (*.ts) limit 5"],
     ["grep", { pattern: "TODO" }, "/TODO/ in ."],
     ["find", { pattern: "*.ts", path: "src", limit: 5 }, "*.ts in src (limit 5)"],
+    // 不同字段恰好同值时各自显示。
+    ["grep", { pattern: "*.ts", glob: "*.ts" }, "/*.ts/ in . (*.ts)"],
     // 通用工具和插件的同类别名由正文的完整参数块承担调用展示。
     ["deploy", { target: "prod" }, undefined],
     ["shell", { command: "build", cwd: "/tmp" }, undefined],
@@ -78,6 +80,10 @@ test("the reader call line follows the Pi native call format without a prompt", 
     ["bash", { command: "build", cwd: "/tmp" }, undefined],
     ["grep", { pattern: "TODO", ignoreCase: true }, undefined],
     ["read", { file_path: "src/file.ts" }, undefined],
+    // 必填字段缺失或修改无法组成 diff 时，调用行不足以表达参数。
+    ["bash", { timeout: 30 }, undefined],
+    ["edit", { path: "src/file.ts", edits: [{ oldText: 1 }] }, undefined],
+    ["write", { path: "src/file.ts" }, undefined],
   ];
   for (const [tool, args, expected] of cases) {
     expect(toolReaderCall(event(tool, args, "result")), `${tool} ${JSON.stringify(args)}`).toBe(expected);
