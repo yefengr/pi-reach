@@ -82,6 +82,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/workspace-navigation.css", selector: ".pwa-root .pwa-presence-label, .pwa-root .pwa-current-label", property: "padding", values: [2, 6], reason: "状态徽标内边距" },
   { file: "app/workspace-navigation.css", selector: ".pwa-root .pwa-peer-menu-panel", property: "padding", values: [6], reason: MENU },
   { file: "app/workspace-navigation.css", selector: ".pwa-root .pwa-device-drawer-body", property: "padding", values: [10], reason: MENU },
+  { file: "app/workspace-navigation.css", selector: ".pwa-root .pwa-peer-menu-panel button", property: "padding-inline", values: [10], reason: MENU },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-nav-heading-copy", property: "gap", values: [6], reason: STATUS },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-nav-session, .pwa-root .pwa-history-row", property: "margin", values: [2], reason: NAV },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-nav-session, .pwa-root .pwa-history-row", property: "padding", values: [6], reason: NAV },

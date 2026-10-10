@@ -252,6 +252,7 @@
 
 .pwa-root .pwa-peer-menu-panel button {
   min-height: 44px;
+  padding-inline: 10px;
   border-radius: var(--pwa-radius-sm);
   font-size: var(--pwa-text-meta);
 }
