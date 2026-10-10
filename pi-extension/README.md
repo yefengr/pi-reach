@@ -62,7 +62,7 @@ Report vulnerabilities through GitHub's [private vulnerability reporting](https:
 | `/pi-reach devices` | List browsers paired with this computer |
 | `/pi-reach revoke <shortid>` | Revoke a browser's pairing on this computer |
 | `/pi-reach set-relay <url>` | Save the Relay URL |
-| `/pi-reach config` | Show the Relay URL currently in use |
+| `/pi-reach config` | Show the configured Relay URL |
 
 ## Relay configuration
 
@@ -80,6 +80,8 @@ Set and check it from Pi:
 /pi-reach set-relay https://relay.example.com
 /pi-reach config
 ```
+
+A new URL takes effect the next time this Pi connects. If it's already connected, run `/pi-reach stop` and then `/pi-reach start`.
 
 In the PWA, enter the same URL under **Settings → Connection → Relay URL**. Use `https://` for a deployed Relay; `http://` is accepted for local development. Don't enter a `ws://` or `wss://` address: the Extension converts the URL to WebSocket form itself. The Relay keeps routing state in memory and does not store conversations.
 
