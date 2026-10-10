@@ -81,9 +81,9 @@ Set and check it from Pi:
 /pi-reach config
 ```
 
-A new URL takes effect the next time this Pi connects. If it's already connected, run `/pi-reach stop` and then `/pi-reach start`.
+`set-relay` only accepts `http://` or `https://` URLs; the Extension converts them to WebSocket form itself. A new URL takes effect the next time this Pi connects. If it's already connected, run `/pi-reach stop` and then `/pi-reach start`.
 
-In the PWA, enter the same URL under **Settings → Connection → Relay URL**. Use `https://` for a deployed Relay; `http://` is accepted for local development. Don't enter a `ws://` or `wss://` address: the Extension converts the URL to WebSocket form itself. The Relay keeps routing state in memory and does not store conversations.
+In the PWA, enter the same URL under **Settings → Connection → Relay URL**. Use `https://` for a deployed Relay; `http://` is accepted for local development. The Relay keeps routing state in memory and does not store conversations.
 
 ## Local data
 
