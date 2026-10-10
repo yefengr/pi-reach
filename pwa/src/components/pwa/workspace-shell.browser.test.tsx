@@ -56,13 +56,13 @@ test("moves the toggle from the sidebar brand row to the title bar start, preser
   await button.click();
   await settleLayout();
   const after = buttonNode.getBoundingClientRect();
-  // 展开时位于侧栏品牌行右端，收起后停在会话标题区左端，与标题同一行。
+  // 展开时位于侧栏品牌行右端，收起后停在主区卡片标题区左端（卡片距窗口 8），与标题同一行。
   const brand = document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!.getBoundingClientRect();
   expect(before.right).toBe(252);
   expect(before.top).toBeGreaterThanOrEqual(brand.top);
   expect(before.bottom).toBeLessThanOrEqual(brand.bottom);
-  expect(after.x).toBe(8);
-  expect(after.y).toBe(before.y);
+  expect(after.x).toBe(16);
+  expect(after.y).toBe(before.y + 8);
   const heading = document.querySelector(".pwa-title-bar-heading")!.getBoundingClientRect();
   expect(heading.left).toBeGreaterThanOrEqual(after.right);
   expect(screen.getByRole("button", { name: "Expand sidebar" }).element()).toBe(buttonNode);

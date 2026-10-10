@@ -1,0 +1,128 @@
+/* 桌面主区内嵌卡片对比稿：token 取自 pwa/src/app/pwa-theme.css，只做视觉评审。 */
+:root {
+  --pwa-bg: #FFFFFF;
+  --pwa-surface: #FFFFFF;
+  --pwa-panel: #F7F7F7;
+  --pwa-message: #F2F2F2;
+  --pwa-hover: #EBEBEB;
+  --pwa-selected: #E5E5E5;
+  --pwa-ink: #2A2A2A;
+  --pwa-secondary: #606060;
+  --pwa-line: #E0E0E0;
+  --pwa-control-line: #878787;
+  --pwa-accent: #446396;
+  --pwa-on-accent: #FFFFFF;
+  --pwa-complete: #347953;
+  --pwa-scrim: #00000047;
+  --pwa-shadow-color: #0000001A;
+  --pwa-shadow-modal: 0 12px 32px var(--pwa-shadow-color);
+  --pwa-radius-sm: 6px;
+  --pwa-radius-md: 8px;
+  --pwa-radius-lg: 12px;
+  --pwa-topbar-height: 48px;
+  --pwa-sidebar-width: 260px;
+  /* 方案新增：主区卡片与窗口边缘的内缩距离。 */
+  --inset: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+}
+.theme-dark {
+  --pwa-bg: #1E1E1E;
+  --pwa-surface: #2D2D2D;
+  --pwa-panel: #282828;
+  --pwa-message: #353535;
+  --pwa-hover: #353535;
+  --pwa-selected: #3A3A3A;
+  --pwa-ink: #F0F0F0;
+  --pwa-secondary: #BCBCBC;
+  --pwa-line: #464646;
+  --pwa-control-line: #848484;
+  --pwa-accent: #98B8E6;
+  --pwa-on-accent: #142237;
+  --pwa-complete: #95CBA8;
+  --pwa-scrim: #0000008C;
+  --pwa-shadow-color: #0000004D;
+}
+
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html { background: #D9D9D9; }
+body { margin: 0; padding: 32px 24px 48px; font-family: var(--font); color: #2A2A2A; background: #D9D9D9; }
+h1 { margin: 0 0 4px; font-size: 24px; }
+.lead { margin: 0 0 16px; color: #4A4A4A; font-size: 14px; line-height: 1.6; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; }
+.controls label { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid #BDBDBD; border-radius: 6px; background: #FFFFFF; font-size: 14px; cursor: pointer; }
+
+.row { margin-bottom: 48px; }
+.row > h2 { margin: 0 0 12px; font-size: 18px; }
+.pair { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+figure { margin: 0; }
+figcaption { margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+figcaption small { margin-left: 8px; color: #606060; font-weight: 400; }
+
+/* 模拟浏览器窗口：外框圆角只代表系统窗口，不属于 PWA 本身。 */
+.window { width: 760px; height: 520px; overflow: hidden; border-radius: 10px; box-shadow: 0 0 0 1px #00000026, 0 8px 24px #00000026; font-family: var(--font); color: var(--pwa-ink); }
+.phone { width: 390px; height: 720px; overflow: hidden; position: relative; border-radius: 28px; box-shadow: 0 0 0 1px #00000026, 0 8px 24px #00000026; font-family: var(--font); color: var(--pwa-ink); }
+
+.i { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.i-16 { width: 16px; height: 16px; }
+
+/* ---------- 布局：当前（贴边）与方案（内嵌卡片） ---------- */
+.app { height: 100%; display: grid; grid-template-columns: var(--pwa-sidebar-width) minmax(0, 1fr); background: var(--pwa-bg); }
+.app.collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.app.collapsed .sidebar { visibility: hidden; }
+.app.inset { background: var(--pwa-panel); }
+.app.inset .main { margin: var(--inset) var(--inset) var(--inset) 0; border-radius: var(--pwa-radius-lg); }
+.app.inset.collapsed .main { margin-left: var(--inset); }
+body.with-border .app.inset .main { box-shadow: 0 0 0 1px var(--pwa-line); }
+
+/* ---------- 侧栏 ---------- */
+.sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 0 8px; background: var(--pwa-panel); }
+.brand { min-height: var(--pwa-topbar-height); display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 18px; font-weight: 600; }
+.brand svg { width: 24px; height: 24px; }
+.toggle { margin-left: auto; margin-right: -8px; }
+.icon-btn { width: 44px; height: 44px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--pwa-secondary); background: transparent; cursor: pointer; }
+.icon-btn:hover { color: var(--pwa-ink); }
+.computer { min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 14px; font-weight: 600; }
+.computer .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pwa-accent); }
+.computer span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.computer .i { color: var(--pwa-secondary); }
+.nav-scroll { min-height: 0; flex: 1; overflow: hidden; }
+.nav-heading { min-height: 32px; margin-top: 12px; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--pwa-secondary); font-size: 13px; font-weight: 600; }
+.nav-heading em { font-style: normal; font-weight: 400; }
+.nav-heading small { margin-left: auto; font-size: 13px; font-weight: 400; }
+.nav-row { min-height: 44px; margin-bottom: 2px; padding: 6px 8px; border-radius: var(--pwa-radius-sm); }
+.nav-row b { display: block; overflow: hidden; font-size: 14px; font-weight: 600; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.nav-row small { display: block; color: var(--pwa-secondary); font-size: 13px; line-height: 1.4; }
+.nav-row.current { background: var(--pwa-selected); }
+.nav-row:not(.current):hover { background: var(--pwa-hover); }
+.nav-foot { padding: 4px 0 8px; }
+.text-btn { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); background: transparent; font: 600 14px var(--font); cursor: pointer; }
+.text-btn:hover { background: var(--pwa-hover); }
+
+/* ---------- 主区 ---------- */
+.main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--pwa-bg); }
+.titlebar { min-height: var(--pwa-topbar-height); display: flex; align-items: center; gap: 4px; padding: 0 8px 0 20px; }
+.app.collapsed .titlebar { padding-left: 56px; }
+.titlebar h3 { min-width: 0; flex: 1; margin: 0; overflow: hidden; font-size: 18px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.titlebar h3 span { color: var(--pwa-secondary); font-weight: 400; }
+.conn { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; color: var(--pwa-secondary); font-size: 13px; }
+.conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--pwa-complete); }
+/* 收起后展开入口停在标题区左端（方案中位于卡片内）。 */
+.expand { position: absolute; top: 2px; left: 8px; }
+.messages { flex: 1; min-height: 0; overflow: hidden; padding: 16px 20px 0; }
+.column { max-width: 680px; margin: 0 auto; }
+.bubble { width: fit-content; max-width: 80%; margin: 0 0 16px auto; padding: 10px 14px; border-radius: var(--pwa-radius-md); background: var(--pwa-message); font-size: 16px; line-height: 1.65; }
+.reply { margin: 0 0 12px; font-size: 16px; line-height: 1.65; }
+.composer { padding: 0 20px 16px; }
+.composer-card { max-width: 680px; min-height: 96px; margin: 0 auto; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 8px 8px 14px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); color: var(--pwa-secondary); font-size: 16px; }
+.composer-bar { display: flex; align-items: center; gap: 4px; }
+.composer-bar .model { margin-left: auto; font-size: 13px; font-weight: 600; }
+.send { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: var(--pwa-on-accent); background: var(--pwa-accent); opacity: .45; }
+
+/* ---------- 移动导航 Drawer ---------- */
+.mobile { height: 100%; position: relative; background: var(--pwa-bg); }
+.mobile .titlebar { padding: 44px 4px 0; min-height: 92px; }
+.mobile .titlebar h3 { font-size: 18px; }
+.mobile .scrim { position: absolute; inset: 0; background: var(--pwa-scrim); }
+.drawer { position: absolute; top: 0; bottom: 0; left: 0; width: min(320px, 85%); display: flex; flex-direction: column; padding: 44px 8px 24px; background: var(--pwa-panel); box-shadow: var(--pwa-shadow-modal); }
+.drawer.rounded { border-radius: 0 var(--pwa-radius-lg) var(--pwa-radius-lg) 0; }

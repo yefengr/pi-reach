@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>桌面主区内嵌卡片对比</title>
+  <link rel="stylesheet" href="./shared.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-brand" viewBox="0 0 64 64"><path fill="currentColor" stroke="none" d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z"/><path fill="currentColor" stroke="none" d="M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z"/><path fill="currentColor" stroke="none" d="M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  </svg>
+
+  <h1>桌面主区内嵌卡片对比</h1>
+  <p class="lead">左为当前实现：侧栏与主区都贴着窗口边缘。右为推荐方案：应用底色改为 panel，主区作为圆角 12 的卡片，上、右、下各内缩 8px，不加阴影；侧栏本身不变。窗口外框的圆角和阴影只是模拟浏览器窗口。原型状态：已确认（2026-10-10，采用无边框卡片与移动导航右侧圆角，见 ADR-20261010）。</p>
+  <div class="controls">
+    <label><input type="checkbox" id="border-toggle"> 方案主区 1px line 边框</label>
+  </div>
+
+  <section class="row" aria-label="浅色展开">
+    <h2>浅色 · 侧栏展开</h2>
+    <div class="pair">
+      <figure><figcaption>当前<small>贴边</small></figcaption><div class="window" data-app data-variant="flush"></div></figure>
+      <figure><figcaption>方案<small>主区内嵌卡片</small></figcaption><div class="window" data-app data-variant="inset"></div></figure>
+    </div>
+  </section>
+
+  <section class="row" aria-label="深色展开">
+    <h2>深色 · 侧栏展开</h2>
+    <div class="pair">
+      <figure><figcaption>当前<small>贴边</small></figcaption><div class="window theme-dark" data-app data-variant="flush"></div></figure>
+      <figure><figcaption>方案<small>主区内嵌卡片</small></figcaption><div class="window theme-dark" data-app data-variant="inset"></div></figure>
+    </div>
+  </section>
+
+  <section class="row" aria-label="浅色收起">
+    <h2>浅色 · 侧栏收起</h2>
+    <div class="pair">
+      <figure><figcaption>当前<small>主区占满</small></figcaption><div class="window" data-app data-variant="flush" data-collapsed></div></figure>
+      <figure><figcaption>方案<small>卡片四边内缩 8</small></figcaption><div class="window" data-app data-variant="inset" data-collapsed></div></figure>
+    </div>
+  </section>
+
+  <section class="row" aria-label="移动导航">
+    <h2>移动 · 导航 Drawer（可选小改动）</h2>
+    <div class="pair">
+      <figure><figcaption>当前<small>直角</small></figcaption><div class="phone" data-mobile></div></figure>
+      <figure><figcaption>方案<small>右侧两角 12</small></figcaption><div class="phone" data-mobile data-rounded></div></figure>
+      <figure><figcaption>方案 · 深色</figcaption><div class="phone theme-dark" data-mobile data-rounded></div></figure>
+    </div>
+  </section>
+
+  <template id="tpl-sidebar">
+    <div class="brand"><svg class="i"><use href="#i-brand"/></svg>Pi Reach<button class="icon-btn toggle" type="button" aria-label="收起侧栏"><svg class="i"><use href="#i-left"/></svg></button></div>
+    <div class="computer"><i class="dot"></i><span>yefengdeMacBook-Pro.local</span><svg class="i"><use href="#i-down"/></svg></div>
+    <div class="nav-scroll">
+      <div class="nav-heading"><svg class="i i-16"><use href="#i-msg"/></svg>在线 Pi<small>1</small></div>
+      <div class="nav-row current"><b>核查 UI 规范实施覆盖</b><small>pi-reach · 空闲</small></div>
+      <div class="nav-heading"><svg class="i i-16"><use href="#i-history"/></svg>本地历史<em>仅保存在此浏览器</em><small>11</small></div>
+      <div class="nav-row"><b>启动测试 Relay 配对会话</b><small>昨天</small></div>
+      <div class="nav-row"><b>磁盘已用空间完整归因</b><small>10月7日</small></div>
+      <div class="nav-row"><b>修复原生返回并提交 PR</b><small>10月7日</small></div>
+      <div class="nav-row"><b>修复设置返回闪屏并更新测试候选</b><small>10月7日</small></div>
+      <div class="nav-row"><b>排查移动端设置返回闪屏</b><small>10月7日</small></div>
+    </div>
+    <div class="nav-foot">
+      <button class="text-btn" type="button"><svg class="i"><use href="#i-link"/></svg>配对电脑</button>
+      <button class="text-btn" type="button"><svg class="i"><use href="#i-gear"/></svg>设置</button>
+    </div>
+  </template>
+
+  <template id="tpl-main">
+    <div class="titlebar">
+      <h3><span>pi-reach · </span>核查 UI 规范实施覆盖</h3>
+      <span class="conn"><i></i>已连接</span>
+      <button class="icon-btn" type="button" aria-label="刷新"><svg class="i"><use href="#i-refresh"/></svg></button>
+      <button class="icon-btn" type="button" aria-label="更多"><svg class="i"><use href="#i-more"/></svg></button>
+    </div>
+    <div class="messages"><div class="column">
+      <div class="bubble">核查 UI 规范在桌面和移动端的实施覆盖情况</div>
+      <p class="reply">已对照 DESIGN.md 逐项检查：侧栏、会话标题区、Composer 与设置页均已按新规范实现；移动导航的状态栏避让与右滑返回也有自动化测试覆盖。</p>
+      <p class="reply">未覆盖项只剩两条，均为横屏刘海下的安全区组合，建议补一条 Playwright 几何断言。</p>
+    </div></div>
+    <div class="composer"><div class="composer-card">给 Pi 发送消息
+      <div class="composer-bar">
+        <button class="icon-btn" type="button" aria-label="添加附件"><svg class="i"><use href="#i-paperclip"/></svg></button>
+        <span class="model">claude-opus · 高</span>
+        <span class="send"><svg class="i"><use href="#i-up"/></svg></span>
+      </div>
+    </div></div>
+  </template>
+
+  <template id="tpl-mobile">
+    <div class="titlebar">
+      <button class="icon-btn" type="button" aria-label="打开导航"><svg class="i"><use href="#i-menu"/></svg></button>
+      <h3>核查 UI 规范实施覆盖</h3>
+      <button class="icon-btn" type="button" aria-label="更多"><svg class="i"><use href="#i-more"/></svg></button>
+    </div>
+    <div class="messages"><div class="column">
+      <div class="bubble">核查 UI 规范在桌面和移动端的实施覆盖情况</div>
+      <p class="reply">已对照 DESIGN.md 逐项检查，侧栏、会话标题区与 Composer 均已按新规范实现。</p>
+    </div></div>
+    <div class="scrim"></div>
+    <nav class="drawer sidebar" aria-label="导航"></nav>
+  </template>
+
+  <script>
+    // 仅把同一份模板克隆进各对比画框，不含业务逻辑。
+    const tpl = (id) => document.getElementById(id).content.cloneNode(true);
+
+    document.querySelectorAll('[data-app]').forEach((frame) => {
+      const app = document.createElement('div');
+      app.className = 'app' + (frame.dataset.variant === 'inset' ? ' inset' : '');
+      const collapsed = frame.hasAttribute('data-collapsed');
+      if (collapsed) app.classList.add('collapsed');
+      const sidebar = document.createElement('nav');
+      sidebar.className = 'sidebar';
+      sidebar.setAttribute('aria-label', '导航');
+      sidebar.append(tpl('tpl-sidebar'));
+      const main = document.createElement('main');
+      main.className = 'main';
+      main.append(tpl('tpl-main'));
+      if (collapsed) main.insertAdjacentHTML('beforeend', '<button class="icon-btn expand" type="button" aria-label="展开侧栏"><svg class="i"><use href="#i-right"/></svg></button>');
+      app.append(sidebar, main);
+      frame.append(app);
+    });
+
+    document.querySelectorAll('[data-mobile]').forEach((frame) => {
+      const mobile = document.createElement('div');
+      mobile.className = 'mobile';
+      mobile.append(tpl('tpl-mobile'));
+      const drawer = mobile.querySelector('.drawer');
+      if (frame.hasAttribute('data-rounded')) drawer.classList.add('rounded');
+      drawer.append(tpl('tpl-sidebar'));
+      const toggle = drawer.querySelector('.toggle');
+      toggle.setAttribute('aria-label', '关闭导航');
+      toggle.querySelector('use').setAttribute('href', '#i-x');
+      frame.append(mobile);
+    });
+
+    document.getElementById('border-toggle').addEventListener('change', (event) => {
+      document.body.classList.toggle('with-border', event.target.checked);
+    });
+  </script>
+</body>
+</html>
