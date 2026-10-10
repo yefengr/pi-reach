@@ -403,6 +403,7 @@ test("a local preview of the same session becomes the retained projection for an
   const prepared = runtime.prepareLive(scope, 12);
   expect(prepared.plan).toEqual({ mode: "append", startSeq: 11, endSeq: 12, earliestSeq: 1 });
   expect(prepared.change.items.filter((item) => item.kind === "event")).toHaveLength(10);
+  expect(prepared.previewMatched).toBe(true);
   expect(runtime.previewing).toBe(false);
 });
 
@@ -412,6 +413,7 @@ test("a local preview of another session is dropped before the new session loads
   const prepared = runtime.prepareLive({ ...scope, sessionId: "new-session" }, 5);
   expect(prepared.plan).toEqual({ mode: "replace", startSeq: 1, endSeq: 5, earliestSeq: 1 });
   expect(prepared.change.items).toEqual([]);
+  expect(prepared.previewMatched).toBe(false);
   expect(runtime.previewing).toBe(false);
 });
 

@@ -79,7 +79,8 @@ export type TimelineLivePlan = {
   endSeq: number;
   earliestSeq: number | null;
 };
-export type TimelineLivePreparation = { change: TimelineRuntimeChange; plan: TimelineLivePlan };
+/** previewMatched：握手确认了本地预览的同一会话，后续补齐只是接上最新记录。 */
+export type TimelineLivePreparation = { change: TimelineRuntimeChange; plan: TimelineLivePlan; previewMatched: boolean };
 /** 本地缓存预览所属的会话；持久化历史不含 runtime，按电脑、Pi 与会话识别。 */
 export type TimelinePreviewTarget = { deviceId: string; endpointId: string; sessionId: string };
 type Pending = TimelinePending & { scope: TimelineScope; insertionRejected?: boolean };
@@ -185,14 +186,14 @@ export class TimelineRuntime {
       this.clearTransient(true);
       this.scope = scope;
       this.liveHeadSeq = 0;
-      return { change: this.change(), plan: { mode: "append", startSeq: null, endSeq: 0, earliestSeq: null } };
+      return { change: this.change(), plan: { mode: "append", startSeq: null, endSeq: 0, earliestSeq: null }, previewMatched };
     }
     if (canAppend && retained && safeHeadSeq >= retained.maxSeq) {
       this.clearTransient(true);
       this.scope = scope;
       this.liveHeadSeq = safeHeadSeq;
       const gap = safeHeadSeq - retained.maxSeq;
-      if (gap <= TIMELINE_RECENT_LIMIT) return { change: this.change(), plan: { mode: "append", startSeq: gap === 0 ? null : retained.maxSeq + 1, endSeq: safeHeadSeq, earliestSeq: retained.minSeq } };
+      if (gap <= TIMELINE_RECENT_LIMIT) return { change: this.change(), plan: { mode: "append", startSeq: gap === 0 ? null : retained.maxSeq + 1, endSeq: safeHeadSeq, earliestSeq: retained.minSeq }, previewMatched };
     }
 
     this.replacement ??= createTimelineReplacement(this.events.values());
@@ -202,7 +203,7 @@ export class TimelineRuntime {
     this.scope = scope;
     this.liveHeadSeq = safeHeadSeq;
     const startSeq = safeHeadSeq === 0 ? null : Math.max(1, safeHeadSeq - TIMELINE_RECENT_LIMIT + 1);
-    return { change: this.change(), plan: { mode: "replace", startSeq, endSeq: safeHeadSeq, earliestSeq: startSeq } };
+    return { change: this.change(), plan: { mode: "replace", startSeq, endSeq: safeHeadSeq, earliestSeq: startSeq }, previewMatched };
   }
   cancelReplacement(): TimelineRuntimeChange {
     if (!this.replacement) return this.change();

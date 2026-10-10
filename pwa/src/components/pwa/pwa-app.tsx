@@ -16,7 +16,8 @@ import { focusedElement, runConfirmAction, useConfirmationOverlay, type ConfirmA
 import { SettingsPage } from "@/components/pwa/settings-page";
 import { reloadWorkspace, useSettingsRoute } from "@/lib/pwa/settings-route";
 import { SessionActionsMenu } from "@/components/pwa/session-actions-menu";
-import { ConnectionStatus, cwdName, displayDevice, type ConnectionViewState, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
+import { ConnectionStatus, cwdName, displayDevice, type ConnectionViewState, type NavigationSwitchTarget, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
+import { useSwitchOutFade } from "@/components/pwa/use-switch-out-fade";
 import { displayPi } from "@/components/pwa/session-title";
 import { PwaWorkspaceLayout } from "@/components/pwa/pwa-workspace-layout";
 import { PwaOperationNotifications, PwaToastProvider, useToast } from "@/components/pwa/pwa-operation-notifications";
@@ -178,6 +179,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     enabled: selectedHistory === null,
     reportHistoryFailure,
   });
+
+  const switchOut = useSwitchOutFade(messageListRef);
 
   const attachments = useAttachmentComposer((message) => {
     const scope = timelineRuntimeRef.current.currentScope;
@@ -798,6 +801,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     await runConfirmAction(confirmAction, { startNewSession: () => sendCommandAction({ action: "session_new" }), removePairing, invalidateConnection: clearSessionConnection, clearLocalData, reload: reloadWorkspace }, { pendingRef: confirmPendingRef, setPending: setConfirmPending, setError: setConfirmError, onSuccess: () => setConfirmAction(null) });
   }, [attachmentComposer, fileController, filesReadyRef, clearLocalData, clearSessionConnection, confirmAction, isActiveDevice, removePairing, sendCommandAction]);
   const navigate = (next: () => void) => {
+    // 真正切换时新内容在同一次提交中换上；需要确认时在确认框下方恢复原会话。
+    switchOut.settle();
     const uploads = attachmentComposer.snapshot().active;
     const files = fileController.snapshot().active;
     const switchTarget = () => { fileController.reset(); filesReadyRef.current = false; next(); };
@@ -806,10 +811,15 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   };
   const selectLiveEndpoint = (endpointId: string) => {
     if (selectedHistory !== null || endpointId !== activeEndpointId) navigate(() => openLiveEndpoint(endpointId));
+    else switchOut.settle();
   };
   const selectHistory = (history: TimelineSessionSummary) => {
     if (selectedHistory?.id !== history.id) navigate(() => openHistory(history));
+    else switchOut.settle();
   };
+  const switchesTo = (target: NavigationSwitchTarget) => target.kind === "device"
+    ? target.deviceId !== activeDeviceId
+    : target.kind === "endpoint" ? selectedHistory !== null || target.endpointId !== activeEndpointId : selectedHistory?.id !== target.historyId;
   const onlinePis = useMemo(() => activePis.filter((endpoint) => endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right))), [activePis]);
   const placeholderKind: WorkspacePlaceholderKind = !activeDevice ? "choose-computer" : !snapshotReady ? "checking" : onlinePis.length === 0 ? "no-pi" : onlinePis.length > 1 ? "choose-pi" : "opening";
   // 在线 Pi 的当前会话只出现在「在线 Pi」分组：当前选中的 Pi 只隐藏已握手的实时会话；其他在线 Pi 隐藏它在本浏览器中
@@ -915,7 +925,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   // 选择其他 Pi：只有一个在线时直接进入，多个时回到主区选择列表。
   const chooseOtherPi = () => { if (onlinePis.length === 1) openLiveEndpoint(onlinePis[0]!.endpointId); else setExitedEndpoint(null); };
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
-  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) navigate(() => selectDevice(deviceId)); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
+  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) navigate(() => selectDevice(deviceId)); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
   const connectionStatus = <ConnectionStatus state={displayConnection} retryAttempt={retryAttempt} />;
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;

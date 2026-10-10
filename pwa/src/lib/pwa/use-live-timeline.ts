@@ -64,6 +64,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   const [reconnectPhase, setReconnectPhase] = useState<TimelineReconnectPhase>(null);
   const [catchupFailed, setCatchupFailed] = useState(false);
   const [catchingUp, setCatchingUp] = useState(false);
+  // 接在本地预览之后的补齐只追加最新记录，不在顶部显示「正在加载记录」，避免内容上下跳动。
+  const [quietCatchup, setQuietCatchup] = useState(false);
 
   const runtimeRef = useRef(new TimelineRuntime());
   const historyLoaderRef = useRef<TimelineHistoryLoader | null>(null);
@@ -205,6 +207,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     replacementRequiresReplaceRef.current = forceAuthoritativeReplacement || hadExistingProjection;
     persistenceEpochRef.current = beginTimelinePersistenceEpoch(runtimeRef.current);
     const prepared = runtimeRef.current.prepareLive(scope, headSeq);
+    setQuietCatchup(prepared.previewMatched);
     fragmentAssemblerRef.current = new TimelineEventFragmentAssembler({ session_id: scope.sessionId, leaf_id: scope.leafId });
 
     const loader = new TimelineHistoryLoader({
@@ -391,8 +394,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     items,
     lastSyncedAt,
     setLastSyncedAt,
-    hasEarlier: hasEarlierState || catchupFailed || catchingUp,
-    loadingEarlier: loadingEarlier || catchingUp,
+    hasEarlier: hasEarlierState || catchupFailed || (catchingUp && !quietCatchup),
+    loadingEarlier: loadingEarlier || (catchingUp && !quietCatchup),
     reconnectPhase,
     catchupFailed,
     catchingUp,

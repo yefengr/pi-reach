@@ -225,9 +225,18 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
   const wrappedPair = () => closeAfter(navigation.onPair);
   // 进入设置页时导航不先播放关闭动画：设置页推入完成后由工作区布局直接卸载导航。
   const wrappedSettings = navigation.onSettings;
-  const wrappedDevice = (deviceId: string) => closeAfter(() => navigation.onSelectDevice(deviceId));
-  const wrappedEndpoint = (endpointId: string) => closeAfter(() => navigation.onSelectEndpoint(endpointId));
-  const wrappedHistory = (history: Parameters<WorkspaceNavigationProps["onSelectHistory"]>[0]) => closeAfter(() => navigation.onSelectHistory(history));
+  const wrappedDevice = (deviceId: string) => {
+    navigation.onSwitchIntent?.({ kind: "device", deviceId });
+    closeAfter(() => navigation.onSelectDevice(deviceId));
+  };
+  const wrappedEndpoint = (endpointId: string) => {
+    navigation.onSwitchIntent?.({ kind: "endpoint", endpointId });
+    closeAfter(() => navigation.onSelectEndpoint(endpointId));
+  };
+  const wrappedHistory = (history: Parameters<WorkspaceNavigationProps["onSelectHistory"]>[0]) => {
+    navigation.onSwitchIntent?.({ kind: "history", historyId: history.id });
+    closeAfter(() => navigation.onSelectHistory(history));
+  };
   const wrappedRename = (device: Parameters<WorkspaceNavigationProps["onRename"]>[0]) => closeAfter(() => navigation.onRename(device));
   const wrappedRemove = (device: Parameters<WorkspaceNavigationProps["onRemove"]>[0]) => navigation.onRemove(device);
 

@@ -3227,3 +3227,47 @@ test("opens long saved history behind a loading state with its latest page and k
     await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(200);
   } finally { release(); await screen.unmount(); }
 });
+
+test("the mobile navigation fades out the old session while it exits and hands over to the new one", async () => {
+  await page.viewport(390, 844);
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderTwoPis();
+  const fadeOuts = () => [...(document.querySelector(".pwa-message-list")?.getAnimations() ?? [])]
+    .filter((animation) => (animation.effect as KeyframeEffect).getKeyframes().at(-1)?.opacity === "0");
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1", 3));
+    await expect.poll(listText).toContain("Record 3");
+
+    expect(fadeOuts()).toHaveLength(0);
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await screen.getByRole("dialog", { name: /Workspace/ }).getByRole("button", { name: /Second Pi/ }).click();
+    expect(fadeOuts()).toHaveLength(1);
+    await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    expect(fadeOuts()).toHaveLength(0);
+    expect(listText()).not.toContain("Record 3");
+  } finally { await screen.unmount(); }
+});
+
+test("catching up after a saved preview appends the newest records without a top loading row", async () => {
+  await seedTimeline(numberedEvents(3));
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: `active_endpoint:${makePwaDeviceId("owner-device-key")}`, value: "second-endpoint" });
+  const screen = await renderTwoPis();
+  try {
+    const first = channelHarness.channels[0]!;
+    first.emit(readyFrame(first, "second-session"));
+    await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
+
+    await selectPi("Test Pi");
+    await expect.poll(listText).toContain("Record 3");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const returned = channelHarness.channels[1]!;
+    returned.emit(readyFrame(returned, "session-1", 5));
+    await expect.poll(() => returned.frames.some((frame) => frame.type === "session_sync")).toBe(true);
+    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+    returned.emit(recentHistoryFrame(returned, "session-1", numberedEvents(2, 4)));
+    await expect.poll(listText).toContain("Record 5");
+    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+  } finally { await screen.unmount(); }
+});
