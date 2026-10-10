@@ -171,6 +171,16 @@
   --pwa-radius-md: 8px;
   --pwa-radius-lg: 12px;
 
+  /* 通用间距档位，按内容关系选用（见 DESIGN「间距」）；Mantine spacing xs–xl 依次引用 8／12／16／24／32。
+     页面 gutter（桌面 20、移动 16）不是通用档位，由布局层单独定义。 */
+  --pwa-space-2xs: 4px;
+  --pwa-space-xs: 8px;
+  --pwa-space-sm: 12px;
+  --pwa-space-md: 16px;
+  --pwa-space-lg: 24px;
+  --pwa-space-xl: 32px;
+  --pwa-space-2xl: 48px;
+
   --pwa-shadow-float: 0 4px 16px var(--pwa-shadow-color);
   --pwa-shadow-modal: 0 12px 32px var(--pwa-shadow-color);
 
@@ -198,14 +208,6 @@
   /* 应用整体高度；独立窗口见下方覆盖。 */
   --pwa-app-height: 100dvh;
   --maxw: 1180px;
-
-  /* Tailwind 工具类使用的别名。 */
-  --bg: var(--pwa-bg);
-  --fg: var(--pwa-ink);
-  --accent: var(--pwa-accent);
-  --muted: var(--pwa-secondary);
-  --surface: var(--pwa-panel);
-  --border-soft: var(--pwa-line);
 }
 
 /*

@@ -132,3 +132,20 @@ test("plain toasts close after four seconds unless hovered, and wait behind an e
     await expect.element(screen.getByText("Connection restored")).toBeVisible();
   } finally { await screen.unmount(); }
 }, 20_000);
+
+test("toast actions keep a 44px touch target without growing the card", async () => {
+  const controller = createOperationNotificationController();
+  const screen = await render(<Harness controller={controller} />);
+  try {
+    controller.notify("Settings saved");
+    await expect.element(screen.getByText("Settings saved")).toBeVisible();
+    const plainHeight = document.querySelector<HTMLElement>(".pwa-operation-notification")!.getBoundingClientRect().height;
+    controller.notify("New version available", { action: { label: "Refresh", onClick: () => {} } });
+    const action = screen.getByRole("button", { name: "Refresh" });
+    await expect.element(action).toBeVisible();
+    expect(Math.round(action.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    expect(getComputedStyle(action.element(), "::before").top).toBe("4px");
+    const card = document.querySelector<HTMLElement>(".pwa-operation-notification")!;
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(Math.round(plainHeight));
+  } finally { await screen.unmount(); }
+});

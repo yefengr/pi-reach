@@ -4,13 +4,8 @@
 @import "./workspace-shell.css";
 @import "./queued-messages.css";
 
+/* Tailwind 只提供 preflight 与入口；业务组件不使用其间距、颜色和圆角工具类，颜色一律引用 --pwa-* token。 */
 @theme inline {
-  --color-bg: var(--bg);
-  --color-fg: var(--fg);
-  --color-accent: var(--accent);
-  --color-muted: var(--muted);
-  --color-surface: var(--surface);
-  --color-border-soft: var(--border-soft);
   --font-sans: var(--pwa-font-ui);
   --font-mono: var(--pwa-font-mono);
 }
@@ -204,12 +199,10 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
-.pwa-ui-scope .pwa-button[data-variant="default"],
-.pwa-ui-scope .pwa-button[data-variant="light"] { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
-@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]),
-.pwa-ui-scope .pwa-button[data-variant="light"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
-.pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]),
-.pwa-ui-scope .pwa-button[data-variant="light"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
+/* 次级按钮只用 default 变体：surface 底、1px line 边框、ink 文字。 */
+.pwa-ui-scope .pwa-button[data-variant="default"] { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
+.pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
 .pwa-ui-scope .pwa-button[data-variant="transparent"] { padding: 0 10px; border-color: transparent; color: var(--pwa-accent); background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="transparent"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: var(--pwa-error); color: var(--pwa-error); background: transparent; }
@@ -329,7 +322,8 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 选中项只加深描边；颜色只留给单选圆点。 */
 .pwa-appearance-option:has(input:checked) { border-color: var(--pwa-ink); background: var(--pwa-surface); }
 .pwa-appearance-option .mantine-Radio-inner { align-self: center; }
-.pwa-appearance-option .mantine-Radio-radio { border-color: var(--pwa-line); }
+/* 未选中的圆点是需要识别的控件轮廓，用 control-line（≥ 3:1）；卡片外框仍是装饰性 line。 */
+.pwa-appearance-option .mantine-Radio-radio { border-color: var(--pwa-control-line); }
 .pwa-appearance-option .mantine-Radio-radio:checked { border-color: var(--pwa-accent); background: var(--pwa-accent); }
 .pwa-appearance-option .mantine-Radio-labelWrapper { min-width: 0; flex: 1; }
 .pwa-appearance-option .mantine-Radio-label { display: block; padding-left: 10px; color: var(--pwa-ink); }
@@ -352,7 +346,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-input input:disabled,
 .pwa-ui-scope .pwa-textarea textarea:disabled { color: var(--pwa-secondary); background: var(--pwa-disabled-bg); opacity: 1; }
 .pwa-ui-scope .pwa-input .mantine-InputWrapper-label,
-.pwa-ui-scope .pwa-textarea .mantine-InputWrapper-label { margin-bottom: 6px; color: var(--pwa-ink); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
+.pwa-ui-scope .pwa-textarea .mantine-InputWrapper-label { margin-bottom: var(--pwa-space-xs); color: var(--pwa-ink); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
 .pwa-ui-scope .pwa-input .mantine-InputWrapper-description,
 .pwa-ui-scope .pwa-textarea .mantine-InputWrapper-description { margin-top: 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 .pwa-layout-reset-note { margin: 6px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
@@ -508,8 +502,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-operation-notifications .pwa-toast-error .pwa-toast-icon { color: var(--pwa-error); }
 .pwa-operation-notifications .pwa-operation-notification-message { color: inherit; font: inherit; overflow-wrap: anywhere; }
 .pwa-operation-notifications .pwa-toast-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pwa-operation-notifications .pwa-toast-action { flex: 0 0 auto; white-space: nowrap; min-height: 36px; padding: 0 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
-@media (hover: hover) { .pwa-operation-notifications .pwa-toast-action:hover { background: var(--pwa-hover); } }
+/* 操作按钮点击区 44，视觉底色仍为 36 高：底色画在上下各内缩 4 的伪元素上，焦点轮廓同样内缩。 */
+.pwa-operation-notifications .pwa-toast-action { position: relative; isolation: isolate; flex: 0 0 auto; white-space: nowrap; min-height: 44px; padding: 0 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
+.pwa-operation-notifications .pwa-toast-action::before { content: ""; position: absolute; z-index: -1; inset: 4px 0; border-radius: var(--pwa-radius-sm); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-operation-notifications .pwa-toast-action:focus-visible { outline-offset: -4px; }
+@media (hover: hover) { .pwa-operation-notifications .pwa-toast-action:hover::before { background: var(--pwa-hover); } }
 .pwa-operation-notifications .pwa-operation-notification-close { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; color: var(--pwa-secondary); }
 
 /* 密度取应用壳的实际可见高度；软键盘不改变 layout viewport 时也使用同一套规则。 */

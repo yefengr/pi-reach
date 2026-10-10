@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { ActionIcon, Badge, Button, Select, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Badge, Button, Radio, Select, Stack, Text, TextInput, Title } from "@mantine/core";
 import { DesktopSidebar } from "./workspace-view";
 
 function SelectHarness({ disabled = false }: { disabled?: boolean }) {
@@ -166,5 +166,54 @@ test.each(["light", "dark"] as const)("direct Mantine controls preserve variants
     else document.documentElement.setAttribute("data-mantine-color-scheme", originalScheme);
     await screen.unmount();
     await page.viewport(1280, 900);
+  }
+});
+
+/** 解析 token 的实际颜色，与元素计算样式比较时不依赖十六进制写法。 */
+function resolvedColor(token: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = `var(${token})`;
+  document.querySelector(".pwa-root")!.append(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
+test("Mantine spacing follows the spacing tokens, including button icon sections", async () => {
+  const screen = await renderPwa(<>
+    {(["xs", "sm", "md", "lg", "xl"] as const).map(size => <Stack key={size} data-testid={`stack-${size}`} gap={size}><span>a</span><span>b</span></Stack>)}
+    <Button leftSection={<span data-testid="icon-section">+</span>}>With icon</Button>
+  </>);
+  try {
+    for (const [size, gap] of [["xs", "8px"], ["sm", "12px"], ["md", "16px"], ["lg", "24px"], ["xl", "32px"]] as const) {
+      expect(getComputedStyle(screen.getByTestId(`stack-${size}`).element()).rowGap).toBe(gap);
+    }
+    const section = screen.getByTestId("icon-section").element().closest(".mantine-Button-section")!;
+    const label = document.querySelector(".mantine-Button-label")!;
+    expect(Math.round(label.getBoundingClientRect().left - section.getBoundingClientRect().right)).toBe(8);
+  } finally { await screen.unmount(); }
+});
+
+test.each(["light", "dark"] as const)("form labels sit 8px above inputs and unchecked radios use the control outline in %s mode", async (scheme) => {
+  const originalScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  const screen = await renderPwa(<>
+    <TextInput className="pwa-input" label="Relay URL" />
+    <Radio.Group name="probe" value="a" className="pwa-appearance-options">
+      <Radio className="pwa-appearance-option" value="a" label="Selected" />
+      <Radio className="pwa-appearance-option" value="b" label="Unselected" />
+    </Radio.Group>
+  </>);
+  try {
+    document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
+    const label = document.querySelector(".pwa-input .mantine-InputWrapper-label")!.getBoundingClientRect();
+    const input = screen.getByRole("textbox", { name: "Relay URL" }).element().getBoundingClientRect();
+    expect(Math.round(input.top - label.bottom)).toBe(8);
+    const unchecked = screen.getByRole("radio", { name: "Unselected" }).element();
+    // 切换外观后边框颜色有过渡，等过渡结束再比较。
+    await expect.poll(() => getComputedStyle(unchecked).borderTopColor).toBe(resolvedColor("--pwa-control-line"));
+  } finally {
+    if (originalScheme === null) document.documentElement.removeAttribute("data-mantine-color-scheme");
+    else document.documentElement.setAttribute("data-mantine-color-scheme", originalScheme);
+    await screen.unmount();
   }
 });

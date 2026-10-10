@@ -111,7 +111,7 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
         onMenuChange={onMenuChange}
       />)}
     </div>
-    <Button className="pwa-device-panel-pair" variant="light" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
+    <Button className="pwa-device-panel-pair" variant="default" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
   </div>;
 }
 
