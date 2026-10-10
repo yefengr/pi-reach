@@ -5,6 +5,10 @@ import { userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { ActionIcon, Badge, Button, Radio, Select, Stack, Text, TextInput, Title } from "@mantine/core";
 import { DesktopSidebar } from "./workspace-view";
+import { ChoosePiWorkspace, UnpairedWorkspace } from "./workspace-content";
+import { StartupErrorView } from "./pwa-startup";
+import { PwaConnectionBanner } from "./pwa-app-actions";
+import type { PwaEndpointRecord } from "@/lib/pwa/db";
 
 function SelectHarness({ disabled = false }: { disabled?: boolean }) {
   const [value, setValue] = useState("endpoint-main");
@@ -216,4 +220,58 @@ test.each(["light", "dark"] as const)("form labels sit 8px above inputs and unch
     else document.documentElement.setAttribute("data-mantine-color-scheme", originalScheme);
     await screen.unmount();
   }
+});
+
+const gap = (upper: Element, lower: Element) => Math.round(lower.getBoundingClientRect().top - upper.getBoundingClientRect().bottom);
+const onlineEndpoint = (id: string): PwaEndpointRecord => ({ id: `endpoint:${id}`, deviceId: "device", endpointId: id, runtimeInstanceId: id, kind: "interactive", name: `Pi ${id}`, cwd: "/repo/pi-reach", online: true, updatedAt: 1 });
+
+test("empty states space icon, title, description and the next block by one layout layer", async () => {
+  await page.viewport(1280, 900);
+  let screen = await renderPwa(<div className="pwa-main"><UnpairedWorkspace onPair={() => {}} /></div>);
+  const state = document.querySelector(".pwa-workspace-state")!;
+  expect(getComputedStyle(state).rowGap).toBe("0px");
+  const [icon, title, description, block, action] = [".pwa-workspace-state-icon", "h2", "p", ".pwa-command-block", ".pwa-button"].map(selector => state.querySelector(selector)!);
+  expect([gap(icon, title), gap(title, description), gap(description, block), gap(block, action)]).toEqual([16, 8, 16, 16]);
+  await screen.unmount();
+  screen = await renderPwa(<div className="pwa-main"><ChoosePiWorkspace endpoints={[onlineEndpoint("a"), onlineEndpoint("b")]} onSelect={() => {}} /></div>);
+  expect(gap(document.querySelector(".pwa-choose-pi h2")!, document.querySelector(".pwa-choose-pi-list")!)).toBe(16);
+  await screen.unmount();
+});
+
+test("navigation row text shares the 16px left edge of the brand and section headings", async () => {
+  await page.viewport(1280, 720);
+  const screen = await renderPwa(<DesktopSidebar devices={[{ id: "device:a", deviceId: "device", relayUrl: "https://relay.example.test", pairedAt: "2026-01-01T00:00:00.000Z", hostname: "office" }]} endpoints={[onlineEndpoint("a")]} history={[]} activeDeviceId="device:a" activeEndpointId={null} selectedHistoryId={null} snapshotReady onPair={() => {}} onSettings={() => {}} onSelectDevice={() => {}} onSelectEndpoint={() => {}} onSelectHistory={() => {}} onRename={() => {}} onRemove={() => {}} />);
+  try {
+    const sidebar = document.querySelector(".pwa-sidebar")!.getBoundingClientRect();
+    const heading = document.querySelector(".pwa-nav-section-heading")!;
+    const label = document.querySelector(".pwa-nav-session .mantine-NavLink-label")!.getBoundingClientRect();
+    expect(Math.round(label.left - sidebar.left)).toBe(16);
+    // 分组标题以 16 的图标开头，图标盒左缘即内容左缘。
+    expect(Math.round(heading.firstElementChild!.getBoundingClientRect().left - sidebar.left)).toBe(16);
+  } finally { await screen.unmount(); }
+});
+
+test("disabled command rows use secondary text instead of transparency", async () => {
+  const screen = await renderPwa(<div className="pwa-command-menu-panel">
+    <button type="button" className="pwa-command-row" disabled><span className="pwa-command-copy"><code>/compact</code><small>Compact context</small></span></button>
+  </div>);
+  try {
+    const row = document.querySelector(".pwa-command-row")!;
+    expect(getComputedStyle(row).opacity).toBe("1");
+    expect(getComputedStyle(row.querySelector("code")!).color).toBe(resolvedColor("--pwa-secondary"));
+  } finally { await screen.unmount(); }
+});
+
+test("startup and compact notices keep icons on the 16/20/24 scale and the mobile gutter", async () => {
+  await page.viewport(390, 844);
+  let screen = await renderPwa(<StartupErrorView error={null} onRetry={() => {}} />);
+  const icon = document.querySelector(".pwa-startup-icon")!.getBoundingClientRect();
+  expect([Math.round(icon.width), Math.round(icon.height)]).toEqual([48, 48]);
+  expect(getComputedStyle(document.querySelector(".pwa-startup-card")!).paddingLeft).toBe("16px");
+  await screen.unmount();
+  screen = await renderPwa(<div className="pwa-app-shell" data-compact-height="short"><PwaConnectionBanner kind="relay" connection="retrying" onRetry={() => {}} /></div>);
+  const svg = document.querySelector(".pwa-connection-banner-icon svg")!.getBoundingClientRect();
+  expect([Math.round(svg.width), Math.round(svg.height)]).toEqual([16, 16]);
+  await screen.unmount();
+  await page.viewport(1280, 900);
 });

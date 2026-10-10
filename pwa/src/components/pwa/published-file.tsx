@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Progress } from "@mantine/core";
+import { ActionIcon, Progress } from "@mantine/core";
 import { Download, Eye, FileText, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { FILE_AUTO_IMAGE_BYTES, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
@@ -102,7 +102,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   };
   const errorText = state?.error === "too_large" ? t.files.tooLarge : state?.error === "not_available" || state?.error === "permission_denied" ? t.files.unavailable : decodeFailure === state?.url && decodeFailure !== null ? t.files.decodeError : t.files.failed;
   const disabled = !canFetch || files?.active === true;
-  // 操作只显示图标，名称交给 aria-label 与 title；同一位置始终是 Button，状态切换时保留焦点。
+  // 操作只显示图标，名称交给 aria-label 与 title；同一位置始终是图标按钮（44 点击区、36 圆形反馈），状态切换时保留焦点。
   const viewLabel = failed ? t.common.retry : image && !ready ? t.files.fetchImage : t.files.view;
   const downloadRetry = failed && !image && !text;
   // 图片占位区已显示错误时，状态行保留大小，避免重复提示。
@@ -120,9 +120,9 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
         {fetching || settling && ready || failed ? null : !canFetch && !ready ? <span className="pwa-published-meta">{t.files.offline}</span> : null}
       </div>
       <div className="pwa-published-actions">
-        {fetching ? <Button {...iconAction(t.common.cancel)} variant="subtle" onClick={cancel}><X size={20} aria-hidden="true" /></Button> : <>
-          {(image || text) && (canFetch || ready) ? <Button {...iconAction(viewLabel)} variant="subtle" disabled={!ready && disabled} onClick={event => { void acquire("view", event.currentTarget); }}>{failed ? <RotateCw size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}</Button> : null}
-          {ready && state?.url ? <Button {...iconAction(t.files.save)} component="a" variant="subtle" href={state.url} download={fileSaveName(name)}><Download size={20} aria-hidden="true" /></Button> : canFetch ? <Button {...iconAction(downloadRetry ? t.common.retry : t.files.download)} variant="subtle" disabled={disabled} onClick={() => { void acquire("download"); }}>{downloadRetry ? <RotateCw size={20} aria-hidden="true" /> : <Download size={20} aria-hidden="true" />}</Button> : null}
+        {fetching ? <ActionIcon {...iconAction(t.common.cancel)} onClick={cancel}><X size={20} aria-hidden="true" /></ActionIcon> : <>
+          {(image || text) && (canFetch || ready) ? <ActionIcon {...iconAction(viewLabel)} disabled={!ready && disabled} onClick={event => { void acquire("view", event.currentTarget); }}>{failed ? <RotateCw size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}</ActionIcon> : null}
+          {ready && state?.url ? <ActionIcon {...iconAction(t.files.save)} component="a" href={state.url} download={fileSaveName(name)}><Download size={20} aria-hidden="true" /></ActionIcon> : canFetch ? <ActionIcon {...iconAction(downloadRetry ? t.common.retry : t.files.download)} disabled={disabled} onClick={() => { void acquire("download"); }}>{downloadRetry ? <RotateCw size={20} aria-hidden="true" /> : <Download size={20} aria-hidden="true" />}</ActionIcon> : null}
         </>}
       </div>
     </div>

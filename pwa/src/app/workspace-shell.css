@@ -77,9 +77,9 @@
 .pwa-root .pwa-nav-heading-copy em { min-width: 0; overflow: hidden; font-size: var(--pwa-text-meta); font-style: normal; font-weight: var(--pwa-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-nav-empty { margin: 0; padding: 4px 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
-/* 会话行：上下 6、左右 10，行间 2；悬停 hover，选中 selected＋ink。 */
+/* 会话行：上下 6、左右 8（文字与品牌、分组标题同一左缘 16），行间 2；悬停 hover，选中 selected＋ink。 */
 .pwa-root .pwa-nav-session,
-.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: 6px 10px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: 6px 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-nav-session .pwa-nav-link-body,
 .pwa-root .pwa-history-row .pwa-nav-link-body { min-width: 0; display: grid; gap: 2px; }
 .pwa-root .pwa-nav-session .pwa-nav-link-label,
@@ -147,13 +147,15 @@
 .pwa-status-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
 
 /* 主区空状态：阅读列中部偏上，图标、标题、一行说明，最多一个操作。 */
-.pwa-root .pwa-workspace-state { min-width: 0; flex: 1 1 auto; display: grid; align-content: start; justify-items: center; gap: 8px; overflow-y: auto; padding: clamp(48px, 24dvh, 260px) var(--pwa-main-inset-end) 48px var(--pwa-main-inset-start); text-align: center; }
+.pwa-root .pwa-workspace-state { min-width: 0; flex: 1 1 auto; display: grid; align-content: start; justify-items: center; gap: 0; overflow-y: auto; padding: clamp(48px, 24dvh, 260px) var(--pwa-main-inset-end) 48px var(--pwa-main-inset-start); text-align: center; }
 .pwa-root .pwa-workspace-state-icon { display: grid; place-items: center; color: var(--pwa-secondary); }
+/* 间距只由各元素的上外边距负责：图标到标题 16、标题到说明 8，说明到命令块、操作或列表 16。 */
+.pwa-root .pwa-workspace-state .pwa-workspace-state-icon + h2 { margin-top: 16px; }
 .pwa-root .pwa-workspace-state h2 { max-width: var(--pwa-reading-width); margin: 8px 0 0; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
-.pwa-root .pwa-workspace-state p { max-width: min(var(--pwa-reading-width), 480px); margin: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
+.pwa-root .pwa-workspace-state p { max-width: min(var(--pwa-reading-width), 480px); margin: 8px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-root .pwa-workspace-state > .pwa-button { margin-top: 16px; }
 /* 未配对空状态的命令块：panel 底、高 44，右侧复制按钮。 */
-.pwa-root .pwa-command-block { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 8px; padding-left: 12px; border-radius: var(--pwa-radius-sm); background: var(--pwa-panel); }
+.pwa-root .pwa-command-block { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 16px; padding-left: 12px; border-radius: var(--pwa-radius-sm); background: var(--pwa-panel); }
 .pwa-root .pwa-command-block code { padding: 0; color: var(--pwa-ink); background: transparent; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
 /* 选择 Pi：有边界的可点行，悬停 hover、按下 neutral-active，右侧箭头提示可进入。 */
 .pwa-root .pwa-choose-pi-list { width: min(var(--pwa-reading-width), 100%); display: grid; gap: 8px; margin-top: 16px; text-align: left; }
@@ -169,7 +171,7 @@
 .pwa-skeleton { display: block; height: 14px; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); animation: pwa-breathe 1.5s linear infinite; }
 .pwa-root .pwa-skeleton-user { justify-self: end; width: 45%; height: 40px; border-radius: var(--pwa-radius-md); }
 .pwa-root .pwa-skeleton-short { width: 60%; }
-.pwa-root .pwa-nav-skeleton { display: grid; gap: 10px; padding: 8px 10px; }
+.pwa-root .pwa-nav-skeleton { display: grid; gap: 10px; padding: 8px; }
 .pwa-root .pwa-nav-skeleton .pwa-skeleton:last-child { width: 70%; }
 @keyframes pwa-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 @media (prefers-reduced-motion: reduce) { .pwa-skeleton { animation: none; } }

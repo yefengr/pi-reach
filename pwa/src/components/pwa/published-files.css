@@ -7,8 +7,6 @@
 .pwa-root .pwa-published-meta, .pwa-root .pwa-published-error { font-size: var(--pwa-text-meta); line-height: 1.4; color: var(--pwa-secondary); overflow-wrap: anywhere; }
 .pwa-root .pwa-published-error { color: var(--pwa-error); }
 .pwa-root .pwa-published-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
-.pwa-root .pwa-published-actions .mantine-Button-root { min-height: 44px; padding-inline: 8px; }
-.pwa-root .pwa-published-actions .pwa-published-icon-action { width: 44px; padding-inline: 0; }
 /* 进度占用大小行：行高与大小文字一致，状态文字等宽数字避免百分比变化时抖动。 */
 .pwa-root .pwa-published-progress { display: flex; align-items: center; gap: 8px; }
 .pwa-root .pwa-published-progress .mantine-Progress-root { flex: 1; min-width: 48px; max-width: 160px; }
