@@ -220,6 +220,36 @@ test("the desktop reader header is a left-aligned tool name with status, copy an
     expect(status.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.getBoundingClientRect().right);
     expect(document.querySelector(".pwa-tool-reader-actions .pwa-tool-reader-close")).not.toBeNull();
     expect(document.querySelector(".pwa-topbar-back")).toBeNull();
+    // 桌面右侧 Drawer 朝向主区的左侧两角始终为 12，贴屏幕的右侧为直角。
+    expect(getComputedStyle(document.querySelector(".pwa-tool-reader")!).borderRadius).toBe("12px 0px 0px 12px");
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("the mobile full-screen reader rounds its leading corners only while it slides", async () => {
+  await page.viewport(390, 844);
+  const current: ToolValue = { ...base, tool: "bash", args: { command: "pnpm test" }, result: [{ type: "text", text: "3 passed" }] };
+  let setOpened: (opened: boolean) => void = () => {};
+  function Harness() {
+    const [opened, update] = useState(false);
+    setOpened = update;
+    return <ToolReader value={current} opened={opened} onClose={() => update(false)} />;
+  }
+  const screen = await renderPwa(<Harness />);
+  const reader = () => document.querySelector<HTMLElement>(".pwa-tool-reader");
+  try {
+    flushSync(() => setOpened(true));
+    await expect.poll(reader).not.toBeNull();
+    expect(reader()!.hasAttribute("data-pwa-moving")).toBe(true);
+    expect(getComputedStyle(reader()!).borderRadius).toBe("12px 0px 0px 12px");
+    // 进入结束后铺满屏幕，四角为直角，不在角上露出下层界面。
+    await expect.poll(() => reader()!.hasAttribute("data-pwa-moving")).toBe(false);
+    expect(getComputedStyle(reader()!).borderRadius).toBe("0px");
+    flushSync(() => setOpened(false));
+    expect(reader()!.hasAttribute("data-pwa-moving")).toBe(true);
+    expect(getComputedStyle(reader()!).borderRadius).toBe("12px 0px 0px 12px");
+    await expect.poll(reader).toBeNull();
   } finally {
     await screen.unmount();
   }

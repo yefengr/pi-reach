@@ -267,7 +267,8 @@
   flex-direction: column;
   overflow: hidden;
   border: 0;
-  border-radius: 0;
+  /* 移动导航从左侧滑入：贴边的左侧为直角，朝向主区的右侧两角与底部 Drawer 上沿同为 12。 */
+  border-radius: 0 var(--pwa-radius-lg) var(--pwa-radius-lg) 0;
   color: var(--pwa-ink);
   background: var(--pwa-panel);
   box-shadow: var(--pwa-shadow-modal);

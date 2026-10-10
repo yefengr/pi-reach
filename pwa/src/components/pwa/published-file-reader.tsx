@@ -10,7 +10,7 @@ import { useSwipe } from "./use-swipe";
 import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { usePublishedFilesView } from "./published-files-context";
 import { IMAGE_RESET, imageGesture, zoomImage, type ImagePoint, type ImageTransform } from "./published-image-gesture";
-import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
+import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration, useDrawerMoving } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import "./published-files.css";
 
@@ -74,6 +74,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
   });
   // 长文本解析与排版是同步长任务，放在进入动画结束后，避免推迟面板滑入的起点。
   const [entered, setEntered] = useState(false);
+  const motion = useDrawerMoving(opened);
   const previewKind = state?.preview?.kind;
   const previewText = state?.text;
   const previewSize = state?.byteLength;
@@ -105,9 +106,9 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
     return () => observer.disconnect();
   }, [scroll, preview, mobile]);
-  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => setEntered(true)} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
+  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => { setEntered(true); motion.onEnterTransitionEnd(); }} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }}>
+    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }} data-pwa-moving={motion.moving || undefined}>
       <Drawer.Header className="pwa-topbar pwa-file-reader-header">
         {/* 移动全屏与设置页同为左侧返回；桌面右侧 Drawer 保留右上角关闭。 */}
         {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back" aria-label={t.files.closeReader} icon={<ArrowLeft size={20} />} /> : null}

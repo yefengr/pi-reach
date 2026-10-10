@@ -113,8 +113,11 @@ afterEach(async () => {
 
 test("D4 settings follow the finger over the stationary workspace while the scrim fades", async () => {
   const origin = await openFromWorkspace();
+  // 静止铺满时为直角，跟手拖动时朝向工作区的左侧两角为 12。
+  expect(getComputedStyle(settings()!).borderRadius).toBe("0px");
   await dragTo(origin, 112);
   expect(settingsLeft()).toBe(100);
+  expect(getComputedStyle(settings()!).borderRadius).toBe("12px 0px 0px 12px");
   expect(workspaceLeft()).toBe(0);
   expect(workspace().getAnimations()).toHaveLength(0);
   expect(scrimOpacity()).toBeCloseTo(1 - 100 / window.innerWidth, 2);

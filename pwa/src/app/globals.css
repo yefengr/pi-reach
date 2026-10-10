@@ -214,7 +214,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button.pwa-latest-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); } }
 
-.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); }
+.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); }
 .pwa-image-input { display: none; }
 .pwa-composer-card { min-width: 0; padding: 10px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
@@ -524,7 +524,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-app-shell[data-compact-height] .pwa-toast { margin-block: 2px; }
 .pwa-app-shell[data-compact-height] .pwa-toast > span { max-height: 2lh; }
 .pwa-app-shell[data-compact-height]:has(.pwa-main-notices .pwa-toast) .pwa-toast { padding-block: 4px; }
-.pwa-app-shell[data-compact-height="very-short"]:has(.pwa-main-notices .pwa-toast) .pwa-composer { padding-block: 4px calc(4px + var(--pwa-safe-bottom)); }
+.pwa-app-shell[data-compact-height="very-short"]:has(.pwa-main-notices .pwa-toast) .pwa-composer { padding-block: 4px calc(4px + var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))); }
 .pwa-app-shell[data-wide-compact] .pwa-runtime-notice .pwa-runtime-notice-body { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
 .pwa-app-shell[data-wide-compact] .pwa-runtime-notice .pwa-runtime-notice-message,
 .pwa-app-shell[data-wide-compact] .pwa-runtime-notice-content { display: contents; }
