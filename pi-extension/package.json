@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Control your running Pi coding agent from your phone or any browser. Stream responses, send prompts and files, and switch between active Pi sessions.",
+  "description": "Pair your phone or any browser with the Pi coding agent on your computer. Watch replies as they stream in, send prompts and files, and switch between running Pi sessions.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
