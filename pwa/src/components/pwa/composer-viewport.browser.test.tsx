@@ -150,6 +150,33 @@ test.each([[390, 844, 310], [844, 390, 260], [768, 1024, 440]])("keeps the keybo
   await view.screen.unmount();
 });
 
+test("tightens the composer bottom under the keyboard and restores the safe area after closing", async () => {
+  await page.viewport(390, 844);
+  // 无头 Chromium 的 env(safe-area-inset-bottom) 恒为 0，用根节点变量模拟 Home 指示条安全区。
+  document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+  const paddingBottom = () => parseFloat(getComputedStyle(composer).paddingBottom);
+  try {
+    expect(paddingBottom()).toBe(34);
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 330 });
+    await settle();
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect(paddingBottom()).toBe(8);
+    view.input.blur();
+    viewport.change({ height: 844 });
+    await settle();
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(paddingBottom()).toBe(34);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-bottom");
+    await view.screen.unmount();
+  }
+});
+
 test("keeps a real timeline paragraph anchored through keyboard, draft and rotation changes", async () => {
   await page.viewport(390, 844);
   const viewport = new ViewportMock();
