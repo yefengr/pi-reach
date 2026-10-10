@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { TimelineEventFragmentAssembler } from "@/lib/pwa/timeline-transfer";
 import { TimelineHistoryLoader } from "@/lib/pwa/timeline-history-loader";
-import { TimelineRuntime, type TimelineScope, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { TimelineRuntime, type TimelinePreviewTarget, type TimelineScope, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
 import { loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
@@ -42,6 +43,18 @@ function sameFormalEvents(left: readonly TimelineEvent[], right: readonly Timeli
   return left.every((event) => JSON.stringify(event) === JSON.stringify(rightById.get(event.event_id)));
 }
 
+/** 预览只取末尾连续编号的最近记录，握手确认同一会话后才能按已保留区间增量追加；存在无序号记录时不预览。 */
+function recentContiguousEvents(events: readonly TimelineEvent[]): TimelineEvent[] {
+  if (events.some((event) => event.event_seq === undefined)) return [];
+  const recent: TimelineEvent[] = [];
+  for (let index = events.length - 1; index >= 0 && recent.length < TIMELINE_RECENT_LIMIT; index -= 1) {
+    const event = events[index]!;
+    if (recent.length > 0 && event.event_seq !== recent[0]!.event_seq! - 1) break;
+    recent.unshift(event);
+  }
+  return recent;
+}
+
 /** Owns the live timeline display independently from the Relay endpoint registry. */
 export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: UseLiveTimelineOptions) {
   const [items, setItems] = useState<TimelineViewItem[]>([]);
@@ -68,6 +81,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   const replacementRequiresReplaceRef = useRef(false);
   const persistenceEpochRef = useRef(0);
   const catchingUpRef = useRef(false);
+  // 切换 Pi 后的本地预览读取是异步的；再次切换或清空时作废尚未返回的读取。
+  const previewTokenRef = useRef(0);
   const viewport = useTimelineViewport(items, enabled);
   const { receiveRealtimeOutput, prepareHistoryPrepend, reset: resetOutputFollowing } = viewport;
 
@@ -183,7 +198,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     setCatchingUp(false);
     setReconnectPhase(null);
 
-    const hadExistingProjection = runtimeRef.current.currentScope !== null || runtimeRef.current.formalEvents().length > 0;
+    // 本地预览不是已确认的实时投影：同一会话走增量追加，否则按首次打开合并本地历史，不做权威替换。
+    const hadExistingProjection = runtimeRef.current.currentScope !== null || (!runtimeRef.current.previewing && runtimeRef.current.formalEvents().length > 0);
     const forceAuthoritativeReplacement = forceAuthoritativeReplacementRef.current;
     forceAuthoritativeReplacementRef.current = false;
     replacementRequiresReplaceRef.current = forceAuthoritativeReplacement || hadExistingProjection;
@@ -338,6 +354,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   }, [applyTimelineChange, disconnect, resetOutputFollowing]);
 
   const clearTimeline = useCallback(() => {
+    previewTokenRef.current += 1;
     disconnect();
     setHasEarlierState(false);
     setLastSyncedAt(undefined);
@@ -345,7 +362,25 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     applyTimelineChange(runtimeRef.current.clear(), true);
   }, [applyTimelineChange, disconnect, resetOutputFollowing]);
 
+  /** 切换到另一个 Pi：立即撤下旧会话；有本地缓存时先显示该会话最近的记录，握手后再增量补齐或改为加载新会话。 */
+  const switchLive = useCallback((preview: TimelinePreviewTarget | null) => {
+    const token = ++previewTokenRef.current;
+    disconnect();
+    setHasEarlierState(false);
+    setLastSyncedAt(undefined);
+    resetOutputFollowing();
+    applyTimelineChange(runtimeRef.current.detachLive(), true);
+    if (!preview) return;
+    // 预览只为提速：读取失败或晚于握手时放弃，照常等待实时会话的正式加载。
+    void loadTimeline({ ...preview, leafId: null }).then((events) => {
+      if (token !== previewTokenRef.current) return;
+      const change = runtimeRef.current.showPreview(preview, recentContiguousEvents(events));
+      if (change) applyTimelineChange(change, true);
+    }, () => undefined);
+  }, [applyTimelineChange, disconnect, resetOutputFollowing]);
+
   useEffect(() => () => {
+    previewTokenRef.current += 1;
     contextGenerationRef.current += 1;
     clearTransitionTimer();
     if (streamTimerRef.current) clearTimeout(streamTimerRef.current);
@@ -371,6 +406,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     disconnect,
     invalidateScope,
     clearTimeline,
+    switchLive,
     ...viewport,
   };
 }

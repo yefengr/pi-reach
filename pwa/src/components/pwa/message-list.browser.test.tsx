@@ -1,6 +1,6 @@
 import { createRef, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { MessageList } from "./message-list";
@@ -601,4 +601,35 @@ test("a group without failures shows no failure marker", async () => {
   await liveList([read("a", "a.ts"), read("b", "b.ts")].map(eventItem).concat(runEndItem()));
   expect(groupButton().textContent).toBe("Read 2 files");
   expect(groupButton().querySelector(".pwa-tool-group-alert")).toBeNull();
+});
+
+test("fades in content that arrives in a loading list, without replaying for updates or a first message", async () => {
+  const animate = vi.spyOn(HTMLElement.prototype, "animate");
+  let setState!: (state: { items: TimelineViewItem[]; loading: boolean }) => void;
+  function Harness() {
+    const [state, update] = useState<{ items: TimelineViewItem[]; loading: boolean }>({ items: [], loading: true });
+    const listRef = useRef<HTMLDivElement>(null);
+    const bottomRef = useRef<HTMLDivElement>(null);
+    setState = update;
+    return <MessageList items={state.items} loading={state.loading} hasEarlier listRef={listRef} bottomSentinelRef={bottomRef} onScroll={() => {}} />;
+  }
+  const screen = await renderPwa(<Harness />);
+  const fades = () => animate.mock.contexts.filter((element) => (element as Element).classList.contains("pwa-message-list")).length;
+  const first = eventItem({ ...assistantEvent, event_id: "first" });
+  const second = eventItem({ ...assistantEvent, event_id: "second", timestamp: 2 });
+  try {
+    // 加载中的空列表只显示骨架，不叠加「加载更多」。
+    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+    flushSync(() => setState({ items: [first], loading: false }));
+    expect(fades()).toBe(1);
+    expect(document.querySelector(".pwa-earlier-button")).not.toBeNull();
+    flushSync(() => setState({ items: [first, second], loading: false }));
+    expect(fades()).toBe(1);
+    flushSync(() => setState({ items: [], loading: false }));
+    flushSync(() => setState({ items: [first], loading: false }));
+    expect(fades()).toBe(1);
+  } finally {
+    animate.mockRestore();
+    await screen.unmount();
+  }
 });

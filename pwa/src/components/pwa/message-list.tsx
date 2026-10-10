@@ -3,6 +3,7 @@ import { Button } from "@mantine/core";
 import { CircleAlert } from "lucide-react";
 import { AssistantBlocks, MarkdownContent, ThinkingContent } from "./timeline-content";
 import { ConversationTimeline } from "./conversation-timeline";
+import { useTimelineEnterFade } from "./use-timeline-enter-fade";
 import "./timeline-reconnect.css";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelinePending, TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -116,6 +117,8 @@ export function MessageList({ items, hasEarlier, loadingEarlier, onLoadEarlier, 
   // 仅合法发布记录可见，继续隐藏未知 custom；发布记录也是工具摘要的边界。
   const visibleItems = items.filter((item) => item.kind !== "event" || (item.event.kind !== "run_end" && (item.event.kind !== "custom" || publishedFileFromEvent(item.event) !== null) && (item.event.kind !== "assistant" || item.event.blocks.some((block) => block.text.trim()))));
   const liveRunning = isLive && running;
+  const loadingEmpty = visibleItems.length === 0 && loading;
+  useTimelineEnterFade(listRef, visibleItems.length === 0, loading);
   const completions = useMemo(() => runCompletions(
     items.flatMap((item) => item.kind === "event" ? [item.event] : []),
   ), [items]);
@@ -123,9 +126,9 @@ export function MessageList({ items, hasEarlier, loadingEarlier, onLoadEarlier, 
     const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
     onScroll(scrollHeight - scrollTop - clientHeight <= 32);
   }}>
-    {hasEarlier ? <Button variant="default" className="pwa-earlier-button" type="button" onClick={onLoadEarlier} disabled={loadingEarlier || !isLive}>{loadingEarlier ? t.timeline.loadingRecords : t.timeline.loadMore}</Button> : null}
+    {hasEarlier && !loadingEmpty ? <Button variant="default" className="pwa-earlier-button" type="button" onClick={onLoadEarlier} disabled={loadingEarlier || !isLive}>{loadingEarlier ? t.timeline.loadingRecords : t.timeline.loadMore}</Button> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {visibleItems.length === 0 && loading ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div> : <ConversationTimeline items={visibleItems} live={isLive} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div> : <ConversationTimeline items={visibleItems} live={isLive} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

@@ -131,8 +131,8 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 ## 会话数据流
 
 1. 已配对 PWA 用 Owner identity 连接 Relay，并订阅自己的 device。
-2. 用户选中一个当前 online endpoint 后，PWA 建立 session channel 并发送 `session_hello`。
-3. 收到 `session_ready` 后，PWA 建立 scope，异步读取本地正式 timeline，并请求当前 Pi 的 recent history。
+2. 用户选中一个当前 online endpoint 后，PWA 建立 session channel 并发送 `session_hello`。从另一个 Pi 切换过来时先撤下旧投影（未确认投递按原 scope 保留）；本地保存过该 Pi 的会话时，以末尾最多 30 条连续正式 event 作预览，预览没有 scope，不能发送。
+3. 收到 `session_ready` 后，PWA 建立 scope：与预览是同一 session 时把预览当作已保留区间，只补缺口；否则撤下预览，异步读取本地正式 timeline，并请求当前 Pi 的 recent history。
 4. 正式 event 与 history 按稳定 `event_id` 合流；不同事件不能占用同一 `event_seq`。普通追加更新当前 `leaf_id`，branch reset 的新投影在完整同步和持久化成功后原子替换旧投影；partial 和 pending 只保留内存。
 5. PWA 发送文本、会话附件或受限 typed action；附件先上传原件，再通过文件 ID 提交消息。Extension 把用户文字与本地文件清单交给当前 Pi session。Relay 只转发，不提供离线队列。
 

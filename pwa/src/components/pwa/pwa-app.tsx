@@ -171,6 +171,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     disconnect: disconnectTimeline,
     invalidateScope: invalidateTimelineScope,
     clearTimeline,
+    switchLive: switchLiveTimeline,
   } = useLiveTimeline({
     channelRef,
     enabled: selectedHistory === null,
@@ -443,14 +444,25 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     operationNotifications.clearSession();
     historyLoadTokenRef.current += 1;
     setSelectedHistory(null); setHistoryItems([]); setHistoryError(null);
-    if (liveEndpointSnapshot?.endpointId !== endpointId) { setLiveEndpointSnapshot(null); setSessionSwitched(false); }
+    const switching = liveEndpointSnapshot?.endpointId !== endpointId;
+    if (switching) { setLiveEndpointSnapshot(null); setSessionSwitched(false); }
     setExitedEndpoint(null);
     rememberSessionPosition();
+    if (switching && activeDevice) {
+      // 换到另一个 Pi 时立即撤下旧会话，不让它留在新标题下；本次访问握手过的会话最准确，否则取本地历史中该 Pi 最近的会话作预览。
+      const deviceId = activeDevice.deviceId;
+      const target = endpoints.find((endpoint) => endpoint.deviceId === deviceId && endpoint.endpointId === endpointId);
+      const remembered = target ? lastSessionByRuntimeRef.current.get(`${deviceId}\u0000${endpointId}\u0000${target.runtimeInstanceId}`) : undefined;
+      const sessionId = remembered ?? historySessions.find((session) => session.endpointId === endpointId)?.sessionId;
+      switchLiveTimeline(sessionId ? { deviceId, endpointId, sessionId } : null);
+      // 旧通道随即关闭；同一次提交就进入连接中，避免新 Pi 的空会话提示闪现。
+      if (onlineRef.current) setConnection("connecting");
+    }
     resetOutputFollowing();
     const saved = activeDevice ? sessionPositionsRef.current.get(`live:${activeDevice.deviceId}\u0000${endpointId}`) : undefined;
     restoreSessionPosition(saved && !("history" in saved) ? saved : null);
     selectEndpoint(endpointId);
-  }, [activeDevice, activeEndpointId, liveEndpointSnapshot?.endpointId, operationNotifications, rememberSessionPosition, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory]);
+  }, [activeDevice, activeEndpointId, endpoints, historySessions, liveEndpointSnapshot?.endpointId, onlineRef, operationNotifications, rememberSessionPosition, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory, switchLiveTimeline]);
   const sendModelsRequest = useCallback((scope: TimelineScope, channel: PeerChannel): boolean => {
     const requestId = id();
     modelRequestRef.current = requestId;
@@ -815,7 +827,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       return latestByEndpoint.get(session.endpointId) !== session;
     });
   }, [historySessions, liveSession, onlinePis, selectedEndpointId, selectedHistory?.id]);
-  const sessionLoading = selectedHistory === null && activeDevice !== null && displayEndpoint !== null && timelineItems.length === 0 && connection === "connecting";
+  const sessionLoading = selectedHistory === null && activeDevice !== null && displayEndpoint !== null && timelineItems.length === 0 && (connection === "connecting" || catchingUp);
   const focusEmptySession = useCallback(() => {
     const scope = timelineRuntimeRef.current.currentScope;
     const sessionKey = scope ? `${scope.deviceId}\u0000${scope.endpointId}\u0000${scope.sessionId}` : null;

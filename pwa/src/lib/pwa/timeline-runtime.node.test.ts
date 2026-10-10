@@ -374,3 +374,55 @@ test("retries unknown image and attachment deliveries with their original reques
   expect(retried.frame).not.toHaveProperty("images");
   expect(attachmentRuntime.pendingItems[0]).toMatchObject({ clientRequestId: "req-1", attachments: [descriptor] });
 });
+
+const previewTarget = { deviceId: scope.deviceId, endpointId: scope.endpointId, sessionId: scope.sessionId };
+
+test("switching Pi drops the previous projection at once and keeps its unknown delivery for a return", () => {
+  const runtime = new TimelineRuntime();
+  runtime.setScope(scope);
+  runtime.prependHistory(numberedUserEvents(1, 3));
+  const sent = runtime.sendUser("unsure")!;
+  expect(runtime.detachLive().items).toEqual([]);
+  expect(runtime.currentScope).toBeNull();
+  const other = runtime.prepareLive({ ...scope, endpointId: "other-endpoint", runtimeInstanceId: "runtime-other", sessionId: "other-session" }, 0);
+  expect(other.change.items).toEqual([]);
+
+  runtime.detachLive();
+  runtime.prepareLive({ ...scope, channelId: "return-channel" }, 0);
+  runtime.commitReplacement();
+  expect(runtime.retryUnknown(sent.frame.client_request_id)?.frame.channel_id).toBe("return-channel");
+});
+
+test("a local preview of the same session becomes the retained projection for an incremental handshake", () => {
+  const runtime = new TimelineRuntime();
+  const shown = runtime.showPreview(previewTarget, numberedUserEvents(1, 10));
+  expect(shown?.items.filter((item) => item.kind === "event")).toHaveLength(10);
+  expect(runtime.previewing).toBe(true);
+  expect(runtime.sendUser("before the handshake")).toBeNull();
+
+  const prepared = runtime.prepareLive(scope, 12);
+  expect(prepared.plan).toEqual({ mode: "append", startSeq: 11, endSeq: 12, earliestSeq: 1 });
+  expect(prepared.change.items.filter((item) => item.kind === "event")).toHaveLength(10);
+  expect(runtime.previewing).toBe(false);
+});
+
+test("a local preview of another session is dropped before the new session loads", () => {
+  const runtime = new TimelineRuntime();
+  runtime.showPreview(previewTarget, numberedUserEvents(1, 10));
+  const prepared = runtime.prepareLive({ ...scope, sessionId: "new-session" }, 5);
+  expect(prepared.plan).toEqual({ mode: "replace", startSeq: 1, endSeq: 5, earliestSeq: 1 });
+  expect(prepared.change.items).toEqual([]);
+  expect(runtime.previewing).toBe(false);
+});
+
+test("ignores a late or empty preview and drops it when the timeline is cleared", () => {
+  const live = new TimelineRuntime();
+  live.prepareLive(scope, 0);
+  expect(live.showPreview(previewTarget, numberedUserEvents(1, 2))).toBeNull();
+  expect(new TimelineRuntime().showPreview(previewTarget, [])).toBeNull();
+
+  const cleared = new TimelineRuntime();
+  cleared.showPreview(previewTarget, numberedUserEvents(1, 2));
+  expect(cleared.clear().items).toEqual([]);
+  expect(cleared.previewing).toBe(false);
+});

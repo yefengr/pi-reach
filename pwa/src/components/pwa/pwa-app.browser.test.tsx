@@ -3105,3 +3105,91 @@ test("shows the directory and model under the empty-session hint", async () => {
     await screen.unmount();
   }
 });
+
+function twoPisFrame() {
+  return { type: "endpoints", device_id: "owner-device-key", endpoints: [
+    { endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } },
+    { endpoint_id: "second-endpoint", runtime_instance_id: "runtime-2", metadata: { kind: "interactive", name: "Second Pi", cwd: "/workspace/second" } },
+  ] };
+}
+
+async function renderTwoPis() {
+  const screen = await renderWorkspaceApp();
+  await vi.waitFor(() => expect(relayHarness.instances[0]?.state).toBe("open"));
+  relayHarness.instances[0]!.emitControl(twoPisFrame());
+  await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(1));
+  return screen;
+}
+
+async function selectPi(name: string) {
+  await expect.poll(() => [...document.querySelectorAll<HTMLButtonElement>(".pwa-nav-session")].some((row) => row.textContent?.includes(name))).toBe(true);
+  [...document.querySelectorAll<HTMLButtonElement>(".pwa-nav-session")].find((row) => row.textContent?.includes(name))!.click();
+}
+
+function sessionEvents(sessionId: string, label: string, count: number): TimelineEvent[] {
+  return numberedEvents(count).map((event) => ({ ...event, event_id: `${sessionId}-${event.event_seq}`, session_id: sessionId, leaf_id: `generation-${sessionId}`, blocks: [{ type: "text", text: `${label} ${event.event_seq}` }] }) as TimelineEvent);
+}
+
+function listText(): string {
+  return document.querySelector(".pwa-message-list")?.textContent ?? "";
+}
+
+test("switching Pi removes the previous session at once, loads behind a skeleton, and previews a viewed Pi before its handshake", async () => {
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderTwoPis();
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1", 3));
+    await expect.poll(listText).toContain("Record 3");
+
+    await selectPi("Second Pi");
+    // 旧会话不留在新标题下，等待期间也不误显示空会话提示。
+    await expect.poll(listText).not.toContain("Record 3");
+    expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    await expect.poll(() => document.querySelectorAll(".pwa-message-list .pwa-skeleton").length).toBe(3);
+
+    const second = channelHarness.channels[1]!;
+    second.emit(readyFrame(second, "second-session", 2));
+    await expect.poll(() => second.frames.some((frame) => frame.type === "session_sync")).toBe(true);
+    expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+    second.emit(recentHistoryFrame(second, "second-session", sessionEvents("second-session", "Second", 2)));
+    await expect.poll(listText).toContain("Second 2");
+
+    await selectPi("Test Pi");
+    // 握手前先显示本地保存的同一会话，确认后只补缺口，不重新下载。
+    await expect.poll(listText).toContain("Record 3");
+    expect(listText()).not.toContain("Second 2");
+    await expect.poll(() => channelHarness.channels.length).toBe(3);
+    const returned = channelHarness.channels[2]!;
+    expect(returned.frames.some((frame) => frame.type === "session_hello")).toBe(true);
+    returned.emit(readyFrame(returned, "session-1", 3));
+    await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeEnabled();
+    await flushMicrotasks();
+    expect(returned.frames.some((frame) => frame.type === "session_sync")).toBe(false);
+    expect(listText()).toContain("Record 3");
+  } finally { await screen.unmount(); }
+});
+
+test("drops a saved preview when the selected Pi has moved to another session", async () => {
+  await seedTimeline(numberedEvents(3));
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: `active_endpoint:${makePwaDeviceId("owner-device-key")}`, value: "second-endpoint" });
+  const screen = await renderTwoPis();
+  try {
+    const first = channelHarness.channels[0]!;
+    first.emit(readyFrame(first, "second-session"));
+    await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
+
+    await selectPi("Test Pi");
+    await expect.poll(listText).toContain("Record 3");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const moved = channelHarness.channels[1]!;
+    moved.emit(readyFrame(moved, "session-2", 2));
+    await expect.poll(listText).not.toContain("Record 3");
+    expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+    await expect.poll(() => moved.frames.some((frame) => frame.type === "session_sync")).toBe(true);
+    moved.emit(recentHistoryFrame(moved, "session-2", sessionEvents("session-2", "Moved", 2)));
+    await expect.poll(listText).toContain("Moved 2");
+    expect(listText()).not.toContain("Record 3");
+  } finally { await screen.unmount(); }
+});
