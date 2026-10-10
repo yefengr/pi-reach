@@ -67,7 +67,8 @@
 
 /* 工具详情阅读器：桌面右侧 720px Drawer，移动端全屏；输出不带行号、长行自动换行。
    顶栏与正文同用主界面 bg，状态栏与主界面同色；桌面 Drawer 靠阴影与遮罩和主区分开。 */
-.pwa-root .pwa-tool-reader { max-width: 100vw; display: flex; flex-direction: column; overflow: hidden; color: var(--pwa-ink); background: var(--pwa-bg); box-shadow: var(--pwa-shadow-modal); }
+/* 从右侧滑入：朝向下层的左侧两角为 12，贴屏幕的右侧为直角；移动全屏只在进出与跟手拖动时显示圆角。 */
+.pwa-root .pwa-tool-reader { max-width: 100vw; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--pwa-radius-lg) 0 0 var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-bg); box-shadow: var(--pwa-shadow-modal); }
 /* 桌面右侧阅读器只贴右边缘，避让右安全区；移动全屏左右都贴边。 */
 .pwa-root .pwa-tool-reader-header { padding-right: calc(8px + var(--pwa-safe-right)); padding-left: var(--pwa-gutter); background: var(--pwa-bg); }
 .pwa-root .pwa-tool-reader-title { min-width: 0; flex: 1 1 auto; margin: 0; overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-title)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
@@ -92,6 +93,7 @@
 
 @media (max-width: 767.98px) {
   .pwa-root .pwa-tool-reader, .pwa-root .pwa-tool-reader-scroll { touch-action: pan-y; }
+  .pwa-root .pwa-tool-reader:not([data-pwa-moving], [data-pwa-dragging]) { border-radius: 0; }
   .pwa-root .pwa-tool-reader-header { padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
   /* 移动全屏阅读器四边都贴屏幕：底部与 Composer 一样取 16 与底部安全区中的较大值。 */
   .pwa-root .pwa-tool-reader-scroll { padding: 16px calc(16px + var(--pwa-safe-right)) max(16px, var(--pwa-safe-bottom)) calc(16px + var(--pwa-safe-left)); }

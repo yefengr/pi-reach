@@ -5,7 +5,7 @@ import { ArrowLeft, Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X 
 import { CopyButton } from "./copy-button";
 import { useSwipe } from "./use-swipe";
 import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
-import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "./use-pwa-motion";
+import { PWA_DRAWER_EASE, pwaDrawerTransitions, useDrawerMoving, usePwaMotionDuration } from "./use-pwa-motion";
 import { useReaderHistory } from "./use-reader-history";
 import { ToolImage } from "./tool-output";
 import { toolContentBlocks, toolError, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
@@ -53,6 +53,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
+  const motion = useDrawerMoving(opened);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
   const { instant, skipExit, resetSkipExit } = useReaderHistory({ opened, stateKey: "piReachToolReader", marker: true, onClose });
@@ -79,6 +80,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   return <Drawer.Root
     opened={opened}
     onClose={onClose}
+    onEnterTransitionEnd={motion.onEnterTransitionEnd}
     onExitTransitionEnd={onExitTransitionEnd}
     position="right"
     size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"}
@@ -90,7 +92,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}
   >
     <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-tool-reader" }} aria-describedby="pwa-tool-reader-description">
+    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-tool-reader" }} data-pwa-moving={motion.moving || undefined} aria-describedby="pwa-tool-reader-description">
       <Drawer.Header className="pwa-topbar pwa-tool-reader-header">
         {/* 移动全屏与设置页同为左侧返回；桌面右侧 Drawer 保留右上角关闭。 */}
         {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<ArrowLeft size={20} />} /> : null}

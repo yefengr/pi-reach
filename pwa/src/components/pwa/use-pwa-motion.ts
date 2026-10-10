@@ -53,6 +53,23 @@ export const pwaDrawerTransitions = {
 
 export const PWA_DRAWER_EASE = "var(--pwa-ease-standard)";
 
+/**
+ * Drawer 是否正在进出：打开后到进入转场结束、以及关闭到卸载之间为 true。
+ * 全屏面板只在移动中显示朝向下层的圆角，静止铺满时不在角上露出下层界面。
+ */
+export function useDrawerMoving(opened: boolean): { moving: boolean; onEnterTransitionEnd: () => void } {
+  // Mantine 在挂载时已打开的 Drawer 直接处于进入完成态，不播放进入转场，也不回调。
+  const [settled, setSettled] = useState(opened);
+  const [previous, setPrevious] = useState(opened);
+  // 每次打开或关闭都重新等待进入转场结束；在渲染中重置，避免先以旧的静止态渲染一帧。
+  if (previous !== opened) {
+    setPrevious(opened);
+    setSettled(false);
+  }
+  const onEnterTransitionEnd = useCallback(() => setSettled(true), []);
+  return { moving: !opened || !settled, onEnterTransitionEnd };
+}
+
 /** 菜单的业务动作在退出卸载后交接，避免仍在退出的 Menu 挡住随后的确认框。 */
 export function useMenuExitAction() {
   const pendingRef = useRef<(() => void) | null>(null);

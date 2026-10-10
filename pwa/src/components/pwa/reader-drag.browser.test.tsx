@@ -128,11 +128,16 @@ test.each(["tool", "file"] as const)("%s reader reverses back to the start witho
 
 test.each(["tool", "file"] as const)("%s reader springs back below the threshold and leaves no residue", async (kind) => {
   const { origin } = await open(kind);
+  // 静止铺满时为直角；跟手拖动时朝向下层的左侧两角为 12，回弹结束后恢复直角。
+  const radius = () => getComputedStyle(surfaceOf(kind)).borderRadius;
+  await expect.poll(radius).toBe("0px");
   await dragTo(origin, 50);
   expect(offsetOf(kind)).toBeGreaterThan(20);
+  expect(radius()).toBe("12px 0px 0px 12px");
   await release();
   await expect.poll(() => surfaceOf(kind).getAnimations().length).toBe(0);
   expect(offsetOf(kind)).toBe(0);
+  expect(radius()).toBe("0px");
   expect(element(".pwa-scrim").getAnimations()).toHaveLength(0);
   expect(close).not.toHaveBeenCalled();
   expect(history(kind)).toBeTruthy();

@@ -5,6 +5,9 @@ import { pwaMotionShiftDisabled, usePwaMotionDuration } from "./use-pwa-motion";
 
 type Phase = "idle" | "dragging" | "settling";
 
+/** 跟手拖动到收尾结束期间标在 Drawer 表面上，供样式显示移动中的圆角等外观。 */
+export const DRAWER_DRAGGING_ATTRIBUTE = "data-pwa-dragging";
+
 type DrawerSwipeCloseOptions = {
   /** Drawer.Content；Drawer 关闭卸载后为 null。 */
   surface: HTMLElement | null;
@@ -27,6 +30,7 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
   const duration = usePwaMotionDuration("--pwa-duration-drawer", 200);
   const latest = useRef({ surface, opened, requestClose, skipExit, resetSkipExit, duration });
   const dragRef = useRef<SwipeDrag | null>(null);
+  const draggedSurfaceRef = useRef<HTMLElement | null>(null);
   const phaseRef = useRef<Phase>("idle");
   const pendingRef = useRef<number | null>(null);
   const seqRef = useRef(0);
@@ -40,6 +44,8 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
     drag.dispose();
     if (dragRef.current !== drag) return;
     dragRef.current = null;
+    draggedSurfaceRef.current?.removeAttribute(DRAWER_DRAGGING_ATTRIBUTE);
+    draggedSurfaceRef.current = null;
     phaseRef.current = "idle";
     pendingRef.current = null;
   }, []);
@@ -107,6 +113,8 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
         extent: width,
         duration: () => full,
       });
+      element.setAttribute(DRAWER_DRAGGING_ATTRIBUTE, "");
+      draggedSurfaceRef.current = element;
       phaseRef.current = "dragging";
       return true;
     },
