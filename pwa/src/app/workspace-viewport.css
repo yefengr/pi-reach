@@ -8,6 +8,9 @@
   --pwa-safe-bottom: 0px;
 }
 
+/* iOS 26 的系统辅助栏上方另有约 10pt 透明边距，输入区底部只再留 8，避免与键盘之间显得空。 */
+.pwa-app-shell[data-keyboard-viewport] .pwa-composer { padding-bottom: var(--pwa-space-xs); }
+
 /* 由实际可用空间决定阅读留白，不依赖布局断点或物理屏幕高度。 */
 .pwa-app-shell .pwa-main[data-composer-budget] .pwa-message-list {
   padding-block: 8px;

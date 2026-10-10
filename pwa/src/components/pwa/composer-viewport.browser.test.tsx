@@ -150,7 +150,7 @@ test.each([[390, 844, 310], [844, 390, 260], [768, 1024, 440]])("keeps the keybo
   await view.screen.unmount();
 });
 
-test("drops the bottom safe area under the keyboard and restores it after closing", async () => {
+test("tightens the composer bottom under the keyboard and restores the safe area after closing", async () => {
   await page.viewport(390, 844);
   // 无头 Chromium 的 env(safe-area-inset-bottom) 恒为 0，用根节点变量模拟 Home 指示条安全区。
   document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
@@ -165,7 +165,7 @@ test("drops the bottom safe area under the keyboard and restores it after closin
     viewport.change({ height: 330 });
     await settle();
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
-    expect(paddingBottom()).toBe(16);
+    expect(paddingBottom()).toBe(8);
     view.input.blur();
     viewport.change({ height: 844 });
     await settle();
