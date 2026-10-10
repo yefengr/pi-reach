@@ -810,11 +810,11 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     else switchTarget();
   };
   const selectLiveEndpoint = (endpointId: string) => {
-    if (selectedHistory !== null || endpointId !== activeEndpointId) navigate(() => openLiveEndpoint(endpointId));
+    if (selectedHistory !== null || endpointId !== activeEndpointId) switchOut.run(() => navigate(() => openLiveEndpoint(endpointId)));
     else switchOut.settle();
   };
   const selectHistory = (history: TimelineSessionSummary) => {
-    if (selectedHistory?.id !== history.id) navigate(() => openHistory(history));
+    if (selectedHistory?.id !== history.id) switchOut.run(() => navigate(() => openHistory(history)));
     else switchOut.settle();
   };
   const switchesTo = (target: NavigationSwitchTarget) => target.kind === "device"
@@ -925,7 +925,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   // 选择其他 Pi：只有一个在线时直接进入，多个时回到主区选择列表。
   const chooseOtherPi = () => { if (onlinePis.length === 1) openLiveEndpoint(onlinePis[0]!.endpointId); else setExitedEndpoint(null); };
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
-  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) navigate(() => selectDevice(deviceId)); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
+  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
   const connectionStatus = <ConnectionStatus state={displayConnection} retryAttempt={retryAttempt} />;
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;

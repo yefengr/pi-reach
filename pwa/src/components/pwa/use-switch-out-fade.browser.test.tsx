@@ -34,3 +34,28 @@ test("restores the old content when no switch follows the navigation exit", asyn
     expect(target.getAnimations()).toHaveLength(0);
   } finally { await screen.unmount(); }
 });
+
+test("an entry without a navigation exit fades out first, while a navigation fade switches at once", async () => {
+  const { screen, fade, target } = await renderFade();
+  try {
+    const switched: string[] = [];
+    fade().run(() => switched.push("desktop"));
+    expect(switched).toEqual([]);
+    expect(target.getAnimations()).toHaveLength(1);
+    await target.getAnimations()[0]!.finished;
+    await expect.poll(() => switched).toEqual(["desktop"]);
+    fade().settle();
+
+    fade().begin();
+    fade().run(() => switched.push("mobile"));
+    expect(switched).toEqual(["desktop", "mobile"]);
+    fade().settle();
+
+    // 淡出期间改选别的目标：只执行最后一次选择。
+    fade().run(() => switched.push("first"));
+    fade().settle();
+    fade().run(() => switched.push("second"));
+    await target.getAnimations()[0]!.finished;
+    await expect.poll(() => switched).toEqual(["desktop", "mobile", "second"]);
+  } finally { await screen.unmount(); }
+});

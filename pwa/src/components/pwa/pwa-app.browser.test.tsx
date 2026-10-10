@@ -3271,3 +3271,22 @@ test("catching up after a saved preview appends the newest records without a top
     expect(document.querySelector(".pwa-earlier-button")).toBeNull();
   } finally { await screen.unmount(); }
 });
+
+test("the desktop sidebar fades out the old session before switching to another Pi", async () => {
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderTwoPis();
+  const fadeOuts = () => [...(document.querySelector(".pwa-message-list")?.getAnimations() ?? [])]
+    .filter((animation) => (animation.effect as KeyframeEffect).getKeyframes().at(-1)?.opacity === "0");
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1", 3));
+    await expect.poll(listText).toContain("Record 3");
+    await selectPi("Second Pi");
+    // 旧会话先淡出，切换在淡出结束后才发生。
+    expect(fadeOuts()).toHaveLength(1);
+    expect(channelHarness.channels).toHaveLength(1);
+    expect(listText()).toContain("Record 3");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    expect(fadeOuts()).toHaveLength(0);
+    expect(listText()).not.toContain("Record 3");
+  } finally { await screen.unmount(); }
+});
