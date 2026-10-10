@@ -57,7 +57,7 @@ Report vulnerabilities through GitHub's [private vulnerability reporting](https:
 |---|---|
 | `/pi-reach` or `/pi-reach start` | Connect this Pi (for example, after `/pi-reach stop`) |
 | `/pi-reach stop` | Disconnect this Pi |
-| `/pi-reach status` | Show the Relay connection, endpoint, runtime, and number of connected browsers |
+| `/pi-reach status` | Show the Relay connection, endpoint, runtime, and number of browsers bound to this session (`owners`) |
 | `/pi-reach pair` | Show a pairing QR code and pairing code for this Pi |
 | `/pi-reach devices` | List browsers paired with this computer |
 | `/pi-reach revoke <shortid>` | Revoke a browser's pairing on this computer |
