@@ -8,7 +8,7 @@ import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 import type { PairingPresence } from "./workspace-view";
 
-const sheetLifecycle = vi.hoisted(() => ({ exit: undefined as (() => void) | undefined }));
+const sheetLifecycle = vi.hoisted(() => ({ exit: undefined as (() => void) | undefined, holdExit: false, heldExit: undefined as (() => void) | undefined }));
 vi.mock("@mantine/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mantine/core")>();
   const DrawerRoot = actual.Drawer.Root;
@@ -18,7 +18,11 @@ vi.mock("@mantine/core", async (importOriginal) => {
       ...actual.Drawer,
       Root: (props: Parameters<typeof DrawerRoot>[0]) => {
         if (props.position === "left") sheetLifecycle.exit = props.onExitTransitionEnd;
-        return <DrawerRoot {...props} />;
+        // 模拟退出回调晚到：先扣住，由测试决定何时送达。
+        const onExitTransitionEnd = props.position === "left" && sheetLifecycle.holdExit
+          ? () => { sheetLifecycle.heldExit = props.onExitTransitionEnd; }
+          : props.onExitTransitionEnd;
+        return <DrawerRoot {...props} onExitTransitionEnd={onExitTransitionEnd} />;
       },
     }),
   };
@@ -131,7 +135,12 @@ function SessionSheetHarness({ events, renamed = [], removed = [], rejectClose =
 }
 
 beforeEach(async () => { await page.viewport(1280, 900); });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  sheetLifecycle.holdExit = false;
+  sheetLifecycle.heldExit = undefined;
+});
 
 async function openSheet(screen: Awaited<ReturnType<typeof renderPwa>>) {
   const trigger = screen.getByRole("button", { name: "Open navigation" });
@@ -454,4 +463,32 @@ test("the mobile navigation adds the left safe area outside its 320px content", 
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-left");
   }
+});
+
+test("hands a switch over when the drawer movement ends and restores focus after a late exit", async () => {
+  sheetLifecycle.holdExit = true;
+  const events: string[] = [];
+  const exits: string[] = [];
+  const screen = await renderPwa(<SessionSheetHarness events={events} exits={exits} />);
+  const { trigger } = await openSheet(screen);
+  await screen.getByRole("button", { name: /B working Pi/ }).click();
+  // 退出回调还没到，切换已按抽屉移动时长交接。
+  await expect.poll(() => events).toEqual(["close", "pi:alpha-working"]);
+  expect(exits).toEqual([]);
+  await expect.poll(() => sheetLifecycle.heldExit).toBeTypeOf("function");
+  sheetLifecycle.heldExit!();
+  await expect.poll(() => exits).toEqual(["exit"]);
+  expect(events).toEqual(["close", "pi:alpha-working"]);
+  await expect.element(screen.getByTestId("action-target")).toHaveFocus();
+  expect(trigger.element()).not.toBe(document.activeElement);
+});
+
+test("a rejected close keeps a selected switch from running early", async () => {
+  const events: string[] = [];
+  const screen = await renderPwa(<SessionSheetHarness events={events} rejectClose />);
+  const { dialog } = await openSheet(screen);
+  await screen.getByRole("button", { name: /B working Pi/ }).click();
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await expect.element(dialog).toBeVisible();
+  expect(events).toEqual(["close"]);
 });
