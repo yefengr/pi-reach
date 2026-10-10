@@ -34,7 +34,7 @@
   .pwa-root .pwa-file-reader, .pwa-root .pwa-file-reader-scroll { touch-action: pan-y; }
   .pwa-root .pwa-file-reader-scroll[data-swipe-horizontal] { touch-action: auto; }
   .pwa-root .pwa-file-reader-header { padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
-  .pwa-root .pwa-file-reader-scroll { padding: 16px calc(16px + var(--pwa-safe-right)) 16px calc(16px + var(--pwa-safe-left)); }
+  .pwa-root .pwa-file-reader-scroll { padding: 16px calc(16px + var(--pwa-safe-right)) max(16px, var(--pwa-safe-bottom)) calc(16px + var(--pwa-safe-left)); }
   .pwa-root .pwa-published-row { flex-wrap: wrap; }
   .pwa-root .pwa-published-actions { margin-left: auto; }
 }

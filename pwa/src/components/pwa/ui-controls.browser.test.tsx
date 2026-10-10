@@ -275,3 +275,16 @@ test("startup and compact notices keep icons on the 16/20/24 scale and the mobil
   await screen.unmount();
   await page.viewport(1280, 900);
 });
+
+test("the mobile file reader keeps its last content above the bottom safe area", async () => {
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
+  const screen = await renderPwa(<div className="pwa-file-reader-scroll">Content</div>);
+  try {
+    expect(getComputedStyle(document.querySelector(".pwa-file-reader-scroll")!).paddingBottom).toBe("34px");
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-bottom");
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});

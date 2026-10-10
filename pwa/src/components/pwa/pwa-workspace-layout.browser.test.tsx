@@ -1159,3 +1159,20 @@ test("landscape side safe areas are avoided once by the edge-touching layers", a
     document.documentElement.style.removeProperty("--pwa-safe-right");
   }
 });
+
+test("the workspace runtime notice relies on the notice area for the side safe area", async () => {
+  const safe = 47;
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-safe-left", `${safe}px`);
+  try {
+    await renderLayout({ events: [], runtimeNotice: true });
+    const notice = document.querySelector<HTMLElement>(".pwa-main-notices .pwa-runtime-notice");
+    await expect.poll(() => notice ?? document.querySelector(".pwa-main-notices .pwa-runtime-notice")).not.toBeNull();
+    const rect = document.querySelector<HTMLElement>(".pwa-main-notices .pwa-runtime-notice")!.getBoundingClientRect();
+    // 提示区已内缩左安全区，提示条只留 16 的 gutter，安全区只算一次。
+    expect(Math.round(rect.left)).toBe(safe + 16);
+    expect(Math.round(rect.right)).toBe(390 - 16);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+  }
+});

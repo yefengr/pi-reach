@@ -266,7 +266,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-menu-panel { bottom: calc(100% + 8px); left: 0; }
 .pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
 @media (hover: hover) { .pwa-composer-menu-panel button:hover { color: var(--pwa-ink); background: var(--pwa-hover); } }
-.pwa-root .pwa-command-menu-dropdown { --pwa-command-menu-width: min(340px, calc(100vw - 32px)); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
+.pwa-root .pwa-command-menu-dropdown { /* 浮层宽度上限扣除两侧留白，留白取 16 与安全区中的较大值。 */ --pwa-command-menu-width: min(340px, calc(100vw - max(16px, var(--pwa-safe-left)) - max(16px, var(--pwa-safe-right)))); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-command-menu-panel { display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; }
 .pwa-command-row,
 .pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }

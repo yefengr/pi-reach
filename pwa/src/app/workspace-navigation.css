@@ -45,7 +45,7 @@
 }
 
 .pwa-root .pwa-device-popover {
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw - max(12px, var(--pwa-safe-left)) - max(12px, var(--pwa-safe-right)));
   max-height: min(65dvh, 480px);
   padding: 6px;
   overflow: hidden;

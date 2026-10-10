@@ -3,6 +3,7 @@ import { ActionIcon, Popover, Textarea } from "@mantine/core";
 import { MoreHorizontal } from "lucide-react";
 import { pwaFadeTransition, usePwaMotionDuration } from "./use-pwa-motion";
 import { useI18n } from "@/lib/i18n";
+import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 
 /** 「更多」弹层只提供可访问的只读会话信息。 */
 export type SessionMenuInfo = {
@@ -38,6 +39,7 @@ function scheduleFocusReturn(
 }
 
 export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
+  const floatingMiddlewares = useFloatingSafeMiddlewares();
   const { t } = useI18n();
   const menuDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
   const [opened, setOpened] = useState(false);
@@ -94,6 +96,7 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
 
   return <div className="pwa-session-actions">
     <Popover
+      middlewares={floatingMiddlewares}
       opened={opened}
       onChange={setMenuOpened}
       trapFocus={false}

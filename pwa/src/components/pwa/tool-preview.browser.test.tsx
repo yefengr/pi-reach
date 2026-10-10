@@ -283,16 +283,20 @@ test("the desktop reader adds the right safe area outside its 720px content and 
     expect(getComputedStyle(document.querySelector(".pwa-tool-reader-scroll")!).paddingLeft).toBe("20px");
     await screen.unmount();
     await page.viewport(740, 360);
+    document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
     screen = await renderPwa(<ToolReader value={value("done")} opened onClose={() => {}} />);
     await expect.element(screen.getByRole("dialog")).toBeVisible();
     const header = getComputedStyle(document.querySelector(".pwa-tool-reader-header")!);
     expect([header.paddingLeft, header.paddingRight]).toEqual([`${4 + 30}px`, `${4 + 47}px`]);
     const scroll = getComputedStyle(document.querySelector(".pwa-tool-reader-scroll")!);
     expect([scroll.paddingLeft, scroll.paddingRight]).toEqual([`${16 + 30}px`, `${16 + 47}px`]);
+    // 全屏阅读器底部取 16 与底部安全区中的较大值，末尾内容不进入安全区。
+    expect(scroll.paddingBottom).toBe("34px");
     await screen.unmount();
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-left");
     document.documentElement.style.removeProperty("--pwa-safe-right");
+    document.documentElement.style.removeProperty("--pwa-safe-bottom");
     await page.viewport(1280, 900);
   }
 });

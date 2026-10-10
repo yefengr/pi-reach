@@ -632,6 +632,12 @@ Composer 内层 textarea 不套用普通输入框的边框和圆角；外层卡�
 
 验证（Linux 容器，Chromium）：每批执行 PWA 类型检查、lint（仅 2 条与本事项无关的既有警告）、`pnpm --filter pwa test`（Node、Browser Mode 与生产 Service Worker 专项）和生产构建，均通过；收口时 Node 595、Browser Mode 773（另有 11 项既有跳过）、生产 Service Worker 18 项通过，`pnpm check:docs` 通过。新增的几何断言覆盖间距映射、标签与表单间距、单选圆点颜色、Toast 点击区、横屏左右安全区（侧栏展开与收起、设置层、阅读器、移动导航）、弹窗操作区、导航左缘、空状态间距、文件卡片图标按钮、启动页与矮窗口图标。CSS 守卫经注入违规样式确认能拦截色值、非档位间距与粗边框。另用 README 演示数据渲染桌面与移动中英文界面截图人工核对，未见布局破损。
 
+实施后复核修正（2026-10-10）：只读复核发现三处安全区缺口，已修复并补测试：
+
+- 移动全屏工具与文件阅读器正文底部固定 16，未避让底部安全区；改为 `max(16px, 底部安全区)`。
+- 工作区内的运行时提示条 Portal 到主区提示区，提示区已避让安全区，提示条又扣一次（390 宽、左安全区 47 时左边距 86.5，应为 63）；提示区内改为只留 gutter，应用壳顶层的备用槽位仍自行扣除。
+- Popover 与 Menu 只保留 Mantine 默认 5px 视口留白，窄屏会进入安全区；新增 `useFloatingSafeMiddlewares` 把 shift 留白改为 `max(5px, 安全区)`，命令菜单与电脑选择 Popover 的宽度上限同时扣除安全区。
+
 未覆盖风险：
 
 - 左右安全区只通过覆盖 `--pwa-safe-left／right` 模拟验证，iOS／Android 横屏刘海、主屏 standalone 与软键盘组合仍需真机核对。

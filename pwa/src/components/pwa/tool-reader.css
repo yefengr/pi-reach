@@ -93,6 +93,7 @@
 @media (max-width: 767.98px) {
   .pwa-root .pwa-tool-reader, .pwa-root .pwa-tool-reader-scroll { touch-action: pan-y; }
   .pwa-root .pwa-tool-reader-header { padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
-  .pwa-root .pwa-tool-reader-scroll { padding: 16px calc(16px + var(--pwa-safe-right)) 16px calc(16px + var(--pwa-safe-left)); }
+  /* 移动全屏阅读器四边都贴屏幕：底部与 Composer 一样取 16 与底部安全区中的较大值。 */
+  .pwa-root .pwa-tool-reader-scroll { padding: 16px calc(16px + var(--pwa-safe-right)) max(16px, var(--pwa-safe-bottom)) calc(16px + var(--pwa-safe-left)); }
 }
 .pwa-root .pwa-tool-group-alert { flex: none; align-self: center; color: var(--pwa-error); }

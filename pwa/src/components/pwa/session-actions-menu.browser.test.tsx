@@ -158,3 +158,21 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps themed infor
     await page.viewport(1280, 900);
   }
 });
+
+test("keeps the information popover clear of the side safe areas on narrow screens", async () => {
+  await page.viewport(320, 640);
+  document.documentElement.style.setProperty("--pwa-safe-left", "47px");
+  document.documentElement.style.setProperty("--pwa-safe-right", "30px");
+  try {
+    const screen = await renderPwa(<div style={{ display: "flex", justifyContent: "flex-end" }}><InfoHarness /></div>);
+    const { dialog } = await openInfo(screen);
+    const panel = dialog.element().closest<HTMLElement>(".mantine-Popover-dropdown") ?? dialog.element();
+    await expect.poll(() => Math.round(panel.getBoundingClientRect().left)).toBeGreaterThanOrEqual(47);
+    expect(Math.round(panel.getBoundingClientRect().right)).toBeLessThanOrEqual(320 - 30);
+    await screen.unmount();
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+    document.documentElement.style.removeProperty("--pwa-safe-right");
+    await page.viewport(1280, 900);
+  }
+});
