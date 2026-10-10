@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PWA UI 规范调整前后对比</title>
+  <link rel="stylesheet" href="./shared.css">
+</head>
+<body class="guides">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  </svg>
+
+  <main class="review" aria-label="PWA UI 规范调整前后对比">
+    <header class="review-head">
+      <div>
+        <h1>PWA UI 规范：调整前后对比</h1>
+        <p>静态评审稿 · 依据 docs/plans/active/20261009-pwa-ui-spec.md · 浅色外观 · 尺寸为 CSS px</p>
+      </div>
+      <div class="legend">
+        <span><i class="swatch changed"></i>有变化的间距</span>
+        <span><i class="swatch same"></i>不变的间距</span>
+        <span><i class="swatch hit"></i>点击区域</span>
+        <span><i class="swatch safe"></i>安全区</span>
+        <label class="guide-toggle"><input type="checkbox" id="guide-toggle" checked>显示标注</label>
+      </div>
+    </header>
+
+    <nav aria-label="对比项">
+      <ul class="toc">
+        <li><a href="#c1">1 设置页表单</a></li>
+        <li><a href="#c2">2 移动重命名弹窗</a></li>
+        <li><a href="#c3">3 Toast 操作</a></li>
+        <li><a href="#c4">4 横屏手机安全区</a></li>
+        <li><a href="#c5">5 菜单内部</a></li>
+        <li><a href="#c6">6 主区空状态</a></li>
+        <li><a href="#c7">7 运行时提示条</a></li>
+        <li><a href="#c8">8 导航左缘</a></li>
+      </ul>
+    </nav>
+
+    <!-- 1 设置页 -->
+    <section class="cmp" id="c1" aria-labelledby="c1-title">
+      <div class="cmp-head"><h2 id="c1-title">1 设置页：外观与连接<span class="ref">§7.2 · §9 · P2 P3 P10</span></h2></div>
+      <ul class="changes">
+        <li>标签 → 输入框 <b>6 → 8</b></li>
+        <li>输入框 → 保存设置 <b>12 → 16</b></li>
+        <li>未选中单选圆点 <b>line → control-line</b>（约 1.3:1 → ≥ 3:1）</li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状</figcaption>
+          <div class="stage-wrap"><div class="stage settings col">
+            <p class="s-title">外观</p><i class="sp" style="--h:4px" data-v="4"></i>
+            <p class="s-desc">选择 Pi Reach 在此浏览器中的外观。</p><i class="sp" style="--h:16px" data-v="16"></i>
+            <div class="opt checked"><span class="radio on"></span><span class="opt-copy"><svg class="i"><use href="#i-monitor"/></svg><span><strong>跟随系统</strong><small>与设备外观一致</small></span></span></div>
+            <i class="sp" style="--h:8px" data-v="8"></i>
+            <div class="opt"><span class="radio"></span><span class="opt-copy"><svg class="i"><use href="#i-sun"/></svg><span><strong>浅色</strong><small>明亮的工作区</small></span></span></div>
+            <i class="sp" style="--h:32px" data-v="32"></i>
+            <p class="s-title">连接</p><i class="sp" style="--h:4px" data-v="4"></i>
+            <p class="s-desc">安全的 Relay 使用 https://，WebSocket 会自动选择。</p><i class="sp" style="--h:16px" data-v="16"></i>
+            <span class="field-label">Relay 地址</span><i class="sp d" style="--h:6px" data-v="6"></i>
+            <span class="input">wss://relay.example.com</span><i class="sp d" style="--h:12px" data-v="12"></i>
+            <button class="btn primary" type="button">保存设置</button>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后</figcaption>
+          <div class="stage-wrap"><div class="stage settings col">
+            <p class="s-title">外观</p><i class="sp" style="--h:4px" data-v="4"></i>
+            <p class="s-desc">选择 Pi Reach 在此浏览器中的外观。</p><i class="sp" style="--h:16px" data-v="16"></i>
+            <div class="opt checked"><span class="radio on"></span><span class="opt-copy"><svg class="i"><use href="#i-monitor"/></svg><span><strong>跟随系统</strong><small>与设备外观一致</small></span></span></div>
+            <i class="sp" style="--h:8px" data-v="8"></i>
+            <div class="opt"><span class="radio control hl"></span><span class="opt-copy"><svg class="i"><use href="#i-sun"/></svg><span><strong>浅色</strong><small>明亮的工作区</small></span></span></div>
+            <i class="sp" style="--h:32px" data-v="32"></i>
+            <p class="s-title">连接</p><i class="sp" style="--h:4px" data-v="4"></i>
+            <p class="s-desc">安全的 Relay 使用 https://，WebSocket 会自动选择。</p><i class="sp" style="--h:16px" data-v="16"></i>
+            <span class="field-label">Relay 地址</span><i class="sp d" style="--h:8px" data-v="8"></i>
+            <span class="input">wss://relay.example.com</span><i class="sp d" style="--h:16px" data-v="16"></i>
+            <button class="btn primary" type="button">保存设置</button>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 2 移动重命名 -->
+    <section class="cmp" id="c2" aria-labelledby="c2-title">
+      <div class="cmp-head"><h2 id="c2-title">2 移动端重命名弹窗（390 宽）<span class="ref">§7.2 · §12 · P2 P6</span></h2></div>
+      <ul class="changes">
+        <li>标签 → 输入框 <b>约 14 → 8</b>（grid gap 8 与标签外边距 6 叠加，按 CSS 推算）</li>
+        <li>正文 → 操作区 <b>24 → 16</b>，与确认弹窗一致</li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状</figcaption>
+          <div class="stage-wrap"><div class="stage phone-scrim">
+            <div class="dialog col" role="dialog" aria-label="重命名配对（现状）">
+              <div class="dialog-head" style="align-self:stretch"><h3>重命名配对</h3><span class="icon-btn"><svg class="i"><use href="#i-x"/></svg></span></div>
+              <i class="sp" style="--h:16px" data-v="16"></i>
+              <p class="dialog-desc">为 <strong>MacBook Pro</strong> 设置本地名称，只会修改此浏览器中的显示名称。</p>
+              <i class="sp" style="--h:16px" data-v="16"></i>
+              <span class="field-label">配对名称</span><i class="sp d" style="--h:14px" data-v="14"></i>
+              <span class="input">MacBook Pro</span><i class="sp d" style="--h:24px" data-v="24"></i>
+              <div class="actions-row"><button class="btn default" type="button">取消</button><button class="btn primary" type="button">保存</button></div>
+            </div>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后</figcaption>
+          <div class="stage-wrap"><div class="stage phone-scrim">
+            <div class="dialog col" role="dialog" aria-label="重命名配对（调整后）">
+              <div class="dialog-head" style="align-self:stretch"><h3>重命名配对</h3><span class="icon-btn"><svg class="i"><use href="#i-x"/></svg></span></div>
+              <i class="sp" style="--h:16px" data-v="16"></i>
+              <p class="dialog-desc">为 <strong>MacBook Pro</strong> 设置本地名称，只会修改此浏览器中的显示名称。</p>
+              <i class="sp" style="--h:16px" data-v="16"></i>
+              <span class="field-label">配对名称</span><i class="sp d" style="--h:8px" data-v="8"></i>
+              <span class="input">MacBook Pro</span><i class="sp d" style="--h:16px" data-v="16"></i>
+              <div class="actions-row"><button class="btn default" type="button">取消</button><button class="btn primary" type="button">保存</button></div>
+            </div>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 3 Toast -->
+    <section class="cmp" id="c3" aria-labelledby="c3-title">
+      <div class="cmp-head"><h2 id="c3-title">3 Toast 操作按钮<span class="ref">§8.1 · §15.1 · P9</span></h2></div>
+      <ul class="changes">
+        <li>“刷新”点击区 <b>36 → 44</b></li>
+        <li>视觉高度保持 36，Toast 总高仍为 44</li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状</figcaption>
+          <div class="stage-wrap"><div class="stage toast-stage">
+            <div class="fake-title"></div>
+            <div class="toast"><svg class="i i-16"><use href="#i-download"/></svg><span class="toast-msg">Pi Reach 有新版本</span>
+              <button class="toast-action" type="button">刷新<span class="hit-box" style="inset:0" data-v="36"></span></button>
+              <span class="icon-btn"><svg class="i"><use href="#i-x"/></svg></span></div>
+            <p class="toast-note meta">悬停底色示意按钮视觉范围</p>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后</figcaption>
+          <div class="stage-wrap"><div class="stage toast-stage">
+            <div class="fake-title"></div>
+            <div class="toast"><svg class="i i-16"><use href="#i-download"/></svg><span class="toast-msg">Pi Reach 有新版本</span>
+              <button class="toast-action tall" type="button"><span class="label">刷新</span><span class="hit-box" style="inset:0" data-v="44"></span></button>
+              <span class="icon-btn"><svg class="i"><use href="#i-x"/></svg></span></div>
+            <p class="toast-note meta">悬停底色示意按钮视觉范围</p>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 4 横屏 -->
+    <section class="cmp" id="c4" aria-labelledby="c4-title">
+      <div class="cmp-head"><h2 id="c4-title">4 横屏手机进入桌面布局（844 × 390，按 52% 缩放）<span class="ref">§4 · P8</span></h2></div>
+      <ul class="changes">
+        <li>侧栏左侧 <b>+ 左安全区 47</b>，安全区用 panel 填充</li>
+        <li>标题区右侧 <b>8 → 8 + 47</b></li>
+        <li>阅读列与 Composer 右侧 <b>20 → 20 + 47</b></li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状：导航与右侧操作落在刘海和圆角区域</figcaption>
+          <div class="stage-wrap"><div class="landscape-wrap">
+            <div class="device" aria-label="横屏现状">
+              <div class="device-inner">
+                <aside class="side">
+                  <div class="brand"><span class="brand-mark">π</span>Pi Reach</div>
+                  <div class="nav-heading">在线 Pi</div>
+                  <div class="nav-row active"><b>重构配对流程</b><small>pi-reach · <span class="run">运行中</span></small></div>
+                  <div class="nav-row"><b>修复附件上传</b><small>api · 空闲</small></div>
+                  <div class="nav-heading">本地历史</div>
+                  <div class="nav-row"><b>整理发布说明</b><small>昨天</small></div>
+                </aside>
+                <section class="main">
+                  <div class="titlebar"><h4><span>pi-reach · </span>重构配对流程</h4><span class="conn"><i class="dot"></i>已连接</span><span class="icon-btn"><svg class="i"><use href="#i-more"/></svg></span></div>
+                  <div class="msgs"><div class="bubble">把配对码输入改成自动提交</div><p class="reply">已修改配对弹窗：输满 8 位有效字符后自动提交，并保留手动提交按钮。</p></div>
+                  <div class="composer"><div class="composer-card">给 Pi 发送消息<span class="send"><svg class="i"><use href="#i-up"/></svg></span></div></div>
+                </section>
+              </div>
+              <span class="safe l"></span><span class="safe r"></span><span class="notch"></span><span class="home-bar"></span>
+            </div>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后：内容避开左右安全区</figcaption>
+          <div class="stage-wrap"><div class="landscape-wrap">
+            <div class="device" aria-label="横屏调整后">
+              <div class="device-inner after-safe" style="--side:307px">
+                <aside class="side safe-pad">
+                  <div class="brand"><span class="brand-mark">π</span>Pi Reach</div>
+                  <div class="nav-heading">在线 Pi</div>
+                  <div class="nav-row active"><b>重构配对流程</b><small>pi-reach · <span class="run">运行中</span></small></div>
+                  <div class="nav-row"><b>修复附件上传</b><small>api · 空闲</small></div>
+                  <div class="nav-heading">本地历史</div>
+                  <div class="nav-row"><b>整理发布说明</b><small>昨天</small></div>
+                </aside>
+                <section class="main">
+                  <div class="titlebar"><h4><span>pi-reach · </span>重构配对流程</h4><span class="conn"><i class="dot"></i>已连接</span><span class="icon-btn"><svg class="i"><use href="#i-more"/></svg></span></div>
+                  <div class="msgs"><div class="bubble">把配对码输入改成自动提交</div><p class="reply">已修改配对弹窗：输满 8 位有效字符后自动提交，并保留手动提交按钮。</p></div>
+                  <div class="composer"><div class="composer-card">给 Pi 发送消息<span class="send"><svg class="i"><use href="#i-up"/></svg></span></div></div>
+                </section>
+              </div>
+              <span class="safe l"></span><span class="safe r"></span><span class="notch"></span><span class="home-bar"></span>
+            </div>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 5 菜单 -->
+    <section class="cmp" id="c5" aria-labelledby="c5-title">
+      <div class="cmp-head"><h2 id="c5-title">5 菜单内部<span class="ref">§14.1 · P12（拟）</span></h2></div>
+      <ul class="changes">
+        <li>模型菜单项左右内边距 <b>12 → 10</b>，与命令菜单一致</li>
+        <li>禁用项 <b>透明度 0.45 → secondary 文字</b></li>
+        <li>电脑选择 Popover 容器 <b>8 → 6</b>（图中未画）</li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状</figcaption>
+          <div class="stage-wrap"><div class="stage menus">
+            <div><p class="menu-label">模型与思考</p><div class="menu">
+              <div class="menu-item"><i class="sp x d" style="--w:12px" data-v="12"></i><span class="grow">切换模型</span><svg class="i i-16"><use href="#i-chev"/></svg><i class="sp x d" style="--w:12px" data-v="12"></i></div>
+              <div class="menu-item"><i class="sp x d" style="--w:12px" data-v="12"></i><span class="grow">思考级别</span><svg class="i i-16"><use href="#i-chev"/></svg><i class="sp x d" style="--w:12px" data-v="12"></i></div>
+            </div></div>
+            <div><p class="menu-label">命令</p><div class="menu">
+              <div class="menu-heading">Pi 命令</div>
+              <div class="menu-item"><i class="sp x" style="--w:10px" data-v="10"></i><span class="grow"><code>/new</code><small>新会话</small></span><i class="sp x" style="--w:10px" data-v="10"></i></div>
+              <div class="menu-item fade"><i class="sp x" style="--w:10px" data-v="10"></i><span class="grow"><code>/compact</code><small>压缩上下文</small></span><i class="sp x" style="--w:10px" data-v="10"></i></div>
+            </div></div>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后</figcaption>
+          <div class="stage-wrap"><div class="stage menus">
+            <div><p class="menu-label">模型与思考</p><div class="menu">
+              <div class="menu-item"><i class="sp x d" style="--w:10px" data-v="10"></i><span class="grow">切换模型</span><svg class="i i-16"><use href="#i-chev"/></svg><i class="sp x d" style="--w:10px" data-v="10"></i></div>
+              <div class="menu-item"><i class="sp x d" style="--w:10px" data-v="10"></i><span class="grow">思考级别</span><svg class="i i-16"><use href="#i-chev"/></svg><i class="sp x d" style="--w:10px" data-v="10"></i></div>
+            </div></div>
+            <div><p class="menu-label">命令</p><div class="menu">
+              <div class="menu-heading">Pi 命令</div>
+              <div class="menu-item"><i class="sp x" style="--w:10px" data-v="10"></i><span class="grow"><code>/new</code><small>新会话</small></span><i class="sp x" style="--w:10px" data-v="10"></i></div>
+              <div class="menu-item muted"><i class="sp x" style="--w:10px" data-v="10"></i><span class="grow"><code>/compact</code><small>压缩上下文</small></span><i class="sp x" style="--w:10px" data-v="10"></i></div>
+            </div></div>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 6 空状态 -->
+    <section class="cmp" id="c6" aria-labelledby="c6-title">
+      <div class="cmp-head"><h2 id="c6-title">6 主区空状态（未配对）<span class="ref">§15.2 · P14（拟）</span></h2></div>
+      <ul class="changes">
+        <li>命令块 → 开始配对 <b>24 → 16</b>（现状为 gap 8 与外边距 16 叠加）</li>
+        <li>改为由单一布局层负责</li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状</figcaption>
+          <div class="stage-wrap"><div class="stage empty">
+            <svg class="i i-24"><use href="#i-laptop"/></svg><i class="sp" style="--h:16px" data-v="16"></i>
+            <h4>还没有配对的电脑</h4><i class="sp" style="--h:8px" data-v="8"></i>
+            <p>在电脑上的 Pi 中运行下面的命令。</p><i class="sp" style="--h:16px" data-v="16"></i>
+            <span class="cmd"><code>/pi-reach pair</code><span class="icon-btn"><svg class="i"><use href="#i-copy"/></svg></span></span><i class="sp d" style="--h:24px" data-v="24"></i>
+            <button class="btn primary" type="button">开始配对</button>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后</figcaption>
+          <div class="stage-wrap"><div class="stage empty">
+            <svg class="i i-24"><use href="#i-laptop"/></svg><i class="sp" style="--h:16px" data-v="16"></i>
+            <h4>还没有配对的电脑</h4><i class="sp" style="--h:8px" data-v="8"></i>
+            <p>在电脑上的 Pi 中运行下面的命令。</p><i class="sp" style="--h:16px" data-v="16"></i>
+            <span class="cmd"><code>/pi-reach pair</code><span class="icon-btn"><svg class="i"><use href="#i-copy"/></svg></span></span><i class="sp d" style="--h:16px" data-v="16"></i>
+            <button class="btn primary" type="button">开始配对</button>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 7 运行时提示条 -->
+    <section class="cmp" id="c7" aria-labelledby="c7-title">
+      <div class="cmp-head"><h2 id="c7-title">7 运行时提示条（移动 390 宽）<span class="ref">§15.1 · P13（拟）</span></h2></div>
+      <ul class="changes">
+        <li>两侧留白 <b>12 → 16</b>，与移动 gutter 和阅读列对齐（桌面 18 → 20）</li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状：提示条比正文宽出 4</figcaption>
+          <div class="stage-wrap"><div class="stage phone">
+            <div class="notice" style="width:366px"><div class="notice-body"><b>安装 Pi Reach</b>从设备的应用启动器打开此工作区。<br><button class="btn default" type="button">安装应用</button></div><span class="icon-btn"><svg class="i"><use href="#i-x"/></svg></span></div>
+            <div class="mobile-top"><span class="icon-btn"><svg class="i"><use href="#i-menu"/></svg></span><b>重构配对流程</b><span class="icon-btn"><svg class="i"><use href="#i-more"/></svg></span></div>
+            <div class="msgs"><div class="bubble">把配对码输入改成自动提交</div><p class="reply">已修改配对弹窗：输满 8 位有效字符后自动提交。</p></div>
+            <span class="vguide same" style="left:16px" data-v="16"></span><span class="vguide same" style="left:374px"></span>
+            <span class="vguide" style="left:12px;top:6px;bottom:auto;height:120px;--label-top:96px" data-v="12"></span>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后：与阅读列同一左右边线</figcaption>
+          <div class="stage-wrap"><div class="stage phone">
+            <div class="notice" style="width:358px"><div class="notice-body"><b>安装 Pi Reach</b>从设备的应用启动器打开此工作区。<br><button class="btn default" type="button">安装应用</button></div><span class="icon-btn"><svg class="i"><use href="#i-x"/></svg></span></div>
+            <div class="mobile-top"><span class="icon-btn"><svg class="i"><use href="#i-menu"/></svg></span><b>重构配对流程</b><span class="icon-btn"><svg class="i"><use href="#i-more"/></svg></span></div>
+            <div class="msgs"><div class="bubble">把配对码输入改成自动提交</div><p class="reply">已修改配对弹窗：输满 8 位有效字符后自动提交。</p></div>
+            <span class="vguide same" style="left:16px" data-v="16"></span><span class="vguide same" style="left:374px"></span>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 8 导航左缘 -->
+    <section class="cmp" id="c8" aria-labelledby="c8-title">
+      <div class="cmp-head"><h2 id="c8-title">8 导航文字左缘<span class="ref">§13 · P11（待实测）</span></h2></div>
+      <ul class="changes">
+        <li>会话行左右内边距 <b>10 → 8</b>，文字左缘 <b>18 → 16</b>，与品牌和分组标题对齐</li>
+        <li class="pending">按 CSS 推算，实施前需浏览器实测确认</li>
+      </ul>
+      <div class="pair">
+        <figure>
+          <figcaption>现状</figcaption>
+          <div class="stage-wrap"><div class="stage navcrop nav-guide-host">
+            <div class="brand"><span class="brand-mark">π</span>Pi Reach</div>
+            <div class="nav-heading">在线 Pi</div>
+            <div class="nav-row active"><b>重构配对流程</b><small>pi-reach · <span class="run">运行中</span></small></div>
+            <div class="nav-row"><b>修复附件上传</b><small>api · 空闲</small></div>
+            <span class="vguide same" style="left:16px" data-v="16"></span>
+            <span class="vguide" style="left:18px;top:96px" data-v="18"></span>
+          </div></div>
+        </figure>
+        <figure class="after">
+          <figcaption>调整后</figcaption>
+          <div class="stage-wrap"><div class="stage navcrop nav-guide-host">
+            <div class="brand"><span class="brand-mark">π</span>Pi Reach</div>
+            <div class="nav-heading">在线 Pi</div>
+            <div class="nav-row p8 active"><b>重构配对流程</b><small>pi-reach · <span class="run">运行中</span></small></div>
+            <div class="nav-row p8"><b>修复附件上传</b><small>api · 空闲</small></div>
+            <span class="vguide same" style="left:16px" data-v="16"></span>
+          </div></div>
+        </figure>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // 只切换评审标注的显示，不模拟产品交互。
+    document.getElementById("guide-toggle").addEventListener("change", (event) => {
+      document.body.classList.toggle("guides", event.target.checked);
+    });
+  </script>
+</body>
+</html>
