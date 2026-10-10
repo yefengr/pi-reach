@@ -205,7 +205,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 
 首次打开某个会话（在线 Pi 或本地历史）时停在底部最新内容；同一次访问中切回看过的会话时恢复离开时的阅读位置：离开时在底部则继续跟随最新输出，否则按离开时顶部可见的行重新定位，该行加载出来之前先停在底部，用户主动往上回看则以用户位置为准。展开思考、工具组或打开详情阅读器仅暂停自动跟随，不立刻标记离开底部；实际滚离底部或收到未读输出时才显示「最新」入口。位置只保存在页面内存中，刷新后清除。
 
-打开历史会关闭当前 session channel，仅从 IndexedDB 读取对应的 `device_id + endpoint_id + session_id + history_generation` 正式 timeline，`MessageList` 使用 `isLive=false`。历史视图不显示 Composer、远程控制或隐式 resume。返回在线 endpoint 后才重新建立实时 session。
+打开历史会关闭当前 session channel，仅从 IndexedDB 读取对应的 `device_id + endpoint_id + session_id + history_generation` 正式 timeline，`MessageList` 使用 `isLive=false`。历史视图不显示 Composer、远程控制或隐式 resume。返回在线 endpoint 后才重新建立实时 session。读取本地记录期间按「主区空状态与加载」显示会话内骨架，不显示「没有可显示的记录。」，读完后内容按切换 Pi 的规则淡入。长历史先渲染最近 30 条，顶部「加载更多」每次向前展开 80 条（与在线会话向前加载的页大小一致），展开时保持与底部的距离；只读历史的「加载更多」不依赖实时连接。切回看过的历史时连同已展开的范围一起恢复阅读位置。
 
 ## 可访问性与动态效果
 

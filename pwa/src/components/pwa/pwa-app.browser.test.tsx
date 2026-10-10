@@ -3193,3 +3193,37 @@ test("drops a saved preview when the selected Pi has moved to another session", 
     expect(listText()).not.toContain("Record 3");
   } finally { await screen.unmount(); }
 });
+
+test("opens long saved history behind a loading state with its latest page and keeps the expanded range on return", async () => {
+  await seedTimeline(sessionEvents("archived-long", "Long", 150));
+  const actual = await vi.importActual<typeof import("@/lib/pwa/timeline-store")>("@/lib/pwa/timeline-store");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen } = context;
+  const records = () => [...document.querySelectorAll(".pwa-message-list p")].filter((element) => element.textContent?.startsWith("Long ")).length;
+  const openHistoryRow = async () => {
+    await expect.poll(() => document.querySelector(".pwa-history-row")?.textContent).toContain("Long 150");
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+  };
+  try {
+    vi.mocked(loadTimeline).mockImplementationOnce(async (scope) => { await gate; return actual.loadTimeline(scope); });
+    await openHistoryRow();
+    // 读取本地记录期间不把空列表当作「没有记录」。
+    await expect.poll(() => document.querySelectorAll(".pwa-message-list .pwa-skeleton").length).toBe(3);
+    expect(screen.getByText("No records to display.", { exact: true }).query()).toBeNull();
+    release();
+    await expect.poll(records).toBe(30);
+    await screen.getByRole("button", { name: "Load more", exact: true }).click();
+    await expect.poll(records).toBe(110);
+
+    const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+    list.scrollTop = 200;
+    list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await selectPi("Test Pi");
+    await expect.poll(records).toBe(0);
+    await openHistoryRow();
+    await expect.poll(records).toBe(110);
+    await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(200);
+  } finally { release(); await screen.unmount(); }
+});

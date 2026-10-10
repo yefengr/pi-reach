@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { Button } from "@mantine/core";
 import { ChevronRight, Computer, History, Link2, Radio } from "lucide-react";
@@ -6,6 +6,8 @@ import { MessageList } from "@/components/pwa/message-list";
 import { OnlinePiRow } from "@/components/pwa/workspace-view";
 import type { PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { TIMELINE_PAGE_SIZE } from "@/lib/pwa/timeline-history-loader";
+import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { useI18n } from "@/lib/i18n";
 
 const PAIR_COMMAND = "/pi-reach pair";
@@ -17,18 +19,54 @@ export function LiveWorkspace({ timeline, footer }: { timeline: ReactNode; foote
   </>;
 }
 
-export function HistoryWorkspace({ items, restoreScrollTop = null, listRef, bottomSentinelRef, onBackToLive }: { items: TimelineViewItem[]; restoreScrollTop?: number | null; listRef: RefObject<HTMLDivElement | null>; bottomSentinelRef: RefObject<HTMLDivElement | null>; onBackToLive?: () => void }) {
+/** 切回只读历史时恢复的阅读位置；滚动位置依赖当时已展开的记录数，两者一起保存。 */
+export type HistoryRestore = { scrollTop: number; visibleCount: number };
+
+type HistoryWorkspaceProps = {
+  items: TimelineViewItem[];
+  /** 正在读取本地记录；读完之前不把空列表当作「没有记录」。 */
+  loading?: boolean;
+  restore?: HistoryRestore | null;
+  /** 供离开时保存阅读位置读取当前已展开的记录数。 */
+  visibleCountRef?: MutableRefObject<number>;
+  listRef: RefObject<HTMLDivElement | null>;
+  bottomSentinelRef: RefObject<HTMLDivElement | null>;
+  onBackToLive?: () => void;
+};
+
+/** 长历史先渲染最近一段，向前按页展开，避免一次渲染整个会话卡住界面；交互与在线会话的「加载更多」一致。 */
+export function HistoryWorkspace({ items, loading = false, restore = null, visibleCountRef, listRef, bottomSentinelRef, onBackToLive }: HistoryWorkspaceProps) {
   const { t } = useI18n();
+  const [visibleCount, setVisibleCount] = useState(() => Math.max(restore?.visibleCount ?? 0, TIMELINE_RECENT_LIMIT));
+  const visibleItems = useMemo(() => items.slice(-visibleCount), [items, visibleCount]);
+  const skeletonVisible = useDelayedVisibility(loading);
   const positionedRef = useRef(false);
+  const prependAnchorRef = useRef<number | null>(null);
   useLayoutEffect(() => {
-    // 首次打开停在底部最新内容；同一次访问中切回时恢复离开时的位置。
+    if (visibleCountRef) visibleCountRef.current = visibleCount;
+  }, [visibleCount, visibleCountRef]);
+  useLayoutEffect(() => {
+    // 首次打开停在底部最新内容；同一次访问中切回时按当时展开的范围恢复离开时的位置。
     const list = listRef.current;
     if (positionedRef.current || !list || items.length === 0) return;
     positionedRef.current = true;
-    list.scrollTop = restoreScrollTop ?? list.scrollHeight;
-  }, [items, listRef, restoreScrollTop]);
+    list.scrollTop = restore?.scrollTop ?? list.scrollHeight;
+  }, [items, listRef, restore]);
+  useLayoutEffect(() => {
+    // 向前展开时保持与底部的距离，正在读的内容不跳动。
+    const anchor = prependAnchorRef.current;
+    const list = listRef.current;
+    if (anchor === null || !list) return;
+    prependAnchorRef.current = null;
+    list.scrollTop = list.scrollHeight - anchor;
+  }, [listRef, visibleCount]);
+  const loadEarlier = () => {
+    const list = listRef.current;
+    if (list) prependAnchorRef.current = list.scrollHeight - list.scrollTop;
+    setVisibleCount((count) => count + TIMELINE_PAGE_SIZE);
+  };
   return <>
-    <MessageList items={items} hasEarlier={false} listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} />
+    <MessageList items={visibleItems} hasEarlier={items.length > visibleCount} onLoadEarlier={loadEarlier} earlierLocal listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />
     <div className="pwa-chat-footer">
       <div className="pwa-read-only-bar" role="note">
         <span>{t.workspace.readOnlyNote}</span>
