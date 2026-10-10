@@ -255,3 +255,14 @@ test("the settings layer insets side safe areas once around the 640px column", a
     document.documentElement.style.removeProperty("--pwa-safe-right");
   }
 });
+
+test("the relay form keeps 8px from label to input and 16px before the primary action", async () => {
+  const screen = await renderPwa(<SettingsHarness />);
+  const input = screen.getByRole("textbox").element().getBoundingClientRect();
+  const label = document.querySelector(".pwa-settings-form label")!.getBoundingClientRect();
+  const submit = document.querySelector(".pwa-settings-form button[type=submit]")!.getBoundingClientRect();
+  expect(Math.round(input.top - label.bottom)).toBe(8);
+  // 输入框下方的说明属于输入项本身，主操作从说明下方起算 16。
+  const field = document.querySelector(".pwa-settings-form .pwa-field")!.getBoundingClientRect();
+  expect(Math.round(submit.top - field.bottom)).toBe(16);
+});

@@ -107,7 +107,10 @@ test.each([390, 767, 768, 1440].flatMap(width => ["light", "dark"].map(scheme =>
     expect(getComputedStyle(description).fontSize).toBe("16px");
     expect(getComputedStyle(description).lineHeight).toBe("26.4px");
     expect(getComputedStyle(actions).gap).toBe("8px");
-    expect(getComputedStyle(actions).marginTop).toBe("24px");
+    // 弹窗正文到操作区：桌面 24、移动 16；标签到输入框只由公共标签间距负责。
+    expect(getComputedStyle(actions).marginTop).toBe(width < 768 ? "16px" : "24px");
+    const label = document.querySelector(".pwa-rename-dialog label")!.getBoundingClientRect();
+    expect(Math.round(input.getBoundingClientRect().top - label.bottom)).toBe(8);
     expect(dialog.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
     expect(dialog.element().getBoundingClientRect().right).toBeLessThanOrEqual(width);
     await page.screenshot({ path: `../../../.vitest/screenshots/brand-gap-rename-${width}-${scheme}.png` });

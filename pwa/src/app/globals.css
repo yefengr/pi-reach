@@ -309,7 +309,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-section { min-width: 0; }
 .pwa-root .pwa-settings-section-title { margin: 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-root .pwa-settings-section-description { margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
-.pwa-root .pwa-settings-form { margin-top: 16px; display: grid; justify-items: start; gap: 12px; }
+/* 一般内容到表单主操作 16。 */
+.pwa-root .pwa-settings-form { margin-top: var(--pwa-space-md); display: grid; justify-items: start; gap: var(--pwa-space-md); }
 .pwa-root .pwa-settings-form .pwa-field { width: 100%; }
 .pwa-root .pwa-settings-actions { margin-top: 16px; display: grid; justify-items: start; gap: 16px; }
 .pwa-root .pwa-settings-about-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -346,8 +347,9 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-textarea textarea[aria-invalid="true"] { border-color: var(--pwa-error); }
 .pwa-ui-scope .pwa-input input:disabled,
 .pwa-ui-scope .pwa-textarea textarea:disabled { color: var(--pwa-secondary); background: var(--pwa-disabled-bg); opacity: 1; }
+/* 标签为块级，避免 inline-block 被正文行高撑出额外间距；与输入框间隔只由 margin 负责。 */
 .pwa-ui-scope .pwa-input .mantine-InputWrapper-label,
-.pwa-ui-scope .pwa-textarea .mantine-InputWrapper-label { margin-bottom: var(--pwa-space-xs); color: var(--pwa-ink); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
+.pwa-ui-scope .pwa-textarea .mantine-InputWrapper-label { display: block; margin-bottom: var(--pwa-space-xs); color: var(--pwa-ink); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
 .pwa-ui-scope .pwa-input .mantine-InputWrapper-description,
 .pwa-ui-scope .pwa-textarea .mantine-InputWrapper-description { margin-top: 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 .pwa-layout-reset-note { margin: 6px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
@@ -362,10 +364,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-confirm-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-rename-description { margin-bottom: 16px; }
 .pwa-rename-description strong { color: var(--pwa-ink); font-weight: 600; }
-.pwa-rename-field { display: grid; gap: 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: 600; text-transform: uppercase; }
-.pwa-rename-field input { width: 100%; height: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); outline: none; color: var(--pwa-ink); background: var(--pwa-panel); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-transform: none; }
-.pwa-rename-field input:focus { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
-.pwa-rename-field input:disabled { opacity: 0.55; }
 .pwa-rename-actions,
 .pwa-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .pwa-rename-actions .pwa-button { min-width: 88px; }
@@ -390,7 +388,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-pairing-title { font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-pairing-body { min-width: 0; padding: 0; }
 .pwa-pairing-description { margin: 8px 0 16px; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
-.pwa-pairing-form { display: grid; gap: 12px; }
+.pwa-pairing-form { display: grid; gap: var(--pwa-space-md); }
 .pwa-ui-scope .pwa-pairing-input input { font-family: var(--pwa-font-mono); letter-spacing: 0.04em; }
 .pwa-field-error { display: inline-flex; align-items: flex-start; gap: 6px; }
 .pwa-field-error svg { flex: 0 0 auto; margin-top: 1px; }
@@ -561,6 +559,8 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-confirm-dialog { padding: 20px 16px 16px; }
   /* 移动端所有输入框 16px，避免 iOS 聚焦时自动放大。 */
   .pwa-ui-scope .pwa-input input { font-size: 16px; }
+  /* 移动端弹窗正文到操作区统一为 16，与确认弹窗一致。 */
+  .pwa-rename-actions { margin-top: var(--pwa-space-md); }
   .pwa-rename-actions .pwa-button { flex: 1; }
   .pwa-confirm-actions { flex-direction: column; align-items: stretch; margin-top: 16px; }
   .pwa-confirm-actions .pwa-button { width: 100%; min-width: 0; }
