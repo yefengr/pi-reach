@@ -1124,3 +1124,55 @@ test("the navigation icon slides the drawer in on every open, including after re
     await screen.unmount();
   }
 });
+
+test("landscape side safe areas are avoided once by the edge-touching layers", async () => {
+  const safe = 47;
+  await page.viewport(844, 390);
+  document.documentElement.style.setProperty("--pwa-safe-left", `${safe}px`);
+  document.documentElement.style.setProperty("--pwa-safe-right", `${safe}px`);
+  try {
+    const screen = await renderLayout({ events: [] });
+    const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+    await expect.element(toggle).toBeVisible();
+    // 展开：侧栏内容宽 260，面板另加左安全区；主区左侧不贴边，不再叠加左安全区。
+    const navigation = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!;
+    expect(Math.round(navigation.getBoundingClientRect().width)).toBe(260 + safe);
+    expect(Math.round(document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!.getBoundingClientRect().left)).toBe(safe + 8);
+    const titleBar = document.querySelector<HTMLElement>(".pwa-title-bar")!;
+    expect(getComputedStyle(titleBar).paddingLeft).toBe("20px");
+    expect(getComputedStyle(titleBar).paddingRight).toBe(`${8 + safe}px`);
+    for (const child of titleBar.children) {
+      if (child.getBoundingClientRect().width === 0) continue;
+      expect(Math.round(child.getBoundingClientRect().right), child.className).toBeLessThanOrEqual(844 - safe - 8);
+    }
+    const notices = getComputedStyle(document.querySelector(".pwa-main-notices")!);
+    expect([notices.paddingLeft, notices.paddingRight]).toEqual(["0px", `${safe}px`]);
+    // 收起：主区左侧改为贴边，展开入口与标题区都避让左安全区。
+    await toggle.click();
+    const expand = screen.getByRole("button", { name: "Expand sidebar" });
+    await expect.element(expand).toBeVisible();
+    await expect.poll(() => Math.round(expand.element().getBoundingClientRect().left)).toBe(safe + 8);
+    expect(getComputedStyle(titleBar).paddingLeft).toBe(`${56 + safe}px`);
+    await expect.poll(() => getComputedStyle(document.querySelector(".pwa-main-notices")!).paddingLeft).toBe(`${safe}px`);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+    document.documentElement.style.removeProperty("--pwa-safe-right");
+  }
+});
+
+test("the workspace runtime notice relies on the notice area for the side safe area", async () => {
+  const safe = 47;
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-safe-left", `${safe}px`);
+  try {
+    await renderLayout({ events: [], runtimeNotice: true });
+    const notice = document.querySelector<HTMLElement>(".pwa-main-notices .pwa-runtime-notice");
+    await expect.poll(() => notice ?? document.querySelector(".pwa-main-notices .pwa-runtime-notice")).not.toBeNull();
+    const rect = document.querySelector<HTMLElement>(".pwa-main-notices .pwa-runtime-notice")!.getBoundingClientRect();
+    // 提示区已内缩左安全区，提示条只留 16 的 gutter，安全区只算一次。
+    expect(Math.round(rect.left)).toBe(safe + 16);
+    expect(Math.round(rect.right)).toBe(390 - 16);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+  }
+});

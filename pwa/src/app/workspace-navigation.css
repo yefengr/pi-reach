@@ -45,9 +45,9 @@
 }
 
 .pwa-root .pwa-device-popover {
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw - max(12px, var(--pwa-safe-left)) - max(12px, var(--pwa-safe-right)));
   max-height: min(65dvh, 480px);
-  padding: 8px;
+  padding: 6px;
   overflow: hidden;
   border: 1px solid var(--pwa-line);
   border-radius: var(--pwa-radius-md);
@@ -252,6 +252,7 @@
 
 .pwa-root .pwa-peer-menu-panel button {
   min-height: 44px;
+  padding-inline: 10px;
   border-radius: var(--pwa-radius-sm);
   font-size: var(--pwa-text-meta);
 }
@@ -301,7 +302,7 @@
 .pwa-root .pwa-device-drawer-head {
   min-height: 56px;
   flex: 0 0 auto;
-  padding: 8px 12px 8px 16px;
+  padding: 8px calc(12px + var(--pwa-safe-right)) 8px calc(16px + var(--pwa-safe-left));
   border-bottom: 1px solid var(--pwa-line);
 }
 
@@ -312,7 +313,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px 10px calc(12px + var(--pwa-safe-bottom));
+  padding: 10px calc(10px + var(--pwa-safe-right)) calc(12px + var(--pwa-safe-bottom)) calc(10px + var(--pwa-safe-left));
 }
 
 .pwa-root .pwa-device-drawer-body .pwa-device-panel {
@@ -344,9 +345,10 @@
 
 /* 移动导航：左侧 min(320px, 85vw)，顶部为品牌与关闭按钮，内容与桌面侧栏一致。 */
 /* 品牌与下方导航列表左缘对齐（内容区 8px + 行内 8px）。 */
-.pwa-root .pwa-session-sheet-head { padding-right: 4px; padding-left: 16px; background: var(--pwa-panel); }
+/* 移动导航只贴左边缘：面板总宽另加左安全区，头部与内容内缩同样的距离。 */
+.pwa-root .pwa-session-sheet-head { padding-right: 4px; padding-left: calc(16px + var(--pwa-safe-left)); background: var(--pwa-panel); }
 .pwa-root .pwa-session-sheet-head .pwa-sidebar-brand { min-height: 0; padding: 0; }
-.pwa-root .pwa-session-sheet .pwa-navigation-content { padding: 0 8px; }
+.pwa-root .pwa-session-sheet .pwa-navigation-content { padding: 0 8px 0 calc(8px + var(--pwa-safe-left)); }
 .pwa-scrim { background: var(--pwa-scrim) !important; backdrop-filter: none !important; }
 /* 跟手拖动的 WAAPI 动画必须压过 Mantine 的 CSS 过渡：过渡的层叠优先级高于脚本动画，
    外部关闭时否则面板会先跳回起点再由过渡滑出。属性由 swipe-drag 在动画存续期间设置。 */

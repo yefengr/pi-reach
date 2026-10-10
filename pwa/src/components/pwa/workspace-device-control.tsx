@@ -5,6 +5,7 @@ import { ChevronDown, Computer, Link2, MoreHorizontal, Pencil, Trash2 } from "lu
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { getMessages, useI18n } from "@/lib/i18n";
+import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 
 export type WorkspaceDeviceControlVariant = "desktop" | "sheet";
 
@@ -40,6 +41,7 @@ export function displayDevice(device: PwaDeviceRecord): string {
 function ComputerActionsMenu({ device, onRename, onRemove, onMenuChange }: { device: PwaDeviceRecord; onRename: () => void; onRemove: () => void; onMenuChange?: (opened: boolean) => void }) {
   const { t } = useI18n();
   const menuDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
+  const floatingMiddlewares = useFloatingSafeMiddlewares();
   const menuAction = useMenuExitAction();
   const [opened, setOpened] = useState(false);
   const label = displayDevice(device);
@@ -54,6 +56,7 @@ function ComputerActionsMenu({ device, onRename, onRemove, onMenuChange }: { dev
     setMenuOpened(false);
   };
   return <Menu
+    middlewares={floatingMiddlewares}
     opened={opened}
     withinPortal
     portalProps={{ target: ".pwa-root" }}
@@ -111,12 +114,13 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
         onMenuChange={onMenuChange}
       />)}
     </div>
-    <Button className="pwa-device-panel-pair" variant="light" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
+    <Button className="pwa-device-panel-pair" variant="default" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
   </div>;
 }
 
 export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresence = {}, onPair, onSelectDevice, onRename, onRemove, variant = "desktop", purpose = "choose", onOverlayChange }: WorkspaceDeviceControlProps) {
   const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
+  const floatingMiddlewares = useFloatingSafeMiddlewares();
   const popoverDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
   const { t } = useI18n();
   const [opened, setOpened] = useState(false);
@@ -212,6 +216,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
   </>;
 
   return <Popover
+    middlewares={floatingMiddlewares}
     opened={opened}
     onChange={(nextOpened) => { if (nextOpened) setPanelOpened(true); else dismissPanel(); }}
     onExitTransitionEnd={finishClose}

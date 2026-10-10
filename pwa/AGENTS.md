@@ -5,7 +5,7 @@
 ## 技术栈与入口
 
 - React、Vite、TypeScript；版本与 Node 兼容范围以 [`package.json`](package.json) 和锁文件为准。
-- Mantine core/hooks 提供基础组件与交互能力；Tailwind 和业务 CSS 承担布局、响应式及项目样式。
+- Mantine core/hooks 提供基础组件与交互能力；业务 CSS 承担布局、响应式及项目样式。Tailwind 只提供 preflight 与入口，业务组件不使用其间距、颜色和圆角工具类。
 - Dexie 管理 IndexedDB；Serwist 与 Vite 构建集成；ZXing 用于二维码扫描，react-markdown/remark-gfm 用于消息展示。
 - Vitest 分 Node 与 Browser Mode；Playwright 承担跨模块 E2E。
 - 包管理器使用根 pnpm workspace；依赖 catalog、`allowBuilds` 和 overrides 以 [`../pnpm-workspace.yaml`](../pnpm-workspace.yaml) 为准。使用根 `pnpm-lock.yaml`，不创建子项目锁文件，不另用 npm/yarn 安装。
@@ -44,7 +44,7 @@
 - 应用运行在浏览器中，入口复用 `PwaUiProvider`、`PwaAppShell` 和 `PwaApp`。公开环境变量遵循 Vite 规则，不向 bundle 注入完整 `process.env` 或服务端凭据。
 - 组件 props 明确类型，不使用 `any`。
 - 基础控件直接复用 Mantine，不重新建立仅转发 props 的 `components/ui` 包装层。公共默认值、产品 class 与业务样式的分工遵循 [`../docs/DESIGN.md`](../docs/DESIGN.md)，不以旧 Tailwind-only 描述忽略现有 Mantine。
-- 保留 Tailwind 与业务 CSS 的现有组织方式；不擅自引入 CSS Modules 或 styled-components。
+- 保留业务 CSS 的现有组织方式；颜色、间距与圆角引用 `src/app/pwa-theme.css` 的 `--pwa-*` token。不擅自引入 CSS Modules 或 styled-components。
 - 图片使用浏览器原生资源与现有错误 fallback；data URL 附件按实际消费者处理。界面只使用系统字体栈（见 `src/app/pwa-theme.css`），不引入或下载网络字体。品牌图标由 `scripts/render-brand-icons.mjs` 生成到 `public/`，修改标识几何后重新运行。
 - 涉及 Modal、Drawer、Menu、Popover 的调整必须核对 Portal、焦点返回、Escape 竞争、滚动和叠层关系；按项目 overlay 验证技能验收，不仅比较截图。
 

@@ -237,3 +237,32 @@ test("scrolled desktop settings content stays below a translucent status bar", a
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
 });
+
+test("the settings layer insets side safe areas once around the 640px column", async () => {
+  await page.viewport(600, 800);
+  document.documentElement.style.setProperty("--pwa-safe-left", "47px");
+  document.documentElement.style.setProperty("--pwa-safe-right", "47px");
+  try {
+    const screen = await renderPwa(<SettingsHarness />);
+    await expect.element(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+    const inner = document.querySelector<HTMLElement>(".pwa-settings-inner")!.getBoundingClientRect();
+    expect(Math.round(inner.left)).toBe(47);
+    expect(Math.round(inner.right)).toBe(600 - 47);
+    const title = document.querySelector(".pwa-appearance-options")!.getBoundingClientRect();
+    expect(Math.round(title.left)).toBe(47 + 16);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+    document.documentElement.style.removeProperty("--pwa-safe-right");
+  }
+});
+
+test("the relay form keeps 8px from label to input and 16px before the primary action", async () => {
+  const screen = await renderPwa(<SettingsHarness />);
+  const input = screen.getByRole("textbox").element().getBoundingClientRect();
+  const label = document.querySelector(".pwa-settings-form label")!.getBoundingClientRect();
+  const submit = document.querySelector(".pwa-settings-form button[type=submit]")!.getBoundingClientRect();
+  expect(Math.round(input.top - label.bottom)).toBe(8);
+  // 输入框下方的说明属于输入项本身，主操作从说明下方起算 16。
+  const field = document.querySelector(".pwa-settings-form .pwa-field")!.getBoundingClientRect();
+  expect(Math.round(submit.top - field.bottom)).toBe(16);
+});

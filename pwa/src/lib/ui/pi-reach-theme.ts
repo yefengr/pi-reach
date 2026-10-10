@@ -11,8 +11,8 @@ export const pwaModalTransition = {
 } as MantineTransition;
 
 /**
- * Mantine 负责基础组件行为；颜色、字号、圆角、阴影与断点全部取自 pwa-theme.css 的设计 token，
- * 不另外维护与 token 平行的视觉取值。
+ * Mantine 负责基础组件行为；颜色、字号、间距、圆角与阴影取自 pwa-theme.css 的设计 token，
+ * 不另外维护与 token 平行的视觉取值。断点是媒体查询阈值，不能引用 CSS 变量，仍以 em 字面量与 768px 对应。
  */
 export function createPiReachTheme(modalInDuration: number, modalOutDuration: number) {
   return createTheme({
@@ -51,9 +51,9 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
   },
   fontSizes: { xs: "var(--pwa-text-meta)", sm: "var(--pwa-text-list)", md: "var(--pwa-text-body)", lg: "var(--pwa-text-title)", xl: "var(--pwa-text-page)" },
   lineHeights: { xs: "var(--pwa-leading-ui)", sm: "var(--pwa-leading-ui)", md: "var(--pwa-leading-body)", lg: "var(--pwa-leading-ui)", xl: "var(--pwa-leading-ui)" },
-  spacing: { xs: "8px", sm: "12px", md: "16px", lg: "24px", xl: "32px" },
+  spacing: { xs: "var(--pwa-space-xs)", sm: "var(--pwa-space-sm)", md: "var(--pwa-space-md)", lg: "var(--pwa-space-lg)", xl: "var(--pwa-space-xl)" },
   defaultRadius: "sm",
-  radius: { xs: "4px", sm: "6px", md: "8px", lg: "12px", xl: "12px" },
+  radius: { xs: "var(--pwa-radius-xs)", sm: "var(--pwa-radius-sm)", md: "var(--pwa-radius-md)", lg: "var(--pwa-radius-lg)", xl: "var(--pwa-radius-lg)" },
   shadows: {
     xs: "var(--pwa-shadow-float)",
     sm: "var(--pwa-shadow-float)",

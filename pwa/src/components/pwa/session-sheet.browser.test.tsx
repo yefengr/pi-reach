@@ -441,3 +441,17 @@ test.each(navigationViewports)("keeps header and footer fixed while the only bod
   expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
   await page.screenshot({ path: `../../../.vitest/screenshots/workspace-navigation-${width}x${height}.png` });
 });
+
+test("the mobile navigation adds the left safe area outside its 320px content", async () => {
+  await page.viewport(740, 360);
+  document.documentElement.style.setProperty("--pwa-safe-left", "30px");
+  try {
+    const screen = await renderPwa(<SessionSheetHarness events={[]} />);
+    const { dialog } = await openSheet(screen);
+    await expect.poll(() => Math.round(dialog.element().getBoundingClientRect().width)).toBe(320 + 30);
+    expect(getComputedStyle(dialog.element().querySelector(".pwa-navigation-content")!).paddingLeft).toBe(`${8 + 30}px`);
+    expect(getComputedStyle(dialog.element().querySelector(".pwa-session-sheet-head")!).paddingLeft).toBe(`${16 + 30}px`);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+  }
+});

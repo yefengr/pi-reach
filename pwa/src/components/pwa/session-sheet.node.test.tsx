@@ -60,7 +60,7 @@ test("renders a full-height left navigation Drawer with one scrolling navigation
 
   expect(html).toContain("mantine-Drawer-root");
   expect(html).toContain('role="dialog"');
-  expect(html).toContain("width:min(320px, 85vw);height:var(--pwa-app-height);max-width:85vw;max-height:var(--pwa-app-height);display:flex;flex-direction:column");
+  expect(html).toContain("width:min(calc(320px + var(--pwa-safe-left)), 85vw);height:var(--pwa-app-height);max-width:85vw;max-height:var(--pwa-app-height);display:flex;flex-direction:column");
   const titleId = html.match(/aria-labelledby="([^"]+)"/)?.[1];
   expect(titleId).toBeTruthy();
   expect(html).toContain(`id="${titleId}"`);

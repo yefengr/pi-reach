@@ -420,6 +420,12 @@ test("a failed fetch replaces the size line in place and every action is an icon
   const actions = [...document.querySelectorAll(".pwa-published-actions > *")];
   expect(actions.map(action => action.getAttribute("aria-label"))).toEqual(["Retry", "Download"]);
   expect(actions.every(action => action.textContent === "" && action.querySelector("svg"))).toBe(true);
+  // 卡片操作与其他图标按钮同规格：44 点击区、圆形反馈、常态 secondary。
+  for (const action of actions) {
+    expect(action).toHaveClass("pwa-icon-button");
+    expect(Math.round(action.getBoundingClientRect().width)).toBe(44);
+    expect(Math.round(action.getBoundingClientRect().height)).toBe(44);
+  }
   expect(document.body.textContent).not.toContain("/secret");
   await h.screen.unmount();
 });

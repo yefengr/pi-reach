@@ -81,7 +81,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     onClose={onClose}
     onExitTransitionEnd={onExitTransitionEnd}
     position="right"
-    size={mobile ? "100%" : 720}
+    size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"}
     withinPortal
     portalProps={{ target: ".pwa-root" }}
     zIndex={30}

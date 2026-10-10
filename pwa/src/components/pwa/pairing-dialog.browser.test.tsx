@@ -159,3 +159,11 @@ test("Escape closes pairing and returns focus to its trigger", async () => {
   expect(onClose).toHaveBeenCalledTimes(1);
   await expect.element(trigger).toHaveFocus();
 });
+
+test("the pairing form separates the code field from its primary action by 16px", async () => {
+  await renderPwa(<PairingDialog opened connecting={false} error={null} onSubmit={vi.fn()} onClearError={vi.fn()} onClose={vi.fn()} withinPortal={false} />);
+  await expect.poll(() => document.querySelector(".pwa-pairing-form button[type=submit]")).not.toBeNull();
+  const field = document.querySelector(".pwa-pairing-form .pwa-pairing-input")!.getBoundingClientRect();
+  const submit = document.querySelector(".pwa-pairing-form button[type=submit]")!.getBoundingClientRect();
+  expect(Math.round(submit.top - field.bottom)).toBe(16);
+});
