@@ -88,3 +88,16 @@ test("shows a loading state instead of the empty hint until saved records are re
     await expect.element(screen.getByText("No records to display.", { exact: true })).toBeVisible();
   } finally { await screen.unmount(); }
 });
+
+test("keeps attachment cards whose metadata falls just outside the rendered window", async () => {
+  const user: TimelineViewItem = { kind: "event", event: { event_id: "message", message_id: "message", group_id: "group", session_id: "history", leaf_id: "user-leaf", timestamp: 2, kind: "user", blocks: [{ type: "text", text: "Server fallback notes.txt" }], sender_ref: "owner", origin: "pwa", delivery: "normal", status: "committed" } };
+  const metadata: TimelineViewItem = { kind: "event", event: { event_id: "metadata", session_id: "history", leaf_id: "metadata-leaf", timestamp: 1, kind: "custom", truncated: false, payload: { custom_type: "pi-reach:attachments-v1", data: { version: 1, client_request_id: "request", sender_ref: "owner", text: "Original text", attachments: [{ attachment_id: "file", file_name: "notes.txt", mime_type: "text/plain", byte_length: 1024, sha256: "a".repeat(64) }] } } } };
+  const binding: TimelineViewItem = { kind: "event", event: { event_id: "binding", session_id: "history", leaf_id: "binding-leaf", timestamp: 3, kind: "custom", truncated: false, payload: { custom_type: "pi-reach:attachment-message-v1", data: { version: 1, client_request_id: "request", sender_ref: "owner", message_id: "message" } } } };
+  // 共 31 条：最近 30 条的窗口包含用户消息与关联记录，附件元数据落在窗口之外。
+  const { screen } = await renderHistory({ initial: [metadata, user, binding, ...savedItems(28)] });
+  try {
+    await expect.element(screen.getByText("Original text")).toBeVisible();
+    await expect.element(screen.getByText("notes.txt", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Server fallback notes.txt")).not.toBeInTheDocument();
+  } finally { await screen.unmount(); }
+});

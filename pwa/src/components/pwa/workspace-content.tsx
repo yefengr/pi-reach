@@ -66,7 +66,7 @@ export function HistoryWorkspace({ items, loading = false, restore = null, visib
     setVisibleCount((count) => count + TIMELINE_PAGE_SIZE);
   };
   return <>
-    <MessageList items={visibleItems} hasEarlier={items.length > visibleCount} onLoadEarlier={loadEarlier} earlierLocal listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />
+    <MessageList items={visibleItems} projectionItems={items} hasEarlier={items.length > visibleCount} onLoadEarlier={loadEarlier} earlierLocal listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />
     <div className="pwa-chat-footer">
       <div className="pwa-read-only-bar" role="note">
         <span>{t.workspace.readOnlyNote}</span>

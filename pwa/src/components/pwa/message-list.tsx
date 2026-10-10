@@ -38,6 +38,8 @@ type MessageListProps = {
   loading?: boolean;
   /** 更早的记录已在本地（只读历史），不依赖实时连接即可展开。 */
   earlierLocal?: boolean;
+  /** 附件投影读取的完整集合；只读历史分页只限制渲染的记录，附件元数据可能落在窗口之外。默认等于 items。 */
+  projectionItems?: TimelineViewItem[];
   skeletonVisible?: boolean;
   /** 在线 Pi 是否正在运行（整次运行）；历史阅读恒为 false。 */
   running?: boolean;
@@ -112,10 +114,10 @@ function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["on
   return null;
 }
 
-export function MessageList({ items, hasEarlier, loadingEarlier, onLoadEarlier, listRef, bottomSentinelRef, onScroll, onRetryUnknown, onCancelQueued, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false }: MessageListProps) {
+export function MessageList({ items, hasEarlier, loadingEarlier, onLoadEarlier, listRef, bottomSentinelRef, onScroll, onRetryUnknown, onCancelQueued, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, projectionItems = items, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false }: MessageListProps) {
   const { t } = useI18n();
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
-  const attachmentProjection = useMemo(() => projectAttachmentMetadata(items), [items]);
+  const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
   // 仅合法发布记录可见，继续隐藏未知 custom；发布记录也是工具摘要的边界。
   const visibleItems = items.filter((item) => item.kind !== "event" || (item.event.kind !== "run_end" && (item.event.kind !== "custom" || publishedFileFromEvent(item.event) !== null) && (item.event.kind !== "assistant" || item.event.blocks.some((block) => block.text.trim()))));
   const liveRunning = isLive && running;
