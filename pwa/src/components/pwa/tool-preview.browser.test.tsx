@@ -268,3 +268,31 @@ test("the desktop reader header clears a translucent status bar", async () => {
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
 });
+
+test("the desktop reader adds the right safe area outside its 720px content and mobile insets both sides", async () => {
+  document.documentElement.style.setProperty("--pwa-safe-left", "30px");
+  document.documentElement.style.setProperty("--pwa-safe-right", "47px");
+  try {
+    await page.viewport(1280, 900);
+    let screen = await renderPwa(<ToolReader value={value("done")} opened onClose={() => {}} />);
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const content = document.querySelector<HTMLElement>(".mantine-Drawer-content")!;
+    await expect.poll(() => Math.round(content.getBoundingClientRect().width)).toBe(720 + 47);
+    expect(getComputedStyle(document.querySelector(".pwa-tool-reader-header")!).paddingRight).toBe(`${8 + 47}px`);
+    expect(getComputedStyle(document.querySelector(".pwa-tool-reader-scroll")!).paddingRight).toBe(`${20 + 47}px`);
+    expect(getComputedStyle(document.querySelector(".pwa-tool-reader-scroll")!).paddingLeft).toBe("20px");
+    await screen.unmount();
+    await page.viewport(740, 360);
+    screen = await renderPwa(<ToolReader value={value("done")} opened onClose={() => {}} />);
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+    const header = getComputedStyle(document.querySelector(".pwa-tool-reader-header")!);
+    expect([header.paddingLeft, header.paddingRight]).toEqual([`${4 + 30}px`, `${4 + 47}px`]);
+    const scroll = getComputedStyle(document.querySelector(".pwa-tool-reader-scroll")!);
+    expect([scroll.paddingLeft, scroll.paddingRight]).toEqual([`${16 + 30}px`, `${16 + 47}px`]);
+    await screen.unmount();
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+    document.documentElement.style.removeProperty("--pwa-safe-right");
+    await page.viewport(1280, 900);
+  }
+});

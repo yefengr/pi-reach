@@ -205,9 +205,11 @@
   /* 顶栏首行高度，不含安全区；会话标题区、导航、阅读器与移动设置页共用。 */
   --pwa-topbar-height: 48px;
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* 横屏刘海与圆角的左右安全区；只由实际贴住该屏幕边缘的布局层使用，同一边不重复叠加（见 DESIGN「安全区」）。 */
+  --pwa-safe-left: env(safe-area-inset-left, 0px);
+  --pwa-safe-right: env(safe-area-inset-right, 0px);
   /* 应用整体高度；独立窗口见下方覆盖。 */
   --pwa-app-height: 100dvh;
-  --maxw: 1180px;
 }
 
 /*

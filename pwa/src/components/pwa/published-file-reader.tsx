@@ -105,7 +105,7 @@ export function PublishedFileReader({ file, opened, onClose, onExitTransitionEnd
     if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
     return () => observer.disconnect();
   }, [scroll, preview, mobile]);
-  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => setEntered(true)} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : 720} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
+  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => setEntered(true)} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim" />
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }}>
       <Drawer.Header className="pwa-topbar pwa-file-reader-header">

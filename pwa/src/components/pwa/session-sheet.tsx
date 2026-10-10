@@ -236,7 +236,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     onClose={requestClose}
     onExitTransitionEnd={handleExitTransitionEnd}
     position="left"
-    size="min(320px, 85vw)"
+    size="min(calc(320px + var(--pwa-safe-left)), 85vw)"
     withinPortal={withinPortal}
     portalProps={{ target: portalTarget }}
     zIndex={200}

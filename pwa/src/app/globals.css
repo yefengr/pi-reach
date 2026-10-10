@@ -188,11 +188,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-session-actions-secondary-item { min-height: 44px; }
 .pwa-session-title { min-width: 0; max-width: 100%; display: inline-flex; align-items: baseline; vertical-align: bottom; white-space: nowrap; }
 .pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; }
-.pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-gutter), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-timeline-pad-bottom); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: 88px; -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
+.pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-timeline-pad-bottom) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: 88px; -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
 .pwa-history-main .pwa-message-list { --pwa-timeline-pad-bottom: 24px; scroll-padding-bottom: 24px; }
 .pwa-bottom-sentinel { width: 1px; height: 1px; }
 .pwa-chat-footer { flex: 0 0 auto; min-width: 0; position: relative; z-index: 3; }
-.pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-gutter) 12px; pointer-events: none; }
+.pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-main-inset-end) 12px var(--pwa-main-inset-start); pointer-events: none; }
 
 /* 按钮层级：主操作实心强调色；次级为表面＋边线；文字按钮无底无框；危险入口为错误色轮廓。 */
 .pwa-ui-scope .pwa-button { min-height: 44px; height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
@@ -214,7 +214,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button.pwa-latest-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); } }
 
-.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-gutter), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-safe-bottom)); }
+.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); }
 .pwa-image-input { display: none; }
 .pwa-composer-card { min-width: 0; padding: 10px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
@@ -296,7 +296,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-empty { margin: 0; padding: 12px 10px; line-height: var(--pwa-leading-ui); }
 
 /* 独立设置页：与工作区同为 bg 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
-.pwa-root .pwa-settings-page { min-height: 100%; color: var(--pwa-ink); background: var(--pwa-bg); }
+/* 设置层左右都贴屏幕边缘，由页面自身内缩左右安全区；内部 640 容器及其内边距不再叠加。 */
+.pwa-root .pwa-settings-page { min-height: 100%; padding-inline: var(--pwa-safe-left) var(--pwa-safe-right); color: var(--pwa-ink); background: var(--pwa-bg); }
 /* 桌面设置页没有固定顶栏，顶部吸附一条与页面同底色的遮挡条，内容不滚入透明状态栏；负外边距使其不占布局高度。 */
 .pwa-root .pwa-status-bar-shield { position: sticky; z-index: 1; top: 0; height: var(--pwa-safe-top); margin-bottom: calc(-1 * var(--pwa-safe-top)); background: var(--pwa-bg); }
 .pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) 20px calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
@@ -429,7 +430,7 @@ body:has(.pwa-root) { overflow: hidden; }
   --alert-radius: var(--pwa-radius-sm) !important;
   align-self: center;
   flex: 0 0 auto;
-  width: min(var(--maxw), calc(100% - 36px));
+  width: min(var(--pwa-reading-width, 680px), calc(100% - 2 * var(--pwa-gutter)));
   margin: 8px auto 0;
   padding: 8px 12px;
   border: 1px solid var(--alert-bd);
@@ -455,7 +456,8 @@ body:has(.pwa-root) { overflow: hidden; }
   --alert-bg: var(--pwa-panel) !important;
   --alert-color: var(--pwa-ink) !important;
   --alert-bd: var(--pwa-line) !important;
-  width: min(680px, calc(100% - 36px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  /* 位于应用壳顶层、横跨全宽：两侧 gutter 加各侧安全区。 */
+  width: min(680px, calc(100% - 2 * var(--pwa-gutter) - var(--pwa-safe-left) - var(--pwa-safe-right)));
   max-width: 680px;
   margin: 8px auto 0;
   padding: 10px 8px 10px 12px;
@@ -542,15 +544,15 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-root .pwa-settings-back-label { display: none; }
   .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); }
   .pwa-startup-card { padding: 24px 20px; }
-  .pwa-connection-banner { width: calc(100% - 24px); margin-top: 6px; padding: 8px 12px; }
-  .pwa-runtime-notice { width: calc(100% - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); margin-top: 6px; padding: 10px 6px 10px 12px; }
+  .pwa-connection-banner { margin-top: 6px; padding: 8px 12px; }
+  .pwa-runtime-notice { margin-top: 6px; padding: 10px 6px 10px 12px; }
   .pwa-runtime-notice .pwa-runtime-notice-body,
   .pwa-runtime-notice .pwa-runtime-notice-message { display: block; }
   .pwa-runtime-notice .pwa-runtime-notice-title { margin-bottom: 4px; }
   .pwa-runtime-notice-content { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
   .pwa-runtime-notice-actions { width: 100%; justify-content: flex-start; }
-  /* 移动端 Modal 左右各留 16px；Mantine 默认 5vw。 */
-  :root .mantine-Modal-root { --modal-x-offset: 16px; }
+  /* 居中弹窗不贴边，距屏幕边缘取 16 与安全区中的较大值，不相加。 */
+  :root .mantine-Modal-root { --modal-x-offset: max(16px, var(--pwa-safe-left), var(--pwa-safe-right)); }
   .pwa-pairing-dialog,
   .pwa-rename-dialog,
   .pwa-confirm-dialog { width: 100%; }

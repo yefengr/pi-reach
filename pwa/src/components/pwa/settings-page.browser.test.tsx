@@ -237,3 +237,21 @@ test("scrolled desktop settings content stays below a translucent status bar", a
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
 });
+
+test("the settings layer insets side safe areas once around the 640px column", async () => {
+  await page.viewport(600, 800);
+  document.documentElement.style.setProperty("--pwa-safe-left", "47px");
+  document.documentElement.style.setProperty("--pwa-safe-right", "47px");
+  try {
+    const screen = await renderPwa(<SettingsHarness />);
+    await expect.element(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+    const inner = document.querySelector<HTMLElement>(".pwa-settings-inner")!.getBoundingClientRect();
+    expect(Math.round(inner.left)).toBe(47);
+    expect(Math.round(inner.right)).toBe(600 - 47);
+    const title = document.querySelector(".pwa-appearance-options")!.getBoundingClientRect();
+    expect(Math.round(title.left)).toBe(47 + 16);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-left");
+    document.documentElement.style.removeProperty("--pwa-safe-right");
+  }
+});
