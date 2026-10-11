@@ -61,8 +61,8 @@
 
 - PWA 行为变更：执行 `pnpm lint` 和受影响的 Node/Browser Mode 测试。
 - 生产 bundle 受影响时执行 `pnpm build`；关键跨模块流程增加相关 Playwright 场景。
-- 独立 UI/Mantine 迁移批次遵循项目 UI 批次交付技能，涉及叠层时同时使用 overlay 验证技能。
-- 纯文档变更只核对事实、引用、授权范围和 `git diff --check`，不据此运行或宣称通过业务测试。
+- UI/Mantine 改动按上述受影响验证要求验收；涉及叠层、焦点或 Portal 时执行 [overlay 验证技能](../.agents/skills/validate-mantine-stacked-overlays/SKILL.md)。
+- 纯文档变更核对事实、引用和授权范围，并从仓库根执行 `pnpm check:docs` 与 `git diff --check`，不据此运行或宣称通过业务测试。
 - 真实移动设备能力不能用桌面 Chromium 的移动 viewport 代替；尚未结束的设备验收见 [`PWA 加固验收方案`](../docs/plans/active/20260824-pwa-hardening.md)。
 - 最终执行受影响验证和 `git diff --check`；只扩展到实际受影响的范围。
 

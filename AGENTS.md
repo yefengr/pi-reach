@@ -6,7 +6,7 @@
 
 | 目录 | 技术栈 | 职责 |
 |---|---|---|
-| `pi-extension/` | Node + TypeScript | Pi 扩展、Daemon、配对与远程会话协议 |
+| `pi-extension/` | Node + TypeScript | 当前 Pi 进程内的扩展、配对与远程会话协议 |
 | `relay/` | Node + TypeScript + ws | WebSocket Relay、endpoint registry 与 ACL 路由 |
 | `pwa/` | Vite + React + TypeScript | 浏览器 PWA；产品路由均位于 `/app` 下（如 `/app/settings`），根路径 `/` 重定向至 `/app` |
 
@@ -22,13 +22,14 @@
 - 公共协议改在 `packages/protocol/`，两端旧入口保持薄适配；共享包不得引入 SDK、Node 专用 API、React 或连接生命周期。修改共享源码后，局部测试或类型检查前先执行 `pnpm --filter @pi-reach/protocol build`；根 `pnpm typecheck` / `pnpm test` 自动完成此前置步骤，持续开发可另开 `pnpm dev:protocol`。
 - 行为变更必须提供适当的自动化验证；最终执行受影响验证和 `git diff --check`。
 - 不自动执行 `git commit`、`git push`、Pull Request、生产发布或其他外部副作用，除非用户明确授权。
+- 推送前核对工作流副作用：仓库所有者向单层 `bugfix/*`、`feature/*` 分支推送 PWA 或 Relay 构建输入改动，会自动部署并覆盖 staging；须提前告知用户并确认推送授权包含该副作用。发布候选真机验收期间不执行会覆盖 staging 的分支推送；触发条件与边界见 [DEPLOYMENT](docs/DEPLOYMENT.md#功能分支部署-staging)。
 - `main` 受保护：改动在功能分支完成并提交 Pull Request，CI 检查 `verify` 通过后由维护者以变基或压缩方式合并（仓库已关闭合并提交）；不要直接推送或强推 `main`。
 - Pull Request 由 Codex 自动评审；合并前逐条处理评审意见，修复或在对话中说明不采纳的理由。自动合并只等待 `verify`、不等待 Codex，须在 Codex 给出 👍 或其意见处理完毕后再启用。
 - CI 在 Linux 上运行：测试不得依赖关闭事件的处理时序、亚像素几何或过短的计时器；几何断言按整像素比较（`Math.round`），超时与重试窗口要为慢机器留出余量。
 - 文档、代码、测试与示例数据只描述 Pi Reach 本身，不写入其他项目的名称、仓库链接、作者或来源说明；LICENSE 中保留的原版权声明除外。
 - 发现现有未提交改动时，保留并基于当前工作区继续，不回退用户改动。
 - 涉及架构、协议、配对、UI 或安全方向时，先阅读 [`docs/adr/20260518-closed-decisions.md`](docs/adr/20260518-closed-decisions.md)，不要静默推翻已关闭决策。
-- 独立 PWA UI/Mantine 迁移批次按项目技能执行；涉及叠层、焦点或 Portal 时同时执行对应的 overlay 验证技能。
+- PWA UI/Mantine 改动以 [`docs/DESIGN.md`](docs/DESIGN.md) 为基线，按 `pwa/AGENTS.md` 的受影响验证要求验收；涉及叠层、焦点或 Portal 时执行 [overlay 验证技能](.agents/skills/validate-mantine-stacked-overlays/SKILL.md)。
 - 产品术语、当前架构和设计分别见 [`docs/CONTEXT.md`](docs/CONTEXT.md)、[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)、[`docs/DESIGN.md`](docs/DESIGN.md)。历史方案与待实施原型不能替代这些当前说明，也不能作为未获准实现的授权。
 
 ## 文档管理规范
@@ -81,7 +82,7 @@ pnpm verify:release
 
 `pnpm verify` 串行执行 workspace 的类型检查、lint、测试和构建，包含 Node Relay、部署脚本模拟测试和 Service Worker production 专项，但不启动 Playwright 或 Docker E2E；`pnpm test:e2e` 串行执行 PWA 本地生产预览、Docker Protocol v2 和真实浏览器双 Owner 回归；`pnpm verify:release` 组合两者。`pnpm test:relay` 单独构建并验证 Relay。局部验证使用 `pnpm --filter pwa <命令>`、`pnpm --filter @yefengr/pi-reach <命令>`、`pnpm --filter @pi-reach/relay <命令>` 或在对应目录执行。PWA 与 Relay Docker 构建均使用仓库根上下文：`docker build -f pwa/Dockerfile .`、`docker build -f relay/Dockerfile .`。
 
-只运行与当前变更相关的命令；跨项目共享协议或部署配置变更时扩大验证范围。`pnpm check:docs` 检查已跟踪文档的站内链接与 Markdown 锚点。
+只运行与当前变更相关的命令；跨项目共享协议或部署配置变更时扩大验证范围。`pnpm check:docs` 检查已跟踪文档的站内链接与 Markdown 锚点。纯文档变更核对事实、引用和授权范围，并执行 `pnpm check:docs` 与 `git diff --check`，不运行或宣称通过无关业务测试。
 
 CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks` 负责类型检查、lint、除 PWA 浏览器组件测试外的测试与构建，`pwa-browser` 把浏览器组件测试按耗时分到 4 台机器；只改文档时跳过这两项，只运行空白与链接检查。汇总任务 `verify` 是 `main` 保护规则要求的检查；调整 `pnpm verify` 的内容时同步修改工作流。
 
@@ -98,7 +99,7 @@ GitHub 的 Dependabot 告警已开启；`.github/dependabot.yml` 每周为 GitHu
 
 ## 发布
 
-发布、推送和部署必须在本地验证通过后按用户授权执行。PWA 与 Relay 的版本号变更合并到 `main` 后，由 Deploy PWA & Relay 工作流（`.github/workflows/deploy.yml`）构建 GHCR 镜像，维护者在 `production` 环境批准后部署并创建标签与 Release；一次性配置、本机备用部署和镜像发布说明以 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)、`pwa/push-docker.sh` 和 `scripts/deploy-self-hosted.sh` 为准。Extension 的版本号变更合并到 `main` 后，由 Extension npm 工作流（`.github/workflows/release.yml`）提交到 npm 待审区并打标签，维护者在 npmjs.com 批准后上线，再由 Extension GitHub Release 工作流（`.github/workflows/extension-github-release.yml`）自动创建 Release；流程、认证方式与发布后核对见 [DEPLOYMENT](docs/DEPLOYMENT.md#extension-npm-发布)。各组件上线后打版本标签并创建 GitHub Release，命名与时机见 [DEPLOYMENT](docs/DEPLOYMENT.md#版本标签与-github-release)。
+发布、推送和部署必须在本地验证通过后按用户授权执行。PWA 与 Relay 的版本号变更合并到 `main` 后，由 Deploy PWA & Relay 工作流（`.github/workflows/deploy.yml`）单次构建 GHCR 镜像，经 staging 检查与真机验收后，维护者在 `production` 环境批准同 digest 晋升，生产核验通过后创建标签与 Release；一次性配置、本机备用部署和镜像发布说明以 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)、`pwa/push-docker.sh` 和 `scripts/deploy-self-hosted.sh` 为准。Extension 的版本号变更合并到 `main` 后，由 Extension npm 工作流（`.github/workflows/release.yml`）提交到 npm 待审区并打标签，维护者在 npmjs.com 批准后上线，再由 Extension GitHub Release 工作流（`.github/workflows/extension-github-release.yml`）自动创建 Release；流程、认证方式与发布后核对见 [DEPLOYMENT](docs/DEPLOYMENT.md#extension-npm-发布)。各组件上线后打版本标签并创建 GitHub Release，命名与时机见 [DEPLOYMENT](docs/DEPLOYMENT.md#版本标签与-github-release)。
 
 ## 已关闭决策
 
