@@ -228,6 +228,13 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       if (ahead && generation === contextGenerationRef.current) replacementRequiresReplaceRef.current = true;
       return ahead;
     });
+    // 超出 head 的本地记录必属旧分支，合并路径不会覆盖它们。握手时同步排进持久化队列，
+    // 先于之后实时事件的保存执行，不会误删握手后收到的新事件。
+    if (!knownStale) {
+      void enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => discardTimelineEventsAfter(scope, headSeq)).catch(() => {
+        if (generation === contextGenerationRef.current) reportHistoryFailure("Could not update local history.");
+      });
+    }
     setQuietCatchup(prepared.previewMatched);
     fragmentAssemblerRef.current = new TimelineEventFragmentAssembler({ session_id: scope.sessionId, leaf_id: scope.leafId });
 
@@ -236,6 +243,10 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       headSeq,
       ...(prepared.plan.earliestSeq === null ? {} : { boundary: prepared.plan.earliestSeq }),
       send,
+      currentLeafId: () => {
+        const current = runtimeRef.current.currentScope;
+        return current && current.sessionId === scope.sessionId ? current.leafId : scope.leafId;
+      },
       // Branch replacement must persist one complete staged projection before exposing it.
       load: async (target) => {
         await localAhead;
@@ -320,15 +331,6 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
 
     if (prepared.plan.mode === "append") {
       applyTimelineChange(prepared.change);
-      // 追加只合并新记录；本地超出 head 的旧分支记录需单独删除，否则留在历史里。
-      void localAhead.then(async (ahead) => {
-        if (!ahead || generation !== contextGenerationRef.current) return;
-        try {
-          await enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => discardTimelineEventsAfter(scope, headSeq));
-        } catch {
-          if (generation === contextGenerationRef.current) reportHistoryFailure("Could not update local history.");
-        }
-      });
       void loadPreparedRange();
       return prepared.plan;
     }

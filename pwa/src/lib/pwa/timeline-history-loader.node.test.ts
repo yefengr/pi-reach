@@ -12,7 +12,7 @@ type HistoryChunkFrame = Extract<ServerFrame, { type: "session_history_chunk" }>
 type SessionSyncFrame = Extract<ClientFrame, { type: "session_sync" }>;
 type HarnessOverrides = Partial<Pick<
   TimelineHistoryLoaderOptions,
-  "headSeq" | "boundary" | "send" | "load" | "persist" | "requestId" | "timeoutMs"
+  "headSeq" | "boundary" | "send" | "load" | "persist" | "requestId" | "timeoutMs" | "currentLeafId"
 >>;
 
 const scope: TimelineScope = {
@@ -322,4 +322,17 @@ test("queues an earlier page requested during an event id check instead of dropp
   harness.loader.receive(historyFrame("request-2"));
   expect(await page).toBe(true);
   expect(harness.onPage).toHaveBeenCalledTimes(1);
+});
+
+test("sends each history request with the current leaf and accepts only responses for that leaf", async () => {
+  let leaf = "generation";
+  const harness = createHarness({ currentLeafId: () => leaf });
+  leaf = "advanced";
+  const page = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent)).toEqual([expect.objectContaining({ leaf_id: "advanced", before: 81, limit: 80 })]);
+  // 旧 leaf 的响应不被接受。
+  expect(harness.loader.receive(historyFrame("request-1"))).toBe(false);
+  expect(harness.loader.receive({ ...historyFrame("request-1"), leaf_id: "advanced" })).toBe(true);
+  expect(await page).toBe(true);
 });

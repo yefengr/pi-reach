@@ -543,3 +543,48 @@ test("an earlier page requested during the branch check runs after the check", a
     await expect.poll(() => sequences().length).toBe(80);
   } finally { await screen.unmount(); }
 });
+
+function receiveLive(event: TimelineEvent) {
+  flushSync(() => receiveTimelineFrame({ protocol_version: 2, type: "timeline_event", session_id: event.session_id, leaf_id: event.leaf_id, event }, {
+    runtime: api.runtimeRef.current,
+    fragmentAssemblerRef: api.fragmentAssemblerRef,
+    applyTimelineChange: api.applyTimelineChange,
+    receiveRealtimeOutput: api.receiveRealtimeOutput,
+    setError: report,
+    setLastSyncedAt: api.setLastSyncedAt,
+  }));
+}
+
+test("history requests follow the leaf advanced by live events", async () => {
+  const screen = await render(<Harness />);
+  const advanced = { ...scope, leafId: "leaf-after-live" };
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => sequences().length).toBe(30);
+    receiveLive(events(81, 81, advanced)[0]!);
+    await expect.poll(() => sequences().length).toBe(31);
+    api.loadEarlier();
+    await expect.poll(() => frames.length).toBe(2);
+    // Extension 按 Pi 当前 leaf 校验，旧 leaf 会被当作分支变化而 reset。
+    expect(frames[1]).toMatchObject({ before: 51, limit: 50, leaf_id: advanced.leafId });
+    reply(frames, events(1, 50, advanced), advanced);
+    await expect.poll(() => sequences().length).toBe(81);
+  } finally { await screen.unmount(); }
+});
+
+test("discarding records past the head runs before live events received after the handshake are saved", async () => {
+  let resolveLatest!: (event: TimelineEvent | null) => void;
+  vi.mocked(latestTimelineEvent).mockImplementation(() => new Promise((resolve) => { resolveLatest = resolve; }));
+  const screen = await render(<Harness />);
+  try {
+    expect(start(0)).toEqual([]);
+    receiveLive(events(1, 1)[0]!);
+    await expect.poll(() => vi.mocked(mergeTimelineEvents).mock.calls.length).toBe(1);
+    resolveLatest(events(5, 5)[0]!);
+    await expect.poll(() => vi.mocked(discardTimelineEventsAfter).mock.calls.length).toBe(1);
+    // 删除旧分支记录须排在握手后新事件的保存之前，否则会连新事件一起删掉。
+    expect(vi.mocked(discardTimelineEventsAfter).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(mergeTimelineEvents).mock.invocationCallOrder[0]!);
+  } finally { await screen.unmount(); }
+});
