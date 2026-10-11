@@ -116,13 +116,12 @@ test("collapsed group heading shows the last started tool while it runs", () => 
   expect(zh.tools.groupRunning("bash pnpm test")).toBe("正在运行 bash pnpm test");
 });
 
-test("an earlier running tool does not return to the heading after the last started tool ends", () => {
+test("a heading first rendered mid-run shows the last running tool, and a finished group shows only the summary", () => {
   const html = groupHead([runningTool("test", "pnpm test"), doneTool("build", "pnpm build")]);
-  expect(html).not.toContain("pwa-tool-group-current");
-  expect(html).not.toContain("pnpm test");
-  // 摘要前保留旋转图标，表示组内仍有工具在运行。
-  expect(html).toMatch(/pwa-tool-group-summary[^>]*><svg[^>]*pwa-spin/);
-  expect(groupHead([doneTool("test", "pnpm test"), doneTool("build", "pnpm build")])).not.toContain("pwa-spin");
+  expect(html).toContain('<span title="pnpm test">pnpm test</span>');
+  const finished = groupHead([doneTool("test", "pnpm test"), doneTool("build", "pnpm build")]);
+  expect(finished).not.toContain("pwa-tool-group-current");
+  expect(finished).not.toContain("pwa-spin");
 });
 
 test("expanded or offline groups show only the summary", () => {

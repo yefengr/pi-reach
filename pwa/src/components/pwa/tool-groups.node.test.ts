@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { projectTimeline, type PresentationEntry } from "@/lib/pwa/timeline-presentation";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
-import { currentTool, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion } from "./tool-groups";
+import { observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion } from "./tool-groups";
 
 const scope = { session_id: "s", leaf_id: "l" };
 const tool = (id: string, group = "g1", status: "complete" | "error" = "complete"): TimelineViewItem => {
@@ -47,18 +47,6 @@ describe("toolSegments", () => {
     expect(after!.tools).toHaveLength(3);
     expect(after!.key).toBe(before!.key);
     expect(observeTools(withHistory, nextObserved)).toBe(nextObserved);
-  });
-});
-
-describe("currentTool", () => {
-  const values = (items: TimelineViewItem[]) => entries(items).flatMap(entry => entry.kind === "tool" ? [entry.value] : []);
-  test("shows only the last started tool while it runs", () => {
-    expect(currentTool(values([tool("a"), running("b")]), true)?.tool_call_id).toBe("b");
-    expect(currentTool(values([running("a"), running("b")]), true)?.tool_call_id).toBe("b");
-    // 最后开始的已结束：较早仍在运行的不回到组头。
-    expect(currentTool(values([running("a"), tool("b")]), true)).toBeNull();
-    // 离线时 partial 状态未知。
-    expect(currentTool(values([running("a")]), false)).toBeNull();
   });
 });
 

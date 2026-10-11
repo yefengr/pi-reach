@@ -61,12 +61,6 @@ export function toolSegments(entries: readonly PresentationEntry[], gapKeys: Rea
   return segments;
 }
 
-/** 组头显示的当前工具：只取最后开始的一条，它已结束时返回 null，较早仍在运行的工具不回到组头。 */
-export function currentTool(values: readonly ToolValue[], live: boolean): ToolValue | null {
-  const last = values.at(-1);
-  return last !== undefined && effectiveToolStatus(last, live) === "running" ? last : null;
-}
-
 /** 组的有效选择取成员上最近一次的选择，重新分段后新段仍继承用户已做的选择。 */
 export function segmentExpansion(tools: readonly ToolEntry[], choices: ReadonlyMap<string, ToolExpansion>): ToolExpansion | undefined {
   let latest: ToolExpansion | undefined;

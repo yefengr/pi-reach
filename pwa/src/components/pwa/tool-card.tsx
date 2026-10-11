@@ -4,7 +4,8 @@ import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, LoaderCircle 
 import { toolAction, toolHeaderSummary, toolIdentity, toolInlineText, toolStatus, type ToolKind, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n, type Messages } from "@/lib/i18n";
 import { Collapse } from "./collapse";
-import { currentTool, effectiveToolStatus } from "./tool-groups";
+import { effectiveToolStatus } from "./tool-groups";
+import { GROUP_HEAD_MIN_VISIBLE_MS, GROUP_HEAD_QUEUED_VISIBLE_MS, groupHeadTool, initialGroupHead, stepGroupHead, type GroupHeadElapsed } from "./tool-group-head";
 import "./tool-reader.css";
 
 type ToolCardProps = {
@@ -58,9 +59,6 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
   return parts.join(" · ");
 }
 
-/** 组头工具结束后的最短停留时间：快速完成的工具也能被看清；停留期间有新工具开始则立即替换。 */
-const GROUP_HEAD_MIN_VISIBLE_MS = 1500;
-
 /** 组头工具：每次换成新的工具时从下方进入一次，组头首次出现时不播放；停留中的已结束工具显示其结束状态图标。 */
 function ToolGroupCurrent({ value, status, animate }: { value: ToolValue; status: ToolStatus; animate: boolean }) {
   const summary = toolInlineText(toolHeaderSummary(value));
@@ -70,31 +68,28 @@ function ToolGroupCurrent({ value, status, animate }: { value: ToolValue; status
   </span>;
 }
 
-/**
- * 组头显示的工具：最后开始、仍在运行的工具立即显示；它结束后再停留到出现满 GROUP_HEAD_MIN_VISIBLE_MS，
- * 之后回到摘要。较早开始、仍在运行的工具不回到组头。`animate` 表示组头出现后发生过切换。
- */
+const NOT_ELAPSED: GroupHeadElapsed = { queued: false, minimum: false };
+
+/** 组头排队显示：按开始顺序逐条显示，计时从每条进入组头时开始，规则见 `stepGroupHead`。 */
 function useGroupHeadTool(values: readonly ToolValue[], live: boolean): { value: ToolValue | null; animate: boolean } {
-  const running = currentTool(values, live);
-  const runningKey = running ? toolIdentity(running) : null;
-  const [head, setHead] = useState({ key: runningKey, animate: false });
-  if (runningKey !== null && head.key !== runningKey) setHead({ key: runningKey, animate: true });
-  // 记录已满最短停留时间的工具；计时从它进入组头时开始。
-  const [settled, setSettled] = useState<string | null>(null);
+  const [state, setState] = useState(() => initialGroupHead(values, live));
+  const [elapsed, setElapsed] = useState({ index: state.index, ...NOT_ELAPSED });
+  const timing = elapsed.index === state.index ? elapsed : NOT_ELAPSED;
+  const next = stepGroupHead(state, values, live, timing);
+  if (next !== state) setState(next);
   useEffect(() => {
-    const key = head.key;
-    if (key === null) return;
-    const timer = window.setTimeout(() => setSettled(key), GROUP_HEAD_MIN_VISIBLE_MS);
-    return () => window.clearTimeout(timer);
-  }, [head.key]);
-  if (running) return { value: running, animate: head.animate };
-  const held = live && head.key !== null && settled !== head.key ? values.find(value => toolIdentity(value) === head.key) ?? null : null;
-  return { value: held, animate: head.animate };
+    const index = state.index;
+    if (index < 0) return;
+    const queued = window.setTimeout(() => setElapsed(current => ({ index, queued: true, minimum: current.index === index && current.minimum })), GROUP_HEAD_QUEUED_VISIBLE_MS);
+    const minimum = window.setTimeout(() => setElapsed({ index, queued: true, minimum: true }), GROUP_HEAD_MIN_VISIBLE_MS);
+    return () => { window.clearTimeout(queued); window.clearTimeout(minimum); };
+  }, [state.index]);
+  return { value: groupHeadTool(next, values, live, next.index === state.index ? timing : NOT_ELAPSED), animate: next.animate };
 }
 
 /**
- * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头显示最后开始的工具，它结束后至少停留 GROUP_HEAD_MIN_VISIBLE_MS
- * 再回到分类摘要；组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
+ * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头按开始顺序排队显示工具，每条至少停留一段时间，积压过多时跳到最新；
+ * 最后一条结束并停满后回到分类摘要，组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
  */
 export function ToolGroupCard({ values, live, expanded, onExpandedChange, children }: { values: readonly ToolValue[]; live: boolean; expanded: boolean; onExpandedChange: (expanded: boolean) => void; children: ReactNode }) {
   const { t } = useI18n();

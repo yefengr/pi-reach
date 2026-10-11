@@ -126,8 +126,8 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
     receive(partial("first"));
     await expect.poll(current).toBe("readfirst.ts");
     receive(partial("second"));
-    // 两条并行：组头显示最后开始的一条。
-    await expect.poll(current).toBe("readsecond.ts");
+    // 两条并行：second 排队，等 first 停满后显示。
+    await expect.poll(current, { timeout: 3000 }).toBe("readsecond.ts");
     expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
     expect(list.querySelector(".pwa-thinking-status")).toBeNull();
 
