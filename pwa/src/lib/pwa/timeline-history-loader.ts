@@ -5,7 +5,8 @@ import type { TimelineScope as RuntimeTimelineScope } from "./timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "./timeline-reconnect";
 import type { TimelineScope as StoreTimelineScope } from "./timeline-store";
 
-const PAGE_SIZE = 80;
+/** 向前加载一页的记录数；只读历史的分页沿用同一页大小。 */
+export const TIMELINE_PAGE_SIZE = 80;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const CANCELLED = Symbol("timeline-history-loader-cancelled");
 
@@ -139,7 +140,7 @@ export class TimelineHistoryLoader {
 
   loadEarlier(): Promise<boolean> {
     if (this.disposed || !this.hasEarlier) return Promise.resolve(false);
-    return this.loadPage({ start: Math.max(1, this.boundary - PAGE_SIZE), end: this.boundary - 1 });
+    return this.loadPage({ start: Math.max(1, this.boundary - TIMELINE_PAGE_SIZE), end: this.boundary - 1 });
   }
 
   loadRange(start: number, end: number): Promise<boolean> {

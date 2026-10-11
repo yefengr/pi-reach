@@ -3105,3 +3105,188 @@ test("shows the directory and model under the empty-session hint", async () => {
     await screen.unmount();
   }
 });
+
+function twoPisFrame() {
+  return { type: "endpoints", device_id: "owner-device-key", endpoints: [
+    { endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } },
+    { endpoint_id: "second-endpoint", runtime_instance_id: "runtime-2", metadata: { kind: "interactive", name: "Second Pi", cwd: "/workspace/second" } },
+  ] };
+}
+
+async function renderTwoPis() {
+  const screen = await renderWorkspaceApp();
+  await vi.waitFor(() => expect(relayHarness.instances[0]?.state).toBe("open"));
+  relayHarness.instances[0]!.emitControl(twoPisFrame());
+  await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(1));
+  return screen;
+}
+
+async function selectPi(name: string) {
+  await expect.poll(() => [...document.querySelectorAll<HTMLButtonElement>(".pwa-nav-session")].some((row) => row.textContent?.includes(name))).toBe(true);
+  [...document.querySelectorAll<HTMLButtonElement>(".pwa-nav-session")].find((row) => row.textContent?.includes(name))!.click();
+}
+
+function sessionEvents(sessionId: string, label: string, count: number): TimelineEvent[] {
+  return numberedEvents(count).map((event) => ({ ...event, event_id: `${sessionId}-${event.event_seq}`, session_id: sessionId, leaf_id: `generation-${sessionId}`, blocks: [{ type: "text", text: `${label} ${event.event_seq}` }] }) as TimelineEvent);
+}
+
+function listText(): string {
+  return document.querySelector(".pwa-message-list")?.textContent ?? "";
+}
+
+test("switching Pi removes the previous session at once, loads behind a skeleton, and previews a viewed Pi before its handshake", async () => {
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderTwoPis();
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1", 3));
+    await expect.poll(listText).toContain("Record 3");
+
+    await selectPi("Second Pi");
+    // 旧会话不留在新标题下，等待期间也不误显示空会话提示。
+    await expect.poll(listText).not.toContain("Record 3");
+    expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    await expect.poll(() => document.querySelectorAll(".pwa-message-list .pwa-skeleton").length).toBe(3);
+
+    const second = channelHarness.channels[1]!;
+    second.emit(readyFrame(second, "second-session", 2));
+    await expect.poll(() => second.frames.some((frame) => frame.type === "session_sync")).toBe(true);
+    expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+    second.emit(recentHistoryFrame(second, "second-session", sessionEvents("second-session", "Second", 2)));
+    await expect.poll(listText).toContain("Second 2");
+
+    await selectPi("Test Pi");
+    // 握手前先显示本地保存的同一会话，确认后只补缺口，不重新下载。
+    await expect.poll(listText).toContain("Record 3");
+    expect(listText()).not.toContain("Second 2");
+    await expect.poll(() => channelHarness.channels.length).toBe(3);
+    const returned = channelHarness.channels[2]!;
+    expect(returned.frames.some((frame) => frame.type === "session_hello")).toBe(true);
+    returned.emit(readyFrame(returned, "session-1", 3));
+    await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeEnabled();
+    await flushMicrotasks();
+    expect(returned.frames.some((frame) => frame.type === "session_sync")).toBe(false);
+    expect(listText()).toContain("Record 3");
+  } finally { await screen.unmount(); }
+});
+
+test("drops a saved preview when the selected Pi has moved to another session", async () => {
+  await seedTimeline(numberedEvents(3));
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: `active_endpoint:${makePwaDeviceId("owner-device-key")}`, value: "second-endpoint" });
+  const screen = await renderTwoPis();
+  try {
+    const first = channelHarness.channels[0]!;
+    first.emit(readyFrame(first, "second-session"));
+    await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
+
+    await selectPi("Test Pi");
+    await expect.poll(listText).toContain("Record 3");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const moved = channelHarness.channels[1]!;
+    moved.emit(readyFrame(moved, "session-2", 2));
+    await expect.poll(listText).not.toContain("Record 3");
+    expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+    await expect.poll(() => moved.frames.some((frame) => frame.type === "session_sync")).toBe(true);
+    moved.emit(recentHistoryFrame(moved, "session-2", sessionEvents("session-2", "Moved", 2)));
+    await expect.poll(listText).toContain("Moved 2");
+    expect(listText()).not.toContain("Record 3");
+  } finally { await screen.unmount(); }
+});
+
+test("opens long saved history behind a loading state with its latest page and keeps the expanded range on return", async () => {
+  await seedTimeline(sessionEvents("archived-long", "Long", 150));
+  const actual = await vi.importActual<typeof import("@/lib/pwa/timeline-store")>("@/lib/pwa/timeline-store");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen } = context;
+  const records = () => [...document.querySelectorAll(".pwa-message-list p")].filter((element) => element.textContent?.startsWith("Long ")).length;
+  const openHistoryRow = async () => {
+    await expect.poll(() => document.querySelector(".pwa-history-row")?.textContent).toContain("Long 150");
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+  };
+  try {
+    vi.mocked(loadTimeline).mockImplementationOnce(async (scope) => { await gate; return actual.loadTimeline(scope); });
+    await openHistoryRow();
+    // 读取本地记录期间不把空列表当作「没有记录」。
+    await expect.poll(() => document.querySelectorAll(".pwa-message-list .pwa-skeleton").length).toBe(3);
+    expect(screen.getByText("No records to display.", { exact: true }).query()).toBeNull();
+    release();
+    await expect.poll(records).toBe(30);
+    await screen.getByRole("button", { name: "Load more", exact: true }).click();
+    await expect.poll(records).toBe(110);
+
+    const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+    list.scrollTop = 200;
+    list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await selectPi("Test Pi");
+    await expect.poll(records).toBe(0);
+    await openHistoryRow();
+    await expect.poll(records).toBe(110);
+    await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(200);
+  } finally { release(); await screen.unmount(); }
+});
+
+test("the mobile navigation fades out the old session while it exits and hands over to the new one", async () => {
+  await page.viewport(390, 844);
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderTwoPis();
+  const fadeOuts = () => [...(document.querySelector(".pwa-message-list")?.getAnimations() ?? [])]
+    .filter((animation) => (animation.effect as KeyframeEffect).getKeyframes().at(-1)?.opacity === "0");
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1", 3));
+    await expect.poll(listText).toContain("Record 3");
+
+    expect(fadeOuts()).toHaveLength(0);
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await screen.getByRole("dialog", { name: /Workspace/ }).getByRole("button", { name: /Second Pi/ }).click();
+    expect(fadeOuts()).toHaveLength(1);
+    await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    expect(fadeOuts()).toHaveLength(0);
+    expect(listText()).not.toContain("Record 3");
+  } finally { await screen.unmount(); }
+});
+
+test("catching up after a saved preview appends the newest records without a top loading row", async () => {
+  await seedTimeline(numberedEvents(3));
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: `active_endpoint:${makePwaDeviceId("owner-device-key")}`, value: "second-endpoint" });
+  const screen = await renderTwoPis();
+  try {
+    const first = channelHarness.channels[0]!;
+    first.emit(readyFrame(first, "second-session"));
+    await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
+
+    await selectPi("Test Pi");
+    await expect.poll(listText).toContain("Record 3");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const returned = channelHarness.channels[1]!;
+    returned.emit(readyFrame(returned, "session-1", 5));
+    await expect.poll(() => returned.frames.some((frame) => frame.type === "session_sync")).toBe(true);
+    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+    returned.emit(recentHistoryFrame(returned, "session-1", numberedEvents(2, 4)));
+    await expect.poll(listText).toContain("Record 5");
+    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("the desktop sidebar fades out the old session before switching to another Pi", async () => {
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderTwoPis();
+  const fadeOuts = () => [...(document.querySelector(".pwa-message-list")?.getAnimations() ?? [])]
+    .filter((animation) => (animation.effect as KeyframeEffect).getKeyframes().at(-1)?.opacity === "0");
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1", 3));
+    await expect.poll(listText).toContain("Record 3");
+    await selectPi("Second Pi");
+    // 旧会话先淡出，切换在淡出结束后才发生。
+    expect(fadeOuts()).toHaveLength(1);
+    expect(channelHarness.channels).toHaveLength(1);
+    expect(listText()).toContain("Record 3");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    expect(fadeOuts()).toHaveLength(0);
+    expect(listText()).not.toContain("Record 3");
+  } finally { await screen.unmount(); }
+});

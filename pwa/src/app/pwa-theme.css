@@ -196,6 +196,8 @@
   --pwa-duration-expand-out: 120ms;
   --pwa-duration-toast: 180ms;
   --pwa-duration-fade: 120ms;
+  /* 切换会话后新内容的淡入；标准曲线前段很快，需要比通用淡化长才看得出渐入过程。 */
+  --pwa-duration-content: 240ms;
   /* 手动查看获取完成后，满格进度的停留时长；属于状态确认，减少动态效果时不缩短。 */
   --pwa-duration-fetch-settle: 600ms;
   /* 位移类动效乘以该系数；减少动态效果时为 0，只保留透明度淡化。 */
@@ -235,6 +237,7 @@
     --pwa-duration-expand-in: var(--pwa-duration-fade);
     --pwa-duration-expand-out: var(--pwa-duration-fade);
     --pwa-duration-toast: var(--pwa-duration-fade);
+    --pwa-duration-content: var(--pwa-duration-fade);
   }
 
   *,

@@ -16,11 +16,12 @@ import { focusedElement, runConfirmAction, useConfirmationOverlay, type ConfirmA
 import { SettingsPage } from "@/components/pwa/settings-page";
 import { reloadWorkspace, useSettingsRoute } from "@/lib/pwa/settings-route";
 import { SessionActionsMenu } from "@/components/pwa/session-actions-menu";
-import { ConnectionStatus, cwdName, displayDevice, type ConnectionViewState, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
+import { ConnectionStatus, cwdName, displayDevice, type ConnectionViewState, type NavigationSwitchTarget, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
+import { useSwitchOutFade } from "@/components/pwa/use-switch-out-fade";
 import { displayPi } from "@/components/pwa/session-title";
 import { PwaWorkspaceLayout } from "@/components/pwa/pwa-workspace-layout";
 import { PwaOperationNotifications, PwaToastProvider, useToast } from "@/components/pwa/pwa-operation-notifications";
-import { ChooseComputerWorkspace, ChoosePiWorkspace, HistoryWorkspace, LiveWorkspace, NoPiWorkspace, UnpairedWorkspace, useDelayedVisibility, WorkspaceSkeleton } from "@/components/pwa/workspace-content";
+import { ChooseComputerWorkspace, ChoosePiWorkspace, HistoryWorkspace, LiveWorkspace, type HistoryRestore, NoPiWorkspace, UnpairedWorkspace, useDelayedVisibility, WorkspaceSkeleton } from "@/components/pwa/workspace-content";
 import type { WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-bar";
 import { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
@@ -110,6 +111,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const [startupState, setStartupState] = useState<StartupState>("loading"); const [startupError, setStartupError] = useState<StartupError | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<TimelineSessionSummary | null>(null);
   const [historyItems, setHistoryItems] = useState<TimelineViewItem[]>([]); const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [renameFocusOrigin, setRenameFocusOrigin] = useState<HTMLElement | null>(null);
   const [pairingFocusOrigin, setPairingFocusOrigin] = useState<HTMLElement | null>(null);
   const [liveEndpointSnapshot, setLiveEndpointSnapshot] = useState<import("@/lib/pwa/db").PwaEndpointRecord | null>(null);
@@ -171,11 +173,14 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     disconnect: disconnectTimeline,
     invalidateScope: invalidateTimelineScope,
     clearTimeline,
+    switchLive: switchLiveTimeline,
   } = useLiveTimeline({
     channelRef,
     enabled: selectedHistory === null,
     reportHistoryFailure,
   });
+
+  const switchOut = useSwitchOutFade(messageListRef);
 
   const attachments = useAttachmentComposer((message) => {
     const scope = timelineRuntimeRef.current.currentScope;
@@ -407,15 +412,16 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   });
   const { rememberSessionName, invalidateSessionNames } = useHistorySessionNames({ endpoint: activeEndpoint, runtimeRef: timelineRuntimeRef, channelRef, helloRequestRef, onSaved: refreshHistory, onError: reportHistoryFailure, replacingSession: pendingAction?.action === "session_new" });
   // 同一次访问中切回看过的会话时恢复离开时的阅读位置；只保存在页面内存中。首次打开停在底部最新内容。
-  const sessionPositionsRef = useRef(new Map<string, TimelineSessionPosition | { history: true; scrollTop: number; atBottom: boolean }>());
+  const sessionPositionsRef = useRef(new Map<string, TimelineSessionPosition | ({ history: true; atBottom: boolean } & HistoryRestore)>());
   const currentViewKeyRef = useRef<string | null>(null);
-  const [historyRestoreScrollTop, setHistoryRestoreScrollTop] = useState<number | null>(null);
+  const [historyRestore, setHistoryRestore] = useState<HistoryRestore | null>(null);
+  const historyVisibleCountRef = useRef(0);
   const rememberSessionPosition = useCallback(() => {
     const key = currentViewKeyRef.current;
     if (!key) return;
     if (key.startsWith("history:")) {
       const list = messageListRef.current;
-      if (list) sessionPositionsRef.current.set(key, { history: true, scrollTop: list.scrollTop, atBottom: list.scrollHeight - list.scrollTop - list.clientHeight <= 1 });
+      if (list) sessionPositionsRef.current.set(key, { history: true, scrollTop: list.scrollTop, visibleCount: historyVisibleCountRef.current, atBottom: list.scrollHeight - list.scrollTop - list.clientHeight <= 1 });
       return;
     }
     const position = captureSessionPosition();
@@ -425,32 +431,45 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     operationNotifications.clearSession();
     rememberSessionPosition();
     const saved = sessionPositionsRef.current.get(`history:${history.id}`);
-    setHistoryRestoreScrollTop(saved && "history" in saved && !saved.atBottom ? saved.scrollTop : null);
+    setHistoryRestore(saved && "history" in saved && !saved.atBottom ? { scrollTop: saved.scrollTop, visibleCount: saved.visibleCount } : null);
     const token = ++historyLoadTokenRef.current;
     setExitedEndpoint(null);
     setSessionSwitched(false);
     setSelectedHistory(history);
     setHistoryItems([]);
+    setHistoryLoading(true);
     setHistoryError(null);
     resetOutputFollowing();
     clearSessionConnection();
     void loadTimeline(history)
       .then((events) => { if (token === historyLoadTokenRef.current) setHistoryItems(events.map((event) => ({ kind: "event", event }))); })
-      .catch(() => { if (token === historyLoadTokenRef.current) setHistoryError("Could not read the saved conversation."); });
+      .catch(() => { if (token === historyLoadTokenRef.current) setHistoryError("Could not read the saved conversation."); })
+      .finally(() => { if (token === historyLoadTokenRef.current) setHistoryLoading(false); });
   }, [clearSessionConnection, operationNotifications, rememberSessionPosition, resetOutputFollowing]);
   const openLiveEndpoint = useCallback((endpointId: string) => {
     if (selectedHistory !== null || activeEndpointId !== endpointId) setExtensionVersion(null);
     operationNotifications.clearSession();
     historyLoadTokenRef.current += 1;
     setSelectedHistory(null); setHistoryItems([]); setHistoryError(null);
-    if (liveEndpointSnapshot?.endpointId !== endpointId) { setLiveEndpointSnapshot(null); setSessionSwitched(false); }
+    const switching = liveEndpointSnapshot?.endpointId !== endpointId;
+    if (switching) { setLiveEndpointSnapshot(null); setSessionSwitched(false); }
     setExitedEndpoint(null);
     rememberSessionPosition();
+    if (switching && activeDevice) {
+      // 换到另一个 Pi 时立即撤下旧会话，不让它留在新标题下；本次访问握手过的会话最准确，否则取本地历史中该 Pi 最近的会话作预览。
+      const deviceId = activeDevice.deviceId;
+      const target = endpoints.find((endpoint) => endpoint.deviceId === deviceId && endpoint.endpointId === endpointId);
+      const remembered = target ? lastSessionByRuntimeRef.current.get(`${deviceId}\u0000${endpointId}\u0000${target.runtimeInstanceId}`) : undefined;
+      const sessionId = remembered ?? historySessions.find((session) => session.endpointId === endpointId)?.sessionId;
+      switchLiveTimeline(sessionId ? { deviceId, endpointId, sessionId } : null);
+      // 旧通道随即关闭；同一次提交就进入连接中，避免新 Pi 的空会话提示闪现。
+      if (onlineRef.current) setConnection("connecting");
+    }
     resetOutputFollowing();
     const saved = activeDevice ? sessionPositionsRef.current.get(`live:${activeDevice.deviceId}\u0000${endpointId}`) : undefined;
     restoreSessionPosition(saved && !("history" in saved) ? saved : null);
     selectEndpoint(endpointId);
-  }, [activeDevice, activeEndpointId, liveEndpointSnapshot?.endpointId, operationNotifications, rememberSessionPosition, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory]);
+  }, [activeDevice, activeEndpointId, endpoints, historySessions, liveEndpointSnapshot?.endpointId, onlineRef, operationNotifications, rememberSessionPosition, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory, switchLiveTimeline]);
   const sendModelsRequest = useCallback((scope: TimelineScope, channel: PeerChannel): boolean => {
     const requestId = id();
     modelRequestRef.current = requestId;
@@ -782,6 +801,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     await runConfirmAction(confirmAction, { startNewSession: () => sendCommandAction({ action: "session_new" }), removePairing, invalidateConnection: clearSessionConnection, clearLocalData, reload: reloadWorkspace }, { pendingRef: confirmPendingRef, setPending: setConfirmPending, setError: setConfirmError, onSuccess: () => setConfirmAction(null) });
   }, [attachmentComposer, fileController, filesReadyRef, clearLocalData, clearSessionConnection, confirmAction, isActiveDevice, removePairing, sendCommandAction]);
   const navigate = (next: () => void) => {
+    // 真正切换时新内容在同一次提交中换上；需要确认时在确认框下方恢复原会话。
+    switchOut.settle();
     const uploads = attachmentComposer.snapshot().active;
     const files = fileController.snapshot().active;
     const switchTarget = () => { fileController.reset(); filesReadyRef.current = false; next(); };
@@ -789,11 +810,16 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     else switchTarget();
   };
   const selectLiveEndpoint = (endpointId: string) => {
-    if (selectedHistory !== null || endpointId !== activeEndpointId) navigate(() => openLiveEndpoint(endpointId));
+    if (selectedHistory !== null || endpointId !== activeEndpointId) switchOut.run(() => navigate(() => openLiveEndpoint(endpointId)));
+    else switchOut.settle();
   };
   const selectHistory = (history: TimelineSessionSummary) => {
-    if (selectedHistory?.id !== history.id) navigate(() => openHistory(history));
+    if (selectedHistory?.id !== history.id) switchOut.run(() => navigate(() => openHistory(history)));
+    else switchOut.settle();
   };
+  const switchesTo = (target: NavigationSwitchTarget) => target.kind === "device"
+    ? target.deviceId !== activeDeviceId
+    : target.kind === "endpoint" ? selectedHistory !== null || target.endpointId !== activeEndpointId : selectedHistory?.id !== target.historyId;
   const onlinePis = useMemo(() => activePis.filter((endpoint) => endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right))), [activePis]);
   const placeholderKind: WorkspacePlaceholderKind = !activeDevice ? "choose-computer" : !snapshotReady ? "checking" : onlinePis.length === 0 ? "no-pi" : onlinePis.length > 1 ? "choose-pi" : "opening";
   // 在线 Pi 的当前会话只出现在「在线 Pi」分组：当前选中的 Pi 只隐藏已握手的实时会话；其他在线 Pi 隐藏它在本浏览器中
@@ -815,7 +841,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       return latestByEndpoint.get(session.endpointId) !== session;
     });
   }, [historySessions, liveSession, onlinePis, selectedEndpointId, selectedHistory?.id]);
-  const sessionLoading = selectedHistory === null && activeDevice !== null && displayEndpoint !== null && timelineItems.length === 0 && connection === "connecting";
+  const sessionLoading = selectedHistory === null && activeDevice !== null && displayEndpoint !== null && timelineItems.length === 0 && (connection === "connecting" || catchingUp);
   const focusEmptySession = useCallback(() => {
     const scope = timelineRuntimeRef.current.currentScope;
     const sessionKey = scope ? `${scope.deviceId}\u0000${scope.endpointId}\u0000${scope.sessionId}` : null;
@@ -899,7 +925,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   // 选择其他 Pi：只有一个在线时直接进入，多个时回到主区选择列表。
   const chooseOtherPi = () => { if (onlinePis.length === 1) openLiveEndpoint(onlinePis[0]!.endpointId); else setExitedEndpoint(null); };
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
-  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) navigate(() => selectDevice(deviceId)); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
+  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
   const connectionStatus = <ConnectionStatus state={displayConnection} retryAttempt={retryAttempt} />;
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;
@@ -916,7 +942,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     : null;
   const liveTimeline = <MessageList items={timelineItems.filter((item) => !isQueuedMessage(item))} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} onLoadEarlier={loadEarlier} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onScroll={handleScroll} isLive={connection === "online"} fileSourceCurrent emptyContext={emptySessionContext} running={displayEndpoint?.working === true} onReadingChange={onToolReading} reconnectPhase={reconnectPhase} loading={sessionLoading || sessionSkeletonVisible} skeletonVisible={sessionSkeletonVisible} topNotice={sessionSwitched ? t.workspace.sessionSwitched : null} onRetryUnknown={(requestId) => { const retry = timelineRuntimeRef.current.retryUnknown(requestId); if (retry && channelRef.current?.send(retry.frame)) applyTimelineChange(retry.change); }} />;
   const mainContent = selectedHistory
-    ? <HistoryWorkspace key={selectedHistory.id} items={historyItems} restoreScrollTop={historyRestoreScrollTop} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onBackToLive={historyEndpoint && historyEndpoint.online !== false ? () => selectLiveEndpoint(historyEndpoint.endpointId) : undefined} />
+    ? <HistoryWorkspace key={selectedHistory.id} items={historyItems} loading={historyLoading} restore={historyRestore} visibleCountRef={historyVisibleCountRef} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onBackToLive={historyEndpoint && historyEndpoint.online !== false ? () => selectLiveEndpoint(historyEndpoint.endpointId) : undefined} />
     : activeDevice && displayEndpoint
       ? <LiveWorkspace timeline={liveTimeline} footer={exitedDisplay ? <div className="pwa-read-only-bar" role="note"><span>{t.workspace.exitedNote}</span>{onlinePis.length > 0 ? <Button variant="transparent" color="piReach" type="button" onClick={chooseOtherPi}>{t.workspace.chooseOtherPi}</Button> : null}</div> : <><PwaMessageActions show={connection === "offline" || catchupFailed || !followingOutput || unreadOutput > 0} showRetry={connection === "offline" || catchupFailed} showLatest={!followingOutput || unreadOutput > 0} unreadOutput={unreadOutput} onRetry={() => { if (catchupFailed) void retryCatchup(); else retryCurrentSession(); }} onLatest={showLatest} /><MessageComposer queuedMessages={<QueuedMessagesPanel items={timelineItems} isOnline={connection === "online"} runtimeRef={timelineRuntimeRef} channelRef={channelRef} applyChange={applyTimelineChange} onError={setError} />} attachments={attachments.items} canAttach={canAttach} sendingAttachments={attachments.snapshot.active} attachmentNotice={attachments.notice} isOnline={connection === "online"} isWorking={displayEndpoint.working === true} stopping={stopRequestId !== null} draft={draft} onDraftChange={(value) => { draftVersionRef.current += 1; setDraftFor(draftKey, value); }} onSend={sendMessage} onStop={stopCurrentTask} onAddFiles={attachments.addFiles} onRemoveAttachment={attachments.remove} onRetryAttachment={attachments.retry} commandModels={models} commandCurrentModel={currentModel} commandCurrentModelFallback={displayEndpoint.model ?? null} commandThinking={activeThinking} commandPendingAction={pendingAction?.action ?? null} onNewSession={() => requestConfirmation({ kind: "new-session" })} onCompactSession={() => sendCommandAction({ action: "session_compact" })} onSetModel={(model) => sendCommandAction({ action: "model_set", provider: model.provider, modelId: model.id })} onSetThinking={(level) => sendCommandAction({ action: "thinking_set", level })} onCommandsOpen={requestModels} /></>} />
       : skeletonVisible || mainLoading

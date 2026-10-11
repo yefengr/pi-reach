@@ -29,6 +29,12 @@ export function ConnectionStatus({ state, retryAttempt = 0 }: { state: Connectio
   return <span className={`pwa-connection ${state}`} title={label} aria-label={label} data-retry-attempt={state === "retrying" ? retryAttempt : undefined}>{busy ? <LoaderCircle className="pwa-spin" size={12} aria-hidden="true" /> : <span className="pwa-status-dot" aria-hidden="true" />}<span className="pwa-connection-label">{label}</span></span>;
 }
 
+/** 移动导航中选中、待导航退出后执行的切换目标。 */
+export type NavigationSwitchTarget =
+  | { kind: "device"; deviceId: string }
+  | { kind: "endpoint"; endpointId: string }
+  | { kind: "history"; historyId: string };
+
 export type WorkspaceNavigationProps = {
   devices: PwaDeviceRecord[];
   endpoints: PwaEndpointRecord[];
@@ -45,6 +51,8 @@ export type WorkspaceNavigationProps = {
   onSelectDevice: (deviceId: string) => void;
   onSelectEndpoint: (endpointId: string) => void;
   onSelectHistory: (history: TimelineSessionSummary) => void;
+  /** 移动导航开始退出、随后将切换到该目标时调用，主区可随导航同步淡出旧内容。 */
+  onSwitchIntent?: (target: NavigationSwitchTarget) => void;
   onRename: (device: PwaDeviceRecord) => void;
   onRemove: (device: PwaDeviceRecord) => void;
   idPrefix?: string;

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "@/components/pwa/use-pwa-motion";
 import { WorkspaceDeviceControl } from "@/components/pwa/workspace-device-control";
@@ -218,6 +218,23 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     pendingActionRef.current = action;
     requestClose();
   };
+  const switchTimerRef = useRef<number | null>(null);
+  useEffect(() => () => { if (switchTimerRef.current !== null) window.clearTimeout(switchTimerRef.current); }, []);
+  /**
+   * 切换电脑、Pi 或历史在抽屉移动结束（退出时长）时交接，不等退出回调：回调常晚到约 100ms，主区会留下一段空白。
+   * 焦点仍在退出回调后恢复；关闭被拒绝、回弹或抽屉仍打开时不提前执行，沿用原流程。
+   */
+  const switchAfter = (action: () => void) => {
+    closeAfter(action);
+    if (switchTimerRef.current !== null) window.clearTimeout(switchTimerRef.current);
+    switchTimerRef.current = window.setTimeout(() => {
+      switchTimerRef.current = null;
+      const lifecycle = lifecycleRef.current;
+      if (pendingActionRef.current !== action || !lifecycle.active || lifecycle.opened) return;
+      pendingActionRef.current = null;
+      action();
+    }, duration);
+  };
   const handleDeviceOverlayChange = (nextOpened: boolean) => {
     chooserOpenRef.current = nextOpened;
   };
@@ -225,9 +242,18 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
   const wrappedPair = () => closeAfter(navigation.onPair);
   // 进入设置页时导航不先播放关闭动画：设置页推入完成后由工作区布局直接卸载导航。
   const wrappedSettings = navigation.onSettings;
-  const wrappedDevice = (deviceId: string) => closeAfter(() => navigation.onSelectDevice(deviceId));
-  const wrappedEndpoint = (endpointId: string) => closeAfter(() => navigation.onSelectEndpoint(endpointId));
-  const wrappedHistory = (history: Parameters<WorkspaceNavigationProps["onSelectHistory"]>[0]) => closeAfter(() => navigation.onSelectHistory(history));
+  const wrappedDevice = (deviceId: string) => {
+    navigation.onSwitchIntent?.({ kind: "device", deviceId });
+    switchAfter(() => navigation.onSelectDevice(deviceId));
+  };
+  const wrappedEndpoint = (endpointId: string) => {
+    navigation.onSwitchIntent?.({ kind: "endpoint", endpointId });
+    switchAfter(() => navigation.onSelectEndpoint(endpointId));
+  };
+  const wrappedHistory = (history: Parameters<WorkspaceNavigationProps["onSelectHistory"]>[0]) => {
+    navigation.onSwitchIntent?.({ kind: "history", historyId: history.id });
+    switchAfter(() => navigation.onSelectHistory(history));
+  };
   const wrappedRename = (device: Parameters<WorkspaceNavigationProps["onRename"]>[0]) => closeAfter(() => navigation.onRename(device));
   const wrappedRemove = (device: Parameters<WorkspaceNavigationProps["onRemove"]>[0]) => navigation.onRemove(device);
 

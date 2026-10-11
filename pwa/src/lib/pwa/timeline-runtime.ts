@@ -79,7 +79,10 @@ export type TimelineLivePlan = {
   endSeq: number;
   earliestSeq: number | null;
 };
-export type TimelineLivePreparation = { change: TimelineRuntimeChange; plan: TimelineLivePlan };
+/** previewMatched：握手确认了本地预览的同一会话，后续补齐只是接上最新记录。 */
+export type TimelineLivePreparation = { change: TimelineRuntimeChange; plan: TimelineLivePlan; previewMatched: boolean };
+/** 本地缓存预览所属的会话；持久化历史不含 runtime，按电脑、Pi 与会话识别。 */
+export type TimelinePreviewTarget = { deviceId: string; endpointId: string; sessionId: string };
 type Pending = TimelinePending & { scope: TimelineScope; insertionRejected?: boolean };
 type QueueItem = Extract<ServerFrame, { type: "queued_message_state" }>["items"][number];
 
@@ -133,6 +136,7 @@ export class TimelineRuntime {
   private readonly limits: TimelinePendingLimits;
   private scope: TimelineScope | null = null;
   private replacement: TimelineReplacementBranch | null = null;
+  private preview: TimelinePreviewTarget | null = null;
   private liveHeadSeq: number | null = null;
   private readonly events = new Map<string, TimelineEvent>();
   private readonly partials = new Map<string, TimelinePartialView>();
@@ -150,6 +154,7 @@ export class TimelineRuntime {
   }
 
   setScope(scope: TimelineScope): TimelineRuntimeChange {
+    this.preview = null;
     this.removeReplacedEndpointEntries(scope);
     if (!isSameLiveScope(this.scope, scope)) {
       this.clearTransient(true);
@@ -167,6 +172,7 @@ export class TimelineRuntime {
     return this.change();
   }
   prepareLive(scope: TimelineScope, headSeq: number): TimelineLivePreparation {
+    const previewMatched = this.consumePreview(scope);
     if (this.scope && this.scope.selfSenderRef !== scope.selfSenderRef) {
       this.removeEntries((pending) => pending.scope.deviceId === scope.deviceId
         && pending.scope.endpointId === scope.endpointId
@@ -174,20 +180,20 @@ export class TimelineRuntime {
         && pending.scope.sessionId === scope.sessionId);
     }
     const safeHeadSeq = isHeadSequence(headSeq) ? headSeq : 0;
-    const canAppend = isHeadSequence(headSeq) && this.replacement === null && (this.scope === null && this.events.size === 0 && this.unknown.length === 0 || isSameLiveScope(this.scope, scope));
+    const canAppend = isHeadSequence(headSeq) && this.replacement === null && (previewMatched || this.scope === null && this.events.size === 0 && this.unknown.length === 0 || isSameLiveScope(this.scope, scope));
     const retained = this.contiguousFormalRange();
     if (canAppend && !retained && safeHeadSeq === 0) {
       this.clearTransient(true);
       this.scope = scope;
       this.liveHeadSeq = 0;
-      return { change: this.change(), plan: { mode: "append", startSeq: null, endSeq: 0, earliestSeq: null } };
+      return { change: this.change(), plan: { mode: "append", startSeq: null, endSeq: 0, earliestSeq: null }, previewMatched };
     }
     if (canAppend && retained && safeHeadSeq >= retained.maxSeq) {
       this.clearTransient(true);
       this.scope = scope;
       this.liveHeadSeq = safeHeadSeq;
       const gap = safeHeadSeq - retained.maxSeq;
-      if (gap <= TIMELINE_RECENT_LIMIT) return { change: this.change(), plan: { mode: "append", startSeq: gap === 0 ? null : retained.maxSeq + 1, endSeq: safeHeadSeq, earliestSeq: retained.minSeq } };
+      if (gap <= TIMELINE_RECENT_LIMIT) return { change: this.change(), plan: { mode: "append", startSeq: gap === 0 ? null : retained.maxSeq + 1, endSeq: safeHeadSeq, earliestSeq: retained.minSeq }, previewMatched };
     }
 
     this.replacement ??= createTimelineReplacement(this.events.values());
@@ -197,7 +203,7 @@ export class TimelineRuntime {
     this.scope = scope;
     this.liveHeadSeq = safeHeadSeq;
     const startSeq = safeHeadSeq === 0 ? null : Math.max(1, safeHeadSeq - TIMELINE_RECENT_LIMIT + 1);
-    return { change: this.change(), plan: { mode: "replace", startSeq, endSeq: safeHeadSeq, earliestSeq: startSeq } };
+    return { change: this.change(), plan: { mode: "replace", startSeq, endSeq: safeHeadSeq, earliestSeq: startSeq }, previewMatched };
   }
   cancelReplacement(): TimelineRuntimeChange {
     if (!this.replacement) return this.change();
@@ -221,6 +227,7 @@ export class TimelineRuntime {
   }
   invalidateScope(preserveFormal = false): TimelineRuntimeChange {
     this.cancelReplacement();
+    this.preview = null;
     this.removeCurrentScopeEntries();
     this.partials.clear();
     this.clearQueuedSnapshot();
@@ -231,6 +238,7 @@ export class TimelineRuntime {
   }
   clear(): TimelineRuntimeChange {
     this.replacement = null;
+    this.preview = null;
     this.scope = null;
     this.liveHeadSeq = null;
     this.events.clear();
@@ -243,6 +251,22 @@ export class TimelineRuntime {
   markDisconnected(): TimelineRuntimeChange {
     this.cancelReplacement();
     this.clearTransient(true);
+    return this.change();
+  }
+  /** 切换到另一个 Pi：立即撤下旧投影；未确认投递按原 scope 保留，切回该会话时仍可重试。 */
+  detachLive(): TimelineRuntimeChange {
+    this.markDisconnected();
+    this.events.clear();
+    this.scope = null;
+    this.preview = null;
+    this.liveHeadSeq = null;
+    return this.change();
+  }
+  /** 握手前先显示本地缓存的最近记录；只用于已解除 scope 的空投影，预览期间没有 scope，不能发送。 */
+  showPreview(target: TimelinePreviewTarget, events: readonly TimelineEvent[]): TimelineRuntimeChange | null {
+    if (this.scope || this.replacement || this.events.size > 0 || events.length === 0) return null;
+    for (const event of events) this.events.set(event.event_id, event);
+    this.preview = target;
     return this.change();
   }
   sendUser(text: string, images?: UserMessageImages, requestIds?: { clientRequestId: string; requestId: string }): UserMessageSendResult | null {
@@ -552,8 +576,18 @@ export class TimelineRuntime {
   }
   get currentScope(): TimelineScope | null { return this.scope; }
   get replacing(): boolean { return this.replacement !== null; }
+  get previewing(): boolean { return this.preview !== null; }
   formalEvents(): TimelineEvent[] { return [...this.events.values()]; }
   get pendingItems(): TimelinePending[] { return [...this.pending.values(), ...this.unknown].filter((pending) => this.isCurrentPending(pending)); }
+  /** 握手确认同一会话时预览即为已保留的投影，可增量追加；不同会话立即撤下预览。 */
+  private consumePreview(scope: TimelineScope): boolean {
+    const preview = this.preview;
+    if (!preview) return false;
+    this.preview = null;
+    if (preview.deviceId === scope.deviceId && preview.endpointId === scope.endpointId && preview.sessionId === scope.sessionId) return true;
+    this.events.clear();
+    return false;
+  }
   private removeReplacedEndpointEntries(scope: TimelineScope): void {
     this.removeEntries((pending) => pending.scope.deviceId === scope.deviceId
       && pending.scope.endpointId === scope.endpointId
