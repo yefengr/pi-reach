@@ -1,6 +1,7 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { safeFileLink } from "@/lib/pwa/file-preview";
+import { markdownTableComponents } from "./markdown-table";
 import "./timeline-content.css";
 
 const fileMarkdownComponents: Components = {
@@ -10,7 +11,7 @@ const fileMarkdownComponents: Components = {
     const safe = href ? safeFileLink(href) : undefined;
     return safe ? <a href={safe} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>;
   },
-  table: ({ children }) => <div className="pwa-markdown-table"><table>{children}</table></div>,
+  ...markdownTableComponents,
 };
 
 /** 文件正文不继承聊天 Markdown 的图片资源与代码高亮策略。 */
