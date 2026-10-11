@@ -673,7 +673,10 @@ test("marks the open history row with the neutral selected background, also whil
 });
 
 test("saves session names, follows renames, and keeps replaced sessions separate", async () => {
-  await seedTimeline(numberedEvents(1));
+  // 握手的 head_seq 为 0，预置记录不带序号，避免被当作序号回退后的旧分支记录删除。
+  const unsequenced: TimelineEvent = { ...numberedEvents(1)[0]! };
+  delete unsequenced.event_seq;
+  await seedTimeline([unsequenced]);
   const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
   const relay = relayHarness.instances[0];
   const summaries = () => listTimelineSessions("owner-device-key");
@@ -691,7 +694,7 @@ test("saves session names, follows renames, and keeps replaced sessions separate
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
     const nextChannel = channelHarness.channels[1];
     nextChannel.emit(readyFrame(nextChannel, "session-2"));
-    await seedTimeline([{ ...numberedEvents(1)[0], event_id: "second-event", session_id: "session-2", leaf_id: "generation-session-2", timestamp: Date.now() + 1 }]);
+    await seedTimeline([{ ...unsequenced, event_id: "second-event", session_id: "session-2", leaf_id: "generation-session-2", timestamp: Date.now() + 1 }]);
     await expect.poll(async () => (await summaries()).find((entry) => entry.sessionId === "session-2")?.name).toBe("Second session");
     expect((await summaries()).find((entry) => entry.sessionId === "session-1")?.name).toBe("Renamed session");
 

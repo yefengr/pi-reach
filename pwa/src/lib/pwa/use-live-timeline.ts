@@ -5,7 +5,7 @@ import { TimelineHistoryLoader } from "@/lib/pwa/timeline-history-loader";
 import { TimelineRuntime, type TimelinePreviewTarget, type TimelineScope, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
-import { loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "@/lib/pwa/timeline-store";
+import { discardTimelineEventsAfter, latestTimelineSequence, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
@@ -209,7 +209,16 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     const prepared = runtimeRef.current.prepareLive(scope, headSeq);
     // 只有 branch reset 或同一会话序号回退说明本地记录已过期，才整段替换；缺口过大、Pi 重启或换会话
     // 只是显示窗口从最新处重新开始，按首次打开合并，不删除本浏览器已保存的更早记录。
-    replacementRequiresReplaceRef.current = forceAuthoritativeReplacement || prepared.sequenceRegressed;
+    const knownStale = forceAuthoritativeReplacement || prepared.sequenceRegressed;
+    replacementRequiresReplaceRef.current = knownStale;
+    // 冷启动等内存中没有已保留记录时，按本地已保存的最大序号补判回退；读取失败按未回退处理，与首次打开一致。
+    const localAhead = knownStale
+      ? Promise.resolve(false)
+      : latestTimelineSequence(scope).then((latest) => {
+        const ahead = latest > headSeq;
+        if (ahead && generation === contextGenerationRef.current) replacementRequiresReplaceRef.current = true;
+        return ahead;
+      }, () => false);
     setQuietCatchup(prepared.previewMatched);
     fragmentAssemblerRef.current = new TimelineEventFragmentAssembler({ session_id: scope.sessionId, leaf_id: scope.leafId });
 
@@ -219,7 +228,10 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       ...(prepared.plan.earliestSeq === null ? {} : { boundary: prepared.plan.earliestSeq }),
       send,
       // Branch replacement must persist one complete staged projection before exposing it.
-      load: prepared.plan.mode === "replace" && replacementRequiresReplaceRef.current ? async () => [] : loadTimeline,
+      load: async (target) => {
+        await localAhead;
+        return prepared.plan.mode === "replace" && replacementRequiresReplaceRef.current ? [] : loadTimeline(target);
+      },
       persist: async (target, events) => {
         if (generation !== contextGenerationRef.current || runtimeRef.current.replacing) return;
         const persisted = await enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => mergeTimelineEvents(target, events));
@@ -255,6 +267,9 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     setCatchingUp(hasCatchupWork);
 
     const loadPreparedRange = async () => {
+      // 替换前须确定是否整段替换本地记录；没有区间可取时也要等补判完成。
+      await localAhead;
+      if (generation !== contextGenerationRef.current) return;
       const succeeded = range === null || await loader.loadRange(range.start, range.end);
       if (generation !== contextGenerationRef.current) return;
       if (!succeeded) {
@@ -283,6 +298,15 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
 
     if (prepared.plan.mode === "append") {
       applyTimelineChange(prepared.change);
+      // 追加只合并新记录；本地超出 head 的旧分支记录需单独删除，否则留在历史里。
+      void localAhead.then(async (ahead) => {
+        if (!ahead || generation !== contextGenerationRef.current) return;
+        try {
+          await enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => discardTimelineEventsAfter(scope, headSeq));
+        } catch {
+          if (generation === contextGenerationRef.current) reportHistoryFailure("Could not update local history.");
+        }
+      });
       void loadPreparedRange();
       return prepared.plan;
     }

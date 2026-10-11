@@ -11,10 +11,10 @@ import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { MessageList } from "@/components/pwa/message-list";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
-import { loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
+import { discardTimelineEventsAfter, latestTimelineSequence, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
 
 vi.mock("./timeline-store", () => ({
-  loadTimeline: vi.fn(async () => []), mergeTimelineEvents: vi.fn(async () => {}), replaceTimelineEvents: vi.fn(async () => {}),
+  loadTimeline: vi.fn(async () => []), mergeTimelineEvents: vi.fn(async () => {}), replaceTimelineEvents: vi.fn(async () => {}), latestTimelineSequence: vi.fn(async () => 0), discardTimelineEventsAfter: vi.fn(async () => {}),
   TimelineStoreConflictError: class extends Error {},
 }));
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
@@ -47,7 +47,7 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
   expect(api.historyLoaderRef.current?.receive(frame)).toBe(true);
 }
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
-afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
+afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineSequence).mockReset().mockResolvedValue(0); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
 
 test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and reading position at %ipx", async width => {
   await page.viewport(width, 844);
@@ -443,5 +443,43 @@ test("auto-loads earlier history near the top only after the reader leaves the l
     await expect.poll(() => api.loadEarlierFailed).toBe(true);
     api.disconnect();
     await expect.poll(() => api.loadEarlierFailed).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("a cold start replaces saved records when the persisted sequence is ahead of the head", async () => {
+  vi.mocked(latestTimelineSequence).mockResolvedValue(100);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(50);
+    await expect.poll(() => frames.length).toBe(1);
+    // 本地记录已过期：不以它们填充窗口，取得权威记录后整段替换。
+    expect(vi.mocked(loadTimeline)).not.toHaveBeenCalled();
+    reply(frames, events(21, 50));
+    await expect.poll(() => vi.mocked(replaceTimelineEvents).mock.calls.length).toBe(1);
+    expect(vi.mocked(replaceTimelineEvents).mock.calls[0]?.[1].map((event) => event.event_seq)).toEqual(Array.from({ length: 30 }, (_, index) => 21 + index));
+    expect(vi.mocked(mergeTimelineEvents)).not.toHaveBeenCalled();
+  } finally { await screen.unmount(); }
+});
+
+test("a cold start of an empty session clears saved records left from another branch", async () => {
+  vi.mocked(latestTimelineSequence).mockResolvedValue(5);
+  const screen = await render(<Harness />);
+  try {
+    expect(start(0)).toEqual([]);
+    await expect.poll(() => vi.mocked(discardTimelineEventsAfter).mock.calls.length).toBe(1);
+    expect(vi.mocked(discardTimelineEventsAfter)).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: scope.sessionId }), 0);
+    expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
+  } finally { await screen.unmount(); }
+});
+
+test("a cold start merges when saved records do not pass the head", async () => {
+  vi.mocked(latestTimelineSequence).mockResolvedValue(50);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => vi.mocked(mergeTimelineEvents).mock.calls.length).toBeGreaterThan(0);
+    expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
   } finally { await screen.unmount(); }
 });
