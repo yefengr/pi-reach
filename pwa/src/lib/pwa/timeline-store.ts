@@ -17,7 +17,13 @@ export type TimelineSessionSummary = TimelineScope & {
   eventCount: number;
   preview: string;
   name?: string;
+  model?: string;
+  thinking?: string;
 };
+
+/** 会话在线时从 Pi 状态记下的信息；摘要按记录重建时原样保留。 */
+export type TimelineSessionDetails = Pick<PwaTimelineSessionRecord, "name" | "model" | "thinking">;
+const SESSION_DETAIL_KEYS = ["name", "model", "thinking"] as const;
 
 type ScopedTimelineEvent = { event: TimelineEvent; timestamp: number };
 
@@ -188,9 +194,18 @@ export async function listTimelineSessions(deviceId?: string): Promise<TimelineS
       updatedAt: record.updatedAt,
       eventCount: record.eventCount,
       preview: record.preview,
-      ...(record.name === undefined ? {} : { name: record.name }),
+      ...savedSessionDetails(record),
     }))
     .sort((left, right) => right.updatedAt - left.updatedAt || right.id.localeCompare(left.id));
+}
+
+function savedSessionDetails(record: TimelineSessionDetails | undefined): TimelineSessionDetails {
+  const details: TimelineSessionDetails = {};
+  for (const key of SESSION_DETAIL_KEYS) {
+    const value = record?.[key];
+    if (value !== undefined) details[key] = value;
+  }
+  return details;
 }
 
 function summarizeSession(
@@ -209,7 +224,7 @@ function summarizeSession(
     endpointId: scope.endpointId,
     sessionId: scope.sessionId,
     leafId: scope.leafId,
-    ...(existing?.name === undefined ? {} : { name: existing.name }),
+    ...savedSessionDetails(existing),
     startedAt: first?.timestamp ?? existing?.startedAt ?? Date.now(),
     updatedAt: last?.timestamp ?? existing?.updatedAt ?? Date.now(),
     eventCount: records.length > 0 || !preserveEmptySummary ? records.length : existing?.eventCount ?? 0,
@@ -263,7 +278,7 @@ async function summarizeStoredSession(
     endpointId: scope.endpointId,
     sessionId: scope.sessionId,
     leafId: scope.leafId,
-    ...(existing?.name === undefined ? {} : { name: existing.name }),
+    ...savedSessionDetails(existing),
     startedAt: first.timestamp,
     updatedAt: last.timestamp,
     eventCount,
@@ -276,15 +291,24 @@ async function summarizeStoredSession(
 }
 
 export async function saveTimelineSessionName(scope: TimelineScope, name: string): Promise<void> {
-  const normalizedName = name.trim();
-  if (!normalizedName) return;
+  await saveTimelineSessionDetails(scope, { name });
+}
+
+/** 合并保存会话名称、模型与思考级别；空值不覆盖已保存的内容。 */
+export async function saveTimelineSessionDetails(scope: TimelineScope, details: TimelineSessionDetails): Promise<void> {
+  const updates: TimelineSessionDetails = {};
+  for (const key of SESSION_DETAIL_KEYS) {
+    const value = details[key]?.trim();
+    if (value) updates[key] = value;
+  }
+  if (Object.keys(updates).length === 0) return;
   const db = getPwaDatabase();
   const id = makeTimelineScopeId(scope);
   await db.transaction("rw", db.sessions, async () => {
     const existing = await db.sessions.get(id);
     await db.sessions.put({
       ...summarizeSession(scope, [], existing, true),
-      name: normalizedName,
+      ...updates,
     });
   });
 }

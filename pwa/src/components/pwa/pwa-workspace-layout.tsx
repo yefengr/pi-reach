@@ -262,7 +262,7 @@ export function PwaWorkspaceLayout({
       <ActionIcon ref={sidebarToggleRef} className="pwa-sidebar-toggle" type="button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="pwa-desktop-navigation" onPointerDown={(event) => { if (event.pointerType === "mouse") event.preventDefault(); }} onClick={toggleSidebar}>
         {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
       </ActionIcon>
-      <main ref={setMainElement} className={`pwa-main${historyMode ? " pwa-history-main" : ""}`}>
+      <main ref={setMainElement} className="pwa-main">
         <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={presentNavigation} />
         <div ref={noticesRef} className="pwa-main-notices">
           {historyMode ? null : connectionBanner}

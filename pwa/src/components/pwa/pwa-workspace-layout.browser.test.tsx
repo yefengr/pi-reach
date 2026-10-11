@@ -71,7 +71,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
 
   return <PwaAppShell runtimeNotice={noticeVisible && <ServiceWorkerNotice installPrompt unsupported={false} onInstall={() => {}} onDismiss={() => setNoticeVisible(false)} />}><PwaWorkspaceLayout
     navigation={navigation}
-    titleBar={unpaired ? { title: "Navigation", showTitle: false } : historyMode ? { title: "Saved Pi", showTitle: true, kicker: "Local history · Read only" } : { title, showTitle: true, status: <ConnectionStatus state="online" /> }}
+    titleBar={unpaired ? { title: "Navigation", showTitle: false } : historyMode ? { title: "Saved Pi", showTitle: true } : { title, showTitle: true, status: <ConnectionStatus state="online" /> }}
     historyMode={historyMode}
     connectionBanner={connectionBanner ? <PwaConnectionBanner kind={connectionBanner} connection="retrying" onRetry={() => events.push("retry")} /> : null}
     toast={unpaired ? null : <div data-testid="toast">Toast</div>}
@@ -442,10 +442,9 @@ test("preserves one main and the stateful workspace child through boundary and d
   }
 });
 
-test("labels saved history as read-only in the title area instead of showing realtime status", async () => {
+test("shows saved history without realtime status in the title area", async () => {
   const screen = await renderLayout({ events: [], historyMode: true, runtimeNotice: true });
 
-  await expect.element(screen.getByText("Local history · Read only", { exact: true }).last()).toBeVisible();
   await expect.element(screen.getByRole("heading", { level: 1, name: "Saved Pi" })).toBeVisible();
   await expect.element(screen.getByLabelText("Connected")).not.toBeInTheDocument();
   await expect.element(screen.getByRole("status", { name: "Install Pi Reach" })).toBeVisible();

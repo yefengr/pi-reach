@@ -137,7 +137,6 @@
 .pwa-root .pwa-title-bar { min-height: var(--pwa-topbar-height); padding-top: 0; padding-right: calc(8px + var(--pwa-main-safe-right)); padding-left: var(--pwa-main-inset-start); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: 56px; }
 .pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; }
-.pwa-root .pwa-title-bar-kicker { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-root .pwa-title-bar-name { min-width: 0; margin: 0; overflow: hidden; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-title-bar-prefix { color: var(--pwa-secondary); font-weight: var(--pwa-weight-regular); }
 .pwa-root .pwa-title-bar-actions { flex: 0 0 auto; display: flex; align-items: center; }
@@ -214,7 +213,6 @@
   .pwa-root .pwa-session-trigger:focus-visible .pwa-session-trigger-icon { outline: 2px solid var(--pwa-accent); outline-offset: -4px; }
   .pwa-root .pwa-session-trigger-icon .pwa-notice-dot { position: absolute; top: 9px; right: 9px; }
   .pwa-root .pwa-session-trigger-copy { min-width: 0; display: grid; text-align: left; }
-  .pwa-root .pwa-session-trigger-kicker { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-regular); }
   .pwa-root .pwa-session-trigger-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pwa-root .pwa-read-only-bar { font-size: var(--pwa-text-body); }
   /* 移动顶栏只保留导航入口、连接状态与「更多」，把宽度留给会话名。 */

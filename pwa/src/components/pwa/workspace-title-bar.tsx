@@ -11,8 +11,6 @@ export type WorkspaceTitleBarProps = {
   showTitle: boolean;
   /** 会话名前的工作目录最后一级。 */
   prefix?: string | null;
-  /** 会话名上方的小字，如「本地历史 · 只读」。 */
-  kicker?: string | null;
   status?: ReactNode;
   moreMenu?: ReactNode;
   /** 移动端菜单图标右上角的后台完成提醒圆点。 */
@@ -25,7 +23,7 @@ export type WorkspaceTitleBarProps = {
 /**
  * 会话标题区：桌面为主区顶部 48px 的一行，移动端即工作区顶栏（菜单图标与会话名共同构成导航入口）。
  */
-export function WorkspaceTitleBar({ title, showTitle, prefix, kicker, status, moreMenu, navigationNotice = false, navigationExpanded, onOpenNavigation, onRefresh = refreshPwaApp }: WorkspaceTitleBarProps) {
+export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, navigationNotice = false, navigationExpanded, onOpenNavigation, onRefresh = refreshPwaApp }: WorkspaceTitleBarProps) {
   const { t } = useI18n();
   return <header className="pwa-topbar pwa-title-bar">
     <UnstyledButton
@@ -37,11 +35,10 @@ export function WorkspaceTitleBar({ title, showTitle, prefix, kicker, status, mo
       title={title}
     >
       <span className="pwa-session-trigger-icon" aria-hidden="true"><Menu size={20} />{navigationNotice ? <span className="pwa-notice-dot" /> : null}</span>
-      <span className="pwa-session-trigger-copy">{kicker ? <span className="pwa-session-trigger-kicker">{kicker}</span> : null}<span className="pwa-session-trigger-title">{title}</span></span>
+      <span className="pwa-session-trigger-copy"><span className="pwa-session-trigger-title">{title}</span></span>
     </UnstyledButton>
     <div className="pwa-title-bar-heading">
       {showTitle ? <>
-        {kicker ? <span className="pwa-title-bar-kicker">{kicker}</span> : null}
         <h1 className="pwa-title-bar-name" title={prefix ? `${prefix} · ${title}` : title}>
           {prefix ? <span className="pwa-title-bar-prefix">{prefix}<span aria-hidden="true"> · </span></span> : null}
           <span className="pwa-title-bar-title">{title}</span>

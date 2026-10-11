@@ -443,3 +443,38 @@ export function MessageComposer({
     </form>
   );
 }
+
+type ReadOnlyComposerProps = {
+  notice: string;
+  /** 该 Pi 最后已知的模型；本地没有记录时不显示模型标签。 */
+  modelName: string | null;
+  thinking: ThinkingLevel;
+};
+
+/** 只读历史的输入区：与在线输入框同一结构和样式，所有控件禁用，提示区说明只读原因。 */
+export function ReadOnlyComposer({ notice, modelName, thinking }: ReadOnlyComposerProps) {
+  const { t } = useI18n();
+  const modelLabel = modelName ? t.commands.modelChipLabel(modelName, thinking) : null;
+  return (
+    <div className="pwa-composer">
+      <p className="pwa-composer-hint" role="note">{notice}</p>
+      <div className="pwa-composer-card">
+        <Textarea className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value="" placeholder={t.composer.readOnlyPlaceholder} aria-label={t.composer.readOnlyPlaceholder} disabled rows={1} />
+        <div className="pwa-composer-footer">
+          <div className="pwa-composer-tools">
+            <div className="pwa-composer-menu"><ActionIcon className="pwa-composer-icon" type="button" disabled aria-label={t.attachments.add} title={t.attachments.add}><Plus size={20} /></ActionIcon></div>
+            <div className="pwa-composer-command"><ActionIcon className="pwa-composer-icon" type="button" disabled aria-label={t.commands.piCommands} title={t.commands.piCommands}><Slash size={20} /></ActionIcon></div>
+          </div>
+          <div className="pwa-composer-actions">
+            {modelName && modelLabel ? <UnstyledButton className="pwa-composer-model" disabled aria-label={modelLabel} title={modelLabel}>
+              <span className="pwa-composer-model-name">{modelName}</span>
+              <span className="pwa-composer-model-thinking" aria-hidden="true"> · {thinking}</span>
+              <ChevronDown size={16} aria-hidden="true" />
+            </UnstyledButton> : null}
+            <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="button" disabled aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

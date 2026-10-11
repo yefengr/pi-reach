@@ -16,6 +16,7 @@ import {
   makeTimelineScopeId,
   mergeTimelineEvents,
   replaceTimelineEvents,
+  saveTimelineSessionDetails,
   saveTimelineSessionName,
   selectPersistableTimelineEvents,
   type TimelineScope,
@@ -154,6 +155,23 @@ test("updates a saved name without changing event-derived metadata", async () =>
     updatedAt: 20,
     eventCount: 2,
   });
+});
+
+test("saves the last reported model with the session and keeps it through merges and replacements", async () => {
+  await mergeTimelineEvents(scope, [userEvent("first", "group", 10)]);
+  await saveTimelineSessionName(scope, "Titled");
+
+  await saveTimelineSessionDetails(scope, { model: " Model A ", thinking: "low" });
+  await saveTimelineSessionDetails(scope, { model: "Model B" });
+  // 空值不覆盖已保存的模型与思考级别。
+  await saveTimelineSessionDetails(scope, { model: "  ", thinking: "" });
+  expect((await listTimelineSessions(scope.deviceId))[0]).toMatchObject({ name: "Titled", model: "Model B", thinking: "low", eventCount: 1 });
+
+  await mergeTimelineEvents(scope, [userEvent("second", "group", 20)]);
+  expect((await listTimelineSessions(scope.deviceId))[0]).toMatchObject({ name: "Titled", model: "Model B", thinking: "low", eventCount: 2 });
+
+  await replaceTimelineEvents(scope, [userEvent("replaced", "group", 30)]);
+  expect((await listTimelineSessions(scope.deviceId))[0]).toMatchObject({ name: "Titled", model: "Model B", thinking: "low", eventCount: 1 });
 });
 
 test("shares names across leaf changes and isolates sessions", async () => {

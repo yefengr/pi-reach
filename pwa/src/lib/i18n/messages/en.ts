@@ -76,7 +76,6 @@ export const en = {
     currentComputer: "Current computer",
     expandSidebar: "Expand sidebar",
     collapseSidebar: "Collapse sidebar",
-    historyReadOnly: "Local history · Read only",
     refreshApp: "Refresh app",
   },
   devices: {
@@ -119,8 +118,7 @@ export const en = {
     chooseComputerBody: "Select a paired computer from the navigation.",
     newSessionHint: "Send a message to Pi to begin.",
     loading: "Loading…",
-    readOnlyNote: "This is a read-only record saved in this browser. You can't continue the conversation.",
-    backToLive: "Back to live session",
+    readOnlyNote: "This is a session saved in this browser. It's read-only.",
   },
 
   settings: {
@@ -215,6 +213,7 @@ export const en = {
     imageAttachment: "Image attachment",
     removeImage: "Remove image",
     placeholder: "Message your agent…",
+    readOnlyPlaceholder: "You can't send messages in saved history",
     stoppingTask: "Stopping current task",
     stopTask: "Stop current task",
     send: "Send message",

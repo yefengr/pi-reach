@@ -78,7 +78,6 @@ export const zh: Messages = {
     currentComputer: "当前电脑",
     expandSidebar: "展开侧栏",
     collapseSidebar: "收起侧栏",
-    historyReadOnly: "本地历史 · 只读",
     refreshApp: "刷新应用",
   },
   devices: {
@@ -121,8 +120,7 @@ export const zh: Messages = {
     chooseComputerBody: "从导航中选择一台已配对的电脑。",
     newSessionHint: "向 Pi 发送消息开始。",
     loading: "正在加载…",
-    readOnlyNote: "这是本地保存的只读记录，不能继续对话。",
-    backToLive: "回到在线会话",
+    readOnlyNote: "这是本地保存的历史会话，只读。",
   },
 
   settings: {
@@ -217,6 +215,7 @@ export const zh: Messages = {
     imageAttachment: "图片附件",
     removeImage: "移除图片",
     placeholder: "向 Pi 发送消息…",
+    readOnlyPlaceholder: "历史会话不能发送消息",
     stoppingTask: "正在停止当前任务",
     stopTask: "停止当前任务",
     send: "发送消息",
