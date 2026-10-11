@@ -111,6 +111,20 @@ test("moves a gap marker past hidden records to the next visible record", async 
   } finally { await screen.unmount(); }
 });
 
+test("does not group tools of one run across an unsaved gap", async () => {
+  const tool = (seq: number): TimelineViewItem => ({ kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: `s-${seq}`, event_seq: seq, group_id: "run", timestamp: seq, kind: "tool", tool_call_id: `call-${seq}`, tool: "read", args: {}, truncated: false, status: "complete", result: {} } });
+  const runEnd: TimelineViewItem = { kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: "s-23", event_seq: 23, group_id: "run", timestamp: 23, kind: "run_end", status: "complete" } };
+  const { screen } = await renderHistory({ initial: [tool(1), tool(2), tool(3), tool(20), tool(21), tool(22), runEnd] });
+  try {
+    await expect.poll(() => list().querySelectorAll(".pwa-tool-group").length).toBe(2);
+    const gap = screen.getByText("Some records in between aren't saved in this browser").element();
+    const groups = [...list().querySelectorAll(".pwa-tool-group")];
+    // 缺口提示位于两组之间，缺口两侧的工具不合并为一组。
+    expect(groups[0]!.compareDocumentPosition(gap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(gap.compareDocumentPosition(groups[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  } finally { await screen.unmount(); }
+});
+
 test("does not mark a complete saved history", async () => {
   const { screen } = await renderHistory({ initial: sequencedItems([1, 2, 3]) });
   try {
