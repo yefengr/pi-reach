@@ -60,6 +60,9 @@
 ## 验证与交付
 
 - PWA 行为变更：执行 `pnpm lint` 和受影响的 Node/Browser Mode 测试。
+- 本地 Browser Mode 测试按文件串行（隔离键盘焦点），平均约 1 秒／用例，全量 `pnpm test:component` 需十分钟以上。本地只运行直接覆盖改动的测试文件，即断言了被改组件、选择器或行为的文件，可用 `-t` 进一步缩小到相关用例；不因“可能受影响”在本地运行全量或成批文件。
+- 共享布局、全局 CSS、设计 token 等更广的回归由 Pull Request 的 CI（`checks` 与分 4 组的 `pwa-browser`）覆盖：本地定向验证通过后推送，以 CI 结果作为扩大验证的证据，CI 失败时再在本地定向复现。
+- 需要逐帧采样或等待动画的测试，采样窗口只覆盖一次过渡所需时长，避免累积等待。
 - 生产 bundle 受影响时执行 `pnpm build`；关键跨模块流程增加相关 Playwright 场景。
 - UI/Mantine 改动按上述受影响验证要求验收；涉及叠层、焦点或 Portal 时执行 [overlay 验证技能](../.agents/skills/validate-mantine-stacked-overlays/SKILL.md)。
 - 纯文档变更核对事实、引用和授权范围，并从仓库根执行 `pnpm check:docs` 与 `git diff --check`，不据此运行或宣称通过业务测试。
