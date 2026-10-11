@@ -268,11 +268,27 @@ test("uses a replacement plan for initial heads at zero, below the recent limit,
   expect(new TimelineRuntime().prepareLive(scope, 31).plan).toEqual({ mode: "replace", startSeq: 2, endSeq: 31, earliestSeq: 2 });
 });
 
+test("flags a same-session head below the retained projection as a sequence regression", () => {
+  const regressed = new TimelineRuntime();
+  regressed.setScope(scope);
+  regressed.prependHistory(numberedUserEvents(1, 10));
+  const lower = regressed.prepareLive({ ...scope, runtimeInstanceId: "runtime-b" }, 5);
+  expect(lower.plan.mode).toBe("replace");
+  expect(lower.sequenceRegressed).toBe(true);
+
+  const otherSession = new TimelineRuntime();
+  otherSession.setScope(scope);
+  otherSession.prependHistory(numberedUserEvents(1, 10));
+  expect(otherSession.prepareLive({ ...scope, sessionId: "session-b" }, 5).sequenceRegressed).toBe(false);
+});
+
 test("falls back to replacement for large gaps, scope changes, and unsafe formal sequences", () => {
   const largeGap = new TimelineRuntime();
   largeGap.setScope(scope);
   largeGap.prependHistory(numberedUserEvents(1, 10));
-  expect(largeGap.prepareLive(scope, 41).plan).toEqual({ mode: "replace", startSeq: 12, endSeq: 41, earliestSeq: 12 });
+  const largeGapPreparation = largeGap.prepareLive(scope, 41);
+  expect(largeGapPreparation.plan).toEqual({ mode: "replace", startSeq: 12, endSeq: 41, earliestSeq: 12 });
+  expect(largeGapPreparation.sequenceRegressed).toBe(false);
 
   const changedScope = new TimelineRuntime();
   changedScope.setScope(scope);

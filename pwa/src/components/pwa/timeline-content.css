@@ -87,3 +87,8 @@
 /* 新会话的上下文：目录 · 模型 · 思考级别，发送前确认对象。 */
 .pwa-chat-empty .pwa-chat-empty-context { font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
 .pwa-timeline-notice { margin: 0 0 16px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); text-align: center; }
+/* 时间线中间的未保存区间：与相邻消息拉开同样的间距。 */
+.pwa-timeline-notice.pwa-timeline-gap { margin: 16px 0; }
+/* 顶部更早记录入口：按钮、加载动画、失败与离线说明共用同一高度，切换状态时内容不跳动。 */
+.pwa-earlier { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; margin: 0 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: center; }
+.pwa-earlier-loading { display: inline-flex; align-items: center; gap: 8px; }

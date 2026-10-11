@@ -423,10 +423,9 @@ test.each(navigationViewports)("keeps header and footer fixed while the only bod
   const header = dialog.element().querySelector<HTMLElement>(".pwa-session-sheet-head")!;
   const scroll = dialog.element().querySelector<HTMLElement>(".pwa-navigation-scroll")!;
   const footer = dialog.element().querySelector<HTMLElement>(".pwa-session-sheet-foot")!;
-  // 本地历史先显示 20 条，「显示更早的记录」每次追加 20 条。
-  expect(dialog.element().querySelectorAll(".pwa-history-row")).toHaveLength(20);
-  await screen.getByRole("button", { name: "Show earlier records" }).click();
+  // 本地历史直接列出当前电脑的全部记录，不再分批展开。
   expect(dialog.element().querySelectorAll(".pwa-history-row")).toHaveLength(28);
+  await expect.element(screen.getByRole("button", { name: "Show earlier records" })).not.toBeInTheDocument();
   const last = screen.getByRole("button", { name: /Final saved conversation 28/ });
   const beforeHeader = header.getBoundingClientRect();
   const beforeFooter = footer.getBoundingClientRect();

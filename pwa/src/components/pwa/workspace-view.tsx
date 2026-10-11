@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Button, NavLink } from "@mantine/core";
 import { History, Link2, LoaderCircle, MessageSquare, Settings } from "lucide-react";
 import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "@/components/pwa/workspace-device-control";
@@ -146,16 +146,12 @@ export function WorkspaceRunningPiSection({ activeDevice, endpoints, activeEndpo
   </section>;
 }
 
-const HISTORY_PAGE_SIZE = 20;
-
 export function WorkspaceHistorySection({ activeDevice, history, selectedHistoryId, onSelectHistory, headingId, variant = "desktop" }: WorkspaceHistorySectionProps) {
   const { t, format } = useI18n();
-  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   if (!activeDevice) return null;
-  const visible = history.slice(0, visibleCount);
   return <section className={sectionClassName(variant)} aria-labelledby={headingId}>
     <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong><em>{t.navigation.savedInBrowser}</em></span><small className="pwa-tabular">{history.length}</small></div>
-    {history.length === 0 ? <p className="pwa-nav-empty">{t.navigation.historyEmpty}</p> : visible.map((entry) => {
+    {history.length === 0 ? <p className="pwa-nav-empty">{t.navigation.historyEmpty}</p> : history.map((entry) => {
       const current = entry.id === selectedHistoryId;
       const title = historySessionTitle(entry);
       return <NavLink
@@ -173,7 +169,6 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
         onClick={() => { if (!current) onSelectHistory(entry); }}
       />;
     })}
-    {history.length > visibleCount ? <Button className="pwa-history-more" variant="transparent" color="piReach" type="button" onClick={() => setVisibleCount((count) => count + HISTORY_PAGE_SIZE)}>{t.navigation.showEarlier}</Button> : null}
   </section>;
 }
 

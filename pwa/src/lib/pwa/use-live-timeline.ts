@@ -5,7 +5,7 @@ import { TimelineHistoryLoader } from "@/lib/pwa/timeline-history-loader";
 import { TimelineRuntime, type TimelinePreviewTarget, type TimelineScope, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
-import { loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "@/lib/pwa/timeline-store";
+import { discardTimelineEventsAfter, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
@@ -25,6 +25,8 @@ type StartLiveOptions = {
   headSeq: number;
   send: (request: ClientFrame) => boolean;
   onHistoryChanged: () => void;
+  /** 本地缓存与当前分支不一致（断线期间换了分支、未收到 reset）；调用方按 branch reset 恢复。 */
+  onBranchMismatch: () => void;
 };
 
 type UseLiveTimelineOptions = {
@@ -64,6 +66,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   const [reconnectPhase, setReconnectPhase] = useState<TimelineReconnectPhase>(null);
   const [catchupFailed, setCatchupFailed] = useState(false);
   const [catchingUp, setCatchingUp] = useState(false);
+  // 普通向前翻页失败后停止自动加载，由用户重试；补齐失败另由 catchupFailed 表示。
+  const [earlierFailed, setEarlierFailed] = useState(false);
   // 接在本地预览之后的补齐只追加最新记录，不在顶部显示「正在加载记录」，避免内容上下跳动。
   const [quietCatchup, setQuietCatchup] = useState(false);
 
@@ -79,6 +83,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   const deferredChangeRef = useRef<TimelineRuntimeChange | null>(null);
   const failedCatchupRef = useRef<FailedCatchup | null>(null);
   const onHistoryChangedRef = useRef<(() => void) | null>(null);
+  // 当前连接补齐成功后待执行的分支核对；每个连接只执行一次。
+  const branchCheckRef = useRef<(() => Promise<void>) | null>(null);
   const forceAuthoritativeReplacementRef = useRef(false);
   const replacementRequiresReplaceRef = useRef(false);
   const persistenceEpochRef = useRef(0);
@@ -187,7 +193,13 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     return false;
   }, [channelRef, renderChange, reportHistoryFailure, resetOutputFollowing]);
 
-  const startLive = useCallback(({ scope, headSeq, send, onHistoryChanged }: StartLiveOptions) => {
+  const runBranchCheck = useCallback(() => {
+    const check = branchCheckRef.current;
+    branchCheckRef.current = null;
+    void check?.();
+  }, []);
+
+  const startLive = useCallback(({ scope, headSeq, send, onHistoryChanged, onBranchMismatch }: StartLiveOptions) => {
     const generation = ++contextGenerationRef.current;
     clearTransitionTimer();
     disposeLoader();
@@ -197,16 +209,32 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     onHistoryChangedRef.current = onHistoryChanged;
     catchingUpRef.current = false;
     setCatchupFailed(false);
+    setEarlierFailed(false);
     setCatchingUp(false);
     setReconnectPhase(null);
 
-    // 本地预览不是已确认的实时投影：同一会话走增量追加，否则按首次打开合并本地历史，不做权威替换。
-    const hadExistingProjection = runtimeRef.current.currentScope !== null || (!runtimeRef.current.previewing && runtimeRef.current.formalEvents().length > 0);
     const forceAuthoritativeReplacement = forceAuthoritativeReplacementRef.current;
     forceAuthoritativeReplacementRef.current = false;
-    replacementRequiresReplaceRef.current = forceAuthoritativeReplacement || hadExistingProjection;
     persistenceEpochRef.current = beginTimelinePersistenceEpoch(runtimeRef.current);
     const prepared = runtimeRef.current.prepareLive(scope, headSeq);
+    // 只有 branch reset 或同一会话序号回退说明本地记录已过期，才整段替换；缺口过大、Pi 重启或换会话
+    // 只是显示窗口从最新处重新开始，按首次打开合并，不删除本浏览器已保存的更早记录。
+    const knownStale = forceAuthoritativeReplacement || prepared.sequenceRegressed;
+    replacementRequiresReplaceRef.current = knownStale;
+    // 冷启动等内存中没有已保留记录时，按本地已保存的最大序号补判回退；读取失败按未回退处理，与首次打开一致。
+    const localLatest = knownStale ? Promise.resolve(null) : latestTimelineEvent(scope).catch(() => null);
+    const localAhead = localLatest.then((latest) => {
+      const ahead = (latest?.event_seq ?? 0) > headSeq;
+      if (ahead && generation === contextGenerationRef.current) replacementRequiresReplaceRef.current = true;
+      return ahead;
+    });
+    // 超出 head 的本地记录必属旧分支，合并路径不会覆盖它们。握手时同步排进持久化队列，
+    // 先于之后实时事件的保存执行，不会误删握手后收到的新事件。
+    if (!knownStale) {
+      void enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => discardTimelineEventsAfter(scope, headSeq)).catch(() => {
+        if (generation === contextGenerationRef.current) reportHistoryFailure("Could not update local history.");
+      });
+    }
     setQuietCatchup(prepared.previewMatched);
     fragmentAssemblerRef.current = new TimelineEventFragmentAssembler({ session_id: scope.sessionId, leaf_id: scope.leafId });
 
@@ -215,8 +243,15 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       headSeq,
       ...(prepared.plan.earliestSeq === null ? {} : { boundary: prepared.plan.earliestSeq }),
       send,
+      currentLeafId: () => {
+        const current = runtimeRef.current.currentScope;
+        return current && current.sessionId === scope.sessionId ? current.leafId : scope.leafId;
+      },
       // Branch replacement must persist one complete staged projection before exposing it.
-      load: prepared.plan.mode === "replace" && replacementRequiresReplaceRef.current ? async () => [] : loadTimeline,
+      load: async (target) => {
+        await localAhead;
+        return prepared.plan.mode === "replace" && replacementRequiresReplaceRef.current ? [] : loadTimeline(target);
+      },
       persist: async (target, events) => {
         if (generation !== contextGenerationRef.current || runtimeRef.current.replacing) return;
         const persisted = await enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => mergeTimelineEvents(target, events));
@@ -237,7 +272,9 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
         setLoadingEarlier(state.loading);
       },
       onError: (message) => {
-        if (generation === contextGenerationRef.current) reportHistoryFailure(message);
+        if (generation !== contextGenerationRef.current) return;
+        setEarlierFailed(true);
+        reportHistoryFailure(message);
       },
     });
     historyLoaderRef.current = loader;
@@ -249,7 +286,20 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     catchingUpRef.current = hasCatchupWork;
     setCatchingUp(hasCatchupWork);
 
+    // 序号未回退时本地缓存仍可能属于断线期间被放弃的分支：补齐后取本地原最新一条的权威事件核对 event_id。
+    // 一致说明此前的记录都在当前分支上；不一致则按 branch reset 恢复，强制替换会清掉期间写入的记录，
+    // 避免继续向前加载时把两个分支拼在一起。核对放在补齐之后，不拖慢打开；请求失败时保留显示，下次连接再核对。
+    branchCheckRef.current = async () => {
+      const latest = await localLatest;
+      if (await localAhead || latest?.event_seq === undefined || generation !== contextGenerationRef.current) return;
+      const remoteId = await loader.fetchEventId(latest.event_seq);
+      if (remoteId !== null && remoteId !== latest.event_id && generation === contextGenerationRef.current) onBranchMismatch();
+    };
+
     const loadPreparedRange = async () => {
+      // 替换前须确定是否整段替换本地记录；没有区间可取时也要等补判完成。
+      await localAhead;
+      if (generation !== contextGenerationRef.current) return;
       const succeeded = range === null || await loader.loadRange(range.start, range.end);
       if (generation !== contextGenerationRef.current) return;
       if (!succeeded) {
@@ -269,11 +319,14 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
         if (!committed) {
           failedCatchupRef.current = { generation };
           setCatchupFailed(true);
+          return;
         }
+        runBranchCheck();
         return;
       }
       catchingUpRef.current = false;
       setCatchingUp(false);
+      runBranchCheck();
     };
 
     if (prepared.plan.mode === "append") {
@@ -291,7 +344,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     // 暂存期间保持旧投影可见；失败时保留暂存门禁，重试成功后再提交。
     void loadPreparedRange();
     return prepared.plan;
-  }, [applyTimelineChange, clearTransitionTimer, disposeLoader, finishReplacement, renderChange, reportHistoryFailure]);
+  }, [applyTimelineChange, clearTransitionTimer, disposeLoader, finishReplacement, renderChange, reportHistoryFailure, runBranchCheck]);
 
   const retryCatchup = useCallback(async (): Promise<boolean> => {
     const failed = failedCatchupRef.current;
@@ -299,6 +352,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     if (catchingUpRef.current || !failed || !loader || failed.generation !== contextGenerationRef.current) return false;
     catchingUpRef.current = true;
     setCatchingUp(true);
+    // 补齐失败也经 onError 记为分页失败；重试时一并清除，再次失败会重新设置。
+    setEarlierFailed(false);
 
     let succeeded = failed.range
       ? await loader.loadRange(failed.range.start, failed.range.end)
@@ -312,12 +367,13 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     if (succeeded) {
       failedCatchupRef.current = null;
       setCatchupFailed(false);
+      runBranchCheck();
     } else {
       failedCatchupRef.current = failed;
       setCatchupFailed(true);
     }
     return succeeded;
-  }, [finishReplacement]);
+  }, [finishReplacement, runBranchCheck]);
 
   const loadEarlier = useCallback(() => {
     const loader = historyLoaderRef.current;
@@ -327,6 +383,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       return;
     }
     if (!loader.hasEarlier) return;
+    setEarlierFailed(false);
     prepareHistoryPrepend();
     void loader.loadEarlier();
   }, [loadingEarlier, prepareHistoryPrepend, retryCatchup]);
@@ -339,8 +396,11 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     replacementGateRef.current = false;
     deferredChangeRef.current = null;
     failedCatchupRef.current = null;
+    branchCheckRef.current = null;
     catchingUpRef.current = false;
     setCatchupFailed(false);
+    // loader 已销毁，旧的失败无法再重试；重连后按新连接的结果判断。
+    setEarlierFailed(false);
     setCatchingUp(false);
     setReconnectPhase(null);
     fragmentAssemblerRef.current?.reset();
@@ -396,6 +456,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     setLastSyncedAt,
     hasEarlier: hasEarlierState || catchupFailed || (catchingUp && !quietCatchup),
     loadingEarlier: loadingEarlier || (catchingUp && !quietCatchup),
+    loadEarlierFailed: earlierFailed || catchupFailed,
     reconnectPhase,
     catchupFailed,
     catchingUp,

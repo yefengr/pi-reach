@@ -305,6 +305,28 @@ export async function mergeTimelineEvents(scope: TimelineScope, events: readonly
   });
 }
 
+/** 本地已保存的序号最大的正式事件；没有带序号的记录时为 null。 */
+export async function latestTimelineEvent(scope: TimelineScope): Promise<TimelineEvent | null> {
+  const latest = await getPwaDatabase().events.where("[deviceId+endpointId+sessionId+eventSeq]")
+    .between([...scopeWhere(scope), Dexie.minKey], [...scopeWhere(scope), Dexie.maxKey], true, true)
+    .last();
+  return latest?.event ?? null;
+}
+
+/** 删除序号高于 headSeq 的记录：Pi 切换分支后序号回退，留下的是旧分支内容。会话摘要随之更新。 */
+export async function discardTimelineEventsAfter(scope: TimelineScope, headSeq: number): Promise<void> {
+  const db = getPwaDatabase();
+  await db.transaction("rw", [db.events, db.sessions], async () => {
+    const removed = await db.events.where("[deviceId+endpointId+sessionId+eventSeq]")
+      .between([...scopeWhere(scope), headSeq + 1], [...scopeWhere(scope), Dexie.maxKey], true, true)
+      .delete();
+    if (removed === 0) return;
+    const existingSession = await db.sessions.get(makeTimelineScopeId(scope));
+    const eventCount = await db.events.where("[deviceId+endpointId+sessionId]").equals(scopeWhere(scope)).count();
+    await db.sessions.put(await summarizeStoredSession(scope, eventCount, existingSession));
+  });
+}
+
 export async function replaceTimelineEvents(scope: TimelineScope, events: readonly TimelineEvent[]): Promise<void> {
   const db = getPwaDatabase();
   const incoming = scopedEvents(scope, events).map((item) => toRecord(scope, item.event));

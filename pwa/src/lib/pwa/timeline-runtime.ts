@@ -79,8 +79,11 @@ export type TimelineLivePlan = {
   endSeq: number;
   earliestSeq: number | null;
 };
-/** previewMatched：握手确认了本地预览的同一会话，后续补齐只是接上最新记录。 */
-export type TimelineLivePreparation = { change: TimelineRuntimeChange; plan: TimelineLivePlan; previewMatched: boolean };
+/**
+ * previewMatched：握手确认了本地预览的同一会话，后续补齐只是接上最新记录。
+ * sequenceRegressed：同一会话的最新序号低于已保留的记录，本地投影已过期，须权威替换而非合并。
+ */
+export type TimelineLivePreparation = { change: TimelineRuntimeChange; plan: TimelineLivePlan; previewMatched: boolean; sequenceRegressed: boolean };
 /** 本地缓存预览所属的会话；持久化历史不含 runtime，按电脑、Pi 与会话识别。 */
 export type TimelinePreviewTarget = { deviceId: string; endpointId: string; sessionId: string };
 type Pending = TimelinePending & { scope: TimelineScope; insertionRejected?: boolean };
@@ -182,18 +185,21 @@ export class TimelineRuntime {
     const safeHeadSeq = isHeadSequence(headSeq) ? headSeq : 0;
     const canAppend = isHeadSequence(headSeq) && this.replacement === null && (previewMatched || this.scope === null && this.events.size === 0 && this.unknown.length === 0 || isSameLiveScope(this.scope, scope));
     const retained = this.contiguousFormalRange();
+    const sameSession = previewMatched || (this.scope !== null && this.scope.deviceId === scope.deviceId
+      && this.scope.endpointId === scope.endpointId && this.scope.sessionId === scope.sessionId);
+    const sequenceRegressed = sameSession && retained !== null && safeHeadSeq < retained.maxSeq;
     if (canAppend && !retained && safeHeadSeq === 0) {
       this.clearTransient(true);
       this.scope = scope;
       this.liveHeadSeq = 0;
-      return { change: this.change(), plan: { mode: "append", startSeq: null, endSeq: 0, earliestSeq: null }, previewMatched };
+      return { change: this.change(), plan: { mode: "append", startSeq: null, endSeq: 0, earliestSeq: null }, previewMatched, sequenceRegressed };
     }
     if (canAppend && retained && safeHeadSeq >= retained.maxSeq) {
       this.clearTransient(true);
       this.scope = scope;
       this.liveHeadSeq = safeHeadSeq;
       const gap = safeHeadSeq - retained.maxSeq;
-      if (gap <= TIMELINE_RECENT_LIMIT) return { change: this.change(), plan: { mode: "append", startSeq: gap === 0 ? null : retained.maxSeq + 1, endSeq: safeHeadSeq, earliestSeq: retained.minSeq }, previewMatched };
+      if (gap <= TIMELINE_RECENT_LIMIT) return { change: this.change(), plan: { mode: "append", startSeq: gap === 0 ? null : retained.maxSeq + 1, endSeq: safeHeadSeq, earliestSeq: retained.minSeq }, previewMatched, sequenceRegressed };
     }
 
     this.replacement ??= createTimelineReplacement(this.events.values());
@@ -203,7 +209,7 @@ export class TimelineRuntime {
     this.scope = scope;
     this.liveHeadSeq = safeHeadSeq;
     const startSeq = safeHeadSeq === 0 ? null : Math.max(1, safeHeadSeq - TIMELINE_RECENT_LIMIT + 1);
-    return { change: this.change(), plan: { mode: "replace", startSeq, endSeq: safeHeadSeq, earliestSeq: startSeq }, previewMatched };
+    return { change: this.change(), plan: { mode: "replace", startSeq, endSeq: safeHeadSeq, earliestSeq: startSeq }, previewMatched, sequenceRegressed };
   }
   cancelReplacement(): TimelineRuntimeChange {
     if (!this.replacement) return this.change();

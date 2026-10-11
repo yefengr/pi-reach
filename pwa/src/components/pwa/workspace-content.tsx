@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { Button } from "@mantine/core";
 import { ChevronRight, Computer, History, Link2, Radio } from "lucide-react";
@@ -9,6 +9,9 @@ import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_PAGE_SIZE } from "@/lib/pwa/timeline-history-loader";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { useI18n } from "@/lib/i18n";
+import { useDelayedVisibility } from "./use-delayed-visibility";
+
+export { useDelayedVisibility };
 
 const PAIR_COMMAND = "/pi-reach pair";
 
@@ -34,11 +37,28 @@ type HistoryWorkspaceProps = {
   onBackToLive?: () => void;
 };
 
-/** 长历史先渲染最近一段，向前按页展开，避免一次渲染整个会话卡住界面；交互与在线会话的「加载更多」一致。 */
+/** 本地记录按序号排列后的完整性：首条之前和中间缺少的区间都未保存在此浏览器。 */
+function savedRangeGaps(items: readonly TimelineViewItem[]): { gapBefore: Set<string>; missingStart: boolean } {
+  const gapBefore = new Set<string>();
+  let previous: number | null = null;
+  let missingStart = false;
+  for (const item of items) {
+    if (item.kind !== "event" || item.event.event_seq === undefined) continue;
+    const sequence = item.event.event_seq;
+    if (previous === null) missingStart = sequence > 1;
+    else if (sequence > previous + 1) gapBefore.add(item.event.event_id);
+    previous = sequence;
+  }
+  return { gapBefore, missingStart };
+}
+
+/** 长历史先渲染最近一段，接近顶部时按页向前展开，避免一次渲染整个会话卡住界面；交互与在线会话的向前加载一致。 */
 export function HistoryWorkspace({ items, loading = false, restore = null, visibleCountRef, listRef, bottomSentinelRef, onBackToLive }: HistoryWorkspaceProps) {
   const { t } = useI18n();
   const [visibleCount, setVisibleCount] = useState(() => Math.max(restore?.visibleCount ?? 0, TIMELINE_RECENT_LIMIT));
   const visibleItems = useMemo(() => items.slice(-visibleCount), [items, visibleCount]);
+  const { gapBefore, missingStart } = useMemo(() => savedRangeGaps(items), [items]);
+  const hasEarlier = items.length > visibleCount;
   const skeletonVisible = useDelayedVisibility(loading);
   const positionedRef = useRef(false);
   const prependAnchorRef = useRef<number | null>(null);
@@ -66,7 +86,7 @@ export function HistoryWorkspace({ items, loading = false, restore = null, visib
     setVisibleCount((count) => count + TIMELINE_PAGE_SIZE);
   };
   return <>
-    <MessageList items={visibleItems} projectionItems={items} hasEarlier={items.length > visibleCount} onLoadEarlier={loadEarlier} earlierLocal listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />
+    <MessageList items={visibleItems} projectionItems={items} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier} earlierLocal gapBefore={gapBefore} topNotice={!hasEarlier && missingStart ? t.timeline.earlierNotSaved : null} listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />
     <div className="pwa-chat-footer">
       <div className="pwa-read-only-bar" role="note">
         <span>{t.workspace.readOnlyNote}</span>
@@ -127,24 +147,6 @@ export function ChoosePiWorkspace({ endpoints, completedEndpointIds, onSelect }:
       {ordered.map((endpoint) => <OnlinePiRow key={endpoint.id} endpoint={endpoint} current={false} completed={completedEndpointIds?.has(endpoint.endpointId) ?? false} onSelect={() => onSelect(endpoint.endpointId)} trailing={<ChevronRight size={16} aria-hidden="true" />} />)}
     </div>
   </div>;
-}
-
-/** 300ms 内完成不显示加载态；一旦显示，至少保持 500ms。 */
-export function useDelayedVisibility(active: boolean, delay = 300, minimum = 500): boolean {
-  const [visible, setVisible] = useState(false);
-  const [shownAt, setShownAt] = useState<number | null>(null);
-  useEffect(() => {
-    if (active && !visible) {
-      const timer = window.setTimeout(() => { setVisible(true); setShownAt(Date.now()); }, delay);
-      return () => window.clearTimeout(timer);
-    }
-    if (!active && visible) {
-      const remaining = Math.max(0, minimum - (Date.now() - (shownAt ?? 0)));
-      const timer = window.setTimeout(() => { setVisible(false); setShownAt(null); }, remaining);
-      return () => window.clearTimeout(timer);
-    }
-  }, [active, delay, minimum, shownAt, visible]);
-  return visible;
 }
 
 /** 打开会话时按真实消息布局排 3 行骨架，完成后原位替换；可见时机由调用方的 useDelayedVisibility 决定。 */

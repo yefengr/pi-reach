@@ -19,6 +19,8 @@ type Deferred<T> = {
 };
 type ActiveRequest = {
   id: string;
+  /** 发出请求时的 leaf；响应须与之一致。 */
+  leafId: string | null;
   range: SequenceRange;
   assembler: HistoryWindowAssembler;
   deferred: Deferred<HistoryWindowResult>;
@@ -47,6 +49,8 @@ export type TimelineHistoryLoaderOptions = {
   onState: (state: { hasEarlier: boolean; loading: boolean }) => void;
   onError: (message: string) => void;
   requestId?: () => string;
+  /** 发请求时读取的当前 leaf：实时事件会推进 tip，Extension 按 Pi 当前 leaf 校验，沿用握手时的 leaf 会被当作分支变化。 */
+  currentLeafId?: () => string | null;
   timeoutMs?: number;
 };
 
@@ -114,8 +118,11 @@ export class TimelineHistoryLoader {
   private readonly headSeq: number;
   private readonly timeoutMs: number;
   private readonly requestId: () => string;
+  private readonly currentLeafId: () => string | null;
   private boundary: number;
   private active: PageOperation | null = null;
+  // 正在进行的单条核对；期间请求的分页排到其后执行，不复用核对结果。
+  private verification: Promise<unknown> | null = null;
   private disposed = false;
   private token = 0;
 
@@ -128,6 +135,7 @@ export class TimelineHistoryLoader {
     this.headSeq = options.headSeq;
     this.boundary = options.boundary ?? options.headSeq + 1;
     this.requestId = options.requestId ?? defaultRequestId;
+    this.currentLeafId = options.currentLeafId ?? (() => this.scope.leafId);
     this.timeoutMs = options.timeoutMs !== undefined && Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
       ? options.timeoutMs
       : DEFAULT_TIMEOUT_MS;
@@ -150,7 +158,48 @@ export class TimelineHistoryLoader {
     return this.loadPage({ start, end });
   }
 
+  /**
+   * 向 Extension 取单个序号的权威事件 ID，用于核对本地缓存是否仍属于当前分支。
+   * 不读本地缓存、不持久化、不改变分页边界，也不切换加载状态；失败或被取消时返回 null。
+   */
+  fetchEventId(sequence: number): Promise<string | null> {
+    if (this.disposed || this.active || !isPositiveSequence(sequence) || sequence > this.headSeq) return Promise.resolve(null);
+    const page: PageOperation = {
+      token: ++this.token,
+      page: { start: sequence, end: sequence },
+      events: new Map(),
+      eventSequences: new Map(),
+      cancelled: createDeferred<void>(),
+      promise: Promise.resolve(false),
+      request: null,
+    };
+    this.active = page;
+    const result = (async () => {
+      try {
+        const response = await this.requestRange(page, page.page);
+        if (response === CANCELLED || !this.isCurrent(page)) return null;
+        this.acceptResponse(page, page.page, response);
+        return page.events.get(sequence)?.event_id ?? null;
+      } catch {
+        return null;
+      } finally {
+        if (this.active === page) this.active = null;
+      }
+    })();
+    page.promise = result.then(() => false);
+    const verification = result.finally(() => {
+      if (this.verification === verification) this.verification = null;
+    });
+    this.verification = verification;
+    return result;
+  }
+
   private loadPage(range: SequenceRange): Promise<boolean> {
+    const verification = this.verification;
+    if (verification) {
+      this.emitState(true);
+      return verification.then(() => this.disposed ? false : this.loadPage(range));
+    }
     if (this.active) return this.active.promise;
 
     const page: PageOperation = {
@@ -185,7 +234,7 @@ export class TimelineHistoryLoader {
     if (
       frame.target_channel_id !== this.scope.channelId
       || frame.session_id !== this.scope.sessionId
-      || frame.leaf_id !== this.scope.leafId
+      || frame.leaf_id !== request.leafId
     ) return false;
 
     const result = request.assembler.accept(frame);
@@ -261,10 +310,12 @@ export class TimelineHistoryLoader {
   private async requestRange(page: PageOperation, range: SequenceRange): Promise<HistoryWindowResult | Cancelled> {
     const requestId = this.requestId();
     if (!requestId) throw new TimelineHistoryLoaderError("Could not create a history request.");
+    const leafId = this.currentLeafId();
     const request: ActiveRequest = {
       id: requestId,
+      leafId,
       range,
-      assembler: new HistoryWindowAssembler(requestId, { session_id: this.scope.sessionId, leaf_id: this.scope.leafId }),
+      assembler: new HistoryWindowAssembler(requestId, { session_id: this.scope.sessionId, leaf_id: leafId }),
       deferred: createDeferred<HistoryWindowResult>(),
       settled: false,
       timer: null,
@@ -277,7 +328,7 @@ export class TimelineHistoryLoader {
       id: request.id,
       channel_id: this.scope.channelId,
       session_id: this.scope.sessionId,
-      leaf_id: this.scope.leafId,
+      leaf_id: leafId,
       before: range.end + 1,
       limit: range.end - range.start + 1,
     };

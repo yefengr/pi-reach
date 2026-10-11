@@ -1,8 +1,8 @@
 import { useMemo, type RefObject } from "react";
 import { Button } from "@mantine/core";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 import { AssistantBlocks, MarkdownContent, ThinkingContent } from "./timeline-content";
-import { ConversationTimeline } from "./conversation-timeline";
+import { ConversationTimeline, GapNotice } from "./conversation-timeline";
 import { useTimelineEnterFade } from "./use-timeline-enter-fade";
 import "./timeline-reconnect.css";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
@@ -14,12 +14,20 @@ import { attachmentMessageKey, projectAttachmentMetadata, type TimelineAttachmen
 import { publishedFileFromEvent, type AttachmentMetadata } from "@pi-reach/protocol/session";
 import { PublishedFile, type PublishedFileRead } from "./published-file";
 import { AttachmentCards, readonlyAttachmentItems } from "./attachment-cards";
+import { useAutoLoadEarlier } from "./use-auto-load-earlier";
+import { useDelayedVisibility } from "./use-delayed-visibility";
 
 type MessageListProps = {
   items: TimelineViewItem[];
   hasEarlier: boolean;
   loadingEarlier?: boolean;
   onLoadEarlier?: () => void;
+  /** 上次向前加载失败：停止自动加载，改为显示重试，避免失败后连续重试。 */
+  loadEarlierFailed?: boolean;
+  /** 是否允许接近顶部时自动加载；在线会话仍跟随最新输出时为 false，避免打开时立即向前加载。 */
+  autoLoadEarlier?: boolean;
+  /** 这些正式事件之前缺少记录（只读历史中未保存的区间），在其前方标出。 */
+  gapBefore?: ReadonlySet<string>;
   listRef: RefObject<HTMLDivElement | null>;
   bottomSentinelRef: RefObject<HTMLDivElement | null>;
   onScroll: (nearBottom: boolean) => void;
@@ -53,6 +61,29 @@ function blockText(event: TimelineEvent | TimelinePartial): string {
 /** 发送方只为读屏标出；用户消息靠右、轻底，不显示时间。 */
 function userScreenReaderLabel(event: Extract<TimelineEvent, { kind: "user" }>, t: Messages["timeline"]): string {
   return event.origin === "extension" ? t.srRemote : t.srYou;
+}
+
+/** 时间线只显示合法发布记录，继续隐藏未知 custom、run_end 与空白 assistant；发布记录也是工具摘要的边界。 */
+function isVisibleItem(item: TimelineViewItem): boolean {
+  if (item.kind !== "event") return true;
+  const event = item.event;
+  if (event.kind === "run_end") return false;
+  if (event.kind === "custom") return publishedFileFromEvent(event) !== null;
+  return event.kind !== "assistant" || event.blocks.some((block) => block.text.trim());
+}
+
+/** 缺口标在隐藏记录上时顺延到其后第一条可见记录；其后没有可见记录时标在时间线末尾，过滤后提示不丢失。 */
+function visibleGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string> | undefined): { before?: ReadonlySet<string>; atEnd: boolean } {
+  if (!gapBefore || gapBefore.size === 0) return { before: gapBefore, atEnd: false };
+  const before = new Set<string>();
+  let pending = false;
+  for (const item of items) {
+    if (item.kind === "event" && gapBefore.has(item.event.event_id)) pending = true;
+    if (!pending || !isVisibleItem(item) || item.kind !== "event") continue;
+    before.add(item.event.event_id);
+    pending = false;
+  }
+  return { before, atEnd: pending };
 }
 
 function eventText(event: TimelineEvent): string {
@@ -114,25 +145,48 @@ function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["on
   return null;
 }
 
-export function MessageList({ items, hasEarlier, loadingEarlier, onLoadEarlier, listRef, bottomSentinelRef, onScroll, onRetryUnknown, onCancelQueued, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, projectionItems = items, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false }: MessageListProps) {
+/** 顶部的更早记录入口：加载中显示动画，失败显示重试，离线只读说明；空闲时保留按钮供键盘和无法自动触发时使用。 */
+function EarlierRecords({ loading, failed, offline, onLoad }: { loading: boolean; failed: boolean; offline: boolean; onLoad: () => void }) {
+  const { t } = useI18n();
+  const loaderVisible = useDelayedVisibility(loading);
+  // 离线时重试无法生效，连接说明优先于失败状态。
+  if (offline) return <p className="pwa-earlier">{t.timeline.earlierOffline}</p>;
+  if (failed && !loading) return <div className="pwa-earlier" role="status"><span>{t.timeline.loadEarlierFailed}</span><Button className="pwa-earlier-button" variant="transparent" color="piReach" size="compact-sm" type="button" onClick={onLoad} aria-label={t.timeline.retryEarlier}>{t.common.retry}</Button></div>;
+  if (loading || loaderVisible) return <div className="pwa-earlier" aria-busy="true">
+    <span className="pwa-sr-only" role="status">{t.timeline.loadingRecords}</span>
+    {loaderVisible ? <span className="pwa-earlier-loading" aria-hidden="true"><LoaderCircle className="pwa-spin" size={16} />{t.timeline.loadingRecords}</span> : null}
+  </div>;
+  return <div className="pwa-earlier"><Button variant="default" className="pwa-earlier-button" type="button" onClick={onLoad}>{t.timeline.loadMore}</Button></div>;
+}
+
+export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadEarlier, loadEarlierFailed = false, autoLoadEarlier = true, gapBefore, listRef, bottomSentinelRef, onScroll, onRetryUnknown, onCancelQueued, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, projectionItems = items, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false }: MessageListProps) {
   const { t } = useI18n();
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
   const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
-  // 仅合法发布记录可见，继续隐藏未知 custom；发布记录也是工具摘要的边界。
-  const visibleItems = items.filter((item) => item.kind !== "event" || (item.event.kind !== "run_end" && (item.event.kind !== "custom" || publishedFileFromEvent(item.event) !== null) && (item.event.kind !== "assistant" || item.event.blocks.some((block) => block.text.trim()))));
+  const visibleItems = items.filter(isVisibleItem);
+  const gaps = useMemo(() => visibleGaps(items, gapBefore), [items, gapBefore]);
   const liveRunning = isLive && running;
   const loadingEmpty = visibleItems.length === 0 && loading;
   useTimelineEnterFade(listRef, visibleItems.length === 0, loading);
   const completions = useMemo(() => runCompletions(
     items.flatMap((item) => item.kind === "event" ? [item.event] : []),
   ), [items]);
+  const earlierOffline = !isLive && !earlierLocal;
+  const showEarlier = hasEarlier && !loadingEmpty;
+  const checkAutoLoad = useAutoLoadEarlier({
+    listRef,
+    enabled: showEarlier && autoLoadEarlier && !loadingEarlier && !loadEarlierFailed && !earlierOffline && onLoadEarlier !== undefined,
+    contentVersion: items,
+    onLoad: () => onLoadEarlier?.(),
+  });
   return <div className="pwa-message-list" data-reconnect-phase={reconnectPhase ?? undefined} ref={listRef} tabIndex={-1} onScroll={(event) => {
     const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
     onScroll(scrollHeight - scrollTop - clientHeight <= 32);
+    checkAutoLoad();
   }}>
-    {hasEarlier && !loadingEmpty ? <Button variant="default" className="pwa-earlier-button" type="button" onClick={onLoadEarlier} disabled={loadingEarlier || (!isLive && !earlierLocal)}>{loadingEarlier ? t.timeline.loadingRecords : t.timeline.loadMore}</Button> : null}
+    {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div> : <ConversationTimeline items={visibleItems} live={isLive} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

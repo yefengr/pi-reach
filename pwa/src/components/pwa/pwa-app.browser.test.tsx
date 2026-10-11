@@ -673,7 +673,10 @@ test("marks the open history row with the neutral selected background, also whil
 });
 
 test("saves session names, follows renames, and keeps replaced sessions separate", async () => {
-  await seedTimeline(numberedEvents(1));
+  // 握手的 head_seq 为 0，预置记录不带序号，避免被当作序号回退后的旧分支记录删除。
+  const unsequenced: TimelineEvent = { ...numberedEvents(1)[0]! };
+  delete unsequenced.event_seq;
+  await seedTimeline([unsequenced]);
   const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
   const relay = relayHarness.instances[0];
   const summaries = () => listTimelineSessions("owner-device-key");
@@ -691,7 +694,7 @@ test("saves session names, follows renames, and keeps replaced sessions separate
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
     const nextChannel = channelHarness.channels[1];
     nextChannel.emit(readyFrame(nextChannel, "session-2"));
-    await seedTimeline([{ ...numberedEvents(1)[0], event_id: "second-event", session_id: "session-2", leaf_id: "generation-session-2", timestamp: Date.now() + 1 }]);
+    await seedTimeline([{ ...unsequenced, event_id: "second-event", session_id: "session-2", leaf_id: "generation-session-2", timestamp: Date.now() + 1 }]);
     await expect.poll(async () => (await summaries()).find((entry) => entry.sessionId === "session-2")?.name).toBe("Second session");
     expect((await summaries()).find((entry) => entry.sessionId === "session-1")?.name).toBe("Renamed session");
 
@@ -1258,6 +1261,15 @@ function recentHistoryFrame(
   };
 }
 
+function historyRequests(channel: { frames: ClientFrame[] }): Extract<ClientFrame, { type: "session_sync" }>[] {
+  return channel.frames.filter((frame): frame is Extract<ClientFrame, { type: "session_sync" }> => frame.type === "session_sync");
+}
+/** 补齐后会核对本地原最新一条是否仍在当前分支；回应它，并确认请求只取这一条。 */
+async function answerBranchCheck(channel: { channelId: string; frames: ClientFrame[]; emit: (frame: unknown) => void }, sessionId: string, event: TimelineEvent) {
+  await vi.waitFor(() => expect(historyRequests(channel).at(-1)).toMatchObject({ before: event.event_seq! + 1, limit: 1 }));
+  channel.emit(recentHistoryFrame(channel, sessionId, [event]));
+}
+
 function numberedEvents(count: number, first = 1): TimelineEvent[] {
   return Array.from({ length: count }, (_, index) => ({
     event_id: `event-${first + index}`, event_seq: first + index, session_id: "session-1", leaf_id: "generation-session-1",
@@ -1366,7 +1378,9 @@ test.each([
     const channel = channelHarness.channels[0];
     channel.emit(readyFrame(channel, "session-1", headSeq));
     await expect.poll(() => document.querySelectorAll(".pwa-message-list article").length).toBe(expected);
-    expect(channel.frames.some((frame) => frame.type === "session_sync")).toBe(false);
+    // 窗口取自本地缓存，只额外核对本地最新一条是否仍在当前分支。
+    if (headSeq > 0) await answerBranchCheck(channel, "session-1", numberedEvents(headSeq).at(-1)!);
+    expect(historyRequests(channel)).toHaveLength(headSeq === 0 ? 0 : 1);
     expect(vi.mocked(loadTimeline)).toHaveBeenCalledTimes(headSeq === 0 ? 0 : 1);
     if (first) await expect.element(screen.getByText(first, { exact: true }).first()).toBeVisible();
     if (hasEarlier) await expect.element(screen.getByRole("button", { name: "Load more", exact: true })).toBeVisible();
@@ -1429,6 +1443,7 @@ test("reconnecting keeps a small-gap live view mounted and catches up in place",
     if (!relay || !firstChannel) throw new Error("Expected an initial Relay and session channel.");
     firstChannel.emit(readyFrame(firstChannel, "session-1", 80));
     await expect.poll(() => document.querySelectorAll(".pwa-message-list article").length).toBe(30);
+    await answerBranchCheck(firstChannel, "session-1", numberedEvents(80).at(-1)!);
     emitEvent(firstChannel, numberedEvents(1, 81)[0]);
     await expect.poll(() => document.querySelectorAll(".pwa-message-list article").length).toBe(31);
     const listBeforeReconnect = document.querySelector(".pwa-message-list");
@@ -1459,7 +1474,8 @@ test("reconnecting keeps a small-gap live view mounted and catches up in place",
     resumedChannel.emit(readyFrame(resumedChannel, "session-1", 81));
     await expect.poll(() => document.querySelectorAll(".pwa-message-list article").length).toBe(31);
     expect(document.querySelector(".pwa-message-list")).toBe(listBeforeReconnect);
-    expect(resumedChannel.frames.some((frame) => frame.type === "session_sync")).toBe(false);
+    await answerBranchCheck(resumedChannel, "session-1", numberedEvents(1, 81)[0]!);
+    expect(historyRequests(resumedChannel)).toHaveLength(1);
     emitEvent(resumedChannel, numberedEvents(1, 82)[0]);
     await expect.poll(() => document.querySelectorAll(".pwa-message-list article").length).toBe(32);
     const contents = document.querySelector(".pwa-message-list")!.textContent;
@@ -1488,22 +1504,50 @@ test.each([[1280, 900], [390, 844]])("fills recent and earlier missing ranges wi
     expect([recentRequest.before, recentRequest.limit]).toEqual([161, 2]);
     channel.emit(recentHistoryFrame(channel, "session-1", numberedEvents(2, 159)));
     await expect.poll(() => list.querySelectorAll("article").length).toBe(31);
+    await answerBranchCheck(channel, "session-1", all.find((event) => event.event_seq === 158)!);
     const live = await timelineTextElement(list, "Record 161");
     const button = screen.getByRole("button", { name: "Load more", exact: true });
     button.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     button.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     for (const expected of [[82, 1], [116, 1]] as const) {
-      await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(expected[0] === 82 ? 2 : 3));
+      await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(expected[0] === 82 ? 3 : 4));
       const request = channel.frames.filter((frame): frame is Extract<ClientFrame, { type: "session_sync" }> => frame.type === "session_sync").at(-1)!;
       expect([request.before, request.limit]).toEqual(expected);
       channel.emit(recentHistoryFrame(channel, "session-1", all.filter((event) => event.event_seq! < request.before! && event.event_seq! >= request.before! - request.limit!)));
     }
     await expect.poll(() => list.querySelectorAll("article").length).toBe(111);
     await expect.poll(() => live.getBoundingClientRect().bottom).toBeGreaterThan(list.getBoundingClientRect().top);
-    await button.click();
+    // 直接触发按钮：定位器点击会先滚到顶部，自动加载可能已抢先开始；两条路径都只能加载一次。
+    button.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await expect.poll(() => list.querySelectorAll("article").length).toBe(161);
-    expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(3);
+    expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(4);
     await expect.element(button).not.toBeInTheDocument();
+  } finally { await screen.unmount(); }
+});
+
+test("recovers like a branch reset when saved records belong to an abandoned branch", async () => {
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const branch = numberedEvents(4).map((event) => ({ ...event, event_id: `branch-${event.event_seq}`, blocks: [{ type: "text" as const, text: `Branch ${event.event_seq}` }] }));
+  try {
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1", 4));
+    await vi.waitFor(() => expect(historyRequests(channel).at(-1)).toMatchObject({ before: 5, limit: 1 }));
+    channel.emit(recentHistoryFrame(channel, "session-1", branch.slice(3)));
+    await expect.poll(listText).toContain("Branch 4");
+    // 核对第 3 条：本地是旧分支的记录，按 branch reset 重新握手。
+    await vi.waitFor(() => expect(historyRequests(channel).at(-1)).toMatchObject({ before: 4, limit: 1 }));
+    channel.emit(recentHistoryFrame(channel, "session-1", branch.slice(2, 3)));
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+
+    const restarted = channelHarness.channels[1]!;
+    restarted.emit(readyFrame(restarted, "session-1", 4));
+    await vi.waitFor(() => expect(historyRequests(restarted).at(-1)).toMatchObject({ before: 5, limit: 4 }));
+    restarted.emit(recentHistoryFrame(restarted, "session-1", branch));
+    await expect.poll(listText).toContain("Branch 1");
+    expect(listText()).not.toContain("Record 1");
+    // 本地旧分支记录被整段替换，不与新分支拼接。
+    await vi.waitFor(async () => expect((await (await openPwaDatabase()).events.toArray()).map((record) => record.eventId).sort()).toEqual(branch.map((event) => event.event_id).sort()));
   } finally { await screen.unmount(); }
 });
 
@@ -1515,10 +1559,12 @@ test("a failed recent-window request releases loading and retries the same range
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(1));
     const first = channel.frames.find((frame) => frame.type === "session_sync")!;
     channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: first.id, code: "internal_error", message: "History unavailable" });
-    await expect.element(screen.getByRole("button", { name: "Load more", exact: true })).toBeEnabled();
+    // 失败后停止自动加载，顶部改为说明与重试。
+    await expect.element(screen.getByText("Couldn't load earlier records")).toBeVisible();
     expect(document.querySelectorAll(".pwa-message-list article")).toHaveLength(0);
     await expect.element(screen.getByText("Could not load the conversation. Try again.")).toBeVisible();
-    await screen.getByRole("button", { name: "Load more", exact: true }).click();
+    expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(1);
+    await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(2));
     const requests = channel.frames.filter((frame) => frame.type === "session_sync");
     expect(requests.map((frame) => [frame.before, frame.limit])).toEqual([[81, 30], [81, 30]]);
@@ -3164,8 +3210,9 @@ test("switching Pi removes the previous session at once, loads behind a skeleton
     expect(returned.frames.some((frame) => frame.type === "session_hello")).toBe(true);
     returned.emit(readyFrame(returned, "session-1", 3));
     await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeEnabled();
-    await flushMicrotasks();
-    expect(returned.frames.some((frame) => frame.type === "session_sync")).toBe(false);
+    // 确认仍是同一会话后不重新下载，只核对本地最新一条是否仍在当前分支。
+    await answerBranchCheck(returned, "session-1", numberedEvents(3)[2]!);
+    expect(historyRequests(returned)).toHaveLength(1);
     expect(listText()).toContain("Record 3");
   } finally { await screen.unmount(); }
 });
@@ -3214,17 +3261,18 @@ test("opens long saved history behind a loading state with its latest page and k
     expect(screen.getByText("No records to display.", { exact: true }).query()).toBeNull();
     release();
     await expect.poll(records).toBe(30);
-    await screen.getByRole("button", { name: "Load more", exact: true }).click();
+    screen.getByRole("button", { name: "Load more", exact: true }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await expect.poll(records).toBe(110);
 
+    // 离顶部足够远，恢复位置时不触发自动展开。
     const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
-    list.scrollTop = 200;
+    list.scrollTop = 1200;
     list.dispatchEvent(new Event("scroll", { bubbles: true }));
     await selectPi("Test Pi");
     await expect.poll(records).toBe(0);
     await openHistoryRow();
     await expect.poll(records).toBe(110);
-    await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(200);
+    await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(1200);
   } finally { release(); await screen.unmount(); }
 });
 
@@ -3265,10 +3313,10 @@ test("catching up after a saved preview appends the newest records without a top
     const returned = channelHarness.channels[1]!;
     returned.emit(readyFrame(returned, "session-1", 5));
     await expect.poll(() => returned.frames.some((frame) => frame.type === "session_sync")).toBe(true);
-    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+    expect(document.querySelector(".pwa-earlier")).toBeNull();
     returned.emit(recentHistoryFrame(returned, "session-1", numberedEvents(2, 4)));
     await expect.poll(listText).toContain("Record 5");
-    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+    expect(document.querySelector(".pwa-earlier")).toBeNull();
   } finally { await screen.unmount(); }
 });
 

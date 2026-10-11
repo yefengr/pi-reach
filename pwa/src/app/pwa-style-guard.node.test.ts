@@ -87,7 +87,6 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-nav-session, .pwa-root .pwa-history-row", property: "margin", values: [2], reason: NAV },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-nav-session, .pwa-root .pwa-history-row", property: "padding", values: [6], reason: NAV },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-nav-session .pwa-nav-link-body, .pwa-root .pwa-history-row .pwa-nav-link-body", property: "gap", values: [2], reason: TEXT_PAIR },
-  { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-history-more", property: "margin", values: [2], reason: NAV },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-sidebar-foot, .pwa-root .pwa-session-sheet-foot", property: "gap", values: [2], reason: NAV },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-sidebar-foot .pwa-button, .pwa-root .pwa-session-sheet-foot .pwa-button", property: "padding-inline", values: [10], reason: TEXT_BUTTON },
   { file: "app/workspace-shell.css", selector: ".pwa-session-info", property: "padding", values: [10], reason: "会话信息弹层是只读阅读区，保留 8/10 内边距" },

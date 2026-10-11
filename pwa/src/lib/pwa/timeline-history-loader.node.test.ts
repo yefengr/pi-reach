@@ -12,7 +12,7 @@ type HistoryChunkFrame = Extract<ServerFrame, { type: "session_history_chunk" }>
 type SessionSyncFrame = Extract<ClientFrame, { type: "session_sync" }>;
 type HarnessOverrides = Partial<Pick<
   TimelineHistoryLoaderOptions,
-  "headSeq" | "boundary" | "send" | "load" | "persist" | "requestId" | "timeoutMs"
+  "headSeq" | "boundary" | "send" | "load" | "persist" | "requestId" | "timeoutMs" | "currentLeafId"
 >>;
 
 const scope: TimelineScope = {
@@ -263,4 +263,76 @@ test("returns false without callbacks when a reconnect range is cancelled", asyn
   await flushMicrotasks();
   expect(harness.onPage).not.toHaveBeenCalled();
   expect(harness.onError).not.toHaveBeenCalled();
+});
+
+test("fetches one authoritative event id without reading the cache, persisting, or changing the boundary", async () => {
+  const load = vi.fn(async () => numberedEvents(1, 80));
+  const persist = vi.fn(async () => {});
+  const harness = createHarness({ load, persist });
+
+  const fetched = harness.loader.fetchEventId(50);
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent)).toEqual([expect.objectContaining({ id: "request-1", before: 51, limit: 1 })]);
+  expect(harness.loader.receive(historyFrame("request-1", [{ ...numberedEvents(50, 1)[0]!, event_id: "remote-50" }]))).toBe(true);
+  expect(await fetched).toBe("remote-50");
+  expect(load).not.toHaveBeenCalled();
+  expect(persist).not.toHaveBeenCalled();
+  expect(harness.onPage).not.toHaveBeenCalled();
+  expect(harness.onState).not.toHaveBeenCalledWith(expect.objectContaining({ loading: true }));
+  expect(harness.loader.hasEarlier).toBe(true);
+
+  // 核对结束后可照常从缓存加载。
+  expect(await harness.loader.loadEarlier()).toBe(true);
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(harness.onPage).toHaveBeenCalledTimes(1);
+});
+
+test("returns null for an event id request that fails, times out, or is out of range", async () => {
+  vi.useFakeTimers();
+  const harness = createHarness();
+  expect(await harness.loader.fetchEventId(81)).toBeNull();
+  expect(await harness.loader.fetchEventId(0)).toBeNull();
+
+  const failed = harness.loader.fetchEventId(10);
+  await flushMicrotasks();
+  harness.loader.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: "request-1", code: "internal_error", message: "History unavailable" });
+  expect(await failed).toBeNull();
+
+  const timedOut = harness.loader.fetchEventId(10);
+  await flushMicrotasks();
+  await vi.advanceTimersByTimeAsync(25);
+  expect(await timedOut).toBeNull();
+  expect(harness.onError).not.toHaveBeenCalled();
+});
+
+test("queues an earlier page requested during an event id check instead of dropping it", async () => {
+  const harness = createHarness();
+  const check = harness.loader.fetchEventId(50);
+  await flushMicrotasks();
+  const page = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  // 核对期间先显示加载中，分页请求等核对结束后再发出。
+  expect(sessionSyncFrames(harness.sent)).toHaveLength(1);
+  expect(harness.onState).toHaveBeenLastCalledWith({ hasEarlier: true, loading: true });
+
+  harness.loader.receive(historyFrame("request-1", numberedEvents(50, 1)));
+  expect(await check).toBe("event-50");
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent).at(-1)).toMatchObject({ id: "request-2", before: 81, limit: 80 });
+  harness.loader.receive(historyFrame("request-2"));
+  expect(await page).toBe(true);
+  expect(harness.onPage).toHaveBeenCalledTimes(1);
+});
+
+test("sends each history request with the current leaf and accepts only responses for that leaf", async () => {
+  let leaf = "generation";
+  const harness = createHarness({ currentLeafId: () => leaf });
+  leaf = "advanced";
+  const page = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent)).toEqual([expect.objectContaining({ leaf_id: "advanced", before: 81, limit: 80 })]);
+  // 旧 leaf 的响应不被接受。
+  expect(harness.loader.receive(historyFrame("request-1"))).toBe(false);
+  expect(harness.loader.receive({ ...historyFrame("request-1"), leaf_id: "advanced" })).toBe(true);
+  expect(await page).toBe(true);
 });

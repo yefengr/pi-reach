@@ -111,7 +111,6 @@
 .pwa-root .pwa-pi-directory { color: var(--pwa-secondary); }
 .pwa-root .pwa-pi-status { display: inline-flex; align-items: center; gap: 4px; }
 .pwa-root .pwa-pi-status-running { color: var(--pwa-running); }
-.pwa-root .pwa-history-more { margin: 2px 0 0; }
 .pwa-notice-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-accent); }
 
 .pwa-root .pwa-sidebar-foot,

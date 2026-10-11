@@ -11,15 +11,16 @@ import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { MessageList } from "@/components/pwa/message-list";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
-import { loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
+import { discardTimelineEventsAfter, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
 
 vi.mock("./timeline-store", () => ({
-  loadTimeline: vi.fn(async () => []), mergeTimelineEvents: vi.fn(async () => {}), replaceTimelineEvents: vi.fn(async () => {}),
+  loadTimeline: vi.fn(async () => []), mergeTimelineEvents: vi.fn(async () => {}), replaceTimelineEvents: vi.fn(async () => {}), latestTimelineEvent: vi.fn(async () => null), discardTimelineEventsAfter: vi.fn(async () => {}),
   TimelineStoreConflictError: class extends Error {},
 }));
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
 type Timeline = ReturnType<typeof useLiveTimeline>;
 const report = vi.fn();
+const branchMismatch = vi.fn();
 let api: Timeline;
 // 与应用一致：endpoint working 只控制运行/等待展示，不决定一轮是否结束。
 let piRunning = false;
@@ -27,7 +28,7 @@ function Harness() {
   const channelRef = useRef<PeerChannel | null>(null);
   const timeline = useLiveTimeline({ channelRef, enabled: true, reportHistoryFailure: report });
   useLayoutEffect(() => { api = timeline; });
-  return <PwaUiProvider><div className="pwa-root"><div style={{ display: "flex", flexDirection: "column", height: 400 }}><MessageList items={timeline.items} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} onLoadEarlier={timeline.loadEarlier} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} reconnectPhase={timeline.reconnectPhase} running={piRunning} /></div></div></PwaUiProvider>;
+  return <PwaUiProvider><div className="pwa-root"><div style={{ display: "flex", flexDirection: "column", height: 400 }}><MessageList items={timeline.items} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} onLoadEarlier={timeline.loadEarlier} loadEarlierFailed={timeline.loadEarlierFailed} autoLoadEarlier={!timeline.followingOutput} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} reconnectPhase={timeline.reconnectPhase} running={piRunning} /></div></div></PwaUiProvider>;
 }
 function events(start: number, end: number, target = scope): TimelineEvent[] {
   return Array.from({ length: end - start + 1 }, (_, index) => {
@@ -37,7 +38,7 @@ function events(start: number, end: number, target = scope): TimelineEvent[] {
 }
 function start(headSeq: number, target = scope) {
   const frames: ClientFrame[] = [];
-  api.startLive({ scope: target, headSeq, send: (frame) => { frames.push(frame); return true; }, onHistoryChanged: () => {} });
+  api.startLive({ scope: target, headSeq, send: (frame) => { frames.push(frame); return true; }, onHistoryChanged: () => {}, onBranchMismatch: branchMismatch });
   return frames;
 }
 function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) {
@@ -47,7 +48,7 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
   expect(api.historyLoaderRef.current?.receive(frame)).toBe(true);
 }
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
-afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
+afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
 
 test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and reading position at %ipx", async width => {
   await page.viewport(width, 844);
@@ -237,6 +238,7 @@ test("failed initial catchup can be retried once without losing concurrent outpu
     await expect.poll(() => frames.length).toBe(1);
     api.historyLoaderRef.current!.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: frames[0].id, code: "internal_error", message: "history failed" });
     await expect.poll(() => api.catchupFailed).toBe(true);
+    expect(api.loadEarlierFailed).toBe(true);
     api.applyTimelineChange(api.runtimeRef.current.commit(events(41, 41)[0]));
     const first = api.retryCatchup();
     const duplicate = api.retryCatchup();
@@ -246,6 +248,9 @@ test("failed initial catchup can be retried once without losing concurrent outpu
     expect(await first).toBe(true);
     await expect.poll(() => sequences().length).toBe(31);
     expect(api.catchupFailed).toBe(false);
+    // 补齐成功后顶部恢复为可自动加载，不残留失败状态。
+    await expect.poll(() => api.loadEarlierFailed).toBe(false);
+    await expect.poll(() => document.querySelector(".pwa-earlier")?.textContent).not.toContain("Couldn't load earlier records");
   } finally { await screen.unmount(); }
 });
 
@@ -274,6 +279,7 @@ test("keeps the old branch through failed persistence and commits a successful r
     api.applyTimelineChange(api.runtimeRef.current.prependHistory(events(1, 2)));
     await expect.poll(sequences).toEqual([1, 2]);
     vi.mocked(replaceTimelineEvents).mockRejectedValueOnce(new Error("quota"));
+    api.invalidateScope();
     const frames = start(3, next);
     await expect.poll(() => frames.length).toBe(1);
     api.applyTimelineChange(api.runtimeRef.current.commit(events(4, 4, next)[0]));
@@ -299,6 +305,7 @@ test("repeats the final atomic replace when realtime output arrives during persi
     api.applyTimelineChange(api.runtimeRef.current.prependHistory(events(1, 2)));
     await expect.poll(sequences).toEqual([1, 2]);
 
+    api.invalidateScope();
     const frames = start(1, next);
     await expect.poll(() => frames.length).toBe(1);
     reply(frames, events(1, 1, next), next);
@@ -322,6 +329,7 @@ test("retries an empty branch replacement after persistence fails without reques
     await expect.poll(sequences).toEqual([1, 2]);
     vi.mocked(replaceTimelineEvents).mockRejectedValueOnce(new Error("quota"));
 
+    api.invalidateScope();
     const frames = start(0, empty);
     expect(frames).toEqual([]);
     await expect.poll(() => api.catchupFailed).toBe(true);
@@ -352,5 +360,231 @@ test("reset and disconnect preserve the previous formal branch and cancel staged
     const empty = start(0, next);
     expect(empty).toEqual([]);
     await expect.poll(sequences).toEqual([]);
+  } finally { await screen.unmount(); }
+});
+
+test.each([
+  ["the same runtime after a large gap", scope],
+  ["a restarted Pi resuming the same session", { ...scope, runtimeInstanceId: "runtime-restarted", channelId: "channel-2" }],
+])("reconnecting %s merges the latest window into local history instead of replacing it", async (_label, target) => {
+  const screen = await render(<Harness />);
+  try {
+    const first = start(40);
+    await expect.poll(() => first.length).toBe(1);
+    reply(first, events(11, 40));
+    await expect.poll(() => sequences().length).toBe(30);
+    api.disconnect();
+
+    const frames = start(100, target);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(71, 100, target), target);
+    await expect.poll(sequences).toEqual(Array.from({ length: 30 }, (_, index) => 71 + index));
+    expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
+    expect(vi.mocked(mergeTimelineEvents).mock.calls.at(-1)?.[1].map((event) => event.event_seq)).toEqual(Array.from({ length: 30 }, (_, index) => 71 + index));
+  } finally { await screen.unmount(); }
+});
+
+test("a lower head for the same session still replaces the stale local projection", async () => {
+  const screen = await render(<Harness />);
+  try {
+    const first = start(40);
+    await expect.poll(() => first.length).toBe(1);
+    reply(first, events(11, 40));
+    await expect.poll(() => sequences().length).toBe(30);
+    api.disconnect();
+
+    const frames = start(20);
+    await expect.poll(() => frames.length).toBe(1);
+    expect(vi.mocked(loadTimeline)).toHaveBeenCalledTimes(1);
+    reply(frames, events(1, 20));
+    await expect.poll(() => vi.mocked(replaceTimelineEvents).mock.calls.length).toBe(1);
+    expect(vi.mocked(replaceTimelineEvents).mock.calls[0]?.[1].map((event) => event.event_seq)).toEqual(Array.from({ length: 20 }, (_, index) => 1 + index));
+  } finally { await screen.unmount(); }
+});
+
+test("auto-loads earlier history near the top only after the reader leaves the latest output, and stops after a failure", async () => {
+  const screen = await render(<Harness />);
+  const syncs = (frames: ClientFrame[]) => frames.filter((frame): frame is Extract<ClientFrame, { type: "session_sync" }> => frame.type === "session_sync");
+  const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  try {
+    const frames = start(200);
+    await expect.poll(() => syncs(frames).length).toBe(1);
+    reply(frames, events(171, 200));
+    await expect.poll(() => sequences().length).toBe(30);
+    const list = api.messageListRef.current!;
+    await expect.poll(() => list.scrollHeight - list.clientHeight - list.scrollTop).toBeLessThanOrEqual(1);
+    for (let index = 0; index < 4; index += 1) await nextFrame();
+    // 跟随最新输出时不向前加载。
+    expect(syncs(frames)).toHaveLength(1);
+
+    list.scrollTop = 0;
+    await expect.poll(() => syncs(frames).length).toBe(2);
+    expect([syncs(frames)[1]!.before, syncs(frames)[1]!.limit]).toEqual([171, 80]);
+    await expect.element(screen.getByText("Loading records…")).toBeInTheDocument();
+    reply(frames, events(91, 170));
+    await expect.poll(() => sequences().length).toBe(110);
+
+    list.scrollTop = 0;
+    await expect.poll(() => syncs(frames).length).toBe(3);
+    const failed = syncs(frames)[2]!;
+    expect(api.historyLoaderRef.current?.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: failed.id, code: "internal_error", message: "History unavailable" })).toBe(true);
+    await expect.element(screen.getByText("Couldn't load earlier records")).toBeVisible();
+    list.scrollTop = 0;
+    list.dispatchEvent(new Event("scroll"));
+    for (let index = 0; index < 4; index += 1) await nextFrame();
+    expect(syncs(frames)).toHaveLength(3);
+
+    await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
+    await expect.poll(() => syncs(frames).length).toBe(4);
+    expect([syncs(frames)[3]!.before, syncs(frames)[3]!.limit]).toEqual([91, 80]);
+
+    // 断线销毁 loader 后不保留失败状态，否则离线时仍显示无效的重试。
+    const retried = syncs(frames)[3]!;
+    expect(api.historyLoaderRef.current?.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: retried.id, code: "internal_error", message: "History unavailable" })).toBe(true);
+    await expect.poll(() => api.loadEarlierFailed).toBe(true);
+    api.disconnect();
+    await expect.poll(() => api.loadEarlierFailed).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("a cold start replaces saved records when the persisted sequence is ahead of the head", async () => {
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(100, 100)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(50);
+    await expect.poll(() => frames.length).toBe(1);
+    // 本地记录已过期：不以它们填充窗口，取得权威记录后整段替换。
+    expect(vi.mocked(loadTimeline)).not.toHaveBeenCalled();
+    reply(frames, events(21, 50));
+    await expect.poll(() => vi.mocked(replaceTimelineEvents).mock.calls.length).toBe(1);
+    expect(vi.mocked(replaceTimelineEvents).mock.calls[0]?.[1].map((event) => event.event_seq)).toEqual(Array.from({ length: 30 }, (_, index) => 21 + index));
+    expect(vi.mocked(mergeTimelineEvents)).not.toHaveBeenCalled();
+  } finally { await screen.unmount(); }
+});
+
+test("a cold start of an empty session clears saved records left from another branch", async () => {
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(5, 5)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    expect(start(0)).toEqual([]);
+    await expect.poll(() => vi.mocked(discardTimelineEventsAfter).mock.calls.length).toBe(1);
+    expect(vi.mocked(discardTimelineEventsAfter)).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: scope.sessionId }), 0);
+    expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
+  } finally { await screen.unmount(); }
+});
+
+test("checks the latest saved record against the current branch after catching up", async () => {
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    // 先照常补齐，不因核对拖慢打开。
+    expect(frames[0]).toMatchObject({ type: "session_sync", before: 81, limit: 30 });
+    reply(frames, events(51, 80));
+    await expect.poll(() => sequences().length).toBe(30);
+    await expect.poll(() => frames.length).toBe(2);
+    expect(frames[1]).toMatchObject({ type: "session_sync", before: 51, limit: 1 });
+    reply(frames, events(50, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(branchMismatch).not.toHaveBeenCalled();
+    expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
+  } finally { await screen.unmount(); }
+});
+
+test("a saved record from an abandoned branch triggers branch recovery", async () => {
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => frames.length).toBe(2);
+    reply(frames, [{ ...events(50, 50)[0]!, event_id: "new-branch-50" }]);
+    await expect.poll(() => branchMismatch.mock.calls.length).toBe(1);
+  } finally { await screen.unmount(); }
+});
+
+test("a failed branch check keeps the caught-up view without recovery", async () => {
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => frames.length).toBe(2);
+    expect(api.historyLoaderRef.current?.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: frames[1]!.id, code: "internal_error", message: "History unavailable" })).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(branchMismatch).not.toHaveBeenCalled();
+    expect(api.catchupFailed).toBe(false);
+    expect(sequences()).toHaveLength(30);
+    // 核对结束后可照常向前加载。
+    api.loadEarlier();
+    await expect.poll(() => frames.length).toBe(3);
+    expect(frames[2]).toMatchObject({ before: 51, limit: 50 });
+  } finally { await screen.unmount(); }
+});
+
+test("an earlier page requested during the branch check runs after the check", async () => {
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => frames.length).toBe(2);
+    api.loadEarlier();
+    await expect.poll(() => api.loadingEarlier).toBe(true);
+    expect(frames).toHaveLength(2);
+    reply(frames, events(50, 50));
+    await expect.poll(() => frames.length).toBe(3);
+    expect(frames[2]).toMatchObject({ before: 51, limit: 50 });
+    reply(frames, events(1, 50));
+    await expect.poll(() => sequences().length).toBe(80);
+  } finally { await screen.unmount(); }
+});
+
+function receiveLive(event: TimelineEvent) {
+  flushSync(() => receiveTimelineFrame({ protocol_version: 2, type: "timeline_event", session_id: event.session_id, leaf_id: event.leaf_id, event }, {
+    runtime: api.runtimeRef.current,
+    fragmentAssemblerRef: api.fragmentAssemblerRef,
+    applyTimelineChange: api.applyTimelineChange,
+    receiveRealtimeOutput: api.receiveRealtimeOutput,
+    setError: report,
+    setLastSyncedAt: api.setLastSyncedAt,
+  }));
+}
+
+test("history requests follow the leaf advanced by live events", async () => {
+  const screen = await render(<Harness />);
+  const advanced = { ...scope, leafId: "leaf-after-live" };
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => sequences().length).toBe(30);
+    receiveLive(events(81, 81, advanced)[0]!);
+    await expect.poll(() => sequences().length).toBe(31);
+    api.loadEarlier();
+    await expect.poll(() => frames.length).toBe(2);
+    // Extension 按 Pi 当前 leaf 校验，旧 leaf 会被当作分支变化而 reset。
+    expect(frames[1]).toMatchObject({ before: 51, limit: 50, leaf_id: advanced.leafId });
+    reply(frames, events(1, 50, advanced), advanced);
+    await expect.poll(() => sequences().length).toBe(81);
+  } finally { await screen.unmount(); }
+});
+
+test("discarding records past the head runs before live events received after the handshake are saved", async () => {
+  let resolveLatest!: (event: TimelineEvent | null) => void;
+  vi.mocked(latestTimelineEvent).mockImplementation(() => new Promise((resolve) => { resolveLatest = resolve; }));
+  const screen = await render(<Harness />);
+  try {
+    expect(start(0)).toEqual([]);
+    receiveLive(events(1, 1)[0]!);
+    await expect.poll(() => vi.mocked(mergeTimelineEvents).mock.calls.length).toBe(1);
+    resolveLatest(events(5, 5)[0]!);
+    await expect.poll(() => vi.mocked(discardTimelineEventsAfter).mock.calls.length).toBe(1);
+    // 删除旧分支记录须排在握手后新事件的保存之前，否则会连新事件一起删掉。
+    expect(vi.mocked(discardTimelineEventsAfter).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(mergeTimelineEvents).mock.invocationCallOrder[0]!);
   } finally { await screen.unmount(); }
 });
