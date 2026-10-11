@@ -520,7 +520,18 @@ test("the heading queues tools in start order, holds each briefly and never retu
   const finish = (id: string, command: string) => eventItem({ ...toolEvent, tool: "bash", event_id: id, tool_call_id: id, args: { command }, result: "ok" });
   const { update } = await liveList([run("test", "pnpm test")]);
   const current = () => groupButton().querySelector(".pwa-tool-group-current")?.textContent ?? null;
+  // 组头状态图标沿用状态语义色，不被工具行文字的 secondary 覆盖。
+  const tokenColor = (token: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${token})`;
+    document.querySelector(".pwa-root")!.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  };
+  const statusColor = () => getComputedStyle(groupButton().querySelector(".pwa-tool-group-current > .pwa-tool-status")!).color;
   expect(current()).toBe("bashpnpm test");
+  expect(statusColor()).toBe(tokenColor("--pwa-running"));
   // build 开始时 test 刚进入组头，排队等 test 停满后再显示。
   await update([run("test", "pnpm test"), run("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm test");
@@ -529,6 +540,7 @@ test("the heading queues tools in start order, holds each briefly and never retu
   await update([run("test", "pnpm test"), finish("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm build");
   expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
+  expect(statusColor()).toBe(tokenColor("--pwa-complete"));
   // 停留中的工具及其结束状态也在可访问名称里。
   expect(groupButton().getAttribute("aria-label")).toBe("Expand bash pnpm build: Complete · Ran 2 commands");
   await expect.poll(current, { timeout: 3000 }).toBeNull();
