@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { highlightCode, languageForFence } from "@/lib/pwa/code-highlight";
 import { CopyButton } from "./copy-button";
 import { Collapse } from "./collapse";
+import { markdownTableComponents } from "./markdown-table";
 import "./timeline-content.css";
 
 const PREVIEW_CHARACTERS = 2400;
@@ -37,7 +38,7 @@ const markdownComponents: Components = {
     const fence = /(?:^|\s)language-([\w+#.-]+)/.exec(code?.className ?? "")?.[1];
     return <CodeBlock text={text} language={languageForFence(fence)} label={fence?.trim().toLowerCase() || undefined} />;
   },
-  table: ({ children }) => <div className="pwa-markdown-table"><table>{children}</table></div>,
+  ...markdownTableComponents,
 };
 
 export function MarkdownContent({ text }: { text: string }) {
