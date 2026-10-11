@@ -237,8 +237,12 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       void enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => discardTimelineEventsAfter(scope, headSeq)).catch(() => {
         if (generation === contextGenerationRef.current) reportHistoryFailure("Could not update local history.");
       });
+      // 写入失败时不能跳过核对：退回握手时读到的本地最新记录，至少在本次连接内核对一次。
       checkpointReady = enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, async () => {
-        checkpoint = await ensureTimelineBranchCheckpoint(scope);
+        checkpoint = await ensureTimelineBranchCheckpoint(scope).catch(async () => {
+          const latest = await localLatest;
+          return latest?.event_seq === undefined ? null : { eventSeq: latest.event_seq, eventId: latest.event_id };
+        });
       }).catch(() => false);
     }
     setQuietCatchup(prepared.previewMatched);

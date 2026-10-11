@@ -514,6 +514,21 @@ test("a saved record from an abandoned branch triggers branch recovery", async (
   } finally { await screen.unmount(); }
 });
 
+test("a checkpoint that cannot be saved still checks the latest saved record in this connection", async () => {
+  vi.mocked(ensureTimelineBranchCheckpoint).mockRejectedValue(new Error("IndexedDB unavailable"));
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => frames.length).toBe(2);
+    expect(frames[1]).toMatchObject({ type: "session_sync", before: 51, limit: 1 });
+    reply(frames, [{ ...events(50, 50)[0]!, event_id: "new-branch-50" }]);
+    await expect.poll(() => branchMismatch.mock.calls.length).toBe(1);
+  } finally { await screen.unmount(); }
+});
+
 test("a pending checkpoint beyond the current head triggers branch recovery without a request", async () => {
   vi.mocked(ensureTimelineBranchCheckpoint).mockResolvedValue({ eventSeq: 90, eventId: "session-90" });
   const screen = await render(<Harness />);
