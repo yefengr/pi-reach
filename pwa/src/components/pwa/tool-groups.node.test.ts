@@ -54,11 +54,19 @@ describe("expansion choices", () => {
   test("the latest choice among members wins after regrouping", () => {
     const [segment] = segmentsOf([tool("a"), tool("b")]);
     const [first, second] = segment!.tools;
-    let choices = withExpansion(new Map(), first!.key, true, false);
-    choices = withExpansion(choices, second!.key, false, false);
+    let choices = withExpansion(new Map(), [first!.key], true, false);
+    choices = withExpansion(choices, [second!.key], false, false);
     expect(segmentExpansion(segment!.tools, choices)?.expanded).toBe(false);
     expect(segmentExpansion([first!], choices)?.expanded).toBe(true);
-    expect(withExpansion(new Map(), first!.key, false, true).get(first!.key)?.follow).toBe(false);
+    expect(withExpansion(new Map(), [first!.key], false, true).get(first!.key)?.follow).toBe(false);
+  });
+
+  test("every part of a split group inherits the choice made on the whole group", () => {
+    const [segment] = segmentsOf([tool("a"), tool("b"), tool("c")]);
+    const choices = withExpansion(new Map(), segment!.tools.map(entry => entry.key), true, false);
+    // 迟到的正文插入后拆成两段，两段都保持展开。
+    const parts = segmentsOf([tool("a"), text("late"), tool("b"), tool("c")]);
+    expect(parts.map(part => segmentExpansion(part.tools, choices)?.expanded)).toEqual([true, true]);
   });
 });
 
@@ -90,6 +98,19 @@ describe("timelineActivity", () => {
     expect(activity([text("a"), streaming("old"), user("next", "g2")]).result.working).toBe(true);
     // 末轮自己的流式输出仍然算正在输出。
     expect(activity([user("next", "g2"), streaming("new", "g2")]).result.working).toBe(false);
+  });
+
+  test("a fresh send marks partials left over from an idle Pi as residual", () => {
+    const pending = (queued: boolean): TimelineViewItem => ({ kind: "pending", id: "p", clientRequestId: "p", requestId: "p", text: "next", createdAt: 3, delivery: "pending", ...(queued ? { queued: true } : {}) });
+    const items = [text("a"), streaming("old"), pending(false)];
+    const list = entries(items);
+    const stale = new Set(list.filter(entry => entry.kind === "text" && entry.streaming).map(entry => entry.key));
+    // 旧轮缺少 run_end：Pi 空闲时就在的 partial，在新发送后不再抑制 Working。
+    expect(timelineActivity(list, true, true, () => false, stale).working).toBe(true);
+    // Pi 正在输出时发送：partial 不在空闲集合中，仍算正在输出。
+    expect(timelineActivity(list, true, true, () => false).working).toBe(false);
+    // 已进入 Pi 队列的消息不是新一轮的边界。
+    expect(timelineActivity(entries([text("a"), streaming("old"), pending(true)]), true, true, () => false, stale).working).toBe(false);
   });
 
   test("treats only the trailing segment of a running turn as a live tail", () => {

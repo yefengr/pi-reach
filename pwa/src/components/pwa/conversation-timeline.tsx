@@ -8,7 +8,7 @@ import { usePublishedFilesView } from "./published-files-context";
 import type { PublishedFileRead } from "./published-file";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { entryGroupId, gapEntryKeys, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
-import { observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
+import { isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
@@ -111,6 +111,14 @@ function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: Rea
   return { view, gapKeys, segments, segmentOf };
 }
 
+/** Pi 空闲期间仍在的 partial 不可能是正在进行的输出；记下它们，供新发送消息后识别旧轮残留。 */
+function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): ReadonlySet<string> {
+  const [keys, setKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const additions = idle ? entries.filter(entry => isPartialEntry(entry) && !keys.has(entry.key)) : [];
+  if (additions.length > 0) setKeys(new Set([...keys, ...additions.map(entry => entry.key)]));
+  return keys;
+}
+
 export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
   const [thinkingChoices, setThinkingChoices] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [toolChoices, setToolChoices] = useState<ReadonlyMap<string, ToolExpansion>>(() => new Map());
@@ -133,7 +141,8 @@ export function ConversationTimeline({ items, live, completions, running = false
 
   const { view, gapKeys, segments, segmentOf } = useProjectedTimeline(items, gapBefore);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
-  const activity = timelineActivity(view.entries, live, running, groupId => completions?.has(groupId) === true);
+  const idlePartials = useIdlePartials(view.entries, live && !running);
+  const activity = timelineActivity(view.entries, live, running, groupId => completions?.has(groupId) === true, idlePartials);
   // 展开的思考与工具组暂停行内自动跟随；末段运行中展开的工具组除外。工具详情由 Reader 独立持锁。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
     const choice = segmentExpansion(segment.tools, tools);
@@ -152,9 +161,9 @@ export function ConversationTimeline({ items, live, completions, running = false
     setThinkingChoices(choices);
     notifyReading(toolChoices, choices);
   };
-  // 选择记在组的锚点工具上；是否跟随在展开时确定，之后不随运行状态变化。
+  // 选择记在组内全部成员上；是否跟随在展开时确定，之后不随运行状态变化。
   const chooseSegment = (segment: ToolSegment, expanded: boolean) => {
-    const choices = withExpansion(toolChoices, segment.anchor, expanded, activity.liveTail(segment));
+    const choices = withExpansion(toolChoices, segment.tools.map(tool => tool.key), expanded, activity.liveTail(segment));
     setToolChoices(choices);
     notifyReading(choices, thinkingChoices);
   };
