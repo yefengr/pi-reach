@@ -237,6 +237,7 @@ test("failed initial catchup can be retried once without losing concurrent outpu
     await expect.poll(() => frames.length).toBe(1);
     api.historyLoaderRef.current!.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: frames[0].id, code: "internal_error", message: "history failed" });
     await expect.poll(() => api.catchupFailed).toBe(true);
+    expect(api.loadEarlierFailed).toBe(true);
     api.applyTimelineChange(api.runtimeRef.current.commit(events(41, 41)[0]));
     const first = api.retryCatchup();
     const duplicate = api.retryCatchup();
@@ -246,6 +247,9 @@ test("failed initial catchup can be retried once without losing concurrent outpu
     expect(await first).toBe(true);
     await expect.poll(() => sequences().length).toBe(31);
     expect(api.catchupFailed).toBe(false);
+    // 补齐成功后顶部恢复为可自动加载，不残留失败状态。
+    await expect.poll(() => api.loadEarlierFailed).toBe(false);
+    await expect.poll(() => document.querySelector(".pwa-earlier")?.textContent).not.toContain("Couldn't load earlier records");
   } finally { await screen.unmount(); }
 });
 

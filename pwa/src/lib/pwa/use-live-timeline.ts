@@ -304,6 +304,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     if (catchingUpRef.current || !failed || !loader || failed.generation !== contextGenerationRef.current) return false;
     catchingUpRef.current = true;
     setCatchingUp(true);
+    // 补齐失败也经 onError 记为分页失败；重试时一并清除，再次失败会重新设置。
+    setEarlierFailed(false);
 
     let succeeded = failed.range
       ? await loader.loadRange(failed.range.start, failed.range.end)
