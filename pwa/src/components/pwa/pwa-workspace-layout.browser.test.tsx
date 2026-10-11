@@ -163,6 +163,10 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
     const expand = screen.getByRole("button", { name: "Expand sidebar" });
     await expect.element(expand).toBeVisible();
     expect(Math.abs(center(expand.element()) - (safeTop + 24))).toBeLessThanOrEqual(1);
+    // 收起后主区贴到顶边，标题区按顶栏规格把状态栏高度计入自身。
+    await expect.poll(() => Math.round(document.querySelector(".pwa-main")!.getBoundingClientRect().top)).toBe(0);
+    await expect.poll(() => Math.round(titleBar.getBoundingClientRect().height)).toBe(48 + safeTop);
+    for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
@@ -241,8 +245,8 @@ test.each([
   const screen = await renderLayout({ events: [], title });
   await screen.getByRole("button", { name: "Collapse sidebar" }).click();
   const toggle = screen.getByRole("button", { name: "Expand sidebar" }).element();
-  // 主区卡片距窗口左缘 8，入口再距卡片左缘 8。
-  await expect.poll(() => Math.round(toggle.getBoundingClientRect().left)).toBe(16);
+  // 收起后主区贴边，入口距窗口左缘 8。
+  await expect.poll(() => Math.round(toggle.getBoundingClientRect().left)).toBe(8);
   await Promise.allSettled(document.getAnimations().map((animation) => animation.finished));
   const box = toggle.getBoundingClientRect();
   const name = document.querySelector<HTMLElement>(".pwa-title-bar-name")!;
@@ -272,10 +276,9 @@ test("keeps the toggle in the header band and on top throughout both sidebar tra
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       frames += 1;
       const box = toggle.getBoundingClientRect();
-      // 收起后入口随主区卡片下移 8，过渡中只在品牌行与卡片标题区之间移动。
-      expect(box.top).toBeGreaterThanOrEqual(start.top);
-      expect(box.top).toBeLessThanOrEqual(start.top + 8);
-      expect(box.bottom).toBeLessThanOrEqual(8 + 48);
+      // 品牌行与收起后的贴边标题区同高，过渡中入口只水平移动。
+      expect(Math.round(box.top)).toBe(Math.round(start.top));
+      expect(box.bottom).toBeLessThanOrEqual(48);
       expect(toggle.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
       for (const element of [...brandCopy, ...rows]) {
         if (getComputedStyle(element).visibility === "hidden") continue;
@@ -1131,7 +1134,7 @@ test("the navigation icon slides the drawer in on every open, including after re
   }
 });
 
-test("desktop main is an inset card on the panel layout while the mobile main stays flush", async () => {
+test("desktop main is an inset card beside the sidebar and flush once collapsed, while the mobile main stays flush", async () => {
   await page.viewport(1280, 844);
   const screen = await renderLayout({ events: [] });
   await expect.element(screen.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
@@ -1147,6 +1150,16 @@ test("desktop main is an inset card on the panel layout while the mobile main st
   expect(style.boxShadow).toBe("none");
   expect(getComputedStyle(layout).backgroundColor).toBe(getComputedStyle(sidebar).backgroundColor);
   expect(style.backgroundColor).not.toBe(getComputedStyle(layout).backgroundColor);
+  // 收起侧栏：主区贴满窗口，四边不留 panel 底，圆角为 0。
+  await screen.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect.element(screen.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+  await expect.poll(() => {
+    const flush = main.getBoundingClientRect();
+    return [flush.left - frame.left, flush.top - frame.top, frame.right - flush.right, frame.bottom - flush.bottom].map(Math.round);
+  }).toEqual([0, 0, 0, 0]);
+  await expect.poll(() => getComputedStyle(main).borderRadius).toBe("0px");
+  await screen.getByRole("button", { name: "Expand sidebar" }).click();
+  await expect.poll(() => Math.round(main.getBoundingClientRect().left - frame.left)).toBe(260);
   await page.viewport(390, 844);
   await expect.poll(() => getComputedStyle(main).borderRadius).toBe("0px");
   const mobile = main.getBoundingClientRect();
@@ -1179,14 +1192,16 @@ test("landscape side safe areas are avoided once by the edge-touching layers", a
     }
     const notices = getComputedStyle(document.querySelector(".pwa-main-notices")!);
     expect([notices.paddingLeft, notices.paddingRight]).toEqual(["0px", "0px"]);
-    // 收起：卡片左侧同样与窗口相距 max(8, 安全区)，展开入口位于卡片标题区左端，标题区不再叠加安全区。
+    // 收起：主区贴满窗口，入口、标题区与提示区各自避让一次安全区。
     await toggle.click();
     const expand = screen.getByRole("button", { name: "Expand sidebar" });
     await expect.element(expand).toBeVisible();
     await expect.poll(() => Math.round(expand.element().getBoundingClientRect().left)).toBe(safe + 8);
-    await expect.poll(() => Math.round(main.getBoundingClientRect().left)).toBe(safe);
-    expect(getComputedStyle(titleBar).paddingLeft).toBe("56px");
-    expect(getComputedStyle(document.querySelector(".pwa-main-notices")!).paddingLeft).toBe("0px");
+    await expect.poll(() => [main.getBoundingClientRect().left, main.getBoundingClientRect().right].map(Math.round)).toEqual([0, 844]);
+    expect(getComputedStyle(titleBar).paddingLeft).toBe(`${56 + safe}px`);
+    expect(getComputedStyle(titleBar).paddingRight).toBe(`${8 + safe}px`);
+    const collapsedNotices = getComputedStyle(document.querySelector(".pwa-main-notices")!);
+    expect([collapsedNotices.paddingLeft, collapsedNotices.paddingRight]).toEqual([`${safe}px`, `${safe}px`]);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-left");
     document.documentElement.style.removeProperty("--pwa-safe-right");

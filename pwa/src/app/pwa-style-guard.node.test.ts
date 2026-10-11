@@ -91,7 +91,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-sidebar-foot .pwa-button, .pwa-root .pwa-session-sheet-foot .pwa-button", property: "padding-inline", values: [10], reason: TEXT_BUTTON },
   { file: "app/workspace-shell.css", selector: ".pwa-session-info", property: "padding", values: [10], reason: "会话信息弹层是只读阅读区，保留 8/10 内边距" },
   { file: "app/workspace-shell.css", selector: ".pwa-ui-scope .pwa-root .pwa-topbar > .pwa-topbar-back", property: "margin-right", values: [-4], reason: "顶栏返回按钮与标题间隔 4" },
-  { file: "app/workspace-shell.css", selector: ".pwa-root[data-sidebar-collapsed] .pwa-title-bar", property: "padding-left", values: [56], reason: "收起侧栏后标题区避让展开入口（8＋44＋4）" },
+  { file: "app/workspace-shell.css", selector: ".pwa-root[data-sidebar-collapsed] .pwa-title-bar", property: "padding-left", values: [56], reason: "收起侧栏后标题区避让展开入口（8＋44＋4），另加左安全区" },
   { file: "app/workspace-shell.css", selector: ".pwa-connection", property: "gap", values: [6], reason: STATUS },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-workspace-state", property: "padding", values: [260], reason: "主区空状态顶部 clamp(48px, 24dvh, 260px) 的上限" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-read-only-bar", property: "margin", values: [10], reason: COMPOSER },
