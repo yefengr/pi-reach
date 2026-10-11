@@ -113,6 +113,20 @@ describe("timelineActivity", () => {
     expect(timelineActivity(entries([text("a"), streaming("old"), pending(true)]), true, true, () => false, stale).working).toBe(false);
   });
 
+  test("a queued message at the end still belongs to the current turn", () => {
+    const queued: TimelineViewItem = { kind: "pending", id: "q", clientRequestId: "q", requestId: "q", text: "later", createdAt: 3, delivery: "accepted", queued: true };
+    const list = entries([text("a"), queued]);
+    // 当前轮已收到 run_end，working 晚到也不显示 Working。
+    expect(timelineActivity(list, true, true, group => group === "g1").working).toBe(false);
+    // 当前轮已有输出：两段输出之间按延迟显示。
+    expect(timelineActivity(list, true, true, () => false).hasOutput).toBe(true);
+    // 新发送的消息开始新的一轮：已结束的旧轮不影响 Working，且新轮尚无输出。
+    const fresh: TimelineViewItem = { ...queued, queued: undefined, delivery: "pending" };
+    const sent = timelineActivity(entries([text("a"), fresh]), true, true, group => group === "g1");
+    expect(sent.working).toBe(true);
+    expect(sent.hasOutput).toBe(false);
+  });
+
   test("treats only the trailing segment of a running turn as a live tail", () => {
     const { result, segments } = activity([tool("a"), text("t"), tool("b")]);
     expect(segments.map(segment => result.liveTail(segment))).toEqual([false, true]);

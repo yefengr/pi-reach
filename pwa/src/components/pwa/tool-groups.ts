@@ -99,7 +99,8 @@ export function isPartialEntry(entry: PresentationEntry): boolean {
  * 已收到 run_end 或不属于末轮（最后一条正式记录所属的轮）的 partial 视为残留，不算正在输出，也不决定末尾位置。
  * 末尾是新发送、尚未回传也未进入 Pi 队列的消息时，Pi 空闲期间就已存在的 partial（`idlePartials`）同样视为残留；
  * Pi 正在输出时发送的消息不触发该规则，避免流式输出过程中闪现 Working。
- * 最后一轮已收到 run_end 时不算仍在运行，避免 working 晚于结束事件更新时闪现。
+ * 轮次的结束与输出按末轮判断：末尾是新发送的消息时视为新的一轮；末尾是已进入 Pi 队列的消息时仍属当前轮。
+ * 末轮已收到 run_end 时不算仍在运行，避免 working 晚于结束事件更新时闪现。末项只决定视觉上的尾部位置。
  */
 export function timelineActivity(entries: readonly PresentationEntry[], live: boolean, running: boolean, runEnded: (groupId: string) => boolean, idlePartials: ReadonlySet<string> = new Set()): TimelineActivity {
   const formal = entries.findLast(entry => !isPartialEntry(entry) && entryGroupId(entry) !== undefined);
@@ -113,8 +114,8 @@ export function timelineActivity(entries: readonly PresentationEntry[], live: bo
   };
   const current = entries.filter(entry => !residual(entry));
   const last = current.at(-1);
-  const lastGroup = last === undefined ? undefined : entryGroupId(last);
-  const runActive = live && running && !(lastGroup !== undefined && runEnded(lastGroup));
+  const turn = freshSend ? undefined : turnGroup;
+  const runActive = live && running && !(turn !== undefined && runEnded(turn));
   const outputting = (entry: PresentationEntry) => entry.kind === "tool"
     ? effectiveToolStatus(entry.value, live) === "running"
     : (entry.kind === "text" || entry.kind === "thinking") && entry.streaming;
@@ -122,6 +123,6 @@ export function timelineActivity(entries: readonly PresentationEntry[], live: bo
   return {
     liveTail: segment => segment.tools.at(-1) === last && (runActive || segment.tools.some(outputting)),
     working: runActive && current.length > 0 && !outputActive,
-    hasOutput: current.some(entry => entryGroupId(entry) === lastGroup && isPiOutputEntry(entry)),
+    hasOutput: turn !== undefined && current.some(entry => entryGroupId(entry) === turn && isPiOutputEntry(entry)),
   };
 }
