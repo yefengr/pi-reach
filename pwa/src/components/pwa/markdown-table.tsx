@@ -26,6 +26,8 @@ function fitCellsToLines(table: HTMLTableElement) {
     });
     for (const item of pending) item.width = Math.min(item.singleLine, Math.ceil(item.width * WIDEN_FACTOR));
   }
+  // 轮数用尽仍超高（如长标识符夹在短词之间）时直接取单行宽度，单行必然不超过两行。
+  for (const item of pending) item.cell.style.minWidth = `max(var(--pwa-markdown-cell-min), ${Math.ceil(item.singleLine)}px)`;
 }
 
 function MarkdownTable({ children }: { children?: ReactNode }) {

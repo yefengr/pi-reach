@@ -40,6 +40,13 @@ test.each(["chat", "file"])("%s table cells widen to at most two unclipped lines
   expect(document.querySelectorAll("td")[4]!.style.textAlign).toBe("right");
 });
 
+test("a long identifier between short words still ends within two lines", async () => {
+  // 四轮放宽后宽度约为单行的 97.7%：首行放不下前缀加标识符、次行放不下标识符加尾词，仍是三行，须落到单行宽度。
+  await renderPwa(<div style={{ width: 358 }}><MarkdownContent text={table(`a ${"x".repeat(100)} b`)} /></div>);
+  await expect.poll(() => cells().length).toBe(columns.length * 2);
+  expectTwoLinesWithoutClipping();
+});
+
 test("streaming content growth re-fits the table to two lines", async () => {
   const screen = await renderPwa(<div style={{ width: 760 }}><MarkdownContent text={table("short")} /></div>);
   await expect.poll(() => cells().length).toBe(columns.length * 2);
