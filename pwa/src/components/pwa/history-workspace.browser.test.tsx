@@ -43,7 +43,7 @@ test("opens saved history at the latest content the first time and restores the 
   await expect.poll(() => list().scrollTop).toBe(120);
 });
 
-test("renders only the latest records of a long history and expands earlier pages without moving the reader", async () => {
+test("renders only the latest records of a long history and auto-expands earlier pages near the top without moving the reader", async () => {
   const visibleCountRef = { current: 0 };
   const { screen } = await renderHistory({ initial: savedItems(200), visibleCountRef });
   try {
@@ -51,28 +51,69 @@ test("renders only the latest records of a long history and expands earlier page
     expect(renderedRecords()[0]).toBe("Saved record 170");
     expect(visibleCountRef.current).toBe(30);
     await expect.poll(() => list().scrollHeight - list().clientHeight - list().scrollTop).toBeLessThanOrEqual(1);
+    // 停在底部时不提前展开；按钮只作键盘与兜底入口。
+    await expect.element(screen.getByRole("button", { name: "Load more", exact: true })).toBeVisible();
 
+    const fromBottom = list().scrollHeight;
+    // 只读历史不依赖实时连接，接近顶部即自动展开。
     list().scrollTop = 0;
-    const fromBottom = list().scrollHeight - list().scrollTop;
-    // 只读历史不依赖实时连接，「加载更多」保持可用。
-    await screen.getByRole("button", { name: "Load more", exact: true }).click();
     await expect.poll(() => renderedRecords().length).toBe(110);
     expect(renderedRecords()[0]).toBe("Saved record 90");
     expect(Math.abs(list().scrollHeight - list().scrollTop - fromBottom)).toBeLessThanOrEqual(1);
     expect(visibleCountRef.current).toBe(110);
 
-    await screen.getByRole("button", { name: "Load more", exact: true }).click();
-    await screen.getByRole("button", { name: "Load more", exact: true }).click();
+    list().scrollTop = 0;
+    await expect.poll(() => renderedRecords().length).toBe(190);
+    list().scrollTop = 0;
     await expect.poll(() => renderedRecords().length).toBe(200);
     await expect.element(screen.getByRole("button", { name: "Load more", exact: true })).not.toBeInTheDocument();
   } finally { await screen.unmount(); }
 });
 
+test("keeps the load more button as a keyboard entry", async () => {
+  const { screen } = await renderHistory({ initial: savedItems(200) });
+  try {
+    await expect.poll(() => renderedRecords().length).toBe(30);
+    // 直接触发按钮：定位器点击会先把按钮滚入视野，接近顶部时自动加载已抢先完成。
+    screen.getByRole("button", { name: "Load more", exact: true }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await expect.poll(() => renderedRecords().length).toBe(110);
+  } finally { await screen.unmount(); }
+});
+
+function sequencedItems(sequences: number[]): TimelineViewItem[] {
+  return sequences.map((seq) => ({
+    kind: "event",
+    event: { session_id: "history", leaf_id: "generation", event_id: `s-${seq}`, event_seq: seq, group_id: `g-${seq}`, timestamp: seq, kind: "assistant", status: "complete", blocks: [{ type: "text", text: `Saved record ${seq}` }] },
+  }));
+}
+
+test("marks records that were never saved in this browser before and between saved ranges", async () => {
+  const { screen } = await renderHistory({ initial: sequencedItems([5, 6, 7, 20, 21]) });
+  try {
+    await expect.poll(() => renderedRecords().length).toBe(5);
+    await expect.element(screen.getByText("Earlier records aren't saved in this browser")).toBeVisible();
+    const gap = screen.getByText("Some records in between aren't saved in this browser");
+    await expect.element(gap).toBeVisible();
+    const texts = [...list().querySelectorAll("p")].map((element) => element.textContent ?? "");
+    expect(texts.indexOf("Some records in between aren't saved in this browser")).toBe(texts.indexOf("Saved record 7") + 1);
+    expect(texts.indexOf("Saved record 20")).toBe(texts.indexOf("Some records in between aren't saved in this browser") + 1);
+  } finally { await screen.unmount(); }
+});
+
+test("does not mark a complete saved history", async () => {
+  const { screen } = await renderHistory({ initial: sequencedItems([1, 2, 3]) });
+  try {
+    await expect.poll(() => renderedRecords().length).toBe(3);
+    expect(list().querySelector(".pwa-timeline-notice")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
 test("restores the expanded range together with the saved scroll position", async () => {
-  const { screen } = await renderHistory({ initial: savedItems(200), restore: { scrollTop: 300, visibleCount: 110 } });
+  // 恢复位置离顶部足够远，不触发自动展开。
+  const { screen } = await renderHistory({ initial: savedItems(200), restore: { scrollTop: 1200, visibleCount: 110 } });
   try {
     await expect.poll(() => renderedRecords().length).toBe(110);
-    await expect.poll(() => list().scrollTop).toBe(300);
+    await expect.poll(() => list().scrollTop).toBe(1200);
   } finally { await screen.unmount(); }
 });
 

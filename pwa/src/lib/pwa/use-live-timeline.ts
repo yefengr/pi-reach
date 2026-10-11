@@ -64,6 +64,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   const [reconnectPhase, setReconnectPhase] = useState<TimelineReconnectPhase>(null);
   const [catchupFailed, setCatchupFailed] = useState(false);
   const [catchingUp, setCatchingUp] = useState(false);
+  // 普通向前翻页失败后停止自动加载，由用户重试；补齐失败另由 catchupFailed 表示。
+  const [earlierFailed, setEarlierFailed] = useState(false);
   // 接在本地预览之后的补齐只追加最新记录，不在顶部显示「正在加载记录」，避免内容上下跳动。
   const [quietCatchup, setQuietCatchup] = useState(false);
 
@@ -197,16 +199,17 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     onHistoryChangedRef.current = onHistoryChanged;
     catchingUpRef.current = false;
     setCatchupFailed(false);
+    setEarlierFailed(false);
     setCatchingUp(false);
     setReconnectPhase(null);
 
-    // 本地预览不是已确认的实时投影：同一会话走增量追加，否则按首次打开合并本地历史，不做权威替换。
-    const hadExistingProjection = runtimeRef.current.currentScope !== null || (!runtimeRef.current.previewing && runtimeRef.current.formalEvents().length > 0);
     const forceAuthoritativeReplacement = forceAuthoritativeReplacementRef.current;
     forceAuthoritativeReplacementRef.current = false;
-    replacementRequiresReplaceRef.current = forceAuthoritativeReplacement || hadExistingProjection;
     persistenceEpochRef.current = beginTimelinePersistenceEpoch(runtimeRef.current);
     const prepared = runtimeRef.current.prepareLive(scope, headSeq);
+    // 只有 branch reset 或同一会话序号回退说明本地记录已过期，才整段替换；缺口过大、Pi 重启或换会话
+    // 只是显示窗口从最新处重新开始，按首次打开合并，不删除本浏览器已保存的更早记录。
+    replacementRequiresReplaceRef.current = forceAuthoritativeReplacement || prepared.sequenceRegressed;
     setQuietCatchup(prepared.previewMatched);
     fragmentAssemblerRef.current = new TimelineEventFragmentAssembler({ session_id: scope.sessionId, leaf_id: scope.leafId });
 
@@ -237,7 +240,9 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
         setLoadingEarlier(state.loading);
       },
       onError: (message) => {
-        if (generation === contextGenerationRef.current) reportHistoryFailure(message);
+        if (generation !== contextGenerationRef.current) return;
+        setEarlierFailed(true);
+        reportHistoryFailure(message);
       },
     });
     historyLoaderRef.current = loader;
@@ -327,6 +332,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       return;
     }
     if (!loader.hasEarlier) return;
+    setEarlierFailed(false);
     prepareHistoryPrepend();
     void loader.loadEarlier();
   }, [loadingEarlier, prepareHistoryPrepend, retryCatchup]);
@@ -396,6 +402,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     setLastSyncedAt,
     hasEarlier: hasEarlierState || catchupFailed || (catchingUp && !quietCatchup),
     loadingEarlier: loadingEarlier || (catchingUp && !quietCatchup),
+    loadEarlierFailed: earlierFailed || catchupFailed,
     reconnectPhase,
     catchupFailed,
     catchingUp,

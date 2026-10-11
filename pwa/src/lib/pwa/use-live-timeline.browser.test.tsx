@@ -27,7 +27,7 @@ function Harness() {
   const channelRef = useRef<PeerChannel | null>(null);
   const timeline = useLiveTimeline({ channelRef, enabled: true, reportHistoryFailure: report });
   useLayoutEffect(() => { api = timeline; });
-  return <PwaUiProvider><div className="pwa-root"><div style={{ display: "flex", flexDirection: "column", height: 400 }}><MessageList items={timeline.items} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} onLoadEarlier={timeline.loadEarlier} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} reconnectPhase={timeline.reconnectPhase} running={piRunning} /></div></div></PwaUiProvider>;
+  return <PwaUiProvider><div className="pwa-root"><div style={{ display: "flex", flexDirection: "column", height: 400 }}><MessageList items={timeline.items} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} onLoadEarlier={timeline.loadEarlier} loadEarlierFailed={timeline.loadEarlierFailed} autoLoadEarlier={!timeline.followingOutput} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} reconnectPhase={timeline.reconnectPhase} running={piRunning} /></div></div></PwaUiProvider>;
 }
 function events(start: number, end: number, target = scope): TimelineEvent[] {
   return Array.from({ length: end - start + 1 }, (_, index) => {
@@ -274,6 +274,7 @@ test("keeps the old branch through failed persistence and commits a successful r
     api.applyTimelineChange(api.runtimeRef.current.prependHistory(events(1, 2)));
     await expect.poll(sequences).toEqual([1, 2]);
     vi.mocked(replaceTimelineEvents).mockRejectedValueOnce(new Error("quota"));
+    api.invalidateScope();
     const frames = start(3, next);
     await expect.poll(() => frames.length).toBe(1);
     api.applyTimelineChange(api.runtimeRef.current.commit(events(4, 4, next)[0]));
@@ -299,6 +300,7 @@ test("repeats the final atomic replace when realtime output arrives during persi
     api.applyTimelineChange(api.runtimeRef.current.prependHistory(events(1, 2)));
     await expect.poll(sequences).toEqual([1, 2]);
 
+    api.invalidateScope();
     const frames = start(1, next);
     await expect.poll(() => frames.length).toBe(1);
     reply(frames, events(1, 1, next), next);
@@ -322,6 +324,7 @@ test("retries an empty branch replacement after persistence fails without reques
     await expect.poll(sequences).toEqual([1, 2]);
     vi.mocked(replaceTimelineEvents).mockRejectedValueOnce(new Error("quota"));
 
+    api.invalidateScope();
     const frames = start(0, empty);
     expect(frames).toEqual([]);
     await expect.poll(() => api.catchupFailed).toBe(true);
@@ -352,5 +355,82 @@ test("reset and disconnect preserve the previous formal branch and cancel staged
     const empty = start(0, next);
     expect(empty).toEqual([]);
     await expect.poll(sequences).toEqual([]);
+  } finally { await screen.unmount(); }
+});
+
+test.each([
+  ["the same runtime after a large gap", scope],
+  ["a restarted Pi resuming the same session", { ...scope, runtimeInstanceId: "runtime-restarted", channelId: "channel-2" }],
+])("reconnecting %s merges the latest window into local history instead of replacing it", async (_label, target) => {
+  const screen = await render(<Harness />);
+  try {
+    const first = start(40);
+    await expect.poll(() => first.length).toBe(1);
+    reply(first, events(11, 40));
+    await expect.poll(() => sequences().length).toBe(30);
+    api.disconnect();
+
+    const frames = start(100, target);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(71, 100, target), target);
+    await expect.poll(sequences).toEqual(Array.from({ length: 30 }, (_, index) => 71 + index));
+    expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
+    expect(vi.mocked(mergeTimelineEvents).mock.calls.at(-1)?.[1].map((event) => event.event_seq)).toEqual(Array.from({ length: 30 }, (_, index) => 71 + index));
+  } finally { await screen.unmount(); }
+});
+
+test("a lower head for the same session still replaces the stale local projection", async () => {
+  const screen = await render(<Harness />);
+  try {
+    const first = start(40);
+    await expect.poll(() => first.length).toBe(1);
+    reply(first, events(11, 40));
+    await expect.poll(() => sequences().length).toBe(30);
+    api.disconnect();
+
+    const frames = start(20);
+    await expect.poll(() => frames.length).toBe(1);
+    expect(vi.mocked(loadTimeline)).toHaveBeenCalledTimes(1);
+    reply(frames, events(1, 20));
+    await expect.poll(() => vi.mocked(replaceTimelineEvents).mock.calls.length).toBe(1);
+    expect(vi.mocked(replaceTimelineEvents).mock.calls[0]?.[1].map((event) => event.event_seq)).toEqual(Array.from({ length: 20 }, (_, index) => 1 + index));
+  } finally { await screen.unmount(); }
+});
+
+test("auto-loads earlier history near the top only after the reader leaves the latest output, and stops after a failure", async () => {
+  const screen = await render(<Harness />);
+  const syncs = (frames: ClientFrame[]) => frames.filter((frame): frame is Extract<ClientFrame, { type: "session_sync" }> => frame.type === "session_sync");
+  const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  try {
+    const frames = start(200);
+    await expect.poll(() => syncs(frames).length).toBe(1);
+    reply(frames, events(171, 200));
+    await expect.poll(() => sequences().length).toBe(30);
+    const list = api.messageListRef.current!;
+    await expect.poll(() => list.scrollHeight - list.clientHeight - list.scrollTop).toBeLessThanOrEqual(1);
+    for (let index = 0; index < 4; index += 1) await nextFrame();
+    // 跟随最新输出时不向前加载。
+    expect(syncs(frames)).toHaveLength(1);
+
+    list.scrollTop = 0;
+    await expect.poll(() => syncs(frames).length).toBe(2);
+    expect([syncs(frames)[1]!.before, syncs(frames)[1]!.limit]).toEqual([171, 80]);
+    await expect.element(screen.getByText("Loading records…")).toBeInTheDocument();
+    reply(frames, events(91, 170));
+    await expect.poll(() => sequences().length).toBe(110);
+
+    list.scrollTop = 0;
+    await expect.poll(() => syncs(frames).length).toBe(3);
+    const failed = syncs(frames)[2]!;
+    expect(api.historyLoaderRef.current?.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: failed.id, code: "internal_error", message: "History unavailable" })).toBe(true);
+    await expect.element(screen.getByText("Couldn't load earlier records")).toBeVisible();
+    list.scrollTop = 0;
+    list.dispatchEvent(new Event("scroll"));
+    for (let index = 0; index < 4; index += 1) await nextFrame();
+    expect(syncs(frames)).toHaveLength(3);
+
+    await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
+    await expect.poll(() => syncs(frames).length).toBe(4);
+    expect([syncs(frames)[3]!.before, syncs(frames)[3]!.limit]).toEqual([91, 80]);
   } finally { await screen.unmount(); }
 });

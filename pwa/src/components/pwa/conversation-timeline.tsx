@@ -7,7 +7,7 @@ import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
 import type { PublishedFileRead } from "./published-file";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
-import { entryGroupId, isPiOutputEntry, projectTimeline, type PresentationEntry, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
+import { entryGroupId, gapEntryKeys, isPiOutputEntry, projectTimeline, type PresentationEntry, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
@@ -23,7 +23,11 @@ type ConversationTimelineProps = {
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
   renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead) => ReactNode;
+  /** 这些正式事件之前缺少记录，在对应条目前显示一行说明。 */
+  gapBefore?: ReadonlySet<string>;
 };
+
+const NO_GAPS: ReadonlySet<string> = new Set();
 
 /** `grouped`：打开时该工具已在组内；只有打开时尚未合并的工具才延后合并。 */
 type ReaderState = { key: string; grouped: boolean } | null;
@@ -83,7 +87,12 @@ function ThinkingStatus() {
   return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.piThinking}</p>;
 }
 
-function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], toolRuns: Map<string, ToolEntry[]>, groupedToolKeys: Map<string, string>, expanded: (key: string) => boolean, choose: (key: string, expanded: boolean) => void, render: (entry: PresentationEntry) => ReactNode) {
+function GapNotice() {
+  const { t } = useI18n();
+  return <p className="pwa-timeline-notice pwa-timeline-gap">{t.timeline.gapNotSaved}</p>;
+}
+
+function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], toolRuns: Map<string, ToolEntry[]>, groupedToolKeys: Map<string, string>, gapKeys: ReadonlySet<string>, expanded: (key: string) => boolean, choose: (key: string, expanded: boolean) => void, render: (entry: PresentationEntry) => ReactNode) {
   const rows: ReactNode[] = [];
   let segmentGroup: string | undefined;
   let hasOutput = false;
@@ -102,6 +111,7 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
     }
     if (isPiOutputEntry(entry)) hasOutput = true;
     if (entry.kind === "text" && entry.interrupted) interrupted = true;
+    if (gapKeys.has(entry.key)) rows.push(<GapNotice key={`gap:${entry.key}`} />);
     const runKey = groupedToolKeys.get(entry.key);
     if (runKey !== undefined) {
       const run = toolRuns.get(runKey)!;
@@ -114,7 +124,7 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
   return { rows, hasOutput };
 }
 
-export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord }: ConversationTimelineProps) {
+export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS }: ConversationTimelineProps) {
   const [snapshot, setSnapshot] = useState(() => projectTimeline([]));
   const [expansionChoices, setExpansionChoices] = useState<Map<string, boolean>>(() => new Map());
   const [reader, setReader] = useState<ReaderState>(null);
@@ -222,7 +232,8 @@ export function ConversationTimeline({ items, live, completions, running = false
       />;
   };
   // 发布记录保留 group_id，同一轮的完成时间仍只在段末追加一次。
-  const { rows, hasOutput } = conversationRows(view.entries, completions, toolRuns, groupedToolKeys, key => groupExpanded(expansionChoices, key), chooseExpansion, renderEntry);
+  const gapKeys = gapBefore.size === 0 ? NO_GAPS : gapEntryKeys(items, gapBefore);
+  const { rows, hasOutput } = conversationRows(view.entries, completions, toolRuns, groupedToolKeys, gapKeys, key => groupExpanded(expansionChoices, key), chooseExpansion, renderEntry);
   const waitingForReply = live && running && view.entries.length > 0 && !hasOutput;
 
   return <>

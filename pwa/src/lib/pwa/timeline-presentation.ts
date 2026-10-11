@@ -94,6 +94,21 @@ export function isPiOutputEntry(entry: PresentationEntry): boolean {
   return item.kind === "partial" || (item.kind === "event" && item.event.kind !== "user");
 }
 
+/** 每个缺口之后第一条可见条目的 key；缺口处的事件本身可能不产生条目（如 run_end），标记顺延到下一条。 */
+export function gapEntryKeys(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>): Set<string> {
+  const keys = new Set<string>();
+  let pending = false;
+  for (const item of items) {
+    if (item.kind === "event" && gapBefore.has(item.event.event_id)) pending = true;
+    if (!pending) continue;
+    const first = flatten([item])[0];
+    if (!first) continue;
+    keys.add(first.key);
+    pending = false;
+  }
+  return keys;
+}
+
 export function projectTimeline(items: readonly TimelineViewItem[], previous?: PresentationSnapshot): PresentationSnapshot {
   return { items, entries: reconcileOrder(flatten(items), previous?.entries ?? []) };
 }

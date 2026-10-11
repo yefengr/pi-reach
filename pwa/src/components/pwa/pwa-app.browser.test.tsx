@@ -1500,7 +1500,8 @@ test.each([[1280, 900], [390, 844]])("fills recent and earlier missing ranges wi
     }
     await expect.poll(() => list.querySelectorAll("article").length).toBe(111);
     await expect.poll(() => live.getBoundingClientRect().bottom).toBeGreaterThan(list.getBoundingClientRect().top);
-    await button.click();
+    // 直接触发按钮：定位器点击会先滚到顶部，自动加载可能已抢先开始；两条路径都只能加载一次。
+    button.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await expect.poll(() => list.querySelectorAll("article").length).toBe(161);
     expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(3);
     await expect.element(button).not.toBeInTheDocument();
@@ -1515,10 +1516,12 @@ test("a failed recent-window request releases loading and retries the same range
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(1));
     const first = channel.frames.find((frame) => frame.type === "session_sync")!;
     channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: first.id, code: "internal_error", message: "History unavailable" });
-    await expect.element(screen.getByRole("button", { name: "Load more", exact: true })).toBeEnabled();
+    // 失败后停止自动加载，顶部改为说明与重试。
+    await expect.element(screen.getByText("Couldn't load earlier records")).toBeVisible();
     expect(document.querySelectorAll(".pwa-message-list article")).toHaveLength(0);
     await expect.element(screen.getByText("Could not load the conversation. Try again.")).toBeVisible();
-    await screen.getByRole("button", { name: "Load more", exact: true }).click();
+    expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(1);
+    await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(2));
     const requests = channel.frames.filter((frame) => frame.type === "session_sync");
     expect(requests.map((frame) => [frame.before, frame.limit])).toEqual([[81, 30], [81, 30]]);
@@ -3214,17 +3217,18 @@ test("opens long saved history behind a loading state with its latest page and k
     expect(screen.getByText("No records to display.", { exact: true }).query()).toBeNull();
     release();
     await expect.poll(records).toBe(30);
-    await screen.getByRole("button", { name: "Load more", exact: true }).click();
+    screen.getByRole("button", { name: "Load more", exact: true }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await expect.poll(records).toBe(110);
 
+    // 离顶部足够远，恢复位置时不触发自动展开。
     const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
-    list.scrollTop = 200;
+    list.scrollTop = 1200;
     list.dispatchEvent(new Event("scroll", { bubbles: true }));
     await selectPi("Test Pi");
     await expect.poll(records).toBe(0);
     await openHistoryRow();
     await expect.poll(records).toBe(110);
-    await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(200);
+    await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(1200);
   } finally { release(); await screen.unmount(); }
 });
 
@@ -3265,10 +3269,10 @@ test("catching up after a saved preview appends the newest records without a top
     const returned = channelHarness.channels[1]!;
     returned.emit(readyFrame(returned, "session-1", 5));
     await expect.poll(() => returned.frames.some((frame) => frame.type === "session_sync")).toBe(true);
-    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+    expect(document.querySelector(".pwa-earlier")).toBeNull();
     returned.emit(recentHistoryFrame(returned, "session-1", numberedEvents(2, 4)));
     await expect.poll(listText).toContain("Record 5");
-    expect(document.querySelector(".pwa-earlier-button")).toBeNull();
+    expect(document.querySelector(".pwa-earlier")).toBeNull();
   } finally { await screen.unmount(); }
 });
 

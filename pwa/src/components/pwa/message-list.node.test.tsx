@@ -47,6 +47,19 @@ const unknownPending: TimelinePending = {
   delivery: "unknown_delivery",
 };
 
+test("shows the earlier-records state that matches loading, failure and connection", () => {
+  const items = [{ kind: "event" as const, event: toolEvent }];
+  expect(renderList(items, { loadingEarlier: true })).toContain("aria-busy=\"true\"");
+  const failed = renderList(items, { loadEarlierFailed: true });
+  expect(failed).toContain("Couldn&#x27;t load earlier records");
+  expect(failed).toContain("aria-label=\"Retry loading earlier records\"");
+  const offline = renderList(items, { isLive: false });
+  expect(offline).toContain("Connect to load earlier records");
+  expect(offline).not.toContain("pwa-earlier-button");
+  // 只读历史的更早记录已在本地，不依赖连接。
+  expect(renderList(items, { isLive: false, earlierLocal: true })).toContain("Load more");
+});
+
 test("keeps earlier and retry actions alongside a tool details entry", () => {
   const html = renderList([{ kind: "event", event: toolEvent }, unknownPending], { onRetryUnknown: () => {} });
   const earlierButton = html.match(/<button[^>]*class="[^"]*pwa-earlier-button[^"]*"[^>]*>/)?.[0] ?? "";

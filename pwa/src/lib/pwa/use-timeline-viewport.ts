@@ -34,7 +34,7 @@ type ProgrammaticScroll = {
 const BOTTOM_EPSILON = 1;
 /** 内边距等不改变元素尺寸的布局变化（ResizeObserver 无法感知）由派发方通知时间线重新贴底或恢复锚点。 */
 export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
-const OBSERVED_CONTENT_EXCLUSIONS = ".pwa-earlier-button, .pwa-bottom-sentinel, .pwa-chat-empty";
+const OBSERVED_CONTENT_EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty";
 
 function maxScrollTop(list: HTMLDivElement): number {
   return Math.max(0, list.scrollHeight - list.clientHeight);
