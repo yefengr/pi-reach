@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
-import { getPwaDatabase, timelineEventPreview, type PwaTimelineEventRecord, type PwaTimelineSessionRecord } from "./db";
+import { getPwaDatabase, timelineEventPreview, type PwaTimelineBranchCheckpoint, type PwaTimelineEventRecord, type PwaTimelineSessionRecord } from "./db";
 
 /** Runtime identity deliberately does not participate in persistent history keys. */
 export type TimelineScope = {
@@ -20,6 +20,8 @@ export type TimelineSessionSummary = TimelineScope & {
 };
 
 type ScopedTimelineEvent = { event: TimelineEvent; timestamp: number };
+
+export type TimelineBranchCheckpoint = PwaTimelineBranchCheckpoint;
 
 export class TimelineStoreConflictError extends Error {
   constructor(message: string) {
@@ -221,6 +223,8 @@ function summarizeSession(
     ...(last
       ? { lastEventId: last.eventId }
       : preserveEmptySummary && existing?.lastEventId ? { lastEventId: existing.lastEventId } : {}),
+    // 只有改名沿用检查点；整段替换后的记录来自当前分支，无需再核对。
+    ...(preserveEmptySummary && existing?.branchCheckpoint ? { branchCheckpoint: existing.branchCheckpoint } : {}),
   };
 }
 
@@ -267,6 +271,7 @@ async function summarizeStoredSession(
     ...(previewRecord ? { previewEventId: previewRecord.eventId } : {}),
     firstEventId: first.eventId,
     lastEventId: last.eventId,
+    ...(existing?.branchCheckpoint ? { branchCheckpoint: existing.branchCheckpoint } : {}),
   };
 }
 
@@ -324,6 +329,37 @@ export async function discardTimelineEventsAfter(scope: TimelineScope, headSeq: 
     const existingSession = await db.sessions.get(makeTimelineScopeId(scope));
     const eventCount = await db.events.where("[deviceId+endpointId+sessionId]").equals(scopeWhere(scope)).count();
     await db.sessions.put(await summarizeStoredSession(scope, eventCount, existingSession));
+  });
+}
+
+/**
+ * 返回待与当前分支核对的检查点：沿用尚未核对通过的检查点，没有时以本地序号最大的记录建立。
+ * 须在补齐写入新记录前调用，否则新写入的当前分支记录会顶替真正待核对的旧记录。
+ */
+export async function ensureTimelineBranchCheckpoint(scope: TimelineScope): Promise<TimelineBranchCheckpoint | null> {
+  const db = getPwaDatabase();
+  return db.transaction("rw", [db.events, db.sessions], async () => {
+    const session = await db.sessions.get(makeTimelineScopeId(scope));
+    if (!session) return null;
+    if (session.branchCheckpoint) return session.branchCheckpoint;
+    const latest = await latestTimelineEvent(scope);
+    if (latest?.event_seq === undefined) return null;
+    const checkpoint = { eventSeq: latest.event_seq, eventId: latest.event_id };
+    await db.sessions.put({ ...session, branchCheckpoint: checkpoint });
+    return checkpoint;
+  });
+}
+
+/** 核对通过后清除检查点；已被替换为其他检查点时保持不变。 */
+export async function clearTimelineBranchCheckpoint(scope: TimelineScope, checkpoint: TimelineBranchCheckpoint): Promise<void> {
+  const db = getPwaDatabase();
+  await db.transaction("rw", db.sessions, async () => {
+    const session = await db.sessions.get(makeTimelineScopeId(scope));
+    const current = session?.branchCheckpoint;
+    if (!session || current?.eventSeq !== checkpoint.eventSeq || current.eventId !== checkpoint.eventId) return;
+    const next = { ...session };
+    delete next.branchCheckpoint;
+    await db.sessions.put(next);
   });
 }
 

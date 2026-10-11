@@ -5,7 +5,7 @@ import { TimelineHistoryLoader } from "@/lib/pwa/timeline-history-loader";
 import { TimelineRuntime, type TimelinePreviewTarget, type TimelineScope, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
-import { discardTimelineEventsAfter, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "@/lib/pwa/timeline-store";
+import { clearTimelineBranchCheckpoint, discardTimelineEventsAfter, ensureTimelineBranchCheckpoint, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents, type TimelineBranchCheckpoint } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
@@ -230,10 +230,16 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     });
     // 超出 head 的本地记录必属旧分支，合并路径不会覆盖它们。握手时同步排进持久化队列，
     // 先于之后实时事件的保存执行，不会误删握手后收到的新事件。
+    // 分支检查点同样排在补齐与实时事件写入之前，见下方 branchCheckRef。
+    let checkpoint: TimelineBranchCheckpoint | null = null;
+    let checkpointReady = Promise.resolve(false);
     if (!knownStale) {
       void enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => discardTimelineEventsAfter(scope, headSeq)).catch(() => {
         if (generation === contextGenerationRef.current) reportHistoryFailure("Could not update local history.");
       });
+      checkpointReady = enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, async () => {
+        checkpoint = await ensureTimelineBranchCheckpoint(scope);
+      }).catch(() => false);
     }
     setQuietCatchup(prepared.previewMatched);
     fragmentAssemblerRef.current = new TimelineEventFragmentAssembler({ session_id: scope.sessionId, leaf_id: scope.leafId });
@@ -286,14 +292,26 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     catchingUpRef.current = hasCatchupWork;
     setCatchingUp(hasCatchupWork);
 
-    // 序号未回退时本地缓存仍可能属于断线期间被放弃的分支：补齐后取本地原最新一条的权威事件核对 event_id。
-    // 一致说明此前的记录都在当前分支上；不一致则按 branch reset 恢复，强制替换会清掉期间写入的记录，
-    // 避免继续向前加载时把两个分支拼在一起。核对放在补齐之后，不拖慢打开；请求失败时保留显示，下次连接再核对。
+    // 序号未回退时本地缓存仍可能属于断线期间被放弃的分支：补齐后取检查点序号的权威事件核对 event_id。
+    // 一致说明此前的记录都在当前分支上；不一致则按 branch reset 恢复，强制替换会清掉期间写入的记录与检查点，
+    // 避免继续向前加载时把两个分支拼在一起。核对放在补齐之后，不拖慢打开。检查点持久化在本地、核对通过才清除：
+    // 请求失败或中途断线时留到下次连接，不让本次补齐写入的当前分支记录顶替它而使核对误判通过。
     branchCheckRef.current = async () => {
-      const latest = await localLatest;
-      if (await localAhead || latest?.event_seq === undefined || generation !== contextGenerationRef.current) return;
-      const remoteId = await loader.fetchEventId(latest.event_seq);
-      if (remoteId !== null && remoteId !== latest.event_id && generation === contextGenerationRef.current) onBranchMismatch();
+      if (!await checkpointReady || await localAhead || generation !== contextGenerationRef.current) return;
+      const pending = checkpoint;
+      if (!pending) return;
+      // 检查点超出当前 head（此前已因序号回退删去其记录），不可能在当前分支上。
+      if (pending.eventSeq > headSeq) {
+        onBranchMismatch();
+        return;
+      }
+      const remoteId = await loader.fetchEventId(pending.eventSeq);
+      if (remoteId === null || generation !== contextGenerationRef.current) return;
+      if (remoteId !== pending.eventId) {
+        onBranchMismatch();
+        return;
+      }
+      await clearTimelineBranchCheckpoint(scope, pending).catch(() => {});
     };
 
     const loadPreparedRange = async () => {
