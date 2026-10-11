@@ -49,6 +49,8 @@
 .pwa-markdown table { border-collapse: collapse; font-size: var(--pwa-text-body); }
 .pwa-markdown th, .pwa-markdown td { padding: 6px 10px; border-bottom: 1px solid var(--pwa-line); text-align: left; vertical-align: top; }
 .pwa-markdown th { font-weight: var(--pwa-weight-strong); }
+/* 每列至少 8em；长内容由 markdown-table.tsx 加宽到最多两行，列宽之和超出容器时横向滚动，不截断。 */
+.pwa-markdown-cell { --pwa-markdown-cell-min: 8em; min-width: var(--pwa-markdown-cell-min); overflow-wrap: break-word; }
 
 /* 成段代码：浅色主题在 panel 上、深色在 code-bg 上；块内横向滚动，右上角复制。 */
 .pwa-code-block { margin: 8px 0; border-radius: var(--pwa-radius-md); color: var(--pwa-code-text); background: var(--pwa-code-surface); }
