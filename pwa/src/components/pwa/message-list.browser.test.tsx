@@ -561,6 +561,21 @@ test("a live tool that first arrives already finished is still shown once in a n
   await expect.poll(current, { timeout: 3000 }).toBeNull();
 });
 
+test("a group split by late content does not replay tools already shown in the heading", async () => {
+  const read = (id: string) => eventItem({ ...toolEvent, event_id: id, tool_call_id: id, args: { path: `${id}.ts` }, result: id });
+  const late = eventItem({ ...assistantEvent, event_id: "late", blocks: [{ type: "text", text: "Late reply" }] });
+  const { update } = await liveList([eventItem(assistantEvent)]);
+  await update([eventItem(assistantEvent), read("a"), read("b")]);
+  const current = (index = 0) => groupButton(index).querySelector(".pwa-tool-group-current")?.textContent ?? null;
+  await expect.poll(() => current(), { timeout: 3000 }).toBe("readb.ts");
+  await expect.poll(() => current(), { timeout: 3000 }).toBeNull();
+  // 迟到的正文插入两条工具之间，b 所在的后半段作为新组挂载，不再重新显示 b。
+  await update([eventItem(assistantEvent), read("a"), late, read("b")]);
+  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(2);
+  expect(current(0)).toBeNull();
+  expect(current(1)).toBeNull();
+});
+
 test("a burst of tools skips the heading to the latest once the backlog exceeds the limit", async () => {
   const run = (id: string) => partialItem({ ...toolPartial, tool: "bash", partial_id: `tool:${id}`, tool_call_id: id, args: { command: `echo ${id}` } });
   const { update } = await liveList([run("a")]);

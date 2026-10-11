@@ -35,7 +35,10 @@ const NO_GAPS: ReadonlySet<string> = new Set();
 /** 两段输出之间（如正文结束、下一个工具尚未开始）延迟显示 Working，避免交接瞬间闪现。 */
 const WORKING_BETWEEN_OUTPUTS_DELAY_MS = 400;
 
-/** 投影快照、工具首次被观察到的顺序（决定工具组身份，历史补齐不改变已有组）与在线新追加的工具（进入组头排队）。 */
+/**
+ * 投影快照、工具首次被观察到的顺序（决定工具组身份，历史补齐不改变已有组），以及最近一次更新中在线新追加的工具（进入组头排队）。
+ * `appended` 只保留最近一次更新的新增，不累计：组之后被拆分或合并而重新挂载时，已在组头显示过的工具不会再次排队。
+ */
 type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string, number>; appended: ReadonlySet<string> };
 
 /** Pi 回复靠左占满阅读列、无底色；不显示发送方，只为读屏保留「Pi：」。 */
@@ -102,8 +105,7 @@ function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: Rea
   if (view.items !== items) {
     view = projectTimeline(items, timeline.view);
     observed = observeTools(view.entries, timeline.observed);
-    const added = appendedTools(view.entries, timeline.view.entries);
-    if (added.length > 0) appended = new Set([...appended, ...added]);
+    appended = new Set(appendedTools(view.entries, timeline.view.entries));
     setTimeline({ view, observed, appended });
   }
   const gapKeys = gapBefore.size === 0 ? NO_GAPS : gapEntryKeys(items, gapBefore);
