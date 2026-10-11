@@ -527,6 +527,8 @@ test("the heading holds a finished tool briefly, never returns to an earlier one
   // 结束的工具继续停留，图标换成结束状态；满最短停留时间后回到摘要。
   expect(current()).toBe("bashpnpm build");
   expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
+  // 停留中的工具及其结束状态也在可访问名称里。
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand bash pnpm build: Complete · Ran 2 commands");
   await expect.poll(current, { timeout: 3000 }).toBeNull();
   // 摘要前的旋转图标只表示组内仍有工具在运行。
   expect(groupButton().querySelector(".pwa-tool-group-summary .pwa-spin")).not.toBeNull();

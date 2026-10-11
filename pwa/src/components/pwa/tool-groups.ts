@@ -1,4 +1,4 @@
-import { entryGroupId, type PresentationEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
+import { entryGroupId, isPiOutputEntry, type PresentationEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import { toolStatus, type ToolStatus, type ToolValue } from "./tool-presentation";
 
 /** 一个工具段：`anchor` 是组内最早被观察到的工具 key，`key` 由它派生，作为组的身份。 */
@@ -89,18 +89,39 @@ export type TimelineActivity = {
   liveTail: (segment: ToolSegment) => boolean;
   /** Working 提示：Pi working、末尾没有正在输出的内容，且最后一轮尚未收到 run_end。 */
   working: boolean;
+  /** 最后一轮是否已有 Pi 输出；没有时 Working 立即显示，否则延迟显示。 */
+  hasOutput: boolean;
 };
 
-/** 时间线末尾的运行情况；最后一轮已收到 run_end 时不算仍在运行，避免 working 晚于结束事件更新时闪现。 */
-export function timelineActivity(entries: readonly PresentationEntry[], segments: readonly ToolSegment[], live: boolean, running: boolean, runEnded: (groupId: string) => boolean): TimelineActivity {
-  const toolRunning = (tools: readonly ToolEntry[]) => tools.some(tool => effectiveToolStatus(tool.value, live) === "running");
-  const last = entries.at(-1);
+function isPartialEntry(entry: PresentationEntry): boolean {
+  if (entry.kind === "tool") return "partial_id" in entry.value;
+  if (entry.kind === "text" || entry.kind === "thinking") return entry.streaming;
+  return entry.item.kind === "partial";
+}
+
+/**
+ * 时间线末尾的运行情况，只按末轮派生。运行时把 partial 排在正式事件之后，未与正式消息对上的旧 partial 会一直留在末尾；
+ * 已收到 run_end 或不属于末轮（最后一条正式记录所属的轮）的 partial 视为残留，不算正在输出，也不决定末尾位置。
+ * 最后一轮已收到 run_end 时不算仍在运行，避免 working 晚于结束事件更新时闪现。
+ */
+export function timelineActivity(entries: readonly PresentationEntry[], live: boolean, running: boolean, runEnded: (groupId: string) => boolean): TimelineActivity {
+  const formal = entries.findLast(entry => !isPartialEntry(entry) && entryGroupId(entry) !== undefined);
+  const turnGroup = formal === undefined ? undefined : entryGroupId(formal);
+  const residual = (entry: PresentationEntry) => {
+    const groupId = entryGroupId(entry);
+    return isPartialEntry(entry) && groupId !== undefined && (runEnded(groupId) || (turnGroup !== undefined && groupId !== turnGroup));
+  };
+  const current = entries.filter(entry => !residual(entry));
+  const last = current.at(-1);
   const lastGroup = last === undefined ? undefined : entryGroupId(last);
   const runActive = live && running && !(lastGroup !== undefined && runEnded(lastGroup));
-  const outputActive = segments.some(segment => toolRunning(segment.tools))
-    || entries.some(entry => (entry.kind === "text" || entry.kind === "thinking") && entry.streaming);
+  const outputting = (entry: PresentationEntry) => entry.kind === "tool"
+    ? effectiveToolStatus(entry.value, live) === "running"
+    : (entry.kind === "text" || entry.kind === "thinking") && entry.streaming;
+  const outputActive = current.some(outputting);
   return {
-    liveTail: segment => segment.tools.at(-1) === last && (runActive || toolRunning(segment.tools)),
-    working: runActive && entries.length > 0 && !outputActive,
+    liveTail: segment => segment.tools.at(-1) === last && (runActive || segment.tools.some(outputting)),
+    working: runActive && current.length > 0 && !outputActive,
+    hasOutput: current.some(entry => entryGroupId(entry) === lastGroup && isPiOutputEntry(entry)),
   };
 }

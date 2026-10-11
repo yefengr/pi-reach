@@ -105,7 +105,10 @@ export function ToolGroupCard({ values, live, expanded, onExpandedChange, childr
   const current = expanded ? null : head.value;
   const currentStatus = current ? effectiveToolStatus(current, live) : null;
   const busy = current === null && !expanded && values.some(value => effectiveToolStatus(value, live) === "running");
-  const currentLabel = current && currentStatus === "running" ? t.tools.groupRunning(`${current.tool} ${toolInlineText(toolHeaderSummary(current))}`.trim()) : null;
+  // 停留中的已结束工具也保留在可访问名称里，与屏幕上显示的工具和结束状态一致。
+  const currentCommand = current ? `${current.tool} ${toolInlineText(toolHeaderSummary(current))}`.trim() : null;
+  const currentLabel = currentCommand === null || currentStatus === null ? null
+    : currentStatus === "running" ? t.tools.groupRunning(currentCommand) : t.tools.statusLabel(currentCommand, t.tools.status[currentStatus]);
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
   return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length}>
     <div className="pwa-tool-head">

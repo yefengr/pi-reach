@@ -78,7 +78,7 @@ describe("timelineActivity", () => {
   const activity = (items: TimelineViewItem[], { live = true, working = true, ended = [] as string[] } = {}) => {
     const list = entries(items);
     const segments = toolSegments(list, new Set(), observeTools(list, new Map()));
-    return { result: timelineActivity(list, segments, live, working, group => ended.includes(group)), segments };
+    return { result: timelineActivity(list, live, working, group => ended.includes(group)), segments };
   };
 
   test("shows Working only while Pi works and nothing is being output", () => {
@@ -90,6 +90,18 @@ describe("timelineActivity", () => {
     expect(activity([tool("a")], { working: false }).result.working).toBe(false);
     expect(activity([tool("a")], { live: false }).result.working).toBe(false);
     expect(activity([{ kind: "event", event: runEnd("g0") }, tool("a")], { ended: ["g0"] }).result.working).toBe(true);
+  });
+
+  test("ignores residual partials of an ended or earlier turn", () => {
+    const user = (id: string, group: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: id, message_id: id, group_id: group, timestamp: 2, kind: "user", blocks: [{ type: "text", text: id }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" } });
+    // 旧轮已收到 run_end，残留的流式正文与运行中工具不再抑制新一轮的 Working。
+    const ended = activity([text("a"), streaming("old"), running("t"), user("next", "g2")], { ended: ["g1"] }).result;
+    expect(ended.working).toBe(true);
+    expect(ended.hasOutput).toBe(false);
+    // 旧轮缺少 run_end，但已不是末轮：同样视为残留。
+    expect(activity([text("a"), streaming("old"), user("next", "g2")]).result.working).toBe(true);
+    // 末轮自己的流式输出仍然算正在输出。
+    expect(activity([user("next", "g2"), streaming("new", "g2")]).result.working).toBe(false);
   });
 
   test("treats only the trailing segment of a running turn as a live tail", () => {

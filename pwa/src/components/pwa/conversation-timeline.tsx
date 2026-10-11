@@ -92,7 +92,7 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
     rows.push(render(entry));
   }
   closeSegment();
-  return { rows, hasOutput };
+  return rows;
 }
 
 /** 投影时间线并划分工具段；工具的首次观察顺序随投影一起保存，决定工具组身份。 */
@@ -133,7 +133,7 @@ export function ConversationTimeline({ items, live, completions, running = false
 
   const { view, gapKeys, segments, segmentOf } = useProjectedTimeline(items, gapBefore);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
-  const activity = timelineActivity(view.entries, segments, live, running, groupId => completions?.has(groupId) === true);
+  const activity = timelineActivity(view.entries, live, running, groupId => completions?.has(groupId) === true);
   // 展开的思考与工具组暂停行内自动跟随；末段运行中展开的工具组除外。工具详情由 Reader 独立持锁。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
     const choice = segmentExpansion(segment.tools, tools);
@@ -225,10 +225,10 @@ export function ConversationTimeline({ items, live, completions, running = false
     onExpandedChange={expanded => chooseSegment(segment, expanded)}
   >{segment.tools.map(renderEntry)}</ToolGroupCard>;
   // 发布记录保留 group_id，同一轮的完成时间仍只在段末追加一次。
-  const { rows, hasOutput } = conversationRows(view.entries, completions, segmentOf, gapKeys, renderSegment, renderEntry);
+  const rows = conversationRows(view.entries, completions, segmentOf, gapKeys, renderSegment, renderEntry);
   // 本轮尚无输出时立即显示 Working；两段输出之间延迟显示。
-  const workingBetweenOutputs = useDelayedVisibility(activity.working && hasOutput, WORKING_BETWEEN_OUTPUTS_DELAY_MS, 0);
-  const showWorking = activity.working && (!hasOutput || workingBetweenOutputs);
+  const workingBetweenOutputs = useDelayedVisibility(activity.working && activity.hasOutput, WORKING_BETWEEN_OUTPUTS_DELAY_MS, 0);
+  const showWorking = activity.working && (!activity.hasOutput || workingBetweenOutputs);
 
   return <>
     {rows}
