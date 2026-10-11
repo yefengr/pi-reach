@@ -30,16 +30,24 @@ function fitCellsToLines(table: HTMLTableElement) {
 
 function MarkdownTable({ children }: { children?: ReactNode }) {
   const tableRef = useRef<HTMLTableElement>(null);
-  // 不设依赖：流式输出每次改变内容都重新测量。隐藏时测不到宽度，等到可见再测一次。
+  const fittedMarkupRef = useRef<string | null>(null);
+  // 不设依赖：时间线流式更新会重渲染全部历史行，children 每次都是新对象，只能以测量后的 DOM 判断表格是否真的变化；
+  // 未变化时在任何布局读取之前返回，避免每帧对所有历史表格强制重排。隐藏时测不到宽度，等到可见再测一次。
   useLayoutEffect(() => {
     const table = tableRef.current;
-    if (!table) return;
-    fitCellsToLines(table);
-    if (table.offsetWidth > 0 || typeof ResizeObserver === "undefined") return;
+    if (!table || table.innerHTML === fittedMarkupRef.current) return;
+    const fit = () => {
+      fitCellsToLines(table);
+      fittedMarkupRef.current = table.innerHTML;
+    };
+    if (table.offsetWidth > 0 || typeof ResizeObserver === "undefined") {
+      fit();
+      return;
+    }
     const observer = new ResizeObserver(() => {
       if (table.offsetWidth === 0) return;
       observer.disconnect();
-      fitCellsToLines(table);
+      fit();
     });
     observer.observe(table);
     return () => observer.disconnect();

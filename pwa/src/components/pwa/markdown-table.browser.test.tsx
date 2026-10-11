@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { flushSync } from "react-dom";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
@@ -44,6 +46,27 @@ test("streaming content growth re-fits the table to two lines", async () => {
   for (const cell of cells()) expect(height(cell)).toBe(Math.round(lineHeight(cell)));
   await screen.rerender(<PwaUiProvider><div className="pwa-root"><div style={{ width: 760 }}><MarkdownContent text={table(longCell.repeat(4))} /></div></div></PwaUiProvider>);
   await expect.poll(() => cells()[columns.length + 2]!.textContent?.length).toBeGreaterThan(longCell.length * 3);
+  expectTwoLinesWithoutClipping();
+});
+
+test("re-renders with unchanged content skip measuring, changed content measures again", async () => {
+  let setFrame!: (frame: { text: string; index: number }) => void;
+  function Harness() {
+    const [frame, update] = useState({ text: table(longCell), index: 0 });
+    setFrame = update;
+    return <div style={{ width: 760 }} data-frame={frame.index}><MarkdownContent text={frame.text} /></div>;
+  }
+  await renderPwa(<Harness />);
+  await expect.poll(() => cells().length).toBe(columns.length * 2);
+  const rendered = document.querySelector("table")!;
+  const observer = new MutationObserver(() => {});
+  observer.observe(rendered, { subtree: true, attributes: true, attributeFilter: ["style"] });
+  for (let index = 1; index <= 3; index += 1) flushSync(() => setFrame({ text: table(longCell), index }));
+  expect(observer.takeRecords()).toHaveLength(0);
+  flushSync(() => setFrame({ text: table(longCell.repeat(2)), index: 4 }));
+  expect(observer.takeRecords().length).toBeGreaterThan(0);
+  observer.disconnect();
+  expect(document.querySelector("table")).toBe(rendered);
   expectTwoLinesWithoutClipping();
 });
 
