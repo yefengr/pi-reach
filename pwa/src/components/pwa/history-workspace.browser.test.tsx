@@ -122,6 +122,15 @@ test("keeps a gap marker when only hidden records follow the gap", async () => {
   } finally { await screen.unmount(); }
 });
 
+test("shows a gap marker even when every saved record is hidden", async () => {
+  const runEnd = (seq: number): TimelineViewItem => ({ kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: `s-${seq}`, event_seq: seq, group_id: `g-${seq}`, timestamp: seq, kind: "run_end", status: "complete" } });
+  const { screen } = await renderHistory({ initial: [runEnd(1), runEnd(20)] });
+  try {
+    await expect.element(screen.getByText("No records to display.")).toBeVisible();
+    await expect.element(screen.getByText("Some records in between aren't saved in this browser")).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
 test("does not group tools of one run across an unsaved gap", async () => {
   const tool = (seq: number): TimelineViewItem => ({ kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: `s-${seq}`, event_seq: seq, group_id: "run", timestamp: seq, kind: "tool", tool_call_id: `call-${seq}`, tool: "read", args: {}, truncated: false, status: "complete", result: {} } });
   const runEnd: TimelineViewItem = { kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: "s-23", event_seq: 23, group_id: "run", timestamp: 23, kind: "run_end", status: "complete" } };

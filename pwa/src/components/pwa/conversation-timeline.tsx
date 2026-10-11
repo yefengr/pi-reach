@@ -90,7 +90,7 @@ function ThinkingStatus() {
   return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.piThinking}</p>;
 }
 
-function GapNotice() {
+export function GapNotice() {
   const { t } = useI18n();
   return <p className="pwa-timeline-notice pwa-timeline-gap">{t.timeline.gapNotSaved}</p>;
 }

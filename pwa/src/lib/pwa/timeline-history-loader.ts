@@ -150,6 +150,38 @@ export class TimelineHistoryLoader {
     return this.loadPage({ start, end });
   }
 
+  /**
+   * 向 Extension 取单个序号的权威事件 ID，用于核对本地缓存是否仍属于当前分支。
+   * 不读本地缓存、不持久化、不改变分页边界，也不切换加载状态；失败或被取消时返回 null。
+   */
+  fetchEventId(sequence: number): Promise<string | null> {
+    if (this.disposed || this.active || !isPositiveSequence(sequence) || sequence > this.headSeq) return Promise.resolve(null);
+    const page: PageOperation = {
+      token: ++this.token,
+      page: { start: sequence, end: sequence },
+      events: new Map(),
+      eventSequences: new Map(),
+      cancelled: createDeferred<void>(),
+      promise: Promise.resolve(false),
+      request: null,
+    };
+    this.active = page;
+    const result = (async () => {
+      try {
+        const response = await this.requestRange(page, page.page);
+        if (response === CANCELLED || !this.isCurrent(page)) return null;
+        this.acceptResponse(page, page.page, response);
+        return page.events.get(sequence)?.event_id ?? null;
+      } catch {
+        return null;
+      } finally {
+        if (this.active === page) this.active = null;
+      }
+    })();
+    page.promise = result.then(() => false);
+    return result;
+  }
+
   private loadPage(range: SequenceRange): Promise<boolean> {
     if (this.active) return this.active.promise;
 

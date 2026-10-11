@@ -305,12 +305,12 @@ export async function mergeTimelineEvents(scope: TimelineScope, events: readonly
   });
 }
 
-/** 本地已保存的最大正式序号；没有带序号的记录时为 0。 */
-export async function latestTimelineSequence(scope: TimelineScope): Promise<number> {
+/** 本地已保存的序号最大的正式事件；没有带序号的记录时为 null。 */
+export async function latestTimelineEvent(scope: TimelineScope): Promise<TimelineEvent | null> {
   const latest = await getPwaDatabase().events.where("[deviceId+endpointId+sessionId+eventSeq]")
     .between([...scopeWhere(scope), Dexie.minKey], [...scopeWhere(scope), Dexie.maxKey], true, true)
     .last();
-  return latest?.eventSeq ?? 0;
+  return latest?.event ?? null;
 }
 
 /** 删除序号高于 headSeq 的记录：Pi 切换分支后序号回退，留下的是旧分支内容。会话摘要随之更新。 */

@@ -264,3 +264,43 @@ test("returns false without callbacks when a reconnect range is cancelled", asyn
   expect(harness.onPage).not.toHaveBeenCalled();
   expect(harness.onError).not.toHaveBeenCalled();
 });
+
+test("fetches one authoritative event id without reading the cache, persisting, or changing the boundary", async () => {
+  const load = vi.fn(async () => numberedEvents(1, 80));
+  const persist = vi.fn(async () => {});
+  const harness = createHarness({ load, persist });
+
+  const fetched = harness.loader.fetchEventId(50);
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent)).toEqual([expect.objectContaining({ id: "request-1", before: 51, limit: 1 })]);
+  expect(harness.loader.receive(historyFrame("request-1", [{ ...numberedEvents(50, 1)[0]!, event_id: "remote-50" }]))).toBe(true);
+  expect(await fetched).toBe("remote-50");
+  expect(load).not.toHaveBeenCalled();
+  expect(persist).not.toHaveBeenCalled();
+  expect(harness.onPage).not.toHaveBeenCalled();
+  expect(harness.onState).not.toHaveBeenCalledWith(expect.objectContaining({ loading: true }));
+  expect(harness.loader.hasEarlier).toBe(true);
+
+  // 核对结束后可照常从缓存加载。
+  expect(await harness.loader.loadEarlier()).toBe(true);
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(harness.onPage).toHaveBeenCalledTimes(1);
+});
+
+test("returns null for an event id request that fails, times out, or is out of range", async () => {
+  vi.useFakeTimers();
+  const harness = createHarness();
+  expect(await harness.loader.fetchEventId(81)).toBeNull();
+  expect(await harness.loader.fetchEventId(0)).toBeNull();
+
+  const failed = harness.loader.fetchEventId(10);
+  await flushMicrotasks();
+  harness.loader.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: "request-1", code: "internal_error", message: "History unavailable" });
+  expect(await failed).toBeNull();
+
+  const timedOut = harness.loader.fetchEventId(10);
+  await flushMicrotasks();
+  await vi.advanceTimersByTimeAsync(25);
+  expect(await timedOut).toBeNull();
+  expect(harness.onError).not.toHaveBeenCalled();
+});

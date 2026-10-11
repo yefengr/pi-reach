@@ -517,7 +517,14 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       setDraftSessions((current) => current[runtimeKey] === frame.session_id ? current : { ...current, [runtimeKey]: frame.session_id });
       if (previousSession !== undefined && previousSession !== frame.session_id) setSessionSwitched(true);
       emptySessionFocusRef.current = frame.head_seq === 0 ? `${context.deviceId}\u0000${context.endpointId}\u0000${frame.session_id}` : null;
-      startLive({ scope, headSeq: frame.head_seq, send: (request) => context.channel.send(request), onHistoryChanged: () => { void refreshHistory(); } });
+      startLive({ scope, headSeq: frame.head_seq, send: (request) => context.channel.send(request), onHistoryChanged: () => { void refreshHistory(); }, onBranchMismatch: () => {
+        // 与收到 reset(branch_changed) 相同：撤下当前投影并重新握手，按权威分支整段替换本地记录。
+        if (channelContextRef.current?.generation !== context.generation) return;
+        fileController.reset();
+        filesReadyRef.current = false;
+        invalidateTimelineScope();
+        restartSession();
+      } });
       // 握手即已在线；上传状态回执可能先于 React commit 到达，不能读上一帧的 connecting。
       connectionRef.current = "online";
       attachmentComposer.connect(scope, (request) => context.channel.send(request));

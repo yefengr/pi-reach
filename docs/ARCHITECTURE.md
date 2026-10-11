@@ -84,7 +84,7 @@ device_id
 device_id + endpoint_id + session_id
 ```
 
-`leaf_id` 是当前 branch tip 元数据，不进入持久主键；`runtime_instance_id` 只用于实时 stale gate。`events` 以稳定 `event_id` 覆盖，冗余保存 `event_seq` 和是否可生成预览，并为稳定 session 下的序号、时间与预览来源建立复合索引。`sessions` 在同一事务中维护事件数、首末时间、预览及其来源事件；历史导航直接读取摘要。普通事件合入只查询相同 event ID、相同序号、首末事件和最新预览，不随 session 长度加载全部正文；只有 branch reset 或同一 session 的 `head_seq` 低于内存中已保留或本地已保存的记录时，才完整替换当前 session 投影（无需取历史时只删除超出 `head_seq` 的本地记录）；重连缺口过大、Pi 重启或切回旧会话只把显示窗口移到最新处，新取得的记录合入本地，不删除本浏览器已保存的更早记录。
+`leaf_id` 是当前 branch tip 元数据，不进入持久主键；`runtime_instance_id` 只用于实时 stale gate。`events` 以稳定 `event_id` 覆盖，冗余保存 `event_seq` 和是否可生成预览，并为稳定 session 下的序号、时间与预览来源建立复合索引。`sessions` 在同一事务中维护事件数、首末时间、预览及其来源事件；历史导航直接读取摘要。普通事件合入只查询相同 event ID、相同序号、首末事件和最新预览，不随 session 长度加载全部正文；只有 branch reset 或同一 session 的 `head_seq` 低于内存中已保留或本地已保存的记录时，才完整替换当前 session 投影（无需取历史时只删除超出 `head_seq` 的本地记录）；重连缺口过大、Pi 重启或切回旧会话只把显示窗口移到最新处，新取得的记录合入本地，不删除本浏览器已保存的更早记录。合并依赖的本地记录可能属于断线期间被放弃的分支，补齐后取本地原最新一条的权威事件核对 `event_id`，不一致时按 branch reset 重新握手并整段替换。
 
 PWA 只保存已收到的正式事件；pending 和 partial 不写入正式事件表。下线不会删除正式 timeline，只有用户移除 pairing 或清除本地数据才删除关联数据。
 

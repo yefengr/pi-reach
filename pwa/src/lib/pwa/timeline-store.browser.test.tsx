@@ -8,7 +8,7 @@ import {
   findTimelineConflict,
   isPersistableTimelineEvent,
   listTimelineSessions,
-  latestTimelineSequence,
+  latestTimelineEvent,
   loadTimeline,
   makePwaTimelineEventId,
   makeTimelineScopeId,
@@ -363,19 +363,20 @@ test("roundtrips null leaf events and clears the stable session projection", asy
 
 test("reads the latest saved sequence and discards records past a regressed head", async () => {
   const other = { ...scope, sessionId: "other" };
-  expect(await latestTimelineSequence(scope)).toBe(0);
+  const latestSequence = async (target: TimelineScope) => (await latestTimelineEvent(target))?.event_seq ?? 0;
+  expect(await latestTimelineEvent(scope)).toBeNull();
   await mergeTimelineEvents(scope, [1, 2, 3, 4].map((seq) => ({ ...userEvent(`e-${seq}`, "group", seq), event_seq: seq })));
   await mergeTimelineEvents(other, [{ ...userEvent("o-9", "group", 9, other), event_seq: 9 }]);
   await saveTimelineSessionName(scope, "Kept name");
-  expect(await latestTimelineSequence(scope)).toBe(4);
+  expect(await latestTimelineEvent(scope)).toMatchObject({ event_id: "e-4", event_seq: 4 });
 
   await discardTimelineEventsAfter(scope, 2);
   expect((await loadTimeline(scope)).map((event) => event.event_seq)).toEqual([1, 2]);
-  expect(await latestTimelineSequence(scope)).toBe(2);
+  expect(await latestSequence(scope)).toBe(2);
   const summary = (await listTimelineSessions(scope.deviceId)).find((session) => session.sessionId === scope.sessionId);
   expect(summary).toMatchObject({ eventCount: 2, name: "Kept name", updatedAt: 2, preview: "e-2" });
   // 其他会话不受影响。
-  expect(await latestTimelineSequence(other)).toBe(9);
+  expect(await latestSequence(other)).toBe(9);
 
   await discardTimelineEventsAfter(scope, 0);
   expect(await loadTimeline(scope)).toEqual([]);
