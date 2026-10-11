@@ -1,6 +1,21 @@
 import { entryGroupId, isPiOutputEntry, type PresentationEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import { toolStatus, type ToolStatus, type ToolValue } from "./tool-presentation";
 
+/**
+ * 本次投影中在线新追加的工具：排在某条上一次投影已有的条目之后。首次加载、切换会话（没有共同条目）
+ * 与向前补齐的历史（排在所有已有条目之前）都不算新追加。
+ */
+export function appendedTools(entries: readonly PresentationEntry[], previous: readonly PresentationEntry[]): string[] {
+  const known = new Set(previous.map(entry => entry.key));
+  const added: string[] = [];
+  let afterKnown = false;
+  for (const entry of entries) {
+    if (known.has(entry.key)) afterKnown = true;
+    else if (afterKnown && entry.kind === "tool") added.push(entry.key);
+  }
+  return added;
+}
+
 /** 一个工具段：`key` 由组内最早被观察到的工具派生，作为组的身份。 */
 export type ToolSegment = { key: string; tools: ToolEntry[] };
 

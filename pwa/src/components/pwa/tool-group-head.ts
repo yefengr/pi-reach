@@ -17,28 +17,30 @@ export type GroupHeadState = { known: ReadonlySet<string>; queue: readonly strin
 /** 当前显示的工具已停留的时长是否已满排队停留与最短停留。 */
 export type GroupHeadElapsed = { queued: boolean; minimum: boolean };
 
-/** 组头首次出现：已有的工具视为历史，只把仍在运行的排入队列，并直接显示最后开始的一条。 */
-export function initialGroupHead(values: readonly ToolValue[], live: boolean): GroupHeadState {
-  const queue = live ? values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity) : [];
-  return { known: new Set(values.map(toolIdentity)), queue, index: queue.length - 1, animate: false };
+/**
+ * 组头首次出现：在线期间新追加的工具（`appended`，不论状态）与仍在运行的工具排入队列；打开页面、切换会话或
+ * 向前加载得到的历史工具不排队。新追加的组从第一条开始显示；页面打开时已在运行的组直接显示最后一条运行中的工具。
+ */
+export function initialGroupHead(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>): GroupHeadState {
+  const queue = live ? values.filter(value => appended.has(toolIdentity(value)) || effectiveToolStatus(value, live) === "running").map(toolIdentity) : [];
+  const fresh = queue.some(key => appended.has(key));
+  return { known: new Set(values.map(toolIdentity)), queue, index: fresh ? 0 : queue.length - 1, animate: false };
 }
 
 /**
- * 按开始顺序推进组头：在线时追加在已知工具之后新出现的工具（向前补齐的历史不排队）；当前一条停满排队停留后换下一条，
+ * 按开始顺序推进组头：在线期间新追加的工具（`appended`）入队，向前补齐的历史不排队；当前一条停满排队停留后换下一条，
  * 积压超过 GROUP_HEAD_MAX_BACKLOG 时直接跳到最新一条。已显示过的工具不再回到组头。没有变化时返回原状态。
  */
-export function stepGroupHead(state: GroupHeadState, values: readonly ToolValue[], live: boolean, elapsed: GroupHeadElapsed): GroupHeadState {
+export function stepGroupHead(state: GroupHeadState, values: readonly ToolValue[], live: boolean, elapsed: GroupHeadElapsed, appended: ReadonlySet<string>): GroupHeadState {
   let known = state.known;
   let queue = state.queue;
-  let lastKnown = -1;
-  values.forEach((value, position) => { if (state.known.has(toolIdentity(value))) lastKnown = position; });
-  values.forEach((value, position) => {
+  for (const value of values) {
     const key = toolIdentity(value);
-    if (known.has(key)) return;
+    if (known.has(key)) continue;
     if (known === state.known) known = new Set(state.known);
     (known as Set<string>).add(key);
-    if (live && position > lastKnown) queue = [...queue, key];
-  });
+    if (live && appended.has(key)) queue = [...queue, key];
+  }
   const backlog = queue.length - 1 - state.index;
   let index = state.index;
   if (backlog > GROUP_HEAD_MAX_BACKLOG) index = queue.length - 1;

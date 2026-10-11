@@ -8,7 +8,7 @@ import { usePublishedFilesView } from "./published-files-context";
 import type { PublishedFileRead } from "./published-file";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { entryGroupId, gapEntryKeys, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
-import { isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
+import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
@@ -35,8 +35,8 @@ const NO_GAPS: ReadonlySet<string> = new Set();
 /** 两段输出之间（如正文结束、下一个工具尚未开始）延迟显示 Working，避免交接瞬间闪现。 */
 const WORKING_BETWEEN_OUTPUTS_DELAY_MS = 400;
 
-/** 投影快照与工具首次被观察到的顺序；后者决定工具组身份，历史补齐不改变已有组。 */
-type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string, number> };
+/** 投影快照、工具首次被观察到的顺序（决定工具组身份，历史补齐不改变已有组）与在线新追加的工具（进入组头排队）。 */
+type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string, number>; appended: ReadonlySet<string> };
 
 /** Pi 回复靠左占满阅读列、无底色；不显示发送方，只为读屏保留「Pi：」。 */
 function TextRow({ entry }: { entry: TextEntry }) {
@@ -97,18 +97,20 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
 
 /** 投影时间线并划分工具段；工具的首次观察顺序随投影一起保存，决定工具组身份。 */
 function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>) {
-  const [timeline, setTimeline] = useState<TimelineState>(() => ({ view: projectTimeline([]), observed: new Map() }));
-  let { view, observed } = timeline;
+  const [timeline, setTimeline] = useState<TimelineState>(() => ({ view: projectTimeline([]), observed: new Map(), appended: new Set() }));
+  let { view, observed, appended } = timeline;
   if (view.items !== items) {
     view = projectTimeline(items, timeline.view);
     observed = observeTools(view.entries, timeline.observed);
-    setTimeline({ view, observed });
+    const added = appendedTools(view.entries, timeline.view.entries);
+    if (added.length > 0) appended = new Set([...appended, ...added]);
+    setTimeline({ view, observed, appended });
   }
   const gapKeys = gapBefore.size === 0 ? NO_GAPS : gapEntryKeys(items, gapBefore);
   const segments = toolSegments(view.entries, gapKeys, observed);
   const segmentOf = new Map<string, ToolSegment>();
   for (const segment of segments) for (const tool of segment.tools) segmentOf.set(tool.key, segment);
-  return { view, gapKeys, segments, segmentOf };
+  return { view, gapKeys, segments, segmentOf, appended };
 }
 
 /** Pi 空闲期间仍在的 partial 不可能是正在进行的输出；记下它们，供新发送消息后识别旧轮残留。 */
@@ -139,7 +141,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   const currentFileReader = useRef(scopedFileReader);
   useLayoutEffect(() => { currentFileReader.current = scopedFileReader; }, [scopedFileReader]);
 
-  const { view, gapKeys, segments, segmentOf } = useProjectedTimeline(items, gapBefore);
+  const { view, gapKeys, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
   const idlePartials = useIdlePartials(view.entries, live && !running);
   const activity = timelineActivity(view.entries, live, running, groupId => completions?.has(groupId) === true, idlePartials);
@@ -230,6 +232,7 @@ export function ConversationTimeline({ items, live, completions, running = false
     key={segment.key}
     values={segment.tools.map(tool => tool.value)}
     live={live}
+    appended={appended}
     // 视口锚点用它在重新挂载后找回工具组；取第一条工具，内容相同时与观察顺序无关。
     timelineKey={`tools:${segment.tools[0]!.key}`}
     expanded={segmentExpansion(segment.tools, toolChoices)?.expanded ?? false}

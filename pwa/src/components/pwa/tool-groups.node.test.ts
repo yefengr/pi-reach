@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { projectTimeline, type PresentationEntry } from "@/lib/pwa/timeline-presentation";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
-import { observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion } from "./tool-groups";
+import { appendedTools, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion } from "./tool-groups";
 
 const scope = { session_id: "s", leaf_id: "l" };
 const tool = (id: string, group = "g1", status: "complete" | "error" = "complete"): TimelineViewItem => {
@@ -47,6 +47,19 @@ describe("toolSegments", () => {
     expect(after!.tools).toHaveLength(3);
     expect(after!.key).toBe(before!.key);
     expect(observeTools(withHistory, nextObserved)).toBe(nextObserved);
+  });
+});
+
+describe("appendedTools", () => {
+  test("only counts tools that arrive after content already on screen", () => {
+    const before = entries([text("t"), tool("a")]);
+    const after = projectTimeline([text("t"), tool("a"), tool("b")], { items: [], entries: before }).entries;
+    expect(appendedTools(after, before)).toEqual([after[2]!.key]);
+    // 首次加载、切换会话与向前补齐的历史都不算新追加。
+    expect(appendedTools(before, [])).toEqual([]);
+    expect(appendedTools(entries([tool("x", "other")]), before)).toEqual([]);
+    const prepended = projectTimeline([tool("old"), text("t"), tool("a")], { items: [], entries: before }).entries;
+    expect(appendedTools(prepended, before)).toEqual([]);
   });
 });
 

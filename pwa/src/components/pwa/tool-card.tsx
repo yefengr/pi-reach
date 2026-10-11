@@ -69,13 +69,14 @@ function ToolGroupCurrent({ value, status, animate }: { value: ToolValue; status
 }
 
 const NOT_ELAPSED: GroupHeadElapsed = { queued: false, minimum: false };
+const NO_APPENDED: ReadonlySet<string> = new Set();
 
 /** 组头排队显示：按开始顺序逐条显示，计时从每条进入组头时开始，规则见 `stepGroupHead`。 */
-function useGroupHeadTool(values: readonly ToolValue[], live: boolean): { value: ToolValue | null; animate: boolean } {
-  const [state, setState] = useState(() => initialGroupHead(values, live));
+function useGroupHeadTool(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>): { value: ToolValue | null; animate: boolean } {
+  const [state, setState] = useState(() => initialGroupHead(values, live, appended));
   const [elapsed, setElapsed] = useState({ index: state.index, ...NOT_ELAPSED });
   const timing = elapsed.index === state.index ? elapsed : NOT_ELAPSED;
-  const next = stepGroupHead(state, values, live, timing);
+  const next = stepGroupHead(state, values, live, timing, appended);
   if (next !== state) setState(next);
   useEffect(() => {
     const index = state.index;
@@ -91,12 +92,12 @@ function useGroupHeadTool(values: readonly ToolValue[], live: boolean): { value:
  * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头按开始顺序排队显示工具，每条至少停留一段时间，积压过多时跳到最新；
  * 最后一条结束并停满后回到分类摘要，组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
  */
-export function ToolGroupCard({ values, live, expanded, onExpandedChange, timelineKey, children }: { values: readonly ToolValue[]; live: boolean; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; children: ReactNode }) {
+export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, onExpandedChange, timelineKey, children }: { values: readonly ToolValue[]; live: boolean; appended?: ReadonlySet<string>; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
   const hasFailure = values.some(value => toolStatus(value) === "error");
-  const head = useGroupHeadTool(values, live);
+  const head = useGroupHeadTool(values, live, appended);
   const current = expanded ? null : head.value;
   const currentStatus = current ? effectiveToolStatus(current, live) : null;
   const runningCount = values.filter(value => effectiveToolStatus(value, live) === "running").length;

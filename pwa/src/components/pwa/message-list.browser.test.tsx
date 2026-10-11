@@ -552,6 +552,15 @@ test("the heading queues tools in start order, holds each briefly and never retu
   expect(groupButton().querySelector(".pwa-spin")).toBeNull();
 });
 
+test("a live tool that first arrives already finished is still shown once in a new group", async () => {
+  const { update } = await liveList([eventItem(assistantEvent)]);
+  await update([eventItem(assistantEvent), eventItem({ ...toolEvent, tool: "bash", args: { command: "pnpm lint" }, result: "ok" })]);
+  const current = () => groupButton().querySelector(".pwa-tool-group-current")?.textContent ?? null;
+  expect(current()).toBe("bashpnpm lint");
+  expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
+  await expect.poll(current, { timeout: 3000 }).toBeNull();
+});
+
 test("a burst of tools skips the heading to the latest once the backlog exceeds the limit", async () => {
   const run = (id: string) => partialItem({ ...toolPartial, tool: "bash", partial_id: `tool:${id}`, tool_call_id: id, args: { command: `echo ${id}` } });
   const { update } = await liveList([run("a")]);
