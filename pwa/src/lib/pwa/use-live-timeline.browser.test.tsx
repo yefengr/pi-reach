@@ -135,14 +135,14 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
     await expect.poll(() => api.items.some(item => item.kind === "event" && item.event.event_id === "event:first")).toBe(true);
     expect(current()).toBe("readsecond.ts");
     formal(done("second", 2));
-    await expect.poll(current).toBeNull();
+    // 工具全部结束、Pi 仍 working：短暂延迟后显示 Working；组头停留满最短时间后回到摘要。
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    await expect.poll(() => list.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+    await expect.poll(current, { timeout: 3000 }).toBeNull();
     await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
     expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
     expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(0);
     expect(list.querySelector(".pwa-turn-meta")).toBeNull();
-    // 工具全部结束、Pi 仍 working：短暂延迟后显示 Working。
-    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
-    await expect.poll(() => list.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
 
     if (mode === "run_end with residual partial") {
       receive({ ...base, protocol_version: 2, type: "timeline_partial", partial_id: "unfinished:assistant:0", kind: "assistant", status: "delta", delta: "Still streaming" });

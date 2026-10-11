@@ -67,7 +67,7 @@
 .pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-summary-text { flex: 0 1 auto; font: inherit; color: inherit; }
 /* 当前工具与工具行同样式；换成新工具时从下方进入一次，减少动态效果时位移为 0、只保留淡入。 */
 .pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current { display: flex; align-items: center; gap: 8px; color: inherit; font: inherit; }
-.pwa-root .pwa-tool-group .pwa-tool-group-current > svg { flex: none; }
+.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current > .pwa-tool-status { flex: none; overflow: visible; }
 .pwa-root .pwa-tool-group .pwa-tool-group-current[data-enter] { animation: pwa-tool-group-current-in var(--pwa-duration-content) var(--pwa-ease-standard); }
 @keyframes pwa-tool-group-current-in { from { opacity: 0; transform: translateY(calc(100% * var(--pwa-motion-shift))); } }
 .pwa-tool-group-details { min-width: 0; }

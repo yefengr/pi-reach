@@ -514,7 +514,7 @@ test("tools join a live group from the first call and an open reader keeps its o
   expect(reading.at(-1)).toBe(true);
 });
 
-test("an earlier running tool does not return to the heading after the last started tool ends", async () => {
+test("the heading holds a finished tool briefly, never returns to an earlier one and switches at once to a new one", async () => {
   const unitTest = { ...toolPartial, tool: "bash", partial_id: "tool:test", tool_call_id: "test", args: { command: "pnpm test" } };
   const build = { ...toolPartial, tool: "bash", partial_id: "tool:build", tool_call_id: "build", args: { command: "pnpm build" } };
   const { update } = await liveList([partialItem(unitTest)]);
@@ -522,13 +522,25 @@ test("an earlier running tool does not return to the heading after the last star
   expect(current()).toBe("bashpnpm test");
   await update([partialItem(unitTest), partialItem(build)]);
   expect(current()).toBe("bashpnpm build");
-  await update([partialItem(unitTest), eventItem({ ...toolEvent, tool: "bash", event_id: "build", tool_call_id: "build", args: { command: "pnpm build" }, result: "ok" })]);
-  expect(current()).toBeNull();
+  const buildDone = eventItem({ ...toolEvent, tool: "bash", event_id: "build", tool_call_id: "build", args: { command: "pnpm build" }, result: "ok" });
+  await update([partialItem(unitTest), buildDone]);
+  // 结束的工具继续停留，图标换成结束状态；满最短停留时间后回到摘要。
+  expect(current()).toBe("bashpnpm build");
+  expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
+  await expect.poll(current, { timeout: 3000 }).toBeNull();
   // 摘要前的旋转图标只表示组内仍有工具在运行。
   expect(groupButton().querySelector(".pwa-tool-group-summary .pwa-spin")).not.toBeNull();
   expect(groupButton().textContent).toBe("Ran 2 commands");
   await update([eventItem({ ...toolEvent, tool: "bash", event_id: "test", tool_call_id: "test", args: { command: "pnpm test" }, result: "ok" }), eventItem({ ...toolEvent, tool: "bash", event_id: "build", tool_call_id: "build", args: { command: "pnpm build" }, result: "ok" })]);
   expect(groupButton().querySelector(".pwa-spin")).toBeNull();
+  // 停留期间有新工具开始时立即替换，不等待停留结束。
+  const lint = { ...toolPartial, tool: "bash", partial_id: "tool:lint", tool_call_id: "lint", args: { command: "pnpm lint" } };
+  const lintDone = eventItem({ ...toolEvent, tool: "bash", event_id: "lint", tool_call_id: "lint", args: { command: "pnpm lint" }, result: "ok" });
+  await update([partialItem(lint)]);
+  await update([lintDone]);
+  expect(current()).toBe("bashpnpm lint");
+  await update([lintDone, partialItem(build)]);
+  expect(current()).toBe("bashpnpm build");
 });
 
 test("earlier history keeps an expanded group expanded with the same identity", async () => {
@@ -547,7 +559,7 @@ test("reduced motion keeps the running indicator and uses a short reader fade", 
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   try {
     const { screen } = await liveList([partialItem(toolPartial)]);
-    expect(getComputedStyle(groupButton().querySelector(".pwa-tool-group-current .pwa-spin")!).animationName).not.toBe("none");
+    expect(getComputedStyle(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-running > svg")!).animationName).not.toBe("none");
     await expandToolGroups();
     expect(getComputedStyle(document.querySelector(".pwa-tool-status-running > svg")!).animationName).not.toBe("none");
     await expect.element(screen.getByRole("status", { name: "read: Running" })).toBeVisible();
