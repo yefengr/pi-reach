@@ -99,7 +99,9 @@ export function ToolGroupCard({ values, live, expanded, onExpandedChange, timeli
   const head = useGroupHeadTool(values, live);
   const current = expanded ? null : head.value;
   const currentStatus = current ? effectiveToolStatus(current, live) : null;
-  const busy = current === null && !expanded && values.some(value => effectiveToolStatus(value, live) === "running");
+  const runningCount = values.filter(value => effectiveToolStatus(value, live) === "running").length;
+  // 摘要态旋转图标对读屏隐藏，收起时工具行也未挂载，可访问名称里保留仍在运行的数量。
+  const busy = current === null && !expanded && runningCount > 0;
   // 停留中的已结束工具也保留在可访问名称里，与屏幕上显示的工具和结束状态一致。
   const currentCommand = current ? `${current.tool} ${toolInlineText(toolHeaderSummary(current))}`.trim() : null;
   const currentLabel = currentCommand === null || currentStatus === null ? null
@@ -107,7 +109,7 @@ export function ToolGroupCard({ values, live, expanded, onExpandedChange, timeli
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
   return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length} data-timeline-key={timelineKey}>
     <div className="pwa-tool-head">
-      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, currentLabel ? `${currentLabel} · ${summary}` : summary)} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
+      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, [currentLabel, busy ? t.tools.groupBusy(runningCount) : null, summary].filter(Boolean).join(" · "))} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
         <span className="pwa-tool-action-copy">{current
           ? <ToolGroupCurrent key={toolIdentity(current)} value={current} status={currentStatus!} animate={head.animate} />
           : <span className="pwa-tool-group-summary" title={summary}>{busy ? <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> : null}<span className="pwa-tool-group-summary-text">{summary}</span></span>}</span>

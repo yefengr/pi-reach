@@ -386,6 +386,7 @@ export const en = {
     groupInterrupted: (count: number) => `${count} interrupted`,
     groupToggle: (expanded: boolean, summary: string) => `${expanded ? "Collapse" : "Expand"} ${summary}`,
     groupRunning: (command: string) => `Running ${command}`,
+    groupBusy: (count: number) => `${count} running`,
     groupStatus: (count: number) => `${count} tools complete`,
     readFile: "Read file",
     runCommand: "Run command",

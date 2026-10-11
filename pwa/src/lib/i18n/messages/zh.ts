@@ -387,6 +387,7 @@ export const zh: Messages = {
     groupInterrupted: (count) => `${count} 项已中断`,
     groupToggle: (expanded, summary) => `${expanded ? "收起" : "展开"}：${summary}`,
     groupRunning: (command) => `正在运行 ${command}`,
+    groupBusy: (count) => `${count} 项运行中`,
     groupStatus: (count) => `${count} 个工具已完成`,
     useTool: (tool) => (tool ? `使用 ${tool} 工具` : "使用工具"),
     readFile: "读取文件",

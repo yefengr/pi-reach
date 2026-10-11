@@ -547,6 +547,7 @@ test("the heading queues tools in start order, holds each briefly and never retu
   // 摘要前的旋转图标只表示组内仍有工具在运行。
   expect(groupButton().querySelector(".pwa-tool-group-summary .pwa-spin")).not.toBeNull();
   expect(groupButton().textContent).toBe("Ran 2 commands");
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand 1 running · Ran 2 commands");
   await update([finish("test", "pnpm test"), finish("build", "pnpm build")]);
   expect(groupButton().querySelector(".pwa-spin")).toBeNull();
 });
