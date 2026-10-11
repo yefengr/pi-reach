@@ -6,6 +6,10 @@
   --pwa-reader-drawer-width: calc(720px + var(--pwa-safe-right));
 }
 
+/* 主区贴边进度：0 为内嵌卡片，1 为贴满窗口。注册为数值才能过渡，卡片外边距与主区内部安全区都由它插值，
+   两者之和在收展过程中保持不变，内容不会因安全区被重复计入而跳动；不支持 @property 的浏览器直接切换。 */
+@property --pwa-main-flush { syntax: "<number>"; inherits: true; initial-value: 0; }
+
 /* 侧栏内容宽 260 不含安全区，面板总宽另加左安全区。
    侧栏展开时桌面主区是内嵌在 panel 底上的卡片：上、右、下与窗口边缘相距 8，
    遇到安全区时按不贴边叠层取较大值，卡片内部不再叠加安全区。侧栏收起后主区与移动端一样贴满窗口，内部按 main-safe-* 避让。 */
@@ -15,23 +19,19 @@
   --pwa-reading-width: 680px;
   --pwa-sidebar-motion: var(--pwa-duration-sidebar);
   --pwa-main-card-gap: var(--pwa-space-xs);
-  --pwa-main-card-top: max(var(--pwa-main-card-gap), var(--pwa-safe-top));
-  --pwa-main-card-right: max(var(--pwa-main-card-gap), var(--pwa-safe-right));
-  --pwa-main-card-bottom: max(var(--pwa-main-card-gap), var(--pwa-safe-bottom));
-  --pwa-main-safe-left: 0px;
-  --pwa-main-safe-right: 0px;
-  --pwa-main-safe-bottom: 0px;
+  --pwa-main-flush: 0;
+  --pwa-main-card-top: calc(max(var(--pwa-main-card-gap), var(--pwa-safe-top)) * (1 - var(--pwa-main-flush)));
+  --pwa-main-card-right: calc(max(var(--pwa-main-card-gap), var(--pwa-safe-right)) * (1 - var(--pwa-main-flush)));
+  --pwa-main-card-bottom: calc(max(var(--pwa-main-card-gap), var(--pwa-safe-bottom)) * (1 - var(--pwa-main-flush)));
+  --pwa-main-safe-top: calc(var(--pwa-safe-top) * var(--pwa-main-flush));
+  --pwa-main-safe-left: calc(var(--pwa-safe-left) * var(--pwa-main-flush));
+  --pwa-main-safe-right: calc(var(--pwa-safe-right) * var(--pwa-main-flush));
+  --pwa-main-safe-bottom: calc(var(--pwa-safe-bottom) * var(--pwa-main-flush));
   --pwa-main-inset-start: calc(var(--pwa-gutter) + var(--pwa-main-safe-left));
   --pwa-main-inset-end: calc(var(--pwa-gutter) + var(--pwa-main-safe-right));
+  transition: --pwa-main-flush var(--pwa-sidebar-motion) var(--pwa-ease-standard);
 }
-.pwa-root[data-sidebar-collapsed] {
-  --pwa-main-card-top: 0px;
-  --pwa-main-card-right: 0px;
-  --pwa-main-card-bottom: 0px;
-  --pwa-main-safe-left: var(--pwa-safe-left);
-  --pwa-main-safe-right: var(--pwa-safe-right);
-  --pwa-main-safe-bottom: var(--pwa-safe-bottom);
-}
+.pwa-root[data-sidebar-collapsed] { --pwa-main-flush: 1; }
 
 /* 工作区与设置页两层视图：设置页为当前视图时工作区隐藏但保持挂载，保留会话、草稿与阅读位置。
    转场与右侧 Drawer 同一模型：工作区不动，设置层带模态阴影滑入，遮罩只在转场中由脚本淡入淡出。 */
@@ -138,11 +138,11 @@
 .pwa-ui-scope .pwa-root .pwa-topbar > .pwa-topbar-back { flex: none; margin-right: -4px; }
 
 /* 主区与会话标题区。 */
-.pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: var(--pwa-main-card-top) var(--pwa-main-card-right) var(--pwa-main-card-bottom) 0; border-radius: var(--pwa-radius-lg); background: var(--pwa-bg); transition: margin var(--pwa-sidebar-motion) var(--pwa-ease-standard), border-radius var(--pwa-sidebar-motion) var(--pwa-ease-standard); }
+.pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: var(--pwa-main-card-top) var(--pwa-main-card-right) var(--pwa-main-card-bottom) 0; border-radius: var(--pwa-radius-lg); background: var(--pwa-bg); transition: border-radius var(--pwa-sidebar-motion) var(--pwa-ease-standard); }
 .pwa-root[data-sidebar-collapsed] .pwa-main { border-radius: 0; }
 /* 侧栏展开时标题区位于卡片内，不贴屏幕顶边，状态栏安全区已由卡片上边距承担；收起后主区贴边，标题区按顶栏规格自行避让状态栏。 */
-.pwa-root .pwa-title-bar { min-height: var(--pwa-topbar-height); padding-top: 0; padding-right: calc(8px + var(--pwa-main-safe-right)); padding-left: var(--pwa-main-inset-start); }
-.pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); padding-top: var(--pwa-safe-top); padding-left: calc(56px + var(--pwa-safe-left)); }
+.pwa-root .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-main-safe-top)); padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-left: var(--pwa-main-inset-start); }
+.pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }
 .pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; }
 .pwa-root .pwa-title-bar-name { min-width: 0; margin: 0; overflow: hidden; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-title-bar-prefix { color: var(--pwa-secondary); font-weight: var(--pwa-weight-regular); }
@@ -198,7 +198,7 @@
 @media (max-width: 767.98px) {
   :root { --pwa-gutter: 16px; }
   /* 移动主区贴满屏幕，不做卡片；内部按各侧安全区避让。 */
-  .pwa-root { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-main-safe-right: var(--pwa-safe-right); --pwa-main-safe-bottom: var(--pwa-safe-bottom); }
+  .pwa-root { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-main-safe-right: var(--pwa-safe-right); --pwa-main-safe-bottom: var(--pwa-safe-bottom); transition: none; }
   .pwa-root .pwa-layout { display: flex; transition: none; background: var(--pwa-bg); }
   .pwa-root .pwa-main { flex: 1 1 auto; margin: 0; border-radius: 0; touch-action: pan-y; transition: none; }
   .pwa-root .pwa-workspace-state { touch-action: pan-y; }

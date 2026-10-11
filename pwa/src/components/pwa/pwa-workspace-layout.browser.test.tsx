@@ -1208,6 +1208,40 @@ test("landscape side safe areas are avoided once by the edge-touching layers", a
   }
 });
 
+test("moves the desktop safe areas between the card margin and the main insets without jumping", async () => {
+  const safeTop = 24;
+  const safeRight = 47;
+  await page.viewport(1024, 768);
+  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
+  document.documentElement.style.setProperty("--pwa-safe-right", `${safeRight}px`);
+  try {
+    const screen = await renderLayout({ events: [] });
+    await expect.element(screen.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    const main = document.querySelector<HTMLElement>(".pwa-main")!;
+    const heading = document.querySelector<HTMLElement>(".pwa-title-bar-heading")!;
+    const actions = document.querySelector<HTMLElement>(".pwa-title-bar-actions")!;
+    const headingTop = Math.round(heading.getBoundingClientRect().top);
+    const actionsRight = Math.round(actions.getBoundingClientRect().right);
+    for (const name of ["Collapse sidebar", "Expand sidebar"]) {
+      await screen.getByRole("button", { name }).click();
+      const mainTops = new Set<number>();
+      const until = performance.now() + 400;
+      while (performance.now() < until) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        mainTops.add(Math.round(main.getBoundingClientRect().top));
+        // 卡片外边距减少多少，主区内部安全区就增加多少，标题与右侧操作在整个过渡中不动。
+        expect(Math.abs(Math.round(heading.getBoundingClientRect().top) - headingTop)).toBeLessThanOrEqual(1);
+        expect(Math.abs(Math.round(actions.getBoundingClientRect().right) - actionsRight)).toBeLessThanOrEqual(1);
+      }
+      // 采样到外边距的中间值，说明确实经历了过渡而不是直接切换。
+      expect([...mainTops].some((top) => top > 0 && top < safeTop)).toBe(true);
+    }
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-top");
+    document.documentElement.style.removeProperty("--pwa-safe-right");
+  }
+});
+
 test("the workspace runtime notice relies on the notice area for the side safe area", async () => {
   const safe = 47;
   await page.viewport(390, 844);
