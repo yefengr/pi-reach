@@ -75,11 +75,12 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     commit(done("a-second", 2));
     commit(done("z-first", 3));
     receive(text("B", "After tools. ".repeat(25)));
-    await expect.poll(() => list.querySelectorAll("article").length).toBe(4);
+    // 两条工具从第一条起即在同一个折叠组内：正文、工具组、正文。
+    await expect.poll(() => list.querySelectorAll("article").length).toBe(3);
     await expect.poll(() => list.querySelector("article.partial")?.textContent?.includes("After tools. ".repeat(25).trim())).toBe(true);
     await settle();
     const reply = list.querySelector("article.partial")!;
-    expect([...list.querySelectorAll("article")].slice(0, 3)).toEqual(original);
+    expect([...list.querySelectorAll("article")].slice(0, 2)).toEqual(original);
     expect(list.scrollHeight - list.clientHeight - list.scrollTop).toBeLessThanOrEqual(1);
     const reading = original[0].querySelectorAll("p")[5];
     list.scrollTop += reading.getBoundingClientRect().top - list.getBoundingClientRect().top - 2;
@@ -95,15 +96,15 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     receive(text("C", "Final summary."));
     commit(formal("C", 6, "Final summary."));
     await settle();
-    expect([...list.querySelectorAll("article")].slice(0, 4)).toEqual([...original, reply]);
-    expect(list.querySelectorAll("article")).toHaveLength(6);
+    expect([...list.querySelectorAll("article")].slice(0, 3)).toEqual([...original, reply]);
+    expect(list.querySelectorAll("article")).toHaveLength(5);
     expect(list.querySelectorAll(".pwa-streaming")).toHaveLength(0);
     expect(Math.abs(offset() - before)).toBeLessThanOrEqual(1);
     expect(api.followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });
 
-test.each(["missing run_end", "run_end", "run_end with residual partial"] as const)("live frame delivery groups tools only after explicit completion without working updates (%s)", async mode => {
+test.each(["missing run_end", "run_end", "run_end with residual partial"] as const)("live frame delivery groups tools from the first call and finishes the turn only on run_end (%s)", async mode => {
   piRunning = true;
   const screen = await render(<Harness />);
   const base = { session_id: scope.sessionId, leaf_id: scope.leafId, group_id: "tool-run" };
@@ -121,40 +122,44 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
   try {
     flushSync(() => { expect(start(0)).toEqual([]); });
     const list = api.messageListRef.current!;
+    const current = () => list.querySelector(".pwa-tool-group-current")?.textContent ?? null;
     receive(partial("first"));
+    await expect.poll(current).toBe("readfirst.ts");
     receive(partial("second"));
-    await expect.poll(() => list.querySelectorAll(".pwa-tool-status-running").length).toBe(2);
-    expect(list.querySelector(".pwa-tool-group")).toBeNull();
+    // 两条并行：组头显示最后开始的一条。
+    await expect.poll(current).toBe("readsecond.ts");
+    expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
 
     formal(done("first", 1));
-    await expect.poll(() => list.querySelectorAll(".pwa-tool-status-complete").length).toBe(1);
-    expect(list.querySelector(".pwa-tool-group")).toBeNull();
+    await expect.poll(() => api.items.some(item => item.kind === "event" && item.event.event_id === "event:first")).toBe(true);
+    expect(current()).toBe("readsecond.ts");
     formal(done("second", 2));
-    await expect.poll(() => list.querySelectorAll(".pwa-tool-status-complete").length).toBe(2);
-    expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(2);
-    expect(list.querySelector(".pwa-tool-group")).toBeNull();
+    await expect.poll(current).toBeNull();
+    await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
+    expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+    expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(0);
     expect(list.querySelector(".pwa-turn-meta")).toBeNull();
+    // 工具全部结束、Pi 仍 working：短暂延迟后显示 Working。
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    await expect.poll(() => list.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
 
     if (mode === "run_end with residual partial") {
       receive({ ...base, protocol_version: 2, type: "timeline_partial", partial_id: "unfinished:assistant:0", kind: "assistant", status: "delta", delta: "Still streaming" });
       await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Still streaming");
+      expect(list.querySelector(".pwa-thinking-status")).toBeNull();
     }
     if (mode !== "missing run_end") {
       const timestamp = Date.UTC(2026, 0, 1, 9, 30);
       formal({ ...base, event_id: "run-end", event_seq: 3, timestamp, kind: "run_end", status: "complete" });
       await expect.poll(() => list.querySelector(".pwa-turn-meta time")?.getAttribute("datetime")).toBe(new Date(timestamp).toISOString());
       await expect.poll(() => vi.mocked(mergeTimelineEvents).mock.calls.some(([, values]) => values.some(event => event.kind === "run_end"))).toBe(true);
+      // 收到 run_end 后即使 working 尚未更新也不再显示 Working。
+      expect(list.querySelector(".pwa-thinking-status")).toBeNull();
     }
-    if (mode === "run_end") {
-      await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
-      expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
-      expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(0);
-      expect(api.items.some(item => item.kind === "partial")).toBe(false);
-    } else {
-      expect(list.querySelector(".pwa-tool-group")).toBeNull();
-      expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(2);
-      if (mode === "run_end with residual partial") expect(api.items.some(item => item.kind === "partial" && item.partial.partial_id === "unfinished:assistant:0")).toBe(true);
-    }
+    expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+    if (mode === "run_end") expect(api.items.some(item => item.kind === "partial")).toBe(false);
+    if (mode === "run_end with residual partial") expect(api.items.some(item => item.kind === "partial" && item.partial.partial_id === "unfinished:assistant:0")).toBe(true);
     expect(api.messageListRef.current).toBe(list);
     expect(piRunning).toBe(true);
     expect(report).not.toHaveBeenCalled();

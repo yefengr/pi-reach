@@ -184,6 +184,9 @@ test.each([1280, 390])("closing the direct reader by Escape or history preserves
   const tail = answer("tail", paragraphs("Below"));
   const { screen, list, readAt, update, viewport } = await renderTimeline([partial("above", paragraphs("Above", 5)), tool, tail]);
   try {
+    // 工具在默认收起的组内，先展开再从工具行打开阅读器。
+    await userEvent.click(list.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head .pwa-tool-action")!);
+    await settleLayout();
     const heading = list.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!;
     await readAt(heading);
     heading.focus({ preventScroll: true });

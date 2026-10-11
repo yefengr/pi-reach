@@ -32,6 +32,10 @@ function runEndItem(): TimelineViewItem {
 function partialItem(partial: TimelinePartial): TimelineViewItem { return { kind: "partial", createdAt: 0, partial }; }
 function toolButton(index = 0): HTMLButtonElement { return document.querySelectorAll<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")[index]!; }
 function groupButton(index = 0): HTMLButtonElement { return document.querySelectorAll<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head .pwa-tool-action")[index]!; }
+/** 工具从第一条起即在默认收起的组内；需要操作工具行时先展开所有收起的组。 */
+async function expandToolGroups() {
+  for (const toggle of document.querySelectorAll<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head .pwa-tool-action[aria-expanded='false']")) await userEvent.click(toggle);
+}
 async function closeReader(key: "escape" | "history" = "escape") {
   await expect.poll(() => window.history.state?.piReachToolReader).toBe(true);
   if (key === "history") window.history.back();
@@ -162,6 +166,8 @@ test("all tool states show only titles and status, never input, output, images o
   const custom: TimelineEvent = { ...toolEvent, event_id: "custom", tool_call_id: "custom", tool: "custom", result: { secretPreview: "not visible" } };
   const image: TimelineEvent = { ...toolEvent, tool_call_id: "image", event_id: "image", tool: "write", args: { path: "file.txt", content: "INPUT_MARKER" }, result: [{ type: "image", mimeType: "image/png", data: "IMAGE_MARKER" }] };
   const { screen } = await liveList([partialItem(toolPartial), eventItem({ ...toolEvent, tool_call_id: "complete", result: "Finished" }), eventItem(failed), eventItem(interrupted), eventItem(custom), eventItem(image)]);
+  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+  await expandToolGroups();
   expect(document.querySelectorAll(".pwa-tool-card")).toHaveLength(6);
   for (const action of document.querySelectorAll(".pwa-tool-card .pwa-tool-action")) {
     expect(action.hasAttribute("aria-expanded")).toBe(false);
@@ -181,6 +187,7 @@ test("one keyboard action opens live output and partial updates and formalizatio
   const { screen, update } = await liveList([partialItem(toolPartial)], { onReadingChange: value => reading.push(value) });
   await update([partialItem({ ...toolPartial, blocks: [{ type: "text", text: "New live output" }] })]);
   await expect.element(screen.getByText("New live output")).not.toBeInTheDocument();
+  await expandToolGroups();
   const origin = toolButton();
   expect(origin.getAttribute("aria-label")).toBe("View read tool details");
   origin.focus();
@@ -208,22 +215,28 @@ test("one keyboard action opens live output and partial updates and formalizatio
   await closeReader();
 });
 
-test("parallel completion preserves timeline order and reader content while other tools become a collapsed group", async () => {
+test("parallel completion preserves timeline order, groups and reader content", async () => {
   const before = { ...assistantEvent, event_id: "before", blocks: [{ type: "text" as const, text: "Before tools" }] };
   const between = { ...assistantEvent, event_id: "between", blocks: [{ type: "text" as const, text: "Between tools" }] };
   const laterTools = Array.from({ length: 6 }, (_, index) => eventItem({ ...toolEvent, event_id: `later-${index}`, tool_call_id: `later-${index}`, tool: "bash", args: { command: `echo ${index}` }, result: `Output ${index}` }));
   const { screen, update } = await liveList([eventItem(before), partialItem(toolPartial), eventItem(between), ...laterTools]);
   const originalOrder = [...document.querySelectorAll(".pwa-message-list > article")];
-  expect(document.querySelectorAll(".pwa-tool-action")).toHaveLength(7);
-  await userEvent.click(toolButton());
+  // 正文把工具分成两段，各自从第一条起成组。
+  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(2);
+  await userEvent.click(groupButton(0));
+  const origin = toolButton();
+  await userEvent.click(origin);
   await update([eventItem(before), eventItem(between), ...laterTools, eventItem({ ...toolEvent, args: toolPartial.args!, result: "Read completed last" }), runEndItem()]);
   expect([...document.querySelectorAll(".pwa-message-list > article")].slice(0, 3)).toEqual(originalOrder.slice(0, 3));
-  expect(groupButton().getAttribute("aria-expanded")).toBe("false");
+  expect(groupButton(0).getAttribute("aria-expanded")).toBe("true");
+  expect(groupButton(1).getAttribute("aria-expanded")).toBe("false");
+  expect(origin.isConnected).toBe(true);
   await expect.element(screen.getByText("Read completed last")).toBeVisible();
   await closeReader();
-  await userEvent.click(groupButton());
-  await expect.poll(() => document.querySelectorAll(".pwa-tool-group .pwa-tool-card").length).toBe(6);
-  expect(document.querySelectorAll(".pwa-tool-group .pwa-tool-action[aria-haspopup='dialog']")).toHaveLength(6);
+  await expect.poll(() => document.activeElement).toBe(origin);
+  await userEvent.click(groupButton(1));
+  await expect.poll(() => document.querySelectorAll(".pwa-tool-group .pwa-tool-card").length).toBe(7);
+  expect(document.querySelectorAll(".pwa-tool-group .pwa-tool-action[aria-haspopup='dialog']")).toHaveLength(7);
   expect(document.querySelector(".pwa-tool-group .pwa-tool-preview")).toBeNull();
 });
 
@@ -241,6 +254,7 @@ test.each(["history-replacement", "empty"])("tool removal closes the reader and 
     return <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onReadingChange={value => { viewport.setReadingDetails(value); reading.push(value); }} />;
   }
   const screen = await renderPwa(<Harness />);
+  await expandToolGroups();
   await userEvent.click(toolButton());
   await expect.element(screen.getByRole("dialog")).toBeVisible();
   expect(reading.at(-1)).toBe(true);
@@ -261,6 +275,9 @@ test.each(["history-replacement", "empty"])("tool removal closes the reader and 
 
 test("an offline partial has an unknown status and hides its content until opened", async () => {
   const screen = await renderMessageList([partialItem(toolPartial)], { isLive: false });
+  // 状态未知的 partial 不作为组头当前工具，也没有旋转图标。
+  expect(document.querySelector(".pwa-tool-group-current, .pwa-tool-group .pwa-spin")).toBeNull();
+  await expandToolGroups();
   await expect.element(screen.getByRole("status", { name: "read: Status unknown" })).toBeVisible();
   await expect.element(screen.getByText("Streaming output")).not.toBeInTheDocument();
   expect(toolButton().getAttribute("aria-label")).toBe("View read tool details");
@@ -269,6 +286,7 @@ test("an offline partial has an unknown status and hides its content until opene
 test("a repeated tool id in another session cannot inherit the old reader", async () => {
   const reading: boolean[] = [];
   const { screen, update } = await liveList([eventItem({ ...toolEvent, result: "Old session output" })], { onReadingChange: value => reading.push(value) });
+  await expandToolGroups();
   await userEvent.click(toolButton());
   await expect.element(screen.getByText("Old session output")).toBeVisible();
   await update([eventItem({ ...toolEvent, session_id: "other-session", result: "New session output" })]);
@@ -276,12 +294,15 @@ test("a repeated tool id in another session cannot inherit the old reader", asyn
   await expect.poll(() => reading.at(-1)).toBe(false);
   expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
   expect(document.querySelector(".pwa-message-list")?.textContent).not.toContain("New session output");
+  // 新会话的同名工具是另一个组，不继承旧组的展开选择。
+  expect(groupButton().getAttribute("aria-expanded")).toBe("false");
 });
 
 test("images and structured output appear only in the direct reader without raw-data tabs", async () => {
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
   const screen = await renderMessageList([eventItem({ ...toolEvent, args: { path: "image.png" }, result: [{ type: "text", text: "Image result" }, { type: "image", mimeType: "image/png", data: png }] })]);
   expect(document.querySelector(".pwa-message-list img")).toBeNull();
+  await expandToolGroups();
   await userEvent.click(toolButton());
   await expect.element(screen.getByRole("dialog").getByRole("img", { name: "Tool output image 2" })).toBeVisible();
   expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
@@ -289,6 +310,7 @@ test("images and structured output appear only in the direct reader without raw-
   await closeReader();
   await screen.unmount();
   const fallback = await renderMessageList([eventItem({ ...toolEvent, tool: "custom", result: { files: 3, ok: true } })]);
+  await expandToolGroups();
   await userEvent.click(toolButton());
   expect(document.querySelector(".pwa-tool-reader-scroll")?.textContent).toContain('"files": 3');
   expect(document.body.textContent).not.toContain("Raw data");
@@ -304,6 +326,7 @@ test.each([1280, 390])("one click opens short output or complete long write inpu
   ];
   const { screen, update } = await liveList([eventItem(calls[0])]);
   const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+  await expandToolGroups();
   for (let index = 0; index < calls.length; index += 1) {
     await update([eventItem(calls[index])]);
     const origin = toolButton();
@@ -343,14 +366,21 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
     partialItem({ ...toolPartial, tool: "bash", tool_call_id: "running", partial_id: "tool:running", args: { command: `pnpm build\n${"long-argument ".repeat(50)}` } }),
     eventItem({ ...toolEvent, tool: "edit", tool_call_id: "failed", event_id: "failed", args: { path: "src/component.tsx" }, status: "error", error: "Hidden error details" }),
   ]);
+  await expandToolGroups();
   try {
     for (const theme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", theme);
       const replyLeft = Math.round(document.querySelector(".pwa-message.assistant .pwa-markdown")!.getBoundingClientRect().left);
-      for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-action")) {
+      // 组头与 Pi 回复左缘对齐；组内工具行在 2px 竖线加 12px 内边距之后。
+      const group = groupButton();
+      expect(Math.round(group.getBoundingClientRect().height)).toBe(44);
+      expect(Math.round(group.getBoundingClientRect().left)).toBe(replyLeft);
+      expect(Math.round(group.getBoundingClientRect().right)).toBeLessThanOrEqual(width);
+      expect(group.querySelector(".pwa-tool-chevron")).not.toBeNull();
+      for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-card .pwa-tool-action")) {
         const rect = action.getBoundingClientRect();
         expect(Math.round(rect.height)).toBe(44);
-        expect(Math.round(rect.left)).toBe(replyLeft);
+        expect(Math.round(rect.left)).toBe(replyLeft + 14);
         expect(Math.round(rect.right)).toBeLessThanOrEqual(width);
         expect(action.hasAttribute("aria-expanded")).toBe(false);
         expect(action.querySelector(".pwa-tool-chevron")).toBeNull();
@@ -361,7 +391,7 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
         expect(getComputedStyle(label).fontStyle).toBe("normal");
         expect(getComputedStyle(label).fontWeight).toBe("600");
       }
-      expect(Math.round(document.querySelector(".pwa-tool-action-copy strong")!.getBoundingClientRect().left)).toBe(replyLeft);
+      expect(Math.round(document.querySelector(".pwa-tool-card .pwa-tool-action-copy strong")!.getBoundingClientRect().left)).toBe(replyLeft + 14);
       const thinking = document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!;
       // 思考与工具行一样：标题与 Pi 回复左缘对齐，折叠箭头在行右侧。
       expect(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left)).toBe(replyLeft);
@@ -447,38 +477,78 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
   }
 });
 
-test("finished-turn grouping waits for the open reader, then groups and falls back to list focus", async () => {
+test("tools join a live group from the first call and an open reader keeps its origin while the turn finishes", async () => {
   const first = { ...toolEvent, args: { path: "a.ts" }, result: "First output" };
   const second = { ...toolEvent, event_id: "second", tool_call_id: "second", args: { path: "b.ts" }, result: "Second output" };
   const running = { ...toolPartial, partial_id: "tool:third", tool_call_id: "third", args: { path: "c.ts" } };
   const reading: boolean[] = [];
-  const { screen, update } = await liveList([eventItem(first), eventItem(second), partialItem(running)], { onReadingChange: value => reading.push(value) });
+  const { screen, update } = await liveList([eventItem(first)], { onReadingChange: value => reading.push(value) });
+  const group = document.querySelector(".pwa-tool-group")!;
+  expect(group.getAttribute("data-tool-group-size")).toBe("1");
+  await update([eventItem(first), eventItem(second), partialItem(running)]);
+  expect(document.querySelector(".pwa-tool-group")).toBe(group);
+  // 折叠的组头显示最后开始、仍在运行的工具；组头出现后的变化才播放进入过渡。
+  expect(groupButton().querySelector(".pwa-tool-group-current")?.textContent).toBe("readc.ts");
+  expect(groupButton().querySelector(".pwa-tool-group-current")?.hasAttribute("data-enter")).toBe(true);
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand Running read c.ts · Read 3 files");
+  // 末段运行中展开不加阅读锁，自动跟随继续。
+  await userEvent.click(groupButton());
+  expect(reading.at(-1)).toBe(false);
+  expect(groupButton().querySelector(".pwa-tool-group-current")).toBeNull();
+  expect(groupButton().textContent).toBe("Read 3 files");
   const origin = toolButton();
   await userEvent.click(origin);
   await expect.element(screen.getByText("First output")).toBeVisible();
   await update([eventItem(first), eventItem(second), eventItem({ ...toolEvent, event_id: "third", tool_call_id: "third", args: { path: "c.ts" }, result: "Third output" }), runEndItem()]);
-  // 阅读器打开期间不合并：触发行仍在，阅读内容不变。
-  expect(document.querySelector(".pwa-tool-group")).toBeNull();
+  expect(document.querySelector(".pwa-tool-group")).toBe(group);
+  expect(groupButton().getAttribute("aria-expanded")).toBe("true");
   expect(origin.isConnected).toBe(true);
-  await expect.element(screen.getByRole("dialog")).toBeVisible();
   await expect.element(screen.getByText("First output")).toBeVisible();
   expect(reading.at(-1)).toBe(true);
   await closeReader("history");
   await expect.poll(() => reading.at(-1)).toBe(false);
-  // 退出后合并生效，原触发行收入组内，焦点回到列表。
-  await expect.poll(() => document.querySelector(".pwa-tool-group")).not.toBeNull();
-  expect(groupButton().getAttribute("aria-expanded")).toBe("false");
-  expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
+  await expect.poll(() => document.activeElement).toBe(origin);
+  // 已结束的组展开照旧暂停自动跟随。
   await userEvent.click(groupButton());
-  await userEvent.click(toolButton());
-  await expect.element(screen.getByText("First output")).toBeVisible();
-  await closeReader();
+  await userEvent.click(groupButton());
+  expect(reading.at(-1)).toBe(true);
+});
+
+test("an earlier running tool does not return to the heading after the last started tool ends", async () => {
+  const unitTest = { ...toolPartial, tool: "bash", partial_id: "tool:test", tool_call_id: "test", args: { command: "pnpm test" } };
+  const build = { ...toolPartial, tool: "bash", partial_id: "tool:build", tool_call_id: "build", args: { command: "pnpm build" } };
+  const { update } = await liveList([partialItem(unitTest)]);
+  const current = () => groupButton().querySelector(".pwa-tool-group-current")?.textContent ?? null;
+  expect(current()).toBe("bashpnpm test");
+  await update([partialItem(unitTest), partialItem(build)]);
+  expect(current()).toBe("bashpnpm build");
+  await update([partialItem(unitTest), eventItem({ ...toolEvent, tool: "bash", event_id: "build", tool_call_id: "build", args: { command: "pnpm build" }, result: "ok" })]);
+  expect(current()).toBeNull();
+  // 摘要前的旋转图标只表示组内仍有工具在运行。
+  expect(groupButton().querySelector(".pwa-tool-group-summary .pwa-spin")).not.toBeNull();
+  expect(groupButton().textContent).toBe("Ran 2 commands");
+  await update([eventItem({ ...toolEvent, tool: "bash", event_id: "test", tool_call_id: "test", args: { command: "pnpm test" }, result: "ok" }), eventItem({ ...toolEvent, tool: "bash", event_id: "build", tool_call_id: "build", args: { command: "pnpm build" }, result: "ok" })]);
+  expect(groupButton().querySelector(".pwa-spin")).toBeNull();
+});
+
+test("earlier history keeps an expanded group expanded with the same identity", async () => {
+  const read = (id: string): TimelineViewItem => eventItem({ ...toolEvent, event_id: id, tool_call_id: id, args: { path: `${id}.ts` }, result: id });
+  const { update } = await liveList([read("b"), read("c")]);
+  const group = document.querySelector(".pwa-tool-group")!;
+  await userEvent.click(groupButton());
+  await update([read("a"), read("b"), read("c")]);
+  expect(document.querySelector(".pwa-tool-group")).toBe(group);
+  expect(group.getAttribute("data-tool-group-size")).toBe("3");
+  expect(groupButton().getAttribute("aria-expanded")).toBe("true");
+  expect(document.querySelectorAll(".pwa-tool-group .pwa-tool-card")).toHaveLength(3);
 });
 
 test("reduced motion keeps the running indicator and uses a short reader fade", async () => {
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   try {
     const { screen } = await liveList([partialItem(toolPartial)]);
+    expect(getComputedStyle(groupButton().querySelector(".pwa-tool-group-current .pwa-spin")!).animationName).not.toBe("none");
+    await expandToolGroups();
     expect(getComputedStyle(document.querySelector(".pwa-tool-status-running > svg")!).animationName).not.toBe("none");
     await expect.element(screen.getByRole("status", { name: "read: Running" })).toBeVisible();
     await userEvent.click(toolButton());
@@ -507,7 +577,7 @@ test("reports whether scrolling is within 32px of the latest output", async () =
 
 test("message list controls retain 44px touch targets", async () => {
   const screen = await renderMessageList([eventItem(toolEvent), eventItem(assistantEvent), unknownPending, { ...unknownPending, id: "pending-2", delivery: "accepted", cancelable: true }]);
-  for (const name of ["View read tool details", "Expand thinking", "Retry delivery", "Cancel queued message"]) {
+  for (const name of ["Expand Used tools 1 time", "Expand thinking", "Retry delivery", "Cancel queued message"]) {
     const rect = screen.getByRole("button", { name }).element().getBoundingClientRect();
     expect(Math.round(rect.width)).toBeGreaterThanOrEqual(44);
     expect(Math.round(rect.height)).toBeGreaterThanOrEqual(44);
@@ -564,6 +634,7 @@ test("keeps inline code and tool names in neutral text while links keep the acce
   const screen = await renderMessageList([eventItem(toolEvent), eventItem(answer)]);
   try {
     await expect.element(screen.getByText("pnpm test")).toBeVisible();
+    await expandToolGroups();
     const probe = document.createElement("span");
     probe.style.cssText = "color: var(--pwa-soft-ink); border-top: 1px solid var(--pwa-ink); background: var(--pwa-accent)";
     document.querySelector(".pwa-root")!.append(probe);
@@ -575,15 +646,16 @@ test("keeps inline code and tool names in neutral text while links keep the acce
   } finally { await screen.unmount(); }
 });
 
-test("groups adjacent finished tools of one turn including failures, and marks the failure on the group", async () => {
+test("groups adjacent tools of one turn including failures, and marks the failure on the group", async () => {
   const read = (id: string, path: string): Extract<TimelineEvent, { kind: "tool" }> => ({ ...toolEvent, event_id: id, tool_call_id: id, args: { path }, result: "ok" });
   const failed: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "failed", tool_call_id: "failed", tool: "bash", args: { command: "pnpm lint" }, status: "error", error: "Lint failed" };
   const otherTurn: Extract<TimelineEvent, { kind: "tool" }> = { ...read("other-turn", "d.ts"), group_id: "group-2" };
   const reading: boolean[] = [];
   await liveList([...([read("a", "a.ts"), read("b", "b.ts"), failed, read("c", "c.ts"), read("d", "a.ts"), otherTurn].map(eventItem)), runEndItem()], { onReadingChange: value => reading.push(value) });
   const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
-  expect(list.querySelectorAll(":scope > .pwa-tool-group")).toHaveLength(1);
-  expect(list.querySelectorAll(":scope > .pwa-tool-card")).toHaveLength(1);
+  // 另一轮的工具单独成组，不与本轮合并。
+  expect(list.querySelectorAll(":scope > .pwa-tool-group")).toHaveLength(2);
+  expect(list.querySelectorAll(":scope > .pwa-tool-card")).toHaveLength(0);
   expect(groupButton().textContent).toBe("Read 3 files · Ran 1 command · 1 failed");
   expect(groupButton().querySelector(".pwa-tool-group-alert")).not.toBeNull();
   expect(groupButton().getAttribute("aria-label")).toBe("Expand Read 3 files · Ran 1 command · 1 failed");

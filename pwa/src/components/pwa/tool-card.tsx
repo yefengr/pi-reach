@@ -1,9 +1,10 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 
 import { toolAction, toolHeaderSummary, toolInlineText, toolStatus, type ToolKind, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n, type Messages } from "@/lib/i18n";
 import { Collapse } from "./collapse";
+import { currentTool, effectiveToolStatus } from "./tool-groups";
 import "./tool-reader.css";
 
 type ToolCardProps = {
@@ -49,17 +50,40 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
   return parts.join(" · ");
 }
 
-/** 同一轮中相邻且状态已有定论的工具合并为一行摘要，展开后是逐条工具行；含失败时摘要旁显示错误图标，仅有中断时不显示。 */
-export function ToolGroupCard({ values, expanded, onExpandedChange, children }: { values: readonly ToolValue[]; expanded: boolean; onExpandedChange: (expanded: boolean) => void; children: ReactNode }) {
+/** 组头当前工具：每次换成新的工具时从下方进入一次；组头首次出现时不播放。 */
+function ToolGroupCurrent({ value, animate }: { value: ToolValue; animate: boolean }) {
+  const summary = toolInlineText(toolHeaderSummary(value));
+  return <span className="pwa-tool-group-current" data-enter={animate ? "" : undefined}>
+    <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />
+    <strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}
+  </span>;
+}
+
+/**
+ * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头只显示最后开始、仍在运行的工具；它结束后回到分类摘要，
+ * 组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
+ */
+export function ToolGroupCard({ values, live, expanded, onExpandedChange, children }: { values: readonly ToolValue[]; live: boolean; expanded: boolean; onExpandedChange: (expanded: boolean) => void; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
   const hasFailure = values.some(value => toolStatus(value) === "error");
+  const running = currentTool(values, live);
+  const runningKey = running ? JSON.stringify([running.group_id, running.tool_call_id]) : null;
+  // 组头出现后当前工具第一次变化起才播放进入过渡；展开再收起不算变化。
+  const [shown, setShown] = useState({ key: runningKey, animate: false });
+  if (shown.key !== runningKey) setShown({ key: runningKey, animate: true });
+  const current = expanded ? null : running;
+  const busy = current === null && !expanded && values.some(value => effectiveToolStatus(value, live) === "running");
+  const currentLabel = current ? t.tools.groupRunning(`${current.tool} ${toolInlineText(toolHeaderSummary(current))}`.trim()) : null;
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
   return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length}>
     <div className="pwa-tool-head">
-      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, summary)} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
-        <span className="pwa-tool-action-copy"><span className="pwa-tool-group-summary" title={summary}>{summary}</span>{hasFailure ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}</span>
+      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, currentLabel ? `${currentLabel} · ${summary}` : summary)} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
+        <span className="pwa-tool-action-copy">{current
+          ? <ToolGroupCurrent key={runningKey} value={current} animate={shown.animate} />
+          : <span className="pwa-tool-group-summary" title={summary}>{busy ? <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> : null}<span className="pwa-tool-group-summary-text">{summary}</span></span>}</span>
+        {hasFailure ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}
         <ChevronRight className="pwa-tool-chevron pwa-timeline-chevron" size={16} aria-hidden="true" />
       </button>
     </div>
