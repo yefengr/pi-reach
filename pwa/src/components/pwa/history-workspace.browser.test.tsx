@@ -111,6 +111,17 @@ test("moves a gap marker past hidden records to the next visible record", async 
   } finally { await screen.unmount(); }
 });
 
+test("keeps a gap marker when only hidden records follow the gap", async () => {
+  const runEnd: TimelineViewItem = { kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: "s-20", event_seq: 20, group_id: "g-7", timestamp: 20, kind: "run_end", status: "complete" } };
+  const { screen } = await renderHistory({ initial: [...sequencedItems([5, 6, 7]), runEnd] });
+  try {
+    await expect.poll(() => renderedRecords().length).toBe(3);
+    await expect.element(screen.getByText("Some records in between aren't saved in this browser")).toBeVisible();
+    const texts = [...list().querySelectorAll("p")].map((element) => element.textContent ?? "");
+    expect(texts.indexOf("Some records in between aren't saved in this browser")).toBeGreaterThan(texts.indexOf("Saved record 7"));
+  } finally { await screen.unmount(); }
+});
+
 test("does not group tools of one run across an unsaved gap", async () => {
   const tool = (seq: number): TimelineViewItem => ({ kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: `s-${seq}`, event_seq: seq, group_id: "run", timestamp: seq, kind: "tool", tool_call_id: `call-${seq}`, tool: "read", args: {}, truncated: false, status: "complete", result: {} } });
   const runEnd: TimelineViewItem = { kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: "s-23", event_seq: 23, group_id: "run", timestamp: 23, kind: "run_end", status: "complete" } };

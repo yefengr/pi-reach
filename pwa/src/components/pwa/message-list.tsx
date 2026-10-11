@@ -72,18 +72,18 @@ function isVisibleItem(item: TimelineViewItem): boolean {
   return event.kind !== "assistant" || event.blocks.some((block) => block.text.trim());
 }
 
-/** 缺口标在隐藏记录上时顺延到其后第一条可见记录，过滤后提示不丢失。 */
-function visibleGapBefore(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string> | undefined): ReadonlySet<string> | undefined {
-  if (!gapBefore || gapBefore.size === 0) return gapBefore;
-  const moved = new Set<string>();
+/** 缺口标在隐藏记录上时顺延到其后第一条可见记录；其后没有可见记录时标在时间线末尾，过滤后提示不丢失。 */
+function visibleGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string> | undefined): { before?: ReadonlySet<string>; atEnd: boolean } {
+  if (!gapBefore || gapBefore.size === 0) return { before: gapBefore, atEnd: false };
+  const before = new Set<string>();
   let pending = false;
   for (const item of items) {
     if (item.kind === "event" && gapBefore.has(item.event.event_id)) pending = true;
     if (!pending || !isVisibleItem(item) || item.kind !== "event") continue;
-    moved.add(item.event.event_id);
+    before.add(item.event.event_id);
     pending = false;
   }
-  return moved;
+  return { before, atEnd: pending };
 }
 
 function eventText(event: TimelineEvent): string {
@@ -164,7 +164,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
   const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
   const visibleItems = items.filter(isVisibleItem);
-  const visibleGaps = useMemo(() => visibleGapBefore(items, gapBefore), [items, gapBefore]);
+  const gaps = useMemo(() => visibleGaps(items, gapBefore), [items, gapBefore]);
   const liveRunning = isLive && running;
   const loadingEmpty = visibleItems.length === 0 && loading;
   useTimelineEnterFade(listRef, visibleItems.length === 0, loading);
@@ -186,7 +186,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   }}>
     {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={visibleGaps} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

@@ -25,6 +25,8 @@ type ConversationTimelineProps = {
   renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead) => ReactNode;
   /** 这些正式事件之前缺少记录，在对应条目前显示一行说明。 */
   gapBefore?: ReadonlySet<string>;
+  /** 最后一处缺口之后没有可见条目，在时间线末尾显示说明。 */
+  gapAtEnd?: boolean;
 };
 
 const NO_GAPS: ReadonlySet<string> = new Set();
@@ -125,7 +127,7 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
   return { rows, hasOutput };
 }
 
-export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS }: ConversationTimelineProps) {
+export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
   const [snapshot, setSnapshot] = useState(() => projectTimeline([]));
   const [expansionChoices, setExpansionChoices] = useState<Map<string, boolean>>(() => new Map());
   const [reader, setReader] = useState<ReaderState>(null);
@@ -239,6 +241,7 @@ export function ConversationTimeline({ items, live, completions, running = false
 
   return <>
     {rows}
+    {gapAtEnd ? <GapNotice /> : null}
     {waitingForReply ? <ThinkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
