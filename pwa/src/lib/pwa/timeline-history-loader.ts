@@ -116,6 +116,8 @@ export class TimelineHistoryLoader {
   private readonly requestId: () => string;
   private boundary: number;
   private active: PageOperation | null = null;
+  // 正在进行的单条核对；期间请求的分页排到其后执行，不复用核对结果。
+  private verification: Promise<unknown> | null = null;
   private disposed = false;
   private token = 0;
 
@@ -179,10 +181,19 @@ export class TimelineHistoryLoader {
       }
     })();
     page.promise = result.then(() => false);
+    const verification = result.finally(() => {
+      if (this.verification === verification) this.verification = null;
+    });
+    this.verification = verification;
     return result;
   }
 
   private loadPage(range: SequenceRange): Promise<boolean> {
+    const verification = this.verification;
+    if (verification) {
+      this.emitState(true);
+      return verification.then(() => this.disposed ? false : this.loadPage(range));
+    }
     if (this.active) return this.active.promise;
 
     const page: PageOperation = {

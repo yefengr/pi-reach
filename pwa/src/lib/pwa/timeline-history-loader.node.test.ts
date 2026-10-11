@@ -304,3 +304,22 @@ test("returns null for an event id request that fails, times out, or is out of r
   expect(await timedOut).toBeNull();
   expect(harness.onError).not.toHaveBeenCalled();
 });
+
+test("queues an earlier page requested during an event id check instead of dropping it", async () => {
+  const harness = createHarness();
+  const check = harness.loader.fetchEventId(50);
+  await flushMicrotasks();
+  const page = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  // 核对期间先显示加载中，分页请求等核对结束后再发出。
+  expect(sessionSyncFrames(harness.sent)).toHaveLength(1);
+  expect(harness.onState).toHaveBeenLastCalledWith({ hasEarlier: true, loading: true });
+
+  harness.loader.receive(historyFrame("request-1", numberedEvents(50, 1)));
+  expect(await check).toBe("event-50");
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent).at(-1)).toMatchObject({ id: "request-2", before: 81, limit: 80 });
+  harness.loader.receive(historyFrame("request-2"));
+  expect(await page).toBe(true);
+  expect(harness.onPage).toHaveBeenCalledTimes(1);
+});

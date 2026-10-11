@@ -524,3 +524,22 @@ test("a failed branch check keeps the caught-up view without recovery", async ()
     expect(frames[2]).toMatchObject({ before: 51, limit: 50 });
   } finally { await screen.unmount(); }
 });
+
+test("an earlier page requested during the branch check runs after the check", async () => {
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => frames.length).toBe(2);
+    api.loadEarlier();
+    await expect.poll(() => api.loadingEarlier).toBe(true);
+    expect(frames).toHaveLength(2);
+    reply(frames, events(50, 50));
+    await expect.poll(() => frames.length).toBe(3);
+    expect(frames[2]).toMatchObject({ before: 51, limit: 50 });
+    reply(frames, events(1, 50));
+    await expect.poll(() => sequences().length).toBe(80);
+  } finally { await screen.unmount(); }
+});
