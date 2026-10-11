@@ -230,6 +230,8 @@ export function ConversationTimeline({ items, live, completions, running = false
     key={segment.key}
     values={segment.tools.map(tool => tool.value)}
     live={live}
+    // 视口锚点用它在重新挂载后找回工具组；取第一条工具，内容相同时与观察顺序无关。
+    timelineKey={`tools:${segment.tools[0]!.key}`}
     expanded={segmentExpansion(segment.tools, toolChoices)?.expanded ?? false}
     onExpandedChange={expanded => chooseSegment(segment, expanded)}
   >{segment.tools.map(renderEntry)}</ToolGroupCard>;

@@ -275,3 +275,26 @@ test.each([1280, 390])("switching back to a viewed session restores its reading 
     expect(viewport().followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });
+
+test("switching back restores a reading position anchored on a collapsed tool group", async () => {
+  await page.viewport(390, 844);
+  const tool = (id: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: id, group_id: "tools", tool_call_id: id, timestamp: 1, kind: "tool", tool: "read", args: { path: `${id}.txt` }, status: "complete", truncated: false, result: "ok" } });
+  const sessionA = [answer("a-0", paragraphs("Session A 0", 4)), tool("first"), tool("second"), ...Array.from({ length: 8 }, (_, index) => answer(`a-${index + 1}`, paragraphs(`Session A ${index + 1}`, 4)))];
+  const { screen, list, readAt, replace, viewport } = await renderTimeline(sessionA);
+  try {
+    const group = () => list.querySelector<HTMLElement>(".pwa-tool-group")!;
+    await readAt(group());
+    const top = offset(group(), list);
+    const saved = viewport().captureSessionPosition();
+    // 切到另一个会话后整体替换内容，原工具组 DOM 断开，只能靠定位键找回。
+    flushSync(() => { viewport().reset(); viewport().restoreSessionPosition(null); });
+    replace([answer("b-0", paragraphs("Session B", 30))]);
+    await settleLayout();
+    expect(group()).toBeNull();
+    flushSync(() => { viewport().reset(); viewport().restoreSessionPosition(saved); });
+    replace(sessionA);
+    await settleLayout();
+    expect(Math.abs(offset(group(), list) - top)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});

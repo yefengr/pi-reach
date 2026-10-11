@@ -91,7 +91,7 @@ function useGroupHeadTool(values: readonly ToolValue[], live: boolean): { value:
  * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头按开始顺序排队显示工具，每条至少停留一段时间，积压过多时跳到最新；
  * 最后一条结束并停满后回到分类摘要，组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
  */
-export function ToolGroupCard({ values, live, expanded, onExpandedChange, children }: { values: readonly ToolValue[]; live: boolean; expanded: boolean; onExpandedChange: (expanded: boolean) => void; children: ReactNode }) {
+export function ToolGroupCard({ values, live, expanded, onExpandedChange, timelineKey, children }: { values: readonly ToolValue[]; live: boolean; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
@@ -105,7 +105,7 @@ export function ToolGroupCard({ values, live, expanded, onExpandedChange, childr
   const currentLabel = currentCommand === null || currentStatus === null ? null
     : currentStatus === "running" ? t.tools.groupRunning(currentCommand) : t.tools.statusLabel(currentCommand, t.tools.status[currentStatus]);
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
-  return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length}>
+  return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length} data-timeline-key={timelineKey}>
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, currentLabel ? `${currentLabel} · ${summary}` : summary)} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
         <span className="pwa-tool-action-copy">{current
