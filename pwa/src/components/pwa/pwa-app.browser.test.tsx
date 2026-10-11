@@ -1551,6 +1551,46 @@ test("recovers like a branch reset when saved records belong to an abandoned bra
   } finally { await screen.unmount(); }
 });
 
+test("a failed branch check is retried against the same saved record on the next connection", async () => {
+  await seedTimeline(numberedEvents(3));
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const branch = numberedEvents(5).map((event) => ({ ...event, event_id: `branch-${event.event_seq}`, blocks: [{ type: "text" as const, text: `Branch ${event.event_seq}` }] }));
+  try {
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1", 4));
+    await vi.waitFor(() => expect(historyRequests(channel).at(-1)).toMatchObject({ before: 5, limit: 1 }));
+    channel.emit(recentHistoryFrame(channel, "session-1", branch.slice(3, 4)));
+    await expect.poll(listText).toContain("Branch 4");
+    // 新分支第 4 条已写入本地，核对第 3 条的请求却失败。
+    await vi.waitFor(() => expect(historyRequests(channel).at(-1)).toMatchObject({ before: 4, limit: 1 }));
+    await vi.waitFor(async () => expect((await (await openPwaDatabase()).events.toArray()).map((record) => record.eventId)).toContain("branch-4"));
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: historyRequests(channel).at(-1)!.id, code: "internal_error", message: "History unavailable" });
+
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.poll(() => screen.getByLabelText("Connected", { exact: true }).query()).toBeNull();
+    relay.emitState("open");
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1", 5));
+    await vi.waitFor(() => expect(historyRequests(resumed).at(-1)).toMatchObject({ before: 6, limit: 1 }));
+    resumed.emit(recentHistoryFrame(resumed, "session-1", branch.slice(4)));
+    // 仍核对上次未完成的第 3 条，而不是本地新的最新记录第 5 条。
+    await vi.waitFor(() => expect(historyRequests(resumed).at(-1)).toMatchObject({ before: 4, limit: 1 }));
+    resumed.emit(recentHistoryFrame(resumed, "session-1", branch.slice(2, 3)));
+    await expect.poll(() => channelHarness.channels.length).toBe(3);
+
+    const restarted = channelHarness.channels[2]!;
+    restarted.emit(readyFrame(restarted, "session-1", 5));
+    await vi.waitFor(() => expect(historyRequests(restarted).at(-1)).toMatchObject({ before: 6, limit: 5 }));
+    restarted.emit(recentHistoryFrame(restarted, "session-1", branch));
+    await expect.poll(listText).toContain("Branch 1");
+    expect(listText()).not.toContain("Record 1");
+    await vi.waitFor(async () => expect((await (await openPwaDatabase()).events.toArray()).map((record) => record.eventId).sort()).toEqual(branch.map((event) => event.event_id).sort()));
+  } finally { await screen.unmount(); }
+});
+
 test("a failed recent-window request releases loading and retries the same range", async () => {
   const screen = await renderOnlineApp(renderWorkspaceApp);
   try {

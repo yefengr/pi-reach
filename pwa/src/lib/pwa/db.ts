@@ -71,6 +71,13 @@ export type PwaTimelineSessionRecord = {
   previewEventId?: string;
   firstEventId?: string;
   lastEventId?: string;
+  /** 待与 Pi 当前分支核对的本地记录；核对通过或整段替换后清除。不建索引，无需升级版本。 */
+  branchCheckpoint?: PwaTimelineBranchCheckpoint;
+};
+
+export type PwaTimelineBranchCheckpoint = {
+  eventSeq: number;
+  eventId: string;
 };
 
 export type PwaIdentityRecord = {

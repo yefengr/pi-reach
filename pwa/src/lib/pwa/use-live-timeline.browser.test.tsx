@@ -11,10 +11,11 @@ import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { MessageList } from "@/components/pwa/message-list";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
-import { discardTimelineEventsAfter, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
+import { clearTimelineBranchCheckpoint, discardTimelineEventsAfter, ensureTimelineBranchCheckpoint, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
 
 vi.mock("./timeline-store", () => ({
   loadTimeline: vi.fn(async () => []), mergeTimelineEvents: vi.fn(async () => {}), replaceTimelineEvents: vi.fn(async () => {}), latestTimelineEvent: vi.fn(async () => null), discardTimelineEventsAfter: vi.fn(async () => {}),
+  ensureTimelineBranchCheckpoint: vi.fn(async () => null), clearTimelineBranchCheckpoint: vi.fn(async () => {}),
   TimelineStoreConflictError: class extends Error {},
 }));
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
@@ -48,7 +49,7 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
   expect(api.historyLoaderRef.current?.receive(frame)).toBe(true);
 }
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
-afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
+afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
 
 test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and reading position at %ipx", async width => {
   await page.viewport(width, 844);
@@ -473,8 +474,10 @@ test("a cold start of an empty session clears saved records left from another br
   } finally { await screen.unmount(); }
 });
 
+const checkpoint50 = { eventSeq: 50, eventId: "session-50" };
+
 test("checks the latest saved record against the current branch after catching up", async () => {
-  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  vi.mocked(ensureTimelineBranchCheckpoint).mockResolvedValue(checkpoint50);
   const screen = await render(<Harness />);
   try {
     const frames = start(80);
@@ -486,14 +489,18 @@ test("checks the latest saved record against the current branch after catching u
     await expect.poll(() => frames.length).toBe(2);
     expect(frames[1]).toMatchObject({ type: "session_sync", before: 51, limit: 1 });
     reply(frames, events(50, 50));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // 核对通过才清除检查点。
+    await expect.poll(() => vi.mocked(clearTimelineBranchCheckpoint).mock.calls.length).toBe(1);
+    expect(vi.mocked(clearTimelineBranchCheckpoint)).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: scope.sessionId }), checkpoint50);
     expect(branchMismatch).not.toHaveBeenCalled();
     expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
+    // 检查点须在补齐记录写入前记下，否则会被新写入的当前分支记录顶替。
+    expect(vi.mocked(ensureTimelineBranchCheckpoint).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(mergeTimelineEvents).mock.invocationCallOrder[0]!);
   } finally { await screen.unmount(); }
 });
 
 test("a saved record from an abandoned branch triggers branch recovery", async () => {
-  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  vi.mocked(ensureTimelineBranchCheckpoint).mockResolvedValue(checkpoint50);
   const screen = await render(<Harness />);
   try {
     const frames = start(80);
@@ -502,11 +509,40 @@ test("a saved record from an abandoned branch triggers branch recovery", async (
     await expect.poll(() => frames.length).toBe(2);
     reply(frames, [{ ...events(50, 50)[0]!, event_id: "new-branch-50" }]);
     await expect.poll(() => branchMismatch.mock.calls.length).toBe(1);
+    // 检查点由随后的整段替换清除。
+    expect(vi.mocked(clearTimelineBranchCheckpoint)).not.toHaveBeenCalled();
+  } finally { await screen.unmount(); }
+});
+
+test("a checkpoint that cannot be saved still checks the latest saved record in this connection", async () => {
+  vi.mocked(ensureTimelineBranchCheckpoint).mockRejectedValue(new Error("IndexedDB unavailable"));
+  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => frames.length).toBe(2);
+    expect(frames[1]).toMatchObject({ type: "session_sync", before: 51, limit: 1 });
+    reply(frames, [{ ...events(50, 50)[0]!, event_id: "new-branch-50" }]);
+    await expect.poll(() => branchMismatch.mock.calls.length).toBe(1);
+  } finally { await screen.unmount(); }
+});
+
+test("a pending checkpoint beyond the current head triggers branch recovery without a request", async () => {
+  vi.mocked(ensureTimelineBranchCheckpoint).mockResolvedValue({ eventSeq: 90, eventId: "session-90" });
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(80);
+    await expect.poll(() => frames.length).toBe(1);
+    reply(frames, events(51, 80));
+    await expect.poll(() => branchMismatch.mock.calls.length).toBe(1);
+    expect(frames).toHaveLength(1);
   } finally { await screen.unmount(); }
 });
 
 test("a failed branch check keeps the caught-up view without recovery", async () => {
-  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  vi.mocked(ensureTimelineBranchCheckpoint).mockResolvedValue(checkpoint50);
   const screen = await render(<Harness />);
   try {
     const frames = start(80);
@@ -516,6 +552,8 @@ test("a failed branch check keeps the caught-up view without recovery", async ()
     expect(api.historyLoaderRef.current?.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: frames[1]!.id, code: "internal_error", message: "History unavailable" })).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(branchMismatch).not.toHaveBeenCalled();
+    // 保留检查点，下次连接再核对。
+    expect(vi.mocked(clearTimelineBranchCheckpoint)).not.toHaveBeenCalled();
     expect(api.catchupFailed).toBe(false);
     expect(sequences()).toHaveLength(30);
     // 核对结束后可照常向前加载。
@@ -526,7 +564,7 @@ test("a failed branch check keeps the caught-up view without recovery", async ()
 });
 
 test("an earlier page requested during the branch check runs after the check", async () => {
-  vi.mocked(latestTimelineEvent).mockResolvedValue(events(50, 50)[0]!);
+  vi.mocked(ensureTimelineBranchCheckpoint).mockResolvedValue(checkpoint50);
   const screen = await render(<Harness />);
   try {
     const frames = start(80);

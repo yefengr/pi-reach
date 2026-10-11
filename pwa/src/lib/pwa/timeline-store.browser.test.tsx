@@ -4,7 +4,9 @@ import { getPwaDatabase, openPwaDatabase, type PwaTimelineEventRecord } from "./
 import { attachmentMessageKey, projectAttachmentMetadata } from "./timeline-attachments";
 import {
   clearScope,
+  clearTimelineBranchCheckpoint,
   discardTimelineEventsAfter,
+  ensureTimelineBranchCheckpoint,
   findTimelineConflict,
   isPersistableTimelineEvent,
   listTimelineSessions,
@@ -381,6 +383,32 @@ test("reads the latest saved sequence and discards records past a regressed head
   await discardTimelineEventsAfter(scope, 0);
   expect(await loadTimeline(scope)).toEqual([]);
   expect((await listTimelineSessions(scope.deviceId)).some((session) => session.sessionId === scope.sessionId)).toBe(false);
+});
+
+test("keeps a pending branch checkpoint across merges and renames until it is verified or replaced", async () => {
+  const numbered = (seq: number, id = `e-${seq}`) => ({ ...userEvent(id, "group", seq), event_seq: seq });
+  expect(await ensureTimelineBranchCheckpoint(scope)).toBeNull();
+  await mergeTimelineEvents(scope, [1, 2, 3].map((seq) => numbered(seq)));
+  const checkpoint = { eventSeq: 3, eventId: "e-3" };
+  expect(await ensureTimelineBranchCheckpoint(scope)).toEqual(checkpoint);
+
+  // 补齐写入更新的记录后，仍返回原检查点，而不是新的最新记录。
+  await mergeTimelineEvents(scope, [numbered(4, "branch-4")]);
+  await saveTimelineSessionName(scope, "Kept name");
+  await discardTimelineEventsAfter(scope, 4);
+  expect(await ensureTimelineBranchCheckpoint(scope)).toEqual(checkpoint);
+  expect((await listTimelineSessions())[0]).toMatchObject({ name: "Kept name", eventCount: 4 });
+
+  // 只清除与核对时一致的检查点。
+  await clearTimelineBranchCheckpoint(scope, { eventSeq: 3, eventId: "other" });
+  expect(await ensureTimelineBranchCheckpoint(scope)).toEqual(checkpoint);
+  await clearTimelineBranchCheckpoint(scope, checkpoint);
+  expect(await ensureTimelineBranchCheckpoint(scope)).toEqual({ eventSeq: 4, eventId: "branch-4" });
+
+  // 整段替换后的记录来自当前分支，检查点随之清除。
+  await replaceTimelineEvents(scope, [numbered(1, "fresh-1")]);
+  expect((await getPwaDatabase().sessions.get(makeTimelineScopeId(scope)))?.branchCheckpoint).toBeUndefined();
+  expect(await ensureTimelineBranchCheckpoint(scope)).toEqual({ eventSeq: 1, eventId: "fresh-1" });
 });
 
 test("serializes renames with event summary updates", async () => {
