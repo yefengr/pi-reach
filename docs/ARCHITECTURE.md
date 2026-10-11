@@ -99,8 +99,8 @@ endpoint metadata 可以落盘，但不是 presence。`use-endpoint-registry.ts`
 | [`use-endpoint-registry.ts`](../pwa/src/lib/pwa/use-endpoint-registry.ts) | Relay snapshot、在线 endpoint 和非 presence metadata 持久化。 |
 | [`use-active-endpoint-selection.ts`](../pwa/src/lib/pwa/use-active-endpoint-selection.ts) | 当前电脑、用户选择与 0/1/N endpoint 选择。 |
 | [`use-device-pairing.ts`](../pwa/src/lib/pwa/use-device-pairing.ts) | 八位 pairing code 的解析、target 解析和配对写入。 |
-| [`timeline-store.ts`](../pwa/src/lib/pwa/timeline-store.ts) | 正式 timeline scope 的持久化、会话名称保存、读取和历史摘要。 |
-| [`use-history-session-names.ts`](../pwa/src/lib/pwa/use-history-session-names.ts) | 将已握手的活动会话与在线名称关联，顺序保存名称更新。 |
+| [`timeline-store.ts`](../pwa/src/lib/pwa/timeline-store.ts) | 正式 timeline scope 的持久化、会话名称与模型保存、读取和历史摘要。 |
+| [`use-history-session-details.ts`](../pwa/src/lib/pwa/use-history-session-details.ts) | 将已握手的活动会话与 Pi 报告的名称、模型和思考级别关联，变化时顺序保存，供只读历史显示。 |
 | [`workspace-view.tsx`](../pwa/src/components/pwa/workspace-view.tsx) | 电脑、活动 Pi 与本地历史导航。 |
 | [`session-sheet.tsx`](../pwa/src/components/pwa/session-sheet.tsx) | 移动端导航 Drawer。 |
 

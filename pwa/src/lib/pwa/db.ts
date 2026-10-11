@@ -64,6 +64,9 @@ export type PwaTimelineSessionRecord = {
   sessionId: string;
   leafId: string | null;
   name?: string;
+  /** 该会话在线时 Pi 最后报告的模型与思考级别，供只读历史显示；不建索引，无需升级版本。 */
+  model?: string;
+  thinking?: string;
   startedAt: number;
   updatedAt: number;
   eventCount: number;

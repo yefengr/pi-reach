@@ -713,6 +713,41 @@ test("saves session names, follows renames, and keeps replaced sessions separate
   } finally { await screen.unmount(); }
 });
 
+test("saves the reported model with each session and shows it in saved history after the Pi goes offline", async () => {
+  const unsequenced: TimelineEvent = { ...numberedEvents(1)[0]! };
+  delete unsequenced.event_seq;
+  await seedTimeline([unsequenced]);
+  const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
+  const relay = relayHarness.instances[0];
+  const session = async (sessionId: string) => (await listTimelineSessions("owner-device-key")).find((entry) => entry.sessionId === sessionId);
+  const updateModel = (model: string, thinking: string) => relay.emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", model, thinking } });
+  try {
+    updateModel("Model A", "low");
+    await expect.poll(async () => (await session("session-1"))?.model).toBe("Model A");
+    // 每次模型或思考级别变化都更新会话记录。
+    updateModel("Model B", "high");
+    await expect.poll(async () => (await session("session-1"))?.thinking).toBe("high");
+    expect((await session("session-1"))?.model).toBe("Model B");
+
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    const nextChannel = channelHarness.channels[1];
+    nextChannel.emit(readyFrame(nextChannel, "session-2"));
+    await seedTimeline([{ ...unsequenced, event_id: "second-event", session_id: "session-2", leaf_id: "generation-session-2", timestamp: Date.now() + 1 }]);
+    updateModel("Model C", "medium");
+    await expect.poll(async () => (await session("session-2"))?.model).toBe("Model C");
+    expect((await session("session-1"))).toMatchObject({ model: "Model B", thinking: "high" });
+
+    // Pi 离线后，历史仍按会话记录显示当时的模型，标签不可点击。
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [] });
+    await expect.poll(() => document.querySelector(".pwa-history-row")).not.toBeNull();
+    await userEvent.click([...document.querySelectorAll<HTMLElement>(".pwa-history-row")].find((row) => row.textContent?.includes("Test Pi"))!);
+    const model = screen.getByRole("button", { name: "Model and thinking settings, current Model B, thinking level high" });
+    await expect.element(model).toBeDisabled();
+    await expect.element(model).toHaveTextContent("Model B · high");
+  } finally { await screen.unmount(); }
+});
+
 test.each([
   ["invalid_leaf", "This session is out of date. Reconnect and try again."],
   ["too_large", "This message is too large to send."],
