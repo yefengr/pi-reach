@@ -63,6 +63,29 @@ function userScreenReaderLabel(event: Extract<TimelineEvent, { kind: "user" }>, 
   return event.origin === "extension" ? t.srRemote : t.srYou;
 }
 
+/** 时间线只显示合法发布记录，继续隐藏未知 custom、run_end 与空白 assistant；发布记录也是工具摘要的边界。 */
+function isVisibleItem(item: TimelineViewItem): boolean {
+  if (item.kind !== "event") return true;
+  const event = item.event;
+  if (event.kind === "run_end") return false;
+  if (event.kind === "custom") return publishedFileFromEvent(event) !== null;
+  return event.kind !== "assistant" || event.blocks.some((block) => block.text.trim());
+}
+
+/** 缺口标在隐藏记录上时顺延到其后第一条可见记录，过滤后提示不丢失。 */
+function visibleGapBefore(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string> | undefined): ReadonlySet<string> | undefined {
+  if (!gapBefore || gapBefore.size === 0) return gapBefore;
+  const moved = new Set<string>();
+  let pending = false;
+  for (const item of items) {
+    if (item.kind === "event" && gapBefore.has(item.event.event_id)) pending = true;
+    if (!pending || !isVisibleItem(item) || item.kind !== "event") continue;
+    moved.add(item.event.event_id);
+    pending = false;
+  }
+  return moved;
+}
+
 function eventText(event: TimelineEvent): string {
   if (event.kind === "user" || event.kind === "assistant") return blockText(event);
   if (event.kind === "provider_error") return event.message;
@@ -126,8 +149,9 @@ function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["on
 function EarlierRecords({ loading, failed, offline, onLoad }: { loading: boolean; failed: boolean; offline: boolean; onLoad: () => void }) {
   const { t } = useI18n();
   const loaderVisible = useDelayedVisibility(loading);
-  if (failed && !loading) return <div className="pwa-earlier" role="status"><span>{t.timeline.loadEarlierFailed}</span><Button className="pwa-earlier-button" variant="transparent" color="piReach" size="compact-sm" type="button" onClick={onLoad} aria-label={t.timeline.retryEarlier}>{t.common.retry}</Button></div>;
+  // 离线时重试无法生效，连接说明优先于失败状态。
   if (offline) return <p className="pwa-earlier">{t.timeline.earlierOffline}</p>;
+  if (failed && !loading) return <div className="pwa-earlier" role="status"><span>{t.timeline.loadEarlierFailed}</span><Button className="pwa-earlier-button" variant="transparent" color="piReach" size="compact-sm" type="button" onClick={onLoad} aria-label={t.timeline.retryEarlier}>{t.common.retry}</Button></div>;
   if (loading || loaderVisible) return <div className="pwa-earlier" aria-busy="true">
     <span className="pwa-sr-only" role="status">{t.timeline.loadingRecords}</span>
     {loaderVisible ? <span className="pwa-earlier-loading" aria-hidden="true"><LoaderCircle className="pwa-spin" size={16} />{t.timeline.loadingRecords}</span> : null}
@@ -139,8 +163,8 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   const { t } = useI18n();
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
   const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
-  // 仅合法发布记录可见，继续隐藏未知 custom；发布记录也是工具摘要的边界。
-  const visibleItems = items.filter((item) => item.kind !== "event" || (item.event.kind !== "run_end" && (item.event.kind !== "custom" || publishedFileFromEvent(item.event) !== null) && (item.event.kind !== "assistant" || item.event.blocks.some((block) => block.text.trim()))));
+  const visibleItems = items.filter(isVisibleItem);
+  const visibleGaps = useMemo(() => visibleGapBefore(items, gapBefore), [items, gapBefore]);
   const liveRunning = isLive && running;
   const loadingEmpty = visibleItems.length === 0 && loading;
   useTimelineEnterFade(listRef, visibleItems.length === 0, loading);
@@ -162,7 +186,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   }}>
     {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={gapBefore} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={visibleGaps} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

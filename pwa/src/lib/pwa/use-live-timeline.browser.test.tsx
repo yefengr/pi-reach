@@ -436,5 +436,12 @@ test("auto-loads earlier history near the top only after the reader leaves the l
     await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
     await expect.poll(() => syncs(frames).length).toBe(4);
     expect([syncs(frames)[3]!.before, syncs(frames)[3]!.limit]).toEqual([91, 80]);
+
+    // 断线销毁 loader 后不保留失败状态，否则离线时仍显示无效的重试。
+    const retried = syncs(frames)[3]!;
+    expect(api.historyLoaderRef.current?.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: retried.id, code: "internal_error", message: "History unavailable" })).toBe(true);
+    await expect.poll(() => api.loadEarlierFailed).toBe(true);
+    api.disconnect();
+    await expect.poll(() => api.loadEarlierFailed).toBe(false);
   } finally { await screen.unmount(); }
 });

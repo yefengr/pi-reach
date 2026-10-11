@@ -56,6 +56,8 @@ test("shows the earlier-records state that matches loading, failure and connecti
   const offline = renderList(items, { isLive: false });
   expect(offline).toContain("Connect to load earlier records");
   expect(offline).not.toContain("pwa-earlier-button");
+  // 离线时失败重试无法生效，以连接说明为准。
+  expect(renderList(items, { isLive: false, loadEarlierFailed: true })).toContain("Connect to load earlier records");
   // 只读历史的更早记录已在本地，不依赖连接。
   expect(renderList(items, { isLive: false, earlierLocal: true })).toContain("Load more");
 });

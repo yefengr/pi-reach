@@ -349,6 +349,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     failedCatchupRef.current = null;
     catchingUpRef.current = false;
     setCatchupFailed(false);
+    // loader 已销毁，旧的失败无法再重试；重连后按新连接的结果判断。
+    setEarlierFailed(false);
     setCatchingUp(false);
     setReconnectPhase(null);
     fragmentAssemblerRef.current?.reset();

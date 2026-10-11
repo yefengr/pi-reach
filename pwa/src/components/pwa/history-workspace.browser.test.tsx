@@ -100,6 +100,17 @@ test("marks records that were never saved in this browser before and between sav
   } finally { await screen.unmount(); }
 });
 
+test("moves a gap marker past hidden records to the next visible record", async () => {
+  const runEnd: TimelineViewItem = { kind: "event", event: { session_id: "history", leaf_id: "generation", event_id: "s-20", event_seq: 20, group_id: "g-7", timestamp: 20, kind: "run_end", status: "complete" } };
+  const { screen } = await renderHistory({ initial: [...sequencedItems([5, 6, 7]), runEnd, ...sequencedItems([21])] });
+  try {
+    await expect.poll(() => renderedRecords().length).toBe(4);
+    await expect.element(screen.getByText("Some records in between aren't saved in this browser")).toBeVisible();
+    const texts = [...list().querySelectorAll("p")].map((element) => element.textContent ?? "");
+    expect(texts.indexOf("Saved record 21")).toBe(texts.indexOf("Some records in between aren't saved in this browser") + 1);
+  } finally { await screen.unmount(); }
+});
+
 test("does not mark a complete saved history", async () => {
   const { screen } = await renderHistory({ initial: sequencedItems([1, 2, 3]) });
   try {
