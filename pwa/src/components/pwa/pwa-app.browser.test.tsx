@@ -644,7 +644,7 @@ test("entering saved history revokes session feedback and ignores old channel re
     await expect.element(context.screen.getByText("Could not compact the conversation. Try again.")).toBeVisible();
     await expect.poll(() => document.querySelector(".pwa-history-row")?.textContent).toContain("Archived note");
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
-    await expect.element(context.screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    await expect.element(context.screen.getByRole("heading", { level: 1, name: /Archived note$/ })).toBeVisible();
     await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
     replyOperation(context.channel, request);
     await flushMicrotasks();
@@ -658,7 +658,7 @@ test("marks the open history row with the neutral selected background, also whil
   try {
     await expect.poll(() => document.querySelector(".pwa-history-row")?.textContent).toContain("Archived note");
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
-    await expect.element(context.screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    await expect.element(context.screen.getByRole("heading", { level: 1, name: /Archived note$/ })).toBeVisible();
     const row = document.querySelector<HTMLElement>(".pwa-history-row[data-active]")!;
     const probe = document.createElement("span");
     probe.style.cssText = "color: var(--pwa-ink); background: var(--pwa-selected)";
@@ -705,10 +705,10 @@ test("saves session names, follows renames, and keeps replaced sessions separate
     expect(navigationHistoryRows().some((text) => text.startsWith("Second renamed"))).toBe(false);
     const oldHistory = page.elementLocator([...document.querySelectorAll<HTMLElement>(".pwa-history-row")].find((row) => row.textContent?.startsWith("Renamed session"))!);
     await oldHistory.click();
-    await expect.element(screen.getByRole("heading", { name: "Renamed session", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { level: 1, name: /Renamed session$/ })).toBeVisible();
     updateName("Live name while reading history");
     await flushMicrotasks();
-    await expect.element(screen.getByRole("heading", { name: "Renamed session", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { level: 1, name: /Renamed session$/ })).toBeVisible();
     expect((await summaries()).find((entry) => entry.sessionId === "session-1")?.name).toBe("Renamed session");
   } finally { await screen.unmount(); }
 });
@@ -857,11 +857,12 @@ test("confirms leaving an attachment send, preserves the original draft and reje
     await expect.element(input).toHaveValue("Keep scope-bound image draft");
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
     await screen.getByRole("button", { name: "Stop and switch", exact: true }).click();
-    await expect.element(screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { level: 1, name: /Archived note$/ })).toBeVisible();
     channelHarness.finishReplies[0]?.();
     await flushMicrotasks();
     expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(0);
-    await screen.getByRole("button", { name: "Back to live session", exact: true }).click();
+    // 只读历史不再提供返回入口，点击侧栏中的在线 Pi 回到实时会话。
+    await userEvent.click(document.querySelector<HTMLElement>(".pwa-nav-session")!);
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
     const resumedChannel = channelHarness.channels[1];
     if (!resumedChannel) throw new Error("Expected a replacement session channel.");
@@ -981,14 +982,15 @@ test.each(["opening", "reading"] as const)("published files: history confirms %s
     }
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
     await screen.getByRole("button", { name: "Cancel and switch", exact: true }).click();
-    await expect.element(screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { level: 1, name: /Archived note$/ })).toBeVisible();
     const readCount = channel.frames.filter(frame => frame.type === "file_read").length;
     channel.emit(publishedReportOpened(request));
     await flushMicrotasks();
     expect(channel.frames.filter(frame => frame.type === "file_read")).toHaveLength(readCount);
     expect(document.querySelector(".pwa-published-file")).toBeNull();
     if (read) expect(channel.frames.filter(frame => frame.type === "file_close")).toEqual([expect.objectContaining({ transfer_id: read.transfer_id })]);
-    await screen.getByRole("button", { name: "Back to live session", exact: true }).click();
+    // 只读历史不再提供返回入口，点击侧栏中的在线 Pi 回到实时会话。
+    await userEvent.click(document.querySelector<HTMLElement>(".pwa-nav-session")!);
     await expect.poll(() => channelHarness.channels.length).toBe(2);
     const resumed = channelHarness.channels[1]!;
     resumed.emit(readyFrame(resumed, "session-1", 1));
@@ -1020,7 +1022,7 @@ test("published files: upload and fetching share one mixed leave confirmation", 
     expect(channel.frames.some(frame => frame.type === "attachment_cancel" || frame.type === "file_close")).toBe(false);
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
     await screen.getByRole("button", { name: "Cancel and switch", exact: true }).click();
-    await expect.element(screen.getByRole("heading", { name: "Archived note", exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { level: 1, name: /Archived note$/ })).toBeVisible();
     await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
     expect(channel.frames.filter(frame => frame.type === "attachment_cancel")).toHaveLength(1);
     expect(channel.frames.filter(frame => frame.type === "file_close")).toEqual([expect.objectContaining({ transfer_id: read.transfer_id })]);
@@ -1028,7 +1030,8 @@ test("published files: upload and fetching share one mixed leave confirmation", 
     channel.emit(publishedReportOpened(request));
     await flushMicrotasks();
     expect(channel.frames.some(frame => frame.type === "user_message")).toBe(false);
-    await screen.getByRole("button", { name: "Back to live session", exact: true }).click();
+    // 只读历史不再提供返回入口，点击侧栏中的在线 Pi 回到实时会话。
+    await userEvent.click(document.querySelector<HTMLElement>(".pwa-nav-session")!);
     await expect.poll(() => channelHarness.channels.length).toBe(2);
     channelHarness.channels[1]!.emit(readyFrame(channelHarness.channels[1]!, "session-1", 1));
     await expect.element(screen.getByPlaceholder("Message your agent…")).toHaveValue("Keep the original upload draft");
@@ -2063,12 +2066,15 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(screen.getByRole("tab", { name: "History" })).not.toBeInTheDocument();
     await navigation.getByRole("button", { name: /Saved session note/ }).click();
     await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
-    // 移动顶栏在会话名上方标出「本地历史 · 只读」；输入区换为只读说明条，「更多」只含信息区。
+    // 标题与在线会话一致，不再标注只读；输入区保留在线样式但全部禁用，提示区说明只读，「更多」只含信息区。
     const historyTrigger = screen.getByRole("button", { name: "Open navigation" });
-    await expect.element(historyTrigger).toHaveTextContent("Local history · Read only");
     await expect.element(historyTrigger).toHaveTextContent("Saved session note");
-    await expect.element(screen.getByRole("note")).toHaveTextContent("This is a read-only record saved in this browser.");
-    await expect.element(screen.getByRole("textbox")).not.toBeInTheDocument();
+    await expect.element(historyTrigger).not.toHaveTextContent("Read only");
+    await expect.element(screen.getByRole("note")).toHaveTextContent("This is a session saved in this browser. It's read-only.");
+    const historyInput = screen.getByRole("textbox", { name: "You can't send messages in saved history" });
+    await expect.element(historyInput).toBeDisabled();
+    for (const name of ["Add attachments", "Pi commands", "Send message"]) await expect.element(screen.getByRole("button", { name, exact: true })).toBeDisabled();
+    expect(document.querySelector(".pwa-composer-stop")).toBeNull();
     await screen.getByRole("button", { name: "Session details" }).click();
     await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
@@ -2118,7 +2124,7 @@ test("hides live connection feedback while reading local history", async () => {
 
     await screen.getByRole("button", { name: "Open navigation" }).click();
     await screen.getByRole("button", { name: /Offline history note/ }).click();
-    await expect.element(screen.getByRole("button", { name: "Open navigation" })).toHaveTextContent("Local history · Read only");
+    await expect.element(screen.getByRole("note")).toHaveTextContent("It's read-only.");
     await expect.element(screen.getByText("Network unavailable. Check your connection.", { exact: true })).not.toBeInTheDocument();
   } finally {
     await screen.unmount();

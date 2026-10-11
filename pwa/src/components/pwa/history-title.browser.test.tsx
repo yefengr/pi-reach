@@ -40,8 +40,8 @@ test("uses the same title policy in saved-history navigation and detail views", 
   const screen = await render(
     <PwaUiProvider>
       <WorkspaceHistorySection activeDevice={activeDevice} history={[named, legacy]} selectedHistoryId={null} onSelectHistory={() => {}} headingId="history-heading" />
-      <WorkspaceTitleBar title={historySessionTitle(named)} showTitle kicker="Local history · Read only" navigationExpanded={false} onOpenNavigation={() => {}} />
-      <WorkspaceTitleBar title={historySessionTitle(legacy)} showTitle kicker="Local history · Read only" navigationExpanded={false} onOpenNavigation={() => {}} />
+      <WorkspaceTitleBar title={historySessionTitle(named)} showTitle navigationExpanded={false} onOpenNavigation={() => {}} />
+      <WorkspaceTitleBar title={historySessionTitle(legacy)} showTitle navigationExpanded={false} onOpenNavigation={() => {}} />
     </PwaUiProvider>,
   );
 

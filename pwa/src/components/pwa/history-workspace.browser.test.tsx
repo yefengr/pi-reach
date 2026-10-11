@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import { renderPwa } from "@/test/browser/render";
 import { HistoryWorkspace, type HistoryRestore } from "./workspace-content";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import type { ThinkingLevel } from "@/lib/pi-reach/types";
 
 function savedItems(count: number): TimelineViewItem[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -13,9 +14,9 @@ function savedItems(count: number): TimelineViewItem[] {
 }
 const items = savedItems(30);
 
-type HarnessOptions = { restore?: HistoryRestore | null; initial?: TimelineViewItem[]; initialLoading?: boolean; visibleCountRef?: { current: number } };
+type HarnessOptions = { restore?: HistoryRestore | null; initial?: TimelineViewItem[]; initialLoading?: boolean; visibleCountRef?: { current: number }; modelName?: string | null; thinking?: ThinkingLevel };
 
-async function renderHistory({ restore = null, initial = items, initialLoading = false, visibleCountRef }: HarnessOptions = {}) {
+async function renderHistory({ restore = null, initial = items, initialLoading = false, visibleCountRef, modelName, thinking }: HarnessOptions = {}) {
   let update!: (state: { items: TimelineViewItem[]; loading: boolean }) => void;
   function Harness() {
     const listRef = useRef<HTMLDivElement | null>(null);
@@ -23,7 +24,7 @@ async function renderHistory({ restore = null, initial = items, initialLoading =
     const [state, setState] = useState({ items: initial, loading: initialLoading });
     update = setState;
     return <main className="pwa-main" style={{ height: 500, display: "flex", flexDirection: "column" }}>
-      <HistoryWorkspace items={state.items} loading={state.loading} restore={restore} visibleCountRef={visibleCountRef} listRef={listRef} bottomSentinelRef={bottomRef} />
+      <HistoryWorkspace items={state.items} loading={state.loading} restore={restore} visibleCountRef={visibleCountRef} listRef={listRef} bottomSentinelRef={bottomRef} modelName={modelName} thinking={thinking} />
     </main>;
   }
   const screen = await renderPwa(<Harness />);
@@ -186,4 +187,22 @@ test("keeps attachment cards whose metadata falls just outside the rendered wind
     await expect.element(screen.getByText("notes.txt", { exact: true })).toBeVisible();
     await expect.element(screen.getByText("Server fallback notes.txt")).not.toBeInTheDocument();
   } finally { await screen.unmount(); }
+});
+
+test("keeps the live composer layout disabled and shows the last known model only when it is saved", async () => {
+  const { screen: known } = await renderHistory({ modelName: "Saved model", thinking: "high" });
+  try {
+    await expect.element(known.getByRole("note")).toHaveTextContent("It's read-only.");
+    await expect.element(known.getByRole("textbox")).toBeDisabled();
+    const model = known.getByRole("button", { name: "Model and thinking settings, current Saved model, thinking level high" });
+    await expect.element(model).toBeDisabled();
+    await expect.element(model).toHaveTextContent("Saved model · high");
+    for (const name of ["Add attachments", "Pi commands", "Send message"]) await expect.element(known.getByRole("button", { name, exact: true })).toBeDisabled();
+  } finally {
+    await known.unmount();
+  }
+
+  const { screen: unknown } = await renderHistory();
+  await expect.element(unknown.getByRole("textbox")).toBeDisabled();
+  expect(document.querySelector(".pwa-composer-model")).toBeNull();
 });

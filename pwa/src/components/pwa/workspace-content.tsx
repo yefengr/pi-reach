@@ -3,8 +3,10 @@ import { CopyButton } from "@/components/pwa/copy-button";
 import { Button } from "@mantine/core";
 import { ChevronRight, Computer, History, Link2, Radio } from "lucide-react";
 import { MessageList } from "@/components/pwa/message-list";
+import { ReadOnlyComposer } from "@/components/pwa/message-composer";
 import { OnlinePiRow } from "@/components/pwa/workspace-view";
 import type { PwaEndpointRecord } from "@/lib/pwa/db";
+import type { ThinkingLevel } from "@/lib/pi-reach/types";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_PAGE_SIZE } from "@/lib/pwa/timeline-history-loader";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
@@ -34,7 +36,9 @@ type HistoryWorkspaceProps = {
   visibleCountRef?: MutableRefObject<number>;
   listRef: RefObject<HTMLDivElement | null>;
   bottomSentinelRef: RefObject<HTMLDivElement | null>;
-  onBackToLive?: () => void;
+  /** 该 Pi 最后已知的模型与思考级别，只读输入区按在线样式显示。 */
+  modelName?: string | null;
+  thinking?: ThinkingLevel;
 };
 
 /** 本地记录按序号排列后的完整性：首条之前和中间缺少的区间都未保存在此浏览器。 */
@@ -53,7 +57,7 @@ function savedRangeGaps(items: readonly TimelineViewItem[]): { gapBefore: Set<st
 }
 
 /** 长历史先渲染最近一段，接近顶部时按页向前展开，避免一次渲染整个会话卡住界面；交互与在线会话的向前加载一致。 */
-export function HistoryWorkspace({ items, loading = false, restore = null, visibleCountRef, listRef, bottomSentinelRef, onBackToLive }: HistoryWorkspaceProps) {
+export function HistoryWorkspace({ items, loading = false, restore = null, visibleCountRef, listRef, bottomSentinelRef, modelName = null, thinking = "off" }: HistoryWorkspaceProps) {
   const { t } = useI18n();
   const [visibleCount, setVisibleCount] = useState(() => Math.max(restore?.visibleCount ?? 0, TIMELINE_RECENT_LIMIT));
   const visibleItems = useMemo(() => items.slice(-visibleCount), [items, visibleCount]);
@@ -88,10 +92,7 @@ export function HistoryWorkspace({ items, loading = false, restore = null, visib
   return <>
     <MessageList items={visibleItems} projectionItems={items} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier} earlierLocal gapBefore={gapBefore} topNotice={!hasEarlier && missingStart ? t.timeline.earlierNotSaved : null} listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />
     <div className="pwa-chat-footer">
-      <div className="pwa-read-only-bar" role="note">
-        <span>{t.workspace.readOnlyNote}</span>
-        {onBackToLive ? <Button variant="transparent" color="piReach" type="button" onClick={onBackToLive}>{t.workspace.backToLive}</Button> : null}
-      </div>
+      <ReadOnlyComposer notice={t.workspace.readOnlyNote} modelName={modelName} thinking={thinking} />
     </div>
   </>;
 }

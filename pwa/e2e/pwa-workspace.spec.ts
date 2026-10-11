@@ -34,13 +34,13 @@ test("shows saved history without treating a cached Pi as online", async ({ page
     await expect(navigation).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Open navigation" })).toContainText(workspace.historyPreview);
   }
-  // 桌面在标题区显示会话名，移动端在顶栏导航入口；两者都标出「本地历史 · 只读」，输入区换为只读说明条。
+  // 桌面在标题区显示会话名，移动端在顶栏导航入口；标题不标注只读，输入区保留在线样式但全部禁用，由提示区说明只读。
   if (!mobile) await expect(main.getByRole("heading", { level: 1, name: workspace.historyPreview })).toBeVisible();
-  await expect(main.getByText("Local history · Read only", { exact: true }).locator("visible=true")).toHaveCount(1);
-  await expect(main.getByRole("note")).toContainText("read-only record");
-  await expect(main.getByRole("textbox")).toHaveCount(0);
-  await expect(main.getByRole("button", { name: "Send message" })).toHaveCount(0);
-  await expect(main.getByRole("button", { name: "Pi commands" })).toHaveCount(0);
+  await expect(main.getByText("Read only")).toHaveCount(0);
+  await expect(main.getByRole("note")).toContainText("It's read-only.");
+  await expect(main.getByRole("textbox")).toBeDisabled();
+  await expect(main.getByRole("button", { name: "Send message" })).toBeDisabled();
+  await expect(main.getByRole("button", { name: "Pi commands" })).toBeDisabled();
 });
 
 test("cancels and confirms clear-local-data in an isolated seeded workspace", async ({ page, pwa }, testInfo) => {

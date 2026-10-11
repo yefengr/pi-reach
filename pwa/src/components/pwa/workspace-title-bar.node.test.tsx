@@ -20,8 +20,7 @@ test("renders the session title, directory prefix, refresh and navigation entry"
   expect(html).not.toContain("pwa-notice-dot");
 });
 
-test("shows the history kicker, hides the desktop title without a session, and marks background completions", () => {
-  expect(render({ kicker: "Local history · Read only" })).toContain("pwa-title-bar-kicker");
+test("hides the desktop title without a session and marks background completions", () => {
   const idle = render({ showTitle: false, title: "Studio Mac", navigationNotice: true });
   expect(idle).not.toContain("pwa-title-bar-name");
   expect(idle).toContain("Studio Mac");
