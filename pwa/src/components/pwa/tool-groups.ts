@@ -1,4 +1,4 @@
-import { entryGroupId, isPiOutputEntry, type PresentationEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
+import { entryGroupId, type PresentationEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import { toolStatus, type ToolStatus, type ToolValue } from "./tool-presentation";
 
 /**
@@ -97,10 +97,8 @@ export function withExpansion(choices: ReadonlyMap<string, ToolExpansion>, membe
 export type TimelineActivity = {
   /** 工具组是否为末段且仍在运行：位于时间线末尾，Pi 仍在本轮运行或组内仍有工具运行。 */
   liveTail: (segment: ToolSegment) => boolean;
-  /** Working 提示：Pi working、末尾没有正在输出的内容，且最后一轮尚未收到 run_end。 */
+  /** Working 提示：在线 Pi working 且最后一轮尚未收到 run_end；输出和工具执行期间持续显示。 */
   working: boolean;
-  /** 最后一轮是否已有 Pi 输出；没有时 Working 立即显示，否则延迟显示。 */
-  hasOutput: boolean;
 };
 
 export function isPartialEntry(entry: PresentationEntry): boolean {
@@ -113,8 +111,8 @@ export function isPartialEntry(entry: PresentationEntry): boolean {
  * 时间线末尾的运行情况，只按末轮派生。运行时把 partial 排在正式事件之后，未与正式消息对上的旧 partial 会一直留在末尾；
  * 已收到 run_end 或不属于末轮（最后一条正式记录所属的轮）的 partial 视为残留，不算正在输出，也不决定末尾位置。
  * 末尾是新发送、尚未回传也未进入 Pi 队列的消息时，Pi 空闲期间就已存在的 partial（`idlePartials`）同样视为残留；
- * Pi 正在输出时发送的消息不触发该规则，避免流式输出过程中闪现 Working。
- * 轮次的结束与输出按末轮判断：末尾是新发送的消息时视为新的一轮；末尾是已进入 Pi 队列的消息时仍属当前轮。
+ * Pi 正在输出时发送的消息不触发该规则，避免将当前输出误判为残留。
+ * 轮次的结束按末轮判断：末尾是新发送的消息时视为新的一轮；末尾是已进入 Pi 队列的消息时仍属当前轮。
  * 末轮已收到 run_end 时不算仍在运行，避免 working 晚于结束事件更新时闪现。末项只决定视觉上的尾部位置。
  */
 export function timelineActivity(entries: readonly PresentationEntry[], live: boolean, running: boolean, runEnded: (groupId: string) => boolean, idlePartials: ReadonlySet<string> = new Set()): TimelineActivity {
@@ -134,10 +132,8 @@ export function timelineActivity(entries: readonly PresentationEntry[], live: bo
   const outputting = (entry: PresentationEntry) => entry.kind === "tool"
     ? effectiveToolStatus(entry.value, live) === "running"
     : (entry.kind === "text" || entry.kind === "thinking") && entry.streaming;
-  const outputActive = current.some(outputting);
   return {
     liveTail: segment => segment.tools.at(-1) === last && (runActive || segment.tools.some(outputting)),
-    working: runActive && current.length > 0 && !outputActive,
-    hasOutput: turn !== undefined && current.some(entry => entryGroupId(entry) === turn && isPiOutputEntry(entry)),
+    working: runActive && current.length > 0,
   };
 }

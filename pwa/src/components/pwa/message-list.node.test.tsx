@@ -266,17 +266,19 @@ describe("turn presentation", () => {
     expect(html).not.toContain("View read tool details");
   });
 
-  test("shows Working while Pi is working and nothing is being output", () => {
+  test("shows Working immediately throughout a live run", () => {
     const live = { hasEarlier: false, running: true };
     expect(renderList(events(user("u1", "g1", 1)), live)).toContain("Working…");
-    // 两段输出之间延迟显示（浏览器测试覆盖），首帧不出现，避免交接瞬间闪现。
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "event", event: { ...toolEvent, group_id: "g1" } }], live)).not.toContain("Working…");
-    expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), live)).not.toContain("Working…");
-    // 正文流式输出、工具运行或本轮已收到 run_end 时不显示。
+    // 已有输出时不延迟；正文、思考和工具执行期间也持续显示。
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "event", event: { ...toolEvent, group_id: "g1" } }], live)).toContain("Working…");
+    expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), live)).toContain("Working…");
     const streaming: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "g1:assistant:0", kind: "assistant", status: "delta", delta: "Partial" };
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: streaming }], live)).not.toContain("Working…");
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: streaming }], live)).toContain("Working…");
+    const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "g1:thinking:0", kind: "thinking", status: "delta", delta: "Reasoning" };
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: thinking }], live)).toContain("Working…");
     const tool: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "tool:t1", kind: "tool", tool_call_id: "t1", tool: "bash", args: { command: "pnpm test" }, status: "running" };
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).not.toContain("Working…");
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).toContain("Working…");
+    // 本轮结束、Pi 空闲或断线时隐藏。
     expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), runEnd("r1", "g1", 3)), live)).not.toContain("Working…");
     expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false })).not.toContain("Working…");
     expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true, isLive: false })).not.toContain("Working…");

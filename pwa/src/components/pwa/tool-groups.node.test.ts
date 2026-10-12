@@ -90,11 +90,11 @@ describe("timelineActivity", () => {
     return { result: timelineActivity(list, live, working, group => ended.includes(group)), segments };
   };
 
-  test("shows Working only while Pi works and nothing is being output", () => {
+  test("shows Working throughout a live run including output and tool execution", () => {
     expect(activity([tool("a")]).result.working).toBe(true);
     expect(activity([text("t")]).result.working).toBe(true);
-    expect(activity([running("a")]).result.working).toBe(false);
-    expect(activity([streaming("t")]).result.working).toBe(false);
+    expect(activity([running("a")]).result.working).toBe(true);
+    expect(activity([streaming("t")]).result.working).toBe(true);
     expect(activity([tool("a")], { ended: ["g1"] }).result.working).toBe(false);
     expect(activity([tool("a")], { working: false }).result.working).toBe(false);
     expect(activity([tool("a")], { live: false }).result.working).toBe(false);
@@ -103,27 +103,26 @@ describe("timelineActivity", () => {
 
   test("ignores residual partials of an ended or earlier turn", () => {
     const user = (id: string, group: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: id, message_id: id, group_id: group, timestamp: 2, kind: "user", blocks: [{ type: "text", text: id }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" } });
-    // 旧轮已收到 run_end，残留的流式正文与运行中工具不再抑制新一轮的 Working。
-    const ended = activity([text("a"), streaming("old"), running("t"), user("next", "g2")], { ended: ["g1"] }).result;
-    expect(ended.working).toBe(true);
-    expect(ended.hasOutput).toBe(false);
+    // 旧轮残留不改变新一轮的 Working 或末尾工具组判定。
+    const ended = activity([text("a"), tool("next", "g2"), streaming("old"), running("t")], { ended: ["g1"] });
+    expect(ended.result.working).toBe(true);
+    expect(ended.segments.map(segment => ended.result.liveTail(segment))).toEqual([true, false]);
     // 旧轮缺少 run_end，但已不是末轮：同样视为残留。
     expect(activity([text("a"), streaming("old"), user("next", "g2")]).result.working).toBe(true);
-    // 末轮自己的流式输出仍然算正在输出。
-    expect(activity([user("next", "g2"), streaming("new", "g2")]).result.working).toBe(false);
+    // 末轮自己的流式输出也不隐藏 Working。
+    expect(activity([user("next", "g2"), streaming("new", "g2")]).result.working).toBe(true);
   });
 
-  test("a fresh send marks partials left over from an idle Pi as residual", () => {
+  test("keeps Working visible for fresh sends and queued messages despite residual partials", () => {
     const pending = (queued: boolean): TimelineViewItem => ({ kind: "pending", id: "p", clientRequestId: "p", requestId: "p", text: "next", createdAt: 3, delivery: "pending", ...(queued ? { queued: true } : {}) });
     const items = [text("a"), streaming("old"), pending(false)];
     const list = entries(items);
     const stale = new Set(list.filter(entry => entry.kind === "text" && entry.streaming).map(entry => entry.key));
-    // 旧轮缺少 run_end：Pi 空闲时就在的 partial，在新发送后不再抑制 Working。
+    // 新发送、流式输出与排队期间都保持 Working。
     expect(timelineActivity(list, true, true, () => false, stale).working).toBe(true);
-    // Pi 正在输出时发送：partial 不在空闲集合中，仍算正在输出。
-    expect(timelineActivity(list, true, true, () => false).working).toBe(false);
+    expect(timelineActivity(list, true, true, () => false).working).toBe(true);
     // 已进入 Pi 队列的消息不是新一轮的边界。
-    expect(timelineActivity(entries([text("a"), streaming("old"), pending(true)]), true, true, () => false, stale).working).toBe(false);
+    expect(timelineActivity(entries([text("a"), streaming("old"), pending(true)]), true, true, () => false, stale).working).toBe(true);
   });
 
   test("a queued message at the end still belongs to the current turn", () => {
@@ -131,13 +130,12 @@ describe("timelineActivity", () => {
     const list = entries([text("a"), queued]);
     // 当前轮已收到 run_end，working 晚到也不显示 Working。
     expect(timelineActivity(list, true, true, group => group === "g1").working).toBe(false);
-    // 当前轮已有输出：两段输出之间按延迟显示。
-    expect(timelineActivity(list, true, true, () => false).hasOutput).toBe(true);
-    // 新发送的消息开始新的一轮：已结束的旧轮不影响 Working，且新轮尚无输出。
+    // 当前轮已有输出，仍持续显示 Working。
+    expect(timelineActivity(list, true, true, () => false).working).toBe(true);
+    // 新发送的消息开始新的一轮：已结束的旧轮不影响 Working。
     const fresh: TimelineViewItem = { ...queued, queued: undefined, delivery: "pending" };
     const sent = timelineActivity(entries([text("a"), fresh]), true, true, group => group === "g1");
     expect(sent.working).toBe(true);
-    expect(sent.hasOutput).toBe(false);
   });
 
   test("treats only the trailing segment of a running turn as a live tail", () => {
