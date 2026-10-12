@@ -357,7 +357,7 @@ export const en = {
     thinkingLabel: "thinking",
     collapseThinking: "Collapse thinking",
     expandThinking: "Expand thinking",
-    thinking: "Thinking",
+    thinking: "Thinking…",
     thoughtProcess: "Thought process",
   },
   tools: {

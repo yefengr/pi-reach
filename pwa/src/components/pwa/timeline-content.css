@@ -71,11 +71,12 @@
 .pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
-/* 思考行：标题取推理里的首个加粗标题，没有则为「思考过程」；进行中显示旋转图标与「思考中」，折叠箭头在右。展开内容不缩进，左侧 2px 竖线与 Markdown 引用同色。 */
+/* 思考行：进行中左侧显示旋转图标与「思考中…」，结束后显示首个加粗标题或「思考过程」；两种状态共用右侧箭头列，避免结束时偏移。 */
 .pwa-thinking { color: var(--pwa-secondary); }
-.pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto auto; }
+.pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }
 .pwa-thinking-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pwa-thinking-live { display: inline-flex; align-items: center; gap: 4px; color: var(--pwa-running); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
+.pwa-thinking-live { display: flex; align-items: center; gap: 8px; color: var(--pwa-running); }
+.pwa-thinking-live > svg { flex: none; }
 .pwa-thinking-content .pwa-collapse-inner { padding-bottom: 4px; }
 .pwa-thinking-content .pwa-long-text { padding-left: 12px; border-left: 2px solid var(--pwa-control-line); }
 .pwa-long-text { min-width: 0; }
