@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { ThinkingContent, MarkdownContent } from "./timeline-content";
-import { ToolCard, ToolGroupCard } from "./tool-card";
+import { initialToolGroupRunningIndicators, ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
 import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
@@ -19,7 +19,7 @@ type ConversationTimelineProps = {
   live: boolean;
   /** 每一轮的结束时间与状态（来自 run_end，缺失时按降级规则推断）。 */
   completions?: ReadonlyMap<string, RunCompletion>;
-  /** 在线 Pi 正在运行（working）：本轮结束前持续显示「Working…」。 */
+  /** 在线 Pi 正在运行（working）：本轮没有具体运行指示时显示「Working…」。 */
   running?: boolean;
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
@@ -122,6 +122,17 @@ function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): 
 export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
   const [thinkingChoices, setThinkingChoices] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [toolChoices, setToolChoices] = useState<ReadonlyMap<string, ToolExpansion>>(() => new Map());
+  const [toolIndicators, setToolIndicators] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
+  const reportToolIndicators = useCallback((key: string, indicators: readonly string[] | null) => {
+    setToolIndicators(previous => {
+      const known = previous.get(key);
+      if (indicators === null ? known === undefined : known?.length === indicators.length && known.every((value, index) => value === indicators[index])) return previous;
+      const next = new Map(previous);
+      if (indicators === null) next.delete(key);
+      else next.set(key, indicators);
+      return next;
+    });
+  }, []);
   const [reader, setReader] = useState<string | null>(null);
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
@@ -143,6 +154,13 @@ export function ConversationTimeline({ items, live, completions, running = false
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
   const idlePartials = useIdlePartials(view.entries, live && !running);
   const activity = timelineActivity(view.entries, live, running, groupId => completions?.has(groupId) === true, idlePartials);
+  const thinkingActive = view.entries.some(entry => entry.kind === "thinking" && activity.currentOutput(entry));
+  const toolsActive = segments.some(segment => {
+    const indicators = toolIndicators.get(segment.key) ?? initialToolGroupRunningIndicators(
+      segment.tools.map(tool => tool.value), live, appended, segmentExpansion(segment.tools, toolChoices)?.expanded ?? false,
+    );
+    return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
+  });
   // 展开的思考与工具组暂停行内自动跟随；末段运行中展开的工具组除外。工具详情由 Reader 独立持锁。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
     const choice = segmentExpansion(segment.tools, tools);
@@ -233,6 +251,8 @@ export function ConversationTimeline({ items, live, completions, running = false
     appended={appended}
     // 视口锚点用它在重新挂载后找回工具组；取第一条工具，内容相同时与观察顺序无关。
     timelineKey={`tools:${segment.tools[0]!.key}`}
+    activityKey={segment.key}
+    onRunningToolsChange={reportToolIndicators}
     expanded={segmentExpansion(segment.tools, toolChoices)?.expanded ?? false}
     onExpandedChange={expanded => chooseSegment(segment, expanded)}
   >{segment.tools.map(renderEntry)}</ToolGroupCard>;
@@ -242,7 +262,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   return <>
     {rows}
     {gapAtEnd ? <GapNotice /> : null}
-    {activity.working ? <WorkingStatus /> : null}
+    {activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;

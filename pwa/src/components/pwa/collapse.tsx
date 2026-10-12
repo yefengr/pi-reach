@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode, type TransitionEvent } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode, type TransitionEvent } from "react";
 
 /** 退出时长（--pwa-duration-expand-out 与减少动态效果时的淡化时长均为 120ms）加 50ms 兜底。 */
 const EXIT_FALLBACK_MS = 170;
@@ -7,6 +7,8 @@ type CollapseProps = {
   open: boolean;
   id?: string;
   className?: string;
+  /** 通知呈现目标或挂载状态变化，供运行提示观察实际过渡，不代表内容已经可见。 */
+  onPresentationChange?: () => void;
   children: ReactNode;
 };
 
@@ -17,7 +19,7 @@ type CollapseProps = {
  * - 退出动画结束后卸载；过渡结束事件缺失时以时长加 50ms 兜底。中途反向时从当前位置继续。
  * 减少动态效果由全局规则处理：高度与位移不过渡，只保留透明度淡化。
  */
-export function Collapse({ open, id, className, children }: CollapseProps) {
+export function Collapse({ open, id, className, onPresentationChange, children }: CollapseProps) {
   const [previousOpen, setPreviousOpen] = useState(open);
   const [entered, setEntered] = useState(open);
   const [exiting, setExiting] = useState(false);
@@ -41,6 +43,8 @@ export function Collapse({ open, id, className, children }: CollapseProps) {
     const timer = window.setTimeout(() => setExiting(false), EXIT_FALLBACK_MS);
     return () => window.clearTimeout(timer);
   }, [exiting]);
+
+  useLayoutEffect(() => { onPresentationChange?.(); }, [open, entered, exiting, onPresentationChange]);
 
   if (!open && !exiting) return null;
   const finishExit = (event: TransitionEvent<HTMLDivElement>) => {

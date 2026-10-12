@@ -97,8 +97,12 @@ export function withExpansion(choices: ReadonlyMap<string, ToolExpansion>, membe
 export type TimelineActivity = {
   /** 工具组是否为末段且仍在运行：位于时间线末尾，Pi 仍在本轮运行或组内仍有工具运行。 */
   liveTail: (segment: ToolSegment) => boolean;
-  /** Working 提示：在线 Pi working 且最后一轮尚未收到 run_end；输出和工具执行期间持续显示。 */
+  /** 通用 Working 的运行边界；实际展示还要让位于本轮可见的具体运行指示。 */
   working: boolean;
+  /** 本轮正在输出的条目，排除已结束、旧轮与空闲期间留下的 partial。 */
+  currentOutput: (entry: PresentationEntry) => boolean;
+  /** 可见图标属于当前运行的轮；退出冻结期间即使工具已完成，图标仍可暂时可见。 */
+  currentIndicator: (entry: PresentationEntry) => boolean;
 };
 
 export function isPartialEntry(entry: PresentationEntry): boolean {
@@ -135,5 +139,12 @@ export function timelineActivity(entries: readonly PresentationEntry[], live: bo
   return {
     liveTail: segment => segment.tools.at(-1) === last && (runActive || segment.tools.some(outputting)),
     working: runActive && current.length > 0,
+    currentOutput: entry => runActive && !residual(entry) && outputting(entry),
+    currentIndicator: entry => {
+      const groupId = entryGroupId(entry);
+      return runActive && groupId !== undefined && !runEnded(groupId)
+        && (turnGroup === undefined || groupId === turnGroup)
+        && !(freshSend && idlePartials.has(entry.key));
+    },
   };
 }

@@ -6,6 +6,7 @@ import { useI18n, type Messages } from "@/lib/i18n";
 import { Collapse } from "./collapse";
 import { effectiveToolStatus } from "./tool-groups";
 import { GROUP_HEAD_MIN_VISIBLE_MS, GROUP_HEAD_QUEUED_VISIBLE_MS, groupHeadTool, initialGroupHead, stepGroupHead, type GroupHeadElapsed } from "./tool-group-head";
+import { ToolIndicatorContext, useToolIndicatorRef, useVisibleToolIndicators, type RunningToolsChange } from "./tool-indicator-visibility";
 import "./tool-reader.css";
 
 type ToolCardProps = {
@@ -14,8 +15,9 @@ type ToolCardProps = {
   status?: ToolStatus;
 };
 
-function ToolStatusIcon({ status }: { status: ToolStatus }) {
-  if (status === "running") return <LoaderCircle className="pwa-tool-spinner" size={16} aria-hidden="true" />;
+function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: readonly string[] }) {
+  const indicatorRef = useToolIndicatorRef(toolKeys);
+  if (status === "running") return <LoaderCircle ref={indicatorRef} className="pwa-tool-spinner" size={16} aria-hidden="true" />;
   if (status === "complete") return <Check size={16} aria-hidden="true" />;
   if (status === "error") return <CircleAlert size={16} aria-hidden="true" />;
   if (status === "interrupted") return <CircleStop size={16} aria-hidden="true" />;
@@ -32,7 +34,7 @@ export function ToolCard({ value, onRead, status: statusOverride }: ToolCardProp
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
         <span className="pwa-tool-action-copy"><strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}</span>
-        <span className={`pwa-tool-status pwa-tool-status-${status}`} role="status" aria-label={t.tools.statusLabel(value.tool, t.tools.status[status])}><ToolStatusIcon status={status} />{status === "complete" ? null : <span>{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>}</span>
+        <span className={`pwa-tool-status pwa-tool-status-${status}`} role="status" aria-label={t.tools.statusLabel(value.tool, t.tools.status[status])}><ToolStatusIcon status={status} toolKeys={[toolIdentity(value)]} />{status === "complete" ? null : <span>{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>}</span>
       </button>
     </div>
   </article>;
@@ -63,9 +65,14 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
 function ToolGroupCurrent({ value, status, animate }: { value: ToolValue; status: ToolStatus; animate: boolean }) {
   const summary = toolInlineText(toolHeaderSummary(value));
   return <span className="pwa-tool-group-current" data-enter={animate ? "" : undefined}>
-    <span className={`pwa-tool-status pwa-tool-status-${status}`}><ToolStatusIcon status={status} /></span>
+    <span className={`pwa-tool-status pwa-tool-status-${status}`}><ToolStatusIcon status={status} toolKeys={[toolIdentity(value)]} /></span>
     <strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}
   </span>;
+}
+
+function ToolGroupSummary({ summary, runningKeys, busy }: { summary: string; runningKeys: readonly string[]; busy: boolean }) {
+  const indicatorRef = useToolIndicatorRef(runningKeys);
+  return <span className="pwa-tool-group-summary" title={summary}>{busy ? <LoaderCircle ref={indicatorRef} className="pwa-spin" size={16} aria-hidden="true" /> : null}<span className="pwa-tool-group-summary-text">{summary}</span></span>;
 }
 
 const NOT_ELAPSED: GroupHeadElapsed = { queued: false, minimum: false };
@@ -88,11 +95,24 @@ function useGroupHeadTool(values: readonly ToolValue[], live: boolean, appended:
   return { value: groupHeadTool(next, values, live, next.index === state.index ? timing : NOT_ELAPSED), animate: next.animate };
 }
 
+/** 与实际渲染共用判断：已结束工具停留在收起组头时，其他运行工具尚不可见。 */
+function toolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, expanded: boolean, current: ToolValue | null): readonly string[] {
+  if (expanded || current === null) return values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity);
+  return effectiveToolStatus(current, live) === "running" ? [toolIdentity(current)] : [];
+}
+
+/** 首次渲染与 SSR 尚无组头报告时，沿用队列的初始状态，不猜测 runningCount。 */
+export function initialToolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>, expanded: boolean): readonly string[] {
+  const state = initialGroupHead(values, live, appended);
+  const current = expanded ? null : groupHeadTool(state, values, live, NOT_ELAPSED);
+  return toolGroupRunningIndicators(values, live, expanded, current);
+}
+
 /**
  * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头按开始顺序排队显示工具，每条至少停留一段时间，积压过多时跳到最新；
  * 最后一条结束并停满后回到分类摘要，组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
  */
-export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, onExpandedChange, timelineKey, children }: { values: readonly ToolValue[]; live: boolean; appended?: ReadonlySet<string>; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; children: ReactNode }) {
+export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, onExpandedChange, timelineKey, activityKey, onRunningToolsChange, children }: { values: readonly ToolValue[]; live: boolean; appended?: ReadonlySet<string>; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; activityKey?: string; onRunningToolsChange?: RunningToolsChange; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
@@ -103,23 +123,24 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, 
   const runningCount = values.filter(value => effectiveToolStatus(value, live) === "running").length;
   // 摘要态旋转图标对读屏隐藏，收起时工具行也未挂载，可访问名称里保留仍在运行的数量。
   const busy = current === null && !expanded && runningCount > 0;
+  const { groupRef, register, observe } = useVisibleToolIndicators(activityKey, onRunningToolsChange);
   // 停留中的已结束工具也保留在可访问名称里，与屏幕上显示的工具和结束状态一致。
   const currentCommand = current ? `${current.tool} ${toolInlineText(toolHeaderSummary(current))}`.trim() : null;
   const currentLabel = currentCommand === null || currentStatus === null ? null
     : currentStatus === "running" ? t.tools.groupRunning(currentCommand) : t.tools.statusLabel(currentCommand, t.tools.status[currentStatus]);
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
-  return <article className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length} data-timeline-key={timelineKey}>
+  return <ToolIndicatorContext value={register}><article ref={groupRef} className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length} data-timeline-key={timelineKey}>
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, [currentLabel, busy ? t.tools.groupBusy(runningCount) : null, summary].filter(Boolean).join(" · "))} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
         <span className="pwa-tool-action-copy">{current
           ? <ToolGroupCurrent key={toolIdentity(current)} value={current} status={currentStatus!} animate={head.animate} />
-          : <span className="pwa-tool-group-summary" title={summary}>{busy ? <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> : null}<span className="pwa-tool-group-summary-text">{summary}</span></span>}</span>
+          : <ToolGroupSummary summary={summary} runningKeys={values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity)} busy={busy} />}</span>
         {hasFailure ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}
         <ChevronRight className="pwa-tool-chevron pwa-timeline-chevron" size={16} aria-hidden="true" />
       </button>
     </div>
-    <Collapse open={expanded} id={detailsId} className="pwa-tool-group-details">
+    <Collapse open={expanded} id={detailsId} className="pwa-tool-group-details" onPresentationChange={observe}>
       {children}
     </Collapse>
-  </article>;
+  </article></ToolIndicatorContext>;
 }
