@@ -80,7 +80,7 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   expect(working()?.textContent).toBe("Working…");
   await update([question, partialItem(thinking)]);
   expect(working()).toBeNull();
-  await expect.element(screen.getByRole("status").getByText("Inspecting the request.")).toBeVisible();
+  await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
   expect(document.querySelector(".pwa-thinking-live .pwa-spin")).not.toBeNull();
   expect(document.querySelector(".pwa-thinking-content")).toBeNull();
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
@@ -215,11 +215,11 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   await page.viewport(width, 844);
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA." };
   const { screen, update } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByRole("status").getByText("First step")).toBeVisible();
+  await expect.element(screen.getByText("First step")).toBeVisible();
   await update([partialItem({ ...thinking, delta: `${thinking.delta}\n\n**Second step` })]);
   expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("First step");
   await update([partialItem({ ...thinking, delta: `${thinking.delta}\n\n**Second step**\nB.\n**Unfinished` })]);
-  await expect.element(screen.getByRole("status").getByText("Second step")).toBeVisible();
+  await expect.element(screen.getByText("Second step")).toBeVisible();
   await expect.element(screen.getByText("First step")).not.toBeInTheDocument();
   const status = document.querySelector<HTMLElement>(".pwa-thinking-live")!;
   expect(status.querySelector("span")?.getAttribute("title")).toBe("Second step");
@@ -235,14 +235,56 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   expect(status.textContent).not.toContain("Thinking…");
 });
 
+test.each([1280, 390])("streaming titles keep a stable separate screen-reader status at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "" };
+  const { update } = await liveList([partialItem(thinking)], { running: true });
+  const row = document.querySelector(".pwa-thinking")!;
+  const status = row.querySelector<HTMLElement>('[role="status"]')!;
+  expect(status.textContent).toBe("Thinking…");
+  expect(status.classList.contains("pwa-sr-only")).toBe(true);
+  expect(getComputedStyle(status).clipPath).toBe("inset(50%)");
+  const changes: MutationRecord[] = [];
+  const observer = new MutationObserver(records => changes.push(...records));
+  observer.observe(status, { childList: true, characterData: true, subtree: true, attributes: true });
+  try {
+    const updates = [
+      { text: "I", title: "I" },
+      { text: "Inspect", title: "Inspect" },
+      { text: "Inspecting the request.", title: "Inspecting the request." },
+      { text: "**First stage**\nBody.\n**Second", title: "First stage" },
+      { text: "**First stage**\nBody.\n**Second stage**\nMore reasoning.", title: "Second stage" },
+    ];
+    for (const { text, title } of updates) {
+      await update([partialItem({ ...thinking, delta: text })]);
+      expect(row.querySelector('[role="status"]')).toBe(status);
+      expect(status.textContent).toBe("Thinking…");
+      const visual = row.querySelector<HTMLElement>(".pwa-thinking-live")!;
+      expect(visual.getAttribute("aria-live")).toBe("off");
+      expect(visual.closest('[role="status"]')).toBeNull();
+      expect(visual.querySelector("span")?.textContent).toBe(title);
+      expect(visual.querySelector("span")?.closest('[aria-hidden="true"]')).toBeNull();
+      expect(document.querySelector(".pwa-thinking-status")).toBeNull();
+    }
+    await Promise.resolve();
+    expect(changes).toHaveLength(0);
+    await update([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: updates.at(-1)!.text }] })]);
+    expect(row.querySelector('[role="status"]')).toBeNull();
+    expect(row.querySelector(".pwa-spin")).toBeNull();
+    expect(row.querySelector(".pwa-thinking-title")?.textContent).toBe("First stage");
+  } finally {
+    observer.disconnect();
+  }
+});
+
 test.each([1280, 390])("streaming thinking uses a first-line summary and a neutral empty label at %ipx", async width => {
   await page.viewport(width, 844);
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "\n \t\n" };
   const { screen, update } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByRole("status").getByText("Thought process")).toBeVisible();
+  await expect.element(screen.getByText("Thought process")).toBeVisible();
   const text = "\n  检查   工具\t分组  \n后续原文不应显示在标题中。";
   await update([partialItem({ ...thinking, delta: text })]);
-  await expect.element(screen.getByRole("status").getByText("检查 工具 分组")).toBeVisible();
+  await expect.element(screen.getByText("检查 工具 分组")).toBeVisible();
   expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("检查 工具 分组");
   expect(document.querySelector(".pwa-thinking-content")).toBeNull();
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
@@ -318,7 +360,7 @@ test.each([1280, 390])("streaming thinking keeps manual choices through live upd
   const reading: boolean[] = [];
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nInspecting the request." };
   const { screen, update } = await liveList([partialItem(thinking)], { onReadingChange: value => reading.push(value) });
-  await expect.element(screen.getByRole("status").getByText("First step")).toBeVisible();
+  await expect.element(screen.getByText("First step")).toBeVisible();
   expect(document.querySelector(".pwa-thinking-content")).toBeNull();
   const toggle = document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!;
   expect(toggle.getAttribute("aria-expanded")).toBe("false");

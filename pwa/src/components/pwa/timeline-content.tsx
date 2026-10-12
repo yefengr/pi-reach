@@ -101,10 +101,12 @@ export function ThinkingContent({ text, streaming = false, expanded: controlledE
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
       {streaming
-        ? <span className="pwa-thinking-title pwa-thinking-live" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span title={title}>{title}</span></span>
+        ? <span className="pwa-thinking-title pwa-thinking-live" aria-live="off"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span title={title}>{title}</span></span>
         : <span className="pwa-thinking-title" title={title}>{title}</span>}
       <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
     </button>
+    {/* 独立的稳定状态保留读屏提示，不随视觉标题的流式增量重复播报。 */}
+    {streaming ? <span className="pwa-sr-only" role="status">{t.timeline.thinking}</span> : null}
     <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" /></Collapse>
   </section>;
 }
