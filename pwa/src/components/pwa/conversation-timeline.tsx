@@ -12,7 +12,6 @@ import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timeline
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
-import { useDelayedVisibility } from "./use-delayed-visibility";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 
 type ConversationTimelineProps = {
@@ -20,7 +19,7 @@ type ConversationTimelineProps = {
   live: boolean;
   /** 每一轮的结束时间与状态（来自 run_end，缺失时按降级规则推断）。 */
   completions?: ReadonlyMap<string, RunCompletion>;
-  /** 在线 Pi 正在运行（working）：末尾没有正在输出的内容时显示「Working…」。 */
+  /** 在线 Pi 正在运行（working）：本轮结束前持续显示「Working…」。 */
   running?: boolean;
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
@@ -32,9 +31,6 @@ type ConversationTimelineProps = {
 };
 
 const NO_GAPS: ReadonlySet<string> = new Set();
-/** 两段输出之间（如正文结束、下一个工具尚未开始）延迟显示 Working，避免交接瞬间闪现。 */
-const WORKING_BETWEEN_OUTPUTS_DELAY_MS = 400;
-
 /**
  * 投影快照、工具首次被观察到的顺序（决定工具组身份，历史补齐不改变已有组），以及最近一次更新中在线新追加的工具（进入组头排队）。
  * `appended` 只保留最近一次更新的新增，不累计：组之后被拆分或合并而重新挂载时，已在组头显示过的工具不会再次排队。
@@ -242,14 +238,11 @@ export function ConversationTimeline({ items, live, completions, running = false
   >{segment.tools.map(renderEntry)}</ToolGroupCard>;
   // 发布记录保留 group_id，同一轮的完成时间仍只在段末追加一次。
   const rows = conversationRows(view.entries, completions, segmentOf, gapKeys, renderSegment, renderEntry);
-  // 本轮尚无输出时立即显示 Working；两段输出之间延迟显示。
-  const workingBetweenOutputs = useDelayedVisibility(activity.working && activity.hasOutput, WORKING_BETWEEN_OUTPUTS_DELAY_MS, 0);
-  const showWorking = activity.working && (!activity.hasOutput || workingBetweenOutputs);
 
   return <>
     {rows}
     {gapAtEnd ? <GapNotice /> : null}
-    {showWorking ? <WorkingStatus /> : null}
+    {activity.working ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;

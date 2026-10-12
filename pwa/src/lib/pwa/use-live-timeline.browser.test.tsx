@@ -72,6 +72,8 @@ test("moving-leaf model output renders before the formal message arrives", async
     const list = api.messageListRef.current!;
     receive(partial("Output before completion", "assistant-marker-leaf"));
     await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Output before completion");
+    const workingStatus = list.querySelector(".pwa-thinking-status");
+    expect(workingStatus?.textContent).toBe("Working…");
     expect(api.runtimeRef.current.formalEvents()).toEqual([]);
     expect(api.runtimeRef.current.currentScope?.leafId).toBe(scope.leafId);
 
@@ -85,6 +87,8 @@ test("moving-leaf model output renders before the formal message arrives", async
     expect(list.querySelectorAll("article")).toHaveLength(1);
     expect(list.querySelector("article")?.textContent).toContain("Output before completion keeps growing.");
     expect(list.querySelector("article.partial")).toBeNull();
+    // 流式正文转正式记录时指示器保持挂载，不重新等待显示。
+    expect(list.querySelector(".pwa-thinking-status")).toBe(workingStatus);
     expect(api.runtimeRef.current.currentScope?.leafId).toBe(event.leaf_id);
     receive(partial(" stale output", "assistant-marker-leaf"));
     expect(list.querySelectorAll("article")).toHaveLength(1);
@@ -171,15 +175,15 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
     // 两条并行：second 排队，等 first 停满后显示。
     await expect.poll(current, { timeout: 3000 }).toBe("readsecond.ts");
     expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
-    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    const workingStatus = list.querySelector(".pwa-thinking-status");
+    expect(workingStatus?.textContent).toBe("Working…");
 
     formal(done("first", 1));
     await expect.poll(() => api.items.some(item => item.kind === "event" && item.event.event_id === "event:first")).toBe(true);
     expect(current()).toBe("readsecond.ts");
     formal(done("second", 2));
-    // 工具全部结束、Pi 仍 working：短暂延迟后显示 Working；组头停留满最短时间后回到摘要。
-    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
-    await expect.poll(() => list.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+    // 工具全部结束、Pi 仍 working：指示器持续挂载；组头行为不变。
+    expect(list.querySelector(".pwa-thinking-status")).toBe(workingStatus);
     await expect.poll(current, { timeout: 3000 }).toBeNull();
     await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
     expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
@@ -189,7 +193,7 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
     if (mode === "run_end with residual partial") {
       receive({ ...base, protocol_version: 2, type: "timeline_partial", partial_id: "unfinished:assistant:0", kind: "assistant", status: "delta", delta: "Still streaming" });
       await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Still streaming");
-      expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+      expect(list.querySelector(".pwa-thinking-status")).toBe(workingStatus);
     }
     if (mode !== "missing run_end") {
       const timestamp = Date.UTC(2026, 0, 1, 9, 30);
