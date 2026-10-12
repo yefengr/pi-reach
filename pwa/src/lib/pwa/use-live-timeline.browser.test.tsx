@@ -51,6 +51,48 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
 afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
 
+test("moving-leaf model output renders before the formal message arrives", async () => {
+  piRunning = true;
+  const screen = await render(<Harness />);
+  const base = { session_id: scope.sessionId, group_id: "stream-run" };
+  const receive = (frame: ServerFrame) => flushSync(() => receiveTimelineFrame(frame, {
+    runtime: api.runtimeRef.current,
+    fragmentAssemblerRef: api.fragmentAssemblerRef,
+    applyTimelineChange: api.applyTimelineChange,
+    receiveRealtimeOutput: api.receiveRealtimeOutput,
+    setError: report,
+    setLastSyncedAt: vi.fn(),
+  }));
+  const partial = (delta: string, leafId: string): ServerFrame => ({
+    ...base, protocol_version: 2, type: "timeline_partial", leaf_id: leafId,
+    partial_id: "stream-message:assistant:0", kind: "assistant", status: "delta", delta,
+  });
+  try {
+    flushSync(() => { start(0); });
+    const list = api.messageListRef.current!;
+    receive(partial("Output before completion", "assistant-marker-leaf"));
+    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Output before completion");
+    expect(api.runtimeRef.current.formalEvents()).toEqual([]);
+    expect(api.runtimeRef.current.currentScope?.leafId).toBe(scope.leafId);
+
+    receive(partial(" keeps growing.", "next-marker-leaf"));
+    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Output before completion keeps growing.");
+    const event: TimelineEvent = {
+      ...base, event_id: "stream-message", event_seq: 1, leaf_id: "formal-message-leaf", timestamp: 1,
+      kind: "assistant", status: "complete", blocks: [{ type: "text", text: "Output before completion keeps growing." }],
+    };
+    receive({ protocol_version: 2, type: "timeline_event", session_id: base.session_id, leaf_id: event.leaf_id, event });
+    expect(list.querySelectorAll("article")).toHaveLength(1);
+    expect(list.querySelector("article")?.textContent).toContain("Output before completion keeps growing.");
+    expect(list.querySelector("article.partial")).toBeNull();
+    expect(api.runtimeRef.current.currentScope?.leafId).toBe(event.leaf_id);
+    receive(partial(" stale output", "assistant-marker-leaf"));
+    expect(list.querySelectorAll("article")).toHaveLength(1);
+    expect(list.querySelector("article.partial")).toBeNull();
+    expect(list.textContent).not.toContain("stale output");
+  } finally { await screen.unmount(); }
+});
+
 test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and reading position at %ipx", async width => {
   await page.viewport(width, 844);
   piRunning = true;

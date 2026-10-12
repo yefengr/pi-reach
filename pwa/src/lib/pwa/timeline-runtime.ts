@@ -535,7 +535,8 @@ export class TimelineRuntime {
       return this.change();
     }
     if (frame.type === "timeline_partial") {
-      if (!isSameSession(this.scope, frame) || this.scope?.leafId !== frame.leaf_id) return this.change();
+      // marker 等普通追加会先推进主机 leaf；partial 不推进本地 tip，真正分支变化由 reset 隔离。
+      if (!isSameSession(this.scope, frame)) return this.change();
       try {
         const partial = parseTimelinePartialV2(frame);
         // 无法关联源消息的临时正文不进入展示；仍接受正式事件，避免留下无法结束的流式行。

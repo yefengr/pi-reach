@@ -26,7 +26,8 @@ test("advances the branch tip within one session without losing pending or strea
     in_reply_to: sent.frame.id, session_id: scope.sessionId, leaf_id: markerLeaf,
     message: { id: "pi-marker-entry", group_id: "group", blocks: [{ type: "text", text: "hello" }], origin: "pwa", sender_ref: scope.selfSenderRef, delivery: "normal" },
   });
-  runtime.receive({ ...partial("assistant", "pi-marker-entry:assistant:0"), leaf_id: markerLeaf });
+  const streaming = runtime.receive({ ...partial("assistant", "pi-marker-entry:assistant:0"), leaf_id: markerLeaf });
+  expect(streaming.items).toContainEqual(expect.objectContaining({ kind: "partial", partial: expect.objectContaining({ delta: "streaming" }) }));
   const finalLeaf = "message-leaf";
   const event = { ...userEvent("pi-marker-entry"), event_seq: 1, leaf_id: finalLeaf };
   const change = runtime.receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: finalLeaf, event });
@@ -40,14 +41,57 @@ test("advances the branch tip within one session without losing pending or strea
 test("keeps the current tip for partials and replaces them when a formal event advances the leaf", () => {
   const runtime = new TimelineRuntime();
   runtime.beginLive(scope, 0);
-  runtime.receive({ ...partial("assistant", "pi-entry:assistant:0"), leaf_id: "stream-leaf" });
+  const streaming = runtime.receive({ ...partial("assistant", "pi-entry:assistant:0"), leaf_id: "stream-leaf" });
+  expect(streaming.items).toContainEqual(expect.objectContaining({ kind: "partial", partial: expect.objectContaining({ partial_id: "pi-entry:assistant:0", delta: "streaming" }) }));
   expect(runtime.currentScope?.leafId).toBe(scope.leafId);
   const formal = { event_id: "pi-entry", event_seq: 1, session_id: scope.sessionId, leaf_id: "formal-leaf", timestamp: 3, group_id: "group", kind: "assistant" as const, status: "complete" as const, blocks: [{ type: "text" as const, text: "done" }] };
   const changed = runtime.receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: "formal-leaf", event: formal });
   expect(changed.items.filter((item) => item.kind === "partial")).toEqual([]);
   expect(runtime.currentScope?.leafId).toBe("formal-leaf");
-  runtime.receive({ ...partial("assistant", "foreign:assistant:0"), session_id: "other-session", leaf_id: "other-leaf" });
+  expect(runtime.receive({ ...partial("assistant", "pi-entry:assistant:0"), leaf_id: "stream-leaf" }).items.filter((item) => item.kind === "partial")).toEqual([]);
+  expect(runtime.receive({ ...partial("assistant", "foreign:assistant:0"), session_id: "other-session", leaf_id: "other-leaf" }).items.filter((item) => item.kind === "partial")).toEqual([]);
   expect(runtime.currentScope?.leafId).toBe("formal-leaf");
+});
+
+test.each(["assistant", "thinking", "tool"] as const)("receives %s partials across moving leaves without advancing the formal tip", (kind) => {
+  const runtime = new TimelineRuntime();
+  runtime.beginLive(scope, 0);
+  const frame = kind === "tool" ? toolPartial("moving-tool") : partial(kind, `moving-message:${kind}:0`);
+  const first = runtime.receive({ ...frame, leaf_id: "marker-leaf" });
+  expect(first.items.filter((item) => item.kind === "partial")).toHaveLength(1);
+  const second = runtime.receive({ ...frame, leaf_id: "next-marker-leaf" });
+  expect(second.items).toContainEqual(expect.objectContaining({ kind: "partial", partial: expect.objectContaining({ kind, leaf_id: "next-marker-leaf", ...(kind === "tool" ? {} : { delta: "streamingstreaming" }) }) }));
+  expect(runtime.currentScope?.leafId).toBe(scope.leafId);
+
+  const event: TimelineEvent = kind === "tool"
+    ? { ...toolEvent("moving-tool"), event_seq: 1, leaf_id: "formal-leaf" }
+    : { event_id: "moving-message", event_seq: 1, session_id: scope.sessionId, leaf_id: "formal-leaf", timestamp: 3, group_id: "group", kind: "assistant", status: "complete", blocks: [{ type: kind === "thinking" ? "thinking" : "text", text: "streamingstreaming" }] };
+  const completed = runtime.commit(event);
+  expect(completed.items.filter((item) => item.kind === "partial")).toEqual([]);
+  expect(runtime.receive({ ...frame, leaf_id: "next-marker-leaf" }).items.filter((item) => item.kind === "partial")).toEqual([]);
+  expect(runtime.currentScope?.leafId).toBe("formal-leaf");
+});
+
+test.each(["branch reset", "session change", "runtime takeover", "reconnect"] as const)("clears moving-leaf partials on %s", (boundary) => {
+  const runtime = new TimelineRuntime();
+  runtime.beginLive(scope, 0);
+  const frame = { ...partial("assistant", "before-boundary:assistant:0"), leaf_id: "marker-leaf" };
+  expect(runtime.receive(frame).items.filter((item) => item.kind === "partial")).toHaveLength(1);
+
+  if (boundary === "branch reset") {
+    runtime.receive({ protocol_version: 2, type: "reset", target_channel_id: scope.channelId, session_id: scope.sessionId, leaf_id: "new-branch-leaf", reason: "branch_changed" });
+    expect(runtime.receive(frame).items.filter((item) => item.kind === "partial")).toEqual([]);
+    runtime.beginLive({ ...scope, leafId: "new-branch-leaf" }, 0);
+  } else if (boundary === "session change") {
+    runtime.beginLive({ ...scope, sessionId: "other-session" }, 0);
+    expect(runtime.receive(frame).items.filter((item) => item.kind === "partial")).toEqual([]);
+  } else if (boundary === "runtime takeover") {
+    runtime.beginLive({ ...scope, runtimeInstanceId: "other-runtime" }, 0);
+  } else {
+    runtime.markDisconnected();
+    runtime.beginLive({ ...scope, channelId: "new-channel" }, 0);
+  }
+  expect(runtime.commitReplacement().items.filter((item) => item.kind === "partial")).toEqual([]);
 });
 
 test("late old-leaf receipts and partials do not move the current tip backward", () => {
