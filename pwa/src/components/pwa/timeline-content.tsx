@@ -92,11 +92,12 @@ export function ThinkingContent({ text, streaming = false, expanded: controlledE
   const expanded = controlledExpanded ?? localExpanded;
   const id = useId();
   const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
-  const title = thinkingTitle(text, streaming) ?? t.timeline.thoughtProcess;
+  const title = streaming ? t.timeline.thinking : thinkingTitle(text, false) ?? t.timeline.thoughtProcess;
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
-      <span className="pwa-thinking-title" title={title}>{title}</span>
-      {streaming ? <span className="pwa-thinking-live" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.thinking}</span> : null}
+      {streaming
+        ? <span className="pwa-thinking-title pwa-thinking-live" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span>{title}</span></span>
+        : <span className="pwa-thinking-title" title={title}>{title}</span>}
       <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
     </button>
     <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" /></Collapse>

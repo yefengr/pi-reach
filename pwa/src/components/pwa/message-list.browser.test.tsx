@@ -96,12 +96,42 @@ test("a thinking row is titled by its first bold heading and falls back to the l
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
 });
 
-test("a streaming thinking row shows the latest heading with a live indicator", async () => {
+test("a streaming thinking row replaces headings with a leading live indicator", async () => {
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA.\n\n**Second step**\nB." };
   const { screen } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByText("Second step")).toBeVisible();
+  await expect.element(screen.getByText("Second step")).not.toBeInTheDocument();
   await expect.element(screen.getByText("First step")).not.toBeInTheDocument();
-  await expect.element(screen.getByRole("status").getByText("Thinking")).toBeVisible();
+  await expect.element(screen.getByRole("status").getByText("Thinking…")).toBeVisible();
+  await expect.element(screen.getByText("Thought process")).not.toBeInTheDocument();
+  const status = document.querySelector<HTMLElement>(".pwa-thinking-live")!;
+  expect(status.firstElementChild?.matches("svg.pwa-spin")).toBe(true);
+  expect(getComputedStyle(status).fontSize).toBe("16px");
+  expect(getComputedStyle(status).fontWeight).toBe("600");
+  expect(Math.round(status.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-head")!.getBoundingClientRect().left));
+  expect(Math.round(status.querySelector("svg")!.getBoundingClientRect().right)).toBeLessThan(Math.round(status.querySelector("span")!.getBoundingClientRect().left));
+});
+
+test.each([1280, 390])("thinking and tool-group chevrons stay aligned across streaming completion at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA.\n\n**Second step**\nB." };
+  const { update } = await liveList([eventItem(toolEvent), partialItem(thinking)]);
+  const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  try {
+    for (const theme of ["light", "dark"]) {
+      document.documentElement.setAttribute("data-mantine-color-scheme", theme);
+      await update([eventItem(toolEvent), partialItem(thinking)]);
+      const toggle = document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!;
+      const chevronRight = () => Math.round(toggle.querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().right);
+      const groupRight = Math.round(groupButton().querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().right);
+      expect(chevronRight()).toBe(groupRight);
+      await update([eventItem(toolEvent), eventItem(assistantEvent)]);
+      expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
+      expect(chevronRight()).toBe(groupRight);
+    }
+  } finally {
+    if (originalTheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalTheme);
+    else document.documentElement.removeAttribute("data-mantine-color-scheme");
+  }
 });
 
 test("thinking, tool groups and reader merge their reading locks until the final reader exit", async () => {
@@ -134,8 +164,8 @@ test("thinking, tool groups and reader merge their reading locks until the final
 test("streaming thinking starts collapsed and keeps a manual choice in the formal answer", async () => {
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "Inspecting the request." };
   const { screen, update } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByText("Thought process")).toBeVisible();
-  await expect.element(screen.getByRole("status").getByText("Thinking")).toBeVisible();
+  await expect.element(screen.getByText("Thought process")).not.toBeInTheDocument();
+  await expect.element(screen.getByRole("status").getByText("Thinking…")).toBeVisible();
   await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
   const toggle = document.querySelector(".pwa-thinking .pwa-timeline-toggle");
@@ -143,6 +173,7 @@ test("streaming thinking starts collapsed and keeps a manual choice in the forma
   expect(document.querySelector(".pwa-thinking .pwa-timeline-toggle")).toBe(toggle);
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
   await expect.element(screen.getByText("Thought process")).toBeVisible();
+  expect(document.querySelector(".pwa-thinking-live")).toBeNull();
   await expect.element(screen.getByText("The final answer.")).toBeVisible();
 });
 

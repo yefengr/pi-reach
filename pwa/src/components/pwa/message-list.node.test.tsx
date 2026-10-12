@@ -144,8 +144,9 @@ test("keeps streaming thinking collapsed independently of the tools", () => {
   };
   const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
 
-  expect(html).toContain("Thought process");
-  expect(html).toContain("Thinking</span>");
+  expect(html).not.toContain("Thought process");
+  expect(html).toContain("Thinking…</span>");
+  expect(html.indexOf("pwa-spin")).toBeLessThan(html.indexOf("Thinking…</span>"));
   expect(html).not.toContain("Inspecting the request.");
   expect(html).not.toContain("pwa-tool-code");
   expect(html).toContain('aria-expanded="false"');

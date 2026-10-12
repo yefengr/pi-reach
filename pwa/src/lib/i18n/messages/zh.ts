@@ -359,7 +359,7 @@ export const zh: Messages = {
     thinkingLabel: "思考内容",
     collapseThinking: "收起思考过程",
     expandThinking: "展开思考过程",
-    thinking: "思考中",
+    thinking: "思考中…",
     thoughtProcess: "思考过程",
   },
   tools: {
