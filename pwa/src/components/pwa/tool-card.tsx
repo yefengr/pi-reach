@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useState, type ReactNode } from "react";
 import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 
 import { toolAction, toolHeaderSummary, toolIdentity, toolInlineText, toolStatus, type ToolKind, type ToolStatus, type ToolValue } from "./tool-presentation";
@@ -88,11 +88,26 @@ function useGroupHeadTool(values: readonly ToolValue[], live: boolean, appended:
   return { value: groupHeadTool(next, values, live, next.index === state.index ? timing : NOT_ELAPSED), animate: next.animate };
 }
 
+/** 与实际渲染共用判断：已结束工具停留在收起组头时，其他运行工具尚不可见。 */
+function toolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, expanded: boolean, current: ToolValue | null): readonly string[] {
+  if (expanded || current === null) return values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity);
+  return effectiveToolStatus(current, live) === "running" ? [toolIdentity(current)] : [];
+}
+
+/** 首次渲染与 SSR 尚无组头报告时，沿用队列的初始状态，不猜测 runningCount。 */
+export function initialToolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>, expanded: boolean): readonly string[] {
+  const state = initialGroupHead(values, live, appended);
+  const current = expanded ? null : groupHeadTool(state, values, live, NOT_ELAPSED);
+  return toolGroupRunningIndicators(values, live, expanded, current);
+}
+
+type RunningToolsChange = (groupKey: string, keys: readonly string[] | null) => void;
+
 /**
  * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头按开始顺序排队显示工具，每条至少停留一段时间，积压过多时跳到最新；
  * 最后一条结束并停满后回到分类摘要，组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
  */
-export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, onExpandedChange, timelineKey, children }: { values: readonly ToolValue[]; live: boolean; appended?: ReadonlySet<string>; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; children: ReactNode }) {
+export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, onExpandedChange, timelineKey, activityKey, onRunningToolsChange, children }: { values: readonly ToolValue[]; live: boolean; appended?: ReadonlySet<string>; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; activityKey?: string; onRunningToolsChange?: RunningToolsChange; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
@@ -103,6 +118,14 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, 
   const runningCount = values.filter(value => effectiveToolStatus(value, live) === "running").length;
   // 摘要态旋转图标对读屏隐藏，收起时工具行也未挂载，可访问名称里保留仍在运行的数量。
   const busy = current === null && !expanded && runningCount > 0;
+  const runningIndicators = toolGroupRunningIndicators(values, live, expanded, current);
+  // 布局阶段报告，Working 与队列／展开状态的交接在绘制前完成；父组件按身份去重更新。
+  useLayoutEffect(() => {
+    if (activityKey !== undefined) onRunningToolsChange?.(activityKey, runningIndicators);
+  }, [activityKey, onRunningToolsChange, runningIndicators]);
+  useLayoutEffect(() => () => {
+    if (activityKey !== undefined) onRunningToolsChange?.(activityKey, null);
+  }, [activityKey, onRunningToolsChange]);
   // 停留中的已结束工具也保留在可访问名称里，与屏幕上显示的工具和结束状态一致。
   const currentCommand = current ? `${current.tool} ${toolInlineText(toolHeaderSummary(current))}`.trim() : null;
   const currentLabel = currentCommand === null || currentStatus === null ? null

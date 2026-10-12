@@ -47,19 +47,131 @@ afterEach(async () => { await page.viewport(1280, 900); });
 
 async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProps> = {}) {
   let setItems!: (items: TimelineViewItem[]) => void;
+  let setOverrides!: (overrides: Partial<ListProps>) => void;
   function Harness() {
     const [items, update] = useState(initial);
+    const [props, updateOverrides] = useState(overrides);
+    setOverrides = updateOverrides;
     const listRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     setItems = update;
-    return <main className="pwa-main" style={{ width: "100vw", height: "100vh" }}><MessageList items={items} hasEarlier={false} listRef={listRef} bottomSentinelRef={bottomRef} onScroll={() => {}} {...overrides} /></main>;
+    return <main className="pwa-main" style={{ width: "100vw", height: "100vh" }}><MessageList items={items} hasEarlier={false} listRef={listRef} bottomSentinelRef={bottomRef} onScroll={() => {}} {...props} /></main>;
   }
   const screen = await renderPwa(<Harness />);
-  return { screen, update: async (items: TimelineViewItem[]) => { flushSync(() => setItems(items)); } };
+  return { screen, update: async (items: TimelineViewItem[], nextOverrides?: Partial<ListProps>) => {
+    flushSync(() => { setItems(items); if (nextOverrides !== undefined) setOverrides(nextOverrides); });
+  } };
 }
 function renderMessageList(items: ListProps["items"], overrides: Partial<ListProps> = {}) {
   return renderPwa(<MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} onRetryUnknown={() => {}} onCancelQueued={() => {}} {...overrides} />);
 }
+
+test.each([1280, 390])("Working fallback hands off to current thinking and visible tools at %ipx", async width => {
+  await page.viewport(width, 844);
+  const live = { running: true, isLive: true };
+  const question = eventItem({ ...assistantEvent, event_id: "before-output", blocks: [{ type: "text", text: "Before output" }] });
+  const thinking: TimelinePartial = {
+    protocol_version: 2, type: "timeline_partial", session_id: toolPartial.session_id, leaf_id: toolPartial.leaf_id,
+    group_id: toolPartial.group_id, partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "Inspecting the request.",
+  };
+  const thought = eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: "Inspecting the request." }] });
+  const { screen, update } = await liveList([question], live);
+  const working = () => document.querySelector(".pwa-thinking-status");
+  expect(working()?.textContent).toBe("Working…");
+  await update([question, partialItem(thinking)]);
+  expect(working()).toBeNull();
+  await expect.element(screen.getByRole("status").getByText("Thinking…")).toBeVisible();
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
+  expect(working()).toBeNull();
+  await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
+  await update([question, thought, partialItem(toolPartial)]);
+  expect(document.querySelector(".pwa-thinking-live")).toBeNull();
+  expect(groupButton().querySelector(".pwa-tool-spinner")).not.toBeNull();
+  expect(working()).toBeNull();
+  await userEvent.click(groupButton());
+  await expect.element(screen.getByRole("status", { name: "read: Running" })).toBeVisible();
+  expect(working()).toBeNull();
+  await userEvent.click(groupButton());
+  expect(groupButton().querySelector(".pwa-tool-spinner")).not.toBeNull();
+  expect(working()).toBeNull();
+  // 结束图标不再表示正在工作；Pi 仍 working 时立即恢复兜底，不等组头停留结束。
+  await update([question, thought, eventItem({ ...toolEvent, args: toolPartial.args! })]);
+  expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
+  expect(working()?.textContent).toBe("Working…");
+  await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current"), { timeout: 4000 }).toBeNull();
+  expect(groupButton().querySelector(".pwa-tool-group-summary")).not.toBeNull();
+  expect(working()?.textContent).toBe("Working…");
+  const body: TimelinePartial = { ...thinking, partial_id: "body:assistant:0", kind: "assistant", delta: "Streaming body" };
+  await update([question, thought, eventItem(toolEvent), partialItem(body)]);
+  await expect.element(screen.getByText("Streaming body")).toBeVisible();
+  expect(working()?.textContent).toBe("Working…");
+  // 工具组被移除后不能留下旧报告，压制兜底。
+  await update([question]);
+  expect(document.querySelector(".pwa-tool-group")).toBeNull();
+  expect(working()?.textContent).toBe("Working…");
+  await update([question, runEndItem()]);
+  expect(working()).toBeNull();
+});
+
+test.each([1280, 390])("Working fallback covers a completed queued head until a running indicator is visible at %ipx", async width => {
+  await page.viewport(width, 844);
+  const run = (id: string) => partialItem({ ...toolPartial, partial_id: `tool:${id}`, tool_call_id: id, args: { path: `${id}.ts` } });
+  const finish = (id: string) => eventItem({ ...toolEvent, event_id: id, tool_call_id: id, args: { path: `${id}.ts` } });
+  const { update } = await liveList([run("a")], { running: true });
+  const working = () => document.querySelector(".pwa-thinking-status");
+  expect(working()).toBeNull();
+  await update([finish("a"), run("b")]);
+  expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
+  expect(working()?.textContent).toBe("Working…");
+  await userEvent.click(groupButton());
+  expect(document.querySelector(".pwa-tool-card .pwa-tool-spinner")).not.toBeNull();
+  expect(working()).toBeNull();
+  await userEvent.click(groupButton());
+  // 不等待点击耗时后的具体组头姿态：只要当前有旋转图标就不应出现 Working。
+  expect(working() === null).toBe(groupButton().querySelector(".pwa-tool-spinner, .pwa-spin") !== null);
+  await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current")?.textContent, { timeout: 4000 }).toBe("readb.ts");
+  expect(working()).toBeNull();
+  await update([run("a"), finish("b")]);
+  expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
+  expect(working()?.textContent).toBe("Working…");
+  await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current"), { timeout: 4000 }).toBeNull();
+  expect(groupButton().querySelector(".pwa-tool-group-summary .pwa-spin")).not.toBeNull();
+  expect(working()).toBeNull();
+  await update([finish("a"), finish("b")]);
+  expect(groupButton().querySelector(".pwa-spin")).toBeNull();
+  expect(working()?.textContent).toBe("Working…");
+});
+
+test.each([1280, 390])("Working fallback ignores old ended and idle residuals and respects run boundaries at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = {
+    protocol_version: 2, type: "timeline_partial", session_id: toolPartial.session_id, leaf_id: toolPartial.leaf_id,
+    group_id: toolPartial.group_id, partial_id: "old:thinking:0", kind: "thinking", status: "delta", delta: "Old thought",
+  };
+  const residuals = [partialItem(thinking), partialItem(toolPartial)];
+  const user = (group: string) => eventItem({ ...assistantEvent, event_id: `user-${group}`, message_id: `user-${group}`, group_id: group, kind: "user", blocks: [{ type: "text", text: group }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" });
+  const { update } = await liveList([user("group-1"), ...residuals], { running: true });
+  const working = () => document.querySelector(".pwa-thinking-status");
+  expect(working()).toBeNull();
+  await update([user("group-1"), user("group-2"), ...residuals]);
+  expect(working()?.textContent).toBe("Working…");
+  await userEvent.click(groupButton());
+  expect(working()?.textContent).toBe("Working…");
+  await update([user("group-1"), runEndItem(), user("group-2"), ...residuals]);
+  expect(working()?.textContent).toBe("Working…");
+  await update([user("group-1"), runEndItem(), ...residuals]);
+  expect(working()).toBeNull();
+  // 空闲时看到的 partial，在新发送尚未获得 group_id 时仍是残留。
+  await update([user("group-1"), ...residuals], { running: false });
+  expect(working()).toBeNull();
+  const fresh: TimelinePending = { ...unknownPending, id: "fresh", delivery: "pending" };
+  await update([user("group-1"), fresh, ...residuals], { running: true });
+  expect(working()?.textContent).toBe("Working…");
+  await update([user("group-1"), fresh, ...residuals], { running: true, isLive: false });
+  expect(working()).toBeNull();
+  await update([user("group-1"), fresh, ...residuals], { running: false });
+  expect(working()).toBeNull();
+});
 
 test("supplements a readonly historical user row when metadata arrives after the message", async () => {
   const user: TimelineEvent = { event_id: "message", message_id: "message", group_id: "group", session_id: "session-1", leaf_id: "user-leaf", timestamp: 2, kind: "user", blocks: [{ type: "text", text: "Server fallback notes.txt" }], sender_ref: "owner", origin: "pwa", delivery: "normal", status: "committed" };

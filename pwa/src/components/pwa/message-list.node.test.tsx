@@ -267,18 +267,23 @@ describe("turn presentation", () => {
     expect(html).not.toContain("View read tool details");
   });
 
-  test("shows Working immediately throughout a live run", () => {
+  test("uses Working immediately as a fallback behind specific live indicators", () => {
     const live = { hasEarlier: false, running: true };
     expect(renderList(events(user("u1", "g1", 1)), live)).toContain("Working…");
-    // 已有输出时不延迟；正文、思考和工具执行期间也持续显示。
+    // 已完成摘要与正文不自带运行指示，保留 Working；思考与工具自带旋转图标。
     expect(renderList([...events(user("u1", "g1", 1)), { kind: "event", event: { ...toolEvent, group_id: "g1" } }], live)).toContain("Working…");
     expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), live)).toContain("Working…");
     const streaming: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "g1:assistant:0", kind: "assistant", status: "delta", delta: "Partial" };
     expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: streaming }], live)).toContain("Working…");
     const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "g1:thinking:0", kind: "thinking", status: "delta", delta: "Reasoning" };
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: thinking }], live)).toContain("Working…");
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: thinking }], live)).not.toContain("Working…");
     const tool: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "tool:t1", kind: "tool", tool_call_id: "t1", tool: "bash", args: { command: "pnpm test" }, status: "running" };
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).toContain("Working…");
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).not.toContain("Working…");
+    // 旧轮、已结束轮的具体指示不能压制新轮兜底。
+    const residuals = [{ kind: "partial" as const, createdAt: 2, partial: thinking }, { kind: "partial" as const, createdAt: 2, partial: tool }];
+    expect(renderList([...events(user("u1", "g1", 1), user("u2", "g2", 3)), ...residuals], live)).toContain("Working…");
+    expect(renderList([...events(user("u1", "g1", 1), runEnd("r1", "g1", 2), user("u2", "g2", 3)), ...residuals], live)).toContain("Working…");
+    expect(renderList([...events(user("u1", "g1", 1), runEnd("r1", "g1", 3)), ...residuals], live)).not.toContain("Working…");
     // 本轮结束、Pi 空闲或断线时隐藏。
     expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), runEnd("r1", "g1", 3)), live)).not.toContain("Working…");
     expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false })).not.toContain("Working…");

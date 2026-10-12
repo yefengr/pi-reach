@@ -90,11 +90,17 @@ describe("timelineActivity", () => {
     return { result: timelineActivity(list, live, working, group => ended.includes(group)), segments };
   };
 
-  test("shows Working throughout a live run including output and tool execution", () => {
+  test("keeps the Working run gate independent of specific output indicators", () => {
     expect(activity([tool("a")]).result.working).toBe(true);
     expect(activity([text("t")]).result.working).toBe(true);
     expect(activity([running("a")]).result.working).toBe(true);
     expect(activity([streaming("t")]).result.working).toBe(true);
+    const list = entries([running("a"), streaming("t"), tool("done")]);
+    const current = timelineActivity(list, true, true, () => false);
+    expect(list.map(entry => current.currentOutput(entry))).toEqual([true, true, false]);
+    expect(list.some(entry => timelineActivity(list, false, true, () => false).currentOutput(entry))).toBe(false);
+    expect(list.some(entry => timelineActivity(list, true, false, () => false).currentOutput(entry))).toBe(false);
+    expect(list.some(entry => timelineActivity(list, true, true, () => true).currentOutput(entry))).toBe(false);
     expect(activity([tool("a")], { ended: ["g1"] }).result.working).toBe(false);
     expect(activity([tool("a")], { working: false }).result.working).toBe(false);
     expect(activity([tool("a")], { live: false }).result.working).toBe(false);
@@ -107,6 +113,10 @@ describe("timelineActivity", () => {
     const ended = activity([text("a"), tool("next", "g2"), streaming("old"), running("t")], { ended: ["g1"] });
     expect(ended.result.working).toBe(true);
     expect(ended.segments.map(segment => ended.result.liveTail(segment))).toEqual([true, false]);
+    expect(entries([streaming("old"), running("t")]).some(entry => ended.result.currentOutput(entry))).toBe(false);
+    const earlier = activity([tool("next", "g2"), running("t")]);
+    expect(earlier.result.currentOutput(entries([running("t")])[0]!)).toBe(false);
+    expect(earlier.result.currentOutput(entries([running("new", "g2")])[0]!)).toBe(true);
     // 旧轮缺少 run_end，但已不是末轮：同样视为残留。
     expect(activity([text("a"), streaming("old"), user("next", "g2")]).result.working).toBe(true);
     // 末轮自己的流式输出也不隐藏 Working。
@@ -120,6 +130,7 @@ describe("timelineActivity", () => {
     const stale = new Set(list.filter(entry => entry.kind === "text" && entry.streaming).map(entry => entry.key));
     // 新发送、流式输出与排队期间都保持 Working。
     expect(timelineActivity(list, true, true, () => false, stale).working).toBe(true);
+    expect(list.filter(entry => entry.kind === "text" && entry.streaming).some(entry => timelineActivity(list, true, true, () => false, stale).currentOutput(entry))).toBe(false);
     expect(timelineActivity(list, true, true, () => false).working).toBe(true);
     // 已进入 Pi 队列的消息不是新一轮的边界。
     expect(timelineActivity(entries([text("a"), streaming("old"), pending(true)]), true, true, () => false, stale).working).toBe(true);
