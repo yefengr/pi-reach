@@ -175,15 +175,16 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
     // 两条并行：second 排队，等 first 停满后显示。
     await expect.poll(current, { timeout: 3000 }).toBe("readsecond.ts");
     expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
-    const workingStatus = list.querySelector(".pwa-thinking-status");
-    expect(workingStatus?.textContent).toBe("Working…");
+    // 组头进入动画露出具体旋转提示后，不重复显示 Working。
+    await expect.poll(() => list.querySelector(".pwa-thinking-status")).toBeNull();
 
     formal(done("first", 1));
     await expect.poll(() => api.items.some(item => item.kind === "event" && item.event.event_id === "event:first")).toBe(true);
     expect(current()).toBe("readsecond.ts");
     formal(done("second", 2));
-    // 工具全部结束、Pi 仍 working：指示器持续挂载；组头行为不变。
-    expect(list.querySelector(".pwa-thinking-status")).toBe(workingStatus);
+    // 工具全部结束、Pi 仍 working：立即恢复兜底；组头行为不变。
+    const workingStatus = list.querySelector(".pwa-thinking-status");
+    expect(workingStatus?.textContent).toBe("Working…");
     await expect.poll(current, { timeout: 3000 }).toBeNull();
     await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
     expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);

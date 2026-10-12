@@ -107,6 +107,19 @@ describe("timelineActivity", () => {
     expect(activity([{ kind: "event", event: runEnd("g0") }, tool("a")], { ended: ["g0"] }).result.working).toBe(true);
   });
 
+  test("keeps frozen visible indicators scoped to the active turn after a tool completes", () => {
+    const list = entries([tool("old", "g0"), tool("done", "g1")]);
+    const current = timelineActivity(list, true, true, () => false);
+    expect(list.map(entry => current.currentIndicator(entry))).toEqual([false, true]);
+    expect(list.some(entry => current.currentOutput(entry))).toBe(false);
+    expect(list.some(entry => timelineActivity(list, true, false, () => false).currentIndicator(entry))).toBe(false);
+    expect(list.some(entry => timelineActivity(list, false, true, () => false).currentIndicator(entry))).toBe(false);
+    expect(list.some(entry => timelineActivity(list, true, true, group => group === "g1").currentIndicator(entry))).toBe(false);
+    const pending: TimelineViewItem = { kind: "pending", id: "next", clientRequestId: "next", requestId: "next", text: "next", createdAt: 3, delivery: "pending" };
+    const fresh = entries([tool("done"), pending]);
+    expect(timelineActivity(fresh, true, true, () => false, new Set([fresh[0]!.key])).currentIndicator(fresh[0]!)).toBe(false);
+  });
+
   test("ignores residual partials of an ended or earlier turn", () => {
     const user = (id: string, group: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: id, message_id: id, group_id: group, timestamp: 2, kind: "user", blocks: [{ type: "text", text: id }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" } });
     // 旧轮残留不改变新一轮的 Working 或末尾工具组判定。

@@ -101,6 +101,8 @@ export type TimelineActivity = {
   working: boolean;
   /** 本轮正在输出的条目，排除已结束、旧轮与空闲期间留下的 partial。 */
   currentOutput: (entry: PresentationEntry) => boolean;
+  /** 可见图标属于当前运行的轮；退出冻结期间即使工具已完成，图标仍可暂时可见。 */
+  currentIndicator: (entry: PresentationEntry) => boolean;
 };
 
 export function isPartialEntry(entry: PresentationEntry): boolean {
@@ -138,5 +140,11 @@ export function timelineActivity(entries: readonly PresentationEntry[], live: bo
     liveTail: segment => segment.tools.at(-1) === last && (runActive || segment.tools.some(outputting)),
     working: runActive && current.length > 0,
     currentOutput: entry => runActive && !residual(entry) && outputting(entry),
+    currentIndicator: entry => {
+      const groupId = entryGroupId(entry);
+      return runActive && groupId !== undefined && !runEnded(groupId)
+        && (turnGroup === undefined || groupId === turnGroup)
+        && !(freshSend && idlePartials.has(entry.key));
+    },
   };
 }

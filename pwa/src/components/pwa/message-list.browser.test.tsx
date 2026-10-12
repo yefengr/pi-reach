@@ -90,14 +90,14 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   expect(working()).toBeNull();
   await userEvent.click(groupButton());
   await expect.element(screen.getByRole("status", { name: "read: Running" })).toBeVisible();
-  expect(working()).toBeNull();
+  await expect.poll(working).toBeNull();
   await userEvent.click(groupButton());
   expect(groupButton().querySelector(".pwa-tool-spinner")).not.toBeNull();
   expect(working()).toBeNull();
   // 结束图标不再表示正在工作；Pi 仍 working 时立即恢复兜底，不等组头停留结束。
   await update([question, thought, eventItem({ ...toolEvent, args: toolPartial.args! })]);
   expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
-  expect(working()?.textContent).toBe("Working…");
+  await expect.poll(() => working()?.textContent).toBe("Working…");
   await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current"), { timeout: 4000 }).toBeNull();
   expect(groupButton().querySelector(".pwa-tool-group-summary")).not.toBeNull();
   expect(working()?.textContent).toBe("Working…");
@@ -125,12 +125,12 @@ test.each([1280, 390])("Working fallback covers a completed queued head until a 
   expect(working()?.textContent).toBe("Working…");
   await userEvent.click(groupButton());
   expect(document.querySelector(".pwa-tool-card .pwa-tool-spinner")).not.toBeNull();
-  expect(working()).toBeNull();
+  await expect.poll(working).toBeNull();
   await userEvent.click(groupButton());
-  // 不等待点击耗时后的具体组头姿态：只要当前有旋转图标就不应出现 Working。
-  expect(working() === null).toBe(groupButton().querySelector(".pwa-tool-spinner, .pwa-spin") !== null);
+  // 退出期间仍有被冻结的运行图标，不能只按收起后的组头判断交接。
+  await expect.poll(() => document.querySelector(".pwa-tool-group-details")).toBeNull();
   await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current")?.textContent, { timeout: 4000 }).toBe("readb.ts");
-  expect(working()).toBeNull();
+  await expect.poll(working).toBeNull();
   await update([run("a"), finish("b")]);
   expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
   expect(working()?.textContent).toBe("Working…");

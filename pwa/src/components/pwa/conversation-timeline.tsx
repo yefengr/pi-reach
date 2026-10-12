@@ -159,7 +159,7 @@ export function ConversationTimeline({ items, live, completions, running = false
     const indicators = toolIndicators.get(segment.key) ?? initialToolGroupRunningIndicators(
       segment.tools.map(tool => tool.value), live, appended, segmentExpansion(segment.tools, toolChoices)?.expanded ?? false,
     );
-    return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentOutput(tool));
+    return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
   });
   // 展开的思考与工具组暂停行内自动跟随；末段运行中展开的工具组除外。工具详情由 Reader 独立持锁。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
