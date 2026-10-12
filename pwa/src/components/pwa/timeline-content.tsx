@@ -1,4 +1,4 @@
-import { isValidElement, useId, useMemo, useState, type ReactNode } from "react";
+import { isValidElement, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, LoaderCircle } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -94,6 +94,20 @@ export function thinkingSummary(text: string): string | undefined {
 export function ThinkingContent({ text, streaming = false, expanded: controlledExpanded, onExpandedChange, timelineKey }: ThinkingContentProps) {
   const { t } = useI18n();
   const [localExpanded, setLocalExpanded] = useState(false);
+  const [previousStreaming, setPreviousStreaming] = useState(streaming);
+  const [announcementReady, setAnnouncementReady] = useState(false);
+  if (previousStreaming !== streaming) {
+    setPreviousStreaming(streaming);
+    setAnnouncementReady(false);
+  }
+  useEffect(() => {
+    if (!streaming) return;
+    // 先让空 live region 经过一帧供辅助技术登记，再只写入一次状态；增量不重启公告。
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setAnnouncementReady(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [streaming]);
   const expanded = controlledExpanded ?? localExpanded;
   const id = useId();
   const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
@@ -106,7 +120,7 @@ export function ThinkingContent({ text, streaming = false, expanded: controlledE
       <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
     </button>
     {/* 独立的稳定状态保留读屏提示，不随视觉标题的流式增量重复播报。 */}
-    {streaming ? <span className="pwa-sr-only" role="status">{t.timeline.thinking}</span> : null}
+    {streaming ? <span className="pwa-sr-only" role="status">{announcementReady ? t.timeline.thinking : ""}</span> : null}
     <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" /></Collapse>
   </section>;
 }

@@ -145,7 +145,7 @@ test("keeps streaming thinking collapsed independently of the tools", () => {
   const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
 
   expect(html).not.toContain("Thought process");
-  expect(html).toContain('<span class="pwa-sr-only" role="status">Thinking…</span>');
+  expect(html).toContain('<span class="pwa-sr-only" role="status"></span>');
   expect(html).toContain('<span title="Inspecting the request.">Inspecting the request.</span>');
   expect(html.indexOf("pwa-spin")).toBeLessThan(html.indexOf('title="Inspecting the request."'));
   expect(html).not.toContain("Full reasoning stays collapsed.");
@@ -304,7 +304,7 @@ test.each([
   };
   const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
   expect(html).toContain(`<span title="${title}">${title}</span>`);
-  expect(html).toContain('<span class="pwa-sr-only" role="status">Thinking…</span>');
+  expect(html).toContain('<span class="pwa-sr-only" role="status"></span>');
   expect(html).toContain('aria-live="off"');
   expect(html).toContain('aria-expanded="false"');
   expect(html).not.toContain("pwa-text-plain");

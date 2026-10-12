@@ -238,16 +238,23 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
 test.each([1280, 390])("streaming titles keep a stable separate screen-reader status at %ipx", async width => {
   await page.viewport(width, 844);
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "" };
-  const { update } = await liveList([partialItem(thinking)], { running: true });
+  const before = eventItem({ ...assistantEvent, event_id: "before-thinking", blocks: [{ type: "text", text: "Before thinking" }] });
+  const { update } = await liveList([before], { running: true });
+  await update([before, partialItem(thinking)]);
   const row = document.querySelector(".pwa-thinking")!;
   const status = row.querySelector<HTMLElement>('[role="status"]')!;
-  expect(status.textContent).toBe("Thinking…");
+  expect(status.textContent).toBe("");
   expect(status.classList.contains("pwa-sr-only")).toBe(true);
   expect(getComputedStyle(status).clipPath).toBe("inset(50%)");
   const changes: MutationRecord[] = [];
   const observer = new MutationObserver(records => changes.push(...records));
   observer.observe(status, { childList: true, characterData: true, subtree: true, attributes: true });
   try {
+    // 空区域先注册，随后仅写入一次稳定公告，而不是带初始文字一起挂载。
+    await expect.poll(() => status.textContent).toBe("Thinking…");
+    await Promise.resolve();
+    expect(changes).toHaveLength(1);
+    changes.length = 0;
     const updates = [
       { text: "I", title: "I" },
       { text: "Inspect", title: "Inspect" },
@@ -268,10 +275,21 @@ test.each([1280, 390])("streaming titles keep a stable separate screen-reader st
     }
     await Promise.resolve();
     expect(changes).toHaveLength(0);
-    await update([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: updates.at(-1)!.text }] })]);
+    const completed = eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: updates.at(-1)!.text }] });
+    await update([completed]);
     expect(row.querySelector('[role="status"]')).toBeNull();
     expect(row.querySelector(".pwa-spin")).toBeNull();
     expect(row.querySelector(".pwa-thinking-title")?.textContent).toBe("First stage");
+    // 公告尚未填入时已结束，取消待执行回调，后续开始仍从空区域进入。
+    await update([partialItem(thinking)]);
+    expect(row.querySelector('[role="status"]')?.textContent).toBe("");
+    await update([completed]);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    await update([partialItem(thinking)]);
+    expect(row.querySelector('[role="status"]')?.textContent).toBe("");
+    await update([]);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(document.querySelector(".pwa-thinking")).toBeNull();
   } finally {
     observer.disconnect();
   }
