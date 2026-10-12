@@ -2246,6 +2246,8 @@ test("preserves the session, draft, attachment, tool row and reader across layou
       group_id: "layout-group", kind: "tool", tool_call_id: "layout-tool", tool: "read", args: { path: "README.md" },
       truncated: false, status: "complete", result: Array.from({ length: 45 }, (_, index) => `Reading line ${index + 1}`).join("\n"),
     } });
+    // 工具在默认收起的组内，先展开组再取工具行。
+    await screen.getByRole("button", { name: "Expand Read 1 file" }).click();
     const toolRow = screen.getByRole("button", { name: "View read tool details" });
     await expect.element(toolRow).toBeVisible();
     const toolRowElement = toolRow.element();

@@ -62,16 +62,18 @@ test("shows the earlier-records state that matches loading, failure and connecti
   expect(renderList(items, { isLive: false, earlierLocal: true })).toContain("Load more");
 });
 
-test("keeps earlier and retry actions alongside a tool details entry", () => {
+test("keeps earlier and retry actions alongside a collapsed tool group", () => {
   const html = renderList([{ kind: "event", event: toolEvent }, unknownPending], { onRetryUnknown: () => {} });
   const earlierButton = html.match(/<button[^>]*class="[^"]*pwa-earlier-button[^"]*"[^>]*>/)?.[0] ?? "";
-  const toolAction = html.match(/<button[^>]*aria-label="View read tool details"[^>]*>/)?.[0] ?? "";
+  const groupToggle = html.match(/<button[^>]*aria-label="Expand Used tools 1 time"[^>]*>/)?.[0] ?? "";
   const retryAction = html.match(/<button[^>]*aria-label="Retry delivery"[^>]*>/)?.[0] ?? "";
 
   expect(earlierButton).toMatch(/pwa-button/);
   expect(earlierButton).toMatch(/data-variant="default"/);
-  expect(toolAction).toMatch(/aria-haspopup="dialog"/);
-  expect(toolAction).not.toMatch(/aria-expanded|aria-controls/);
+  // 单条工具也成组，默认收起，组内工具行此时不挂载。
+  expect(groupToggle).toMatch(/aria-expanded="false"/);
+  expect(groupToggle).toMatch(/aria-controls=/);
+  expect(html).not.toContain("View read tool details");
   expect(html).not.toContain("pwa-activity");
   // 投递状态行下方的文字按钮「重试」。
   expect(retryAction).toMatch(/data-variant="transparent"/);
@@ -94,9 +96,8 @@ test("keeps final answers visible while thinking is collapsed and skips empty as
 test("keeps failed tool details out of the conversation with a visible error status", () => {
   const event: TimelineEvent = { ...toolEvent, status: "error", error: "Permission denied", args: { path: "file.txt" }, result: [{ type: "text", text: "Readable text" }] };
   const html = renderList([{ kind: "event", event }]);
-  expect(html).toContain("View read tool details");
-  expect(html).toContain('data-tool-status="error"');
-  expect(html).toContain("Error");
+  expect(html).toContain("Read 1 file · 1 failed");
+  expect(html).toContain("pwa-tool-group-alert");
   expect(html).not.toContain("Permission denied");
   expect(html).not.toContain("Readable text");
   expect(html).not.toContain("Tool input");
@@ -115,17 +116,21 @@ test("uses a Mantine cancel action only for cancelable queued messages", () => {
   expect(html).toContain(">Queued<");
 });
 
-test("summarizes common tools in the header without mounting raw args", () => {
-  // 分属不同轮次，避免相邻成功工具合并为摘要行，从而检查每条工具自己的标题。
-  const read: TimelineEvent = { ...toolEvent, args: { path: "src/components/pwa/message-list.tsx" } };
-  const run: TimelineEvent = { ...toolEvent, event_id: "bash", tool_call_id: "bash-1", group_id: "group-bash", tool: "bash", args: { command: "pnpm   test" }, result: "ok" };
-  const search: TimelineEvent = { ...toolEvent, event_id: "search", tool_call_id: "search-1", group_id: "group-search", tool: "grep", args: { pattern: "ToolCard", path: "src" }, result: [] };
-  const html = renderList([{ kind: "event", event: read }, { kind: "event", event: run }, { kind: "event", event: search }]);
+test("summarizes running tools in the group header without mounting raw args", () => {
+  // 分属不同轮次，各自成组；运行中的工具在折叠的组头显示自己的标题。
+  const running = (tool: string, id: string, args: Extract<TimelinePartial, { kind: "tool" }>["args"]): TimelinePartial => ({
+    protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: `group-${id}`, kind: "tool", partial_id: `tool:${id}`, tool_call_id: id, tool, args, status: "running",
+  });
+  const html = renderList([
+    { kind: "partial", createdAt: 0, partial: running("read", "read-1", { path: "src/components/pwa/message-list.tsx" }) },
+    { kind: "partial", createdAt: 0, partial: running("bash", "bash-1", { command: "pnpm   test" }) },
+    { kind: "partial", createdAt: 0, partial: running("grep", "search-1", { pattern: "ToolCard", path: "src" }) },
+  ]);
 
   expect(html).toContain("src/components/pwa/message-list.tsx");
-  expect(html).toContain("View read tool details");
-  expect(html).toContain("View bash tool details");
-  expect(html).toContain("View grep tool details");
+  expect(html).toContain("Running read");
+  expect(html).toContain("Running bash");
+  expect(html).toContain("Running grep");
   expect(html).toContain("pnpm   test");
   expect(html).toContain("ToolCard");
   expect(html).not.toContain("&quot;path&quot;");
@@ -158,7 +163,7 @@ const customEvent: TimelineEvent = { event_id: "custom-1", session_id: "session-
 
 test("hides extension custom events without rendering their raw payload", () => {
   const html = renderList([{ kind: "event", event: toolEvent }, { kind: "event", event: customEvent }]);
-  expect(html).toContain("View read tool details");
+  expect(html).toContain("Used tools 1 time");
   expect(html).not.toContain("notice");
   expect(html).not.toContain("System");
 });
@@ -245,7 +250,7 @@ describe("turn presentation", () => {
     { label: "history", running: true, isLive: false },
     { label: "later formal run", running: true, later: "formal" },
     { label: "later partial run", running: true, later: "partial" },
-  ])("does not finish or group tools without run_end ($label)", ({ running, isLive, later }) => {
+  ])("groups tools but does not finish the turn without run_end ($label)", ({ running, isLive, later }) => {
     const items: Parameters<typeof MessageList>[0]["items"] = events(
       user("u1", "group-1", 1), toolEvent,
       { ...toolEvent, event_id: "tool-2", tool_call_id: "tool-2", timestamp: 2 },
@@ -256,17 +261,25 @@ describe("turn presentation", () => {
     } });
     const html = renderList(items, { hasEarlier: false, running, isLive });
     expect(html).not.toContain("pwa-turn-meta");
-    expect(html).not.toContain("pwa-tool-group");
-    expect(html.match(/aria-label="View read tool details"/g)).toHaveLength(2);
-    expect(html).not.toContain("aria-expanded");
+    expect(html.match(/data-tool-group-size="2"/g)).toHaveLength(1);
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("View read tool details");
   });
 
-  test("shows Pi is thinking only while running and before the turn has any output", () => {
-    const waiting = renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true });
-    expect(waiting).toContain("Pi is thinking…");
-    expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), { hasEarlier: false, running: true })).not.toContain("Pi is thinking…");
-    expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false })).not.toContain("Pi is thinking…");
-    expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true, isLive: false })).not.toContain("Pi is thinking…");
+  test("shows Working while Pi is working and nothing is being output", () => {
+    const live = { hasEarlier: false, running: true };
+    expect(renderList(events(user("u1", "g1", 1)), live)).toContain("Working…");
+    // 两段输出之间延迟显示（浏览器测试覆盖），首帧不出现，避免交接瞬间闪现。
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "event", event: { ...toolEvent, group_id: "g1" } }], live)).not.toContain("Working…");
+    expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), live)).not.toContain("Working…");
+    // 正文流式输出、工具运行或本轮已收到 run_end 时不显示。
+    const streaming: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "g1:assistant:0", kind: "assistant", status: "delta", delta: "Partial" };
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: streaming }], live)).not.toContain("Working…");
+    const tool: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "tool:t1", kind: "tool", tool_call_id: "t1", tool: "bash", args: { command: "pnpm test" }, status: "running" };
+    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).not.toContain("Working…");
+    expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), runEnd("r1", "g1", 3)), live)).not.toContain("Working…");
+    expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false })).not.toContain("Working…");
+    expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true, isLive: false })).not.toContain("Working…");
   });
 });
 

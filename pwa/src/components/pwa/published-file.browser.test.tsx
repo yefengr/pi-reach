@@ -92,7 +92,8 @@ test("legal custom is independent output and a summary boundary with one group c
   const h = await harness({ items });
   await expect.element(h.screen.getByText("说明.md", { exact: true })).toBeVisible();
   expect(document.querySelectorAll(".pwa-published-file")).toHaveLength(1);
-  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+  // 文件行把工具分成两段，各自成组。
+  expect([...document.querySelectorAll(".pwa-tool-group")].map(group => group.getAttribute("data-tool-group-size"))).toEqual(["2", "1"]);
   expect(document.querySelectorAll(".pwa-turn-meta")).toHaveLength(1);
   expect(document.querySelector(".pwa-published-file")?.closest(".pwa-tool-group")).toBeNull();
   await h.screen.unmount();
