@@ -5,7 +5,7 @@ import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/
 import type { TimelinePending } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
 import { PwaUiProvider } from "./pwa-ui-provider";
-import { thinkingTitle } from "./timeline-content";
+import { thinkingSummary, thinkingTitle } from "./timeline-content";
 
 function renderList(items: Parameters<typeof MessageList>[0]["items"], overrides: Partial<Parameters<typeof MessageList>[0]> = {}): string {
   return renderToStaticMarkup(
@@ -140,14 +140,16 @@ test("summarizes running tools in the group header without mounting raw args", (
 test("keeps streaming thinking collapsed independently of the tools", () => {
   const partial: TimelinePartial = {
     protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
-    group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Inspecting the request.",
+    group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Inspecting the request.\nFull reasoning stays collapsed.",
   };
   const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
 
   expect(html).not.toContain("Thought process");
-  expect(html).toContain("Thinking…</span>");
-  expect(html.indexOf("pwa-spin")).toBeLessThan(html.indexOf("Thinking…</span>"));
-  expect(html).not.toContain("Inspecting the request.");
+  expect(html).not.toContain("Thinking…");
+  expect(html).toContain('<span title="Inspecting the request.">Inspecting the request.</span>');
+  expect(html.indexOf("pwa-spin")).toBeLessThan(html.indexOf('title="Inspecting the request."'));
+  expect(html).not.toContain("Full reasoning stays collapsed.");
+  expect(html).not.toContain("pwa-text-plain");
   expect(html).not.toContain("pwa-tool-code");
   expect(html).toContain('aria-expanded="false"');
 });
@@ -288,6 +290,36 @@ describe("turn presentation", () => {
     expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), runEnd("r1", "g1", 3)), live)).not.toContain("Working…");
     expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false })).not.toContain("Working…");
     expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true, isLive: false })).not.toContain("Working…");
+  });
+});
+
+test.each([
+  { text: "**First step**\nBody.\n**Latest step**\n**Unfinished", title: "Latest step" },
+  { text: "\n \t\n  检查   工具\t分组  \nHidden body", title: "检查 工具 分组" },
+  { text: "\n \t\n", title: "Thought process" },
+])("renders the live thinking title or neutral fallback in SSR ($title)", ({ text, title }) => {
+  const partial: TimelinePartial = {
+    protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
+    group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: text,
+  };
+  const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
+  expect(html).toContain(`<span title="${title}">${title}</span>`);
+  expect(html).toContain('role="status"');
+  expect(html).toContain('aria-expanded="false"');
+  expect(html).not.toContain("Thinking…");
+  expect(html).not.toContain("pwa-text-plain");
+});
+
+describe("thinkingSummary", () => {
+  test("uses the first nonempty line and normalizes inline whitespace only", () => {
+    expect(thinkingSummary("\n \t\n  Inspecting\t  the request.  \nLater line")).toBe("Inspecting the request.");
+    expect(thinkingSummary("\r\n  检查　 工具分组 \r\n模型原文")).toBe("检查 工具分组");
+    expect(thinkingSummary("**Unfinished heading")).toBe("**Unfinished heading");
+    expect(thinkingSummary("An inline **bold** word.")).toBe("An inline **bold** word.");
+  });
+  test("has no summary before text arrives", () => {
+    expect(thinkingSummary("")).toBeUndefined();
+    expect(thinkingSummary(" \n\t\r\n")).toBeUndefined();
   });
 });
 

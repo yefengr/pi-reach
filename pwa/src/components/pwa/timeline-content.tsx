@@ -86,17 +86,22 @@ export function thinkingTitle(text: string, streaming: boolean): string | undefi
   return streaming ? titles.at(-1) : titles[0];
 }
 
+/** 流式阶段尚无完整标题时，用首个非空行作摘要，不改动展开后的原文。 */
+export function thinkingSummary(text: string): string | undefined {
+  return text.split("\n").map(line => line.trim().replace(/\s+/g, " ")).find(Boolean);
+}
+
 export function ThinkingContent({ text, streaming = false, expanded: controlledExpanded, onExpandedChange, timelineKey }: ThinkingContentProps) {
   const { t } = useI18n();
   const [localExpanded, setLocalExpanded] = useState(false);
   const expanded = controlledExpanded ?? localExpanded;
   const id = useId();
   const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
-  const title = streaming ? t.timeline.thinking : thinkingTitle(text, false) ?? t.timeline.thoughtProcess;
+  const title = thinkingTitle(text, streaming) ?? (streaming ? thinkingSummary(text) : undefined) ?? t.timeline.thoughtProcess;
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
       {streaming
-        ? <span className="pwa-thinking-title pwa-thinking-live" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span>{title}</span></span>
+        ? <span className="pwa-thinking-title pwa-thinking-live" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span title={title}>{title}</span></span>
         : <span className="pwa-thinking-title" title={title}>{title}</span>}
       <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
     </button>

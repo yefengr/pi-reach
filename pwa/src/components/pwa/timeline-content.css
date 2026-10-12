@@ -71,12 +71,13 @@
 .pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
-/* 思考行：进行中左侧显示旋转图标与「思考中…」，结束后显示首个加粗标题或「思考过程」；两种状态共用右侧箭头列，避免结束时偏移。 */
+/* 思考行：进行中左侧显示旋转图标与最新完整加粗标题，无标题时用首行摘要或「思考过程」；结束后显示首个加粗标题或「思考过程」。两种状态共用右侧箭头列，避免结束时偏移。 */
 .pwa-thinking { color: var(--pwa-secondary); }
 .pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }
 .pwa-thinking-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pwa-thinking-live { display: flex; align-items: center; gap: 8px; color: var(--pwa-running); }
 .pwa-thinking-live > svg { flex: none; }
+.pwa-thinking-live > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pwa-thinking-content .pwa-collapse-inner { padding-bottom: 4px; }
 .pwa-thinking-content .pwa-long-text { padding-left: 12px; border-left: 2px solid var(--pwa-control-line); }
 .pwa-long-text { min-width: 0; }
