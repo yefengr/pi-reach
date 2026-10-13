@@ -88,7 +88,15 @@ export function thinkingTitle(text: string, streaming: boolean): string | undefi
 
 /** 流式阶段尚无完整标题时，用首个非空行作摘要，不改动展开后的原文。 */
 export function thinkingSummary(text: string): string | undefined {
-  return text.split("\n").map(line => line.trim().replace(/\s+/g, " ")).find(Boolean);
+  let start = 0;
+  while (start < text.length) {
+    const newline = text.indexOf("\n", start);
+    const line = text.slice(start, newline === -1 ? text.length : newline).trim();
+    if (line) return line.replace(/\s+/g, " ");
+    if (newline === -1) return undefined;
+    start = newline + 1;
+  }
+  return undefined;
 }
 
 export function ThinkingContent({ text, streaming = false, expanded: controlledExpanded, onExpandedChange, timelineKey }: ThinkingContentProps) {

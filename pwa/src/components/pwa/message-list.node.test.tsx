@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
@@ -311,6 +311,19 @@ test.each([
 });
 
 describe("thinkingSummary", () => {
+  test("does not split or normalize the remaining body after finding the first line", () => {
+    const text = `\n \t\n First\t line \n${"Unused reasoning.\n".repeat(10_000)}`;
+    const split = vi.spyOn(String.prototype, "split");
+    const normalize = vi.spyOn(String.prototype, "replace");
+    try {
+      const summary = thinkingSummary(text);
+      const calls = { summary, splits: split.mock.calls.length, normalizations: normalize.mock.calls.length };
+      expect(calls).toEqual({ summary: "First line", splits: 0, normalizations: 1 });
+    } finally {
+      split.mockRestore();
+      normalize.mockRestore();
+    }
+  });
   test("uses the first nonempty line and normalizes inline whitespace only", () => {
     expect(thinkingSummary("\n \t\n  Inspecting\t  the request.  \nLater line")).toBe("Inspecting the request.");
     expect(thinkingSummary("\r\n  检查　 工具分组 \r\n模型原文")).toBe("检查 工具分组");
