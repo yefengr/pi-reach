@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { MessageList } from "./message-list";
+import { toolHeaderSummary, toolInlineText } from "./tool-presentation";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { TimelineRuntime, type TimelinePending, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
@@ -967,6 +968,85 @@ test("tools join a live group from the first call and an open reader keeps its o
   expect(reading.at(-1)).toBe(true);
 });
 
+test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width, scheme }))))("tool group text stays left and status stays before the right chevron at $width in $scheme", async ({ width, scheme }) => {
+  await page.viewport(width, 844);
+  const originalScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  const command = `pnpm test --filter ${"long-parameter-".repeat(80)}`;
+  const running = { ...toolPartial, tool: "bash", args: { command } };
+  const finished = { ...toolEvent, tool: "bash", args: { command }, result: "ok" };
+  const earlierFailure: Extract<TimelineEvent, { kind: "tool" }> = { ...toolEvent, event_id: "earlier-failure", tool_call_id: "earlier-failure", tool: "bash", args: { command: "pnpm lint" }, status: "error", error: "failed" };
+  const { update } = await liveList([eventItem(assistantEvent)]);
+  try {
+    document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
+    await update([eventItem(assistantEvent), eventItem(earlierFailure), partialItem(running)]);
+    await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current > span")?.textContent, { timeout: 3000 }).toBe(toolInlineText(toolHeaderSummary(running)));
+    const group = groupButton();
+    const tokenColor = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${token})`;
+      document.querySelector(".pwa-root")!.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const assertGeometry = () => {
+      const copy = group.querySelector<HTMLElement>(":scope > .pwa-tool-action-copy")!;
+      const status = group.querySelector<HTMLElement>(":scope > .pwa-tool-group-status")!;
+      const chevron = group.querySelector(":scope > .pwa-tool-chevron")!;
+      const copyRect = copy.getBoundingClientRect();
+      const statusRect = status.getBoundingClientRect();
+      const arrowRect = chevron.getBoundingClientRect();
+      expect(Math.round(copyRect.left)).toBe(Math.round(group.getBoundingClientRect().left));
+      expect(Math.round(copy.querySelector("strong")!.getBoundingClientRect().left)).toBe(Math.round(group.getBoundingClientRect().left));
+      expect(Math.round(copyRect.right)).toBeLessThanOrEqual(Math.round(statusRect.left));
+      expect(Math.round(statusRect.width)).toBe(16);
+      expect(Math.round(statusRect.right)).toBeLessThanOrEqual(Math.round(arrowRect.left));
+      expect(Math.abs(Math.round(arrowRect.right) - (Math.round(group.getBoundingClientRect().right) - 6))).toBeLessThanOrEqual(1);
+      const alert = group.querySelector(":scope > .pwa-tool-group-alert");
+      if (alert) {
+        expect(Math.round(statusRect.right)).toBeLessThanOrEqual(Math.round(alert.getBoundingClientRect().left));
+        expect(Math.round(alert.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(arrowRect.left));
+      }
+      expect(copy.querySelector("svg")).toBeNull();
+      const parameter = copy.querySelector<HTMLElement>(".pwa-tool-group-current > span")!;
+      expect(getComputedStyle(parameter).textOverflow).toBe("ellipsis");
+      expect(parameter.scrollWidth).toBeGreaterThan(parameter.clientWidth);
+    };
+    assertGeometry();
+    expect(getComputedStyle(group.querySelector(".pwa-tool-group-status")!).color).toBe(tokenColor("--pwa-running"));
+    for (const [status, token] of [["complete", "--pwa-complete"], ["error", "--pwa-error"], ["interrupted", "--pwa-secondary"]] as const) {
+      const ended: Extract<TimelineEvent, { kind: "tool" }> = status === "error" ? { ...finished, status, error: "failed" }
+        : status === "interrupted" ? { ...finished, status, result: undefined } : finished;
+      await update([eventItem(assistantEvent), eventItem(earlierFailure), eventItem(ended)]);
+      assertGeometry();
+      expect(getComputedStyle(group.querySelector(".pwa-tool-group-status")!).color).toBe(tokenColor(token));
+      expect(group.querySelectorAll(".lucide-circle-alert")).toHaveLength(1);
+    }
+    await userEvent.click(group);
+    await expect.poll(() => getComputedStyle(group.querySelector(".pwa-tool-chevron")!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
+    expect(group.querySelector(".pwa-tool-group-status, .lucide-check")).toBeNull();
+    expect(group.querySelector(".pwa-tool-group-alert")).not.toBeNull();
+    const child = toolButton(1);
+    // 子行保留原有状态文字；16px 约束的是图标，不是图标与文字的总宽度。
+    expect(child.querySelector(".pwa-tool-status > svg")!.getAttribute("width")).toBe("16");
+    await expect.poll(() => Math.round(child.querySelector(".pwa-tool-status")!.getBoundingClientRect().width)).toBeGreaterThanOrEqual(16);
+    expect(Math.round(child.querySelector(".pwa-tool-action-copy")!.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(child.querySelector(".pwa-tool-status")!.getBoundingClientRect().left));
+    await userEvent.click(group);
+    await expect.poll(() => getComputedStyle(group.querySelector(".pwa-tool-chevron")!).transform).toBe("none");
+    assertGeometry();
+    await update([eventItem(assistantEvent), eventItem({ ...earlierFailure, status: "complete", result: "ok", error: undefined }), eventItem(finished), runEndItem()]);
+    await expect.poll(() => group.querySelector(".pwa-tool-group-current"), { timeout: 3000 }).toBeNull();
+    expect(group.querySelector(".pwa-tool-group-status, .pwa-tool-group-alert, .lucide-check")).toBeNull();
+    expect(Math.round(group.querySelector(".pwa-tool-action-copy")!.getBoundingClientRect().left)).toBe(Math.round(group.getBoundingClientRect().left));
+    expect(Math.round(group.querySelector(".pwa-tool-action-copy")!.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(group.querySelector(".pwa-tool-chevron")!.getBoundingClientRect().left));
+    const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+    expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+  } finally {
+    if (originalScheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalScheme);
+    else document.documentElement.removeAttribute("data-mantine-color-scheme");
+  }
+});
+
 test("the heading queues tools in start order, holds each briefly and never returns to an earlier one", async () => {
   const run = (id: string, command: string) => partialItem({ ...toolPartial, tool: "bash", partial_id: `tool:${id}`, tool_call_id: id, args: { command } });
   const finish = (id: string, command: string) => eventItem({ ...toolEvent, tool: "bash", event_id: id, tool_call_id: id, args: { command }, result: "ok" });
@@ -981,7 +1061,7 @@ test("the heading queues tools in start order, holds each briefly and never retu
     probe.remove();
     return color;
   };
-  const statusColor = () => getComputedStyle(groupButton().querySelector(".pwa-tool-group-current > .pwa-tool-status")!).color;
+  const statusColor = () => getComputedStyle(groupButton().querySelector(":scope > .pwa-tool-group-status")!).color;
   expect(current()).toBe("bashpnpm test");
   expect(statusColor()).toBe(tokenColor("--pwa-running"));
   // build 开始时 test 刚进入组头，排队等 test 停满后再显示。
@@ -991,7 +1071,7 @@ test("the heading queues tools in start order, holds each briefly and never retu
   // 结束的工具继续停留，图标换成结束状态；较早的 test 仍运行时不能回摘要。
   await update([run("test", "pnpm test"), finish("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm build");
-  expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
+  expect(groupButton().querySelector(":scope > .pwa-tool-group-status.pwa-tool-status-complete")).not.toBeNull();
   expect(statusColor()).toBe(tokenColor("--pwa-complete"));
   // 停留中的工具及其结束状态也在可访问名称里。
   expect(groupButton().getAttribute("aria-label")).toBe("Expand bash pnpm build: Complete · Ran 2 commands");
@@ -1016,7 +1096,7 @@ test("a live tool that first arrives already finished is still shown once in a n
   await update([eventItem(assistantEvent), eventItem({ ...toolEvent, tool: "bash", args: { command: "pnpm lint" }, result: "ok" })]);
   const current = () => groupButton().querySelector(".pwa-tool-group-current")?.textContent ?? null;
   expect(current()).toBe("bashpnpm lint");
-  expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
+  expect(groupButton().querySelector(":scope > .pwa-tool-group-status.pwa-tool-status-complete")).not.toBeNull();
   await new Promise(resolve => window.setTimeout(resolve, 1000));
   expect(current()).toBe("bashpnpm lint");
   // 前面的 assistant 不闭合批次；后续同轮思考可以。
@@ -1063,7 +1143,7 @@ test("reduced motion keeps the running indicator and uses a short reader fade", 
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   try {
     const { screen } = await liveList([partialItem(toolPartial)]);
-    expect(getComputedStyle(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-running > svg")!).animationName).not.toBe("none");
+    expect(getComputedStyle(groupButton().querySelector(":scope > .pwa-tool-group-status.pwa-tool-status-running > svg")!).animationName).not.toBe("none");
     await expandToolGroups();
     expect(getComputedStyle(document.querySelector(".pwa-tool-status-running > svg")!).animationName).not.toBe("none");
     await expect.element(screen.getByRole("status", { name: "read: Running" })).toBeVisible();
