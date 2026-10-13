@@ -75,6 +75,22 @@ export function toolSegments(entries: readonly PresentationEntry[], gapKeys: Rea
   return segments;
 }
 
+/** 后续同轮正文／思考或正式 run_end 才闭合工具批次；闭合不代表组内工具已全部结束。 */
+export function toolBatchClosed(entries: readonly PresentationEntry[], segment: ToolSegment, runEnded: (groupId: string) => boolean): boolean {
+  const last = segment.tools.at(-1);
+  if (last === undefined) return false;
+  const groupId = entryGroupId(last)!;
+  if (runEnded(groupId)) return true;
+  const lastIndex = entries.findIndex(entry => entry.key === last.key);
+  if (lastIndex < 0) return false;
+  const formal = entries.findLast(entry => !isPartialEntry(entry) && entryGroupId(entry) !== undefined);
+  const turnGroup = formal === undefined ? undefined : entryGroupId(formal);
+  return entries.slice(lastIndex + 1).some(entry =>
+    (entry.kind === "text" || entry.kind === "thinking") && entryGroupId(entry) === groupId
+    && (!entry.streaming || turnGroup === undefined || turnGroup === groupId),
+  );
+}
+
 /** 组的有效选择取成员上最近一次的选择，重新分段后新段仍继承用户已做的选择。 */
 export function segmentExpansion(tools: readonly ToolEntry[], choices: ReadonlyMap<string, ToolExpansion>): ToolExpansion | undefined {
   let latest: ToolExpansion | undefined;

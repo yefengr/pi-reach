@@ -61,18 +61,15 @@
   transition-duration: var(--pwa-duration-expand-in);
 }
 
-/* 工具组组头：左侧为当前工具或分类摘要，其后按需显示错误图标，箭头在右；组内工具保留少量缩进。 */
+/* 工具组组头：左侧为当前工具或分类摘要，右侧依次为状态、按需显示的错误提示与箭头；组内工具保留少量缩进。 */
 .pwa-root .pwa-tool-group > .pwa-tool-head .pwa-tool-action { grid-template-columns: minmax(0, 1fr); grid-auto-columns: auto; grid-auto-flow: column; }
 .pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-summary { display: flex; align-items: center; gap: 8px; color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-summary-text { flex: 0 1 auto; font: inherit; color: inherit; }
 /* 当前工具与工具行同样式；换成新工具时从下方进入一次，减少动态效果时位移为 0、只保留淡入。 */
 .pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current { display: flex; align-items: center; gap: 8px; color: inherit; font: inherit; }
-.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current > .pwa-tool-status { flex: none; overflow: visible; }
-/* 工具行通用的 .pwa-tool-action-copy span 规则会把状态色覆盖成 secondary，组头按状态补回语义色。 */
-.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current > .pwa-tool-status-running { color: var(--pwa-running); }
-.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current > .pwa-tool-status-complete { color: var(--pwa-complete); }
-.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current > .pwa-tool-status-error { color: var(--pwa-error); }
-.pwa-root .pwa-tool-group .pwa-tool-group-current[data-enter] { animation: pwa-tool-group-current-in var(--pwa-duration-content) var(--pwa-ease-standard); }
+.pwa-root .pwa-tool-group .pwa-tool-group-status { overflow: visible; }
+/* 状态与文字以相同身份进入，真实可见性观察也包含右侧状态的淡入。 */
+.pwa-root .pwa-tool-group .pwa-tool-group-current[data-enter], .pwa-root .pwa-tool-group .pwa-tool-group-status[data-enter] { animation: pwa-tool-group-current-in var(--pwa-duration-content) var(--pwa-ease-standard); }
 @keyframes pwa-tool-group-current-in { from { opacity: 0; transform: translateY(calc(100% * var(--pwa-motion-shift))); } }
 .pwa-tool-group-details { min-width: 0; }
 .pwa-tool-group-details > .pwa-collapse-inner { padding-left: 12px; border-left: 2px solid var(--pwa-control-line); }

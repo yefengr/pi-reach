@@ -62,28 +62,26 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
 }
 
 /** 组头工具：每次换成新的工具时从下方进入一次，组头首次出现时不播放；停留中的已结束工具显示其结束状态图标。 */
-function ToolGroupCurrent({ value, status, animate }: { value: ToolValue; status: ToolStatus; animate: boolean }) {
+function ToolGroupCurrent({ value, animate }: { value: ToolValue; animate: boolean }) {
   const summary = toolInlineText(toolHeaderSummary(value));
   return <span className="pwa-tool-group-current" data-enter={animate ? "" : undefined}>
-    <span className={`pwa-tool-status pwa-tool-status-${status}`}><ToolStatusIcon status={status} toolKeys={[toolIdentity(value)]} /></span>
     <strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}
   </span>;
 }
 
-function ToolGroupSummary({ summary, runningKeys, busy }: { summary: string; runningKeys: readonly string[]; busy: boolean }) {
-  const indicatorRef = useToolIndicatorRef(runningKeys);
-  return <span className="pwa-tool-group-summary" title={summary}>{busy ? <LoaderCircle ref={indicatorRef} className="pwa-spin" size={16} aria-hidden="true" /> : null}<span className="pwa-tool-group-summary-text">{summary}</span></span>;
+function ToolGroupSummary({ summary }: { summary: string }) {
+  return <span className="pwa-tool-group-summary" title={summary}><span className="pwa-tool-group-summary-text">{summary}</span></span>;
 }
 
 const NOT_ELAPSED: GroupHeadElapsed = { queued: false, minimum: false };
 const NO_APPENDED: ReadonlySet<string> = new Set();
 
 /** 组头排队显示：按开始顺序逐条显示，计时从每条进入组头时开始，规则见 `stepGroupHead`。 */
-function useGroupHeadTool(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>): { value: ToolValue | null; animate: boolean } {
+function useGroupHeadTool(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>, batchClosed: boolean): { value: ToolValue | null; animate: boolean } {
   const [state, setState] = useState(() => initialGroupHead(values, live, appended));
   const [elapsed, setElapsed] = useState({ index: state.index, ...NOT_ELAPSED });
   const timing = elapsed.index === state.index ? elapsed : NOT_ELAPSED;
-  const next = stepGroupHead(state, values, live, timing, appended);
+  const next = stepGroupHead(state, values, live, timing, appended, batchClosed);
   if (next !== state) setState(next);
   useEffect(() => {
     const index = state.index;
@@ -92,7 +90,7 @@ function useGroupHeadTool(values: readonly ToolValue[], live: boolean, appended:
     const minimum = window.setTimeout(() => setElapsed({ index, queued: true, minimum: true }), GROUP_HEAD_MIN_VISIBLE_MS);
     return () => { window.clearTimeout(queued); window.clearTimeout(minimum); };
   }, [state.index]);
-  return { value: groupHeadTool(next, values, live, next.index === state.index ? timing : NOT_ELAPSED), animate: next.animate };
+  return { value: groupHeadTool(next, values, live), animate: next.animate };
 }
 
 /** 与实际渲染共用判断：已结束工具停留在收起组头时，其他运行工具尚不可见。 */
@@ -102,25 +100,26 @@ function toolGroupRunningIndicators(values: readonly ToolValue[], live: boolean,
 }
 
 /** 首次渲染与 SSR 尚无组头报告时，沿用队列的初始状态，不猜测 runningCount。 */
-export function initialToolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>, expanded: boolean): readonly string[] {
-  const state = initialGroupHead(values, live, appended);
-  const current = expanded ? null : groupHeadTool(state, values, live, NOT_ELAPSED);
+export function initialToolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>, expanded: boolean, batchClosed = false): readonly string[] {
+  const state = stepGroupHead(initialGroupHead(values, live, appended), values, live, NOT_ELAPSED, appended, batchClosed);
+  const current = expanded ? null : groupHeadTool(state, values, live);
   return toolGroupRunningIndicators(values, live, expanded, current);
 }
 
 /**
  * 同一轮中相邻的工具从第一条起组成工具组。折叠时组头按开始顺序排队显示工具，每条至少停留一段时间，积压过多时跳到最新；
- * 最后一条结束并停满后回到分类摘要，组内仍有工具运行时摘要前保留旋转图标。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
+ * 批次闭合、全组工具结束且最后一条停满后回到分类摘要，同批不重播。展开时组头只显示摘要。含失败时显示错误图标，仅有中断时不显示。
  */
-export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, onExpandedChange, timelineKey, activityKey, onRunningToolsChange, children }: { values: readonly ToolValue[]; live: boolean; appended?: ReadonlySet<string>; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; activityKey?: string; onRunningToolsChange?: RunningToolsChange; children: ReactNode }) {
+export function ToolGroupCard({ values, live, appended = NO_APPENDED, batchClosed = false, expanded, onExpandedChange, timelineKey, activityKey, onRunningToolsChange, children }: { values: readonly ToolValue[]; live: boolean; appended?: ReadonlySet<string>; batchClosed?: boolean; expanded: boolean; onExpandedChange: (expanded: boolean) => void; timelineKey?: string; activityKey?: string; onRunningToolsChange?: RunningToolsChange; children: ReactNode }) {
   const { t } = useI18n();
   const id = useId();
   const summary = toolGroupSummary(values, t.tools);
   const hasFailure = values.some(value => toolStatus(value) === "error");
-  const head = useGroupHeadTool(values, live, appended);
+  const head = useGroupHeadTool(values, live, appended, batchClosed);
   const current = expanded ? null : head.value;
   const currentStatus = current ? effectiveToolStatus(current, live) : null;
-  const runningCount = values.filter(value => effectiveToolStatus(value, live) === "running").length;
+  const runningKeys = values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity);
+  const runningCount = runningKeys.length;
   // 摘要态旋转图标对读屏隐藏，收起时工具行也未挂载，可访问名称里保留仍在运行的数量。
   const busy = current === null && !expanded && runningCount > 0;
   const { groupRef, register, observe } = useVisibleToolIndicators(activityKey, onRunningToolsChange);
@@ -133,9 +132,10 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, expanded, 
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, [currentLabel, busy ? t.tools.groupBusy(runningCount) : null, summary].filter(Boolean).join(" · "))} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
         <span className="pwa-tool-action-copy">{current
-          ? <ToolGroupCurrent key={toolIdentity(current)} value={current} status={currentStatus!} animate={head.animate} />
-          : <ToolGroupSummary summary={summary} runningKeys={values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity)} busy={busy} />}</span>
-        {hasFailure ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}
+          ? <ToolGroupCurrent key={toolIdentity(current)} value={current} animate={head.animate} />
+          : <ToolGroupSummary summary={summary} />}</span>
+        {current || busy ? <span key={current ? toolIdentity(current) : "summary"} className={`pwa-tool-group-status pwa-tool-status pwa-tool-status-${currentStatus ?? "running"}`} data-enter={current && head.animate ? "" : undefined}><ToolStatusIcon status={currentStatus ?? "running"} toolKeys={current ? [toolIdentity(current)] : runningKeys} /></span> : null}
+        {hasFailure && currentStatus !== "error" ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}
         <ChevronRight className="pwa-tool-chevron pwa-timeline-chevron" size={16} aria-hidden="true" />
       </button>
     </div>

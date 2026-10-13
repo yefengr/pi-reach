@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { projectTimeline, type PresentationEntry } from "@/lib/pwa/timeline-presentation";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
-import { appendedTools, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion } from "./tool-groups";
+import { appendedTools, observeTools, segmentExpansion, timelineActivity, toolBatchClosed, toolSegments, withExpansion } from "./tool-groups";
 
 const scope = { session_id: "s", leaf_id: "l" };
 const tool = (id: string, group = "g1", status: "complete" | "error" = "complete"): TimelineViewItem => {
@@ -47,6 +47,38 @@ describe("toolSegments", () => {
     expect(after!.tools).toHaveLength(3);
     expect(after!.key).toBe(before!.key);
     expect(observeTools(withHistory, nextObserved)).toBe(nextObserved);
+  });
+});
+
+describe("toolBatchClosed", () => {
+  const closed = (items: TimelineViewItem[], ended: string[] = []) => {
+    const list = entries(items);
+    const segment = toolSegments(list, new Set(), observeTools(list, new Map()))[0]!;
+    return toolBatchClosed(list, segment, group => ended.includes(group));
+  };
+
+  test("only same-turn output after the final tool closes a batch", () => {
+    expect(closed([text("before"), tool("a"), tool("b")])).toBe(false);
+    expect(closed([tool("a"), text("after")])).toBe(true);
+    expect(closed([tool("a"), streaming("after")])).toBe(true);
+    expect(closed([tool("a"), text("other", "g2")])).toBe(false);
+    expect(closed([tool("a"), text("other", "g2"), streaming("residual")])).toBe(false);
+    const thought: TimelineViewItem = { kind: "partial", createdAt: 0, partial: { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "thought:thinking:0", kind: "thinking", status: "delta", delta: "Thinking" } };
+    expect(closed([tool("a"), thought])).toBe(true);
+    const formalThought: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "thought", group_id: "g1", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "thinking", text: "Thinking" }] } };
+    expect(closed([tool("a"), formalThought])).toBe(true);
+    // 闭合判断不负责判断工具是否终态。
+    expect(closed([running("a"), text("after")])).toBe(true);
+  });
+
+  test("formal run_end closes without output, but sends and other records do not", () => {
+    expect(closed([tool("a"), { kind: "event", event: runEnd("g1") }], ["g1"])).toBe(true);
+    expect(closed([tool("a"), { kind: "event", event: runEnd("g2") }], ["g2"])).toBe(false);
+    const pending: TimelineViewItem = { kind: "pending", id: "next", clientRequestId: "next", requestId: "next", text: "next", createdAt: 3, delivery: "pending" };
+    expect(closed([tool("a"), pending])).toBe(false);
+    const custom: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "custom", group_id: "g1", timestamp: 2, kind: "custom", payload: {}, truncated: false } };
+    expect(closed([tool("a"), custom])).toBe(false);
+    expect(toolBatchClosed([], { key: "empty", tools: [] }, () => true)).toBe(false);
   });
 });
 
