@@ -9,6 +9,7 @@ const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   : undefined;
 
 type StreamState = {
+  thinkingTextEpoch: object;
   partial: TimelinePartialView;
   targetText: string;
   targetGraphemes: string[];
@@ -162,7 +163,9 @@ function projectedPartial(state: StreamState): TimelinePartialView {
   const partial = hasBlocks(state.partial.partial)
     ? state.partial.partial
     : { ...state.partial.partial, delta: state.visibleText };
-  return { ...state.partial, partial };
+  return { kind: "partial", createdAt: state.partial.createdAt, partial,
+    ...(partial.kind === "thinking" && !hasBlocks(partial) ? { thinkingTextEpoch: state.thinkingTextEpoch } : {}),
+  };
 }
 
 function expectedVisibleText(state: StreamState): string {
@@ -204,6 +207,7 @@ export class StreamDisplayBuffer {
         const immediate = streamsImmediately(partial.partial);
         const visibleCount = immediate ? targetGraphemes.length : Math.min(2, targetGraphemes.length);
         this.streams.set(id, {
+          thinkingTextEpoch: {},
           partial,
           targetText,
           targetGraphemes,
@@ -217,8 +221,13 @@ export class StreamDisplayBuffer {
       }
 
       const targetChanged = existing.targetText !== targetText;
+      if (partial.partial.kind !== existing.partial.partial.kind || hasBlocks(partial.partial) !== hasBlocks(existing.partial.partial)) {
+        existing.thinkingTextEpoch = {};
+        needsSnapshot = true;
+      }
       const immediate = streamsImmediately(partial.partial);
       if (targetChanged && immediate) {
+        existing.thinkingTextEpoch = {};
         const targetGraphemes = segmentText(targetText);
         existing.targetText = targetText;
         existing.targetGraphemes = targetGraphemes;
@@ -233,6 +242,7 @@ export class StreamDisplayBuffer {
         // New output starts a fresh catch-up window, including after this lane drained.
         existing.ticks = 0;
       } else if (targetChanged) {
+        existing.thinkingTextEpoch = {};
         const targetGraphemes = segmentText(targetText);
         existing.targetText = targetText;
         existing.targetGraphemes = targetGraphemes;
@@ -272,6 +282,7 @@ export class StreamDisplayBuffer {
       const targetText = partialText(partial.partial);
       const targetGraphemes = segmentText(targetText);
       this.streams.set(partial.partial.partial_id, {
+        thinkingTextEpoch: {},
         partial,
         targetText,
         targetGraphemes,

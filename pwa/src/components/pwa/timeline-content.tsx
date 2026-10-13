@@ -9,6 +9,8 @@ import { highlightCode, languageForFence } from "@/lib/pwa/code-highlight";
 import { CopyButton } from "./copy-button";
 import { Collapse } from "./collapse";
 import { markdownTableComponents } from "./markdown-table";
+import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
+export { thinkingTitle, thinkingSummary } from "@/lib/pwa/thinking-text-parser";
 import "./timeline-content.css";
 
 const PREVIEW_CHARACTERS = 2400;
@@ -75,32 +77,16 @@ export function LongText({ text, label, variant = "code" }: { text: string; labe
 type ThinkingContentProps = {
   text: string;
   streaming?: boolean;
+  thinkingTextEpoch?: object;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   timelineKey?: string;
 };
 
-/** 推理文本里整行加粗（`**标题**`）的标题；结束后取第一个，流式阶段取目前最新的一个。标题是模型原文，不翻译。 */
-export function thinkingTitle(text: string, streaming: boolean): string | undefined {
-  const titles = [...text.matchAll(/^[ \t]*\*\*([^*\n]+?)\*\*[ \t]*$/gm)].map(match => match[1]!.trim()).filter(Boolean);
-  return streaming ? titles.at(-1) : titles[0];
-}
-
-/** 流式阶段尚无完整标题时，用首个非空行作摘要，不改动展开后的原文。 */
-export function thinkingSummary(text: string): string | undefined {
-  let start = 0;
-  while (start < text.length) {
-    const newline = text.indexOf("\n", start);
-    const line = text.slice(start, newline === -1 ? text.length : newline).trim();
-    if (line) return line.replace(/\s+/g, " ");
-    if (newline === -1) return undefined;
-    start = newline + 1;
-  }
-  return undefined;
-}
-
-export function ThinkingContent({ text, streaming = false, expanded: controlledExpanded, onExpandedChange, timelineKey }: ThinkingContentProps) {
+export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, expanded: controlledExpanded, onExpandedChange, timelineKey }: ThinkingContentProps) {
   const { t } = useI18n();
+  const [parser] = useState(() => new ThinkingTextParser());
+  const parsed = parser.read(text, streaming ? thinkingTextEpoch : undefined, streaming);
   const [localExpanded, setLocalExpanded] = useState(false);
   const [previousStreaming, setPreviousStreaming] = useState(streaming);
   const [announcementReady, setAnnouncementReady] = useState(false);
@@ -119,10 +105,10 @@ export function ThinkingContent({ text, streaming = false, expanded: controlledE
   const expanded = controlledExpanded ?? localExpanded;
   const id = useId();
   const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
-  if (!streaming && !text.trim()) return <section className="pwa-thinking pwa-thinking-trace pwa-timeline-row" data-timeline-key={timelineKey}>
+  if (!streaming && parsed.empty) return <section className="pwa-thinking pwa-thinking-trace pwa-timeline-row" data-timeline-key={timelineKey}>
     <div className="pwa-thinking-title pwa-timeline-heading">{t.timeline.thinkingTrace}</div>
   </section>;
-  const title = thinkingTitle(text, streaming) ?? (streaming ? thinkingSummary(text) : undefined) ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
+  const title = (streaming ? parsed.latestTitle ?? parsed.summary : parsed.firstTitle) ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
       {streaming

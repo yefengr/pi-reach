@@ -7,6 +7,8 @@ import { MessageList } from "./message-list";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { TimelineRuntime, type TimelinePending, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
+import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
 
 type ListProps = Parameters<typeof MessageList>[0];
 const toolEvent: Extract<TimelineEvent, { kind: "tool" }> = {
@@ -65,6 +67,71 @@ async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProp
 function renderMessageList(items: ListProps["items"], overrides: Partial<ListProps> = {}) {
   return renderPwa(<MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} onRetryUnknown={() => {}} onCancelQueued={() => {}} {...overrides} />);
 }
+
+test.each(["body", "tool"])("prepended gaps stay before retained %s and preserve the thinking trace node", async kind => {
+  const empty: TimelineEvent = { ...assistantEvent, event_id: "later-empty", blocks: [{ type: "thinking", text: "" }] };
+  const middle = kind === "body" ? eventItem({ ...assistantEvent, event_id: "middle-body", blocks: [{ type: "text", text: "Visible body" }] }) : eventItem(toolEvent);
+  const { update } = await liveList([middle, eventItem(empty)]);
+  const trace = document.querySelector(".pwa-thinking-trace");
+  const row = document.querySelector(kind === "body" ? ".pwa-message.assistant" : ".pwa-tool-group");
+  await update([eventItem({ ...empty, event_id: "earlier-empty" }), middle, eventItem(empty)], { gapBefore: new Set(["earlier-empty"]) });
+  const gap = document.querySelector(".pwa-timeline-gap")!;
+  expect(document.querySelector(".pwa-thinking-trace")).toBe(trace);
+  expect(document.querySelector(kind === "body" ? ".pwa-message.assistant" : ".pwa-tool-group")).toBe(row);
+  expect(gap.compareDocumentPosition(row!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(row!.compareDocumentPosition(trace!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("a single gap splits reverse-completed tools without reordering or duplicating notices", async () => {
+  const empty: TimelineEvent = { ...assistantEvent, event_id: "later-empty", blocks: [{ type: "thinking", text: "" }] };
+  const running = (id: string) => partialItem({ ...toolPartial, partial_id: `tool:${id}`, tool_call_id: id, args: { path: `${id}.ts` } });
+  const complete = (id: string, timestamp: number) => eventItem({ ...toolEvent, event_id: `event-${id}`, tool_call_id: id, timestamp, args: { path: `${id}.ts` } });
+  const { update } = await liveList([running("a"), running("b"), eventItem(empty)]);
+  const trace = document.querySelector(".pwa-thinking-trace");
+  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+  await update([eventItem({ ...empty, event_id: "earlier-empty" }), complete("b", 2), complete("a", 3), eventItem(empty)], { gapBefore: new Set(["event-a"]) });
+  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(2);
+  expect(document.querySelectorAll(".pwa-timeline-gap")).toHaveLength(1);
+  expect([...document.querySelectorAll(".pwa-message-list > .pwa-timeline-gap, .pwa-message-list > .pwa-tool-group, .pwa-message-list > .pwa-thinking-trace")].map(row => row.classList.contains("pwa-timeline-gap") ? "gap" : row.classList.contains("pwa-tool-group") ? "tool" : "trace")).toEqual(["gap", "tool", "tool", "trace"]);
+  expect(document.querySelector(".pwa-thinking-trace")).toBe(trace);
+  await expandToolGroups();
+  expect([...document.querySelectorAll(".pwa-tool-card .pwa-tool-action")].map(row => row.textContent)).toEqual([expect.stringContaining("a.ts"), expect.stringContaining("b.ts")]);
+});
+
+test("paced thinking parses only new characters through the real presentation and component chain", async () => {
+  const buffer = new StreamDisplayBuffer();
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "" };
+  const original = ThinkingTextParser.prototype.read;
+  let scanned = 0;
+  const spy = vi.spyOn(ThinkingTextParser.prototype, "read").mockImplementation(function (this: ThinkingTextParser, text, epoch, streaming) {
+    const before = this.scannedCharacters;
+    const result = original.call(this, text, epoch, streaming);
+    scanned += this.scannedCharacters - before;
+    return result;
+  });
+  try {
+    const { update } = await liveList(buffer.ingest([partialItem(thinking)]).items, { running: true });
+    expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Thinking…");
+    const target = `${"x".repeat(1024)}\n**First title**\nBody\n**Latest title**`;
+    for (let length = 32; length < target.length; length += 32) {
+      await update(buffer.ingest([partialItem({ ...thinking, delta: target.slice(0, length) })]).items);
+      await update(buffer.advance().items);
+    }
+    await update(buffer.ingest([partialItem({ ...thinking, delta: target })]).items);
+    while (buffer.hasPending()) await update(buffer.advance().items);
+    expect(scanned).toBe(target.length);
+    expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("Latest title");
+    expect(document.querySelector(".pwa-thinking-live")?.getAttribute("aria-live")).toBe("off");
+    expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length);
+    await update(buffer.ingest([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: target }] })]).items);
+    expect(scanned).toBe(target.length * 2);
+    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("First title");
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length * 2);
+  } finally { spy.mockRestore(); }
+});
 
 test.each([1280, 390])("Working fallback hands off to current thinking and visible tools at %ipx", async width => {
   await page.viewport(width, 844);

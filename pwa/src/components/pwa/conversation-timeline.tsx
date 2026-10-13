@@ -104,9 +104,9 @@ function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: Rea
     appended = new Set(appendedTools(view.entries, timeline.view.entries));
     setTimeline({ view, observed, appended });
   }
-  const projectedGaps = gapBefore.size === 0 ? { keys: NO_GAPS, atEnd: false } : projectTimelineGaps(items, gapBefore);
+  const projectedGaps = gapBefore.size === 0 ? { keys: NO_GAPS, toolBreakKeys: NO_GAPS, atEnd: false } : projectTimelineGaps(items, gapBefore, view.entries);
   const gapKeys = projectedGaps.keys;
-  const segments = toolSegments(view.entries, gapKeys, observed);
+  const segments = toolSegments(view.entries, new Set([...gapKeys, ...projectedGaps.toolBreakKeys]), observed);
   const segmentOf = new Map<string, ToolSegment>();
   for (const segment of segments) for (const tool of segment.tools) segmentOf.set(tool.key, segment);
   return { view, gapKeys, projectedGapAtEnd: projectedGaps.atEnd, segments, segmentOf, appended };
@@ -235,6 +235,7 @@ export function ConversationTimeline({ items, live, completions, running = false
         timelineKey={entry.key}
         text={entry.text}
         streaming={entry.streaming}
+        thinkingTextEpoch={entry.thinkingTextEpoch}
         expanded={thinkingChoices.get(entry.key) ?? false}
         onExpandedChange={expanded => chooseThinking(entry.key, expanded)}
       />;

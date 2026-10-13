@@ -2,6 +2,8 @@ import { expect, test } from "vitest";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "./timeline-runtime";
+import { projectTimeline } from "./timeline-presentation";
+import { ThinkingTextParser } from "./thinking-text-parser";
 
 function partial(id: string, group: string, delta: string, kind: "assistant" | "thinking" | "tool" = "assistant"): TimelineViewItem {
   const value: TimelinePartial = kind === "tool"
@@ -128,6 +130,69 @@ test("caps a new large burst after the lane has drained", () => {
   expect(firstText!.length).toBeLessThanOrEqual(66);
   while (buffer.hasPending()) buffer.advance();
   expect(text(buffer.snapshot()[0])).toBe(target);
+});
+
+function epoch(item: TimelineViewItem | undefined): object | undefined {
+  return item?.kind === "partial" ? item.thinkingTextEpoch : undefined;
+}
+
+test("thinking epochs stay stable through trusted appends and ticks, but reset on replacements and reset", () => {
+  const buffer = new StreamDisplayBuffer();
+  const first = buffer.ingest([partial("p:thinking:0", "g", "👍", "thinking")]);
+  const token = epoch(first.items[0]);
+  expect(token).toBeDefined();
+  buffer.ingest([partial("p:thinking:0", "g", "👍🏽\n**Title**", "thinking")]);
+  while (buffer.hasPending()) {
+    const changed = buffer.advance();
+    expect(epoch(changed.items[0])).toBe(token);
+    expect(text(changed.items[0])?.startsWith("👍")).toBe(true);
+  }
+  expect(epoch(buffer.ingest([partial("p:thinking:0", "g", "Replacement", "thinking")]).items[0])).not.toBe(token);
+  const replaced = epoch(buffer.snapshot()[0]);
+  expect(epoch(buffer.reset([partial("p:thinking:0", "g", "Replacement", "thinking")]).items[0])).not.toBe(replaced);
+  const reset = epoch(buffer.snapshot()[0]);
+  buffer.ingest([]);
+  expect(epoch(buffer.ingest([partial("p:thinking:0", "g", "Replacement", "thinking")]).items[0])).not.toBe(reset);
+});
+
+test("exposes epochs only on the view of blockless thinking, never on the wire partial", () => {
+  const buffer = new StreamDisplayBuffer();
+  const thought = partial("p:thinking:0", "g", "Text", "thinking");
+  if (thought.kind !== "partial" || thought.partial.kind !== "thinking") throw new Error("invalid fixture");
+  const blocked = { ...thought, partial: { ...thought.partial, blocks: [{ type: "thinking" as const, text: "Text" }] } };
+  const items = buffer.reset([thought, partial("a", "g", "Text"), partial("t", "g", "Text", "tool")]).items;
+  expect(items.map(epoch)).toEqual([expect.any(Object), undefined, undefined]);
+  expect(items[0]?.kind === "partial" && "thinkingTextEpoch" in items[0].partial).toBe(false);
+  const token = epoch(items[0]);
+  expect(epoch(buffer.ingest([blocked]).items[0])).toBeUndefined();
+  expect(epoch(buffer.ingest([thought]).items[0])).not.toBe(token);
+});
+
+test("buffer to presentation to parser scans exactly the displayed suffix and rebuilds at formal takeover", () => {
+  const buffer = new StreamDisplayBuffer();
+  const parser = new ThinkingTextParser();
+  const target = `\n \t\n${"x".repeat(2048)}\n**Last title**`;
+  const read = (items: TimelineViewItem[]) => {
+    const entry = projectTimeline(items).entries[0];
+    if (entry?.kind !== "thinking") throw new Error("missing thinking entry");
+    return parser.read(entry.text, entry.thinkingTextEpoch);
+  };
+  for (let length = 0; length < target.length; length += 31) {
+    read(buffer.ingest([partial("p:thinking:0", "g", target.slice(0, length), "thinking")]).items);
+    read(buffer.advance().items);
+  }
+  read(buffer.ingest([partial("p:thinking:0", "g", target, "thinking")]).items);
+  while (buffer.hasPending()) read(buffer.advance().items);
+  expect(parser.scannedCharacters).toBe(target.length);
+  expect(read(buffer.snapshot())).toMatchObject({ latestTitle: "Last title", summary: "x".repeat(2048) });
+  const formal = assistantEvent("p", "g", target);
+  if (formal.kind !== "event" || formal.event.kind !== "assistant") throw new Error("invalid fixture");
+  formal.event.blocks = [{ type: "thinking", text: target }];
+  const settled = buffer.ingest([formal]).items;
+  expect(read(settled).firstTitle).toBe("Last title");
+  expect(parser.scannedCharacters).toBe(target.length * 2);
+  read(settled);
+  expect(parser.scannedCharacters).toBe(target.length * 2);
 });
 
 test("reset renders the latest authoritative formal event in full", () => {
