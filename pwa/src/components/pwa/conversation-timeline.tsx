@@ -8,7 +8,7 @@ import { usePublishedFilesView } from "./published-files-context";
 import type { PublishedFileRead } from "./published-file";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
-import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
+import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolBatchClosed, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
@@ -154,11 +154,13 @@ export function ConversationTimeline({ items, live, completions, running = false
   const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
   const idlePartials = useIdlePartials(view.entries, live && !running);
-  const activity = timelineActivity(view.entries, live, running, groupId => completions?.has(groupId) === true, idlePartials);
+  const runEnded = (groupId: string) => completions?.has(groupId) === true;
+  const activity = timelineActivity(view.entries, live, running, runEnded, idlePartials);
+  const batchClosed = new Map(segments.map(segment => [segment.key, toolBatchClosed(view.entries, segment, runEnded)]));
   const thinkingActive = view.entries.some(entry => entry.kind === "thinking" && activity.currentOutput(entry));
   const toolsActive = segments.some(segment => {
     const indicators = toolIndicators.get(segment.key) ?? initialToolGroupRunningIndicators(
-      segment.tools.map(tool => tool.value), live, appended, segmentExpansion(segment.tools, toolChoices)?.expanded ?? false,
+      segment.tools.map(tool => tool.value), live, appended, segmentExpansion(segment.tools, toolChoices)?.expanded ?? false, batchClosed.get(segment.key),
     );
     return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
   });
@@ -251,6 +253,7 @@ export function ConversationTimeline({ items, live, completions, running = false
     values={segment.tools.map(tool => tool.value)}
     live={live}
     appended={appended}
+    batchClosed={batchClosed.get(segment.key)}
     // 视口锚点用它在重新挂载后找回工具组；取第一条工具，内容相同时与观察顺序无关。
     timelineKey={`tools:${segment.tools[0]!.key}`}
     activityKey={segment.key}

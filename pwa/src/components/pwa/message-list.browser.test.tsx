@@ -240,11 +240,15 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   await update([question, thought, eventItem({ ...toolEvent, args: toolPartial.args! })]);
   expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
   await expect.poll(() => working()?.textContent).toBe("Working…");
-  await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current"), { timeout: 4000 }).toBeNull();
-  expect(groupButton().querySelector(".pwa-tool-group-summary")).not.toBeNull();
+  // 已完成且没有后续输出时，组头仍保持调用；较早的 thought 不能闭合工具批次。
+  await new Promise(resolve => window.setTimeout(resolve, 1000));
+  expect(groupButton().querySelector(".pwa-tool-group-current")).not.toBeNull();
+  expect(groupButton().querySelector(".pwa-tool-group-summary")).toBeNull();
   expect(working()?.textContent).toBe("Working…");
   const body: TimelinePartial = { ...thinking, partial_id: "body:assistant:0", kind: "assistant", delta: "Streaming body" };
   await update([question, thought, eventItem(toolEvent), partialItem(body)]);
+  await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current"), { timeout: 4000 }).toBeNull();
+  expect(groupButton().querySelector(".pwa-tool-group-summary")).not.toBeNull();
   await expect.element(screen.getByText("Streaming body")).toBeVisible();
   expect(working()?.textContent).toBe("Working…");
   // 工具组被移除后不能留下旧报告，压制兜底。
@@ -276,10 +280,17 @@ test.each([1280, 390])("Working fallback covers a completed queued head until a 
   await update([run("a"), finish("b")]);
   expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
   expect(working()?.textContent).toBe("Working…");
-  await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current"), { timeout: 4000 }).toBeNull();
-  expect(groupButton().querySelector(".pwa-tool-group-summary .pwa-spin")).not.toBeNull();
-  expect(working()).toBeNull();
-  await update([finish("a"), finish("b")]);
+  await new Promise(resolve => window.setTimeout(resolve, 1000));
+  expect(groupButton().querySelector(".pwa-tool-group-current")?.textContent).toBe("readb.ts");
+  expect(groupButton().querySelector(".pwa-tool-group-summary")).toBeNull();
+  expect(working()?.textContent).toBe("Working…");
+  const after = eventItem({ ...assistantEvent, event_id: "after-tools", blocks: [{ type: "text", text: "After tools" }] });
+  // 即使后续正文已出现，较早工具还在运行也不能切摘要。
+  await update([run("a"), finish("b"), after]);
+  expect(groupButton().querySelector(".pwa-tool-group-current")?.textContent).toBe("readb.ts");
+  expect(working()?.textContent).toBe("Working…");
+  await update([finish("a"), finish("b"), after]);
+  await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current")).toBeNull();
   expect(groupButton().querySelector(".pwa-spin")).toBeNull();
   expect(working()?.textContent).toBe("Working…");
 });
@@ -977,20 +988,27 @@ test("the heading queues tools in start order, holds each briefly and never retu
   await update([run("test", "pnpm test"), run("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm test");
   await expect.poll(current, { timeout: 3000 }).toBe("bashpnpm build");
-  // 结束的工具继续停留，图标换成结束状态；满最短停留时间后回到摘要，较早的 test 不再出现。
+  // 结束的工具继续停留，图标换成结束状态；较早的 test 仍运行时不能回摘要。
   await update([run("test", "pnpm test"), finish("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm build");
   expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
   expect(statusColor()).toBe(tokenColor("--pwa-complete"));
   // 停留中的工具及其结束状态也在可访问名称里。
   expect(groupButton().getAttribute("aria-label")).toBe("Expand bash pnpm build: Complete · Ran 2 commands");
-  await expect.poll(current, { timeout: 3000 }).toBeNull();
-  // 摘要前的旋转图标只表示组内仍有工具在运行。
-  expect(groupButton().querySelector(".pwa-tool-group-summary .pwa-spin")).not.toBeNull();
-  expect(groupButton().textContent).toBe("Ran 2 commands");
-  expect(groupButton().getAttribute("aria-label")).toBe("Expand 1 running · Ran 2 commands");
+  await new Promise(resolve => window.setTimeout(resolve, 1000));
+  expect(current()).toBe("bashpnpm build");
+  expect(groupButton().querySelector(".pwa-tool-group-summary")).toBeNull();
   await update([finish("test", "pnpm test"), finish("build", "pnpm build")]);
+  expect(current()).toBe("bashpnpm build");
+  await update([finish("test", "pnpm test"), finish("build", "pnpm build"), runEndItem()]);
+  await expect.poll(current, { timeout: 3000 }).toBeNull();
+  expect(groupButton().textContent).toBe("Ran 2 commands");
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand Ran 2 commands");
   expect(groupButton().querySelector(".pwa-spin")).toBeNull();
+  // 同批进入摘要后，不因迟到的新调用重播。
+  await update([finish("test", "pnpm test"), finish("build", "pnpm build"), finish("lint", "pnpm lint"), runEndItem()]);
+  expect(current()).toBeNull();
+  expect(groupButton().textContent).toBe("Ran 3 commands");
 });
 
 test("a live tool that first arrives already finished is still shown once in a new group", async () => {
@@ -999,6 +1017,10 @@ test("a live tool that first arrives already finished is still shown once in a n
   const current = () => groupButton().querySelector(".pwa-tool-group-current")?.textContent ?? null;
   expect(current()).toBe("bashpnpm lint");
   expect(groupButton().querySelector(".pwa-tool-group-current .pwa-tool-status-complete")).not.toBeNull();
+  await new Promise(resolve => window.setTimeout(resolve, 1000));
+  expect(current()).toBe("bashpnpm lint");
+  // 前面的 assistant 不闭合批次；后续同轮思考可以。
+  await update([eventItem(assistantEvent), eventItem({ ...toolEvent, tool: "bash", args: { command: "pnpm lint" }, result: "ok" }), eventItem({ ...assistantEvent, event_id: "after-lint", blocks: [{ type: "thinking", text: "Checking lint" }] })]);
   await expect.poll(current, { timeout: 3000 }).toBeNull();
 });
 
@@ -1009,9 +1031,10 @@ test("a group split by late content does not replay tools already shown in the h
   await update([eventItem(assistantEvent), read("a"), read("b")]);
   const current = (index = 0) => groupButton(index).querySelector(".pwa-tool-group-current")?.textContent ?? null;
   await expect.poll(() => current(), { timeout: 3000 }).toBe("readb.ts");
+  await update([eventItem(assistantEvent), read("a"), read("b"), runEndItem()]);
   await expect.poll(() => current(), { timeout: 3000 }).toBeNull();
   // 迟到的正文插入两条工具之间，b 所在的后半段作为新组挂载，不再重新显示 b。
-  await update([eventItem(assistantEvent), read("a"), late, read("b")]);
+  await update([eventItem(assistantEvent), read("a"), late, read("b"), runEndItem()]);
   expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(2);
   expect(current(0)).toBeNull();
   expect(current(1)).toBeNull();
