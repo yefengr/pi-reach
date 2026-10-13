@@ -5,7 +5,7 @@ import { partialMessageIdentity } from "./timeline-identity";
 type Grouped = { session_id: string; leaf_id: string | null; group_id: string };
 export type TimelineToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }>;
 export type ToolEntry = { kind: "tool"; key: string; value: TimelineToolValue };
-export type ThinkingEntry = { kind: "thinking"; key: string; groupId: string; text: string; streaming: boolean };
+export type ThinkingEntry = { kind: "thinking"; key: string; groupId: string; text: string; streaming: boolean; thinkingTextEpoch?: object };
 export type TextEntry = { kind: "text"; key: string; groupId: string; text: string; streaming: boolean; interrupted: boolean; timestamp?: number };
 export type RecordEntry = { kind: "record"; key: string; item: TimelineViewItem };
 export type PresentationEntry = ToolEntry | ThinkingEntry | TextEntry | RecordEntry;
@@ -23,6 +23,11 @@ function blockKey(groupKey: string, messageId: string, type: "text" | "thinking"
   return JSON.stringify([groupKey, messageId, type, index]);
 }
 
+// 普通提交会推进 leaf；空历史痕迹按会话与轮次定位，补齐更早消息也不改变 key。
+function emptyThinkingKey(value: Grouped): string {
+  return JSON.stringify(["thinking-trace", value.session_id, value.group_id]);
+}
+
 function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>): PresentationEntry[] {
   const value = item.kind === "event" ? item.event : item.partial;
   if (value.kind !== "assistant" && value.kind !== "thinking") return [];
@@ -33,9 +38,12 @@ function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>):
   const startIndex = identity?.contentIndex ?? 0;
   const blocks = value.blocks ?? [{ type: value.kind === "thinking" ? "thinking" as const : "text" as const, text: "delta" in value ? value.delta ?? "" : "" }];
   return blocks.flatMap((block, index): PresentationEntry[] => {
-    if (!block.text.trim() && !(streaming && block.type === "thinking")) return [];
-    const key = blockKey(groupKey, sourceId, block.type, startIndex + index);
-    if (block.type === "thinking") return [{ kind: "thinking", key, groupId: value.group_id, text: block.text, streaming }];
+    if (block.type !== "thinking" && !block.text.trim()) return [];
+    const key = !streaming && block.type === "thinking" && !block.text.trim()
+      ? emptyThinkingKey(value) : blockKey(groupKey, sourceId, block.type, startIndex + index);
+    if (block.type === "thinking") return [{ kind: "thinking", key, groupId: value.group_id, text: block.text, streaming,
+      ...(item.kind === "partial" && item.thinkingTextEpoch !== undefined ? { thinkingTextEpoch: item.thinkingTextEpoch } : {}),
+    }];
     return [{ kind: "text", key, groupId: value.group_id, text: block.text, streaming,
       interrupted: "event_id" in value && value.status === "interrupted",
       ...("timestamp" in value ? { timestamp: value.timestamp } : {}),
@@ -43,13 +51,19 @@ function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>):
   });
 }
 
-function flatten(items: readonly TimelineViewItem[]): PresentationEntry[] {
-  return items.flatMap((item): PresentationEntry[] => {
+function flatten(items: readonly TimelineViewItem[], emptyThinkingKeys = new Set<string>()): PresentationEntry[] {
+  const entries = items.flatMap((item): PresentationEntry[] => {
     if (item.kind === "pending") return [{ kind: "record", key: `pending:${item.id}`, item }];
     const value = item.kind === "event" ? item.event : item.partial;
     if (value.kind === "tool") return [{ kind: "tool", key: timelineToolKey(value), value }];
     if (value.kind === "assistant" || value.kind === "thinking") return assistantEntries(item);
     return [{ kind: "record", key: item.kind === "event" ? item.event.event_id : item.partial.partial_id, item }];
+  });
+  return entries.filter(entry => {
+    if (entry.kind !== "thinking" || entry.streaming || entry.text.trim()) return true;
+    if (emptyThinkingKeys.has(entry.key)) return false;
+    emptyThinkingKeys.add(entry.key);
+    return true;
   });
 }
 
@@ -94,19 +108,32 @@ export function isPiOutputEntry(entry: PresentationEntry): boolean {
   return item.kind === "partial" || (item.kind === "event" && item.event.kind !== "user");
 }
 
-/** 每个缺口之后第一条可见条目的 key；缺口处的事件本身可能不产生条目（如 run_end），标记顺延到下一条。 */
-export function gapEntryKeys(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>): Set<string> {
+/** 按同一去重投影划分缺口后的区域，再取该区域在最终展示顺序中的第一条可见条目。 */
+export function projectTimelineGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>, entries: readonly PresentationEntry[] = flatten(items)): { keys: Set<string>; toolBreakKeys: Set<string>; atEnd: boolean } {
   const keys = new Set<string>();
-  let pending = false;
+  const toolBreakKeys = new Set<string>();
+  if (gapBefore.size === 0) return { keys, toolBreakKeys, atEnd: false };
+  const emptyThinkingKeys = new Set<string>();
+  const regions = new Map<string, number>();
+  let region = -1;
   for (const item of items) {
-    if (item.kind === "event" && gapBefore.has(item.event.event_id)) pending = true;
-    if (!pending) continue;
-    const first = flatten([item])[0];
-    if (!first) continue;
-    keys.add(first.key);
-    pending = false;
+    if (item.kind === "event" && gapBefore.has(item.event.event_id)) region += 1;
+    // 所有源条目共用去重状态，重复空痕迹不能把后来的缺口挂回旧位置。
+    const projected = flatten([item], emptyThinkingKeys);
+    for (const entry of projected) regions.set(entry.key, region);
   }
-  return keys;
+  const anchored = new Set<number>();
+  for (const [index, entry] of entries.entries()) {
+    const candidate = regions.get(entry.key);
+    const previous = entries[index - 1];
+    // 提示跟随缺口后区域的首项；工具断组另按源区域判断，不增加提示或移动已观察条目。
+    if (entry.kind === "tool" && previous?.kind === "tool" && regions.get(previous.key) !== candidate) toolBreakKeys.add(entry.key);
+    if (candidate === undefined || candidate < 0 || anchored.has(candidate)
+      || (entry.kind === "record" && entry.item.kind === "event" && entry.item.event.kind === "run_end")) continue;
+    keys.add(entry.key);
+    anchored.add(candidate);
+  }
+  return { keys, toolBreakKeys, atEnd: region >= 0 && !anchored.has(region) };
 }
 
 export function projectTimeline(items: readonly TimelineViewItem[], previous?: PresentationSnapshot): PresentationSnapshot {

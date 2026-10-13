@@ -360,6 +360,7 @@ export const zh: Messages = {
     collapseThinking: "收起思考过程",
     expandThinking: "展开思考过程",
     thinking: "思考中…",
+    thinkingTrace: "思考…",
     thoughtProcess: "思考过程",
   },
   tools: {

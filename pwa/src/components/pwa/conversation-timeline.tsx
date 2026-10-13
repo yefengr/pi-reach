@@ -7,7 +7,7 @@ import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
 import type { PublishedFileRead } from "./published-file";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
-import { entryGroupId, gapEntryKeys, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
+import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import { LoaderCircle } from "lucide-react";
@@ -104,11 +104,12 @@ function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: Rea
     appended = new Set(appendedTools(view.entries, timeline.view.entries));
     setTimeline({ view, observed, appended });
   }
-  const gapKeys = gapBefore.size === 0 ? NO_GAPS : gapEntryKeys(items, gapBefore);
-  const segments = toolSegments(view.entries, gapKeys, observed);
+  const projectedGaps = gapBefore.size === 0 ? { keys: NO_GAPS, toolBreakKeys: NO_GAPS, atEnd: false } : projectTimelineGaps(items, gapBefore, view.entries);
+  const gapKeys = projectedGaps.keys;
+  const segments = toolSegments(view.entries, new Set([...gapKeys, ...projectedGaps.toolBreakKeys]), observed);
   const segmentOf = new Map<string, ToolSegment>();
   for (const segment of segments) for (const tool of segment.tools) segmentOf.set(tool.key, segment);
-  return { view, gapKeys, segments, segmentOf, appended };
+  return { view, gapKeys, projectedGapAtEnd: projectedGaps.atEnd, segments, segmentOf, appended };
 }
 
 /** Pi 空闲期间仍在的 partial 不可能是正在进行的输出；记下它们，供新发送消息后识别旧轮残留。 */
@@ -150,7 +151,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   const currentFileReader = useRef(scopedFileReader);
   useLayoutEffect(() => { currentFileReader.current = scopedFileReader; }, [scopedFileReader]);
 
-  const { view, gapKeys, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore);
+  const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
   const idlePartials = useIdlePartials(view.entries, live && !running);
   const activity = timelineActivity(view.entries, live, running, groupId => completions?.has(groupId) === true, idlePartials);
@@ -234,6 +235,7 @@ export function ConversationTimeline({ items, live, completions, running = false
         timelineKey={entry.key}
         text={entry.text}
         streaming={entry.streaming}
+        thinkingTextEpoch={entry.thinkingTextEpoch}
         expanded={thinkingChoices.get(entry.key) ?? false}
         onExpandedChange={expanded => chooseThinking(entry.key, expanded)}
       />;
@@ -261,7 +263,7 @@ export function ConversationTimeline({ items, live, completions, running = false
 
   return <>
     {rows}
-    {gapAtEnd ? <GapNotice /> : null}
+    {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
     {activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}

@@ -7,6 +7,8 @@ import { MessageList } from "./message-list";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { TimelineRuntime, type TimelinePending, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
+import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
 
 type ListProps = Parameters<typeof MessageList>[0];
 const toolEvent: Extract<TimelineEvent, { kind: "tool" }> = {
@@ -66,6 +68,143 @@ function renderMessageList(items: ListProps["items"], overrides: Partial<ListPro
   return renderPwa(<MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} onRetryUnknown={() => {}} onCancelQueued={() => {}} {...overrides} />);
 }
 
+test.each(["body", "tool"])("prepended gaps stay before retained %s and preserve the thinking trace node", async kind => {
+  const empty: TimelineEvent = { ...assistantEvent, event_id: "later-empty", blocks: [{ type: "thinking", text: "" }] };
+  const middle = kind === "body" ? eventItem({ ...assistantEvent, event_id: "middle-body", blocks: [{ type: "text", text: "Visible body" }] }) : eventItem(toolEvent);
+  const { update } = await liveList([middle, eventItem(empty)]);
+  const trace = document.querySelector(".pwa-thinking-trace");
+  const row = document.querySelector(kind === "body" ? ".pwa-message.assistant" : ".pwa-tool-group");
+  await update([eventItem({ ...empty, event_id: "earlier-empty" }), middle, eventItem(empty)], { gapBefore: new Set(["earlier-empty"]) });
+  const gap = document.querySelector(".pwa-timeline-gap")!;
+  expect(document.querySelector(".pwa-thinking-trace")).toBe(trace);
+  expect(document.querySelector(kind === "body" ? ".pwa-message.assistant" : ".pwa-tool-group")).toBe(row);
+  expect(gap.compareDocumentPosition(row!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(row!.compareDocumentPosition(trace!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("a single gap splits reverse-completed tools without reordering or duplicating notices", async () => {
+  const empty: TimelineEvent = { ...assistantEvent, event_id: "later-empty", blocks: [{ type: "thinking", text: "" }] };
+  const running = (id: string) => partialItem({ ...toolPartial, partial_id: `tool:${id}`, tool_call_id: id, args: { path: `${id}.ts` } });
+  const complete = (id: string, timestamp: number) => eventItem({ ...toolEvent, event_id: `event-${id}`, tool_call_id: id, timestamp, args: { path: `${id}.ts` } });
+  const { update } = await liveList([running("a"), running("b"), eventItem(empty)]);
+  const trace = document.querySelector(".pwa-thinking-trace");
+  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+  await update([eventItem({ ...empty, event_id: "earlier-empty" }), complete("b", 2), complete("a", 3), eventItem(empty)], { gapBefore: new Set(["event-a"]) });
+  expect(document.querySelectorAll(".pwa-tool-group")).toHaveLength(2);
+  expect(document.querySelectorAll(".pwa-timeline-gap")).toHaveLength(1);
+  expect([...document.querySelectorAll(".pwa-message-list > .pwa-timeline-gap, .pwa-message-list > .pwa-tool-group, .pwa-message-list > .pwa-thinking-trace")].map(row => row.classList.contains("pwa-timeline-gap") ? "gap" : row.classList.contains("pwa-tool-group") ? "tool" : "trace")).toEqual(["gap", "tool", "tool", "trace"]);
+  expect(document.querySelector(".pwa-thinking-trace")).toBe(trace);
+  await expandToolGroups();
+  expect([...document.querySelectorAll(".pwa-tool-card .pwa-tool-action")].map(row => row.textContent)).toEqual([expect.stringContaining("a.ts"), expect.stringContaining("b.ts")]);
+});
+
+test("paced thinking parses only new characters through the real presentation and component chain", async () => {
+  const buffer = new StreamDisplayBuffer();
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "" };
+  const original = ThinkingTextParser.prototype.read;
+  let scanned = 0;
+  const spy = vi.spyOn(ThinkingTextParser.prototype, "read").mockImplementation(function (this: ThinkingTextParser, text, epoch, streaming) {
+    const before = this.scannedCharacters;
+    const result = original.call(this, text, epoch, streaming);
+    scanned += this.scannedCharacters - before;
+    return result;
+  });
+  try {
+    const { update } = await liveList(buffer.ingest([partialItem(thinking)]).items, { running: true });
+    expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Thinking…");
+    const target = `${"x".repeat(1024)}\n**First title**\nBody\n**Latest title**`;
+    for (let length = 32; length < target.length; length += 32) {
+      await update(buffer.ingest([partialItem({ ...thinking, delta: target.slice(0, length) })]).items);
+      await update(buffer.advance().items);
+    }
+    await update(buffer.ingest([partialItem({ ...thinking, delta: target })]).items);
+    while (buffer.hasPending()) await update(buffer.advance().items);
+    expect(scanned).toBe(target.length);
+    expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("Latest title");
+    expect(document.querySelector(".pwa-thinking-live")?.getAttribute("aria-live")).toBe("off");
+    expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length);
+    await update(buffer.ingest([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: target }] })]).items);
+    expect(scanned).toBe(target.length * 2);
+    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("First title");
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length * 2);
+  } finally { spy.mockRestore(); }
+});
+
+test.each(["assistant", "thinking"] as const)("cumulative %s thinking blocks parse only new characters through the real component chain", async kind => {
+  const buffer = new StreamDisplayBuffer();
+  const thought: Extract<TimelinePartial, { kind: "thinking" }> = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", blocks: [{ type: "thinking", text: "" }] };
+  const snapshot = (text: string): TimelineViewItem[] => buffer.ingest([partialItem({ ...thought, kind, blocks: [{ type: "thinking", text }] })]).items;
+  const original = ThinkingTextParser.prototype.read;
+  let scanned = 0;
+  const spy = vi.spyOn(ThinkingTextParser.prototype, "read").mockImplementation(function (this: ThinkingTextParser, text, epoch, streaming) {
+    const before = this.scannedCharacters;
+    const result = original.call(this, text, epoch, streaming);
+    scanned += this.scannedCharacters - before;
+    return result;
+  });
+  try {
+    const { update } = await liveList(snapshot(""), { running: true });
+    const target = `${"x".repeat(1024)}\n**First title**\nBody\n**Latest title**`;
+    for (let length = 32; length < target.length; length += 32) {
+      await update(snapshot(target.slice(0, length)));
+      await update(buffer.advance().items);
+    }
+    await update(snapshot(target));
+    expect(scanned).toBe(target.length);
+    expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("Latest title");
+    expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length);
+    const replacement = `${"y".repeat(1024)}\n**Other title**\nBody\n**Newest title**`;
+    await update(snapshot(replacement));
+    expect(scanned).toBe(target.length + replacement.length);
+    expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("Newest title");
+    await update(buffer.ingest([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: replacement }] })]).items);
+    expect(scanned).toBe(target.length + replacement.length * 2);
+    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("Other title");
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length + replacement.length * 2);
+  } finally { spy.mockRestore(); }
+});
+
+test("mixed cumulative blocks keep multiple thinking components incremental and rebuild at boundary replacement", async () => {
+  const buffer = new StreamDisplayBuffer();
+  const assistant: Extract<TimelinePartial, { kind: "assistant" }> = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:assistant:0", kind: "assistant", status: "delta" };
+  const snapshot = (blocks: NonNullable<typeof assistant.blocks>): TimelineViewItem[] => buffer.ingest([partialItem({ ...assistant, blocks })]).items;
+  const initial: NonNullable<typeof assistant.blocks> = [{ type: "thinking", text: "**First**\n" }, { type: "text", text: "Answer" }, { type: "thinking", text: "**Second**\n" }];
+  const original = ThinkingTextParser.prototype.read;
+  let scanned = 0;
+  const spy = vi.spyOn(ThinkingTextParser.prototype, "read").mockImplementation(function (this: ThinkingTextParser, text, epoch, streaming) {
+    const before = this.scannedCharacters;
+    const result = original.call(this, text, epoch, streaming);
+    scanned += this.scannedCharacters - before;
+    return result;
+  });
+  try {
+    const { update } = await liveList(snapshot(initial), { running: true });
+    for (let length = 32; length <= 512; length += 32) {
+      await update(snapshot(initial.map(block => ({ ...block, text: `${block.text}${"x".repeat(length)}` }))));
+    }
+    const grown = initial.map(block => ({ ...block, text: `${block.text}${"x".repeat(512)}` }));
+    const appended = [...grown, { type: "thinking" as const, text: "**Third**" }];
+    await update(snapshot(appended));
+    const count = appended.filter(block => block.type === "thinking").reduce((sum, block) => sum + block.text.length, 0);
+    expect(scanned).toBe(count);
+    expect([...document.querySelectorAll(".pwa-thinking-live > span")].map(element => element.getAttribute("title"))).toEqual(["First", "Second", "Third"]);
+    // joined 文本完全相同，但首块边界改变；必须展示新边界并重建保留的解析器。
+    const rebounded: NonNullable<typeof assistant.blocks> = [{ type: "thinking", text: `${grown[0]!.text}\n${grown[1]!.text}` }, ...appended.slice(2)];
+    await update(snapshot(rebounded));
+    expect(scanned).toBe(count + rebounded.reduce((sum, block) => sum + block.text.length, 0));
+    expect(document.querySelectorAll(".pwa-thinking-live")).toHaveLength(3);
+    expect(document.querySelector(".pwa-message.assistant")).toBeNull();
+    await update(buffer.snapshot());
+    expect(scanned).toBe(count + rebounded.reduce((sum, block) => sum + block.text.length, 0));
+  } finally { spy.mockRestore(); }
+});
+
 test.each([1280, 390])("Working fallback hands off to current thinking and visible tools at %ipx", async width => {
   await page.viewport(width, 844);
   const live = { running: true, isLive: true };
@@ -80,10 +219,13 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   expect(working()?.textContent).toBe("Working…");
   await update([question, partialItem(thinking)]);
   expect(working()).toBeNull();
-  await expect.element(screen.getByRole("status").getByText("Thinking…")).toBeVisible();
+  await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
+  expect(document.querySelector(".pwa-thinking-live .pwa-spin")).not.toBeNull();
+  expect(document.querySelector(".pwa-thinking-content")).toBeNull();
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
   expect(working()).toBeNull();
-  await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
+  await expect.element(page.elementLocator(document.querySelector(".pwa-thinking-content .pwa-text-plain")!)).toBeVisible();
+  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe("Inspecting the request.");
   await update([question, thought, partialItem(toolPartial)]);
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
   expect(groupButton().querySelector(".pwa-tool-spinner")).not.toBeNull();
@@ -208,32 +350,162 @@ test("a thinking row is titled by its first bold heading and falls back to the l
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
 });
 
-test("a streaming thinking row replaces headings with a leading live indicator", async () => {
-  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA.\n\n**Second step**\nB." };
-  const { screen } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByText("Second step")).not.toBeInTheDocument();
+test.each([1280, 390])("empty thinking settles into one static historical trace per turn at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = {
+    protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
+    group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "running", delta: "",
+  };
+  const empty: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text: "" }, { type: "thinking", text: " \t\n" }] };
+  const later: TimelineEvent = { ...empty, event_id: "later-empty", leaf_id: "history-2", timestamp: 2 };
+  const { screen, update } = await liveList([partialItem(thinking)], { running: true, isLive: true });
+  expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Thinking…");
+  await update([eventItem(empty), eventItem(later)], { running: true, isLive: true });
+  const trace = document.querySelector<HTMLElement>(".pwa-thinking-trace")!;
+  await expect.element(page.elementLocator(trace)).toHaveTextContent("Thought…");
+  expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
+  expect(trace.querySelector("button, svg, [role='status'], [aria-expanded], .pwa-collapse")).toBeNull();
+  // 历史痕迹不是运行指示，不能压制本轮 Working 兜底。
+  expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+  const earlier: TimelineEvent = { ...empty, event_id: "earlier-empty", timestamp: 0 };
+  await update([eventItem(earlier), eventItem(empty), eventItem(later), runEndItem()], { running: false, isLive: false });
+  expect(document.querySelector(".pwa-thinking-trace")).toBe(trace);
+  expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
+  expect(document.querySelector(".pwa-thinking-status, .pwa-thinking-live, .pwa-spin")).toBeNull();
+  const readable: TimelineEvent = { ...assistantEvent, event_id: "readable-thinking" };
+  await update([eventItem(empty), eventItem(later), eventItem(readable), runEndItem()], { running: false, isLive: false });
+  expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
+  expect(document.querySelector(".pwa-thinking-head")?.getAttribute("aria-expanded")).toBe("false");
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
+  await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
+  await expect.element(screen.getByText("The final answer.")).toBeVisible();
+});
+
+test.each([1280, 390])("streaming thinking advances only to complete headings beside its live indicator at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA." };
+  const { screen, update } = await liveList([partialItem(thinking)]);
+  await expect.element(screen.getByText("First step")).toBeVisible();
+  await update([partialItem({ ...thinking, delta: `${thinking.delta}\n\n**Second step` })]);
+  expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("First step");
+  await update([partialItem({ ...thinking, delta: `${thinking.delta}\n\n**Second step**\nB.\n**Unfinished` })]);
+  await expect.element(screen.getByText("Second step")).toBeVisible();
   await expect.element(screen.getByText("First step")).not.toBeInTheDocument();
-  await expect.element(screen.getByRole("status").getByText("Thinking…")).toBeVisible();
-  await expect.element(screen.getByText("Thought process")).not.toBeInTheDocument();
   const status = document.querySelector<HTMLElement>(".pwa-thinking-live")!;
+  expect(status.querySelector("span")?.getAttribute("title")).toBe("Second step");
   expect(status.firstElementChild?.matches("svg.pwa-spin")).toBe(true);
+  expect(status.querySelector("svg")?.getAttribute("width")).toBe("16");
   expect(getComputedStyle(status).fontSize).toBe("16px");
   expect(getComputedStyle(status).fontWeight).toBe("600");
   expect(Math.round(status.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-head")!.getBoundingClientRect().left));
-  expect(Math.round(status.querySelector("svg")!.getBoundingClientRect().right)).toBeLessThan(Math.round(status.querySelector("span")!.getBoundingClientRect().left));
+  // 动画中的 SVG 包围盒会变化，图标自身仍保留固定布局宽度。
+  expect(getComputedStyle(status.querySelector("svg")!).width).toBe("16px");
+  expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+  expect(document.querySelector(".pwa-thinking-head")?.getAttribute("aria-expanded")).toBe("false");
+  expect(status.textContent).not.toContain("Thinking…");
+});
+
+test.each([1280, 390])("streaming titles keep a stable separate screen-reader status at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "" };
+  const before = eventItem({ ...assistantEvent, event_id: "before-thinking", blocks: [{ type: "text", text: "Before thinking" }] });
+  const { update } = await liveList([before], { running: true });
+  await update([before, partialItem(thinking)]);
+  const row = document.querySelector(".pwa-thinking")!;
+  const status = row.querySelector<HTMLElement>('[role="status"]')!;
+  expect(status.textContent).toBe("");
+  expect(status.classList.contains("pwa-sr-only")).toBe(true);
+  expect(getComputedStyle(status).clipPath).toBe("inset(50%)");
+  const changes: MutationRecord[] = [];
+  const observer = new MutationObserver(records => changes.push(...records));
+  observer.observe(status, { childList: true, characterData: true, subtree: true, attributes: true });
+  try {
+    // 空区域先注册，随后仅写入一次稳定公告，而不是带初始文字一起挂载。
+    await expect.poll(() => status.textContent).toBe("Thinking…");
+    await Promise.resolve();
+    expect(changes).toHaveLength(1);
+    changes.length = 0;
+    const updates = [
+      { text: "I", title: "I" },
+      { text: "Inspect", title: "Inspect" },
+      { text: "Inspecting the request.", title: "Inspecting the request." },
+      { text: "**First stage**\nBody.\n**Second", title: "First stage" },
+      { text: "**First stage**\nBody.\n**Second stage**\nMore reasoning.", title: "Second stage" },
+    ];
+    for (const { text, title } of updates) {
+      await update([partialItem({ ...thinking, delta: text })]);
+      expect(row.querySelector('[role="status"]')).toBe(status);
+      expect(status.textContent).toBe("Thinking…");
+      const visual = row.querySelector<HTMLElement>(".pwa-thinking-live")!;
+      expect(visual.getAttribute("aria-live")).toBe("off");
+      expect(visual.closest('[role="status"]')).toBeNull();
+      expect(visual.querySelector("span")?.textContent).toBe(title);
+      expect(visual.querySelector("span")?.closest('[aria-hidden="true"]')).toBeNull();
+      expect(document.querySelector(".pwa-thinking-status")).toBeNull();
+    }
+    await Promise.resolve();
+    expect(changes).toHaveLength(0);
+    const completed = eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: updates.at(-1)!.text }] });
+    await update([completed]);
+    expect(row.querySelector('[role="status"]')).toBeNull();
+    expect(row.querySelector(".pwa-spin")).toBeNull();
+    expect(row.querySelector(".pwa-thinking-title")?.textContent).toBe("First stage");
+    // 公告尚未填入时已结束，取消待执行回调，后续开始仍从空区域进入。
+    await update([partialItem(thinking)]);
+    expect(row.querySelector('[role="status"]')?.textContent).toBe("");
+    await update([completed]);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    await update([partialItem(thinking)]);
+    expect(row.querySelector('[role="status"]')?.textContent).toBe("");
+    await update([]);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(document.querySelector(".pwa-thinking")).toBeNull();
+  } finally {
+    observer.disconnect();
+  }
+});
+
+test.each([1280, 390])("streaming thinking uses a first-line summary and a running empty label at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "\n \t\n" };
+  const { screen, update } = await liveList([partialItem(thinking)]);
+  const title = page.elementLocator(document.querySelector(".pwa-thinking-live > span")!);
+  await expect.element(title).toBeVisible();
+  await expect.element(title).toHaveTextContent("Thinking…");
+  const text = "\n  检查   工具\t分组  \n后续原文不应显示在标题中。";
+  await update([partialItem({ ...thinking, delta: text })]);
+  await expect.element(screen.getByText("检查 工具 分组")).toBeVisible();
+  expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("检查 工具 分组");
+  expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
+  await expect.element(page.elementLocator(document.querySelector(".pwa-thinking-content .pwa-text-plain")!)).toBeVisible();
+  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(text);
 });
 
 test.each([1280, 390])("thinking and tool-group chevrons stay aligned across streaming completion at %ipx", async width => {
   await page.viewport(width, 844);
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA.\n\n**Second step**\nB." };
-  const { update } = await liveList([eventItem(toolEvent), partialItem(thinking)]);
+  const longTitle = "检查工具分组与完整思考标题 ".repeat(80);
+  const longThinking = { ...thinking, delta: `${thinking.delta}\n**${longTitle.trim()}**\nAdditional reasoning.` };
+  const { update } = await liveList([eventItem(toolEvent), partialItem(longThinking)]);
   const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
   try {
     for (const theme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", theme);
-      await update([eventItem(toolEvent), partialItem(thinking)]);
+      await update([eventItem(toolEvent), partialItem(longThinking)]);
       const toggle = document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!;
-      const chevronRight = () => Math.round(toggle.querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().right);
+      const title = toggle.querySelector<HTMLElement>(".pwa-thinking-live > span")!;
+      expect(title.textContent).toBe(longTitle.trim());
+      expect(title.title).toBe(longTitle.trim());
+      expect(getComputedStyle(title).textOverflow).toBe("ellipsis");
+      expect(getComputedStyle(title).overflow).toBe("hidden");
+      expect(title.scrollWidth).toBeGreaterThan(title.clientWidth);
+      const chevron = toggle.querySelector(".pwa-timeline-chevron")!;
+      expect(Math.round(title.getBoundingClientRect().right)).toBeLessThan(Math.round(chevron.getBoundingClientRect().left));
+      const list = document.querySelector(".pwa-message-list")!;
+      expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+      expect(Math.round(toggle.getBoundingClientRect().right)).toBeLessThanOrEqual(width);
+      const chevronRight = () => Math.round(chevron.getBoundingClientRect().right);
       const groupRight = Math.round(groupButton().querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().right);
       expect(chevronRight()).toBe(groupRight);
       await update([eventItem(toolEvent), eventItem(assistantEvent)]);
@@ -273,20 +545,46 @@ test("thinking, tool groups and reader merge their reading locks until the final
   expect(reading.at(-1)).toBe(false);
 });
 
-test("streaming thinking starts collapsed and keeps a manual choice in the formal answer", async () => {
-  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "Inspecting the request." };
-  const { screen, update } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByText("Thought process")).not.toBeInTheDocument();
-  await expect.element(screen.getByRole("status").getByText("Thinking…")).toBeVisible();
-  await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
-  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
-  const toggle = document.querySelector(".pwa-thinking .pwa-timeline-toggle");
-  await update([eventItem(assistantEvent)]);
-  expect(document.querySelector(".pwa-thinking .pwa-timeline-toggle")).toBe(toggle);
-  await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
-  await expect.element(screen.getByText("Thought process")).toBeVisible();
+test.each([1280, 390])("streaming thinking keeps manual choices through live updates and the formal answer at %ipx", async width => {
+  await page.viewport(width, 844);
+  const reading: boolean[] = [];
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nInspecting the request." };
+  const { screen, update } = await liveList([partialItem(thinking)], { onReadingChange: value => reading.push(value) });
+  await expect.element(screen.getByText("First step")).toBeVisible();
+  expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+  const toggle = document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  toggle.focus();
+  await userEvent.keyboard("{Enter}");
+  const text = `${thinking.delta}\n\n**Second step**\nAdditional live reasoning.`;
+  await update([partialItem({ ...thinking, delta: text })]);
+  expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(reading.at(-1)).toBe(true);
+  await expect.element(page.elementLocator(document.querySelector(".pwa-thinking-content .pwa-text-plain")!)).toBeVisible();
+  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(text);
+  expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Second step");
+  const completed: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text }, { type: "text", text: "The final answer." }] };
+  await update([eventItem(completed)]);
+  expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(toggle.querySelector(".pwa-thinking-title")?.textContent).toBe("First step");
+  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(text);
+  expect(reading.at(-1)).toBe(true);
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
   await expect.element(screen.getByText("The final answer.")).toBeVisible();
+  // 用户再次收起后，后续流式更新与完成也不能覆盖这一选择。
+  await userEvent.keyboard(" ");
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(reading.at(-1)).toBe(false);
+  await expect.poll(() => document.querySelector(".pwa-thinking-content")).toBeNull();
+  await update([partialItem({ ...thinking, delta: `${text}\nNewest reasoning.` })]);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+  await update([eventItem(completed)]);
+  expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(document.querySelector(".pwa-thinking-content")).toBeNull();
 });
 
 test("streaming text keeps its timeline identity and reserved rows when it becomes formal", async () => {

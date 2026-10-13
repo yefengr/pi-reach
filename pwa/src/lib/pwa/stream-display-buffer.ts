@@ -9,6 +9,7 @@ const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   : undefined;
 
 type StreamState = {
+  thinkingTextEpoch: object;
   partial: TimelinePartialView;
   targetText: string;
   targetGraphemes: string[];
@@ -55,6 +56,15 @@ function hasBlocks(partial: TimelinePartial): boolean {
 
 function streamsImmediately(partial: TimelinePartial): boolean {
   return partial.kind === "tool" || hasBlocks(partial);
+}
+
+function blocksExtend(previous: TimelinePartial, next: TimelinePartial): boolean {
+  const before = previous.blocks;
+  const after = next.blocks;
+  if (before === undefined || after === undefined || before.length > after.length) return false;
+  // 每个展示条目单独解析；不能用 join 后的文本判定块边界是否保留。
+  return before.every((block, index) => (block.type === "text" || block.type === "thinking")
+    && after[index]?.type === block.type && after[index].text.startsWith(block.text));
 }
 
 function segmentText(text: string): string[] {
@@ -162,7 +172,11 @@ function projectedPartial(state: StreamState): TimelinePartialView {
   const partial = hasBlocks(state.partial.partial)
     ? state.partial.partial
     : { ...state.partial.partial, delta: state.visibleText };
-  return { ...state.partial, partial };
+  const presentsThinking = (partial.kind === "assistant" || partial.kind === "thinking")
+    && (partial.blocks === undefined ? partial.kind === "thinking" : partial.blocks.some(block => block.type === "thinking"));
+  return { kind: "partial", createdAt: state.partial.createdAt, partial,
+    ...(presentsThinking ? { thinkingTextEpoch: state.thinkingTextEpoch } : {}),
+  };
 }
 
 function expectedVisibleText(state: StreamState): string {
@@ -204,6 +218,7 @@ export class StreamDisplayBuffer {
         const immediate = streamsImmediately(partial.partial);
         const visibleCount = immediate ? targetGraphemes.length : Math.min(2, targetGraphemes.length);
         this.streams.set(id, {
+          thinkingTextEpoch: {},
           partial,
           targetText,
           targetGraphemes,
@@ -217,6 +232,17 @@ export class StreamDisplayBuffer {
       }
 
       const targetChanged = existing.targetText !== targetText;
+      const modeChanged = partial.partial.kind !== existing.partial.partial.kind || hasBlocks(partial.partial) !== hasBlocks(existing.partial.partial);
+      const textExtends = !hasBlocks(partial.partial) && (!targetChanged || targetText.startsWith(existing.targetText));
+      const appendOnly = !modeChanged && (hasBlocks(partial.partial)
+        ? blocksExtend(existing.partial.partial, partial.partial)
+        : textExtends);
+      if (!appendOnly) {
+        existing.thinkingTextEpoch = {};
+        needsSnapshot = true;
+      }
+      // 空 blocks 追加一个空思考块时 join 不变，仍须创建对应展示条目。
+      if (partial.partial.blocks?.length !== existing.partial.partial.blocks?.length) needsSnapshot = true;
       const immediate = streamsImmediately(partial.partial);
       if (targetChanged && immediate) {
         const targetGraphemes = segmentText(targetText);
@@ -226,7 +252,7 @@ export class StreamDisplayBuffer {
         existing.visibleText = targetText;
         existing.ticks = DRAIN_TICKS;
         needsSnapshot = true;
-      } else if (targetChanged && targetText.startsWith(existing.targetText)) {
+      } else if (targetChanged && textExtends) {
         appendTargetGraphemes(existing, targetText);
         existing.targetText = targetText;
         existing.visibleCount = Math.min(existing.visibleCount, existing.targetGraphemes.length);
@@ -272,6 +298,7 @@ export class StreamDisplayBuffer {
       const targetText = partialText(partial.partial);
       const targetGraphemes = segmentText(targetText);
       this.streams.set(partial.partial.partial_id, {
+        thinkingTextEpoch: {},
         partial,
         targetText,
         targetGraphemes,

@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "./timeline-runtime";
-import { projectTimeline } from "./timeline-presentation";
+import { projectTimelineGaps, projectTimeline } from "./timeline-presentation";
+import { observeTools, toolSegments } from "@/components/pwa/tool-groups";
 
 const base = { session_id: "s", leaf_id: "g", group_id: "group" } as const;
 function tool(id: string, timestamp: number): Extract<TimelineEvent, { kind: "tool" }> {
@@ -49,6 +50,116 @@ test("retains thinking identity as the formal message replaces its partial", () 
   const view = projectTimeline([item({ ...answer("answer", "Answer"), blocks: [{ type: "thinking", text: "Considered" }, { type: "text", text: "Answer" }] })], first);
   expect(view.entries[0]).toMatchObject({ kind: "thinking", key: first.entries[0].key, streaming: false, text: "Considered" });
   expect(view.entries[1]).toMatchObject({ kind: "text", text: "Answer" });
+});
+
+function emptyThinking(id: string, scope: Partial<Pick<TimelineEvent, "session_id" | "leaf_id" | "group_id">> = {}): TimelineViewItem {
+  return item({ ...answer(id, ""), ...scope, blocks: [{ type: "thinking", text: "" }] });
+}
+
+test("merges empty historical thinking blocks and messages into one trace per turn", () => {
+  const first = item({ ...answer("first", ""), blocks: [{ type: "thinking", text: "" }, { type: "thinking", text: " \t\n" }, { type: "text", text: "" }] });
+  const view = projectTimeline([first, emptyThinking("later", { leaf_id: "next-leaf" }), item(answer("answer", "Visible answer"))]);
+  expect(view.entries).toHaveLength(2);
+  expect(view.entries[0]).toMatchObject({ kind: "thinking", text: "", streaming: false });
+  expect(view.entries[1]).toMatchObject({ kind: "text", text: "Visible answer" });
+});
+
+test("does not invent thinking traces for empty text or absent blocks", () => {
+  const view = projectTimeline([item(answer("empty-text", " \t\n")), item({ ...answer("absent", ""), blocks: [] })]);
+  expect(view.entries).toEqual([]);
+});
+
+test("isolates empty thinking traces by session and turn, not by appended leaf", () => {
+  const view = projectTimeline([
+    emptyThinking("first"), emptyThinking("same-turn", { leaf_id: "next-leaf" }),
+    emptyThinking("other-turn", { group_id: "other" }), emptyThinking("other-session", { session_id: "other" }),
+  ]);
+  expect(view.entries).toHaveLength(3);
+  expect(new Set(view.entries.map(entry => entry.key)).size).toBe(3);
+});
+
+test("keeps live empty thinking separate and retains a trace after completion", () => {
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "answer:thinking:0", kind: "thinking", status: "running", delta: "" };
+  const first = projectTimeline([item(thinking), item({ ...thinking, partial_id: "answer:thinking:1" })]);
+  expect(first.entries).toHaveLength(2);
+  expect(first.entries.every(entry => entry.kind === "thinking" && entry.streaming)).toBe(true);
+  const completed = projectTimeline([emptyThinking("answer")], first);
+  expect(completed.entries).toHaveLength(1);
+  expect(completed.entries[0]).toMatchObject({ kind: "thinking", text: "", streaming: false });
+});
+
+test("keeps the trace key when earlier empty history is loaded and clears it on replacement", () => {
+  const first = projectTimeline([emptyThinking("later")]);
+  const loaded = projectTimeline([emptyThinking("earlier"), emptyThinking("later")], first);
+  expect(loaded.entries.map(entry => entry.key)).toEqual(first.entries.map(entry => entry.key));
+  expect(projectTimeline([], loaded).entries).toEqual([]);
+});
+
+test("retains readable thinking alongside the merged empty trace", () => {
+  const readable = item({ ...answer("readable", ""), blocks: [{ type: "thinking", text: "**First step**\nReasoning." }] });
+  const first = projectTimeline([readable]);
+  const view = projectTimeline([emptyThinking("empty"), readable, emptyThinking("later")], first);
+  expect(view.entries).toHaveLength(2);
+  expect(view.entries.find(entry => entry.key === first.entries[0]!.key)).toMatchObject({ kind: "thinking", text: "**First step**\nReasoning." });
+});
+
+test.each([false, true])("moves a gap past deduplicated empty thinking to the next visible body (same message: %s)", sameMessage => {
+  const body = item(answer("body", "Visible body"));
+  const duplicate = sameMessage
+    ? item({ ...answer("duplicate", ""), blocks: [{ type: "thinking", text: "" }, { type: "text", text: "Visible body" }] })
+    : emptyThinking("duplicate");
+  const items = [emptyThinking("first"), duplicate, ...(sameMessage ? [] : [body])];
+  const view = projectTimeline(items);
+  expect(projectTimelineGaps(items, new Set(["duplicate"]))).toEqual({ keys: new Set([view.entries[1]!.key]), toolBreakKeys: new Set(), atEnd: false });
+  expect(projectTimelineGaps(items, new Set(["first"]))).toEqual({ keys: new Set([view.entries[0]!.key]), toolBreakKeys: new Set(), atEnd: false });
+});
+
+test("keeps a trailing gap after a deduplicated empty thinking message", () => {
+  expect(projectTimelineGaps([emptyThinking("first"), emptyThinking("duplicate")], new Set(["duplicate"])))
+    .toEqual({ keys: new Set(), toolBreakKeys: new Set(), atEnd: true });
+});
+
+test.each(["body", "tool"])("anchors a prepended gap before retained %s rather than the moved trace", kind => {
+  const middle = kind === "body" ? item(answer("body", "Visible body")) : item(tool("middle", 2));
+  const initial = projectTimeline([middle, emptyThinking("later")]);
+  const items = [emptyThinking("earlier"), middle, emptyThinking("later")];
+  const loaded = projectTimeline(items, initial);
+  expect(loaded.entries.map(entry => entry.key)).toEqual(initial.entries.map(entry => entry.key));
+  const gaps = projectTimelineGaps(items, new Set(["earlier"]), loaded.entries);
+  expect(gaps).toEqual({ keys: new Set([initial.entries[0]!.key]), toolBreakKeys: new Set(), atEnd: false });
+});
+
+test("splits retained adjacent tools at a real gap despite reversed completion order", () => {
+  const initial = projectTimeline([item(partial("a")), item(partial("b")), emptyThinking("later")]);
+  const items = [emptyThinking("earlier"), item(tool("b", 2)), item(tool("a", 3)), emptyThinking("later")];
+  const loaded = projectTimeline(items, initial);
+  const gaps = projectTimelineGaps(items, new Set(["earlier", "event-a"]), loaded.entries);
+  expect(gaps.keys).toEqual(new Set([initial.entries[0]!.key, initial.entries[1]!.key]));
+  expect(toolSegments(loaded.entries, new Set([...gaps.keys, ...gaps.toolBreakKeys]), observeTools(loaded.entries, new Map())).map(segment => segment.tools.length)).toEqual([1, 1]);
+  const separated = projectTimelineGaps(items, new Set(["event-b"]), loaded.entries);
+  expect(separated.keys).toEqual(new Set([initial.entries[0]!.key]));
+});
+
+test("splits retained adjacent tools at a single real gap despite reversed completion order", () => {
+  const initial = projectTimeline([item(partial("a")), item(partial("b")), emptyThinking("later")]);
+  const items = [emptyThinking("earlier"), item(tool("b", 2)), item(tool("a", 3)), emptyThinking("later")];
+  const loaded = projectTimeline(items, initial);
+  const gaps = projectTimelineGaps(items, new Set(["event-a"]), loaded.entries);
+  expect(loaded.entries.map(entry => entry.key)).toEqual(initial.entries.map(entry => entry.key));
+  expect(gaps.keys).toEqual(new Set([initial.entries[0]!.key]));
+  expect(gaps.toolBreakKeys).toEqual(new Set([initial.entries[1]!.key]));
+  expect(gaps.atEnd).toBe(false);
+  const breaks = new Set([...gaps.keys, ...gaps.toolBreakKeys]);
+  expect(toolSegments(loaded.entries, breaks, observeTools(loaded.entries, new Map())).map(segment => segment.tools.length)).toEqual([1, 1]);
+});
+
+test("moves invisible run_end gaps past duplicate traces and preserves trailing gaps", () => {
+  const end = item({ ...base, event_id: "end", timestamp: 3, kind: "run_end", status: "complete" });
+  const items = [emptyThinking("first"), end, emptyThinking("duplicate"), item(tool("next", 4))];
+  const view = projectTimeline(items);
+  expect(projectTimelineGaps(items, new Set(["end"]), view.entries)).toEqual({ keys: new Set([view.entries.at(-1)!.key]), toolBreakKeys: new Set(), atEnd: false });
+  const trailing = items.slice(0, -1);
+  expect(projectTimelineGaps(trailing, new Set(["end"]), projectTimeline(trailing).entries)).toEqual({ keys: new Set(), toolBreakKeys: new Set(), atEnd: true });
 });
 
 test("isolates repeated tool ids between sessions and history generations", () => {

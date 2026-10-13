@@ -58,7 +58,7 @@ export type TimelinePending = {
   requestId: string;
   messageId?: string;
 };
-export type TimelinePartialView = { kind: "partial"; partial: TimelinePartial; createdAt: number };
+export type TimelinePartialView = { kind: "partial"; partial: TimelinePartial; createdAt: number; thinkingTextEpoch?: object };
 export type TimelineViewItem = { kind: "event"; event: TimelineEvent } | TimelinePending | TimelinePartialView;
 /** 本端撤回的排队消息：取消已被权威快照确认，文字与图片可放回输入区。 */
 export type QueuedCancellation = { clientRequestId: string; text: string; images?: UserMessageImages; attachments?: AttachmentDescriptor[] };

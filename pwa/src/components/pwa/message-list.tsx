@@ -63,13 +63,13 @@ function userScreenReaderLabel(event: Extract<TimelineEvent, { kind: "user" }>, 
   return event.origin === "extension" ? t.srRemote : t.srYou;
 }
 
-/** 时间线只显示合法发布记录，继续隐藏未知 custom、run_end 与空白 assistant；发布记录也是工具摘要的边界。 */
+/** 隐藏未知 custom、run_end 与纯空白正文；保留空思考记录，由投影合并为静态痕迹。 */
 function isVisibleItem(item: TimelineViewItem): boolean {
   if (item.kind !== "event") return true;
   const event = item.event;
   if (event.kind === "run_end") return false;
   if (event.kind === "custom") return publishedFileFromEvent(event) !== null;
-  return event.kind !== "assistant" || event.blocks.some((block) => block.text.trim());
+  return event.kind !== "assistant" || event.blocks.some((block) => block.type === "thinking" || block.text.trim());
 }
 
 /** 缺口标在隐藏记录上时顺延到其后第一条可见记录；其后没有可见记录时标在时间线末尾，过滤后提示不丢失。 */
