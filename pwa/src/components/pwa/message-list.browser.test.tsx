@@ -211,6 +211,37 @@ test("a thinking row is titled by its first bold heading and falls back to the l
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
 });
 
+test.each([1280, 390])("empty thinking settles into one static historical trace per turn at %ipx", async width => {
+  await page.viewport(width, 844);
+  const thinking: TimelinePartial = {
+    protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
+    group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "running", delta: "",
+  };
+  const empty: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text: "" }, { type: "thinking", text: " \t\n" }] };
+  const later: TimelineEvent = { ...empty, event_id: "later-empty", leaf_id: "history-2", timestamp: 2 };
+  const { screen, update } = await liveList([partialItem(thinking)], { running: true, isLive: true });
+  expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Thinking…");
+  await update([eventItem(empty), eventItem(later)], { running: true, isLive: true });
+  const trace = document.querySelector<HTMLElement>(".pwa-thinking-trace")!;
+  await expect.element(page.elementLocator(trace)).toHaveTextContent("Thought…");
+  expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
+  expect(trace.querySelector("button, svg, [role='status'], [aria-expanded], .pwa-collapse")).toBeNull();
+  // 历史痕迹不是运行指示，不能压制本轮 Working 兜底。
+  expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+  const earlier: TimelineEvent = { ...empty, event_id: "earlier-empty", timestamp: 0 };
+  await update([eventItem(earlier), eventItem(empty), eventItem(later), runEndItem()], { running: false, isLive: false });
+  expect(document.querySelector(".pwa-thinking-trace")).toBe(trace);
+  expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
+  expect(document.querySelector(".pwa-thinking-status, .pwa-thinking-live, .pwa-spin")).toBeNull();
+  const readable: TimelineEvent = { ...assistantEvent, event_id: "readable-thinking" };
+  await update([eventItem(empty), eventItem(later), eventItem(readable), runEndItem()], { running: false, isLive: false });
+  expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
+  expect(document.querySelector(".pwa-thinking-head")?.getAttribute("aria-expanded")).toBe("false");
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
+  await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
+  await expect.element(screen.getByText("The final answer.")).toBeVisible();
+});
+
 test.each([1280, 390])("streaming thinking advances only to complete headings beside its live indicator at %ipx", async width => {
   await page.viewport(width, 844);
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "**First step**\nA." };
@@ -295,11 +326,13 @@ test.each([1280, 390])("streaming titles keep a stable separate screen-reader st
   }
 });
 
-test.each([1280, 390])("streaming thinking uses a first-line summary and a neutral empty label at %ipx", async width => {
+test.each([1280, 390])("streaming thinking uses a first-line summary and a running empty label at %ipx", async width => {
   await page.viewport(width, 844);
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "\n \t\n" };
   const { screen, update } = await liveList([partialItem(thinking)]);
-  await expect.element(screen.getByText("Thought process")).toBeVisible();
+  const title = page.elementLocator(document.querySelector(".pwa-thinking-live > span")!);
+  await expect.element(title).toBeVisible();
+  await expect.element(title).toHaveTextContent("Thinking…");
   const text = "\n  检查   工具\t分组  \n后续原文不应显示在标题中。";
   await update([partialItem({ ...thinking, delta: text })]);
   await expect.element(screen.getByText("检查 工具 分组")).toBeVisible();

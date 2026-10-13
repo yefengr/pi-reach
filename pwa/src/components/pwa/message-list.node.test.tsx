@@ -296,8 +296,9 @@ describe("turn presentation", () => {
 test.each([
   { text: "**First step**\nBody.\n**Latest step**\n**Unfinished", title: "Latest step" },
   { text: "\n \t\n  检查   工具\t分组  \nHidden body", title: "检查 工具 分组" },
-  { text: "\n \t\n", title: "Thought process" },
-])("renders the live thinking title or neutral fallback in SSR ($title)", ({ text, title }) => {
+  { text: "", title: "Thinking…" },
+  { text: "\n \t\n", title: "Thinking…" },
+])("renders the live thinking title or running fallback in SSR ($title)", ({ text, title }) => {
   const partial: TimelinePartial = {
     protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
     group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: text,
@@ -308,6 +309,42 @@ test.each([
   expect(html).toContain('aria-live="off"');
   expect(html).toContain('aria-expanded="false"');
   expect(html).not.toContain("pwa-text-plain");
+});
+
+test.each([
+  { name: "empty", text: "", visible: false },
+  { name: "whitespace", text: " \t\n", visible: false },
+  { name: "nonempty", text: "Completed reasoning without a heading.", visible: true },
+])("renders static historical traces without changing readable thinking ($name)", ({ text, visible }) => {
+  const event: TimelineEvent = {
+    event_id: "historical-thinking", session_id: "session-1", leaf_id: "history-1",
+    timestamp: 1, group_id: "group-1", kind: "assistant", status: "complete",
+    blocks: [{ type: "thinking", text }, { type: "text", text: "Visible answer." }],
+  };
+  const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
+  expect(html).toContain("Visible answer.");
+  expect(html.includes("Thought process")).toBe(visible);
+  expect(html.includes("Thought…")).toBe(!visible);
+  expect(html.includes('aria-expanded="false"')).toBe(visible);
+  expect(html).not.toContain("Thinking…");
+  expect(html).not.toContain("pwa-thinking-live");
+});
+
+test("retains empty-only historical thinking without losing a trailing gap", () => {
+  const first: TimelineEvent = {
+    event_id: "first-empty", session_id: "session-1", leaf_id: "history-1", timestamp: 1,
+    group_id: "group-1", kind: "assistant", status: "complete", blocks: [{ type: "thinking", text: "" }],
+  };
+  const duplicate = { ...first, event_id: "duplicate-empty", timestamp: 2 };
+  const html = renderList([{ kind: "event", event: first }, { kind: "event", event: duplicate }], {
+    isLive: false, running: false, gapBefore: new Set(["duplicate-empty"]),
+  });
+  expect(html.match(/>Thought…</g)).toHaveLength(1);
+  expect(html).not.toContain("Expand thinking");
+  expect(html).not.toContain("No records to display.");
+  const gap = "Some records in between";
+  expect(html.includes(gap)).toBe(true);
+  expect(html.indexOf(">Thought…<")).toBeLessThan(html.indexOf(gap));
 });
 
 describe("thinkingSummary", () => {

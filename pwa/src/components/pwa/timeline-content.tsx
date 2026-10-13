@@ -119,7 +119,10 @@ export function ThinkingContent({ text, streaming = false, expanded: controlledE
   const expanded = controlledExpanded ?? localExpanded;
   const id = useId();
   const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
-  const title = thinkingTitle(text, streaming) ?? (streaming ? thinkingSummary(text) : undefined) ?? t.timeline.thoughtProcess;
+  if (!streaming && !text.trim()) return <section className="pwa-thinking pwa-thinking-trace pwa-timeline-row" data-timeline-key={timelineKey}>
+    <div className="pwa-thinking-title pwa-timeline-heading">{t.timeline.thinkingTrace}</div>
+  </section>;
+  const title = thinkingTitle(text, streaming) ?? (streaming ? thinkingSummary(text) : undefined) ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
       {streaming

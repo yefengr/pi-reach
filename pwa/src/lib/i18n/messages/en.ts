@@ -358,6 +358,7 @@ export const en = {
     collapseThinking: "Collapse thinking",
     expandThinking: "Expand thinking",
     thinking: "Thinking…",
+    thinkingTrace: "Thought…",
     thoughtProcess: "Thought process",
   },
   tools: {

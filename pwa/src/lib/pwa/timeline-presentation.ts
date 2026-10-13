@@ -23,6 +23,11 @@ function blockKey(groupKey: string, messageId: string, type: "text" | "thinking"
   return JSON.stringify([groupKey, messageId, type, index]);
 }
 
+// 普通提交会推进 leaf；空历史痕迹按会话与轮次定位，补齐更早消息也不改变 key。
+function emptyThinkingKey(value: Grouped): string {
+  return JSON.stringify(["thinking-trace", value.session_id, value.group_id]);
+}
+
 function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>): PresentationEntry[] {
   const value = item.kind === "event" ? item.event : item.partial;
   if (value.kind !== "assistant" && value.kind !== "thinking") return [];
@@ -33,8 +38,9 @@ function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>):
   const startIndex = identity?.contentIndex ?? 0;
   const blocks = value.blocks ?? [{ type: value.kind === "thinking" ? "thinking" as const : "text" as const, text: "delta" in value ? value.delta ?? "" : "" }];
   return blocks.flatMap((block, index): PresentationEntry[] => {
-    if (!block.text.trim() && !(streaming && block.type === "thinking")) return [];
-    const key = blockKey(groupKey, sourceId, block.type, startIndex + index);
+    if (block.type !== "thinking" && !block.text.trim()) return [];
+    const key = !streaming && block.type === "thinking" && !block.text.trim()
+      ? emptyThinkingKey(value) : blockKey(groupKey, sourceId, block.type, startIndex + index);
     if (block.type === "thinking") return [{ kind: "thinking", key, groupId: value.group_id, text: block.text, streaming }];
     return [{ kind: "text", key, groupId: value.group_id, text: block.text, streaming,
       interrupted: "event_id" in value && value.status === "interrupted",
@@ -43,13 +49,19 @@ function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>):
   });
 }
 
-function flatten(items: readonly TimelineViewItem[]): PresentationEntry[] {
-  return items.flatMap((item): PresentationEntry[] => {
+function flatten(items: readonly TimelineViewItem[], emptyThinkingKeys = new Set<string>()): PresentationEntry[] {
+  const entries = items.flatMap((item): PresentationEntry[] => {
     if (item.kind === "pending") return [{ kind: "record", key: `pending:${item.id}`, item }];
     const value = item.kind === "event" ? item.event : item.partial;
     if (value.kind === "tool") return [{ kind: "tool", key: timelineToolKey(value), value }];
     if (value.kind === "assistant" || value.kind === "thinking") return assistantEntries(item);
     return [{ kind: "record", key: item.kind === "event" ? item.event.event_id : item.partial.partial_id, item }];
+  });
+  return entries.filter(entry => {
+    if (entry.kind !== "thinking" || entry.streaming || entry.text.trim()) return true;
+    if (emptyThinkingKeys.has(entry.key)) return false;
+    emptyThinkingKeys.add(entry.key);
+    return true;
   });
 }
 
@@ -95,18 +107,19 @@ export function isPiOutputEntry(entry: PresentationEntry): boolean {
 }
 
 /** 每个缺口之后第一条可见条目的 key；缺口处的事件本身可能不产生条目（如 run_end），标记顺延到下一条。 */
-export function gapEntryKeys(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>): Set<string> {
+export function projectTimelineGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>): { keys: Set<string>; atEnd: boolean } {
   const keys = new Set<string>();
+  const emptyThinkingKeys = new Set<string>();
   let pending = false;
   for (const item of items) {
     if (item.kind === "event" && gapBefore.has(item.event.event_id)) pending = true;
-    if (!pending) continue;
-    const first = flatten([item])[0];
-    if (!first) continue;
+    // 缺口出现前也登记空痕迹；后续被合并掉的空块不能把缺口挂回旧位置。
+    const first = flatten([item], emptyThinkingKeys)[0];
+    if (!pending || !first) continue;
     keys.add(first.key);
     pending = false;
   }
-  return keys;
+  return { keys, atEnd: pending };
 }
 
 export function projectTimeline(items: readonly TimelineViewItem[], previous?: PresentationSnapshot): PresentationSnapshot {
