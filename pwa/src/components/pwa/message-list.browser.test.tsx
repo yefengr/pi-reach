@@ -133,6 +133,78 @@ test("paced thinking parses only new characters through the real presentation an
   } finally { spy.mockRestore(); }
 });
 
+test.each(["assistant", "thinking"] as const)("cumulative %s thinking blocks parse only new characters through the real component chain", async kind => {
+  const buffer = new StreamDisplayBuffer();
+  const thought: Extract<TimelinePartial, { kind: "thinking" }> = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", blocks: [{ type: "thinking", text: "" }] };
+  const snapshot = (text: string): TimelineViewItem[] => buffer.ingest([partialItem({ ...thought, kind, blocks: [{ type: "thinking", text }] })]).items;
+  const original = ThinkingTextParser.prototype.read;
+  let scanned = 0;
+  const spy = vi.spyOn(ThinkingTextParser.prototype, "read").mockImplementation(function (this: ThinkingTextParser, text, epoch, streaming) {
+    const before = this.scannedCharacters;
+    const result = original.call(this, text, epoch, streaming);
+    scanned += this.scannedCharacters - before;
+    return result;
+  });
+  try {
+    const { update } = await liveList(snapshot(""), { running: true });
+    const target = `${"x".repeat(1024)}\n**First title**\nBody\n**Latest title**`;
+    for (let length = 32; length < target.length; length += 32) {
+      await update(snapshot(target.slice(0, length)));
+      await update(buffer.advance().items);
+    }
+    await update(snapshot(target));
+    expect(scanned).toBe(target.length);
+    expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("Latest title");
+    expect(document.querySelector(".pwa-thinking-content")).toBeNull();
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length);
+    const replacement = `${"y".repeat(1024)}\n**Other title**\nBody\n**Newest title**`;
+    await update(snapshot(replacement));
+    expect(scanned).toBe(target.length + replacement.length);
+    expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("Newest title");
+    await update(buffer.ingest([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: replacement }] })]).items);
+    expect(scanned).toBe(target.length + replacement.length * 2);
+    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("Other title");
+    await update(buffer.snapshot());
+    expect(scanned).toBe(target.length + replacement.length * 2);
+  } finally { spy.mockRestore(); }
+});
+
+test("mixed cumulative blocks keep multiple thinking components incremental and rebuild at boundary replacement", async () => {
+  const buffer = new StreamDisplayBuffer();
+  const assistant: Extract<TimelinePartial, { kind: "assistant" }> = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:assistant:0", kind: "assistant", status: "delta" };
+  const snapshot = (blocks: NonNullable<typeof assistant.blocks>): TimelineViewItem[] => buffer.ingest([partialItem({ ...assistant, blocks })]).items;
+  const initial: NonNullable<typeof assistant.blocks> = [{ type: "thinking", text: "**First**\n" }, { type: "text", text: "Answer" }, { type: "thinking", text: "**Second**\n" }];
+  const original = ThinkingTextParser.prototype.read;
+  let scanned = 0;
+  const spy = vi.spyOn(ThinkingTextParser.prototype, "read").mockImplementation(function (this: ThinkingTextParser, text, epoch, streaming) {
+    const before = this.scannedCharacters;
+    const result = original.call(this, text, epoch, streaming);
+    scanned += this.scannedCharacters - before;
+    return result;
+  });
+  try {
+    const { update } = await liveList(snapshot(initial), { running: true });
+    for (let length = 32; length <= 512; length += 32) {
+      await update(snapshot(initial.map(block => ({ ...block, text: `${block.text}${"x".repeat(length)}` }))));
+    }
+    const grown = initial.map(block => ({ ...block, text: `${block.text}${"x".repeat(512)}` }));
+    const appended = [...grown, { type: "thinking" as const, text: "**Third**" }];
+    await update(snapshot(appended));
+    const count = appended.filter(block => block.type === "thinking").reduce((sum, block) => sum + block.text.length, 0);
+    expect(scanned).toBe(count);
+    expect([...document.querySelectorAll(".pwa-thinking-live > span")].map(element => element.getAttribute("title"))).toEqual(["First", "Second", "Third"]);
+    // joined 文本完全相同，但首块边界改变；必须展示新边界并重建保留的解析器。
+    const rebounded: NonNullable<typeof assistant.blocks> = [{ type: "thinking", text: `${grown[0]!.text}\n${grown[1]!.text}` }, ...appended.slice(2)];
+    await update(snapshot(rebounded));
+    expect(scanned).toBe(count + rebounded.reduce((sum, block) => sum + block.text.length, 0));
+    expect(document.querySelectorAll(".pwa-thinking-live")).toHaveLength(3);
+    expect(document.querySelector(".pwa-message.assistant")).toBeNull();
+    await update(buffer.snapshot());
+    expect(scanned).toBe(count + rebounded.reduce((sum, block) => sum + block.text.length, 0));
+  } finally { spy.mockRestore(); }
+});
+
 test.each([1280, 390])("Working fallback hands off to current thinking and visible tools at %ipx", async width => {
   await page.viewport(width, 844);
   const live = { running: true, isLive: true };
