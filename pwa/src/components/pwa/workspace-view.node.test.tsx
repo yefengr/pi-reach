@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ComputerRow, displayDevice } from "./workspace-device-control";
-import { DesktopSidebar } from "./workspace-view";
+import { ConnectionStatus, DesktopSidebar } from "./workspace-view";
 import { NoPiWorkspace, UnpairedWorkspace } from "./workspace-content";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
@@ -141,6 +141,17 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(waitingHtml).toContain("pwa-nav-skeleton");
   expect(waitingHtml).not.toContain(">Current Pi<");
   expect(waitingHtml).toContain("**Pinned history**");
+});
+
+test("12px running spinners override the global stroke to match 16px icons", () => {
+  const spinner = (html: string) => html.match(/<svg\b[^>]*\bpwa-spin\b[^>]*>/)?.[0] ?? "";
+  const running = navLinkMarkup(renderToStaticMarkup(<PwaUiProvider><DesktopSidebar {...navigationProps()} /></PwaUiProvider>), "Next Pi");
+  const statuses = (["connecting", "retrying"] as const).map((state) => renderToStaticMarkup(<PwaUiProvider><ConnectionStatus state={state} /></PwaUiProvider>));
+
+  for (const html of [running, ...statuses]) {
+    expect(spinner(html)).toContain('width="12"');
+    expect(spinner(html)).toContain('stroke-width="2.4"');
+  }
 });
 
 test("shows only the computer entry in an unpaired sidebar and uses structured main empty states", () => {
