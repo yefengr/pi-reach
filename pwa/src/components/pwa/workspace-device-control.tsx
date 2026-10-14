@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Badge, Button, Drawer, Menu, NavLink, Popover } from "@mantine/core";
 import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, pwaFadeTransition, useMenuExitAction } from "@/components/pwa/use-pwa-motion";
-import { ChevronDown, Computer, Link2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Computer, Ellipsis, Link2, Pencil, Trash2 } from "lucide-react";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { getMessages, useI18n } from "@/lib/i18n";
@@ -67,7 +67,7 @@ function ComputerActionsMenu({ device, onRename, onRemove, onMenuChange }: { dev
     onExitTransitionEnd={() => { onMenuChange?.(false); menuAction.finish(); }}
     transitionProps={{ transition: pwaFadeTransition, duration: menuDuration }}
   >
-    <Menu.Target><ActionIcon className="pwa-peer-menu-trigger" type="button" aria-label={t.devices.actionsFor(label)} title={t.devices.actions}><MoreHorizontal size={20} /></ActionIcon></Menu.Target>
+    <Menu.Target><ActionIcon className="pwa-peer-menu-trigger" type="button" aria-label={t.devices.actionsFor(label)} title={t.devices.actions}><Ellipsis size={20} /></ActionIcon></Menu.Target>
     <Menu.Dropdown inert={!opened} className="pwa-peer-menu-panel" data-mantine-stop-propagation="true" onKeyDown={(event) => {
       if (event.key === "Escape") event.stopPropagation();
     }}>

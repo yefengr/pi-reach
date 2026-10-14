@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ActionIcon, Progress } from "@mantine/core";
-import { Download, Eye, FileText, Image as ImageIcon, RotateCw, X } from "lucide-react";
+import { Download, Eye, FileText, Image as ImageIcon, RefreshCw, X } from "lucide-react";
 import { FILE_AUTO_IMAGE_BYTES, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
 import { fileSaveName } from "@/lib/pwa/file-preview";
@@ -121,8 +121,8 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
       </div>
       <div className="pwa-published-actions">
         {fetching ? <ActionIcon {...iconAction(t.common.cancel)} onClick={cancel}><X size={20} aria-hidden="true" /></ActionIcon> : <>
-          {(image || text) && (canFetch || ready) ? <ActionIcon {...iconAction(viewLabel)} disabled={!ready && disabled} onClick={event => { void acquire("view", event.currentTarget); }}>{failed ? <RotateCw size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}</ActionIcon> : null}
-          {ready && state?.url ? <ActionIcon {...iconAction(t.files.save)} component="a" href={state.url} download={fileSaveName(name)}><Download size={20} aria-hidden="true" /></ActionIcon> : canFetch ? <ActionIcon {...iconAction(downloadRetry ? t.common.retry : t.files.download)} disabled={disabled} onClick={() => { void acquire("download"); }}>{downloadRetry ? <RotateCw size={20} aria-hidden="true" /> : <Download size={20} aria-hidden="true" />}</ActionIcon> : null}
+          {(image || text) && (canFetch || ready) ? <ActionIcon {...iconAction(viewLabel)} disabled={!ready && disabled} onClick={event => { void acquire("view", event.currentTarget); }}>{failed ? <RefreshCw size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}</ActionIcon> : null}
+          {ready && state?.url ? <ActionIcon {...iconAction(t.files.save)} component="a" href={state.url} download={fileSaveName(name)}><Download size={20} aria-hidden="true" /></ActionIcon> : canFetch ? <ActionIcon {...iconAction(downloadRetry ? t.common.retry : t.files.download)} disabled={disabled} onClick={() => { void acquire("download"); }}>{downloadRetry ? <RefreshCw size={20} aria-hidden="true" /> : <Download size={20} aria-hidden="true" />}</ActionIcon> : null}
         </>}
       </div>
     </div>

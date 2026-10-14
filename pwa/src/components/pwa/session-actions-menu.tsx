@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ActionIcon, Popover, Textarea } from "@mantine/core";
-import { MoreHorizontal } from "lucide-react";
+import { Info } from "lucide-react";
 import { pwaFadeTransition, usePwaMotionDuration } from "./use-pwa-motion";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
@@ -117,7 +117,7 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
       zIndex={21}
     >
       <Popover.Target>
-        <ActionIcon ref={triggerRef} className="pwa-session-actions-trigger" type="button" aria-label={t.actions.sessionInfo} title={t.actions.sessionInfo} onClick={() => setMenuOpened(!openedRef.current)} onKeyDown={handleTriggerKeyDown}><MoreHorizontal size={20} /></ActionIcon>
+        <ActionIcon ref={triggerRef} className="pwa-session-actions-trigger" type="button" aria-label={t.actions.sessionInfo} title={t.actions.sessionInfo} onClick={() => setMenuOpened(!openedRef.current)} onKeyDown={handleTriggerKeyDown}><Info size={20} /></ActionIcon>
       </Popover.Target>
       <Popover.Dropdown ref={setDropdownRef} inert={!opened} className="pwa-command-menu-dropdown pwa-session-actions-dropdown" aria-label={t.actions.sessionInfo} aria-describedby={`${nameId} ${metadataId}`} aria-modal={false}>
         <div className="pwa-session-info" role="group" aria-label={t.actions.sessionInfo}>

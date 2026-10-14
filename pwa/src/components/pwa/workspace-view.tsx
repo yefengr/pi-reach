@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Button, NavLink } from "@mantine/core";
-import { History, Link2, LoaderCircle, MessageSquare, Settings } from "lucide-react";
+import { Bot, History, Link2, LoaderCircle, Settings } from "lucide-react";
 import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "@/components/pwa/workspace-device-control";
 import { displayPi } from "@/components/pwa/session-title";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
@@ -15,6 +15,9 @@ export { displayPi } from "@/components/pwa/session-title";
 export type { PairingPresence, PairingStatus } from "@/lib/pwa/pwa-view-model";
 export type ConnectionViewState = "offline" | "connecting" | "online" | "retrying" | "no_network";
 
+// 全局线宽 1.8 按 24 画布缩放，12px 时只剩约 0.9px；2.4 让实际线宽与 16px 图标（约 1.2px）一致。
+const SMALL_SPINNER_STROKE = 2.4;
+
 const navigationNavLinkClassNames = {
   body: "pwa-nav-link-body",
   label: "pwa-nav-link-label",
@@ -26,7 +29,7 @@ export function ConnectionStatus({ state, retryAttempt = 0 }: { state: Connectio
   const { t } = useI18n();
   const label = state === "online" ? t.connection.connected : state === "connecting" ? t.connection.connecting : state === "retrying" ? t.connection.reconnecting : state === "no_network" ? t.connection.noNetwork : t.connection.offline;
   const busy = state === "connecting" || state === "retrying";
-  return <span className={`pwa-connection ${state}`} title={label} aria-label={label} data-retry-attempt={state === "retrying" ? retryAttempt : undefined}>{busy ? <LoaderCircle className="pwa-spin" size={12} aria-hidden="true" /> : <span className="pwa-status-dot" aria-hidden="true" />}<span className="pwa-connection-label">{label}</span></span>;
+  return <span className={`pwa-connection ${state}`} title={label} aria-label={label} data-retry-attempt={state === "retrying" ? retryAttempt : undefined}>{busy ? <LoaderCircle className="pwa-spin" size={12} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : <span className="pwa-status-dot" aria-hidden="true" />}<span className="pwa-connection-label">{label}</span></span>;
 }
 
 /** 移动导航中选中、待导航退出后执行的切换目标。 */
@@ -107,7 +110,7 @@ export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = 
   const { t } = useI18n();
   const directory = cwdName(endpoint.cwd);
   const status = endpoint.working
-    ? <span className="pwa-pi-status pwa-pi-status-running"><LoaderCircle className="pwa-spin" size={12} aria-hidden="true" />{t.actions.running}</span>
+    ? <span className="pwa-pi-status pwa-pi-status-running"><LoaderCircle className="pwa-spin" size={12} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" />{t.actions.running}</span>
     : <span className="pwa-pi-status">{t.actions.idle}</span>;
   return <NavLink
     className={`pwa-nav-session${variant === "sheet" ? " pwa-sheet-room" : ""}`}
@@ -134,7 +137,7 @@ export function WorkspaceRunningPiSection({ activeDevice, endpoints, activeEndpo
   if (!activeDevice) return null;
   const activePis = endpoints.filter((endpoint) => endpoint.deviceId === activeDevice.deviceId && endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right)));
   return <section className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={!snapshotReady || undefined}>
-    <div className={sectionHeadingClassName(variant)} id={headingId}><MessageSquare size={16} /><span>{t.navigation.onlinePi}</span>{snapshotReady ? <small className="pwa-tabular">{activePis.length}</small> : null}</div>
+    <div className={sectionHeadingClassName(variant)} id={headingId}><Bot size={16} /><span>{t.navigation.onlinePi}</span>{snapshotReady ? <small className="pwa-tabular">{activePis.length}</small> : null}</div>
     {!snapshotReady ? <><span className="pwa-sr-only">{t.navigation.checkingPi}</span><SkeletonRows /></> : activePis.length === 0 ? <p className="pwa-nav-empty">{t.navigation.noPiOnline}</p> : activePis.map((endpoint) => <OnlinePiRow
       key={endpoint.id}
       endpoint={endpoint}
