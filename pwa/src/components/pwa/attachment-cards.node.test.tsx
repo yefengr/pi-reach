@@ -28,6 +28,9 @@ test("only uploading has a per-file progress bar; complete has just its check", 
   const failed = markup([{ ...file, status: "failed", errorText: "Disk full" }], true);
   expect(failed).toContain("Disk full");
   expect(failed).toContain('aria-label="Retry notes.txt"');
+  // 重试统一用 RefreshCw；RotateCcw 只表示恢复默认。
+  expect(failed).toContain("lucide-refresh-cw");
+  expect(failed).not.toContain("lucide-rotate-ccw");
   expect(failed).not.toContain("pwa-attachment-progress");
 });
 

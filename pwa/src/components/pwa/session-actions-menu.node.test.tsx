@@ -16,6 +16,9 @@ test("renders one borderless icon trigger with a stable accessible name", () => 
 
   expect(html).toMatch(/aria-label="Session details"/);
   expect(html).toMatch(/aria-haspopup="dialog"/);
+  // 只读信息入口用 Info；三个点只留给操作菜单。
+  expect(html).toContain("lucide-info");
+  expect(html).not.toContain("lucide-ellipsis");
   expect(html).toMatch(/pwa-icon-button/);
   expect(html).not.toMatch(/>Actions</);
   expect(html).not.toMatch(/Refresh app/);

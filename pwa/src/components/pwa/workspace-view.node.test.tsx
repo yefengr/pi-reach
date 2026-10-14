@@ -75,7 +75,7 @@ test("computer row keeps current selection separate from actual presence", () =>
     </PwaUiProvider>,
   );
   const computerSelect = navLinkMarkup(html, "Office Mac");
-  const computerActions = html.match(/<button[^>]*aria-label="Computer actions for Office Mac"[^>]*>/)?.[0] ?? "";
+  const computerActions = html.match(/<button[^>]*aria-label="Computer actions for Office Mac"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
 
   expect(html).toContain("OFFLINE");
   expect(html).toContain("Current");
@@ -89,6 +89,8 @@ test("computer row keeps current selection separate from actual presence", () =>
   expect(computerSelect).not.toContain("Computer actions for Office Mac");
   expect(computerActions).toMatch(/pwa-icon-button/);
   expect(computerActions).toMatch(/aria-haspopup="menu"/);
+  // 操作菜单用 Ellipsis，与只读信息入口的 Info 区分。
+  expect(computerActions).toContain("lucide-ellipsis");
 });
 
 test("keeps the brand and computer selection at the top and pairing plus settings in the footer", () => {
@@ -118,6 +120,7 @@ test("renders online Pi rows with directory and run state, and history rows with
   const nextHistory = navLinkMarkup(historyHtml, "Earlier saved session");
 
   expect(liveHtml).toContain("Online Pi");
+  expect(liveHtml).toMatch(/lucide-bot"[^>]*>(?:(?!<\/svg>)[\s\S])*<\/svg><span>Online Pi<\/span>/);
   expect(liveHtml).toContain("Local history");
   expect(liveHtml).toContain("This browser only");
   expect(liveHtml).not.toMatch(/role="tab"|>Live<|>History</);

@@ -41,5 +41,7 @@ test("renders settings as a page with a focusable title, grouped sections and da
   expect(html).toMatch(/Save settings/);
   expect(html).toMatch(/Clear local data/);
   expect(html).toMatch(/Reset layout/);
+  // 重置布局表示恢复默认，用 RotateCcw，与“刷新应用”的 RefreshCw 区分。
+  expect(html.match(/<button\b[^>]*pwa-layout-reset-button[\s\S]*?<\/button>/)?.[0]).toContain("lucide-rotate-ccw");
   expect(html).not.toMatch(/Close settings/);
 });

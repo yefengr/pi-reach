@@ -421,6 +421,8 @@ test("a failed fetch replaces the size line in place and every action is an icon
   const actions = [...document.querySelectorAll(".pwa-published-actions > *")];
   expect(actions.map(action => action.getAttribute("aria-label"))).toEqual(["Retry", "Download"]);
   expect(actions.every(action => action.textContent === "" && action.querySelector("svg"))).toBe(true);
+  // 重试统一用 RefreshCw。
+  expect(actions[0].querySelector("svg")).toHaveClass("lucide-refresh-cw");
   // 卡片操作与其他图标按钮同规格：44 点击区、圆形反馈、常态 secondary。
   for (const action of actions) {
     expect(action).toHaveClass("pwa-icon-button");
@@ -428,6 +430,16 @@ test("a failed fetch replaces the size line in place and every action is an icon
     expect(Math.round(action.getBoundingClientRect().height)).toBe(44);
   }
   expect(document.body.textContent).not.toContain("/secret");
+  await h.screen.unmount();
+});
+
+test("a failed download of a file without preview retries with the shared retry icon", async () => {
+  const h = await harness({ file: { ...descriptor, file_name: "包.zip", mime_type: "application/zip" } });
+  h.open.mockRejectedValue(new Error("network"));
+  await h.screen.getByRole("button", { name: "Download", exact: true }).click();
+  const retry = h.screen.getByRole("button", { name: "Retry", exact: true });
+  await expect.element(retry).toBeVisible();
+  expect(retry.element().querySelector("svg")).toHaveClass("lucide-refresh-cw");
   await h.screen.unmount();
 });
 
