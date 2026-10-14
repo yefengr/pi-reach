@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { ActionIcon, Progress, UnstyledButton } from "@mantine/core";
-import { Check, ChevronDown, ChevronUp, File, RotateCcw, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, File, RefreshCw, X } from "lucide-react";
 import { attachmentPreviewSchema, type AttachmentDescriptor, type AttachmentPreview } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
 import "./attachment-cards.css";
@@ -57,7 +57,7 @@ function AttachmentCard({ item, onRemove, onRetry, disabled }: { item: ComposerA
     </div>
     <div className="pwa-attachment-actions">
       {item.status === "complete" ? <Check className="pwa-attachment-ready" size={20} aria-hidden="true" /> : <>
-        {item.status === "failed" && onRetry ? <ActionIcon type="button" disabled={disabled} aria-label={t.attachments.retry(item.fileName)} title={t.attachments.retry(item.fileName)} onClick={() => onRetry(item.id)}><RotateCcw size={20} /></ActionIcon> : null}
+        {item.status === "failed" && onRetry ? <ActionIcon type="button" disabled={disabled} aria-label={t.attachments.retry(item.fileName)} title={t.attachments.retry(item.fileName)} onClick={() => onRetry(item.id)}><RefreshCw size={20} /></ActionIcon> : null}
         {onRemove ? <ActionIcon type="button" disabled={disabled} aria-label={removeLabel} title={removeLabel} onClick={() => onRemove(item.id)}><X size={20} /></ActionIcon> : null}
       </>}
     </div>

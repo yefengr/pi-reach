@@ -1,6 +1,6 @@
 import { useRef, useState, type Ref } from "react";
 import { Button, Radio, Stack, TextInput } from "@mantine/core";
-import { ArrowLeft, Globe, Languages, Monitor, Moon, RefreshCw, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2 } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
 import { CopyButton } from "@/components/pwa/copy-button";
@@ -99,7 +99,7 @@ export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relaySta
         <p className="pwa-settings-section-description">{s.localOnlyNote}</p>
         <div className="pwa-settings-actions">
           <div>
-            <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RefreshCw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
+            <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
             <p className="pwa-layout-reset-note">{s.resetLayoutNote}</p>
           </div>
           <Button variant="outline" color="red" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
