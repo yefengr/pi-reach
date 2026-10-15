@@ -10,6 +10,7 @@ import { CopyButton } from "./copy-button";
 import { Collapse } from "./collapse";
 import { markdownTableComponents } from "./markdown-table";
 import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
+import { useThinkingHeading } from "./use-thinking-heading";
 export { thinkingTitle, thinkingSummary } from "@/lib/pwa/thinking-text-parser";
 import "./timeline-content.css";
 
@@ -87,6 +88,7 @@ export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, ex
   const { t } = useI18n();
   const [parser] = useState(() => new ThinkingTextParser());
   const parsed = parser.read(text, streaming ? thinkingTextEpoch : undefined, streaming);
+  const heading = useThinkingHeading(parsed, streaming, thinkingTextEpoch);
   const [localExpanded, setLocalExpanded] = useState(false);
   const [previousStreaming, setPreviousStreaming] = useState(streaming);
   const [announcementReady, setAnnouncementReady] = useState(false);
@@ -108,12 +110,13 @@ export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, ex
   if (!streaming && parsed.empty) return <section className="pwa-thinking pwa-thinking-trace pwa-timeline-row" data-timeline-key={timelineKey}>
     <div className="pwa-thinking-title pwa-timeline-heading">{t.timeline.thinkingTrace}</div>
   </section>;
-  const title = (streaming ? parsed.latestTitle ?? parsed.summary : parsed.firstTitle) ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
+  const title = heading ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
-      {streaming
-        ? <span className="pwa-thinking-title pwa-thinking-live" aria-live="off"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span title={title}>{title}</span></span>
-        : <span className="pwa-thinking-title" title={title}>{title}</span>}
+      <span className={`pwa-thinking-title pwa-thinking-heading${streaming ? " pwa-thinking-live" : ""}`} title={streaming ? undefined : title} aria-live={streaming ? "off" : undefined}>
+        <i className="pwa-thinking-icon-slot" aria-hidden="true">{streaming ? <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> : null}</i>
+        <span title={title}>{title}</span>
+      </span>
       <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
     </button>
     {/* 独立的稳定状态保留读屏提示，不随视觉标题的流式增量重复播报。 */}

@@ -133,8 +133,7 @@ export class ThinkingTextParser {
 }
 
 export function thinkingTitle(text: string, streaming: boolean): string | undefined {
-  const parsed = new ThinkingTextParser().read(text);
-  return streaming ? parsed.latestTitle : parsed.firstTitle;
+  return new ThinkingTextParser().read(text, undefined, streaming).latestTitle;
 }
 
 /** 独立调用保留首行早退；组件同时需要标题时复用增量解析器的摘要结果。 */

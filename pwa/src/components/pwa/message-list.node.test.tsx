@@ -296,6 +296,9 @@ describe("turn presentation", () => {
 test.each([
   { text: "**First step**\nBody.\n**Latest step**\n**Unfinished", title: "Latest step" },
   { text: "\n \t\n  检查   工具\t分组  \nHidden body", title: "检查 工具 分组" },
+  { text: "**", title: "Thinking…" },
+  { text: "**Unfinished heading", title: "Thinking…" },
+  { text: "*", title: "Thinking…" },
   { text: "", title: "Thinking…" },
   { text: "\n \t\n", title: "Thinking…" },
 ])("renders the live thinking title or running fallback in SSR ($title)", ({ text, title }) => {
@@ -328,6 +331,20 @@ test.each([
   expect(html.includes('aria-expanded="false"')).toBe(visible);
   expect(html).not.toContain("Thinking…");
   expect(html).not.toContain("pwa-thinking-live");
+});
+
+test("formal thinking retains the latest heading and an empty icon slot without a live status", () => {
+  const event: TimelineEvent = {
+    event_id: "historical-thinking", session_id: "session-1", leaf_id: "history-1", timestamp: 1,
+    group_id: "group-1", kind: "assistant", status: "complete",
+    blocks: [{ type: "thinking", text: "**First**\nBody\n**Latest**\n**Unfinished" }],
+  };
+  const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
+  expect(html).toContain('title="Latest"');
+  expect(html).toContain("pwa-thinking-icon-slot");
+  expect(html).not.toContain("pwa-spin");
+  expect(html).not.toContain('role="status"');
+  expect(html).not.toContain('title="First"');
 });
 
 test("retains empty-only historical thinking without losing a trailing gap", () => {
@@ -375,8 +392,8 @@ describe("thinkingSummary", () => {
 
 describe("thinkingTitle", () => {
   const text = "**First step**\nSome reasoning.\n\n**Second step**\nMore reasoning.\nAn inline **bold** word stays text.";
-  test("takes the first whole-line bold heading once finished and the latest while streaming", () => {
-    expect(thinkingTitle(text, false)).toBe("First step");
+  test("takes the latest whole-line bold heading both once finished and while streaming", () => {
+    expect(thinkingTitle(text, false)).toBe("Second step");
     expect(thinkingTitle(text, true)).toBe("Second step");
   });
   test("ignores inline bold, an unclosed heading and text without headings", () => {

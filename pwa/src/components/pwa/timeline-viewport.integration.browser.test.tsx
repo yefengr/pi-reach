@@ -298,3 +298,38 @@ test("switching back restores a reading position anchored on a collapsed tool gr
     expect(viewport().followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });
+
+test.each([1280, 390])("running tool heading changes keep following and reading positions stable at %ipx", async width => {
+  await page.viewport(width, 844);
+  const history = answer("live-output", paragraphs("Earlier", 30));
+  const tool = (id: string): TimelineViewItem => ({ kind: "partial", createdAt: 1, partial: {
+    ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${id}`,
+    kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running",
+  } });
+  const { screen, list, update, readAt, viewport } = await renderTimeline([history, tool("a")]);
+  try {
+    const checkHandoff = async (ids: string[]) => {
+      const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
+      const samples: typeof before[] = [];
+      update([history, ...ids.map(tool)]);
+      const start = performance.now();
+      await new Promise<void>(resolve => {
+        const sample = () => window.setTimeout(() => {
+          samples.push({ scrollTop: Math.round(list.scrollTop), height: list.scrollHeight });
+          if (performance.now() - start >= 260) resolve();
+          else requestAnimationFrame(sample);
+        }, 0);
+        requestAnimationFrame(sample);
+      });
+      expect(samples.length).toBeGreaterThan(1);
+      for (const sample of samples) expect(sample).toEqual(before);
+      expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    };
+    await checkHandoff(["a", "b", "c", "d", "e"]);
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(true);
+    await readAt(screen.getByText("Earlier paragraph 4: content that stays available while reading.").element());
+    await checkHandoff(["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});

@@ -71,14 +71,15 @@
 .pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
-/* 思考行：进行中显示旋转图标与最新完整标题，无标题时用首行摘要或「思考中…」；有正文的完成态显示首个标题或「思考过程」，共用箭头列。空历史仅显示静态「思考…」，不可展开。
+/* 思考行：进行中显示旋转图标与最新完整标题，无标题时用合并更新的首行摘要或「思考中…」；完成态沿用最新标题或「思考过程」，保留图标槽与箭头列。空历史仅显示静态「思考…」，不可展开。
    以 14px 文字区分过程与正文，展开内容使用次级文字色，不带引用竖线与缩进。 */
 .pwa-thinking { color: var(--pwa-secondary); }
 .pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }
 .pwa-thinking-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pwa-thinking-live { display: flex; align-items: center; gap: 8px; color: var(--pwa-running); }
-.pwa-thinking-live > svg { flex: none; }
-.pwa-thinking-live > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pwa-thinking-heading { display: flex; align-items: center; gap: 8px; }
+.pwa-thinking-live { color: var(--pwa-running); }
+.pwa-thinking-icon-slot { display: flex; flex: 0 0 16px; align-items: center; width: 16px; height: 16px; }
+.pwa-thinking-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pwa-thinking-content .pwa-collapse-inner { padding-bottom: 4px; }
 .pwa-long-text { min-width: 0; }
 .pwa-text-plain { margin: 0; color: var(--pwa-soft-ink); font: var(--pwa-text-body)/var(--pwa-leading-body) var(--pwa-font-ui); white-space: pre-wrap; overflow-wrap: anywhere; }

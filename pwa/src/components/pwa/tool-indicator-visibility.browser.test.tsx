@@ -41,7 +41,8 @@ function paintedSpinner(): boolean | null {
 function snapshot() {
   const details = document.querySelector(".pwa-tool-group-details");
   return { spinner: paintedSpinner(), working: document.querySelector(".pwa-thinking-status") !== null,
-    details: details !== null, opacity: details ? Number(getComputedStyle(details).opacity) : null };
+    details: details !== null, opacity: details ? Number(getComputedStyle(details).opacity) : null,
+    bottom: Math.round(document.querySelector(".pwa-bottom-sentinel")!.getBoundingClientRect().top) };
 }
 
 /** 一个采样窗口只覆盖一次过渡；反向也在同一窗口内采样，不累积长等待。 */
@@ -113,4 +114,50 @@ test.each(cases)("Working visibility follows painted collapse frames at $width p
   flushSync(() => update([{ kind: "event", event: next }]));
   expect(document.querySelector(".pwa-tool-group")).toBeNull();
   expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+});
+
+async function renderHeading(initial: TimelineViewItem[]) {
+  let update!: (items: TimelineViewItem[]) => void;
+  function Harness() {
+    const [items, setItems] = useState(initial);
+    update = setItems;
+    const listRef = useRef<HTMLDivElement>(null);
+    const bottomRef = useRef<HTMLDivElement>(null);
+    return <main className="pwa-main"><MessageList items={items} running isLive hasEarlier={false} listRef={listRef} bottomSentinelRef={bottomRef} onScroll={() => {}} /></main>;
+  }
+  await renderPwa(<Harness />);
+  return update;
+}
+
+const headSpinner = () => document.querySelector<SVGSVGElement>(".pwa-tool-group-status .pwa-tool-spinner");
+
+test.each(cases)("running heading handoff keeps its spinner and layout at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const update = await renderHeading([running("a")]);
+  const spinner = headSpinner()!;
+  const spin = spinner.getAnimations()[0]!;
+  const before = snapshot();
+  expect(before).toMatchObject({ spinner: true, working: false });
+  expect(spin).toBeDefined();
+  // 积压跳到最新的路径可同步触发与定时轮播相同的组头交接，不依赖计时器是否准时到达。
+  const frames = await sampleTransition(() => update(["a", "b", "c", "d", "e"].map(running)));
+  expect(document.querySelector(".pwa-tool-group-current")?.textContent).toBe("reade.ts");
+  expect(headSpinner()).toBe(spinner);
+  expect(spinner.getAnimations()[0]).toBe(spin);
+  for (const frame of frames) expect(frame).toMatchObject({ spinner: true, working: false, bottom: before.bottom });
+  // 状态必须绑定新工具，不能因复用图标继续报告旧工具身份。
+  flushSync(() => update([running("a"), running("b"), running("c"), running("d"), completed("e")]));
+  expect(snapshot()).toMatchObject({ spinner: false, working: true });
+});
+
+test.each(cases)("completed to running heading is visible immediately at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const update = await renderHeading([running("a")]);
+  const runningBottom = snapshot().bottom;
+  flushSync(() => update([completed("a")]));
+  expect(snapshot()).toMatchObject({ spinner: false, working: true });
+  const frames = await sampleTransition(() => update([completed("a"), ...["b", "c", "d", "e"].map(running)]));
+  for (const frame of frames) expect(frame).toMatchObject({ spinner: true, working: false, bottom: runningBottom });
 });

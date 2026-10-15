@@ -134,7 +134,8 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, batchClose
         <span className="pwa-tool-action-copy">{current
           ? <ToolGroupCurrent key={toolIdentity(current)} value={current} animate={head.animate} />
           : <ToolGroupSummary summary={summary} />}</span>
-        {current || busy ? <span key={current ? toolIdentity(current) : "summary"} className={`pwa-tool-group-status pwa-tool-status pwa-tool-status-${currentStatus ?? "running"}`} data-enter={current && head.animate ? "" : undefined}><ToolStatusIcon status={currentStatus ?? "running"} toolKeys={current ? [toolIdentity(current)] : runningKeys} /></span> : null}
+        {/* 状态槽不随工具身份重建；文字轮播时运行图标连续可见，身份注册仍跟随当前工具更新。 */}
+        {current || busy ? <span className={`pwa-tool-group-status pwa-tool-status pwa-tool-status-${currentStatus ?? "running"}`}><ToolStatusIcon status={currentStatus ?? "running"} toolKeys={current ? [toolIdentity(current)] : runningKeys} /></span> : null}
         {hasFailure && currentStatus !== "error" ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}
         <ChevronRight className="pwa-tool-chevron pwa-timeline-chevron" size={16} aria-hidden="true" />
       </button>

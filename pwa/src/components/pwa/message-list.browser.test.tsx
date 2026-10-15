@@ -10,6 +10,8 @@ import { TimelineRuntime, type TimelinePending, type TimelineViewItem } from "@/
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
 import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
+import { ThinkingContent } from "./timeline-content";
+import { THINKING_SUMMARY_WINDOW_MS } from "./use-thinking-heading";
 
 type ListProps = Parameters<typeof MessageList>[0];
 const toolEvent: Extract<TimelineEvent, { kind: "tool" }> = {
@@ -128,7 +130,7 @@ test("paced thinking parses only new characters through the real presentation an
     expect(scanned).toBe(target.length);
     await update(buffer.ingest([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: target }] })]).items);
     expect(scanned).toBe(target.length * 2);
-    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("First title");
+    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("Latest title");
     await update(buffer.snapshot());
     expect(scanned).toBe(target.length * 2);
   } finally { spy.mockRestore(); }
@@ -165,7 +167,7 @@ test.each(["assistant", "thinking"] as const)("cumulative %s thinking blocks par
     expect(document.querySelector(".pwa-thinking-live > span")?.getAttribute("title")).toBe("Newest title");
     await update(buffer.ingest([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: replacement }] })]).items);
     expect(scanned).toBe(target.length + replacement.length * 2);
-    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("Other title");
+    expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("Newest title");
     await update(buffer.snapshot());
     expect(scanned).toBe(target.length + replacement.length * 2);
   } finally { spy.mockRestore(); }
@@ -354,8 +356,8 @@ test("thinking is independently collapsed and keyboard toggling leaves the answe
   await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
 });
 
-test("a thinking row is titled by its first bold heading and falls back to the localized label", async () => {
-  const titled: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text: "**Checking the group rules**\nInspecting the request." }, { type: "text", text: "The final answer." }] };
+test("a thinking row is titled by its latest bold heading and falls back to the localized label", async () => {
+  const titled: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text: "**Earlier stage**\n**Checking the group rules**\nInspecting the request." }, { type: "text", text: "The final answer." }] };
   const screen = await renderMessageList([eventItem(titled)]);
   await expect.element(screen.getByText("Checking the group rules")).toBeVisible();
   await expect.element(screen.getByText("Thought process")).not.toBeInTheDocument();
@@ -405,7 +407,7 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   await expect.element(screen.getByText("First step")).not.toBeInTheDocument();
   const status = document.querySelector<HTMLElement>(".pwa-thinking-live")!;
   expect(status.querySelector("span")?.getAttribute("title")).toBe("Second step");
-  expect(status.firstElementChild?.matches("svg.pwa-spin")).toBe(true);
+  expect(status.firstElementChild?.matches(".pwa-thinking-icon-slot")).toBe(true);
   expect(status.querySelector("svg")?.getAttribute("width")).toBe("16");
   expect(getComputedStyle(status).fontSize).toBe("14px");
   expect(getComputedStyle(status).fontWeight).toBe("600");
@@ -415,6 +417,104 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   expect(document.querySelector(".pwa-thinking-content")).toBeNull();
   expect(document.querySelector(".pwa-thinking-head")?.getAttribute("aria-expanded")).toBe("false");
   expect(status.textContent).not.toContain("Thinking…");
+});
+
+test("thinking headings never show Markdown fragments and replace complete titles atomically", async () => {
+  const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "" };
+  const { update } = await liveList([partialItem(thinking)]);
+  const title = () => document.querySelector(".pwa-thinking-live > span")?.textContent;
+  for (const delta of ["*", "**", "**Checkin", "**Checking*"]) {
+    await update([partialItem({ ...thinking, delta })]);
+    expect(title()).toBe("Thinking…");
+  }
+  await update([partialItem({ ...thinking, delta: "**Checking**" })]);
+  expect(title()).toBe("Checking");
+  await update([partialItem({ ...thinking, delta: "**Checking**\nBody\n**Verifying" })]);
+  expect(title()).toBe("Checking");
+  await update([partialItem({ ...thinking, delta: "**Checking**\nBody\n**Verifying**" })]);
+  expect(title()).toBe("Verifying");
+  await update([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: "**Checking**\nBody\n**Verifying**" }] })]);
+  expect(document.querySelector(".pwa-thinking-title")?.getAttribute("title")).toBe("Verifying");
+  expect(document.querySelector(".pwa-thinking .pwa-spin, .pwa-thinking [role='status']")).toBeNull();
+});
+
+test.each([true, false])("thinking clears an invalidated provisional heading (trusted epoch: %s)", async trusted => {
+  let update!: (text: string) => void;
+  const epoch = trusted ? {} : undefined;
+  function Harness() {
+    const [text, setText] = useState("**Title**");
+    update = next => flushSync(() => setText(next));
+    return <ThinkingContent text={text} thinkingTextEpoch={epoch} streaming />;
+  }
+  await renderPwa(<Harness />);
+  const title = () => document.querySelector(".pwa-thinking-title > span")?.textContent;
+  expect(title()).toBe("Title");
+  // 末行尚无换行；追加普通文字后不再是整行加粗标题。
+  update("**Title** continuation");
+  expect(title()).toBe("Thinking…");
+  update("**Title** continuation\n**Current**");
+  expect(title()).toBe("Current");
+  if (trusted) return;
+  // 未携带 epoch 的独立消费者也能替换正文，不能锁存上一份文本的标题。
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    update("Fresh summary");
+    expect(title()).not.toBe("Current");
+    flushSync(() => vi.advanceTimersByTime(THINKING_SUMMARY_WINDOW_MS));
+    expect(title()).toBe("Fresh summary");
+  } finally { vi.useRealTimers(); }
+});
+
+test("thinking summary uses a bounded window while body updates immediately and cancels stale work", async () => {
+  let update!: (text: string, epoch?: object, streaming?: boolean) => void;
+  const epoch = {};
+  function Harness() {
+    const [state, setState] = useState({ text: "Seed", epoch, streaming: true });
+    update = (text, nextEpoch = epoch, streaming = true) => flushSync(() => setState({ text, epoch: nextEpoch, streaming }));
+    return <ThinkingContent text={state.text} thinkingTextEpoch={state.epoch} streaming={state.streaming} expanded />;
+  }
+  const screen = await renderPwa(<Harness />);
+  await expect.element(screen.getByRole("button", { name: "Collapse thinking" })).toBeVisible();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const title = () => document.querySelector(".pwa-thinking-title > span")?.textContent;
+  const advance = (ms: number) => { flushSync(() => vi.advanceTimersByTime(ms)); };
+  try {
+    update("Seed one");
+    expect(title()).toBe("Seed");
+    expect(document.querySelector(".pwa-text-plain")?.textContent).toBe("Seed one");
+    await advance(THINKING_SUMMARY_WINDOW_MS / 3);
+    update("Seed one two");
+    await advance(THINKING_SUMMARY_WINDOW_MS / 3);
+    update("Seed one two three");
+    expect(title()).toBe("Seed");
+    await advance(THINKING_SUMMARY_WINDOW_MS / 3);
+    expect(title()).toBe("Seed one two three");
+    update("Seed one two three four");
+    update("Seed one two three four\n**Complete**");
+    expect(title()).toBe("Complete");
+    await advance(THINKING_SUMMARY_WINDOW_MS * 2);
+    expect(title()).toBe("Complete");
+    const replacementEpoch = {};
+    update("Fresh", replacementEpoch);
+    expect(title()).toBe("Fresh");
+    update("Fresh pending", replacementEpoch);
+    update("**", {});
+    expect(title()).toBe("Thinking…");
+    await advance(THINKING_SUMMARY_WINDOW_MS * 2);
+    expect(title()).toBe("Thinking…");
+    update("No heading", replacementEpoch);
+    update("No heading pending", replacementEpoch);
+    update("No heading pending", replacementEpoch, false);
+    expect(title()).toBe("Thought process");
+    await advance(THINKING_SUMMARY_WINDOW_MS * 2);
+    expect(title()).toBe("Thought process");
+    const unmountEpoch = {};
+    update("Unmount", unmountEpoch);
+    update("Unmount pending", unmountEpoch);
+    await screen.unmount();
+    await advance(THINKING_SUMMARY_WINDOW_MS * 2);
+    expect(document.querySelector(".pwa-thinking")).toBeNull();
+  } finally { vi.useRealTimers(); }
 });
 
 test.each([1280, 390])("streaming titles keep a stable separate screen-reader status at %ipx", async width => {
@@ -451,7 +551,7 @@ test.each([1280, 390])("streaming titles keep a stable separate screen-reader st
       const visual = row.querySelector<HTMLElement>(".pwa-thinking-live")!;
       expect(visual.getAttribute("aria-live")).toBe("off");
       expect(visual.closest('[role="status"]')).toBeNull();
-      expect(visual.querySelector("span")?.textContent).toBe(title);
+      await expect.poll(() => visual.querySelector("span")?.textContent).toBe(title);
       expect(visual.querySelector("span")?.closest('[aria-hidden="true"]')).toBeNull();
       expect(document.querySelector(".pwa-thinking-status")).toBeNull();
     }
@@ -461,7 +561,7 @@ test.each([1280, 390])("streaming titles keep a stable separate screen-reader st
     await update([completed]);
     expect(row.querySelector('[role="status"]')).toBeNull();
     expect(row.querySelector(".pwa-spin")).toBeNull();
-    expect(row.querySelector(".pwa-thinking-title")?.textContent).toBe("First stage");
+    expect(row.querySelector(".pwa-thinking-title")?.textContent).toBe("Second stage");
     // 公告尚未填入时已结束，取消待执行回调，后续开始仍从空区域进入。
     await update([partialItem(thinking)]);
     expect(row.querySelector('[role="status"]')?.textContent).toBe("");
@@ -517,11 +617,17 @@ test.each([1280, 390])("thinking and tool-group chevrons stay aligned across str
       const list = document.querySelector(".pwa-message-list")!;
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
       expect(Math.round(toggle.getBoundingClientRect().right)).toBeLessThanOrEqual(width);
+      const titleLeft = Math.round(title.getBoundingClientRect().left);
+      const slot = toggle.querySelector<HTMLElement>(".pwa-thinking-icon-slot")!;
+      expect(Math.round(slot.getBoundingClientRect().width)).toBe(16);
       const chevronRight = () => Math.round(chevron.getBoundingClientRect().right);
       const groupRight = Math.round(groupButton().querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().right);
       expect(chevronRight()).toBe(groupRight);
       await update([eventItem(toolEvent), eventItem(assistantEvent)]);
       expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
+      expect(toggle.querySelector(".pwa-thinking-icon-slot")).toBe(slot);
+      expect(Math.round(toggle.querySelector(".pwa-thinking-title > span")!.getBoundingClientRect().left)).toBe(titleLeft);
+      expect(toggle.querySelector(".pwa-spin, [role='status']")).toBeNull();
       expect(chevronRight()).toBe(groupRight);
     }
   } finally {
@@ -580,7 +686,7 @@ test.each([1280, 390])("streaming thinking keeps manual choices through live upd
   await update([eventItem(completed)]);
   expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
-  expect(toggle.querySelector(".pwa-thinking-title")?.textContent).toBe("First step");
+  expect(toggle.querySelector(".pwa-thinking-title")?.textContent).toBe("Second step");
   expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(text);
   expect(reading.at(-1)).toBe(true);
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
