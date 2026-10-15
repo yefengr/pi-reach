@@ -617,16 +617,22 @@ test.each([1280, 390])("thinking and tool-group chevrons stay aligned across str
       const list = document.querySelector(".pwa-message-list")!;
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
       expect(Math.round(toggle.getBoundingClientRect().right)).toBeLessThanOrEqual(width);
+      const settleHeading = () => Promise.allSettled(toggle.getAnimations({ subtree: true })
+        .filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Infinity))
+        .map(animation => animation.finished));
+      await settleHeading();
       const titleLeft = Math.round(title.getBoundingClientRect().left);
       const slot = toggle.querySelector<HTMLElement>(".pwa-thinking-icon-slot")!;
-      expect(Math.round(slot.getBoundingClientRect().width)).toBe(16);
+      expect(Math.round(slot.getBoundingClientRect().width)).toBe(24);
       const chevronRight = () => Math.round(chevron.getBoundingClientRect().right);
       const groupRight = Math.round(groupButton().querySelector(".pwa-timeline-chevron")!.getBoundingClientRect().right);
       expect(chevronRight()).toBe(groupRight);
       await update([eventItem(toolEvent), eventItem(assistantEvent)]);
       expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
       expect(toggle.querySelector(".pwa-thinking-icon-slot")).toBe(slot);
-      expect(Math.round(toggle.querySelector(".pwa-thinking-title > span")!.getBoundingClientRect().left)).toBe(titleLeft);
+      await settleHeading();
+      expect(Math.round(slot.getBoundingClientRect().width)).toBe(0);
+      expect(Math.round(toggle.querySelector(".pwa-thinking-title > span")!.getBoundingClientRect().left)).toBe(titleLeft - 24);
       expect(toggle.querySelector(".pwa-spin, [role='status']")).toBeNull();
       expect(chevronRight()).toBe(groupRight);
     }

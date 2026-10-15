@@ -1,4 +1,4 @@
-import type { Messages } from "./en";
+import { en, type Messages } from "./en";
 
 // 简体中文界面文案；结构由 Messages 类型约束，与 en.ts 保持一致。
 export const zh: Messages = {
@@ -356,12 +356,13 @@ export const zh: Messages = {
     emptyHistory: "没有可显示的记录。",
     showLess: (label) => `收起${label}`,
     showFull: (label) => `显示全部${label}`,
-    thinkingLabel: "思考内容",
-    collapseThinking: "收起思考过程",
-    expandThinking: "展开思考过程",
-    thinking: "思考中…",
-    thinkingTrace: "思考…",
-    thoughtProcess: "思考过程",
+    // 会话内思考提示统一使用英文；模型原文及模型设置的语言不变。
+    thinkingLabel: en.timeline.thinkingLabel,
+    collapseThinking: en.timeline.collapseThinking,
+    expandThinking: en.timeline.expandThinking,
+    thinking: en.timeline.thinking,
+    thinkingTrace: en.timeline.thinkingTrace,
+    thoughtProcess: en.timeline.thoughtProcess,
   },
   tools: {
     status: { running: "运行中", complete: "完成", error: "出错", interrupted: "已中断", unknown: "状态未知" },

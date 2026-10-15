@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@mantine/core";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { useI18n } from "@/lib/i18n";
+import { en } from "@/lib/i18n/messages/en";
 import { highlightCode, languageForFence } from "@/lib/pwa/code-highlight";
 import { CopyButton } from "./copy-button";
 import { Collapse } from "./collapse";
@@ -60,7 +61,14 @@ function adjacentBlocks(blocks: readonly AssistantBlock[]): AssistantBlock[] {
   return merged;
 }
 
-export function LongText({ text, label, variant = "code" }: { text: string; label: string; variant?: "code" | "prose" }) {
+type LongTextProps = {
+  text: string;
+  label: string;
+  variant?: "code" | "prose";
+  toggleLabels?: { showFull: string; showLess: string };
+};
+
+export function LongText({ text, label, variant = "code", toggleLabels }: LongTextProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const id = useId();
@@ -71,7 +79,7 @@ export function LongText({ text, label, variant = "code" }: { text: string; labe
   const long = end < text.length;
   return <div className="pwa-long-text">
     <pre id={id} className={`${variant === "prose" ? "pwa-text-plain" : "pwa-tool-code"}${expanded ? " expanded" : ""}`}>{expanded || !long ? text : text.slice(0, end)}</pre>
-    {long ? <Button variant="transparent" color="piReach" className="pwa-output-toggle" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded((value) => !value)}>{expanded ? t.timeline.showLess(label) : t.timeline.showFull(label)}</Button> : null}
+    {long ? <Button variant="transparent" color="piReach" className="pwa-output-toggle" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded((value) => !value)}>{expanded ? toggleLabels?.showLess ?? t.timeline.showLess(label) : toggleLabels?.showFull ?? t.timeline.showFull(label)}</Button> : null}
   </div>;
 }
 
@@ -114,14 +122,14 @@ export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, ex
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
       <span className={`pwa-thinking-title pwa-thinking-heading${streaming ? " pwa-thinking-live" : ""}`} title={streaming ? undefined : title} aria-live={streaming ? "off" : undefined}>
-        <i className="pwa-thinking-icon-slot" aria-hidden="true">{streaming ? <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> : null}</i>
+        <i className="pwa-thinking-icon-slot" aria-hidden="true"><LoaderCircle className={streaming ? "pwa-spin" : undefined} size={16} aria-hidden="true" /></i>
         <span title={title}>{title}</span>
       </span>
       <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
     </button>
     {/* 独立的稳定状态保留读屏提示，不随视觉标题的流式增量重复播报。 */}
     {streaming ? <span className="pwa-sr-only" role="status">{announcementReady ? t.timeline.thinking : ""}</span> : null}
-    <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" /></Collapse>
+    <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" toggleLabels={{ showFull: en.timeline.showFull(en.timeline.thinkingLabel), showLess: en.timeline.showLess(en.timeline.thinkingLabel) }} /></Collapse>
   </section>;
 }
 
