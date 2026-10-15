@@ -407,7 +407,7 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   expect(status.querySelector("span")?.getAttribute("title")).toBe("Second step");
   expect(status.firstElementChild?.matches("svg.pwa-spin")).toBe(true);
   expect(status.querySelector("svg")?.getAttribute("width")).toBe("16");
-  expect(getComputedStyle(status).fontSize).toBe("16px");
+  expect(getComputedStyle(status).fontSize).toBe("14px");
   expect(getComputedStyle(status).fontWeight).toBe("600");
   expect(Math.round(status.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-head")!.getBoundingClientRect().left));
   // 动画中的 SVG 包围盒会变化，图标自身仍保留固定布局宽度。
@@ -814,17 +814,36 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
   await page.viewport(width, 844);
   const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
   const { screen } = await liveList([
-    eventItem({ ...assistantEvent, blocks: [{ type: "text", text: "我会检查 `timeline`，每次工具调用独立显示。" }, { type: "thinking", text: "先核对路径，再检查输出。" }] }),
+    eventItem({ ...assistantEvent, blocks: [{ type: "text", text: "我会检查 `timeline`，每次工具调用独立显示。\n\n> 真正的引用保留竖线。" }, { type: "thinking", text: "先核对路径，再检查输出。" }] }),
     eventItem({ ...toolEvent, args: { path: `src/${"directory/".repeat(30)}file.ts`, offset: 200, limit: 60 } }),
     partialItem({ ...toolPartial, tool: "bash", tool_call_id: "running", partial_id: "tool:running", args: { command: `pnpm build\n${"long-argument ".repeat(50)}` } }),
     eventItem({ ...toolEvent, tool: "edit", tool_call_id: "failed", event_id: "failed", args: { path: "src/component.tsx" }, status: "error", error: "Hidden error details" }),
   ]);
   await expandToolGroups();
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
   try {
     for (const theme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", theme);
-      const replyLeft = Math.round(document.querySelector(".pwa-message.assistant .pwa-markdown")!.getBoundingClientRect().left);
-      // 组头与 Pi 回复左缘对齐；组内工具行在 2px 竖线加 12px 内边距之后。
+      const reply = document.querySelector<HTMLElement>(".pwa-message.assistant .pwa-markdown")!;
+      const replyLeft = Math.round(reply.getBoundingClientRect().left);
+      expect(getComputedStyle(reply).fontSize).toBe("16px");
+      const quote = reply.querySelector("blockquote")!;
+      expect(getComputedStyle(quote).borderLeftWidth).toBe("2px");
+      expect(getComputedStyle(quote).paddingLeft).toBe("12px");
+      const thoughtContainer = document.querySelector<HTMLElement>(".pwa-thinking .pwa-long-text")!;
+      const thought = thoughtContainer.querySelector<HTMLElement>(".pwa-text-plain")!;
+      expect(getComputedStyle(thoughtContainer).borderLeftWidth).toBe("0px");
+      expect(getComputedStyle(thoughtContainer).paddingLeft).toBe("0px");
+      expect(Math.round(thought.getBoundingClientRect().left)).toBe(replyLeft);
+      expect(getComputedStyle(thought).fontSize).toBe("14px");
+      expect(getComputedStyle(thought).fontFamily).toBe(getComputedStyle(reply).fontFamily);
+      expect(getComputedStyle(thought).lineHeight).toBe("23.1px");
+      expect(getComputedStyle(thought).color).toBe(getComputedStyle(document.querySelector(".pwa-thinking-title")!).color);
+      for (const description of document.querySelectorAll(".pwa-tool-card .pwa-tool-action-copy > span")) {
+        expect(getComputedStyle(description).fontSize).toBe("14px");
+        expect(getComputedStyle(description).fontFamily).toContain("ui-monospace");
+      }
+      // 组头与子项都与 Pi 回复左缘对齐，不使用引用式缩进。
       const group = groupButton();
       expect(Math.round(group.getBoundingClientRect().height)).toBe(44);
       expect(Math.round(group.getBoundingClientRect().left)).toBe(replyLeft);
@@ -833,18 +852,18 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
       for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-card .pwa-tool-action")) {
         const rect = action.getBoundingClientRect();
         expect(Math.round(rect.height)).toBe(44);
-        expect(Math.round(rect.left)).toBe(replyLeft + 14);
+        expect(Math.round(rect.left)).toBe(replyLeft);
         expect(Math.round(rect.right)).toBeLessThanOrEqual(width);
         expect(action.hasAttribute("aria-expanded")).toBe(false);
         expect(action.querySelector(".pwa-tool-chevron")).toBeNull();
         expect(getComputedStyle(action.querySelector(".pwa-tool-action-copy")!).whiteSpace).toBe("nowrap");
       }
       for (const label of document.querySelectorAll(".pwa-thinking-title, .pwa-tool-action-copy strong")) {
-        expect(getComputedStyle(label).fontSize).toBe("16px");
+        expect(getComputedStyle(label).fontSize).toBe("14px");
         expect(getComputedStyle(label).fontStyle).toBe("normal");
         expect(getComputedStyle(label).fontWeight).toBe("600");
       }
-      expect(Math.round(document.querySelector(".pwa-tool-card .pwa-tool-action-copy strong")!.getBoundingClientRect().left)).toBe(replyLeft + 14);
+      expect(Math.round(document.querySelector(".pwa-tool-card .pwa-tool-action-copy strong")!.getBoundingClientRect().left)).toBe(replyLeft);
       const thinking = document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!;
       // 思考与工具行一样：标题与 Pi 回复左缘对齐，折叠箭头在行右侧。
       expect(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left)).toBe(replyLeft);
@@ -858,12 +877,6 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
       await expect.element(screen.getByText("Hidden error details")).not.toBeInTheDocument();
     }
-    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
-    // 展开内容不整块缩进：左侧 2px 竖线（与引用同色）加 12px 内边距，竖线贴齐标题左缘。
-    const quote = document.querySelector<HTMLElement>(".pwa-thinking .pwa-long-text")!;
-    expect(Math.round(quote.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-title")!.getBoundingClientRect().left));
-    expect(getComputedStyle(quote).borderLeftWidth).toBe("2px");
-    expect(Math.round(document.querySelector(".pwa-thinking .pwa-text-plain")!.getBoundingClientRect().left)).toBe(Math.round(quote.getBoundingClientRect().left) + 14);
     await expect.poll(() => getComputedStyle(document.querySelector(".pwa-thinking .pwa-timeline-chevron")!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
   } finally {
     if (originalTheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalTheme);
@@ -889,9 +902,10 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
   group.focus();
   await userEvent.keyboard("{Enter}");
   await expect.poll(() => document.querySelectorAll(".pwa-tool-group .pwa-tool-card").length).toBe(calls.length);
-  // 展开的子项不整块缩进：左侧 2px 竖线（与引用同色）加 12px 内边距，与思考展开内容同一规则。
+  // 工具组与思考都靠排版区分层级，不使用引用竖线或额外缩进。
   const detailsInner = document.querySelector<HTMLElement>(".pwa-tool-group-details > .pwa-collapse-inner")!;
-  expect(getComputedStyle(detailsInner).borderLeftWidth).toBe("2px");
+  expect(getComputedStyle(detailsInner).borderLeftWidth).toBe("0px");
+  expect(getComputedStyle(detailsInner).paddingLeft).toBe("0px");
   await expect.poll(() => Math.round(detailsInner.getBoundingClientRect().left)).toBe(Math.round(group.getBoundingClientRect().left));
   try {
     for (const theme of ["light", "dark"]) {
@@ -899,7 +913,9 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
       // 旋转中 SVG 的包围盒会暂时变宽；等待最终姿态后再检查布局，不放宽几何容差。
       await expect.poll(() => getComputedStyle(group.querySelector(".pwa-tool-chevron")!).transform).toBe("matrix(0, 1, -1, 0, 0, 0)");
       const arrow = group.querySelector(".pwa-tool-chevron")!.getBoundingClientRect();
-      const summary = group.querySelector(".pwa-tool-group-summary")!.getBoundingClientRect();
+      const summaryLabel = group.querySelector(".pwa-tool-group-summary")!;
+      const summary = summaryLabel.getBoundingClientRect();
+      expect(getComputedStyle(summaryLabel).fontSize).toBe("14px");
       expect(Math.round(arrow.left)).toBeGreaterThanOrEqual(Math.round(summary.right));
       // 亚像素取整可能相差 1px。
       expect(Math.abs(Math.round(arrow.right) - (Math.round(group.getBoundingClientRect().right) - 6))).toBeLessThanOrEqual(1);
@@ -911,6 +927,8 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
       expect(list.textContent).not.toContain("Tests passed: 12");
       for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-card .pwa-tool-action")) {
         expect(Math.round(action.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        expect(Math.round(action.getBoundingClientRect().left)).toBe(Math.round(group.getBoundingClientRect().left));
+        expect(getComputedStyle(action.querySelector("strong")!).fontSize).toBe("14px");
         expect(action.hasAttribute("aria-expanded")).toBe(false);
       }
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
