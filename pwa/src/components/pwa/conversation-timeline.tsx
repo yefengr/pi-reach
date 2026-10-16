@@ -160,7 +160,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   const thinkingActive = view.entries.some(entry => entry.kind === "thinking" && activity.currentOutput(entry));
   const toolsActive = segments.some(segment => {
     const indicators = toolIndicators.get(segment.key) ?? initialToolGroupRunningIndicators(
-      segment.tools.map(tool => tool.value), live, appended, segmentExpansion(segment.tools, toolChoices)?.expanded ?? false, batchClosed.get(segment.key),
+      segment.tools.map(tool => tool.value), live,
     );
     return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
   });

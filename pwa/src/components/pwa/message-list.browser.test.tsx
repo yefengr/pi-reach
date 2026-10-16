@@ -262,7 +262,7 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   expect(working()).toBeNull();
 });
 
-test.each([1280, 390])("Working fallback covers a completed queued head until a running indicator is visible at %ipx", async width => {
+test.each([1280, 390])("Working fallback stays hidden behind group activity while a completed call is queued at %ipx", async width => {
   await page.viewport(width, 844);
   const run = (id: string) => partialItem({ ...toolPartial, partial_id: `tool:${id}`, tool_call_id: id, args: { path: `${id}.ts` } });
   const finish = (id: string) => eventItem({ ...toolEvent, event_id: id, tool_call_id: id, args: { path: `${id}.ts` } });
@@ -270,28 +270,31 @@ test.each([1280, 390])("Working fallback covers a completed queued head until a 
   const working = () => document.querySelector(".pwa-thinking-status");
   expect(working()).toBeNull();
   await update([finish("a"), run("b")]);
-  expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
-  expect(working()?.textContent).toBe("Working…");
+  expect(groupButton().querySelector(".pwa-tool-group-current")?.textContent).toBe("reada.ts");
+  const spinner = groupButton().querySelector(".pwa-tool-spinner");
+  expect(spinner).not.toBeNull();
+  expect(working()).toBeNull();
   await userEvent.click(groupButton());
   expect(document.querySelector(".pwa-tool-card .pwa-tool-spinner")).not.toBeNull();
   await expect.poll(working).toBeNull();
   await userEvent.click(groupButton());
-  // 退出期间仍有被冻结的运行图标，不能只按收起后的组头判断交接。
+  // 组头在展开／收起期间持续表达整组状态，不依赖子行退出时是否仍可见。
   await expect.poll(() => document.querySelector(".pwa-tool-group-details")).toBeNull();
   await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current")?.textContent, { timeout: 4000 }).toBe("readb.ts");
-  await expect.poll(working).toBeNull();
+  expect(groupButton().querySelector(".pwa-tool-spinner")).toBe(spinner);
+  expect(working()).toBeNull();
   await update([run("a"), finish("b")]);
-  expect(groupButton().querySelector(".pwa-tool-status-complete")).not.toBeNull();
-  expect(working()?.textContent).toBe("Working…");
+  expect(groupButton().querySelector(".pwa-tool-spinner")).toBe(spinner);
+  expect(working()).toBeNull();
   await new Promise(resolve => window.setTimeout(resolve, 1000));
   expect(groupButton().querySelector(".pwa-tool-group-current")?.textContent).toBe("readb.ts");
   expect(groupButton().querySelector(".pwa-tool-group-summary")).toBeNull();
-  expect(working()?.textContent).toBe("Working…");
+  expect(working()).toBeNull();
   const after = eventItem({ ...assistantEvent, event_id: "after-tools", blocks: [{ type: "text", text: "After tools" }] });
   // 即使后续正文已出现，较早工具还在运行也不能切摘要。
   await update([run("a"), finish("b"), after]);
   expect(groupButton().querySelector(".pwa-tool-group-current")?.textContent).toBe("readb.ts");
-  expect(working()?.textContent).toBe("Working…");
+  expect(working()).toBeNull();
   await update([finish("a"), finish("b"), after]);
   await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current")).toBeNull();
   expect(groupButton().querySelector(".pwa-spin")).toBeNull();
@@ -1116,7 +1119,7 @@ test("tools join a live group from the first call and an open reader keeps its o
   expect(groupButton().querySelector(".pwa-tool-group-current")?.textContent).toBe("readb.ts");
   expect(groupButton().querySelector(".pwa-tool-group-current")?.hasAttribute("data-enter")).toBe(true);
   await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current")?.textContent, { timeout: 3000 }).toBe("readc.ts");
-  expect(groupButton().getAttribute("aria-label")).toBe("Expand Running read c.ts · Read 3 files");
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand read c.ts · 1 running · Read 3 files");
   // 末段运行中展开不加阅读锁，自动跟随继续。
   await userEvent.click(groupButton());
   expect(reading.at(-1)).toBe(false);
@@ -1240,18 +1243,20 @@ test("the heading queues tools in start order, holds each briefly and never retu
   await update([run("test", "pnpm test"), run("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm test");
   await expect.poll(current, { timeout: 3000 }).toBe("bashpnpm build");
-  // 结束的工具继续停留，图标换成结束状态；较早的 test 仍运行时不能回摘要。
+  // 文字保持已结束的 build，图标继续表示整组；较早的 test 仍运行时不能回摘要。
   await update([run("test", "pnpm test"), finish("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm build");
-  expect(groupButton().querySelector(":scope > .pwa-tool-group-status.pwa-tool-status-complete")).not.toBeNull();
-  expect(statusColor()).toBe(tokenColor("--pwa-complete"));
-  // 停留中的工具及其结束状态也在可访问名称里。
-  expect(groupButton().getAttribute("aria-label")).toBe("Expand bash pnpm build: Complete · Ran 2 commands");
+  expect(groupButton().querySelector(":scope > .pwa-tool-group-status.pwa-tool-status-running")).not.toBeNull();
+  expect(statusColor()).toBe(tokenColor("--pwa-running"));
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand bash pnpm build · 1 running · Ran 2 commands");
   await new Promise(resolve => window.setTimeout(resolve, 1000));
   expect(current()).toBe("bashpnpm build");
   expect(groupButton().querySelector(".pwa-tool-group-summary")).toBeNull();
   await update([finish("test", "pnpm test"), finish("build", "pnpm build")]);
   expect(current()).toBe("bashpnpm build");
+  expect(groupButton().querySelector(":scope > .pwa-tool-group-status.pwa-tool-status-complete")).not.toBeNull();
+  expect(statusColor()).toBe(tokenColor("--pwa-complete"));
+  expect(groupButton().getAttribute("aria-label")).toBe("Expand bash pnpm build: Complete · Ran 2 commands");
   await update([finish("test", "pnpm test"), finish("build", "pnpm build"), runEndItem()]);
   await expect.poll(current, { timeout: 3000 }).toBeNull();
   expect(groupButton().textContent).toBe("Ran 2 commands");

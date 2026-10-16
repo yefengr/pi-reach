@@ -128,9 +128,9 @@ test("summarizes running tools in the group header without mounting raw args", (
   ]);
 
   expect(html).toContain("src/components/pwa/message-list.tsx");
-  expect(html).toContain("Running read");
-  expect(html).toContain("Running bash");
-  expect(html).toContain("Running grep");
+  expect(html).toContain("Expand read src/components/pwa/message-list.tsx · 1 running");
+  expect(html).toContain("Expand bash pnpm   test · 1 running");
+  expect(html).toContain("Expand grep ToolCard · 1 running");
   expect(html).toContain("pnpm   test");
   expect(html).toContain("ToolCard");
   expect(html).not.toContain("&quot;path&quot;");
@@ -281,6 +281,11 @@ describe("turn presentation", () => {
     expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: thinking }], live)).not.toContain("Working…");
     const tool: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "tool:t1", kind: "tool", tool_call_id: "t1", tool: "bash", args: { command: "pnpm test" }, status: "running" };
     expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).not.toContain("Working…");
+    // 首次渲染即有已完成队首和后续运行调用，组级图标也须接管 Working。
+    const mixed = renderList([...events(user("u1", "g1", 1), { ...toolEvent, group_id: "g1" }), { kind: "partial", createdAt: 2, partial: tool }], live);
+    expect(mixed).toContain("pwa-tool-spinner");
+    expect(mixed).toContain("1 running");
+    expect(mixed).not.toContain("Working…");
     // 旧轮、已结束轮的具体指示不能压制新轮兜底。
     const residuals = [{ kind: "partial" as const, createdAt: 2, partial: thinking }, { kind: "partial" as const, createdAt: 2, partial: tool }];
     expect(renderList([...events(user("u1", "g1", 1), user("u2", "g2", 3)), ...residuals], live)).toContain("Working…");

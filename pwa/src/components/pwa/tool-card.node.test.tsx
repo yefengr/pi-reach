@@ -116,7 +116,7 @@ test("collapsed group heading shows the last started tool while it runs", () => 
   expect(html).toContain("pwa-tool-group-current");
   expect(html).toContain('<span title="pnpm test">pnpm test</span>');
   expect(html).not.toContain("pwa-tool-group-summary");
-  expect(html).toContain('aria-label="Expand Running bash pnpm test · Ran 2 commands"');
+  expect(html).toContain('aria-label="Expand bash pnpm test · 1 running · Ran 2 commands"');
   expect(zh.tools.groupRunning("bash pnpm test")).toBe("正在运行 bash pnpm test");
 });
 
@@ -138,12 +138,33 @@ test.each(["running", "complete", "error", "interrupted"] as const)("a newly app
   expect(html).not.toContain("data-enter");
   expect(html).toContain('aria-expanded="false"');
   expect(html).toContain("aria-controls=");
-  const currentLabel = status === "running" ? en.tools.groupRunning("bash pnpm test") : en.tools.statusLabel("bash pnpm test", en.tools.status[status]);
+  const currentLabel = status === "running" ? "bash pnpm test · 1 running" : en.tools.statusLabel("bash pnpm test", en.tools.status[status]);
   expect(html).toContain(`aria-label="${en.tools.groupToggle(false, `${currentLabel} · ${toolGroupSummary([current], en.tools)}`)}"`);
   if (status === "error") {
     expect(html.match(/lucide-circle-alert/g)).toHaveLength(1);
     expect(html).not.toContain("pwa-tool-group-alert");
   }
+});
+
+test.each([false, true])("group activity describes all running calls independently of the queued text (expanded=%s)", expanded => {
+  const finished = doneTool("done", "pnpm lint");
+  const values = [finished, runningTool("test", "pnpm test"), runningTool("build", "pnpm build")];
+  const html = renderCard(<ToolGroupCard values={values} live appended={new Set(values.map(toolIdentity))} expanded={expanded} onExpandedChange={() => {}}>{null}</ToolGroupCard>);
+  expect(html).toContain("pwa-tool-status-running");
+  expect(html).toContain("pwa-tool-spinner");
+  expect(html).toContain("2 running");
+  expect(html).not.toContain("Running bash pnpm lint");
+  expect(html).not.toContain("pwa-tool-status-complete");
+  if (!expanded) expect(html).toContain("bash pnpm lint · 2 running");
+});
+
+test("a failed queued call retains an alert while the group is still running", () => {
+  const values = [groupFailed, runningTool("test", "pnpm test")];
+  const html = renderCard(<ToolGroupCard values={values} live appended={new Set(values.map(toolIdentity))} expanded={false} onExpandedChange={() => {}}>{null}</ToolGroupCard>);
+  expect(html).toContain("pwa-tool-status-running");
+  expect(html).toContain("pwa-tool-group-alert");
+  expect(html.match(/lucide-circle-alert/g)).toHaveLength(1);
+  expect(html).toContain("1 failed");
 });
 
 test("a previous failure retains its right-side alert beside a different current tool", () => {
@@ -163,11 +184,12 @@ test("a heading first rendered mid-run shows the last running tool, and a finish
   expect(finished).not.toContain("lucide-check");
 });
 
-test("expanded or offline groups show only the summary", () => {
+test("expanded groups retain group activity while offline groups show only the summary", () => {
   const expanded = groupHead([runningTool("test", "pnpm test")], { expanded: true });
   expect(expanded).not.toContain("pwa-tool-group-current");
-  expect(expanded).not.toContain("pwa-spin");
-  expect(expanded).not.toContain("pwa-tool-group-status");
+  expect(expanded).toContain("pwa-tool-spinner");
+  expect(expanded).toContain("pwa-tool-group-status");
+  expect(expanded).toContain('aria-label="Collapse 1 running · Ran 1 command"');
   expect(expanded).not.toContain("lucide-check");
   // 离线时 partial 状态未知，不作为当前工具，也不显示旋转图标。
   const offline = groupHead([runningTool("test", "pnpm test")], { live: false });
