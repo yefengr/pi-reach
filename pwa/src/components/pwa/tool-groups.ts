@@ -19,8 +19,8 @@ export function appendedTools(entries: readonly PresentationEntry[], previous: r
 /** 一个工具段：`key` 由组内最早被观察到的工具派生，作为组的身份。 */
 export type ToolSegment = { key: string; tools: ToolEntry[] };
 
-/** 用户对工具组的展开选择；`order` 越大越新，`follow` 表示该次展开不暂停自动跟随。 */
-export type ToolExpansion = { expanded: boolean; order: number; follow: boolean };
+/** 用户对工具组的展开选择；`order` 越大越新。 */
+export type ToolExpansion = { expanded: boolean; order: number };
 
 /** 离线时 partial 无法确认仍在执行，与工具行一致按状态未知处理。 */
 export function effectiveToolStatus(value: ToolValue, live: boolean): ToolStatus {
@@ -102,17 +102,15 @@ export function segmentExpansion(tools: readonly ToolEntry[], choices: ReadonlyM
 }
 
 /** 在组内全部成员上记录一次新的展开选择，顺序号大于已有选择；组之后被拆分时每一段都继承该选择。 */
-export function withExpansion(choices: ReadonlyMap<string, ToolExpansion>, members: readonly string[], expanded: boolean, follow: boolean): ReadonlyMap<string, ToolExpansion> {
+export function withExpansion(choices: ReadonlyMap<string, ToolExpansion>, members: readonly string[], expanded: boolean): ReadonlyMap<string, ToolExpansion> {
   let order = 0;
   for (const choice of choices.values()) order = Math.max(order, choice.order + 1);
   const next = new Map(choices);
-  for (const key of members) next.set(key, { expanded, order, follow: expanded && follow });
+  for (const key of members) next.set(key, { expanded, order });
   return next;
 }
 
 export type TimelineActivity = {
-  /** 工具组是否为末段且仍在运行：位于时间线末尾，Pi 仍在本轮运行或组内仍有工具运行。 */
-  liveTail: (segment: ToolSegment) => boolean;
   /** 通用 Working 的运行边界；实际展示还要让位于本轮可见的具体运行指示。 */
   working: boolean;
   /** 本轮正在输出的条目，排除已结束、旧轮与空闲期间留下的 partial。 */
@@ -129,11 +127,11 @@ export function isPartialEntry(entry: PresentationEntry): boolean {
 
 /**
  * 时间线末尾的运行情况，只按末轮派生。运行时把 partial 排在正式事件之后，未与正式消息对上的旧 partial 会一直留在末尾；
- * 已收到 run_end 或不属于末轮（最后一条正式记录所属的轮）的 partial 视为残留，不算正在输出，也不决定末尾位置。
+ * 已收到 run_end 或不属于末轮（最后一条正式记录所属的轮）的 partial 视为残留，不算正在输出。
  * 末尾是新发送、尚未回传也未进入 Pi 队列的消息时，Pi 空闲期间就已存在的 partial（`idlePartials`）同样视为残留；
  * Pi 正在输出时发送的消息不触发该规则，避免将当前输出误判为残留。
  * 轮次的结束按末轮判断：末尾是新发送的消息时视为新的一轮；末尾是已进入 Pi 队列的消息时仍属当前轮。
- * 末轮已收到 run_end 时不算仍在运行，避免 working 晚于结束事件更新时闪现。末项只决定视觉上的尾部位置。
+ * 末轮已收到 run_end 时不算仍在运行，避免 working 晚于结束事件更新时闪现。
  */
 export function timelineActivity(entries: readonly PresentationEntry[], live: boolean, running: boolean, runEnded: (groupId: string) => boolean, idlePartials: ReadonlySet<string> = new Set()): TimelineActivity {
   const formal = entries.findLast(entry => !isPartialEntry(entry) && entryGroupId(entry) !== undefined);
@@ -146,14 +144,12 @@ export function timelineActivity(entries: readonly PresentationEntry[], live: bo
     return runEnded(groupId) || (turnGroup !== undefined && groupId !== turnGroup) || (freshSend && idlePartials.has(entry.key));
   };
   const current = entries.filter(entry => !residual(entry));
-  const last = current.at(-1);
   const turn = freshSend ? undefined : turnGroup;
   const runActive = live && running && !(turn !== undefined && runEnded(turn));
   const outputting = (entry: PresentationEntry) => entry.kind === "tool"
     ? effectiveToolStatus(entry.value, live) === "running"
     : (entry.kind === "text" || entry.kind === "thinking") && entry.streaming;
   return {
-    liveTail: segment => segment.tools.at(-1) === last && (runActive || segment.tools.some(outputting)),
     working: runActive && current.length > 0,
     currentOutput: entry => runActive && !residual(entry) && outputting(entry),
     currentIndicator: entry => {

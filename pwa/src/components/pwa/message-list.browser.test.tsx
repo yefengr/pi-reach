@@ -412,7 +412,7 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   expect(status.querySelector("span")?.getAttribute("title")).toBe("Second step");
   expect(status.firstElementChild?.matches(".pwa-thinking-icon-slot")).toBe(true);
   expect(status.querySelector("svg")?.getAttribute("width")).toBe("16");
-  expect(getComputedStyle(status).fontSize).toBe("14px");
+  expect(getComputedStyle(status).fontSize).toBe("16px");
   expect(getComputedStyle(status).fontWeight).toBe("600");
   expect(Math.round(status.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-head")!.getBoundingClientRect().left));
   // 动画中的 SVG 包围盒会变化，图标自身仍保留固定布局宽度。
@@ -815,7 +815,7 @@ test("one keyboard action opens live output and partial updates and formalizatio
   expect(document.querySelector(".pwa-tool-card .pwa-tool-status-complete")?.textContent).toBe("");
   await closeReader();
   await expect.poll(() => document.activeElement).toBe(origin);
-  expect(reading.at(-1)).toBe(false);
+  expect(reading.at(-1)).toBe(true);
   await update([eventItem({ ...toolEvent, status: "error", error: "Permission denied" })]);
   expect(document.querySelector(".pwa-tool-card .pwa-tool-status-error")?.textContent).toBe("Error");
   await expect.element(screen.getByText("Permission denied")).not.toBeInTheDocument();
@@ -1015,8 +1015,9 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
         expect(action.querySelector(".pwa-tool-chevron")).toBeNull();
         expect(getComputedStyle(action.querySelector(".pwa-tool-action-copy")!).whiteSpace).toBe("nowrap");
       }
-      for (const label of document.querySelectorAll(".pwa-thinking-title, .pwa-tool-action-copy strong")) {
-        expect(getComputedStyle(label).fontSize).toBe("14px");
+      expect(getComputedStyle(document.querySelector(".pwa-thinking-title")!).fontSize).toBe("16px");
+      for (const label of document.querySelectorAll(".pwa-thinking-title, .pwa-tool-card .pwa-tool-action-copy strong")) {
+        if (label.closest(".pwa-tool-card")) expect(getComputedStyle(label).fontSize).toBe("14px");
         expect(getComputedStyle(label).fontStyle).toBe("normal");
         expect(getComputedStyle(label).fontWeight).toBe("600");
       }
@@ -1056,6 +1057,7 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
   expect(group.textContent).toBe("Read 2 files · Ran 1 command · Wrote 1 file · Edited 1 file");
   expect(group.querySelector(".pwa-tool-status, .lucide-check")).toBeNull();
   expect(group.getAttribute("aria-expanded")).toBe("false");
+  expect(getComputedStyle(group.querySelector(".pwa-tool-group-summary")!).fontSize).toBe("16px");
   group.focus();
   await userEvent.keyboard("{Enter}");
   await expect.poll(() => document.querySelectorAll(".pwa-tool-group .pwa-tool-card").length).toBe(calls.length);
@@ -1072,7 +1074,7 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
       const arrow = group.querySelector(".pwa-tool-chevron")!.getBoundingClientRect();
       const summaryLabel = group.querySelector(".pwa-tool-group-summary")!;
       const summary = summaryLabel.getBoundingClientRect();
-      expect(getComputedStyle(summaryLabel).fontSize).toBe("14px");
+      expect(getComputedStyle(summaryLabel).fontSize).toBe("16px");
       expect(Math.round(arrow.left)).toBeGreaterThanOrEqual(Math.round(summary.right));
       // 亚像素取整可能相差 1px。
       expect(Math.abs(Math.round(arrow.right) - (Math.round(group.getBoundingClientRect().right) - 6))).toBeLessThanOrEqual(1);
@@ -1120,9 +1122,9 @@ test("tools join a live group from the first call and an open reader keeps its o
   expect(groupButton().querySelector(".pwa-tool-group-current")?.hasAttribute("data-enter")).toBe(true);
   await expect.poll(() => groupButton().querySelector(".pwa-tool-group-current")?.textContent, { timeout: 3000 }).toBe("readc.ts");
   expect(groupButton().getAttribute("aria-label")).toBe("Expand read c.ts · 1 running · Read 3 files");
-  // 末段运行中展开不加阅读锁，自动跟随继续。
+  // 运行中末段也暂停自动跟随，与思考展开保持一致。
   await userEvent.click(groupButton());
-  expect(reading.at(-1)).toBe(false);
+  expect(reading.at(-1)).toBe(true);
   expect(groupButton().querySelector(".pwa-tool-group-current")).toBeNull();
   expect(groupButton().textContent).toBe("Read 3 files");
   const origin = toolButton();
@@ -1135,7 +1137,7 @@ test("tools join a live group from the first call and an open reader keeps its o
   await expect.element(screen.getByText("First output")).toBeVisible();
   expect(reading.at(-1)).toBe(true);
   await closeReader("history");
-  await expect.poll(() => reading.at(-1)).toBe(false);
+  await expect.poll(() => reading.at(-1)).toBe(true);
   await expect.poll(() => document.activeElement).toBe(origin);
   // 已结束的组展开照旧暂停自动跟随。
   await userEvent.click(groupButton());
@@ -1184,6 +1186,8 @@ test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width,
       }
       expect(copy.querySelector("svg")).toBeNull();
       const parameter = copy.querySelector<HTMLElement>(".pwa-tool-group-current > span")!;
+      expect(getComputedStyle(copy.querySelector("strong")!).fontSize).toBe("16px");
+      expect(getComputedStyle(parameter).fontSize).toBe("16px");
       expect(getComputedStyle(parameter).textOverflow).toBe("ellipsis");
       expect(parameter.scrollWidth).toBeGreaterThan(parameter.clientWidth);
     };
