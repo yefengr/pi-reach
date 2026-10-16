@@ -34,6 +34,7 @@ export const RELAY_CONNECTION_TIMEOUT_MS = 10_000;
 export class RelayClient {
   private socket: WebSocketLike | null = null;
   private authenticated = false;
+  private authenticationPhase: "challenge" | "signing" | "confirmation" = "challenge";
   private connectPromise: Promise<void> | null = null;
   private connectReject: ((reason?: unknown) => void) | null = null;
   private connectionGeneration = 0;
@@ -121,22 +122,34 @@ export class RelayClient {
     try { socket.close(code === 1002 ? APPLICATION_ERROR_CLOSE_CODE : code, truncateUtf8(reason, 123)); } catch (error) { this.emit("error", error instanceof Error ? error : new Error(String(error))); } finally { this.setState("closed"); }
   }
   private async handleMessage(socket: WebSocketLike, generation: number, raw: unknown, resolve: () => void, reject: (reason?: unknown) => void): Promise<void> {
+    const phase = this.authenticationPhase;
     const text = await toText(raw);
     if (text === undefined || this.socket !== socket || this.connectionGeneration !== generation) return;
     if (!this.authenticated) {
-      const challenge = decodeChallenge(text);
-      if (!challenge) return this.failConnection(socket, new Error("Expected Relay challenge"), reject);
-      try {
-        const signature = await signChallenge(this.options.identity.privateKey, challenge.nonce);
-        if (this.socket !== socket || this.connectionGeneration !== generation) return;
-        socket.send(JSON.stringify({ type: "auth", sig: signature }));
-        if (this.socket !== socket || this.connectionGeneration !== generation) return;
+      if (phase === "confirmation" && this.authenticationPhase === "confirmation") {
+        const frame = decodeRelayFrame(parseJson(text));
+        if (frame?.kind !== "control" || frame.frame.type !== "relay_info") return this.failConnection(socket, new Error("Expected Relay registration confirmation"), reject);
         this.clearConnectionTimer();
         this.authenticated = true;
         this.setState("open");
         this.emit("authenticated");
         resolve();
-      } catch (error) { this.failConnection(socket, error, reject); }
+        this.emit("control", frame.frame);
+        return;
+      }
+      if (phase !== "challenge" || this.authenticationPhase !== "challenge") return this.failConnection(socket, new Error("Unexpected Relay authentication message"), reject);
+      const challenge = decodeChallenge(text);
+      if (!challenge) return this.failConnection(socket, new Error("Expected Relay challenge"), reject);
+      this.authenticationPhase = "signing";
+      try {
+        const signature = await signChallenge(this.options.identity.privateKey, challenge.nonce);
+        if (this.socket !== socket || this.connectionGeneration !== generation) return;
+        socket.send(JSON.stringify({ type: "auth", sig: signature }));
+        if (this.socket !== socket || this.connectionGeneration !== generation) return;
+        this.authenticationPhase = "confirmation";
+      } catch (error) {
+        if (this.socket === socket && this.connectionGeneration === generation) this.failConnection(socket, error, reject);
+      }
       return;
     }
     const frame = decodeRelayFrame(parseJson(text));
@@ -157,6 +170,7 @@ export class RelayClient {
     if (socket !== null && this.socket !== socket) return;
     this.clearConnectionTimer();
     this.authenticated = false;
+    this.authenticationPhase = "challenge";
     this.socket = null;
   }
   private clearConnectionTimer(): void {
