@@ -31,7 +31,7 @@ function Harness() {
   return <PwaUiProvider><PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout
     navigation={navigation} titleBar={{ title: "Swipe Pi", showTitle: true }} historyMode={false} toast={null}
     settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings}
-    renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl={device.relayUrl} defaultRelayUrl={device.relayUrl} relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => {}} onResetLayout={() => {}} />}
+    renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage onShowShortcuts={onShowShortcuts} relayUrl={device.relayUrl} defaultRelayUrl={device.relayUrl} relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => {}} onResetLayout={() => {}} />}
     overlays={null}
     closeBackgroundOverlay={(close) => close()}
   ><p>Workspace reading content</p></PwaWorkspaceLayout></PwaAppShell></PwaUiProvider>;

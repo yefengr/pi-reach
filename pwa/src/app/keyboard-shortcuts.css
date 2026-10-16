@@ -1,0 +1,52 @@
+.pwa-keyboard-dialog {
+  max-width: 100%;
+  border: 1px solid var(--pwa-line);
+  border-radius: var(--pwa-radius-lg);
+  background: var(--pwa-surface);
+  color: var(--pwa-ink);
+  box-shadow: var(--pwa-shadow-modal);
+}
+
+.pwa-keyboard-title {
+  font-size: var(--pwa-text-title);
+  font-weight: var(--pwa-weight-strong);
+  line-height: var(--pwa-leading-ui);
+}
+
+.pwa-keyboard-note {
+  margin: 0;
+  color: var(--pwa-secondary);
+  font-size: var(--pwa-text-list);
+  line-height: var(--pwa-leading-body);
+}
+
+.pwa-keyboard-list {
+  display: grid;
+  gap: var(--pwa-space-md);
+  margin: var(--pwa-space-lg) 0;
+  font-size: var(--pwa-text-list);
+  line-height: var(--pwa-leading-ui);
+}
+
+.pwa-keyboard-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--pwa-space-md);
+}
+
+.pwa-keyboard-list dd { margin: 0; }
+.pwa-keyboard-list kbd { font-family: var(--pwa-font-mono); white-space: nowrap; }
+.pwa-keyboard-setting .mantine-Switch-label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--pwa-ink);
+  font-size: var(--pwa-text-body);
+}
+.pwa-keyboard-setting .mantine-Switch-track { border-color: var(--pwa-control-line); }
+.pwa-keyboard-setting .mantine-Switch-description {
+  color: var(--pwa-secondary);
+  font-size: var(--pwa-text-meta);
+  line-height: var(--pwa-leading-ui);
+}

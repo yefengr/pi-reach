@@ -1,9 +1,10 @@
 import { useRef, useState, type Ref } from "react";
-import { Button, Radio, Stack, TextInput } from "@mantine/core";
+import { Button, Radio, Stack, Switch, TextInput } from "@mantine/core";
 import { ArrowLeft, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2 } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
 import { CopyButton } from "@/components/pwa/copy-button";
+import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
 import { version as pwaVersion } from "../../../package.json";
 
@@ -21,6 +22,7 @@ type SettingsPageProps = {
   backLabel: string;
   onClearData: () => void;
   onResetLayout: () => void;
+  onShowShortcuts: (origin: HTMLButtonElement) => void;
   titleRef?: Ref<HTMLHeadingElement>;
 };
 
@@ -28,12 +30,13 @@ type SettingsPageProps = {
  * 独立设置页：不保留工作区侧栏，内容最大宽 640，分区间距 32。
  * 移动端返回箭头与标题同一行；桌面返回为带文字的按钮，标题在其下方。
  */
-export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, titleRef }: SettingsPageProps) {
+export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: SettingsPageProps) {
   const [value, setValue] = useState(relayUrl);
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
   const { t, preference } = useI18n();
+  const [enterSends, setEnterSends] = useEnterSends();
   const s = t.settings;
   const versionText = (version: string | null, status: ConnectionViewState) => {
     if (status === "online") return version ?? s.versionUnavailable;
@@ -85,6 +88,14 @@ export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relaySta
             <Radio className="pwa-appearance-option" value="en" label={<span className="pwa-appearance-copy"><Languages size={20} /><span><strong lang="en">{s.english}</strong><small>{s.englishHint}</small></span></span>} />
           </Stack>
         </Radio.Group>
+      </section>
+      <section className="pwa-settings-section" aria-labelledby="pwa-keyboard-heading">
+        <h2 id="pwa-keyboard-heading" className="pwa-settings-section-title">{s.keyboard}</h2>
+        <p className="pwa-settings-section-description">{s.keyboardHint}</p>
+        <div className="pwa-settings-actions">
+          <Switch className="pwa-keyboard-setting" size="md" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
+          <Button variant="default" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>{t.shortcuts.title}</Button>
+        </div>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-connection-heading">
         <h2 id="pwa-connection-heading" className="pwa-settings-section-title">{s.connection}</h2>

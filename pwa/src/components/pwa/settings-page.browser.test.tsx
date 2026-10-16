@@ -30,10 +30,11 @@ function SettingsHarness({ events = [], onSave = async () => {}, backLabel = "Ba
     backLabel={backLabel}
     onClearData={() => events.push("clear")}
     onResetLayout={() => events.push("reset")}
+    onShowShortcuts={() => events.push("shortcuts")}
   /></div></div>;
 }
 
-afterEach(async () => { vi.restoreAllMocks(); await page.viewport(1280, 900); });
+afterEach(async () => { vi.restoreAllMocks(); window.localStorage.removeItem("pi-reach-enter-sends"); await page.viewport(1280, 900); });
 
 test("forwards the raw relay value and prevents duplicate saves until its deferred callback settles", async () => {
   const savedValues: string[] = [];
@@ -82,7 +83,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   expect(inner.getBoundingClientRect().width).toBeLessThanOrEqual(640);
   expect(view.scrollWidth).toBeLessThanOrEqual(view.clientWidth);
   const sections = [...document.querySelectorAll<HTMLElement>(".pwa-settings-section")];
-  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Language", "Connection", "Browser data", "About"]);
+  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Language", "Keyboard", "Connection", "Browser data", "About"]);
   expect(sections[1]!.getBoundingClientRect().top - sections[0]!.getBoundingClientRect().bottom).toBeCloseTo(32, 0);
   const back = screen.getByRole("button", { name: "Back to workspace" }).element();
   const title = screen.getByRole("heading", { level: 1, name: "Settings" }).element();
@@ -254,6 +255,27 @@ test("the settings layer insets side safe areas once around the 640px column", a
     document.documentElement.style.removeProperty("--pwa-safe-left");
     document.documentElement.style.removeProperty("--pwa-safe-right");
   }
+});
+
+test("keyboard settings save the Enter preference immediately and expose the help action", async () => {
+  const events: string[] = [];
+  let screen = await renderPwa(<SettingsHarness events={events} />);
+  const setting = screen.getByRole("switch", { name: "Enter sends messages" });
+  await expect.element(setting).toBeChecked();
+  await setting.click();
+  await expect.element(setting).not.toBeChecked();
+  expect(window.localStorage.getItem("pi-reach-enter-sends")).toBe("false");
+  await screen.getByRole("button", { name: "Keyboard shortcuts" }).click();
+  expect(events).toEqual(["shortcuts"]);
+  await screen.unmount();
+  screen = await renderPwa(<SettingsHarness />);
+  await expect.element(screen.getByRole("switch", { name: "Enter sends messages" })).not.toBeChecked();
+});
+
+test("invalid stored keyboard preferences fall back to Enter sending", async () => {
+  window.localStorage.setItem("pi-reach-enter-sends", "invalid");
+  const screen = await renderPwa(<SettingsHarness />);
+  await expect.element(screen.getByRole("switch", { name: "Enter sends messages" })).toBeChecked();
 });
 
 test("the relay form keeps 8px from label to input and 16px before the primary action", async () => {

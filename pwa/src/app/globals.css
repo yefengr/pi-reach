@@ -3,6 +3,7 @@
 @import "./workspace-navigation.css";
 @import "./workspace-shell.css";
 @import "./queued-messages.css";
+@import "./keyboard-shortcuts.css";
 
 /* Tailwind 只提供 preflight 与入口；业务组件不使用其间距、颜色和圆角工具类，颜色一律引用 --pwa-* token。 */
 @theme inline {

@@ -14,6 +14,8 @@ import { useNavigationDrag } from "@/components/pwa/use-navigation-drag";
 import { useSwipe } from "@/components/pwa/use-swipe";
 import type { SettingsOrigin, SettingsRoute } from "@/lib/pwa/settings-route";
 import { useI18n } from "@/lib/i18n";
+import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
+import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, isKeyboardInput, shortcutLabel, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
 
 const MOBILE_QUERY = "(max-width: 767.98px)";
 
@@ -33,7 +35,7 @@ type PwaWorkspaceLayoutProps = {
   onOpenSettings: (origin: SettingsOrigin) => void;
   onSettingsBack: () => void;
   /** 设置页内容；返回按钮文案由来源决定，故以函数接收。 */
-  renderSettings: (props: { backLabel: string; titleRef: RefObject<HTMLHeadingElement | null> }) => ReactNode;
+  renderSettings: (props: { backLabel: string; titleRef: RefObject<HTMLHeadingElement | null>; onShowShortcuts: (origin?: HTMLElement) => void }) => ReactNode;
   overlays: ReactNode;
   closeBackgroundOverlay: (close: () => void) => void;
 };
@@ -68,6 +70,8 @@ export function PwaWorkspaceLayout({
   // 设置页在进入与返回转场期间保持挂载；返回转场结束后卸载。
   const [settingsMounted, setSettingsMounted] = useState(settingsRoute.open);
   const [transitioning, setTransitioning] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [shortcutsRouteChange, setShortcutsRouteChange] = useState(settingsRoute.change);
   const [seenChange, setSeenChange] = useState(settingsRoute.change);
   const [sheetInstant, setSheetInstant] = useState(false);
   const [sheetRestore, setSheetRestore] = useState<{ scrollTop: number } | null>(null);
@@ -130,6 +134,8 @@ export function PwaWorkspaceLayout({
   });
   if (seenChange !== settingsRoute.change) {
     setSeenChange(settingsRoute.change);
+    // 帮助只属于打开它的页面；路由交接同时释放焦点陷阱。
+    setShortcutsOpen(false);
     if (settingsRoute.open) {
       setSettingsMounted(true);
       // 重新进入即结束前次恢复请求；连续反向即使值相同，也必须形成新的恢复边界。
@@ -238,7 +244,7 @@ export function PwaWorkspaceLayout({
       setSheetOpen(false);
     },
   };
-  const toggleSidebar = () => {
+  const toggleSidebar = useCallback(() => {
     if (!sidebarCollapsed) {
       const activeElement = document.activeElement;
       const navigationOwnsFocus = activeElement instanceof HTMLElement && (
@@ -248,7 +254,37 @@ export function PwaWorkspaceLayout({
       if (navigationOwnsFocus) sidebarToggleRef.current?.focus({ preventScroll: true });
     }
     setSidebarCollapsed((value) => !value);
-  };
+  }, [sidebarCollapsed, setSidebarCollapsed]);
+  const showShortcuts = useCallback((origin?: HTMLElement) => {
+    // 指针点击不一定聚焦按钮，先建立实际来源，再由 Mantine 记录与还焦。
+    if (origin && focusable(origin)) origin.focus({ preventScroll: true });
+    // 快捷键入口沿用当前有效焦点；从页面根发出时仍建立后备来源。
+    const activeElement = document.activeElement;
+    if (activeElement === document.body || activeElement === document.documentElement
+      || !focusable(activeElement instanceof HTMLElement ? activeElement : null)) {
+      const fallback = settingsRoute.open ? settingsTitleRef.current : sidebarToggleRef.current;
+      fallback?.focus({ preventScroll: true });
+    }
+    setShortcutsRouteChange(settingsRoute.change);
+    setShortcutsOpen(true);
+  }, [settingsRoute.change, settingsRoute.open]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const root = rootRef.current;
+      if (!root || transitioning || workspaceDrag.dragging || !window.matchMedia(DESKTOP_KEYBOARD_QUERY).matches
+        || isKeyboardInput(event.target) || hasKeyboardOverlay(root)) return;
+      if (event.target instanceof Element && event.target !== document.body && !root.contains(event.target)) return;
+      const action = workspaceShortcut(event);
+      if (!action || (settingsRoute.open && action !== "showHelp")) return;
+      event.preventDefault();
+      if (action === "toggleSidebar") toggleSidebar();
+      else if (action === "openSettings") onOpenSettings({ kind: "workspace" });
+      else showShortcuts();
+    };
+    document.addEventListener("keydown", handleShortcut);
+    return () => document.removeEventListener("keydown", handleShortcut);
+  }, [onOpenSettings, settingsRoute.open, showShortcuts, toggleSidebar, transitioning, workspaceDrag.dragging]);
   const toggleLabel = sidebarCollapsed ? t.navigation.expandSidebar : t.navigation.collapseSidebar;
 
   const backLabel = settingsRoute.origin?.kind === "navigation" ? t.settings.backToNavigation : t.settings.backToWorkspace;
@@ -259,7 +295,7 @@ export function PwaWorkspaceLayout({
     <div className="pwa-layout">
       <div id="pwa-desktop-navigation" className="pwa-desktop-navigation" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed || undefined}><PwaDesktopNavigation navigation={desktopNavigation} collapsed={sidebarCollapsed} /></div>
       {/* 收展入口展开时在侧栏品牌行右端，收起后在会话标题区左端。 */}
-      <ActionIcon ref={sidebarToggleRef} className="pwa-sidebar-toggle" type="button" aria-label={toggleLabel} title={toggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="pwa-desktop-navigation" onPointerDown={(event) => { if (event.pointerType === "mouse") event.preventDefault(); }} onClick={toggleSidebar}>
+      <ActionIcon ref={sidebarToggleRef} className="pwa-sidebar-toggle" type="button" aria-label={toggleLabel} title={`${toggleLabel} (${shortcutLabel("toggleSidebar")})`} aria-keyshortcuts={shortcutLabel("toggleSidebar").replaceAll(" ", "").replace("⌘", "Meta").replace("Ctrl", "Control")} aria-expanded={!sidebarCollapsed} aria-controls="pwa-desktop-navigation" onPointerDown={(event) => { if (event.pointerType === "mouse") event.preventDefault(); }} onClick={toggleSidebar}>
         {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
       </ActionIcon>
       <main ref={setMainElement} className="pwa-main">
@@ -276,7 +312,8 @@ export function PwaWorkspaceLayout({
     {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={navigationDrag.gesture === "rollback" ? null : sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={onNavigationExitTransitionEnd} /> : null}
     </div>
     {settingsMounted ? <div ref={scrimRef} className="pwa-page-scrim" aria-hidden="true" /> : null}
-    {settingsMounted ? <div ref={setSettingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef })}</div> : null}
+    {settingsMounted ? <div ref={setSettingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef, onShowShortcuts: showShortcuts })}</div> : null}
     {overlays}
+    <KeyboardShortcutsDialog opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} returnFocus={shortcutsRouteChange === settingsRoute.change} />
   </div>;
 }
