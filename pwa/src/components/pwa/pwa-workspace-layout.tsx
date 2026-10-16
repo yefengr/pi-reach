@@ -71,6 +71,7 @@ export function PwaWorkspaceLayout({
   const [settingsMounted, setSettingsMounted] = useState(settingsRoute.open);
   const [transitioning, setTransitioning] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [shortcutsRouteChange, setShortcutsRouteChange] = useState(settingsRoute.change);
   const [seenChange, setSeenChange] = useState(settingsRoute.change);
   const [sheetInstant, setSheetInstant] = useState(false);
   const [sheetRestore, setSheetRestore] = useState<{ scrollTop: number } | null>(null);
@@ -133,6 +134,8 @@ export function PwaWorkspaceLayout({
   });
   if (seenChange !== settingsRoute.change) {
     setSeenChange(settingsRoute.change);
+    // 帮助只属于打开它的页面；路由交接同时释放焦点陷阱。
+    setShortcutsOpen(false);
     if (settingsRoute.open) {
       setSettingsMounted(true);
       // 重新进入即结束前次恢复请求；连续反向即使值相同，也必须形成新的恢复边界。
@@ -262,8 +265,9 @@ export function PwaWorkspaceLayout({
       const fallback = settingsRoute.open ? settingsTitleRef.current : sidebarToggleRef.current;
       fallback?.focus({ preventScroll: true });
     }
+    setShortcutsRouteChange(settingsRoute.change);
     setShortcutsOpen(true);
-  }, [settingsRoute.open]);
+  }, [settingsRoute.change, settingsRoute.open]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -310,6 +314,6 @@ export function PwaWorkspaceLayout({
     {settingsMounted ? <div ref={scrimRef} className="pwa-page-scrim" aria-hidden="true" /> : null}
     {settingsMounted ? <div ref={setSettingsRef} className="pwa-settings-view" inert={!settingsRoute.open || undefined} role="main" aria-labelledby="pwa-settings-title">{renderSettings({ backLabel, titleRef: settingsTitleRef, onShowShortcuts: showShortcuts })}</div> : null}
     {overlays}
-    <KeyboardShortcutsDialog opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+    <KeyboardShortcutsDialog opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} returnFocus={shortcutsRouteChange === settingsRoute.change} />
   </div>;
 }

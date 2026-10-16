@@ -1367,6 +1367,58 @@ test("keyboard shortcuts use the settings route and the clickable help entry sha
 });
 
 test.each([
+  { width: 1280, native: false, reduced: false },
+  { width: 390, native: false, reduced: false },
+  { width: 1280, native: true, reduced: false },
+  { width: 390, native: true, reduced: false },
+  { width: 1280, native: false, reduced: true },
+  { width: 390, native: false, reduced: true },
+])("keyboard shortcuts close help on settings back and restore route focus ($width px, native=$native, reduced=$reduced)", async ({ width, native, reduced }) => {
+  await page.viewport(width, 844);
+  if (reduced) await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  const screen = await renderLayout({ events: [] });
+  try {
+    if (width < 768) await screen.getByRole("button", { name: "Open navigation" }).click();
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+    const settingsState = window.history.state;
+    const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    await helpButton.click();
+    const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+    await expect.element(help).toBeVisible();
+    await expect.poll(() => help.element().contains(document.activeElement)).toBe(true);
+
+    if (native) nativePopstate(null);
+    else window.history.back();
+    await expect.poll(() => window.history.state?.piReachSettings).toBeUndefined();
+    await expect.element(help).not.toBeInTheDocument();
+    await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
+    const entry = screen.getByRole("button", { name: "Open settings" });
+    await expect.element(entry).toHaveFocus();
+    expect(entry.element().closest('[inert], [aria-hidden="true"]')).toBeNull();
+    // 返回后的 Tab 必须仍在当前页面／导航中工作，不能被旧帮助的焦点陷阱截走。
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.closest(".pwa-workspace-view")).not.toBeNull();
+
+    if (native) nativePopstate(settingsState);
+    else window.history.forward();
+    await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toHaveFocus();
+    await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+    await expect.element(help).not.toBeInTheDocument();
+    // 再次打开后，普通 Escape 关闭仍返回本次有效入口。
+    await helpButton.click();
+    await expect.element(help).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(help).not.toBeInTheDocument();
+    await expect.element(helpButton).toHaveFocus();
+  } finally {
+    await screen.unmount();
+    if (reduced) await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+  }
+});
+
+test.each([
   { width: 1280, prior: "body" },
   { width: 1280, prior: "control" },
   { width: 390, prior: "body" },

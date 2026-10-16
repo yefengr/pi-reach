@@ -7,9 +7,11 @@ const ACTIONS: readonly ShortcutAction[] = ["send", "sendAlternative", "newline"
 type KeyboardShortcutsDialogProps = {
   opened: boolean;
   onClose: () => void;
+  /** 路由切换时由目标页面接管焦点，不返回旧页面的来源。 */
+  returnFocus: boolean;
 };
 
-export function KeyboardShortcutsDialog({ opened, onClose }: KeyboardShortcutsDialogProps) {
+export function KeyboardShortcutsDialog({ opened, onClose, returnFocus }: KeyboardShortcutsDialogProps) {
   const { t } = useI18n();
   const [enterSends] = useEnterSends();
   return <Modal
@@ -19,7 +21,7 @@ export function KeyboardShortcutsDialog({ opened, onClose }: KeyboardShortcutsDi
     size={480}
     portalProps={{ target: ".pwa-root" }}
     zIndex={310}
-    returnFocus
+    returnFocus={returnFocus}
     inert={!opened}
     closeButtonProps={{ "aria-label": t.common.close, title: t.common.close }}
     classNames={{ content: "pwa-keyboard-dialog", title: "pwa-keyboard-title", close: "pwa-icon-button" }}
