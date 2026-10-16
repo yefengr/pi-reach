@@ -358,8 +358,8 @@ export const en = {
     collapseThinking: "Collapse thinking",
     expandThinking: "Expand thinking",
     thinking: "Thinking…",
-    thinkingTrace: "Thought…",
-    thoughtProcess: "Thought process",
+    thinkingTrace: "Thinking",
+    thoughtProcess: "Thinking",
   },
   tools: {
     status: { running: "Running", complete: "Complete", error: "Error", interrupted: "Interrupted", unknown: "Status unknown" },

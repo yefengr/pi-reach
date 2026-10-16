@@ -5,8 +5,8 @@ export const THINKING_SUMMARY_WINDOW_MS = 120;
 
 /** 只合并标题展示；正文与增量解析始终按原节奏推进。 */
 export function useThinkingHeading(parsed: ThinkingTextResult, streaming: boolean, epoch?: object): string | undefined {
-  // 单个星号也可能是尚未到齐的加粗起始符，不能先作为首行摘要露出。
-  const summary = parsed.summary === "*" || parsed.summary?.startsWith("**") ? undefined : parsed.summary;
+  // 仅隐藏仍可能是整行加粗标题的片段；行内加粗正文继续使用首行摘要。
+  const summary = parsed.summaryIsHeadingCandidate ? undefined : parsed.summary;
   const [snapshot, setSnapshot] = useState({ epoch, streaming, title: parsed.latestTitle, summary });
   let current = snapshot;
   if (snapshot.epoch !== epoch || snapshot.streaming !== streaming) {

@@ -71,7 +71,7 @@
 .pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
-/* 思考行：进行中显示旋转图标与最新完整标题，无标题时用合并更新的首行摘要或「思考中…」；完成态沿用最新标题或「Thought process」，图标淡出后标题滑回左缘，箭头列不动。空历史仅显示静态「思考…」，不可展开。
+/* 思考行：进行中显示旋转图标与最新完整标题，无标题时用合并更新的首行摘要或「Thinking…」；完成态沿用最新标题或「Thinking」，图标淡出后标题滑回左缘，箭头列不动。空历史仅显示静态「Thinking」，不可展开。
    以 14px 文字区分过程与正文，展开内容使用次级文字色，不带引用竖线与缩进。 */
 .pwa-thinking { color: var(--pwa-secondary); }
 .pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }

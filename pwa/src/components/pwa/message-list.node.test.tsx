@@ -144,7 +144,7 @@ test("keeps streaming thinking collapsed independently of the tools", () => {
   };
   const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
 
-  expect(html).not.toContain("Thought process");
+  expect(html).not.toContain('title="Thinking"');
   expect(html).toContain('<span class="pwa-sr-only" role="status"></span>');
   expect(html).toContain('<span title="Inspecting the request.">Inspecting the request.</span>');
   expect(html.indexOf("pwa-spin")).toBeLessThan(html.indexOf('title="Inspecting the request."'));
@@ -326,8 +326,9 @@ test.each([
   };
   const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
   expect(html).toContain("Visible answer.");
-  expect(html.includes("Thought process")).toBe(visible);
-  expect(html.includes("Thought…")).toBe(!visible);
+  expect(html).toContain(">Thinking<");
+  expect(html.includes('title="Thinking"')).toBe(visible);
+  expect(html.includes("pwa-thinking-trace")).toBe(!visible);
   expect(html.includes('aria-expanded="false"')).toBe(visible);
   expect(html).not.toContain("Thinking…");
   expect(html).not.toContain("pwa-thinking-live");
@@ -356,12 +357,12 @@ test("retains empty-only historical thinking without losing a trailing gap", () 
   const html = renderList([{ kind: "event", event: first }, { kind: "event", event: duplicate }], {
     isLive: false, running: false, gapBefore: new Set(["duplicate-empty"]),
   });
-  expect(html.match(/>Thought…</g)).toHaveLength(1);
+  expect(html.match(/>Thinking</g)).toHaveLength(1);
   expect(html).not.toContain("Expand thinking");
   expect(html).not.toContain("No records to display.");
   const gap = "Some records in between";
   expect(html.includes(gap)).toBe(true);
-  expect(html.indexOf(">Thought…<")).toBeLessThan(html.indexOf(gap));
+  expect(html.indexOf(">Thinking<")).toBeLessThan(html.indexOf(gap));
 });
 
 describe("thinkingSummary", () => {

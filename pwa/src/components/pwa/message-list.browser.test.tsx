@@ -360,7 +360,7 @@ test("a thinking row is titled by its latest bold heading and falls back to the 
   const titled: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text: "**Earlier stage**\n**Checking the group rules**\nInspecting the request." }, { type: "text", text: "The final answer." }] };
   const screen = await renderMessageList([eventItem(titled)]);
   await expect.element(screen.getByText("Checking the group rules")).toBeVisible();
-  await expect.element(screen.getByText("Thought process")).not.toBeInTheDocument();
+  await expect.element(screen.getByText("Thinking", { exact: true })).not.toBeInTheDocument();
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
 });
 
@@ -376,7 +376,7 @@ test.each([1280, 390])("empty thinking settles into one static historical trace 
   expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Thinking…");
   await update([eventItem(empty), eventItem(later)], { running: true, isLive: true });
   const trace = document.querySelector<HTMLElement>(".pwa-thinking-trace")!;
-  await expect.element(page.elementLocator(trace)).toHaveTextContent("Thought…");
+  await expect.element(page.elementLocator(trace)).toHaveTextContent("Thinking");
   expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
   expect(trace.querySelector("button, svg, [role='status'], [aria-expanded], .pwa-collapse")).toBeNull();
   // 历史痕迹不是运行指示，不能压制本轮 Working 兜底。
@@ -438,6 +438,46 @@ test("thinking headings never show Markdown fragments and replace complete title
   expect(document.querySelector(".pwa-thinking .pwa-spin, .pwa-thinking [role='status']")).toBeNull();
 });
 
+test.each([
+  [true, "：接着说明"], [true, " 接着说明"], [false, "：接着说明"], [false, " 接着说明"],
+] as const)("thinking recovers inline bold summaries after streamed heading fragments (trusted epoch: %s, suffix: %s)", async (trusted, suffix) => {
+  let update!: (text: string) => void;
+  const epoch = trusted ? {} : undefined;
+  function Harness() {
+    const [text, setText] = useState("");
+    update = next => flushSync(() => setText(next));
+    return <ThinkingContent text={text} thinkingTextEpoch={epoch} streaming expanded />;
+  }
+  await renderPwa(<Harness />);
+  const title = () => document.querySelector(".pwa-thinking-title > span")?.textContent;
+  const advance = (ms: number) => flushSync(() => vi.advanceTimersByTime(ms));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    for (const fragment of ["*", "**", "**检查*", "**检查**"]) {
+      update(fragment);
+      advance(THINKING_SUMMARY_WINDOW_MS);
+      expect(title()).toBe(fragment === "**检查**" ? "检查" : "Thinking…");
+    }
+    const summary = `**检查**${suffix}`;
+    update(summary);
+    expect(title()).toBe("Thinking…");
+    expect(document.querySelector(".pwa-text-plain")?.textContent).toBe(summary);
+    advance(THINKING_SUMMARY_WINDOW_MS - 1);
+    expect(title()).toBe("Thinking…");
+    advance(1);
+    expect(title()).toBe(summary);
+    const body = `${summary}\n${"Long body ".repeat(60)}`;
+    update(body);
+    advance(THINKING_SUMMARY_WINDOW_MS);
+    expect(title()).toBe(summary);
+    update(`${body}\n**Current**`);
+    expect(title()).toBe("Current");
+    update(`${body}\n**Current**\n**Unfinished`);
+    advance(THINKING_SUMMARY_WINDOW_MS * 2);
+    expect(title()).toBe("Current");
+  } finally { vi.useRealTimers(); }
+});
+
 test.each([true, false])("thinking clears an invalidated provisional heading (trusted epoch: %s)", async trusted => {
   let update!: (text: string) => void;
   const epoch = trusted ? {} : undefined;
@@ -449,15 +489,17 @@ test.each([true, false])("thinking clears an invalidated provisional heading (tr
   await renderPwa(<Harness />);
   const title = () => document.querySelector(".pwa-thinking-title > span")?.textContent;
   expect(title()).toBe("Title");
-  // 末行尚无换行；追加普通文字后不再是整行加粗标题。
-  update("**Title** continuation");
-  expect(title()).toBe("Thinking…");
-  update("**Title** continuation\n**Current**");
-  expect(title()).toBe("Current");
-  if (trusted) return;
-  // 未携带 epoch 的独立消费者也能替换正文，不能锁存上一份文本的标题。
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
+    // 末行尚无换行；追加普通文字后不再是整行加粗标题，窗口到期后回到真实摘要。
+    update("**Title** continuation");
+    expect(title()).toBe("Thinking…");
+    flushSync(() => vi.advanceTimersByTime(THINKING_SUMMARY_WINDOW_MS));
+    expect(title()).toBe("**Title** continuation");
+    update("**Title** continuation\n**Current**");
+    expect(title()).toBe("Current");
+    if (trusted) return;
+    // 未携带 epoch 的独立消费者也能替换正文，不能锁存上一份文本的标题。
     update("Fresh summary");
     expect(title()).not.toBe("Current");
     flushSync(() => vi.advanceTimersByTime(THINKING_SUMMARY_WINDOW_MS));
@@ -505,9 +547,9 @@ test("thinking summary uses a bounded window while body updates immediately and 
     update("No heading", replacementEpoch);
     update("No heading pending", replacementEpoch);
     update("No heading pending", replacementEpoch, false);
-    expect(title()).toBe("Thought process");
+    expect(title()).toBe("Thinking");
     await advance(THINKING_SUMMARY_WINDOW_MS * 2);
-    expect(title()).toBe("Thought process");
+    expect(title()).toBe("Thinking");
     const unmountEpoch = {};
     update("Unmount", unmountEpoch);
     update("Unmount pending", unmountEpoch);
