@@ -59,6 +59,8 @@ export function useRelayConnection({
     relayRef.current = relay;
     let connectRelay: (token: number) => void = () => undefined;
     let probeTimer: ReturnType<typeof setTimeout> | null = null;
+    let replacingConnection = false;
+    let foregroundRecoveryPending = false;
     const cancelProbe = () => {
       if (probeTimer) clearTimeout(probeTimer);
       probeTimer = null;
@@ -102,6 +104,7 @@ export function useRelayConnection({
       reportRelay("connecting");
       void relay.connect().then(() => {
         if (cancelled || relayRef.current !== relay || !onlineRef.current || token !== activeToken) return;
+        foregroundRecoveryPending = false;
         activeToken = controller.beginConnection();
         retryAttemptRef.current = 0;
         setRetryAttempt(0);
@@ -112,23 +115,34 @@ export function useRelayConnection({
         setRelayStatus("online");
         setGeneration((current) => current + 1);
       }).catch(() => {
-        if (cancelled || relayRef.current !== relay) return;
+        if (cancelled || relayRef.current !== relay || !onlineRef.current || token !== activeToken) return;
+        foregroundRecoveryPending = false;
         setConnectionFeedback("relay");
         scheduleReconnect("connect_rejected");
       });
     };
 
+    const prepareRecovery = () => {
+      cancelProbe();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+      controller.userRecover();
+      activeToken = controller.beginConnection();
+      retryAttemptRef.current = 0;
+      setRetryAttempt(0);
+    };
     const reconnectNow = () => {
       if (cancelled || !onlineRef.current) {
         if (!onlineRef.current) reportRelay("no_network");
         return;
       }
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-      controller.userRecover();
-      retryAttemptRef.current = 0;
-      setRetryAttempt(0);
-      activeToken = controller.beginConnection();
+      prepareRecovery();
+      foregroundRecoveryPending = true;
+      // 未结束的握手会合并 connect()；先废弃旧 socket，且不为主动替换排退避任务。
+      if (relay.state === "connecting" || relay.state === "authenticating") {
+        replacingConnection = true;
+        try { relay.close(1000, "Relay foreground recovery"); } finally { replacingConnection = false; }
+      }
       connectRelay(activeToken);
     };
     reconnectNowRef.current = reconnectNow;
@@ -139,13 +153,19 @@ export function useRelayConnection({
     const resubscribeAndProbe = () => {
       cancelProbe();
       const deviceIds = devicesRef.current.map((device) => device.deviceId);
-      if (!relay.subscribeEndpoints(deviceIds) || deviceIds.length === 0) return;
+      if (!relay.subscribeEndpoints(deviceIds)) {
+        relay.close(1000, "Relay probe send failed");
+        reconnectNow();
+        return false;
+      }
+      if (deviceIds.length === 0) return true;
       probeTimer = setTimeout(() => {
         probeTimer = null;
         if (cancelled || relayRef.current !== relay || relay.state !== "open") return;
         relay.close(1000, "Relay probe timed out");
         reconnectNow();
       }, RELAY_PROBE_TIMEOUT_MS);
+      return true;
     };
 
     const unsubscribeRoute = relay.on("route", cancelProbe);
@@ -164,6 +184,7 @@ export function useRelayConnection({
       setRelayVersion(null);
       onSessionDisconnect(!intentionalCloseRef.current);
       onAllEndpointsOffline();
+      if (replacingConnection) return;
       if (!onlineRef.current) {
         intentionalCloseRef.current = false;
         onRetryFinished();
@@ -187,6 +208,7 @@ export function useRelayConnection({
     const handleOffline = () => {
       onlineRef.current = false;
       intentionalCloseRef.current = false;
+      foregroundRecoveryPending = false;
       cancelProbe();
       controller.cancel();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -200,19 +222,20 @@ export function useRelayConnection({
     const handleOnline = () => {
       onlineRef.current = true;
       setConnectionFeedback((current) => current === "network" ? "relay" : current);
-      controller.userRecover();
-      retryAttemptRef.current = 0;
-      setRetryAttempt(0);
+      if (foregroundRecoveryPending || probeTimer !== null) return;
       if (relay.state === "open") {
-        resubscribeAndProbe();
+        prepareRecovery();
+        if (!resubscribeAndProbe()) return;
         setRelayStatus("online");
         setGeneration((current) => current + 1);
       } else reconnectNow();
     };
     const handleVisibility = () => {
       // 后台计时器可能被挂起，回到前台时再重新确认。
-      if (document.visibilityState !== "visible") cancelProbe();
-      else if (navigator.onLine) handleOnline();
+      if (document.visibilityState !== "visible") {
+        cancelProbe();
+        foregroundRecoveryPending = false;
+      } else if (navigator.onLine) handleOnline();
     };
     const handlePageShow = () => { if (navigator.onLine) handleOnline(); };
 
