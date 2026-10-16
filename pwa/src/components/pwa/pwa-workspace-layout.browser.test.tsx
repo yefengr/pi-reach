@@ -1354,7 +1354,6 @@ test("keyboard shortcuts use the settings route and the clickable help entry sha
   expect(dispatchWorkspaceShortcut("\\").defaultPrevented).toBe(false);
   await screen.getByRole("switch", { name: "Enter sends messages" }).click();
   const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
-  helpButton.element().focus();
   await helpButton.click();
   const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
   await expect.element(help).toBeVisible();
@@ -1362,6 +1361,48 @@ test("keyboard shortcuts use the settings route and the clickable help entry sha
   expect(document.querySelector('[data-shortcut="newline"] dd')?.textContent).toBe("Enter");
   expect(document.querySelector('[data-shortcut="sendAlternative"]')).toBeNull();
   await userEvent.keyboard("{Escape}");
+  await expect.element(help).not.toBeInTheDocument();
+  await expect.element(helpButton).toHaveFocus();
+  expect(document.querySelector(".pwa-root")?.getAttribute("data-view")).toBe("settings");
+});
+
+test.each([
+  { width: 1280, prior: "body" },
+  { width: 1280, prior: "control" },
+  { width: 390, prior: "body" },
+  { width: 390, prior: "control" },
+])("keyboard shortcuts return help focus to the clicked button without pointer autofocus ($width px, $prior)", async ({ width, prior }) => {
+  await page.viewport(width, 844);
+  const screen = await renderLayout({ events: [] });
+  if (width < 768) {
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await screen.getByRole("button", { name: "Open settings" }).click();
+  } else {
+    dispatchWorkspaceShortcut(",");
+  }
+  await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+  const previous = prior === "control"
+    ? screen.getByRole("switch", { name: "Enter sends messages" }).element()
+    : screen.getByRole("heading", { level: 1, name: "Settings" }).element();
+  previous.focus();
+  if (prior === "body") (previous as HTMLElement).blur();
+  const previousFocus = document.activeElement;
+  expect(previousFocus).toBe(prior === "body" ? document.body : previous);
+
+  const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+  const trigger = helpButton.element();
+  let focusAtClick: Element | null | undefined;
+  // 保留真实指针点击，但阻止 Chromium 的按下聚焦，模拟 Safari 不自动聚焦按钮的路径。
+  trigger.addEventListener("mousedown", (event) => event.preventDefault(), { once: true });
+  trigger.addEventListener("click", () => { focusAtClick = document.activeElement; }, { capture: true, once: true });
+  await helpButton.click();
+  expect(focusAtClick).toBe(previousFocus);
+  const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect.element(help).toBeVisible();
+  await expect.poll(() => help.element().contains(document.activeElement)).toBe(true);
+  if (prior === "body") await userEvent.keyboard("{Escape}");
+  else await screen.getByRole("button", { name: "Close", exact: true }).click();
   await expect.element(help).not.toBeInTheDocument();
   await expect.element(helpButton).toHaveFocus();
   expect(document.querySelector(".pwa-root")?.getAttribute("data-view")).toBe("settings");

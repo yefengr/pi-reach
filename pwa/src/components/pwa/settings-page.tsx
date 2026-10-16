@@ -22,7 +22,7 @@ type SettingsPageProps = {
   backLabel: string;
   onClearData: () => void;
   onResetLayout: () => void;
-  onShowShortcuts: () => void;
+  onShowShortcuts: (origin: HTMLButtonElement) => void;
   titleRef?: Ref<HTMLHeadingElement>;
 };
 
@@ -94,7 +94,7 @@ export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relaySta
         <p className="pwa-settings-section-description">{s.keyboardHint}</p>
         <div className="pwa-settings-actions">
           <Switch className="pwa-keyboard-setting" size="md" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
-          <Button variant="default" type="button" onClick={onShowShortcuts} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>{t.shortcuts.title}</Button>
+          <Button variant="default" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>{t.shortcuts.title}</Button>
         </div>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-connection-heading">

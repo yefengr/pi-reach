@@ -35,7 +35,7 @@ type PwaWorkspaceLayoutProps = {
   onOpenSettings: (origin: SettingsOrigin) => void;
   onSettingsBack: () => void;
   /** 设置页内容；返回按钮文案由来源决定，故以函数接收。 */
-  renderSettings: (props: { backLabel: string; titleRef: RefObject<HTMLHeadingElement | null>; onShowShortcuts: () => void }) => ReactNode;
+  renderSettings: (props: { backLabel: string; titleRef: RefObject<HTMLHeadingElement | null>; onShowShortcuts: (origin?: HTMLElement) => void }) => ReactNode;
   overlays: ReactNode;
   closeBackgroundOverlay: (close: () => void) => void;
 };
@@ -252,8 +252,10 @@ export function PwaWorkspaceLayout({
     }
     setSidebarCollapsed((value) => !value);
   }, [sidebarCollapsed, setSidebarCollapsed]);
-  const showShortcuts = useCallback(() => {
-    // 从 body 发出的键盘操作也要有可返回的有效焦点，不能在关闭帮助后丢到页面根。
+  const showShortcuts = useCallback((origin?: HTMLElement) => {
+    // 指针点击不一定聚焦按钮，先建立实际来源，再由 Mantine 记录与还焦。
+    if (origin && focusable(origin)) origin.focus({ preventScroll: true });
+    // 快捷键入口沿用当前有效焦点；从页面根发出时仍建立后备来源。
     const activeElement = document.activeElement;
     if (activeElement === document.body || activeElement === document.documentElement
       || !focusable(activeElement instanceof HTMLElement ? activeElement : null)) {
