@@ -327,6 +327,60 @@ async function sampleActivityLayout(list: HTMLElement, action: () => void) {
   return samples;
 }
 
+test.each(activityCases)("expanding a live tool group preserves reading until Latest at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const history = answer("live-output", paragraphs("Earlier", 30));
+  const tool = (id: string, complete = false): TimelineViewItem => complete ? { kind: "event", event: {
+    ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id,
+    tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok",
+  } } : { kind: "partial", createdAt: 1, partial: {
+    ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${id}`,
+    kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running",
+  } };
+  const ended: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "end", group_id: "live-output", timestamp: 2, kind: "run_end", status: "complete" } };
+  const { screen, list, update, readAt, viewport } = await renderTimeline([history, tool("a")]);
+  try {
+    const group = list.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head button")!;
+    const top = Math.round(offset(group, list));
+    const scrollTop = Math.round(list.scrollTop);
+    const samples = await sampleActivityLayout(list, () => flushSync(() => group.click()));
+    for (const sample of samples) expect(sample.scrollTop).toBe(scrollTop);
+    expect(Math.round(offset(group, list))).toBe(top);
+    expect(group.getAttribute("aria-expanded")).toBe("true");
+    expect(viewport().unreadOutput).toBe(0);
+    for (const items of [
+      [history, tool("a", true), tool("b")],
+      [history, tool("a", true), tool("b", true), ended],
+    ]) {
+      update(items);
+      await settleLayout();
+      expect(Math.round(offset(group, list))).toBe(top);
+      expect(Math.round(list.scrollTop)).toBe(scrollTop);
+      expect(group.getAttribute("aria-expanded")).toBe("true");
+    }
+    expect(viewport().unreadOutput).toBeGreaterThan(0);
+    await screen.getByRole("button", { name: "Latest output" }).click();
+    await expect.poll(() => bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(viewport().unreadOutput).toBe(0);
+    expect(group.getAttribute("aria-expanded")).toBe("true");
+    update([history, tool("a", true), tool("b", true), ended, answer("next", "Next reply")]);
+    await settleLayout();
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(viewport().unreadOutput).toBe(0);
+
+    // 恢复跟随后再主动上滑，后续输出仍须保留用户的阅读锚点。
+    const target = screen.getByText("Earlier paragraph 4: content that stays available while reading.").element();
+    await readAt(target);
+    const anchorTop = Math.round(offset(target, list));
+    update([history, tool("a", true), tool("b", true), ended, answer("next", paragraphs("New output", 4))]);
+    await settleLayout();
+    expect(Math.round(offset(target, list))).toBe(anchorTop);
+    expect(viewport().followingOutput).toBe(false);
+    expect(viewport().unreadOutput).toBeGreaterThan(0);
+  } finally { await screen.unmount(); }
+});
+
 test.each(activityCases)("Working and Thinking replace each other without moving the follower at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });

@@ -99,16 +99,15 @@ describe("expansion choices", () => {
   test("the latest choice among members wins after regrouping", () => {
     const [segment] = segmentsOf([tool("a"), tool("b")]);
     const [first, second] = segment!.tools;
-    let choices = withExpansion(new Map(), [first!.key], true, false);
-    choices = withExpansion(choices, [second!.key], false, false);
+    let choices = withExpansion(new Map(), [first!.key], true);
+    choices = withExpansion(choices, [second!.key], false);
     expect(segmentExpansion(segment!.tools, choices)?.expanded).toBe(false);
     expect(segmentExpansion([first!], choices)?.expanded).toBe(true);
-    expect(withExpansion(new Map(), [first!.key], false, true).get(first!.key)?.follow).toBe(false);
   });
 
   test("every part of a split group inherits the choice made on the whole group", () => {
     const [segment] = segmentsOf([tool("a"), tool("b"), tool("c")]);
-    const choices = withExpansion(new Map(), segment!.tools.map(entry => entry.key), true, false);
+    const choices = withExpansion(new Map(), segment!.tools.map(entry => entry.key), true);
     // 迟到的正文插入后拆成两段，两段都保持展开。
     const parts = segmentsOf([tool("a"), text("late"), tool("b"), tool("c")]);
     expect(parts.map(part => segmentExpansion(part.tools, choices)?.expanded)).toEqual([true, true]);
@@ -118,8 +117,7 @@ describe("expansion choices", () => {
 describe("timelineActivity", () => {
   const activity = (items: TimelineViewItem[], { live = true, working = true, ended = [] as string[] } = {}) => {
     const list = entries(items);
-    const segments = toolSegments(list, new Set(), observeTools(list, new Map()));
-    return { result: timelineActivity(list, live, working, group => ended.includes(group)), segments };
+    return { result: timelineActivity(list, live, working, group => ended.includes(group)) };
   };
 
   test("keeps the Working run gate independent of specific output indicators", () => {
@@ -154,10 +152,9 @@ describe("timelineActivity", () => {
 
   test("ignores residual partials of an ended or earlier turn", () => {
     const user = (id: string, group: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: id, message_id: id, group_id: group, timestamp: 2, kind: "user", blocks: [{ type: "text", text: id }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" } });
-    // 旧轮残留不改变新一轮的 Working 或末尾工具组判定。
+    // 旧轮残留不改变新一轮的 Working 或具体运行提示归属。
     const ended = activity([text("a"), tool("next", "g2"), streaming("old"), running("t")], { ended: ["g1"] });
     expect(ended.result.working).toBe(true);
-    expect(ended.segments.map(segment => ended.result.liveTail(segment))).toEqual([true, false]);
     expect(entries([streaming("old"), running("t")]).some(entry => ended.result.currentOutput(entry))).toBe(false);
     const earlier = activity([tool("next", "g2"), running("t")]);
     expect(earlier.result.currentOutput(entries([running("t")])[0]!)).toBe(false);
@@ -192,14 +189,5 @@ describe("timelineActivity", () => {
     const fresh: TimelineViewItem = { ...queued, queued: undefined, delivery: "pending" };
     const sent = timelineActivity(entries([text("a"), fresh]), true, true, group => group === "g1");
     expect(sent.working).toBe(true);
-  });
-
-  test("treats only the trailing segment of a running turn as a live tail", () => {
-    const { result, segments } = activity([tool("a"), text("t"), tool("b")]);
-    expect(segments.map(segment => result.liveTail(segment))).toEqual([false, true]);
-    const ended = activity([tool("a")], { ended: ["g1"], working: false });
-    expect(ended.result.liveTail(ended.segments[0]!)).toBe(false);
-    const stillRunning = activity([running("a")], { working: false });
-    expect(stillRunning.result.liveTail(stillRunning.segments[0]!)).toBe(true);
   });
 });

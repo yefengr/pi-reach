@@ -164,10 +164,10 @@ export function ConversationTimeline({ items, live, completions, running = false
     );
     return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
   });
-  // 展开的思考与工具组暂停行内自动跟随；末段运行中展开的工具组除外。工具详情由 Reader 独立持锁。
+  // 手动展开思考与工具组都暂停自动跟随，保持当前阅读位置。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
     const choice = segmentExpansion(segment.tools, tools);
-    return choice?.expanded === true && !choice.follow;
+    return choice?.expanded === true;
   }) || view.entries.some(entry => entry.kind === "thinking" && thinking.get(entry.key) === true);
   // 历史窗口替换可能移除阅读内容；阅读锁随可见内容同步，并保留到 Reader 退出结束。
   const reading = reader !== null || scopedFileReader !== null || readingInline(toolChoices, thinkingChoices);
@@ -182,9 +182,9 @@ export function ConversationTimeline({ items, live, completions, running = false
     setThinkingChoices(choices);
     notifyReading(toolChoices, choices);
   };
-  // 选择记在组内全部成员上；是否跟随在展开时确定，之后不随运行状态变化。
+  // 选择记在组内全部成员上，分组拆分后仍保留用户的阅读选择。
   const chooseSegment = (segment: ToolSegment, expanded: boolean) => {
-    const choices = withExpansion(toolChoices, segment.tools.map(tool => tool.key), expanded, activity.liveTail(segment));
+    const choices = withExpansion(toolChoices, segment.tools.map(tool => tool.key), expanded);
     setToolChoices(choices);
     notifyReading(choices, thinkingChoices);
   };
