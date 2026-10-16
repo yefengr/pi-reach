@@ -35,7 +35,7 @@ function Harness({ select }: { select: () => void }) {
     navigation={{ ...navigation, onSelectHistory: select, onRemove: (target) => setConfirmation({ kind: "remove-pairing", label: target.nickname! }) }}
     titleBar={{ title: "Swipe Pi", showTitle: true }} historyMode={false} toast={null}
     settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings}
-    renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl={device.relayUrl} defaultRelayUrl={device.relayUrl} relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmation({ kind: "clear-local-data" })} onResetLayout={() => {}} />}
+    renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage onShowShortcuts={onShowShortcuts} relayUrl={device.relayUrl} defaultRelayUrl={device.relayUrl} relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmation({ kind: "clear-local-data" })} onResetLayout={() => {}} />}
     overlays={<ConfirmActionDialog action={confirmation} pending={false} onConfirm={() => {}} onClose={() => setConfirmation(null)} />}
     closeBackgroundOverlay={(close) => close()}
   ><p>Workspace reading content</p></PwaWorkspaceLayout></PwaAppShell></PwaUiProvider>;

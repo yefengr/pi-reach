@@ -9,6 +9,7 @@ import { useToast } from "./pwa-operation-notifications";
 import { ServiceWorkerNotice } from "./service-worker-register";
 import { SettingsPage } from "./settings-page";
 import { useSettingsRoute } from "@/lib/pwa/settings-route";
+import { isAppleKeyboard, shortcutLabel } from "@/lib/pwa/keyboard-shortcuts";
 import { ConfirmActionDialog } from "./confirm-action-dialog";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
 import { ConnectionStatus, type WorkspaceNavigationProps } from "./workspace-view";
@@ -78,7 +79,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
     settingsRoute={route}
     onSettingsBack={closeSettings}
     onOpenSettings={(origin) => { events.push(`settings:${origin.kind}`); openSettings(origin); }}
-    renderSettings={({ backLabel, titleRef }) => <SettingsPage relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.example.test" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmOpen(true)} onResetLayout={() => {}} />}
+    renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage onShowShortcuts={onShowShortcuts} relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.example.test" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmOpen(true)} onResetLayout={() => {}} />}
     overlays={<ConfirmActionDialog action={confirmOpen ? { kind: "clear-local-data" } : null} pending={false} error={null} onConfirm={() => {}} onClose={() => setConfirmOpen(false)} />}
     closeBackgroundOverlay={(close) => { events.push("close-request"); if (!rejectClose) close(); }}
   >
@@ -407,6 +408,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   window.history.replaceState(null, "");
+  window.localStorage.removeItem("pi-reach-enter-sends");
   await page.viewport(1280, 900);
 });
 
@@ -1240,6 +1242,152 @@ test("moves the desktop safe areas between the card margin and the main insets w
     document.documentElement.style.removeProperty("--pwa-safe-top");
     document.documentElement.style.removeProperty("--pwa-safe-right");
   }
+});
+
+function dispatchWorkspaceShortcut(key: string, target: EventTarget = document.body, overrides: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, metaKey: isAppleKeyboard(), ctrlKey: !isAppleKeyboard(), ...overrides });
+  target.dispatchEvent(event);
+  return event;
+}
+
+test("keyboard shortcuts toggle the desktop sidebar through its existing action without remounting content", async () => {
+  const screen = await renderLayout({ events: [] });
+  const child = screen.getByTestId("stateful-child");
+  await child.click();
+  const element = child.element();
+  element.focus();
+  const mod = isAppleKeyboard() ? "Meta" : "Control";
+  await userEvent.keyboard(`{${mod}>}\\{/${mod}}`);
+  await expect.element(screen.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+  expect(child.element()).toBe(element);
+  await expect.element(child).toHaveTextContent("Child count 1");
+  expect(window.localStorage.getItem("pi-reach-sidebar-collapsed")).toBe("true");
+  dispatchWorkspaceShortcut("\\");
+  await expect.element(screen.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+});
+
+test("keyboard shortcuts open help in the app Portal and Escape restores its valid origin", async () => {
+  const screen = await renderLayout({ events: [] });
+  const child = screen.getByTestId("stateful-child");
+  child.element().focus();
+  expect(dispatchWorkspaceShortcut("/").defaultPrevented).toBe(true);
+  const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect.element(help).toBeVisible();
+  expect(help.element().closest(".pwa-root")).toBe(document.querySelector(".pwa-root"));
+  expect(document.querySelector('[data-shortcut="showHelp"] dd')?.textContent).toBe(shortcutLabel("showHelp"));
+  // 帮助本身阻断工作区，不能收起其背后的侧栏或打开设置。
+  dispatchWorkspaceShortcut("\\");
+  dispatchWorkspaceShortcut(",");
+  expect(document.querySelector(".pwa-root")?.getAttribute("data-view")).toBe("workspace");
+  expect(document.querySelector(".pwa-root")?.hasAttribute("data-sidebar-collapsed")).toBe(false);
+  await expect.poll(() => getComputedStyle(help.element()).opacity).toBe("1");
+  await page.screenshot({ path: "../../../../.pi/tmp/desktop-shortcuts-help.png" });
+  await userEvent.keyboard("{Escape}");
+  await expect.element(help).not.toBeInTheDocument();
+  await expect.element(child).toHaveFocus();
+});
+
+test.each(["workspace", "settings"] as const)("keyboard shortcuts restore a valid fallback when help opens from body in %s", async (view) => {
+  const screen = await renderLayout({ events: [] });
+  if (view === "settings") {
+    dispatchWorkspaceShortcut(",");
+    await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+    await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  }
+  const origin = view === "settings"
+    ? screen.getByRole("heading", { level: 1, name: "Settings" })
+    : screen.getByRole("button", { name: "Collapse sidebar" });
+  origin.element().focus();
+  (origin.element() as HTMLElement).blur();
+  expect(document.activeElement).toBe(document.body);
+  dispatchWorkspaceShortcut("/");
+  const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect.element(help).toBeVisible();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(help).not.toBeInTheDocument();
+  await expect.element(origin).toHaveFocus();
+});
+
+test("keyboard shortcuts ignore editors, IME, repeats, handled events and extra modifiers", async () => {
+  await renderLayout({ events: [] });
+  const root = document.querySelector<HTMLElement>(".pwa-root")!;
+  for (const tag of ["input", "textarea", "select", "div"]) {
+    const editor = document.createElement(tag);
+    if (tag === "div") editor.contentEditable = "true";
+    root.append(editor);
+    expect(dispatchWorkspaceShortcut("\\", editor).defaultPrevented, tag).toBe(false);
+    expect(root.hasAttribute("data-sidebar-collapsed"), tag).toBe(false);
+    editor.remove();
+  }
+  for (const overrides of [{ isComposing: true }, { keyCode: 229 }, { repeat: true }, { shiftKey: true }, { altKey: true }]) {
+    expect(dispatchWorkspaceShortcut("/", document.body, overrides).defaultPrevented).toBe(false);
+  }
+  const handled = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true, metaKey: isAppleKeyboard(), ctrlKey: !isAppleKeyboard() });
+  handled.preventDefault();
+  document.body.dispatchEvent(handled);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test("keyboard shortcuts pause behind a real computer Popover and recover after Escape", async () => {
+  const screen = await renderLayout({ events: [] });
+  const chooser = document.querySelector<HTMLButtonElement>(".pwa-desktop-navigation .pwa-device-trigger")!;
+  chooser.focus();
+  await userEvent.click(chooser);
+  await expect.poll(() => document.querySelector('.pwa-device-popover[role="dialog"]')).not.toBeNull();
+  expect(dispatchWorkspaceShortcut("\\").defaultPrevented).toBe(false);
+  expect(document.querySelector(".pwa-root")?.hasAttribute("data-sidebar-collapsed")).toBe(false);
+  document.querySelector<HTMLButtonElement>(".pwa-device-panel button")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => document.querySelector('.pwa-device-panel')).toBeNull();
+  dispatchWorkspaceShortcut("\\");
+  await expect.element(screen.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+});
+
+test("keyboard shortcuts use the settings route and the clickable help entry shares the same dialog", async () => {
+  const events: string[] = [];
+  const screen = await renderLayout({ events });
+  screen.getByTestId("stateful-child").element().focus();
+  dispatchWorkspaceShortcut(",");
+  await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+  expect(events).toEqual(["settings:workspace"]);
+  expect(dispatchWorkspaceShortcut("\\").defaultPrevented).toBe(false);
+  await screen.getByRole("switch", { name: "Enter sends messages" }).click();
+  const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+  helpButton.element().focus();
+  await helpButton.click();
+  const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect.element(help).toBeVisible();
+  expect(document.querySelector('[data-shortcut="send"] dd')?.textContent).toBe(shortcutLabel("send", false));
+  expect(document.querySelector('[data-shortcut="newline"] dd')?.textContent).toBe("Enter");
+  expect(document.querySelector('[data-shortcut="sendAlternative"]')).toBeNull();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(help).not.toBeInTheDocument();
+  await expect.element(helpButton).toHaveFocus();
+  expect(document.querySelector(".pwa-root")?.getAttribute("data-view")).toBe("settings");
+});
+
+test.each([767, 390])("keyboard shortcuts remain inactive in mobile layout at %ipx and help stays clickable", async (width) => {
+  await page.viewport(width, 844);
+  const screen = await renderLayout({ events: [] });
+  for (const key of ["\\", ",", "/"]) expect(dispatchWorkspaceShortcut(key).defaultPrevented).toBe(false);
+  expect(document.querySelector(".pwa-root")?.getAttribute("data-view")).toBe("workspace");
+  await screen.getByRole("button", { name: "Open navigation" }).click();
+  await screen.getByRole("button", { name: "Open settings" }).click();
+  await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+  const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+  await helpButton.click();
+  const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect.element(help).toBeVisible();
+  const box = help.element().getBoundingClientRect();
+  expect(Math.round(box.left)).toBeGreaterThanOrEqual(16);
+  expect(Math.round(box.right)).toBeLessThanOrEqual(width - 16);
+  expect(help.element().scrollWidth).toBeLessThanOrEqual(help.element().clientWidth);
+  await expect.poll(() => getComputedStyle(help.element()).opacity).toBe("1");
+  await page.screenshot({ path: `../../../../.pi/tmp/desktop-shortcuts-help-mobile-${width}.png` });
+  await screen.getByRole("button", { name: "Close", exact: true }).click();
+  await expect.element(help).not.toBeInTheDocument();
+  await expect.element(helpButton).toHaveFocus();
 });
 
 test("the workspace runtime notice relies on the notice area for the side safe area", async () => {

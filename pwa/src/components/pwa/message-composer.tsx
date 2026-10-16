@@ -8,6 +8,7 @@ import { useComposerAutosize } from "./use-composer-autosize";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
+import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 
 type ComposerAttachmentMenuProps = {
   disabled: boolean;
@@ -145,6 +146,8 @@ export function MessageComposer({
   const imageFocusFrameRef = useRef<number | null>(null);
   const commandFocusFrameRef = useRef<number | null>(null);
   const sendPendingRef = useRef(false);
+  const composingRef = useRef(false);
+  const [enterSends] = useEnterSends();
   const [menuOpen, setMenuOpen] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   // 模型标签是模型与思考级别的唯一入口，与会话命令菜单分别锚定。
@@ -288,9 +291,22 @@ export function MessageComposer({
   };
 
   const handleTextareaKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (!commandMenuOpenRef.current || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
+    if (commandMenuOpenRef.current && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      focusCommandItem(event.key === "ArrowUp");
+      return;
+    }
+    const nativeEvent = event.nativeEvent;
+    if (event.key !== "Enter" || !window.matchMedia(DESKTOP_KEYBOARD_QUERY).matches
+      || composingRef.current || ignoreShortcutEvent(nativeEvent) || event.altKey || event.shiftKey
+      || isWorking || commandMenuOpenRef.current || imageMenuOpenRef.current || modelMenuOpenRef.current
+      || hasKeyboardOverlay()) return;
+    const plainEnter = !event.metaKey && !event.ctrlKey;
+    if (!(plainEnter ? enterSends : isPrimaryModifier(nativeEvent))) return;
+    if (!isOnline || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)) return;
+    // 仍由表单统一校验并发发送和权限；快捷键不触发运行中的停止按钮。
     event.preventDefault();
-    focusCommandItem(event.key === "ArrowUp");
+    event.currentTarget.form?.requestSubmit();
   };
 
   const handleCommandTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -356,7 +372,7 @@ export function MessageComposer({
       {notice ? <p className="pwa-composer-hint" role="status">{notice}</p> : null}
       <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
       <div className="pwa-composer-card">
-        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments} rows={1} />
+        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments} rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">
             <div className="pwa-composer-menu">

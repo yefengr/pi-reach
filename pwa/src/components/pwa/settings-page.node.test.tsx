@@ -19,6 +19,7 @@ function renderSettings(): string {
         backLabel="Back to workspace"
         onClearData={() => {}}
         onResetLayout={() => {}}
+        onShowShortcuts={() => {}}
       />
     </PwaUiProvider>,
   );
@@ -30,7 +31,9 @@ test("renders settings as a page with a focusable title, grouped sections and da
   expect(html).not.toMatch(/mantine-Drawer/);
   expect(html).toMatch(/<h1 id="pwa-settings-title" class="pwa-settings-title" tabindex="-1">Settings<\/h1>/);
   expect(html).toMatch(/aria-label="Back to workspace"/);
-  expect(html.match(/<h2 /g)).toHaveLength(5);
+  expect(html.match(/<h2 /g)).toHaveLength(6);
+  expect(html).toContain("Enter sends messages");
+  expect(html).toContain("Keyboard shortcuts");
   expect(html).toMatch(/About/);
   expect(html).toMatch(/data-version="pwa"/);
   expect(html).toMatch(/Not connected/);

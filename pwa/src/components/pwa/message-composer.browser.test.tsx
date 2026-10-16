@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { Drawer, Modal } from "@mantine/core";
+import { ENTER_SENDS_STORAGE_KEY, isAppleKeyboard, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
@@ -18,6 +20,8 @@ const model: WireModel = {
 type ComposerHarnessProps = {
   initialDraft?: string;
   initialWorking?: boolean;
+  canAttach?: boolean;
+  keyboardPreferences?: boolean;
   attachmentNotice?: string;
   commandModels?: WireModel[];
   commandCurrentModel?: WireModel | null;
@@ -38,6 +42,8 @@ function attachmentFrom(source: File): ComposerAttachmentItem {
 function ComposerHarness({
   initialDraft = "",
   initialWorking = false,
+  canAttach = true,
+  keyboardPreferences = false,
   attachmentNotice,
   commandModels = [model],
   commandCurrentModel = model,
@@ -66,6 +72,7 @@ function ComposerHarness({
   return (
     <>
       <button type="button">Outside composer</button>
+      {keyboardPreferences ? <KeyboardPreferenceControls /> : null}
       <button type="button" data-testid="composer-set-draft" hidden onClick={() => setDraft("Continue this task")} />
       <button type="button" data-testid="composer-toggle-working" hidden onClick={() => setIsWorking((current) => !current)} />
       <button type="button" data-testid="composer-set-stopping" hidden onClick={() => setStopping(true)} />
@@ -75,7 +82,7 @@ function ComposerHarness({
       <button type="button" data-testid="composer-set-command-pending" hidden onClick={() => setPendingAction("model_set")} />
       <MessageComposer
         attachments={attachments}
-        canAttach={isOnline}
+        canAttach={isOnline && canAttach}
         sendingAttachments={sendingImage}
         attachmentNotice={attachmentNotice}
         isOnline={isOnline}
@@ -102,6 +109,230 @@ function ComposerHarness({
     </>
   );
 }
+
+function KeyboardPreferenceControls() {
+  const [enterSends, setEnterSends] = useEnterSends();
+  return <button type="button" data-testid="composer-toggle-enter-sends" hidden onClick={() => setEnterSends(!enterSends)} />;
+}
+
+function dispatchEnter(input: HTMLTextAreaElement, options: KeyboardEventInit = {}, prevented = false) {
+  const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...options });
+  if (prevented) event.preventDefault();
+  input.dispatchEvent(event);
+  return event;
+}
+
+const primaryEnter = isAppleKeyboard() ? "{Meta>}{Enter}{/Meta}" : "{Control>}{Enter}{/Control}";
+const primaryModifier = isAppleKeyboard() ? { metaKey: true } : { ctrlKey: true };
+
+describe("desktop composer sending shortcuts", () => {
+  beforeEach(async () => {
+    localStorage.removeItem(ENTER_SENDS_STORAGE_KEY);
+    await page.viewport(1280, 900);
+  });
+  afterEach(async () => {
+    localStorage.removeItem(ENTER_SENDS_STORAGE_KEY);
+    await page.viewport(1280, 900);
+  });
+
+  test("sends Enter and primary Enter through native submit without inserting a newline", async () => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="Ready" onSend={() => { sends += 1; }} />);
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    let submits = 0;
+    input.form!.addEventListener("submit", () => { submits += 1; });
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.keyboard("{Enter}");
+    expect(sends).toBe(1);
+    expect(submits).toBe(1);
+    expect(input.value).toBe("Ready");
+    await userEvent.keyboard(primaryEnter);
+    expect(sends).toBe(2);
+    expect(submits).toBe(2);
+    expect(input.value).toBe("Ready");
+    await userEvent.keyboard("{Shift>}{Enter}{/Shift}");
+    expect(input.value).toBe("Ready\n");
+    expect(sends).toBe(2);
+  });
+
+  test("reads disabled Enter sending before the first key and keeps primary Enter available", async () => {
+    localStorage.setItem(ENTER_SENDS_STORAGE_KEY, "false");
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="Ready" onSend={() => { sends += 1; }} />);
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.keyboard("{Enter}");
+    expect(input.value).toBe("Ready\n");
+    expect(sends).toBe(0);
+    await userEvent.keyboard(primaryEnter);
+    expect(sends).toBe(1);
+    expect(input.value).toBe("Ready\n");
+  });
+
+  test("synchronizes an Enter preference change from another mounted consumer", async () => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness keyboardPreferences initialDraft="Ready" onSend={() => { sends += 1; }} />);
+    screen.getByTestId("composer-toggle-enter-sends").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect.poll(() => localStorage.getItem(ENTER_SENDS_STORAGE_KEY)).toBe("false");
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.keyboard("{Enter}");
+    expect(input.value).toBe("Ready\n");
+    expect(sends).toBe(0);
+    screen.getByTestId("composer-toggle-enter-sends").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect.poll(() => localStorage.getItem(ENTER_SENDS_STORAGE_KEY)).toBe("true");
+    await userEvent.keyboard("{Enter}");
+    expect(sends).toBe(1);
+    expect(input.value).toBe("Ready\n");
+  });
+
+  test("leaves mobile Enter, Shift Enter and primary Enter unchanged", async () => {
+    await page.viewport(390, 844);
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="Ready" onSend={() => { sends += 1; }} />);
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.keyboard("{Enter}{Shift>}{Enter}{/Shift}");
+    expect(input.value).toBe("Ready\n\n");
+    const event = dispatchEnter(input, primaryModifier);
+    expect(event.defaultPrevented).toBe(false);
+    await userEvent.keyboard(primaryEnter);
+    expect(sends).toBe(0);
+  });
+
+  test("keeps working Enter editable and never maps Enter shortcuts to Stop", async () => {
+    let sends = 0;
+    let stops = 0;
+    const screen = await renderPwa(<ComposerHarness initialWorking initialDraft="Continue" onSend={() => { sends += 1; }} onStop={() => { stops += 1; }} />);
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.keyboard("{Enter}");
+    expect(input.value).toBe("Continue\n");
+    await userEvent.keyboard(primaryEnter);
+    expect(sends).toBe(0);
+    expect(stops).toBe(0);
+    await expect.element(screen.getByRole("button", { name: "Stop current task" })).toBeVisible();
+  });
+
+  test.each(["empty", "offline", "uploading", "attachment-permission"] as const)("does not submit an unavailable %s message", async state => {
+    let sends = 0;
+    const draft = state === "empty" ? "" : "Ready";
+    const screen = await renderPwa(<ComposerHarness initialDraft={draft} canAttach={state !== "attachment-permission"} onSend={() => { sends += 1; }} />);
+    const actions = { offline: "composer-go-offline", uploading: "composer-set-sending-image", "attachment-permission": "composer-set-attachment" };
+    if (state !== "empty") {
+      screen.getByTestId(actions[state]).element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+    await expect.element(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    let submits = 0;
+    input.form!.addEventListener("submit", () => { submits += 1; });
+    expect(dispatchEnter(input).defaultPrevented).toBe(false);
+    expect(dispatchEnter(input, primaryModifier).defaultPrevented).toBe(false);
+    expect(sends).toBe(0);
+    expect(submits).toBe(0);
+    expect(input.value).toBe(draft);
+  });
+
+  test("allows attachment-only Enter and guards concurrent keyboard and button submits", async () => {
+    let sends = 0;
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const screen = await renderPwa(<ComposerHarness onSend={() => { sends += 1; return pending; }} />);
+    screen.getByTestId("composer-set-attachment").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect.element(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    dispatchEnter(input);
+    dispatchEnter(input, primaryModifier);
+    (screen.getByRole("button", { name: "Send message" }).element() as HTMLButtonElement).click();
+    expect(sends).toBe(1);
+    finish();
+    await pending;
+    dispatchEnter(input);
+    expect(sends).toBe(2);
+    expect(input.value).toBe("");
+  });
+
+  test.each([
+    { isComposing: true }, { keyCode: 229 }, { repeat: true }, { altKey: true }, { shiftKey: true },
+    { ...primaryModifier, altKey: true }, { ...primaryModifier, shiftKey: true },
+    { metaKey: true, ctrlKey: true }, isAppleKeyboard() ? { ctrlKey: true } : { metaKey: true },
+  ])("ignores unsafe Enter modifiers or IME state %j", async options => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="你好" onSend={() => { sends += 1; }} />);
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    const event = dispatchEnter(input, options);
+    expect(event.defaultPrevented).toBe(false);
+    expect(sends).toBe(0);
+    expect(input.value).toBe("你好");
+  });
+
+  test("ignores prevented and AltGraph Enter and the entire composition lifecycle", async () => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="你好" onSend={() => { sends += 1; }} />);
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    dispatchEnter(input, {}, true);
+    const altGraph = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    Object.defineProperty(altGraph, "getModifierState", { value: (key: string) => key === "AltGraph" });
+    input.dispatchEvent(altGraph);
+    input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "你" }));
+    expect(dispatchEnter(input).defaultPrevented).toBe(false);
+    expect(dispatchEnter(input, primaryModifier).defaultPrevented).toBe(false);
+    expect(sends).toBe(0);
+    input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "你好" }));
+    expect(dispatchEnter(input).defaultPrevented).toBe(true);
+    expect(sends).toBe(1);
+  });
+
+  test("keeps slash menu Enter out of sending and preserves arrow navigation and Escape focus", async () => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness onSend={() => { sends += 1; }} />);
+    const textbox = screen.getByRole("textbox");
+    const input = textbox.element() as HTMLTextAreaElement;
+    input.focus();
+    await userEvent.keyboard("/");
+    await expect.element(screen.getByRole("menu", { name: "Pi commands" })).toBeVisible();
+    expect(dispatchEnter(input).defaultPrevented).toBe(false);
+    expect(dispatchEnter(input, primaryModifier).defaultPrevented).toBe(false);
+    expect(sends).toBe(0);
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(screen.getByRole("menu", { name: "Pi commands" })).not.toBeInTheDocument();
+    await expect.element(textbox).toHaveFocus();
+    expect(dispatchEnter(input).defaultPrevented).toBe(true);
+    expect(sends).toBe(1);
+  });
+
+  test.each(["attachments", "model"] as const)("blocks background Enter while the %s menu is visible", async menu => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="Ready" onSend={() => { sends += 1; }} />);
+    const trigger = screen.getByRole("button", { name: menu === "attachments" ? "Add attachments" : /^Model and thinking settings, current/ });
+    await trigger.click();
+    await expect.element(screen.getByRole("menu")).toBeVisible();
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    expect(dispatchEnter(input).defaultPrevented).toBe(false);
+    expect(dispatchEnter(input, primaryModifier).defaultPrevented).toBe(false);
+    expect(sends).toBe(0);
+  });
+
+  test.each([Modal, Drawer])("blocks background sends while a real $displayName overlay is visible", async Overlay => {
+    let sends = 0;
+    const screen = await renderPwa(<>
+      <ComposerHarness initialDraft="Ready" onSend={() => { sends += 1; }} />
+      <Overlay opened onClose={() => {}} title="Keyboard overlay" portalProps={{ target: ".pwa-root" }}>Overlay content</Overlay>
+    </>);
+    await expect.element(screen.getByRole("dialog", { name: "Keyboard overlay" })).toBeVisible();
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    expect(dispatchEnter(input).defaultPrevented).toBe(false);
+    expect(dispatchEnter(input, primaryModifier).defaultPrevented).toBe(false);
+    expect(sends).toBe(0);
+  });
+});
 
 test("keeps the image remove action at a 44px touch target", async () => {
   const screen = await renderPwa(<ComposerHarness />);
