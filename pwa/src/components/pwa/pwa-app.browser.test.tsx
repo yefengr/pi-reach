@@ -31,7 +31,12 @@ const relayHarness = vi.hoisted(() => ({
     emitControl: (frame: unknown) => void;
     emitError: (error: Error) => void;
     connectRejects: number;
+    pendingState: "connecting" | "authenticating" | null;
+    connectionAttempts: number;
+    subscriptionFails: boolean;
+    finishConnect: () => void;
   }>,
+  nextPendingState: null as "connecting" | "authenticating" | null,
   nextConnectRejects: 0,
   rejectConnect: null as ((error: Error) => void) | null,
 }));
@@ -64,8 +69,15 @@ vi.mock("@/lib/pi-reach/relay-client", () => ({
     errorListeners: Array<(error: Error) => void> = [];
     controlListeners: Array<(frame: unknown) => void> = [];
     connectRejects = relayHarness.nextConnectRejects;
+    pendingState = relayHarness.nextPendingState;
+    connectionAttempts = 0;
+    subscriptionFails = false;
+    private pendingConnect: Promise<void> | null = null;
+    private rejectPending: ((error: Error) => void) | null = null;
+    finishConnect: () => void = () => undefined;
 
     constructor() {
+      relayHarness.nextPendingState = null;
       relayHarness.nextConnectRejects = 0;
       relayHarness.rejectConnect = null;
       relayHarness.instances.push(this);
@@ -80,6 +92,22 @@ vi.mock("@/lib/pi-reach/relay-client", () => ({
 
     async connect() {
       this.connectCalls += 1;
+      if (this.state === "open") return;
+      if (this.pendingConnect) return this.pendingConnect;
+      this.connectionAttempts += 1;
+      if (this.pendingState) {
+        this.state = this.pendingState;
+        this.pendingConnect = new Promise<void>((resolve, reject) => {
+          this.rejectPending = reject;
+          this.finishConnect = () => {
+            this.pendingConnect = null;
+            this.rejectPending = null;
+            this.state = "open";
+            resolve();
+          };
+        });
+        return this.pendingConnect;
+      }
       if (this.connectRejects > 0) {
         this.connectRejects -= 1;
         this.state = "closed";
@@ -92,7 +120,7 @@ vi.mock("@/lib/pi-reach/relay-client", () => ({
 
     subscribeEndpoints(deviceIds: string[]) {
       this.subscriptions.push([...deviceIds]);
-      return this.state === "open";
+      return this.state === "open" && !this.subscriptionFails;
     }
 
     sendControl(frame: { type: string; request_id?: string; code?: string }) {
@@ -120,7 +148,12 @@ vi.mock("@/lib/pi-reach/relay-client", () => ({
 
     close() {
       this.closeCalls += 1;
+      const reject = this.rejectPending;
+      this.pendingConnect = null;
+      this.rejectPending = null;
+      this.finishConnect = () => undefined;
       this.emitState("closed");
+      reject?.(new Error("Relay connection closed by client"));
     }
   },
 }));
@@ -249,6 +282,7 @@ beforeEach(async () => {
   await page.viewport(1280, 900);
   relayHarness.instances.length = 0;
   relayHarness.nextConnectRejects = 0;
+  relayHarness.nextPendingState = null;
   relayHarness.rejectConnect = null;
   channelHarness.channels.length = 0;
   channelHarness.nextSendResults.length = 0;
@@ -1818,6 +1852,80 @@ function setPageVisibility(state: DocumentVisibilityState) {
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
   document.dispatchEvent(new Event("visibilitychange"));
 }
+
+test.each(["connecting", "authenticating"] as const)("replaces a stalled %s connection on foreground return without stale retries", async (state) => {
+  relayHarness.nextPendingState = state;
+  const screen = await renderPwa(<PwaApp />);
+  await vi.waitFor(() => expect(relayHarness.instances[0]?.connectionAttempts).toBe(1));
+  const relay = relayHarness.instances[0]!;
+  vi.useFakeTimers();
+  try {
+    setPageVisibility("visible");
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    expect(relay.closeCalls).toBe(1);
+    expect(relay.connectionAttempts).toBe(2);
+    await flushMicrotasks();
+    vi.advanceTimersByTime(1_000);
+    expect(relay.connectionAttempts).toBe(2);
+    expect(relay.connectCalls).toBe(2);
+    relay.finishConnect();
+    await flushMicrotasks();
+    expect(relay.subscriptions).toContainEqual(["owner-device-key"]);
+    relay.emitState("closed");
+    vi.advanceTimersByTime(999);
+    expect(relay.connectCalls).toBe(2);
+    vi.advanceTimersByTime(1);
+    expect(relay.connectCalls).toBe(3);
+  } finally {
+    vi.useRealTimers();
+    Reflect.deleteProperty(document, "visibilityState");
+    await screen.unmount();
+  }
+});
+
+test.each(["closed", "error"] as const)("backs off a later %s after an answered foreground probe", async (failure) => {
+  const screen = await renderOnlineApp();
+  const relay = relayHarness.instances[0]!;
+  vi.useFakeTimers();
+  try {
+    setPageVisibility("visible");
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    relay.emitControl(onlineEndpointsFrame());
+    if (failure === "error") relay.emitError(new Error("socket error"));
+    relay.emitState("closed");
+    vi.advanceTimersByTime(999);
+    expect(relay.connectCalls).toBe(1);
+    vi.advanceTimersByTime(1);
+    await flushMicrotasks();
+    expect(relay.connectCalls).toBe(2);
+    vi.advanceTimersByTime(30_000);
+    expect(relay.connectCalls).toBe(2);
+  } finally {
+    vi.useRealTimers();
+    Reflect.deleteProperty(document, "visibilityState");
+    await screen.unmount();
+  }
+});
+
+test("reconnects immediately when the foreground subscription cannot be sent", async () => {
+  const screen = await renderOnlineApp();
+  const relay = relayHarness.instances[0]!;
+  vi.useFakeTimers();
+  try {
+    relay.subscriptionFails = true;
+    setPageVisibility("visible");
+    expect(relay.closeCalls).toBe(1);
+    expect(relay.connectCalls).toBe(2);
+    relay.subscriptionFails = false;
+    await flushMicrotasks();
+    vi.advanceTimersByTime(30_000);
+    expect(relay.connectCalls).toBe(2);
+  } finally {
+    vi.useRealTimers();
+    Reflect.deleteProperty(document, "visibilityState");
+    await screen.unmount();
+  }
+});
 
 test("reconnects at once when the Relay does not answer after returning to the foreground", async () => {
   const screen = await renderOnlineApp();

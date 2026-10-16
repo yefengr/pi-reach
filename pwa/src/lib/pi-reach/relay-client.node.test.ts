@@ -1,7 +1,7 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { generateOwnerKeyPair } from "./crypto";
 import { encodeBase64, encodeUtf8 } from "./encoding";
-import { RelayClient, type WebSocketLike } from "./relay-client";
+import { RELAY_CONNECTION_TIMEOUT_MS, RelayClient, type WebSocketLike } from "./relay-client";
 
 class FakeWebSocket implements WebSocketLike {
   readonly readyState = 1;
@@ -49,6 +49,62 @@ async function createClient(socket: FakeWebSocket): Promise<RelayClient> {
 function challenge(): string {
   return JSON.stringify({ type: "challenge", nonce: encodeBase64(new Uint8Array(32)) });
 }
+
+test.each(["connecting", "authenticating"])("times out a stalled %s connection and permits a fresh socket", async (state) => {
+  const identity = await generateOwnerKeyPair();
+  const sockets: FakeWebSocket[] = [];
+  const client = new RelayClient({ relayUrl: "https://relay.example.test", identity, webSocketFactory: () => {
+    const socket = new FakeWebSocket();
+    sockets.push(socket);
+    return socket;
+  } });
+  vi.useFakeTimers();
+  try {
+    const first = client.connect();
+    const rejected = first.catch((error: unknown) => error);
+    if (state === "authenticating") {
+      vi.advanceTimersByTime(6_000);
+      sockets[0]!.open();
+    }
+    vi.advanceTimersByTime(state === "authenticating" ? 3_999 : 9_999);
+    expect(client.state).toBe(state);
+    vi.advanceTimersByTime(1);
+    expect(client.state).toBe("closed");
+    expect(await rejected).toEqual(expect.objectContaining({ message: "Relay connection timed out" }));
+    expect(RELAY_CONNECTION_TIMEOUT_MS).toBe(10_000);
+    expect(sockets[0]!.closeCalls).toHaveLength(1);
+    const second = client.connect();
+    expect(sockets).toHaveLength(2);
+    sockets[0]!.open();
+    sockets[0]!.error();
+    sockets[0]!.onclose?.(new Event("close") as CloseEvent);
+    sockets[1]!.open();
+    sockets[1]!.message(challenge());
+    await second;
+    vi.advanceTimersByTime(20_000);
+    expect(client.state).toBe("open");
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    client.close();
+    vi.useRealTimers();
+  }
+});
+
+test("clears the pending deadline on close and merges concurrent connection requests", async () => {
+  const socket = new FakeWebSocket();
+  const client = await createClient(socket);
+  vi.useFakeTimers();
+  try {
+    const first = client.connect();
+    const second = client.connect();
+    const rejected = Promise.all([expect(first).rejects.toThrow(/closed by client/), expect(second).rejects.toThrow(/closed by client/)]);
+    expect(vi.getTimerCount()).toBe(1);
+    client.close();
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(socket.closeCalls).toHaveLength(1);
+  } finally { client.close(); vi.useRealTimers(); }
+});
 
 test("cleans up when the WebSocket factory throws synchronously", async () => {
   const identity = await generateOwnerKeyPair();
