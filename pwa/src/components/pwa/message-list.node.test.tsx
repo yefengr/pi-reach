@@ -128,9 +128,9 @@ test("summarizes running tools in the group header without mounting raw args", (
   ]);
 
   expect(html).toContain("src/components/pwa/message-list.tsx");
-  expect(html).toContain("Running read");
-  expect(html).toContain("Running bash");
-  expect(html).toContain("Running grep");
+  expect(html).toContain("Expand read src/components/pwa/message-list.tsx · 1 running");
+  expect(html).toContain("Expand bash pnpm   test · 1 running");
+  expect(html).toContain("Expand grep ToolCard · 1 running");
   expect(html).toContain("pnpm   test");
   expect(html).toContain("ToolCard");
   expect(html).not.toContain("&quot;path&quot;");
@@ -144,7 +144,7 @@ test("keeps streaming thinking collapsed independently of the tools", () => {
   };
   const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
 
-  expect(html).not.toContain("Thought process");
+  expect(html).not.toContain('title="Thinking"');
   expect(html).toContain('<span class="pwa-sr-only" role="status"></span>');
   expect(html).toContain('<span title="Inspecting the request.">Inspecting the request.</span>');
   expect(html.indexOf("pwa-spin")).toBeLessThan(html.indexOf('title="Inspecting the request."'));
@@ -281,6 +281,11 @@ describe("turn presentation", () => {
     expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: thinking }], live)).not.toContain("Working…");
     const tool: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "tool:t1", kind: "tool", tool_call_id: "t1", tool: "bash", args: { command: "pnpm test" }, status: "running" };
     expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).not.toContain("Working…");
+    // 首次渲染即有已完成队首和后续运行调用，组级图标也须接管 Working。
+    const mixed = renderList([...events(user("u1", "g1", 1), { ...toolEvent, group_id: "g1" }), { kind: "partial", createdAt: 2, partial: tool }], live);
+    expect(mixed).toContain("pwa-tool-spinner");
+    expect(mixed).toContain("1 running");
+    expect(mixed).not.toContain("Working…");
     // 旧轮、已结束轮的具体指示不能压制新轮兜底。
     const residuals = [{ kind: "partial" as const, createdAt: 2, partial: thinking }, { kind: "partial" as const, createdAt: 2, partial: tool }];
     expect(renderList([...events(user("u1", "g1", 1), user("u2", "g2", 3)), ...residuals], live)).toContain("Working…");
@@ -296,6 +301,9 @@ describe("turn presentation", () => {
 test.each([
   { text: "**First step**\nBody.\n**Latest step**\n**Unfinished", title: "Latest step" },
   { text: "\n \t\n  检查   工具\t分组  \nHidden body", title: "检查 工具 分组" },
+  { text: "**", title: "Thinking…" },
+  { text: "**Unfinished heading", title: "Thinking…" },
+  { text: "*", title: "Thinking…" },
   { text: "", title: "Thinking…" },
   { text: "\n \t\n", title: "Thinking…" },
 ])("renders the live thinking title or running fallback in SSR ($title)", ({ text, title }) => {
@@ -323,11 +331,26 @@ test.each([
   };
   const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
   expect(html).toContain("Visible answer.");
-  expect(html.includes("Thought process")).toBe(visible);
-  expect(html.includes("Thought…")).toBe(!visible);
+  expect(html).toContain(">Thinking<");
+  expect(html.includes('title="Thinking"')).toBe(visible);
+  expect(html.includes("pwa-thinking-trace")).toBe(!visible);
   expect(html.includes('aria-expanded="false"')).toBe(visible);
   expect(html).not.toContain("Thinking…");
   expect(html).not.toContain("pwa-thinking-live");
+});
+
+test("formal thinking retains the latest heading and an empty icon slot without a live status", () => {
+  const event: TimelineEvent = {
+    event_id: "historical-thinking", session_id: "session-1", leaf_id: "history-1", timestamp: 1,
+    group_id: "group-1", kind: "assistant", status: "complete",
+    blocks: [{ type: "thinking", text: "**First**\nBody\n**Latest**\n**Unfinished" }],
+  };
+  const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
+  expect(html).toContain('title="Latest"');
+  expect(html).toContain("pwa-thinking-icon-slot");
+  expect(html).not.toContain("pwa-spin");
+  expect(html).not.toContain('role="status"');
+  expect(html).not.toContain('title="First"');
 });
 
 test("retains empty-only historical thinking without losing a trailing gap", () => {
@@ -339,12 +362,12 @@ test("retains empty-only historical thinking without losing a trailing gap", () 
   const html = renderList([{ kind: "event", event: first }, { kind: "event", event: duplicate }], {
     isLive: false, running: false, gapBefore: new Set(["duplicate-empty"]),
   });
-  expect(html.match(/>Thought…</g)).toHaveLength(1);
+  expect(html.match(/>Thinking</g)).toHaveLength(1);
   expect(html).not.toContain("Expand thinking");
   expect(html).not.toContain("No records to display.");
   const gap = "Some records in between";
   expect(html.includes(gap)).toBe(true);
-  expect(html.indexOf(">Thought…<")).toBeLessThan(html.indexOf(gap));
+  expect(html.indexOf(">Thinking<")).toBeLessThan(html.indexOf(gap));
 });
 
 describe("thinkingSummary", () => {
@@ -375,8 +398,8 @@ describe("thinkingSummary", () => {
 
 describe("thinkingTitle", () => {
   const text = "**First step**\nSome reasoning.\n\n**Second step**\nMore reasoning.\nAn inline **bold** word stays text.";
-  test("takes the first whole-line bold heading once finished and the latest while streaming", () => {
-    expect(thinkingTitle(text, false)).toBe("First step");
+  test("takes the latest whole-line bold heading both once finished and while streaming", () => {
+    expect(thinkingTitle(text, false)).toBe("Second step");
     expect(thinkingTitle(text, true)).toBe("Second step");
   });
   test("ignores inline bold, an unclosed heading and text without headings", () => {

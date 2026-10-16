@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -52,7 +52,10 @@ async function renderTimeline(initialItems: TimelineViewItem[]) {
 const bottomGap = (list: HTMLElement) => list.scrollHeight - list.clientHeight - list.scrollTop;
 const offset = (element: Element, list: Element) => element.getBoundingClientRect().top - list.getBoundingClientRect().top;
 
-afterEach(async () => { await page.viewport(1280, 900); });
+afterEach(async () => {
+  await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+  await page.viewport(1280, 900);
+});
 
 test.each([1280, 390])("Markdown growth, shrink and completion keep the follower at the bottom at %ipx", async width => {
   await page.viewport(width, 844);
@@ -295,6 +298,125 @@ test("switching back restores a reading position anchored on a collapsed tool gr
     replace(sessionA);
     await settleLayout();
     expect(Math.abs(offset(group(), list) - top)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+const activityCases = [1280, 390].flatMap(width => ["no-preference", "reduce"].map(motion => ({ width, motion })));
+
+/** 在真正绘制前的状态同步结束后取样，只观察一次标题入场所需的窗口。 */
+async function sampleActivityLayout(list: HTMLElement, action: () => void) {
+  const snapshot = () => ({
+    scrollTop: Math.round(list.scrollTop), height: list.scrollHeight,
+    working: list.querySelector(".pwa-thinking-status") !== null,
+    thinking: list.querySelector(".pwa-thinking-live .pwa-spin") !== null,
+    tool: list.querySelector(".pwa-tool-group-status .pwa-tool-spinner") !== null,
+  });
+  action();
+  const samples = [snapshot()];
+  const start = performance.now();
+  await new Promise<void>(resolve => {
+    const sample = () => window.setTimeout(() => {
+      samples.push(snapshot());
+      if (performance.now() - start >= 260) resolve();
+      else requestAnimationFrame(sample);
+    }, 0);
+    requestAnimationFrame(sample);
+  });
+  expect(samples.length).toBeGreaterThan(1);
+  return samples;
+}
+
+test.each(activityCases)("Working and Thinking replace each other without moving the follower at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  // partial 必须属于最后正式记录所在轮次，才能接管该轮的 Working。
+  const history = answer("live-output", paragraphs("Earlier", 30));
+  const { screen, list, update, viewport } = await renderTimeline([history]);
+  try {
+    const working = list.querySelector<HTMLElement>(".pwa-thinking-status")!;
+    expect(Math.round(working.getBoundingClientRect().height)).toBe(44);
+    expect(getComputedStyle(working).fontSize).toBe("14px");
+    const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
+    for (const thinking of [true, false, true]) {
+      const samples = await sampleActivityLayout(list, () => update(thinking ? [history, partial("live-output", "**Checking results**\nReasoning in progress.", "thinking")] : [history]));
+      for (const sample of samples) expect(sample).toMatchObject({ ...before, working: !thinking, thinking, tool: false });
+      expect(bottomGap(list)).toBeLessThanOrEqual(1);
+      expect(viewport().followingOutput).toBe(true);
+    }
+  } finally { await screen.unmount(); }
+});
+
+test.each(activityCases)("a completed queued call keeps group activity, height and reading position at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const history = answer("live-output", paragraphs("Earlier", 30));
+  const tool = (id: string, complete = false): TimelineViewItem => complete ? { kind: "event", event: {
+    ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id,
+    tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok",
+  } } : { kind: "partial", createdAt: 1, partial: {
+    ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${id}`,
+    kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running",
+  } };
+  const { screen, list, update, readAt, viewport } = await renderTimeline([history, tool("a")]);
+  try {
+    const spinner = list.querySelector(".pwa-tool-group-status .pwa-tool-spinner")!;
+    const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
+    const queued = [history, tool("a", true), tool("b")];
+    const samples = await sampleActivityLayout(list, () => {
+      update(queued);
+      expect(list.querySelector(".pwa-tool-group-current")?.textContent).toBe("reada.ts");
+    });
+    for (const sample of samples) expect(sample).toMatchObject({ ...before, working: false, tool: true });
+    await expect.poll(() => list.querySelector(".pwa-tool-group-current")?.textContent, { timeout: 3000 }).toBe("readb.ts");
+    expect(list.querySelector(".pwa-tool-group-status .pwa-tool-spinner")).toBe(spinner);
+    expect({ scrollTop: Math.round(list.scrollTop), height: list.scrollHeight }).toEqual(before);
+    expect(viewport().followingOutput).toBe(true);
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+
+    const target = screen.getByText("Earlier paragraph 4: content that stays available while reading.").element();
+    await readAt(target);
+    const anchorTop = Math.round(offset(target, list));
+    const reading = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
+    const readingSamples = await sampleActivityLayout(list, () => update([history, tool("a", true), tool("b", true), tool("c")]));
+    for (const sample of readingSamples) expect(sample).toMatchObject({ ...reading, working: false, tool: true });
+    expect(Math.round(offset(target, list))).toBe(anchorTop);
+    expect(viewport().followingOutput).toBe(false);
+    expect(viewport().unreadOutput).toBe(1);
+  } finally { await screen.unmount(); }
+});
+
+test.each([1280, 390])("running tool heading changes keep following and reading positions stable at %ipx", async width => {
+  await page.viewport(width, 844);
+  const history = answer("live-output", paragraphs("Earlier", 30));
+  const tool = (id: string): TimelineViewItem => ({ kind: "partial", createdAt: 1, partial: {
+    ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${id}`,
+    kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running",
+  } });
+  const { screen, list, update, readAt, viewport } = await renderTimeline([history, tool("a")]);
+  try {
+    const checkHandoff = async (ids: string[]) => {
+      const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
+      const samples: typeof before[] = [];
+      update([history, ...ids.map(tool)]);
+      const start = performance.now();
+      await new Promise<void>(resolve => {
+        const sample = () => window.setTimeout(() => {
+          samples.push({ scrollTop: Math.round(list.scrollTop), height: list.scrollHeight });
+          if (performance.now() - start >= 260) resolve();
+          else requestAnimationFrame(sample);
+        }, 0);
+        requestAnimationFrame(sample);
+      });
+      expect(samples.length).toBeGreaterThan(1);
+      for (const sample of samples) expect(sample).toEqual(before);
+      expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    };
+    await checkHandoff(["a", "b", "c", "d", "e"]);
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(true);
+    await readAt(screen.getByText("Earlier paragraph 4: content that stays available while reading.").element());
+    await checkHandoff(["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
     expect(viewport().followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });

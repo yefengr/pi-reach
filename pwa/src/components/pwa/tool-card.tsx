@@ -61,7 +61,7 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
   return parts.join(" · ");
 }
 
-/** 组头工具：每次换成新的工具时从下方进入一次，组头首次出现时不播放；停留中的已结束工具显示其结束状态图标。 */
+/** 组头调用文字：每次换成新的工具时从下方进入一次，组头首次出现时不播放。 */
 function ToolGroupCurrent({ value, animate }: { value: ToolValue; animate: boolean }) {
   const summary = toolInlineText(toolHeaderSummary(value));
   return <span className="pwa-tool-group-current" data-enter={animate ? "" : undefined}>
@@ -93,17 +93,9 @@ function useGroupHeadTool(values: readonly ToolValue[], live: boolean, appended:
   return { value: groupHeadTool(next, values, live), animate: next.animate };
 }
 
-/** 与实际渲染共用判断：已结束工具停留在收起组头时，其他运行工具尚不可见。 */
-function toolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, expanded: boolean, current: ToolValue | null): readonly string[] {
-  if (expanded || current === null) return values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity);
-  return effectiveToolStatus(current, live) === "running" ? [toolIdentity(current)] : [];
-}
-
-/** 首次渲染与 SSR 尚无组头报告时，沿用队列的初始状态，不猜测 runningCount。 */
-export function initialToolGroupRunningIndicators(values: readonly ToolValue[], live: boolean, appended: ReadonlySet<string>, expanded: boolean, batchClosed = false): readonly string[] {
-  const state = stepGroupHead(initialGroupHead(values, live, appended), values, live, NOT_ELAPSED, appended, batchClosed);
-  const current = expanded ? null : groupHeadTool(state, values, live);
-  return toolGroupRunningIndicators(values, live, expanded, current);
+/** 组头文字独立轮播；运行提示始终表达整组状态，首次渲染与 SSR 共用相同判断。 */
+export function initialToolGroupRunningIndicators(values: readonly ToolValue[], live: boolean): readonly string[] {
+  return values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity);
 }
 
 /**
@@ -118,15 +110,15 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, batchClose
   const head = useGroupHeadTool(values, live, appended, batchClosed);
   const current = expanded ? null : head.value;
   const currentStatus = current ? effectiveToolStatus(current, live) : null;
-  const runningKeys = values.filter(value => effectiveToolStatus(value, live) === "running").map(toolIdentity);
+  const runningKeys = initialToolGroupRunningIndicators(values, live);
   const runningCount = runningKeys.length;
-  // 摘要态旋转图标对读屏隐藏，收起时工具行也未挂载，可访问名称里保留仍在运行的数量。
-  const busy = current === null && !expanded && runningCount > 0;
+  // 收起与展开都由组头表达整组运行状态，调用文字和各子行保留自己的语义。
+  const busy = runningCount > 0;
+  const headStatus = busy ? "running" : currentStatus;
   const { groupRef, register, observe } = useVisibleToolIndicators(activityKey, onRunningToolsChange);
-  // 停留中的已结束工具也保留在可访问名称里，与屏幕上显示的工具和结束状态一致。
   const currentCommand = current ? `${current.tool} ${toolInlineText(toolHeaderSummary(current))}`.trim() : null;
   const currentLabel = currentCommand === null || currentStatus === null ? null
-    : currentStatus === "running" ? t.tools.groupRunning(currentCommand) : t.tools.statusLabel(currentCommand, t.tools.status[currentStatus]);
+    : busy ? currentCommand : t.tools.statusLabel(currentCommand, t.tools.status[currentStatus]);
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
   return <ToolIndicatorContext value={register}><article ref={groupRef} className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length} data-timeline-key={timelineKey}>
     <div className="pwa-tool-head">
@@ -134,8 +126,9 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, batchClose
         <span className="pwa-tool-action-copy">{current
           ? <ToolGroupCurrent key={toolIdentity(current)} value={current} animate={head.animate} />
           : <ToolGroupSummary summary={summary} />}</span>
-        {current || busy ? <span key={current ? toolIdentity(current) : "summary"} className={`pwa-tool-group-status pwa-tool-status pwa-tool-status-${currentStatus ?? "running"}`} data-enter={current && head.animate ? "" : undefined}><ToolStatusIcon status={currentStatus ?? "running"} toolKeys={current ? [toolIdentity(current)] : runningKeys} /></span> : null}
-        {hasFailure && currentStatus !== "error" ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}
+        {/* 状态槽和旋转图标不随轮播工具重建；同一个图标注册组内全部运行身份。 */}
+        {headStatus ? <span className={`pwa-tool-group-status pwa-tool-status pwa-tool-status-${headStatus}`}><ToolStatusIcon status={headStatus} toolKeys={busy ? runningKeys : []} /></span> : null}
+        {hasFailure && headStatus !== "error" ? <CircleAlert className="pwa-tool-group-alert" size={16} aria-hidden="true" /> : null}
         <ChevronRight className="pwa-tool-chevron pwa-timeline-chevron" size={16} aria-hidden="true" />
       </button>
     </div>

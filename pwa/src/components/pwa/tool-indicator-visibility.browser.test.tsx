@@ -41,7 +41,8 @@ function paintedSpinner(): boolean | null {
 function snapshot() {
   const details = document.querySelector(".pwa-tool-group-details");
   return { spinner: paintedSpinner(), working: document.querySelector(".pwa-thinking-status") !== null,
-    details: details !== null, opacity: details ? Number(getComputedStyle(details).opacity) : null };
+    details: details !== null, opacity: details ? Number(getComputedStyle(details).opacity) : null,
+    bottom: Math.round(document.querySelector(".pwa-bottom-sentinel")!.getBoundingClientRect().top) };
 }
 
 /** 一个采样窗口只覆盖一次过渡；反向也在同一窗口内采样，不累积长等待。 */
@@ -85,13 +86,15 @@ test.each(cases)("Working visibility follows painted collapse frames at $width p
   await renderPwa(<Harness />);
   flushSync(() => update([running("a"), completed("b")]));
   const toggle = () => document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head button")!.click();
-  expect(snapshot()).toMatchObject({ spinner: false, working: true });
+  expect(snapshot()).toMatchObject({ spinner: true, working: false });
+  const head = headSpinner();
   const entering = await sampleTransition(toggle);
-  expect(entering[0]).toMatchObject({ opacity: 0, working: true });
+  expect(entering[0]).toMatchObject({ opacity: 0, spinner: true, working: false });
   expect(entering.at(-1)).toMatchObject({ spinner: true, working: false });
   const exiting = await sampleTransition(toggle);
-  // 减少动态效果时高度立即归零，冻结图标已被裁剪，兜底必须立即回来。
-  expect(exiting[0]).toMatchObject({ spinner: motion !== "reduce", working: motion === "reduce" });
+  // 组头在子行被淡出或裁剪时继续承担整组运行提示。
+  for (const frame of [...entering, ...exiting]) expect(frame).toMatchObject({ spinner: true, working: false });
+  expect(headSpinner()).toBe(head);
   expect(exiting.at(-1)?.details).toBe(false);
   await sampleTransition(toggle, true);
   // 收起时先冻结运行图标，再收到正式完成事件：当前轮未结束，仍要等可见图标退出。
@@ -113,4 +116,69 @@ test.each(cases)("Working visibility follows painted collapse frames at $width p
   flushSync(() => update([{ kind: "event", event: next }]));
   expect(document.querySelector(".pwa-tool-group")).toBeNull();
   expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+});
+
+async function renderHeading(initial: TimelineViewItem[]) {
+  let update!: (items: TimelineViewItem[]) => void;
+  function Harness() {
+    const [items, setItems] = useState(initial);
+    update = setItems;
+    const listRef = useRef<HTMLDivElement>(null);
+    const bottomRef = useRef<HTMLDivElement>(null);
+    return <main className="pwa-main"><MessageList items={items} running isLive hasEarlier={false} listRef={listRef} bottomSentinelRef={bottomRef} onScroll={() => {}} /></main>;
+  }
+  await renderPwa(<Harness />);
+  return update;
+}
+
+const headSpinner = () => document.querySelector<SVGSVGElement>(".pwa-tool-group-status .pwa-tool-spinner");
+
+test.each(cases)("running heading handoff keeps its spinner and layout at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const update = await renderHeading([running("a")]);
+  const spinner = headSpinner()!;
+  const spin = spinner.getAnimations()[0]!;
+  const before = snapshot();
+  expect(before).toMatchObject({ spinner: true, working: false });
+  expect(spin).toBeDefined();
+  // 积压跳到最新的路径可同步触发与定时轮播相同的组头交接，不依赖计时器是否准时到达。
+  const frames = await sampleTransition(() => update(["a", "b", "c", "d", "e"].map(running)));
+  expect(document.querySelector(".pwa-tool-group-current")?.textContent).toBe("reade.ts");
+  expect(headSpinner()).toBe(spinner);
+  expect(spinner.getAnimations()[0]).toBe(spin);
+  for (const frame of frames) expect(frame).toMatchObject({ spinner: true, working: false, bottom: before.bottom });
+  // 轮播工具已完成，只要较早工具仍运行，组头就保留同一个组级图标。
+  flushSync(() => update([running("a"), running("b"), running("c"), running("d"), completed("e")]));
+  expect(snapshot()).toMatchObject({ spinner: true, working: false });
+  expect(headSpinner()).toBe(spinner);
+  expect(spinner.getAnimations()[0]).toBe(spin);
+  flushSync(() => update(["a", "b", "c", "d", "e"].map(completed)));
+  expect(snapshot()).toMatchObject({ spinner: false, working: true });
+});
+
+test.each(cases)("a hidden group indicator immediately restores Working at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const update = await renderHeading([running("a")]);
+  const spinner = headSpinner()!;
+  const status = spinner.parentElement!;
+  status.style.opacity = "0";
+  flushSync(() => update([running("a"), running("b")]));
+  expect(snapshot()).toMatchObject({ spinner: false, working: true });
+  status.style.opacity = "1";
+  flushSync(() => update([completed("a"), running("b")]));
+  expect(snapshot()).toMatchObject({ spinner: true, working: false });
+  expect(headSpinner()).toBe(spinner);
+});
+
+test.each(cases)("completed to running heading is visible immediately at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const update = await renderHeading([running("a")]);
+  const runningBottom = snapshot().bottom;
+  flushSync(() => update([completed("a")]));
+  expect(snapshot()).toMatchObject({ spinner: false, working: true });
+  const frames = await sampleTransition(() => update([completed("a"), ...["b", "c", "d", "e"].map(running)]));
+  for (const frame of frames) expect(frame).toMatchObject({ spinner: true, working: false, bottom: runningBottom });
 });

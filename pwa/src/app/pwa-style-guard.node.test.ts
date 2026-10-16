@@ -100,6 +100,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "components/pwa/attachment-cards.css", selector: ".pwa-attachment-card", property: "padding", values: [6], reason: "附件卡片 58 高的领域密度" },
   { file: "components/pwa/attachment-cards.css", selector: ".pwa-attachment-meta", property: "gap", values: [3], reason: "附件卡片 58 高的领域密度" },
   { file: "components/pwa/published-files.css", selector: ".pwa-root .pwa-published-actions", property: "gap", values: [2], reason: "相邻 44 图标按钮的点击区紧挨，视觉圆间隔已超过 8" },
+  { file: "components/pwa/timeline-content.css", selector: ".pwa-thinking-status", property: "margin", values: [6], reason: "Working 与思考／工具状态行共用 6px 纵向间距，避免替换时高度变化" },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-message-status", property: "gap", values: [6], reason: STATUS },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown code", property: "padding", values: [1], reason: OPTICAL },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown th, .pwa-markdown td", property: "padding", values: [6, 10], reason: "Markdown 表格单元格的阅读密度" },

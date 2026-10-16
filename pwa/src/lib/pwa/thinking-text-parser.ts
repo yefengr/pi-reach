@@ -1,4 +1,4 @@
-export type ThinkingTextResult = { firstTitle?: string; latestTitle?: string; summary?: string; empty: boolean };
+export type ThinkingTextResult = { firstTitle?: string; latestTitle?: string; summary?: string; summaryIsHeadingCandidate: boolean; empty: boolean };
 
 type HeadingCandidate = {
   phase: "indent" | "open" | "body" | "close" | "trailing";
@@ -29,6 +29,7 @@ export class ThinkingTextParser {
   private summary = "";
   private summarySpace = false;
   private summaryDone = false;
+  private summaryCandidate: HeadingCandidate | undefined = candidate();
   private empty = true;
 
   read(text: string, epoch?: object, streaming?: boolean): ThinkingTextResult {
@@ -43,14 +44,14 @@ export class ThinkingTextParser {
       const space = whitespace.test(char);
       this.scannedCharacters += 1;
       if (!space) this.empty = false;
-      this.consumeSummary(char, space);
+      this.consumeSummary(text, index, char, space);
       this.consumeHeading(text, index, char, space);
     }
     this.length = text.length;
     // 末尾无换行的完整标题是暂定值；追加非空白可使它失效，不污染已提交的标题。
     const provisional = this.candidates.find(value => value.phase === "trailing")?.title;
     return { firstTitle: this.firstTitle ?? provisional, latestTitle: provisional ?? this.latestTitle,
-      summary: this.summary || undefined, empty: this.empty };
+      summary: this.summary || undefined, summaryIsHeadingCandidate: !!this.summary && this.summaryCandidate !== undefined, empty: this.empty };
   }
 
   private reset(): void {
@@ -61,13 +62,15 @@ export class ThinkingTextParser {
     this.summary = "";
     this.summarySpace = false;
     this.summaryDone = false;
+    this.summaryCandidate = candidate();
     this.empty = true;
   }
 
-  private consumeSummary(char: string, space: boolean): void {
+  private consumeSummary(text: string, index: number, char: string, space: boolean): void {
     if (this.summaryDone) return;
     if (char === "\n") {
       if (this.summary) this.summaryDone = true;
+      else this.summaryCandidate = candidate();
       this.summarySpace = false;
       return;
     }
@@ -75,8 +78,13 @@ export class ThinkingTextParser {
       if (this.summary) this.summarySpace = true;
       return;
     }
-    if (this.summarySpace) this.summary += " ";
+    // 与摘要一样忽略首尾空白、合并内部空白；候选仅推进新增字符，不重扫首行。
+    if (this.summarySpace) {
+      this.summary += " ";
+      if (this.summaryCandidate && !this.advanceCandidate(this.summaryCandidate, text, index, " ", true)) this.summaryCandidate = undefined;
+    }
     this.summary += char;
+    if (this.summaryCandidate && !this.advanceCandidate(this.summaryCandidate, text, index, char, false)) this.summaryCandidate = undefined;
     this.summarySpace = false;
   }
 
@@ -133,8 +141,7 @@ export class ThinkingTextParser {
 }
 
 export function thinkingTitle(text: string, streaming: boolean): string | undefined {
-  const parsed = new ThinkingTextParser().read(text);
-  return streaming ? parsed.latestTitle : parsed.firstTitle;
+  return new ThinkingTextParser().read(text, undefined, streaming).latestTitle;
 }
 
 /** 独立调用保留首行早退；组件同时需要标题时复用增量解析器的摘要结果。 */

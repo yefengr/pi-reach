@@ -25,10 +25,13 @@ test("the model chip describes the shared model and thinking settings in both la
   expect(zh.commands.modelChipLabel("示例模型", "high")).toBe("模型与思考设置，当前 示例模型，思考级别 high");
 });
 
-test("empty historical thinking has a concise static label in both languages", () => {
-  expect(en.timeline.thinkingTrace).toBe("Thought…");
-  expect(zh.timeline.thinkingTrace).toBe("思考…");
-  expect(zh.timeline.thinking).toBe("思考中…");
+test("conversation thinking labels stay English in both interface languages", () => {
+  expect(en.timeline.thinkingTrace).toBe("Thinking");
+  expect(en.timeline.thoughtProcess).toBe("Thinking");
+  expect(en.timeline.thinking).toBe("Thinking…");
+  for (const key of ["thinkingLabel", "collapseThinking", "expandThinking", "thinking", "thinkingTrace", "thoughtProcess"] as const) {
+    expect(zh.timeline[key], key).toBe(en.timeline[key]);
+  }
 });
 
 test("every safe feedback message has a Chinese translation", () => {
