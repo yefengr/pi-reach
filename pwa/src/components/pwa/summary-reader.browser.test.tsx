@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { setLanguagePreference } from "@/lib/i18n";
 import { enableTouch, resetTouch, touchDrag, touchOrigin } from "@/test/browser/swipe";
 import { MessageList } from "./message-list";
 import type { SummaryEvent } from "./summary-presentation";
@@ -42,13 +43,16 @@ async function closed() {
   await expect.poll(() => document.querySelector(".pwa-summary-reader")).toBeNull();
 }
 
-test.each([1280, 390])("summary entry opens a named, scrollable reader with safe-area header, copy and focus return at %ipx", async width => {
+test.each([1280, 390, 320])("summary entry opens a named, scrollable reader with safe-area header, copy and focus return at %ipx", async width => {
   await page.viewport(width, 844);
   const body = `${"Original paragraph.\n\n".repeat(150)}FINAL_SUMMARY_LINE`;
   const { screen, reading } = await harness([{ ...summary, payload: { summary: `## Original heading\n\n${body}`, details: "HIDDEN_DETAIL" } }]);
   expect(document.querySelector(".pwa-message-list")?.textContent).not.toContain("Original heading");
   const trigger = document.querySelector<HTMLButtonElement>(".pwa-summary-action")!;
   expect(Math.round(trigger.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  expect(trigger.textContent).toBe("Context compacted · View summary");
+  expect(Math.round(trigger.scrollWidth)).toBeLessThanOrEqual(Math.round(trigger.clientWidth));
+  expect(Math.round(trigger.getBoundingClientRect().right)).toBeLessThanOrEqual(width);
   const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
   const before = list.scrollTop;
   const reader = await openReader(trigger);
@@ -74,10 +78,34 @@ test.each([1280, 390])("summary entry opens a named, scrollable reader with safe
   expect(list.scrollTop).toBe(before);
 });
 
+test.each(["compaction", "branch_summary"] as const)("Chinese %s outcome stays visible at 320px without changing reader title", async kind => {
+  await page.viewport(320, 844);
+  setLanguagePreference("zh");
+  try {
+    const { screen } = await harness([{ ...summary, kind }]);
+    const trigger = document.querySelector<HTMLButtonElement>(".pwa-summary-action")!;
+    expect(trigger.textContent).toBe(kind === "compaction" ? "上下文已压缩 · 查看摘要" : "已生成分支摘要 · 查看摘要");
+    expect(Math.round(trigger.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    const text = trigger.querySelector(".mantine-Button-label > span")!;
+    const range = document.createRange(); range.selectNodeContents(text);
+    const bounds = trigger.getBoundingClientRect();
+    for (const rect of range.getClientRects()) {
+      expect(Math.round(rect.left)).toBeGreaterThanOrEqual(Math.round(bounds.left));
+      expect(Math.round(rect.right)).toBeLessThanOrEqual(Math.round(bounds.right));
+      expect(Math.round(rect.bottom)).toBeLessThanOrEqual(Math.round(bounds.bottom));
+    }
+    await openReader(trigger);
+    await expect.element(screen.getByRole("dialog", { name: kind === "compaction" ? "上下文摘要" : "分支摘要", exact: true })).toBeVisible();
+    await userEvent.keyboard("{Escape}"); await closed();
+  } finally { setLanguagePreference("system"); }
+});
+
 test("browser back closes only the branch reader and a later open starts with fresh content", async () => {
   const { update, reading } = await harness([{ ...summary, kind: "branch_summary", payload: "Branch-only original" }]);
   const url = window.location.href;
+  expect(document.querySelector(".pwa-summary-action")?.textContent).toBe("Branch summary created · View summary");
   await openReader();
+  await expect.poll(() => document.querySelector("[role='dialog']")?.getAttribute("aria-labelledby")).not.toBeNull();
   expect(document.querySelector(".pwa-summary-reader")?.textContent).toContain("Branch-only original");
   window.history.back();
   await closed();

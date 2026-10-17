@@ -142,6 +142,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const channelContextRef = useRef<ConnectionContext | null>(null);
   const helloRequestRef = useRef<string | null>(null);
   const modelRequestRef = useRef<string | null>(null);
+  // 仅关联当前配置失败后的读回；列表请求接替时保留语义，不保存结果。
+  const configurationReadbackRef = useRef<{ channelId: string; sessionId: string } | null>(null);
   const extensionInfoRequestRef = useRef<string | null>(null);
   const activeEndpointModelRef = useRef<string | undefined>(undefined);
   const activeEndpointThinkingRef = useRef<string | undefined>(undefined);
@@ -317,6 +319,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     channelContextRef.current = null;
     helloRequestRef.current = null;
     modelRequestRef.current = null;
+    configurationReadbackRef.current = null;
+    operationNotifications.clearSession({ toastsOnly: true });
     extensionInfoRequestRef.current = null;
     disconnectActions();
     setModelsRequestId(null);
@@ -325,7 +329,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     setExtensionVersion(null);
     disconnectTimeline();
     attachmentComposer.disconnect();
-  }, [attachmentComposer, disconnectActions, disconnectTimeline, fileController, filesReadyRef]);
+  }, [attachmentComposer, disconnectActions, disconnectTimeline, fileController, filesReadyRef, operationNotifications]);
   const finishRetry = useCallback(() => {
     retryPendingRef.current = false;
     retryDeviceIdRef.current = null;
@@ -479,13 +483,29 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     selectEndpoint(endpointId);
   }, [activeDevice, activeEndpointId, endpoints, historySessions, liveEndpointSnapshot?.endpointId, onlineRef, operationNotifications, rememberSessionPosition, resetActions, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory, switchLiveTimeline]);
   const sendModelsRequest = useCallback((scope: TimelineScope, channel: PeerChannel): boolean => {
+    const readback = configurationReadbackRef.current;
+    if (readback && (readback.channelId !== scope.channelId || readback.sessionId !== scope.sessionId)) configurationReadbackRef.current = null;
     const requestId = id();
     modelRequestRef.current = requestId;
     setModelsRequestId(requestId); setModelsStatus("loading");
     if (channel.send({ protocol_version: 2, type: "list_models", id: requestId, channel_id: scope.channelId, session_id: scope.sessionId, leaf_id: scope.leafId })) return true;
-    if (modelRequestRef.current === requestId) { modelRequestRef.current = null; setModelsRequestId(null); setModelsStatus("error"); }
+    if (modelRequestRef.current === requestId) {
+      modelRequestRef.current = null; setModelsRequestId(null); setModelsStatus("error");
+      if (configurationReadbackRef.current) {
+        configurationReadbackRef.current = null;
+        operationNotifications.notify(getMessages().operationFeedback.configUnconfirmed, { kind: "info", sessionScoped: true });
+      }
+    }
     return false;
-  }, []);
+  }, [operationNotifications]);
+
+  const confirmConfiguration = useCallback((channel: PeerChannel) => {
+    const scope = timelineRuntimeRef.current.currentScope;
+    if (!scope) return;
+    configurationReadbackRef.current = { channelId: scope.channelId, sessionId: scope.sessionId };
+    operationNotifications.notify(getMessages().operationFeedback.configChecking, { kind: "info", sessionScoped: true });
+    sendModelsRequest(scope, channel);
+  }, [operationNotifications, sendModelsRequest, timelineRuntimeRef]);
 
   const sendExtensionInfoRequest = useCallback((scope: TimelineScope, channel: PeerChannel) => {
     const requestId = id();
@@ -502,24 +522,32 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       if (pending.action === "session_compact") {
         setCompactionActivity(null);
         operationNotifications.notify(getMessages().operationFeedback.compactIncomplete, { kind: "info" });
+      } else if (pending.action === "model_set" || pending.action === "thinking_set") {
+        operationNotifications.clearAction(pending.action);
+        confirmConfiguration(channel);
       } else operationNotifications.show(actionErrorFeedback(pending.action));
-      if (pending.action === "model_set" || pending.action === "thinking_set") {
-        const scope = timelineRuntimeRef.current.currentScope;
-        if (scope) sendModelsRequest(scope, channel);
-      }
       return;
     }
     operationNotifications.clearAction(pending.action);
     if (frame.action === "model_set" || frame.action === "thinking_set") {
       // 回执是实际值；作废切换前发出的列表，不能让旧列表覆盖新配置。
       modelRequestRef.current = null; setModelsRequestId(null); setModelsStatus("success");
+      const confirming = configurationReadbackRef.current !== null;
+      configurationReadbackRef.current = null;
       setReportedThinking(frame.thinking_level);
-      if (frame.action === "model_set") setCurrentModel(frame.model);
+      if (frame.action === "model_set") {
+        setCurrentModel(frame.model);
+        if (confirming) operationNotifications.notify(getMessages().operationFeedback.configConfirmed(frame.model.name, frame.thinking_level), { kind: "info", sessionScoped: true });
+      } else {
+        const feedback = getMessages().operationFeedback;
+        operationNotifications.notify(pending.requestedThinking && pending.requestedThinking !== frame.thinking_level
+          ? feedback.thinkingAdjusted(frame.thinking_level) : feedback.thinkingUpdated(frame.thinking_level), { sessionScoped: true });
+      }
     }
     if (frame.action === "session_compact" && frame.phase !== "accepted") {
       setCompactionActivity(frame.phase === "cancelled" ? { sessionId: timelineRuntimeRef.current.currentScope?.sessionId ?? "", status: "cancelled" } : null);
     }
-  }, [operationNotifications, pendingActionRef, receiveAction, sendModelsRequest, timelineRuntimeRef]);
+  }, [confirmConfiguration, operationNotifications, pendingActionRef, receiveAction, timelineRuntimeRef]);
 
   const handleServerFrame = useCallback((frame: ServerFrame, context: ConnectionContext) => {
     const current = channelContextRef.current;
@@ -530,6 +558,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       const scope = timelineRuntimeRef.current.currentScope;
       if (!scope || scope.sessionId !== frame.session_id) return;
       if (frame.type === "bye" && scope.leafId !== frame.leaf_id) return;
+      operationNotifications.clearSession();
       if (frame.type === "reset" || frame.reason === "session_replaced") fileController.reset();
       else fileController.disconnect();
       filesReadyRef.current = false;
@@ -555,7 +584,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       const previousSession = lastSessionByRuntimeRef.current.get(runtimeKey);
       lastSessionByRuntimeRef.current.set(runtimeKey, frame.session_id);
       setDraftSessions((current) => current[runtimeKey] === frame.session_id ? current : { ...current, [runtimeKey]: frame.session_id });
-      if (previousSession !== undefined && previousSession !== frame.session_id) setSessionSwitched(true);
+      if (previousSession !== undefined && previousSession !== frame.session_id) {
+        operationNotifications.clearSession();
+        setSessionSwitched(true);
+      }
       emptySessionFocusRef.current = frame.head_seq === 0 ? `${context.deviceId}\u0000${context.endpointId}\u0000${frame.session_id}` : null;
       startLive({ scope, headSeq: frame.head_seq, send: (request) => context.channel.send(request), onHistoryChanged: () => { void refreshHistory(); }, onBranchMismatch: () => {
         // 与收到 reset(branch_changed) 相同：撤下当前投影并重新握手，按权威分支整段替换本地记录。
@@ -593,6 +625,14 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       modelRequestRef.current = null; setModelsRequestId(null); setModelsStatus("success");
       const currentModelFromEndpoint = frame.current ?? resolveEndpointModel(frame.models, activeEndpointModelRef.current);
       setModels(frame.models); setCurrentModel(currentModelFromEndpoint ?? null); setReportedThinking(frame.thinking_level);
+      const readback = configurationReadbackRef.current;
+      configurationReadbackRef.current = null;
+      const scope = timelineRuntimeRef.current.currentScope;
+      if (readback && readback.channelId === context.channel.channelId && readback.sessionId === scope?.sessionId) {
+        const feedback = getMessages().operationFeedback;
+        // 缺少 wire current 不能用 endpoint 旧值冒充已确认配置。
+        operationNotifications.notify(frame.current ? feedback.configConfirmed(frame.current.name, frame.thinking_level) : feedback.configUnconfirmed, { kind: "info", sessionScoped: true });
+      }
       const pending = pendingActionRef.current;
       if (pending?.phase === "unknown" && (pending.action === "model_set" || pending.action === "thinking_set")) setPendingAction(null);
       return;
@@ -603,21 +643,30 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
         setStopRequest(null); operationNotifications.show("stop-send-failed"); return;
       }
       if (frame.in_reply_to === modelRequestRef.current) {
-        modelRequestRef.current = null; setModelsRequestId(null); setModelsStatus("error"); return;
+        modelRequestRef.current = null; setModelsRequestId(null); setModelsStatus("error");
+        if (configurationReadbackRef.current) {
+          configurationReadbackRef.current = null;
+          operationNotifications.notify(getMessages().operationFeedback.configUnconfirmed, { kind: "info", sessionScoped: true });
+        }
+        return;
       }
       const pending = pendingActionRef.current;
       if (frame.in_reply_to === pending?.id) {
         if (pending.action === "session_compact") setCompactionActivity(null);
-        setPendingAction(null); operationNotifications.show(actionErrorFeedback(pending.action));
+        setPendingAction(null);
         if (pending.action === "model_set" || pending.action === "thinking_set") {
-          const scope = timelineRuntimeRef.current.currentScope;
-          if (scope) sendModelsRequest(scope, context.channel);
-        }
+          operationNotifications.clearAction(pending.action);
+          confirmConfiguration(context.channel);
+        } else operationNotifications.show(actionErrorFeedback(pending.action));
         return;
       }
     }
     if (frame.type === "cancelled") {
-      if (frame.in_reply_to === stopRequestRef.current?.id) operationNotifications.clearStop();
+      const stop = stopRequestRef.current;
+      if (stop && frame.in_reply_to === stop.id && stop.sessionId === timelineRuntimeRef.current.currentScope?.sessionId) {
+        setStopRequest({ ...stop, accepted: true });
+        operationNotifications.clearStop();
+      }
       // 受理不等于该轮已结束；只在正式 run_end 后解除等待。
       return;
     }
@@ -645,16 +694,20 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       },
       receiveRealtimeOutput, setError: reportSessionFailure, setLastSyncedAt, onHistoryChanged: refreshHistory,
     });
-  }, [attachmentComposer, fileController, filesReadyRef, applyTimelineChange, disconnectSession, finishRetry, fragmentAssemblerRef, handleActionReply, historyLoaderRef, invalidateTimelineScope, observeSession, operationNotifications, pendingActionRef, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionDetails, reportSessionFailure, resetActions, restartSession, sendExtensionInfoRequest, sendModelsRequest, setLastSyncedAt, setPendingAction, setStopRequest, startLive, stopRequestRef, timelineRuntimeRef]);
+  }, [attachmentComposer, fileController, filesReadyRef, applyTimelineChange, confirmConfiguration, disconnectSession, finishRetry, fragmentAssemblerRef, handleActionReply, historyLoaderRef, invalidateTimelineScope, observeSession, operationNotifications, pendingActionRef, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionDetails, reportSessionFailure, resetActions, restartSession, sendExtensionInfoRequest, sendModelsRequest, setLastSyncedAt, setPendingAction, setStopRequest, startLive, stopRequestRef, timelineRuntimeRef]);
 
   useEffect(() => {
     if (!modelsRequestId) return;
     const timer = window.setTimeout(() => {
       if (modelRequestRef.current !== modelsRequestId) return;
       modelRequestRef.current = null; setModelsRequestId(null); setModelsStatus("error");
+      if (configurationReadbackRef.current) {
+        configurationReadbackRef.current = null;
+        operationNotifications.notify(getMessages().operationFeedback.configUnconfirmed, { kind: "info", sessionScoped: true });
+      }
     }, OPERATION_CONFIRMATION_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
-  }, [modelsRequestId]);
+  }, [modelsRequestId, operationNotifications]);
   useEffect(() => {
     const scope = timelineRuntimeRef.current.currentScope;
     if (scope && connection === "online" && !catchingUp && !catchupFailed && !reconnectPhase) observeSession(scope.sessionId, true);
@@ -802,7 +855,12 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     }
     setCompactionActivity(null);
     if (request.action === "session_compact") remoteCompactionPresentationRef.current = true;
-    setPendingAction({ id: requestId, sessionId: scope.sessionId, action: request.action, phase: "pending", startedAt: Date.now(), ...(request.action === "session_new" ? { projection: timelineItems } : {}) });
+    if (request.action === "model_set" || request.action === "thinking_set") {
+      configurationReadbackRef.current = null;
+      operationNotifications.clearSession({ toastsOnly: true });
+      modelRequestRef.current = null; setModelsRequestId(null);
+    }
+    setPendingAction({ id: requestId, sessionId: scope.sessionId, action: request.action, phase: "pending", startedAt: Date.now(), ...(request.action === "thinking_set" ? { requestedThinking: request.level } : {}), ...(request.action === "session_new" ? { projection: timelineItems } : {}) });
     if (!channel.send(frame)) {
       setPendingAction(null);
       if (request.action === "session_compact") remoteCompactionPresentationRef.current = false;
@@ -1035,7 +1093,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const mainContent = selectedHistory
     ? <HistoryWorkspace key={selectedHistory.id} items={historyItems} loading={historyLoading} restore={historyRestore} visibleCountRef={historyVisibleCountRef} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} modelName={selectedHistory.model ?? null} thinking={safeThinkingLevel(selectedHistory.thinking)} />
     : activeDevice && displayEndpoint
-      ? <LiveWorkspace timeline={liveTimeline} footer={<><OperationFeedback pending={pendingAction} stopUnknown={stopRequest?.unknown === true} compaction={compactionActivity} />{exitedDisplay ? <div className="pwa-read-only-bar" role="note"><span>{t.workspace.exitedNote}</span>{onlinePis.length > 0 ? <Button variant="transparent" color="piReach" type="button" onClick={chooseOtherPi}>{t.workspace.chooseOtherPi}</Button> : null}</div> : <><PwaMessageActions show={connection === "offline" || catchupFailed || !followingOutput || unreadOutput > 0} showRetry={connection === "offline" || catchupFailed} showLatest={!followingOutput || unreadOutput > 0} unreadOutput={unreadOutput} onRetry={() => { if (catchupFailed) void retryCatchup(); else retryCurrentSession(); }} onLatest={showLatest} /><MessageComposer queuedMessages={<QueuedMessagesPanel items={visibleTimelineItems} isOnline={connection === "online" && !newSessionPending} runtimeRef={timelineRuntimeRef} channelRef={channelRef} applyChange={applyTimelineChange} onError={setError} />} attachments={attachments.items} canAttach={canAttach} sendingAttachments={attachments.snapshot.active} attachmentNotice={attachments.notice} isOnline={connection === "online"} isWorking={displayEndpoint.working === true} stopping={stopRequest !== null} draft={draft} onDraftChange={(value) => { draftVersionRef.current += 1; setDraftFor(draftKey, value); }} onSend={sendMessage} onStop={stopCurrentTask} onAddFiles={attachments.addFiles} onRemoveAttachment={attachments.remove} onRetryAttachment={attachments.retry} commandModels={models} commandModelsStatus={modelsStatus} commandCurrentModel={currentModel} commandCurrentModelFallback={displayEndpoint.model ?? null} commandThinking={activeThinking} commandPendingAction={pendingAction?.action ?? null} onNewSession={() => requestConfirmation({ kind: "new-session" })} onCompactSession={() => sendCommandAction({ action: "session_compact" })} onSetModel={(model) => sendCommandAction({ action: "model_set", provider: model.provider, modelId: model.id })} onSetThinking={(level) => sendCommandAction({ action: "thinking_set", level })} onCommandsOpen={requestModels} /></>}</>} />
+      ? <LiveWorkspace timeline={liveTimeline} footer={<><OperationFeedback pending={pendingAction} stop={stopRequest} compaction={compactionActivity} />{exitedDisplay ? <div className="pwa-read-only-bar" role="note"><span>{t.workspace.exitedNote}</span>{onlinePis.length > 0 ? <Button variant="transparent" color="piReach" type="button" onClick={chooseOtherPi}>{t.workspace.chooseOtherPi}</Button> : null}</div> : <><PwaMessageActions show={connection === "offline" || catchupFailed || !followingOutput || unreadOutput > 0} showRetry={connection === "offline" || catchupFailed} showLatest={!followingOutput || unreadOutput > 0} unreadOutput={unreadOutput} onRetry={() => { if (catchupFailed) void retryCatchup(); else retryCurrentSession(); }} onLatest={showLatest} /><MessageComposer queuedMessages={<QueuedMessagesPanel items={visibleTimelineItems} isOnline={connection === "online" && !newSessionPending} runtimeRef={timelineRuntimeRef} channelRef={channelRef} applyChange={applyTimelineChange} onError={setError} />} attachments={attachments.items} canAttach={canAttach} sendingAttachments={attachments.snapshot.active} attachmentNotice={attachments.notice} isOnline={connection === "online"} isWorking={displayEndpoint.working === true} stopping={stopRequest !== null} draft={draft} onDraftChange={(value) => { draftVersionRef.current += 1; setDraftFor(draftKey, value); }} onSend={sendMessage} onStop={stopCurrentTask} onAddFiles={attachments.addFiles} onRemoveAttachment={attachments.remove} onRetryAttachment={attachments.retry} commandModels={models} commandModelsStatus={modelsStatus} commandCurrentModel={currentModel} commandCurrentModelFallback={displayEndpoint.model ?? null} commandThinking={activeThinking} commandPendingAction={pendingAction?.action ?? null} onNewSession={() => requestConfirmation({ kind: "new-session" })} onCompactSession={() => sendCommandAction({ action: "session_compact" })} onSetModel={(model) => sendCommandAction({ action: "model_set", provider: model.provider, modelId: model.id })} onSetThinking={(level) => sendCommandAction({ action: "thinking_set", level })} onCommandsOpen={requestModels} /></>}</>} />
       : skeletonVisible || mainLoading
         ? <WorkspaceSkeleton visible={skeletonVisible} />
         : devices.length === 0

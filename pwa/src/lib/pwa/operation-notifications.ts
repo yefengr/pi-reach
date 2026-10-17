@@ -8,7 +8,7 @@ export const OPERATION_NOTIFICATION_ID = "pwa-operation-feedback";
 export const TOAST_AUTO_CLOSE_MS = 4_000;
 
 export type ToastKind = "success" | "info";
-export type ToastOptions = { kind?: ToastKind; action?: { label: string; onClick: () => void; disabled?: boolean }; onDismiss?: () => void };
+export type ToastOptions = { kind?: ToastKind; sessionScoped?: boolean; action?: { label: string; onClick: () => void; disabled?: boolean }; onDismiss?: () => void };
 type PauseReason = "hover" | "focus";
 
 export type OperationAction = "session_new" | "session_compact" | "model_set" | "thinking_set";
@@ -33,7 +33,8 @@ export type OperationNotificationController = {
   resumeAutoClose: (reason: PauseReason) => void;
   clearAction: (action: OperationAction) => void;
   clearStop: () => void;
-  clearSession: () => void;
+  /** 连接清理或新配置开始时仅撤销普通会话提示，不改变操作错误的生命周期。 */
+  clearSession: (options?: { toastsOnly?: boolean }) => void;
 };
 
 function operationAction(operation: OperationFeedback): OperationAction | "stop" | "preference" | null {
@@ -232,8 +233,11 @@ export function createOperationNotificationController(): OperationNotificationCo
     clearStop: () => {
       if (active && currentOperation === "stop-send-failed") clearAll();
     },
-    clearSession: () => {
-      if (active && currentOperation && operationAction(currentOperation) !== null) clearAll();
+    clearSession: ({ toastsOnly = false } = {}) => {
+      // 必须先撤队列，再清槽位，否则 clearAll 会把已失效的会话结果补显。
+      if (pendingNormal?.options.sessionScoped) pendingNormal = null;
+      if (!active) return;
+      if (currentNormal?.options.sessionScoped || (!toastsOnly && currentOperation && operationAction(currentOperation) !== null)) clearAll();
     },
   };
 }

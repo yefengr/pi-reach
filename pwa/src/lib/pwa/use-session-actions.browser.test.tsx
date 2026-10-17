@@ -2,13 +2,14 @@ import { useEffect } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { renderPwa } from "@/test/browser/render";
 import { useSessionActions } from "./use-session-actions";
+import { OperationFeedback } from "@/components/pwa/operation-feedback";
 import { OPERATION_CONFIRMATION_TIMEOUT_MS } from "./operation-feedback";
 
 type Actions = ReturnType<typeof useSessionActions>;
 function Harness({ expose }: { expose: (actions: Actions) => void }) {
   const actions = useSessionActions();
   useEffect(() => { expose(actions); });
-  return <><output data-testid="action">{actions.pendingAction?.phase ?? "none"}</output><output data-testid="stop">{actions.stopRequest ? actions.stopRequest.unknown ? "unknown" : "waiting" : "none"}</output></>;
+  return <><OperationFeedback pending={actions.pendingAction} stop={actions.stopRequest} compaction={null} /><output data-testid="action">{actions.pendingAction?.phase ?? "none"}</output><output data-testid="stop">{actions.stopRequest ? actions.stopRequest.unknown ? "unknown" : "waiting" : "none"}</output></>;
 }
 afterEach(() => vi.useRealTimers());
 
@@ -28,7 +29,25 @@ test("timeout preserves unknown action and stop targets; it never invents failur
     await expect.element(screen.getByTestId("stop")).toHaveTextContent("unknown");
     expect(actions.pendingActionRef.current?.id).toBe("new");
     expect(actions.stopRequestRef.current?.groupId).toBe("group");
+    actions.setStopRequest({ ...actions.stopRequestRef.current!, accepted: true });
+    await expect.element(screen.getByText("Stop result not confirmed. Wait for reconnection to check this run.", { exact: true })).toBeVisible();
+    expect(screen.getByText("Stop requested. Waiting for this run to end…", { exact: true }).query()).toBeNull();
   } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
+test.each([
+  ["session_new", "New session not confirmed. Reconnect to check before creating another."],
+  ["session_compact", "Compaction not confirmed. Reconnect to check before compacting again."],
+  ["model_set", "Configuration not confirmed. Reconnect to check the actual model and thinking level."],
+  ["thinking_set", "Configuration not confirmed. Reconnect to check the actual model and thinking level."],
+] as const)("unknown %s explains its own safe next step without retrying", async (action, message) => {
+  let actions!: Actions;
+  const screen = await renderPwa(<Harness expose={value => { actions = value; }} />);
+  try {
+    actions.setPendingAction({ id: "request", sessionId: "session", action, phase: "unknown", startedAt: Date.now() });
+    await expect.element(screen.getByText(message, { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-operation-status button")).toBeNull();
+  } finally { await screen.unmount(); }
 });
 
 test("disconnect preserves new-session evidence, while explicit scope reset rejects late replies", async () => {

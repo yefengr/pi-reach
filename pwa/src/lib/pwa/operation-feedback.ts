@@ -9,13 +9,14 @@ export type PendingSessionAction = {
   action: OperationAction;
   phase: "pending" | "accepted" | "unknown";
   startedAt: number;
+  requestedThinking?: string;
   targetSessionId?: string;
   readySessionId?: string;
   dataSessionId?: string;
   /** 仅 /new 交接期间保留当前可见投影，不作为其他会话的缓存。 */
   projection?: TimelineViewItem[];
 };
-export type PendingStop = { id: string; groupId: string; sessionId: string; leafId: string | null; startedAt: number; unknown: boolean };
+export type PendingStop = { id: string; groupId: string; sessionId: string; leafId: string | null; startedAt: number; unknown: boolean; accepted?: boolean };
 
 export function actionReply(pending: PendingSessionAction | null, frame: Extract<ServerFrame, { type: "action_ok" | "action_error" }>): PendingSessionAction | null {
   if (!pending || frame.in_reply_to !== pending.id || frame.action !== pending.action) return pending;
