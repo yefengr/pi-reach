@@ -1,12 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import { Drawer } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
-import { ArrowLeft, Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle, X } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
+import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 import { CopyButton } from "./copy-button";
-import { useSwipe } from "./use-swipe";
-import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
-import { PWA_DRAWER_EASE, pwaDrawerTransitions, useDrawerMoving, usePwaMotionDuration } from "./use-pwa-motion";
-import { useReaderHistory } from "./use-reader-history";
+import { ReaderShell } from "./reader-shell";
 import { ToolImage } from "./tool-output";
 import { toolContentBlocks, toolError, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
@@ -50,15 +45,8 @@ function StatusIcon({ status }: { status: ReturnType<typeof toolStatus> }) {
  */
 export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
   const { t } = useI18n();
-  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
-  const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
-  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
-  const motion = useDrawerMoving(opened);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
-  const { instant, skipExit, resetSkipExit } = useReaderHistory({ opened, stateKey: "piReachToolReader", marker: true, onClose });
-  const { drag, canSwipe } = useDrawerSwipeClose({ surface, opened, direction: 1, requestClose: onClose, skipExit, resetSkipExit });
-  useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: onClose, canSwipe, drag });
 
   const outputKey = value ? JSON.stringify([value.tool_call_id, "blocks" in value ? value.blocks : null, "result" in value ? value.result : null]) : "";
   useLayoutEffect(() => {
@@ -77,35 +65,12 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
 
-  return <Drawer.Root
-    opened={opened}
-    onClose={onClose}
-    onEnterTransitionEnd={motion.onEnterTransitionEnd}
-    onExitTransitionEnd={onExitTransitionEnd}
-    position="right"
-    size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"}
-    withinPortal
-    portalProps={{ target: ".pwa-root" }}
-    zIndex={30}
-    trapFocus
-    returnFocus={false}
-    transitionProps={{ transition: pwaDrawerTransitions.right, duration: drawerDuration, exitDuration: instant ? 0 : drawerDuration, timingFunction: PWA_DRAWER_EASE }}
-  >
-    <Drawer.Overlay className="pwa-scrim" />
-    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-tool-reader" }} data-pwa-moving={motion.moving || undefined} aria-describedby="pwa-tool-reader-description">
-      <Drawer.Header className="pwa-topbar pwa-tool-reader-header">
-        {/* 移动全屏与设置页同为左侧返回；桌面右侧 Drawer 保留右上角关闭。 */}
-        {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<ArrowLeft size={20} />} /> : null}
-        {/* Mantine 只在使用 Drawer.Title 时为对话框设置 aria-labelledby，自定义标题会让对话框失去可访问名称。 */}
-        <Drawer.Title className="pwa-tool-reader-title" tabIndex={-1} data-autofocus title={title}>{title}</Drawer.Title>
-        <div className="pwa-tool-reader-actions">
-          {/* 与会话内工具行一致只显示彩色图标，文字仅供读屏与悬停提示。 */}
-          <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`} title={statusLabel}><StatusIcon status={status} /><span className="pwa-sr-only">{statusLabel}</span></span>
-          {allText ? <CopyButton text={allText} label={t.tools.copyAll} /> : null}
-          {mobile ? null : <Drawer.CloseButton className="pwa-icon-button pwa-tool-reader-close" aria-label={t.tools.closeReader} title={t.tools.closeReader} icon={<X size={20} />} />}
-        </div>
-      </Drawer.Header>
-      <Drawer.Body className="pwa-tool-reader-body">
+  return <ReaderShell opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd}
+    title={title} closeLabel={t.tools.closeReader} historyKey="piReachToolReader" describedBy="pwa-tool-reader-description"
+    actions={<>
+      <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`} title={statusLabel}><StatusIcon status={status} /><span className="pwa-sr-only">{statusLabel}</span></span>
+      {allText ? <CopyButton text={allText} label={t.tools.copyAll} /> : null}
+    </>}>
         <div className="pwa-tool-reader-scroll" ref={scrollRef} onScroll={(event) => {
           const target = event.currentTarget;
           followRef.current = target.scrollHeight - target.scrollTop - target.clientHeight <= FOLLOW_THRESHOLD_PX;
@@ -119,7 +84,5 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
             {toolWasTruncated(value) ? <p className="pwa-tool-notice">{t.tools.outputTruncated}</p> : null}
           </>}
         </div>
-      </Drawer.Body>
-    </Drawer.Content>
-  </Drawer.Root>;
+  </ReaderShell>;
 }

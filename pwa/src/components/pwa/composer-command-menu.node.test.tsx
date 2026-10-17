@@ -113,7 +113,7 @@ test("renders every thinking level and marks the active level", () => {
   const html = renderSettings("thinking");
 
   expect(html).toMatch(/role="group" aria-label="Thinking level"/);
-  for (const level of ["off", "minimal", "low", "medium", "high", "xhigh"]) expect(html).toMatch(new RegExp(`>${level}<`));
+  for (const level of ["off", "minimal", "low", "medium", "high", "xhigh", "max"]) expect(html).toMatch(new RegExp(`>${level}<`));
   expect(html).toMatch(/aria-label="Current thinking level"/);
 });
 
@@ -121,7 +121,7 @@ test("keeps Back enabled when model and thinking choices are pending", () => {
   for (const view of ["models", "thinking"] as const) {
     const html = renderSettings(view, { pendingAction: "model_set" });
     expect(html).toMatch(/mantine-Menu-label/);
-    expect((html.match(/disabled=""/g) ?? []).length).toBe(view === "models" ? 1 : 6);
+    expect((html.match(/disabled=""/g) ?? []).length).toBe(view === "models" ? 1 : 7);
     const back = html.match(/<button\b[^>]*>[\s\S]*?Back[\s\S]*?<\/button>/)?.[0];
     expect(back).toBeDefined();
     expect(back).not.toMatch(/disabled=""/);

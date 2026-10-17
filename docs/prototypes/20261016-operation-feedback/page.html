@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<meta name="color-scheme" content="light dark">
+<title>Pi Reach · 操作状态与摘要展示评审</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg:#fff; --surface:#fff; --panel:#f7f7f7; --message:#f2f2f2;
+  --hover:#ebebeb; --selected:#e5e5e5; --ink:#2a2a2a; --secondary:#606060;
+  --line:#e0e0e0; --control:#878787; --accent:#446396; --on-accent:#fff;
+  --running:#90611f; --complete:#347953; --error:#ae463e; --disabled:#f0f0f0; --error-wash:#f8ecea;
+  --scrim:#00000047; --shadow:0 4px 20px #0000001a;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --review-height:80px;
+}
+:root[data-theme="dark"] {
+  color-scheme:dark;
+  --bg:#1e1e1e; --surface:#2d2d2d; --panel:#282828; --message:#353535;
+  --hover:#353535; --selected:#3a3a3a; --ink:#f0f0f0; --secondary:#bcbcbc;
+  --line:#464646; --control:#848484; --accent:#98b8e6; --on-accent:#142237;
+  --running:#dfba77; --complete:#95cba8; --error:#efa39b; --disabled:#2a2a2a; --error-wash:#422f30;
+  --scrim:#0000008c; --shadow:0 4px 20px #0000004d;
+}
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+body { margin:0; background:var(--panel); color:var(--ink); font:400 16px/1.4 var(--ui); -webkit-font-smoothing:antialiased; }
+button,select,textarea,input { font:inherit; color:inherit; }
+button { cursor:pointer; }
+button:disabled { cursor:default; }
+button,select,summary { -webkit-tap-highlight-color:transparent; }
+button:focus-visible,select:focus-visible,summary:focus-visible,textarea:focus-visible,input:focus-visible { outline:2px solid var(--accent); outline-offset:0; }
+h1,h2,h3,p { margin:0; }
+strong { font-weight:600; }
+.icon { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+.small-icon { width:16px; height:16px; }
+.running { color:var(--running); } .complete { color:var(--complete); } .error { color:var(--error); }
+.spin { animation:spin 1.15s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.icon-button { position:relative; isolation:isolate; width:44px; height:44px; border:0; border-radius:50%; background:transparent; color:var(--secondary); display:inline-grid; place-items:center; flex:none; }
+.icon-button::before { content:""; position:absolute; z-index:-1; inset:4px; border-radius:50%; }
+.icon-button:focus-visible { outline-offset:-4px; }
+.text-button { border:0; background:transparent; color:var(--accent); min-height:44px; min-width:44px; padding:8px 12px; border-radius:6px; font-weight:600; }
+.review-bar { min-height:80px; padding:12px 24px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); background:var(--bg); }
+.review-title { display:flex; align-items:center; gap:8px; }
+.review-title h1 { font-size:16px; font-weight:600; }
+.review-tag { font-size:13px; color:var(--secondary); padding:2px 8px; border:1px solid var(--line); border-radius:4px; white-space:nowrap; }
+.review-subtitle { color:var(--secondary); font-size:13px; margin-top:4px; }
+.review-controls { display:flex; align-items:center; gap:8px; }
+.review-controls select { height:44px; min-width:152px; max-width:224px; padding:8px 32px 8px 12px; border:1px solid var(--control); border-radius:6px; background:var(--bg); font-size:14px; }
+.review-controls #stage { min-width:168px; }
+.next-step { display:flex; align-items:center; gap:8px; white-space:nowrap; font-size:14px; }
+.workspace { display:flex; height:calc(100dvh - var(--review-height)); min-height:360px; background:var(--panel); }
+.sidebar { width:260px; flex:none; display:flex; flex-direction:column; padding:0 8px; background:var(--panel); }
+.brand { min-height:48px; display:flex; align-items:center; gap:8px; padding-left:8px; font-size:18px; font-weight:600; }
+.brand-mark { width:24px; height:24px; flex:none; fill:currentColor; }
+.brand .icon-button { margin-left:auto; }
+.computer { display:flex; align-items:center; gap:8px; min-height:44px; padding:8px; font-size:14px; }
+.computer .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }
+.nav-scroll { overflow-y:auto; min-height:0; flex:1; scrollbar-width:thin; padding-bottom:12px; }
+.nav-heading { color:var(--secondary); font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; min-height:32px; margin-top:12px; padding:0 8px; }
+.nav-heading .count { margin-left:auto; font-weight:400; font-variant-numeric:tabular-nums; }
+.nav-heading-copy { min-width:0; display:flex; align-items:baseline; gap:6px; }
+.nav-heading-copy strong { flex:none; }
+.nav-heading-copy em { font-style:normal; font-weight:400; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.nav-row { padding:6px 8px; margin:0 0 2px; border-radius:6px; min-height:44px; }
+.nav-row.current { background:var(--selected); }
+.nav-title { font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nav-meta { color:var(--secondary); font-size:13px; margin-top:2px; display:flex; gap:4px; align-items:center; }
+.nav-meta .icon { width:12px; height:12px; stroke-width:2.4; }
+.nav-foot { padding:8px 0; display:grid; gap:2px; }
+.nav-foot div { min-height:44px; padding:0 10px; display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:var(--accent); }
+.history-feedback { padding:4px 8px; font-size:13px; color:var(--secondary); line-height:1.4; }
+.history-feedback .status-inline { min-height:44px; justify-content:space-between; }
+.history-feedback .text-button { padding-left:0; }
+.skeleton { height:12px; width:76%; border-radius:4px; background:var(--hover); margin:12px 0; }
+.skeleton.short { width:42%; }
+.main { flex:1; min-width:0; margin:8px 8px 8px 0; background:var(--bg); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; position:relative; }
+.topbar { height:48px; flex:none; display:flex; align-items:center; gap:4px; padding:0 8px 0 20px; }
+.topbar h2 { font-size:18px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.directory { color:var(--secondary); font-weight:400; }
+.connection { display:flex; align-items:center; gap:6px; color:var(--secondary); font-size:13px; font-weight:600; white-space:nowrap; padding:0 8px; }
+.connection.retrying { color:var(--running); }
+.connection .icon { width:12px; height:12px; stroke-width:2.4; }
+.mobile-nav { display:none; }
+.mobile-session-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.timeline-viewport { min-height:0; flex:1; overflow-y:auto; overflow-x:hidden; overflow-anchor:none; }
+.reading-column { max-width:720px; padding:24px 20px 88px; margin:auto; }
+.message { margin-bottom:24px; font-size:16px; line-height:1.65; overflow-wrap:anywhere; }
+.message.user { background:var(--message); border-radius:8px; padding:12px 16px; max-width:84%; width:fit-content; margin-left:auto; }
+.message ul { margin:8px 0 0; padding-left:24px; }
+.time { color:var(--secondary); font-size:13px; margin:-12px 0 32px; font-variant-numeric:tabular-nums; }
+.tool-summary { min-height:44px; display:flex; align-items:center; gap:8px; margin:6px 0 12px; color:var(--secondary); font-size:16px; font-weight:600; }
+.tool-summary .grow { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.activity { min-height:44px; display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14px; }
+.activity .spin { color:var(--running); }
+.activity.muted { color:var(--secondary); }
+.status-inline { display:flex; align-items:center; gap:8px; }
+.activity-context { color:var(--secondary); font-size:13px; margin:0 0 16px 24px; line-height:1.65; }
+.reader-entry { margin:6px 0 16px; width:100%; padding:0; border:0; background:transparent; color:var(--ink); display:flex; align-items:center; gap:8px; min-height:44px; border-radius:6px; text-align:left; font-size:16px; line-height:1.65; }
+.reader-entry .label { flex:1; min-width:0; }
+.reader-entry .meta { color:var(--secondary); font-size:13px; white-space:nowrap; }
+.reader-entry .chevron { color:var(--secondary); }
+.summary-body { font-size:16px; line-height:1.65; overflow-wrap:anywhere; }
+.summary-body h3 { font-size:16px; font-weight:600; margin:8px 0; }
+.summary-body p { margin:0 0 16px; }
+.summary-body ul { margin:8px 0 16px; padding-left:24px; }
+.summary-caption { font-size:13px; color:var(--secondary); margin:8px 0 0; }
+.inline-failure { margin:8px 0; }
+.failure-title { display:flex; align-items:flex-start; gap:8px; font-size:16px; line-height:1.65; }
+.failure-title .icon { margin-top:4px; }
+.failure-copy { color:var(--secondary); margin:4px 0 8px 24px; font-size:14px; line-height:1.65; }
+.inline-failure > .text-button { margin-left:12px; }
+.provider-error { padding:12px; border-radius:8px; background:var(--error-wash); }
+.provider-error .failure-title { color:var(--error); font-size:13px; font-weight:600; }
+.provider-error .failure-copy { margin:4px 0 0; font-size:16px; color:var(--ink); }
+.error-entry { margin:8px 0 0; color:var(--accent); }
+.reader-error { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font:400 14px/1.55 var(--mono); color:var(--ink); }
+.reader-dialog { position:fixed; inset:var(--review-height) 0 0 auto; margin:0; padding:0; border:0; width:min(720px,100vw); max-width:100vw; height:calc(100dvh - var(--review-height)); max-height:none; border-radius:12px 0 0 12px; background:var(--bg); color:var(--ink); box-shadow:-4px 0 24px #00000026; overflow:hidden; }
+.reader-dialog[open] { display:flex; flex-direction:column; }
+.reader-dialog::backdrop { background:linear-gradient(to bottom,transparent var(--review-height),var(--scrim) var(--review-height)); }
+.reader-header { height:48px; flex:none; display:flex; align-items:center; gap:4px; padding:0 8px 0 20px; }
+.reader-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:18px; font-weight:600; }
+.reader-title:focus-visible { outline:2px solid var(--accent); }
+.reader-status { display:grid; place-items:center; width:24px; flex:none; margin-right:4px; }
+.reader-back { display:none; }
+.reader-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:16px 20px 20px; }
+.reader-scroll > .summary-caption:first-child { margin:0 0 16px; }
+.dock { flex:none; max-width:720px; width:100%; padding:10px 20px 16px; margin:0 auto; position:relative; }
+.composer-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+.composer-card:focus-within { border-color:var(--accent); }
+.composer-card textarea { display:block; width:100%; min-height:44px; height:44px; max-height:154px; resize:none; background:transparent; border:0; outline:none; padding:10px 0; font-size:16px; line-height:1.4; }
+.composer-card textarea::placeholder { color:var(--secondary); opacity:1; }
+.composer-footer { display:flex; align-items:center; gap:8px; min-height:44px; }
+.composer-tools,.composer-actions { display:flex; align-items:center; gap:6px; min-width:0; }
+.composer-tools { flex:none; }
+.composer-spacer { flex:1; min-width:0; }
+.model-button { background:transparent; border:0; border-radius:6px; min-height:44px; min-width:0; max-width:240px; padding:0 8px; color:var(--secondary); display:flex; align-items:center; gap:4px; text-align:left; font-size:13px; font-weight:600; white-space:nowrap; }
+.model-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.thinking-level,.model-status { flex:none; }
+.model-status { width:16px; height:16px; display:grid; place-items:center; }
+.send-button { padding:4px; }
+.send-circle { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; background:var(--accent); color:var(--on-accent); }
+.send-button:disabled { opacity:.5; }
+.stop-square { width:12px; height:12px; background:currentColor; border-radius:1px; }
+.composer-note { margin-top:8px; font-size:13px; line-height:1.4; color:var(--secondary); }
+.toast { z-index:3; position:absolute; top:56px; left:50%; transform:translateX(-50%); width:calc(100% - 32px); max-width:400px; padding:8px 4px 8px 12px; display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:var(--shadow); }
+.toast > span { flex:1; font-size:16px; }
+.menu-popover { position:fixed; z-index:5; width:min(340px,calc(100vw - 32px)); max-height:min(380px,58dvh); overflow-y:auto; border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:var(--shadow); padding:6px; }
+.menu-row { width:100%; min-width:0; min-height:44px; display:flex; align-items:center; gap:8px; padding:6px 10px; border:0; border-radius:6px; background:transparent; text-align:left; color:var(--ink); }
+.menu-row.selected { background:var(--selected); }
+.menu-copy { display:grid; gap:2px; min-width:0; flex:1; }
+.menu-copy > span,.menu-copy > code { font:600 16px/1.4 var(--ui); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.menu-copy > code { font-family:var(--mono); }
+.menu-copy small,.menu-heading,.list-feedback { color:var(--secondary); font-size:13px; }
+.menu-copy small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.menu-back { color:var(--secondary); font-size:16px; }
+.menu-heading { display:flex; align-items:center; gap:8px; padding:8px 10px 6px; font-weight:600; }
+.list-feedback { margin:0; padding:6px 10px; min-height:44px; display:flex; align-items:center; gap:8px; line-height:1.4; }
+.list-feedback > span { flex:1; }
+.empty-session { display:grid; gap:4px; margin:48px 0 0; text-align:center; color:var(--secondary); font-size:16px; }
+.empty-session .context { font-size:13px; }
+.session-switched { text-align:center; color:var(--secondary); font-size:13px; margin:0 0 16px; }
+.confirm-dialog { width:min(400px,calc(100vw - 32px)); padding:24px; border:1px solid var(--line); border-radius:12px; color:var(--ink); background:var(--surface); box-shadow:0 12px 32px #0000001a; }
+.confirm-dialog::backdrop { background:var(--scrim); }
+.confirm-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.confirm-kicker { font-size:13px; color:var(--secondary); }
+.confirm-title { font-size:18px; font-weight:600; margin-top:4px; }
+.confirm-body { margin:16px 0 24px; font-size:16px; line-height:1.65; }
+.confirm-actions { display:flex; justify-content:flex-end; gap:8px; }
+.button { min-width:120px; min-height:44px; border:1px solid var(--line); border-radius:6px; background:var(--surface); padding:8px 12px; font-size:14px; font-weight:600; }
+.button.primary { color:var(--on-accent); background:var(--accent); border-color:transparent; }
+.nav-dialog { position:fixed; inset:0 auto 0 0; margin:0; padding:0; border:0; width:min(320px,85vw); max-width:85vw; height:100dvh; max-height:100dvh; border-radius:0 12px 12px 0; background:var(--panel); color:var(--ink); }
+.nav-dialog::backdrop { background:var(--scrim); }
+.nav-dialog .sidebar { width:100%; height:100%; }
+.review-note { margin-top:8px; font-size:13px; line-height:1.65; color:var(--secondary); }
+@media(hover:hover) {
+  button:not(:disabled):not(.icon-button):not(.primary):hover { background-color:var(--hover); }
+  .icon-button:not(:disabled):hover::before { background:var(--hover); }
+}
+summary:active { background:var(--hover); }
+@media(max-width:1000px) {
+  .review-bar { gap:12px; padding-inline:16px; }
+  .review-title h1 { font-size:14px; }
+  .review-tag { display:none; }
+  .review-controls select { min-width:128px; max-width:180px; }
+  .review-controls #stage { min-width:144px; }
+  .next-step span { display:none; }
+}
+@media(max-width:767.98px) {
+  :root { --review-height:124px; }
+  .review-bar { min-height:124px; height:124px; flex-direction:column; align-items:stretch; gap:8px; padding:12px 16px; }
+  .review-title h1 { font-size:14px; }
+  .review-tag { display:inline; font-size:13px; }
+  .review-subtitle { display:none; }
+  .review-controls { justify-content:space-between; gap:8px; }
+  .review-controls select { min-width:0; max-width:none; width:calc((100% - 104px)/2); font-size:14px; padding-left:8px; padding-right:20px; }
+  .review-controls #stage { min-width:0; }
+  .next-step { padding:0; width:44px; }
+  .workspace { height:calc(100dvh - var(--review-height)); min-height:360px; }
+  .workspace > .sidebar { display:none; }
+  .main { margin:0; border-radius:0; }
+  .topbar { padding:0 4px; }
+  .topbar h2 { font-size:18px; }
+  .mobile-nav { display:flex; align-items:center; gap:4px; min-width:44px; min-height:44px; flex:1; padding:0 8px 0 0; border:0; background:transparent; text-align:left; font-size:18px; font-weight:600; }
+  .topbar h2 { display:none; }
+  .directory { display:none; }
+  .connection { margin:0 8px; }
+  .connection.online .connection-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .desktop-refresh { display:none; }
+  .reading-column { padding:24px 16px 88px; }
+  .message.user { max-width:90%; }
+  .dock { padding:10px 16px 16px; }
+  .composer-tools .icon-button { width:44px; }
+  .model-button { max-width:160px; }
+  .thinking-level { display:none; }
+  .reader-entry .meta { display:none; }
+  .reader-dialog { border-radius:0; }
+  .reader-header { padding:0 4px; }
+  .reader-back { display:grid; }
+  .reader-close { display:none; }
+  .reader-scroll { padding:16px 16px max(16px,env(safe-area-inset-bottom)); }
+  .confirm-actions { flex-direction:column; }
+  .confirm-actions .button { width:100%; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { scroll-behavior:auto !important; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-brand" viewBox="0 0 64 64"><path fill="currentColor" d="M13 17h31c3 0 5 2 5 5v4H13c-1.1 0-2-.9-2-2v-5c0-1.1.9-2 2-2Z M17 26h8v22c0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2V26Z M40 26h8v17c0 5 2 6 7 5v7c-10 2-15-2-15-11V26Z"/></symbol>
+<symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-slash" viewBox="0 0 24 24"><path d="m15 4-6 16"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+<symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 1 1 0 10h-2M8 12h8"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 1.72l-.12.91a2 2 0 0 1-1.18 1.52l-.26.15a2 2 0 0 1-1.9.18l-.85-.35a2 2 0 0 0-2.5.87l-.22.38a2 2 0 0 0 .5 2.6l.73.56A2 2 0 0 1 4.8 12a2 2 0 0 1-.83 1.46l-.73.56a2 2 0 0 0-.5 2.6l.22.38a2 2 0 0 0 2.5.87l.85-.35a2 2 0 0 1 1.9.18l.26.15a2 2 0 0 1 1.18 1.52l.12.91a2 2 0 0 0 2 1.72h.44a2 2 0 0 0 2-1.72l.12-.91a2 2 0 0 1 1.18-1.52l.26-.15a2 2 0 0 1 1.9-.18l.85.35a2 2 0 0 0 2.5-.87l.22-.39a2 2 0 0 0-.5-2.6l-.73-.55a2 2 0 0 1-.83-1.46 2 2 0 0 1 .83-1.46l.73-.56a2 2 0 0 0 .5-2.6l-.22-.38a2 2 0 0 0-2.5-.87l-.85.35a2 2 0 0 1-1.9-.18l-.26-.15a2 2 0 0 1-1.18-1.52l-.12-.91a2 2 0 0 0-2-1.72Z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8M2 14h2m16 0h2M9 13v2m6-2v2"/><rect x="4" y="8" width="16" height="12" rx="2"/></symbol>
+<symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3"/></symbol>
+<symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0Z"/></symbol>
+<symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4M14 2v6h6M3 15h6m-3-3v6"/></symbol>
+<symbol id="i-compact" viewBox="0 0 24 24"><path d="m4 4 6 6m0-6v6H4m16 10-6-6m0 6v-6h6"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></symbol>
+<symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="19" r="3"/><path d="M6 8v8M18 9c0 6-12 1-12 7"/></symbol>
+</defs></svg>
+<header class="review-bar">
+  <div><div class="review-title"><h1>操作状态与摘要展示</h1><span class="review-tag">评审中</span></div><p class="review-subtitle" id="review-note">Pi Reach · 交互原型 · 所有状态均为模拟</p></div>
+  <nav class="review-controls" aria-label="原型场景控制">
+    <select id="scene" aria-label="选择评审场景"></select>
+    <select id="stage" aria-label="选择模拟状态"></select>
+    <button id="next" class="text-button next-step" type="button" title="查看下一状态"><span>下一状态</span><svg class="icon small-icon" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+    <button id="theme" class="icon-button" type="button" aria-label="切换深色外观" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+  </nav>
+</header>
+<div class="workspace">
+  <aside class="sidebar" id="sidebar" aria-label="工作区导航示意"></aside>
+  <main class="main" aria-label="会话效果预览">
+    <header class="topbar">
+      <button class="mobile-nav" data-action="navigation" type="button" aria-label="打开导航" aria-haspopup="dialog" aria-expanded="false"><span class="icon-button" aria-hidden="true"><svg class="icon"><use href="#i-menu"/></svg></span><span class="mobile-session-title">检查会话交互</span></button>
+      <h2><span class="directory">pi-reach · </span><span id="session-title">检查会话交互</span></h2>
+      <span class="connection"><i class="dot"></i><span class="connection-label">已连接</span></span>
+      <span class="icon-button desktop-refresh" aria-hidden="true"><svg class="icon"><use href="#i-refresh"/></svg></span>
+      <span class="icon-button" aria-hidden="true"><svg class="icon"><use href="#i-more"/></svg></span>
+    </header>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <div class="timeline-viewport" id="timeline-viewport"><div class="reading-column" id="timeline"></div></div>
+    <section class="dock" aria-label="消息输入与操作反馈">
+      <div id="model-popover" class="menu-popover" role="menu" aria-label="模型与思考" hidden></div>
+      <div id="command-popover" class="menu-popover" role="menu" aria-label="Pi 命令" hidden></div>
+      <div class="composer-card">
+        <textarea id="draft" rows="1" placeholder="向 Pi 发送消息…" aria-label="消息草稿（原型不会发送）"></textarea>
+        <div class="composer-footer">
+          <div class="composer-tools"><span class="icon-button" aria-hidden="true"><svg class="icon"><use href="#i-plus"/></svg></span><button class="icon-button" id="command" data-action="command-menu" type="button" aria-label="Pi 命令" title="Pi 命令" aria-haspopup="menu"><svg class="icon"><use href="#i-slash"/></svg></button></div>
+          <span class="composer-spacer"></span>
+          <div class="composer-actions">
+          <button id="model" class="model-button" type="button" data-action="model-settings" aria-label="模型与思考" aria-haspopup="menu"></button>
+          <button id="send" class="icon-button send-button" type="button" disabled aria-label="发送消息（原型不会发送）"><span class="send-circle"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></span></button>
+          </div>
+        </div>
+      </div>
+      <p class="composer-note" id="composer-note" hidden></p>
+    </section>
+  </main>
+</div>
+<dialog class="nav-dialog" id="navigation" aria-label="工作区导航预览"><div class="sidebar" id="mobile-sidebar"></div></dialog>
+<dialog class="reader-dialog" id="reader" aria-labelledby="reader-title">
+  <header class="reader-header">
+    <button class="icon-button reader-back" data-action="close-reader" type="button" aria-label="返回会话" title="返回会话"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
+    <h2 class="reader-title" id="reader-title" tabindex="-1" autofocus></h2>
+    <span class="reader-status" id="reader-status"></span>
+    <button class="icon-button" id="copy-reader" data-action="copy-reader" type="button" aria-label="复制全部" title="复制全部"><svg class="icon"><use href="#i-copy"/></svg></button>
+    <button class="icon-button reader-close" data-action="close-reader" type="button" aria-label="关闭阅读器" title="关闭阅读器"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="reader-scroll" id="reader-scroll"></div>
+</dialog>
+<dialog class="confirm-dialog" id="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+  <header class="confirm-head"><div><p class="confirm-kicker">确认操作</p><h2 class="confirm-title" id="confirm-title">开始新会话？</h2></div><button class="icon-button" data-action="close-confirm" type="button" aria-label="关闭确认对话框"><svg class="icon"><use href="#i-x"/></svg></button></header>
+  <p class="confirm-body" id="confirm-body">所有正在查看这个 Pi 的人都会转到新会话。</p>
+  <div class="confirm-actions"><button class="button" data-action="close-confirm" type="button">取消</button><button class="button primary" data-action="confirm-new" type="button">开始新会话</button></div>
+</dialog>
+<script>
+// 仅模拟已确认的视觉状态，不读写业务数据、不连接 Pi、Relay 或模型服务。
+const $ = (selector) => document.querySelector(selector);
+const icon = (name, classes = '') => `<svg class="icon small-icon ${classes}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const scenes = {
+  compact: { label:'压缩上下文', stages:[['running','正在压缩'],['done','完成 · 阅读入口'],['expanded','侧栏查看摘要'],['failed','压缩失败'],['cancelled','已取消'],['unknown','断线 · 结果待确认']] },
+  branch: { label:'分支摘要', stages:[['done','摘要阅读入口'],['expanded','侧栏查看摘要']] },
+  new: { label:'新建会话', stages:[['idle','原会话'],['confirm','确认新建'],['creating','正在新建'],['opening','正在打开'],['ready','新会话已就绪'],['failed','新建失败'],['unknown','断线待确认']] },
+  model: { label:'模型与思考', stages:[['settings','设置菜单'],['models','模型列表'],['thinking-list','思考级别列表'],['model','切换模型中'],['model-done','模型已生效'],['model-failed','模型切换失败'],['thinking','切换思考中'],['thinking-done','思考级别已生效'],['thinking-failed','思考切换失败']] },
+  stop: { label:'停止任务', stages:[['waiting','正在停止'],['stopped','已中断'],['finished','自然完成'],['failed','停止失败']] },
+  error: { label:'模型服务错误', stages:[['collapsed','简短错误'],['expanded','侧栏查看详情']] },
+  loading: { label:'列表加载', stages:[['models-loading','模型加载中'],['models-failed','模型加载失败'],['models-empty','没有可用模型'],['models-ready','模型已加载'],['models-refreshing','保留模型刷新'],['models-refresh-failed','刷新失败保留模型'],['history-loading','历史读取中'],['history-failed','历史读取失败'],['history-empty','暂无本地历史'],['history-ready','历史已读取'],['history-refreshing','保留历史刷新'],['history-refresh-failed','刷新失败保留历史']] },
+};
+let scene = 'compact';
+let stage = 'running';
+let modelMenuView = null;
+let modelListState = 'ready';
+let commandMenuOpen = false;
+let modelIndex = 0;
+let thinking = 'high';
+let targetModel = 1;
+let targetThinking = 'medium';
+let previousModel = 0;
+let previousThinking = 'high';
+const demoModels = [{provider:'openai',name:'GPT-6',id:'gpt-6'},{provider:'anthropic',name:'Claude Opus',id:'claude-opus'}];
+const historyMarkup = `<div class="nav-row"><div class="nav-title">优化移动端连接恢复</div><div class="nav-meta">11:26</div></div><div class="nav-row"><div class="nav-title">核查摘要与状态反馈</div><div class="nav-meta">昨天</div></div><div class="nav-row"><div class="nav-title">检查工具详情阅读体验</div><div class="nav-meta">10月14日</div></div>`;
+function historyContent() {
+  if (scene !== 'loading' || !stage.startsWith('history-')) return historyMarkup;
+  if (stage === 'history-loading') return `<div class="history-feedback" aria-busy="true"><span class="sr-only" role="status">正在读取本地历史</span><div class="skeleton"></div><div class="skeleton short"></div></div>`;
+  if (stage === 'history-failed' || stage === 'history-refresh-failed') return `${stage === 'history-refresh-failed' ? historyMarkup : ''}<div class="history-feedback"><div class="status-inline">${icon('alert','error')}<span>本地历史读取失败</span><button class="icon-button" data-action="retry-history" type="button" aria-label="重试读取本地历史" title="重试">${icon('refresh')}</button></div></div>`;
+  if (stage === 'history-empty') return '<p class="history-feedback">暂无本地历史</p>';
+  return historyMarkup;
+}
+function sidebarMarkup(mobile) {
+  const busy = (scene === 'compact' && stage === 'running') || (scene === 'stop' && ['waiting','failed'].includes(stage));
+  const title = scene === 'new' && stage === 'ready' ? '未命名会话' : '检查会话交互';
+  const noHistory = scene === 'loading' && ['history-loading','history-failed','history-empty'].includes(stage);
+  const count = noHistory ? (stage === 'history-empty' ? '0' : '') : '3';
+  const refreshing = scene === 'loading' && stage === 'history-refreshing';
+  return `<div class="brand"><svg class="brand-mark" aria-hidden="true"><use href="#i-brand"/></svg>Pi Reach${mobile ? '<button class="icon-button" data-action="close-navigation" type="button" aria-label="关闭导航">'+icon('x')+'</button>' : '<span class="icon-button" aria-hidden="true">'+icon('left')+'</span>'}</div><div class="computer"><i class="dot"></i><span class="name">工作电脑</span>${icon('down')}</div><div class="nav-scroll"><div class="nav-heading">${icon('bot')}在线 Pi<span class="count">1</span></div><div class="nav-row current" aria-current="true"><div class="nav-title">${title}</div><div class="nav-meta">pi-reach · ${busy ? '<span class="status-inline running">'+icon('loader','spin')+'运行中</span>' : '空闲'}</div></div><div class="nav-heading">${icon('history')}<span class="nav-heading-copy"><strong>本地历史</strong><em title="仅保存在此浏览器">仅保存在此浏览器</em></span><span class="count">${refreshing ? icon('loader','spin running')+'<span class="sr-only">正在刷新历史</span>' : count}</span></div>${historyContent()}</div><div class="nav-foot"><div>${icon('link')}配对电脑</div><div>${icon('settings')}设置</div></div>`;
+}
+const conversation = `<div class="message user">检查一下会话操作的反馈，慢的时候也要知道 Pi 在做什么。</div><div class="message">我会先检查会话操作的生命周期，再核对页面上的等待、完成和失败反馈。</div><div class="tool-summary"><span class="grow">读取 2 个文件 · 运行 1 条命令</span>${icon('chevron')}</div><div class="message">已完成现有行为的核对，接下来检查慢响应和连接中断时的表现。</div><p class="time">14:31</p>`;
+const compactSummary = `<h3>Goal</h3><p>Improve the feedback for session operations in Pi Reach without changing the existing conversation, pairing, or connection recovery behavior.</p><h3>Confirmed rules</h3><ul><li>Show a pending state immediately; accepting a request does not mean the operation has completed.</li><li>Open compaction and branch summaries in the side reader.</li><li>Use icons in fixed slots for compact operation controls.</li><li>Preserve the conversation position when the user opens details.</li><li>Use authoritative lifecycle signals to settle each operation.</li></ul><h3>Next steps</h3><p>Review the proposed states, then implement the shared lifecycle contract and targeted regression tests after approval.</p>`;
+const branchSummary = `<h3>Previous branch</h3><p>Reviewed the session operation feedback and identified missing pending states for compaction and new-session creation.</p><h3>Decisions carried forward</h3><ul><li>Read long summaries and error details in the side reader.</li><li>Keep model and thinking controls stable during switching, with an icon for pending status.</li><li>Preserve the source conversation until the new session is ready.</li></ul><h3>Continue in this branch</h3><p>Check error recovery, cancellation, and the state shown after reconnecting. Keep the existing run completion rules.</p>`;
+const safeError = `本次模型请求未完成。\n\n请检查网络连接及模型服务配置，确认后再发送。\n\n没有可确认的错误代码或详细原因。`;
+function summaryMarkup(branch = false) {
+  const title = branch ? '分支摘要' : '上下文已压缩';
+  return `<button class="reader-entry" type="button" data-action="read-summary" aria-haspopup="dialog" aria-label="${branch ? '查看分支摘要' : '查看压缩摘要'}" title="${branch ? '查看分支摘要' : '查看压缩摘要'}">${icon(branch ? 'branch' : 'check', branch ? '' : 'complete')}<span class="label">${title}</span><span class="meta">${branch ? '上一分支' : '手动压缩'}</span>${icon('chevron','chevron')}</button>`;
+}
+let readerSource = null;
+let readerPosition = 0;
+let readerHistory = false;
+let readerClosing = false;
+function openReader() {
+  if ($('#reader').open) return;
+  readerClosing = false;
+  readerSource = document.activeElement.closest?.('.reader-entry') || $('.reader-entry');
+  readerPosition = $('#timeline-viewport').scrollTop;
+  const error = scene === 'error';
+  const branch = scene === 'branch';
+  $('#reader-title').textContent = error ? '错误详情' : branch ? '分支摘要' : '压缩摘要';
+  const status = error ? '回复出错' : branch ? '分支摘要' : '压缩已完成';
+  $('#reader-status').innerHTML = icon(error ? 'alert' : branch ? 'branch' : 'check',error ? 'error' : branch ? '' : 'complete')+`<span class="sr-only">${status}</span>`;
+  $('#reader-status').title = status;
+  $('#reader-scroll').innerHTML = error ? `<pre class="reader-error">${safeError}</pre>` : `<article class="summary-body">${branch ? branchSummary : compactSummary}</article>`;
+  $('#copy-reader').innerHTML = icon('copy');
+  $('#copy-reader').title = '复制全部';
+  $('#copy-reader').setAttribute('aria-label','复制全部');
+  stage = 'expanded'; $('#stage').value = stage;
+  history.pushState({ ...(history.state || {}), operationFeedbackReader:true },'');
+  readerHistory = true;
+  $('#reader').showModal();
+  $('#reader-scroll').scrollTop = 0;
+  $('#reader-title').focus({preventScroll:true});
+}
+function finishReader() {
+  if (!$('#reader').open) return;
+  $('#reader').close();
+  stage = scene === 'error' ? 'collapsed' : 'done'; $('#stage').value = stage;
+  $('#timeline-viewport').scrollTop = readerPosition;
+  if (readerSource?.isConnected) readerSource.focus({preventScroll:true});
+  readerSource = null;
+}
+function closeReader() {
+  if (readerClosing) return;
+  readerClosing = true;
+  if (readerHistory && history.state?.operationFeedbackReader) { history.back(); return; }
+  finishReader();
+}
+window.addEventListener('popstate', () => {
+  readerHistory = false;
+  readerClosing = false;
+  finishReader();
+});
+function activity(text, name = 'loader') {
+  return `<div class="activity ${name === 'loader' ? '' : 'muted'}" role="status">${icon(name,name === 'loader' ? 'spin' : '')}<span>${text}</span></div>`;
+}
+function errorMarkup() {
+  return `<div class="provider-error"><div class="failure-title">${icon('alert')}<span>模型服务出错</span></div><p class="failure-copy">本次模型请求未完成，请检查连接或模型服务配置。</p><button class="reader-entry error-entry" type="button" data-action="read-summary" aria-haspopup="dialog" aria-label="查看错误详情" title="查看错误详情"><span class="label">错误详情</span>${icon('chevron','chevron')}</button></div><p class="time" style="margin-top:16px">14:32 · 出错</p>`;
+}
+function menuRow(action, label, detail, glyph, end = '', value = '') {
+  return `<button class="menu-row" role="menuitem" data-action="${action}" data-value="${value}" type="button">${icon(glyph)}<span class="menu-copy"><span>${label}</span>${detail ? '<small>'+detail+'</small>' : ''}</span>${end}</button>`;
+}
+function modelChoices() {
+  return demoModels.map((model,index) => `<button class="menu-row ${index === modelIndex ? 'selected' : ''}" role="menuitemradio" aria-checked="${index === modelIndex}" data-action="select-model" data-value="${index}" type="button">${icon('cpu')}<span class="menu-copy"><span>${model.provider} / ${model.name}</span><small>${model.id}</small></span>${index === modelIndex ? icon('check') : ''}</button>`).join('');
+}
+function modelMenu() {
+  if (modelMenuView === 'settings') return menuRow('open-models','切换模型',`${demoModels[modelIndex].provider} / ${demoModels[modelIndex].name}`,'cpu',icon('chevron'))+menuRow('open-thinking','思考级别',`思考级别：${thinking}`,'gauge',icon('chevron'));
+  const back = `<button class="menu-row menu-back" role="menuitem" data-action="model-back" type="button">${icon('left')}返回</button>`;
+  const title = `<div class="menu-heading">${modelMenuView === 'thinking' ? '思考级别' : '切换模型'}${modelListState === 'refreshing' && modelMenuView === 'models' ? icon('loader','spin running')+'<span class="sr-only">正在刷新模型列表</span>' : ''}</div>`;
+  if (modelMenuView === 'thinking') return back+title+['off','minimal','low','medium','high','xhigh'].map(level => `<button class="menu-row ${level === thinking ? 'selected' : ''}" role="menuitemradio" aria-checked="${level === thinking}" data-action="select-thinking" data-value="${level}" type="button">${icon('gauge')}<span class="menu-copy"><span>${level}</span></span>${level === thinking ? icon('check') : ''}</button>`).join('');
+  if (modelListState === 'loading') return back+title+`<div class="list-feedback" role="status" aria-busy="true">${icon('loader','spin running')}<span>正在加载模型…</span></div>`;
+  if (modelListState === 'empty') return back+title+'<p class="list-feedback">没有可用的模型。</p>';
+  const error = ['failed','refresh-failed'].includes(modelListState) ? `<div class="list-feedback">${icon('alert','error')}<span>模型列表加载失败</span><button class="icon-button" role="menuitem" data-action="retry-models" type="button" aria-label="重试加载模型" title="重试">${icon('refresh')}</button></div>` : '';
+  return back+title+(modelListState === 'failed' ? '' : modelChoices())+error;
+}
+function positionMenu(element, trigger, command = false) {
+  if (element.hidden) return;
+  const box = trigger.getBoundingClientRect();
+  const reviewBottom = $('.review-bar').getBoundingClientRect().bottom;
+  element.style.maxHeight = `${Math.max(44,Math.min(380,innerHeight*.58,box.top-reviewBottom-16))}px`;
+  const width = element.getBoundingClientRect().width;
+  element.style.left = `${Math.max(16,Math.min(innerWidth-width-16,command ? box.left-52 : box.right-width))}px`;
+  element.style.top = `${Math.max(reviewBottom+8,box.top-element.getBoundingClientRect().height-8)}px`;
+}
+function renderMenus() {
+  $('#model-popover').hidden = modelMenuView === null;
+  $('#model-popover').innerHTML = modelMenuView ? modelMenu() : '';
+  $('#model').setAttribute('aria-expanded',String(modelMenuView !== null));
+  $('#command-popover').hidden = !commandMenuOpen;
+  $('#command-popover').innerHTML = commandMenuOpen ? `<button class="menu-row" role="menuitem" data-action="new-session" type="button">${icon('file-plus')}<span class="menu-copy"><code>/new</code><small>新会话</small></span></button><button class="menu-row" role="menuitem" data-action="compact-session" type="button">${icon('compact')}<span class="menu-copy"><code>/compact</code><small>压缩上下文</small></span></button>` : '';
+  $('#command').setAttribute('aria-expanded',String(commandMenuOpen));
+  positionMenu($('#model-popover'),$('#model'));
+  positionMenu($('#command-popover'),$('#command'),true);
+}
+function closeMenus(focus = false) {
+  const source = commandMenuOpen ? $('#command') : $('#model');
+  modelMenuView = null; commandMenuOpen = false; renderMenus();
+  if (focus && !source.disabled) source.focus({preventScroll:true});
+}
+function showToast(text, success = false) {
+  $('#toast').innerHTML = icon(success ? 'check' : 'alert',success ? 'complete' : 'error')+`<span>${text}</span><button class="icon-button" data-action="dismiss-toast" type="button" aria-label="关闭操作提示">${icon('x')}</button>`;
+  $('#toast').hidden = !text;
+}
+function render() {
+  let content = conversation;
+  let toast = '';
+  const stopped = scene === 'stop' && ['stopped','finished'].includes(stage);
+  const activeTool = scene === 'stop' && !stopped;
+  const pendingNew = scene === 'new' && ['creating','opening','unknown'].includes(stage);
+  const unknown = stage === 'unknown';
+  if (scene === 'compact') {
+    if (stage === 'running') content += activity('正在压缩上下文…');
+    else if (['done','expanded'].includes(stage)) content += summaryMarkup();
+    else if (stage === 'failed') toast = '压缩未完成，请重试';
+    else if (stage === 'cancelled') content += activity('压缩已取消','info');
+    else content += activity('连接恢复后确认压缩结果','info');
+  } else if (scene === 'branch') {
+    content += summaryMarkup(true);
+  } else if (scene === 'new') {
+    if (stage === 'creating') content += activity('正在新建会话…');
+    if (stage === 'opening') content += activity('正在打开新会话…');
+    if (stage === 'unknown') content += activity('连接恢复后确认新会话结果','info');
+    if (stage === 'ready') content = `<p class="session-switched">Pi 已切换到新会话</p><div class="empty-session"><p>向 Pi 发送消息开始。</p><p class="context">pi-reach · ${demoModels[modelIndex].name} · ${thinking}</p></div>`;
+    if (stage === 'failed') toast = '未能开始新会话，请重试';
+  } else if (scene === 'model') {
+    if (stage === 'model-done') modelIndex = targetModel;
+    if (stage === 'thinking-done') thinking = targetThinking;
+    if (stage === 'model-failed') { modelIndex = previousModel; toast = '切换模型失败，请确认当前模型'; }
+    if (stage === 'thinking-failed') { thinking = previousThinking; toast = '切换思考级别失败，请确认当前级别'; }
+  } else if (scene === 'stop') {
+    content += '<div class="message user">检查这些改动的相关回归。</div>';
+    if (activeTool) content += `<div class="tool-summary"><span class="grow" style="font-family:var(--mono)">bash <span style="font-weight:400">pnpm --filter pwa test</span></span>${icon('loader','spin running')}${icon('chevron')}</div>`;
+    if (stage === 'stopped') content += '<p class="time" style="margin-top:8px">14:32 · 已中断</p>';
+    if (stage === 'finished') content += '<div class="message">检查已完成。</div><p class="time">14:32</p>';
+    if (stage === 'failed') toast = '未能停止任务，请重试';
+  } else if (scene === 'error') {
+    content += '<div class="message user">继续检查剩余的边界情况。</div>'+errorMarkup();
+  }
+  $('#timeline').innerHTML = content;
+  showToast(toast);
+  $('#sidebar').innerHTML = sidebarMarkup(false);
+  $('#mobile-sidebar').innerHTML = sidebarMarkup(true);
+  $('#session-title').textContent = scene === 'new' && stage === 'ready' ? '未命名会话' : '检查会话交互';
+  $('.mobile-session-title').textContent = $('#session-title').textContent;
+  $('.mobile-nav').title = $('#session-title').textContent;
+  $('#composer-note').hidden = true;
+  $('#review-note').textContent = 'Pi Reach · 交互原型 · 所有状态均为模拟';
+  const switching = scene === 'model' && ['model','thinking'].includes(stage);
+  const switchingLabel = switching ? (stage === 'model' ? '正在切换模型' : '正在切换思考级别') : '';
+  const modelLabel = `模型与思考：${demoModels[modelIndex].name} · ${thinking}`;
+  $('#model').innerHTML = `<span class="model-name">${demoModels[modelIndex].name}</span><span class="thinking-level" aria-hidden="true"> · ${thinking}</span><span class="model-status" role="status">${switching ? icon('loader','spin running')+`<span class="sr-only">${switchingLabel}</span>` : icon('down')}</span>`;
+  $('#model').title = switchingLabel || modelLabel;
+  $('#model').setAttribute('aria-label',switchingLabel || modelLabel);
+  $('#model').setAttribute('aria-busy',String(switching));
+  $('#model').disabled = switching || pendingNew || (scene === 'compact' && ['running','unknown'].includes(stage));
+  $('#command').innerHTML = icon('slash');
+  $('#command').title = 'Pi 命令';
+  $('#command').setAttribute('aria-label','Pi 命令');
+  $('#command').setAttribute('aria-busy','false');
+  $('#command').disabled = pendingNew || unknown || switching || activeTool || (scene === 'compact' && stage === 'running');
+  const waitingStop = scene === 'stop' && stage === 'waiting';
+  const send = $('#send');
+  send.classList.toggle('is-stopping',waitingStop);
+  send.disabled = !activeTool || waitingStop;
+  send.setAttribute('aria-label',waitingStop ? '正在停止任务，等待本轮结束' : activeTool ? '停止任务' : '发送消息');
+  send.title = waitingStop ? '正在停止任务，等待本轮结束' : activeTool ? '停止任务' : '发送消息';
+  send.setAttribute('aria-busy',String(waitingStop));
+  send.innerHTML = `<span class="send-circle">${waitingStop ? icon('loader','spin') : activeTool ? '<span class="stop-square"></span>' : icon('up')}</span>`;
+  $('.connection').className = `connection ${unknown ? 'retrying' : 'online'}`;
+  const connectionLabel = unknown ? '重新连接中' : '已连接';
+  $('.connection').title = connectionLabel;
+  $('.connection').setAttribute('aria-label',connectionLabel);
+  $('.connection').innerHTML = (unknown ? icon('loader','spin') : '<i class="dot"></i>')+`<span class="connection-label">${connectionLabel}</span>`;
+  renderMenus();
+  if (scene === 'loading' && stage.startsWith('history-') && matchMedia('(max-width:767.98px)').matches && !$('#navigation').open) $('#navigation').showModal();
+  if (['compact','branch','error'].includes(scene) && stage === 'expanded') openReader();
+  if (scene === 'new' && stage === 'confirm' && !$('#confirm').open) $('#confirm').showModal();
+}
+function setScene(next, selectedStage, preserveValues = false) {
+  scene = next;
+  stage = selectedStage || scenes[scene].stages[0][0];
+  if (!preserveValues) { modelIndex = previousModel = 0; thinking = previousThinking = 'high'; targetModel = 1; targetThinking = 'medium'; }
+  modelMenuView = scene === 'loading' && stage.startsWith('models-') ? 'models' : scene === 'model' ? ({settings:'settings',models:'models','thinking-list':'thinking'}[stage] || null) : null;
+  modelListState = scene === 'loading' ? stage.replace('models-','') : 'ready';
+  commandMenuOpen = false;
+  $('#scene').value = scene;
+  $('#stage').innerHTML = scenes[scene].stages.map(([value,label]) => `<option value="${value}">${label}</option>`).join('');
+  $('#stage').value = stage;
+  if ($('#navigation').open && !(scene === 'loading' && stage.startsWith('history-'))) $('#navigation').close();
+  if ($('#confirm').open && !(scene === 'new' && stage === 'confirm')) $('#confirm').close();
+  render();
+  $('#timeline-viewport').scrollTop = 0;
+}
+$('#scene').innerHTML = Object.entries(scenes).map(([value,item]) => `<option value="${value}">${item.label}</option>`).join('');
+$('#scene').addEventListener('change', event => setScene(event.target.value));
+$('#stage').addEventListener('change', event => setScene(scene,event.target.value));
+$('#next').addEventListener('click', () => {
+  const states = scenes[scene].stages;
+  const next = (states.findIndex(([value]) => value === stage)+1)%states.length;
+  setScene(scene,states[next][0],true);
+});
+$('#theme').addEventListener('click', event => {
+  const dark = document.documentElement.dataset.theme !== 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  event.currentTarget.innerHTML = icon(dark ? 'sun' : 'moon');
+  event.currentTarget.setAttribute('aria-pressed',String(dark));
+  event.currentTarget.setAttribute('aria-label',dark ? '切换浅色外观' : '切换深色外观');
+});
+$('#send').addEventListener('click', () => setScene('stop','waiting'));
+$('#draft').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) event.preventDefault(); });
+document.addEventListener('click', async event => {
+  const trigger = event.target.closest('[data-action]');
+  const withinMenuControls = !!event.target.closest('.menu-popover,#model,#command,.review-bar');
+  const action = trigger?.dataset.action;
+  if (action === 'read-summary') openReader();
+  if (action === 'close-reader') closeReader();
+  if (action === 'copy-reader') {
+    try {
+      await navigator.clipboard.writeText($('#reader-scroll').innerText);
+      $('#copy-reader').innerHTML = icon('check','complete');
+      $('#copy-reader').title = '已复制';
+      $('#copy-reader').setAttribute('aria-label','已复制');
+    } catch {
+      $('#copy-reader').title = '复制失败，请选择正文后复制';
+      $('#copy-reader').setAttribute('aria-label','复制失败，请选择正文后复制');
+    }
+  }
+  if (action === 'navigation') { closeMenus(); $('#navigation').showModal(); $('.mobile-nav').setAttribute('aria-expanded','true'); }
+  if (action === 'close-navigation') $('#navigation').close();
+  if (action === 'dismiss-toast') $('#toast').hidden = true;
+  if (action === 'model-settings') { const wasOpen = modelMenuView !== null; closeMenus(); modelMenuView = wasOpen ? null : 'settings'; renderMenus(); }
+  if (['open-models','open-thinking','model-back'].includes(action)) {
+    modelMenuView = action === 'open-models' ? 'models' : action === 'open-thinking' ? 'thinking' : 'settings';
+    modelListState = 'ready'; renderMenus();
+    $('#model-popover button').focus({preventScroll:true});
+  }
+  if (action === 'select-model' || action === 'select-thinking') {
+    previousModel = modelIndex; previousThinking = thinking;
+    if (action === 'select-model') targetModel = Number(trigger.dataset.value);
+    else targetThinking = trigger.dataset.value;
+    setScene('model',action === 'select-model' ? 'model' : 'thinking',true);
+    $('#draft').focus({preventScroll:true});
+  }
+  if (action === 'retry-models') setScene('loading',stage === 'models-refresh-failed' ? 'models-refreshing' : 'models-loading',true);
+  if (action === 'retry-history') setScene('loading',stage === 'history-refresh-failed' ? 'history-refreshing' : 'history-loading',true);
+  if (action === 'command-menu') { const wasOpen = commandMenuOpen; closeMenus(); commandMenuOpen = !wasOpen; renderMenus(); }
+  if (action === 'new-session') { closeMenus(); setScene('new','confirm',true); }
+  if (action === 'compact-session') { closeMenus(); setScene('compact','running',true); $('#draft').focus({preventScroll:true}); }
+  if (action === 'close-confirm') { $('#confirm').close(); setScene('new','idle',true); $('#command').focus({preventScroll:true}); }
+  if (action === 'confirm-new') { $('#confirm').close(); setScene('new','creating',true); $('#draft').focus({preventScroll:true}); }
+  if (!withinMenuControls) closeMenus();
+});
+document.addEventListener('keydown', event => {
+  if ($('#reader').open || $('#navigation').open || $('#confirm').open) return;
+  const menu = commandMenuOpen ? $('#command-popover') : modelMenuView ? $('#model-popover') : null;
+  if (event.key === 'Escape' && menu) { event.preventDefault(); closeMenus(true); }
+  if (event.key === 'Tab' && menu) closeMenus(true);
+  if (['ArrowDown','ArrowUp','Home','End'].includes(event.key) && menu && (menu.contains(event.target) || event.target.matches('#model,#command'))) {
+    event.preventDefault();
+    const options = [...menu.querySelectorAll('button:not(:disabled)')];
+    const current = options.indexOf(document.activeElement);
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? options.length-1 : (current+(event.key === 'ArrowDown' ? 1 : -1)+options.length)%options.length;
+    options[index]?.focus({preventScroll:true});
+  }
+});
+window.addEventListener('resize', () => { positionMenu($('#model-popover'),$('#model')); positionMenu($('#command-popover'),$('#command'),true); });
+$('#confirm').addEventListener('cancel', event => { event.preventDefault(); $('#confirm').close(); setScene('new','idle',true); $('#command').focus({preventScroll:true}); });
+$('#reader').addEventListener('cancel', event => { event.preventDefault(); closeReader(); });
+$('#reader').addEventListener('click', event => {
+  const box = $('#reader').getBoundingClientRect();
+  if (event.target === $('#reader') && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeReader();
+});
+for (const type of ['wheel','touchmove']) document.addEventListener(type, event => {
+  if ($('#reader').open && !event.target.closest?.('#reader-scroll')) event.preventDefault();
+},{passive:false});
+$('#navigation').addEventListener('close', () => { $('.mobile-nav').setAttribute('aria-expanded','false'); if (matchMedia('(max-width:767.98px)').matches) $('.mobile-nav').focus({preventScroll:true}); });
+$('#navigation').addEventListener('click', event => { if (event.target === $('#navigation')) $('#navigation').close(); });
+setScene('compact');
+</script>
+</body>
+</html>

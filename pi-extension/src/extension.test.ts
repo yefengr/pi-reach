@@ -1195,6 +1195,67 @@ describe("Pi Reach endpoint extension", () => {
     expect(owners).toEqual([]);
   });
 
+  test("routes remote compaction accepted and final callback responses without broadcasting request results", async () => {
+    owners.push({ name: "owner", remote_epk: sourceOwner(), paired_at: "now" });
+    const pi = makePi();
+    (extension as ExtensionFactory)(pi);
+    const manager = SessionManager.inMemory(process.cwd());
+    let options: { onComplete?: (result: unknown) => void; onError?: (error: Error) => void } | undefined;
+    const context = { ...ctx(), sessionManager: manager, compact: vi.fn((value) => { options = value; }) };
+    pi.handlers.get("session_start")?.({}, context);
+    await _connectForTest(ctx());
+    const relay = relays.at(-1)!;
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" }, "session"));
+    await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
+    const ready = readyFrame(relay);
+    const frames = () => relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from((JSON.parse(line) as { ct: string }).ct, "base64")));
+    relay.send.mockClear();
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_compact", id: "compact-remote", channel_id: "channel", session_id: ready.session_id, leaf_id: ready.leaf_id }, "session"));
+    expect(frames()).toEqual([{ protocol_version: 2, type: "action_ok", target_channel_id: "channel", in_reply_to: "compact-remote", action: "session_compact", phase: "accepted" }]);
+    options?.onComplete?.({});
+    options?.onError?.(new Error("private body"));
+    expect(frames()).toHaveLength(2);
+    expect(frames()[1]).toMatchObject({ target_channel_id: "channel", in_reply_to: "compact-remote", phase: "completed" });
+    expect(frames().some((frame) => frame.type === "timeline_event" || frame.type === "compaction_activity")).toBe(false);
+  });
+
+  test("broadcasts public compaction activity to owners while publishing the summary only on timeline", async () => {
+    const ownerB = ownerId(8);
+    owners.push({ name: "owner-a", remote_epk: sourceOwner(), paired_at: "now" }, { name: "owner-b", remote_epk: ownerB, paired_at: "now" });
+    const pi = makePi();
+    (extension as ExtensionFactory)(pi);
+    const manager = SessionManager.inMemory(process.cwd());
+    const first = manager.appendMessage({ role: "user", content: "kept", timestamp: 1 });
+    const context = { ...ctx(), sessionManager: manager };
+    pi.handlers.get("session_start")?.({}, context);
+    await _connectForTest(ctx());
+    const relay = relays.at(-1)!;
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-a", channel_id: "a" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-b", channel_id: "b" }, "session", ownerB));
+    await vi.waitFor(() => expect(_getActivePeerCountForTest()).toBe(2));
+    relay.send.mockClear();
+    for (const reason of ["manual", "threshold", "overflow"]) {
+      pi.handlers.get("session_before_compact")?.({ reason }, context);
+      pi.handlers.get("session_compact_failed")?.({ reason, aborted: false, errorMessage: "private failure body" }, context);
+      pi.handlers.get("session_compact_failed")?.({ reason, aborted: true, errorMessage: "private failure body" }, context);
+    }
+    const entryId = manager.appendCompaction("formal summary", first, 100);
+    const entry = manager.getBranch().find((candidate) => candidate.id === entryId)!;
+    pi.handlers.get("session_compact")?.({ reason: "manual", compactionEntry: entry }, context);
+    pi.handlers.get("session_compact")?.({ reason: "manual", compactionEntry: entry }, context);
+    const frames = relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from((JSON.parse(line) as { ct: string }).ct, "base64")));
+    for (const reason of ["manual", "threshold", "overflow"]) {
+      for (const status of ["running", "failed", "cancelled"]) {
+        expect(frames.filter((frame) => frame.type === "compaction_activity" && frame.reason === reason && frame.status === status)).toHaveLength(2);
+      }
+    }
+    const activity = frames.filter((frame) => frame.type === "compaction_activity");
+    expect(activity.every((frame) => !("in_reply_to" in frame) && !("target_channel_id" in frame) && !("error" in frame) && !("summary" in frame))).toBe(true);
+    expect(JSON.stringify(activity)).not.toContain("private failure body");
+    expect(frames.filter((frame) => frame.type === "timeline_event" && frame.event.kind === "compaction")).toHaveLength(2);
+    expect(frames.some((frame) => frame.type === "action_ok" || frame.type === "action_error")).toBe(false);
+  });
+
   test("routes session_new through the internal command bridge and uses its command ctx", async () => {
     owners.push({ name: "owner", remote_epk: sourceOwner(), paired_at: "now" });
     const pi = makePi();
@@ -1229,7 +1290,7 @@ describe("Pi Reach endpoint extension", () => {
         expect(pi.handlers.get("session_before_fork")?.({ entryId: "entry", position: "before" })).toEqual({ cancel: true });
         pi.handlers.get("session_shutdown")?.({ reason: "new" });
         pi.handlers.get("session_start")?.({ reason: "new" }, { ...ctx(), sessionManager: newManager });
-        await options?.withSession?.({ ...ctx(), newSession: vi.fn() });
+        await options?.withSession?.({ ...ctx(), sessionManager: newManager, newSession: vi.fn() });
         return { cancelled: false };
       }),
     };
@@ -1240,7 +1301,7 @@ describe("Pi Reach endpoint extension", () => {
       const outbound = JSON.parse(line) as { ct: string };
       return decodeServerFrameV2(Buffer.from(outbound.ct, "base64").toString("utf8"));
     });
-    expect(frames.at(-2)).toMatchObject({ type: "action_ok", in_reply_to: "new-1", action: "session_new" });
+    expect(frames.at(-2)).toMatchObject({ type: "action_ok", in_reply_to: "new-1", action: "session_new", session_id: "session-2" });
     expect(frames.at(-1)).toMatchObject({ type: "bye", session_id: "session-1", reason: "session_replaced" });
     expect(pi.handlers.get("session_before_switch")?.({ reason: "resume" })).toBeUndefined();
     expect(pi.handlers.get("session_before_fork")?.({ entryId: "entry", position: "before" })).toBeUndefined();

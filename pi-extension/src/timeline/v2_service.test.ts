@@ -156,6 +156,7 @@ describe("TimelineV2Service", () => {
     const onListModels = vi.fn(() => ({
       models: [{ id: "vision-1", name: "Vision", provider: "test", reasoning: false, context_window: 1000, vision: true }],
       current: { id: "vision-1", name: "Vision", provider: "test", reasoning: false, context_window: 1000, vision: true },
+      thinking_level: "off" as const,
     }));
     const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false, onListModels });
     const request = {
@@ -175,6 +176,66 @@ describe("TimelineV2Service", () => {
       current: { id: "vision-1", vision: true },
     });
     expect(onListModels).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(["model_set", "thinking_set"] as const)("keeps metadata/list_models requests valid after %s advances the real SDK leaf", (type) => {
+    const session = SessionManager.inMemory(process.cwd());
+    const baseline = session.appendMessage({ role: "user", content: "existing history", timestamp: 1 });
+    const onListModels = vi.fn(() => ({ models: [], thinking_level: "high" as const }));
+    const service = new TimelineV2Service({
+      sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(),
+      onUserMessage: () => false, onListModels,
+      onAction: (frame) => {
+        if (frame.type === "model_set") session.appendModelChange(frame.provider, frame.model_id);
+        if (frame.type === "thinking_set") session.appendThinkingLevelChange(frame.level);
+      },
+    });
+    service.handle(hello());
+    const action = type === "model_set"
+      ? { type, provider: "test", model_id: "new-model" }
+      : { type, level: "high" as const };
+    expect(service.handle({ protocol_version: 2, id: "action", channel_id: "channel-1", leaf_id: baseline, ...action })).toEqual([]);
+    expect(session.getLeafId()).not.toBe(baseline);
+    expect(session.getLeafEntry()?.type).toBe(type === "model_set" ? "model_change" : "thinking_level_change");
+    expect(service.handle({ protocol_version: 2, type: "list_models", id: "models", channel_id: "channel-1", leaf_id: baseline })[0])
+      .toMatchObject({ type: "models_list", in_reply_to: "models" });
+    expect(service.handle({ protocol_version: 2, type: "extension_info_request", id: "metadata", channel_id: "channel-1", session_id: session.getSessionId(), leaf_id: baseline })[0])
+      .toMatchObject({ type: "extension_info", version: "1.2.3" });
+    expect(onListModels).toHaveBeenCalledTimes(1);
+  });
+
+  test("explicit refresh invalidates all channels at the same leaf until each sends hello again", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const root = session.appendMessage({ role: "user", content: "root", timestamp: 1 });
+    const baseline = session.appendMessage({ role: "user", content: "leaf", timestamp: 2 });
+    const send = vi.fn(() => true);
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: send });
+    service.handle(hello());
+    service.handle(hello("channel-2"));
+    expect(service.handle(user(baseline))[0]).toMatchObject({ type: "user_message_status", status: "received" });
+    session.branch(root);
+    session.branch(baseline);
+    expect(service.refreshScope()).toBe(false);
+    for (const channelId of ["channel-1", "channel-2"]) {
+      expect(service.handle(user(baseline, { channel_id: channelId }))[0]).toMatchObject({ type: "reset", reason: "branch_changed" });
+    }
+    service.handle(hello());
+    expect(service.handle(user(baseline))[0]).toMatchObject({ type: "user_message_status", status: "received" });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(service.handle(user(baseline, { channel_id: "channel-2" }))[0]).toMatchObject({ type: "reset", reason: "branch_changed" });
+    service.handle(hello("channel-2"));
+    expect(service.handle({ protocol_version: 2, type: "ping", id: "ping", channel_id: "channel-2", leaf_id: baseline })[0]).toMatchObject({ type: "pong" });
+  });
+
+  test("keeps history frozen to the exact requested leaf despite allowing ordinary request ancestors", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const baseline = session.appendMessage({ role: "user", content: "before", timestamp: 1 });
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false });
+    service.handle(hello());
+    session.appendThinkingLevelChange("high");
+    expect(service.handle({ protocol_version: 2, type: "ping", id: "ping", channel_id: "channel-1", leaf_id: baseline })[0]).toMatchObject({ type: "pong" });
+    expect(service.handle({ protocol_version: 2, type: "session_sync", id: "history", channel_id: "channel-1", leaf_id: baseline, before: null })[0]).toMatchObject({ type: "reset", reason: "branch_changed" });
+    expect(service.handle({ protocol_version: 2, type: "session_sync", id: "current-history", channel_id: "channel-1", leaf_id: session.getLeafId(), before: null })[0]).toMatchObject({ type: "session_history_chunk" });
   });
 
   test("accepts typed actions only after hello and generation validation", () => {
@@ -268,7 +329,8 @@ describe("TimelineV2Service", () => {
     });
     const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime, onUserMessage: send });
     service.handle(hello());
-    const first = service.handle(user(service.leafId));
+    const sendingLeaf = service.leafId;
+    const first = service.handle(user(sendingLeaf));
     expect(first).toEqual([expect.objectContaining({ type: "user_message_status", status: "received" })]);
     expect(service.canDrain("request-1")).toBe(true);
     const message = { role: "user", content: "hello", timestamp: 1 };
@@ -279,7 +341,9 @@ describe("TimelineV2Service", () => {
       message: { origin: "pwa", sender_ref: "owner-1", delivery: "normal" },
     });
     expect(service.canDrain("request-1")).toBe(false);
-    const replay = service.handle(user(service.leafId, { id: "wire-2" }));
+    session.appendMessage({ role: "user", content: "hello", timestamp: 1 });
+    expect(service.leafId).not.toBe(sendingLeaf);
+    const replay = service.handle(user(sendingLeaf, { id: "wire-2" }));
     expect(send).toHaveBeenCalledTimes(1);
     expect(replay[0]).toMatchObject({ type: "user_message_status", status: "accepted" });
   });
@@ -316,10 +380,13 @@ describe("TimelineV2Service", () => {
   test("cancel invokes a parameterless callback and returns a direct acknowledgement", () => {
     const session = SessionManager.inMemory(process.cwd());
     const onCancel = vi.fn(() => true);
+    const runtime = new TimelineRuntime();
+    runtime.onAgentStart();
+    runtime.onMessageStart({ role: "user", content: "run", timestamp: 1 }, session);
     const service = new TimelineV2Service({
       sessionManager: session,
       senderRef: "owner-1",
-      runtime: new TimelineRuntime(),
+      runtime,
       onUserMessage: () => false,
       extensionVersion: "1.2.3",
       onCancel,
@@ -329,6 +396,7 @@ describe("TimelineV2Service", () => {
       protocol_version: 2,
       type: "cancel",
       id: "cancel-1",
+      group_id: runtime.currentGroupId!,
       channel_id: "channel-1",
       leaf_id: service.leafId,
     });
@@ -341,12 +409,43 @@ describe("TimelineV2Service", () => {
     expect(response).not.toHaveProperty("target_id");
   });
 
+  test("cancel after normal SDK appends invokes abort once, rejects an old group, and still waits for formal run_end", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const baseline = session.appendMessage({ role: "user", content: "history", timestamp: 1 });
+    const runtime = new TimelineRuntime();
+    const onCancel = vi.fn(() => true);
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime, onUserMessage: () => false, onCancel });
+    service.handle(hello());
+    runtime.onAgentStart();
+    runtime.onMessageStart({ role: "user", content: "previous run", timestamp: 2 }, session);
+    const previousGroup = runtime.currentGroupId!;
+    runtime.onAgentEnd([]);
+    runtime.onAgentStart();
+    const message = { role: "user" as const, content: "active run", timestamp: 3 };
+    runtime.onMessageStart(message, session);
+    session.appendMessage(message);
+    session.appendThinkingLevelChange("high");
+    const currentGroup = runtime.currentGroupId!;
+    const cancel = { protocol_version: 2 as const, type: "cancel" as const, id: "cancel-1", channel_id: "channel-1", session_id: session.getSessionId(), leaf_id: baseline, group_id: previousGroup };
+    expect(service.handle(cancel)[0]).toMatchObject({ type: "protocol_error", code: "invalid_message" });
+    expect(onCancel).not.toHaveBeenCalled();
+    const publishedBefore = runtime.getPublishedEvents();
+    expect(service.handle({ ...cancel, group_id: currentGroup })[0]).toMatchObject({ type: "cancelled", in_reply_to: "cancel-1" });
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith();
+    expect(runtime.currentGroupId).toBe(currentGroup);
+    expect(runtime.getPublishedEvents()).toEqual(publishedBefore);
+    expect(runtime.getPublishedEvents().some((event) => event.kind === "run_end" && event.group_id === currentGroup)).toBe(false);
+  });
+
   test("cancel callback failures remain direct internal errors", () => {
     const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    runtime.onAgentStart();
+    runtime.onMessageStart({ role: "user", content: "run", timestamp: 1 }, session);
     const service = new TimelineV2Service({
       sessionManager: session,
       senderRef: "owner-1",
-      runtime: new TimelineRuntime(),
+      runtime,
       onUserMessage: () => false,
       extensionVersion: "1.2.3",
       onCancel: () => { throw new Error("abort failed"); },
@@ -356,6 +455,7 @@ describe("TimelineV2Service", () => {
       protocol_version: 2,
       type: "cancel",
       id: "cancel-1",
+      group_id: runtime.currentGroupId!,
       channel_id: "channel-1",
       leaf_id: service.leafId,
     })[0]).toMatchObject({
@@ -363,7 +463,7 @@ describe("TimelineV2Service", () => {
       target_channel_id: "channel-1",
       in_reply_to: "cancel-1",
       code: "internal_error",
-      message: expect.stringContaining("abort failed"),
+      message: "Could not stop the target run.",
     });
   });
 

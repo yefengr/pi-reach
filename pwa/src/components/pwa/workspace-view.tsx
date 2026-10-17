@@ -9,6 +9,7 @@ import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { BrandMark } from "@/components/pwa/brand-mark";
 import { useI18n } from "@/lib/i18n";
+import { useDelayedVisibility } from "./use-delayed-visibility";
 
 export { displayDevice } from "@/components/pwa/workspace-device-control";
 export { displayPi } from "@/components/pwa/session-title";
@@ -42,6 +43,8 @@ export type WorkspaceNavigationProps = {
   devices: PwaDeviceRecord[];
   endpoints: PwaEndpointRecord[];
   history: TimelineSessionSummary[];
+  historyListStatus?: "idle" | "loading" | "success" | "error";
+  onRetryHistory?: () => void;
   activeDeviceId: string | null;
   activeEndpointId: string | null;
   selectedHistoryId: string | null;
@@ -69,7 +72,7 @@ type WorkspaceRunningPiSectionProps = Pick<WorkspaceNavigationProps, "endpoints"
   variant?: NavigationVariant;
 };
 
-type WorkspaceHistorySectionProps = Pick<WorkspaceNavigationProps, "history" | "selectedHistoryId" | "onSelectHistory"> & {
+type WorkspaceHistorySectionProps = Pick<WorkspaceNavigationProps, "history" | "selectedHistoryId" | "onSelectHistory" | "historyListStatus" | "onRetryHistory"> & {
   activeDevice: PwaDeviceRecord | null;
   headingId: string;
   variant?: NavigationVariant;
@@ -149,12 +152,15 @@ export function WorkspaceRunningPiSection({ activeDevice, endpoints, activeEndpo
   </section>;
 }
 
-export function WorkspaceHistorySection({ activeDevice, history, selectedHistoryId, onSelectHistory, headingId, variant = "desktop" }: WorkspaceHistorySectionProps) {
+export function WorkspaceHistorySection({ activeDevice, history, selectedHistoryId, onSelectHistory, historyListStatus = "success", onRetryHistory, headingId, variant = "desktop" }: WorkspaceHistorySectionProps) {
   const { t, format } = useI18n();
+  const loadingVisible = useDelayedVisibility(historyListStatus === "loading");
   if (!activeDevice) return null;
-  return <section className={sectionClassName(variant)} aria-labelledby={headingId}>
-    <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong><em>{t.navigation.savedInBrowser}</em></span><small className="pwa-tabular">{history.length}</small></div>
-    {history.length === 0 ? <p className="pwa-nav-empty">{t.navigation.historyEmpty}</p> : history.map((entry) => {
+  return <section className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={historyListStatus === "loading" || undefined}>
+    <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong><em>{t.navigation.savedInBrowser}</em></span>{history.length > 0 || historyListStatus === "success" ? <small className="pwa-tabular">{history.length}</small> : null}</div>
+    {loadingVisible ? <p className="pwa-nav-empty" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> {t.operationFeedback.historyLoading}</p> : null}
+    {historyListStatus === "error" && !loadingVisible ? <div className="pwa-nav-empty" role="status">{t.operationFeedback.historyError}<Button variant="transparent" type="button" onClick={onRetryHistory}>{t.common.retry}</Button></div> : null}
+    {history.length === 0 ? historyListStatus === "success" && !loadingVisible ? <p className="pwa-nav-empty">{t.navigation.historyEmpty}</p> : null : history.map((entry) => {
       const current = entry.id === selectedHistoryId;
       const title = historySessionTitle(entry);
       return <NavLink
@@ -183,7 +189,7 @@ export function WorkspaceNavigationFooter({ onPair, onSettings, className = "pwa
   </div>;
 }
 
-export function WorkspaceNavigationContent({ devices, endpoints, history, activeDeviceId, activeEndpointId, selectedHistoryId, snapshotReady, pairingPresence = {}, completedEndpointIds, onPair, onSettings, onSelectDevice, onSelectEndpoint, onSelectHistory, onRename, onRemove, idPrefix = "pwa-navigation", collapsed = false }: WorkspaceNavigationContentProps) {
+export function WorkspaceNavigationContent({ devices, endpoints, history, historyListStatus, onRetryHistory, activeDeviceId, activeEndpointId, selectedHistoryId, snapshotReady, pairingPresence = {}, completedEndpointIds, onPair, onSettings, onSelectDevice, onSelectEndpoint, onSelectHistory, onRename, onRemove, idPrefix = "pwa-navigation", collapsed = false }: WorkspaceNavigationContentProps) {
   const activeDevice = getActiveDevice(devices, activeDeviceId);
   const runningHeading = `${idPrefix}-running-heading`;
   const historyHeading = `${idPrefix}-history-heading`;
@@ -193,7 +199,7 @@ export function WorkspaceNavigationContent({ devices, endpoints, history, active
     <div className="pwa-navigation-scroll">
       {activeDevice ? <>
         <WorkspaceRunningPiSection activeDevice={activeDevice} endpoints={endpoints} activeEndpointId={activeEndpointId} selectedHistoryId={selectedHistoryId} snapshotReady={snapshotReady} completedEndpointIds={completedEndpointIds} onSelectEndpoint={onSelectEndpoint} headingId={runningHeading} />
-        <WorkspaceHistorySection activeDevice={activeDevice} history={history} selectedHistoryId={selectedHistoryId} onSelectHistory={onSelectHistory} headingId={historyHeading} />
+        <WorkspaceHistorySection activeDevice={activeDevice} history={history} historyListStatus={historyListStatus} onRetryHistory={onRetryHistory} selectedHistoryId={selectedHistoryId} onSelectHistory={onSelectHistory} headingId={historyHeading} />
       </> : null}
     </div>
     <WorkspaceNavigationFooter onPair={onPair} onSettings={onSettings} />

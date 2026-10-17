@@ -636,7 +636,8 @@ describe("plan/63 SDK timeline contracts", () => {
       });
 
       const branch = sessionManager.getBranch();
-      expect(branch.filter((entry) => entry.type === "message").map((entry) => entry.message.role)).toEqual([
+      // SDK 1.3.0 may persist its system context before conversational messages.
+      expect(branch.filter((entry) => entry.type === "message" && entry.message.role !== "system").map((entry) => entry.message.role)).toEqual([
         "user",
         "assistant",
         "toolResult",

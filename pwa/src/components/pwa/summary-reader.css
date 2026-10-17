@@ -1,0 +1,10 @@
+.pwa-root .pwa-summary-entry { padding: 0; }
+.pwa-ui-scope .pwa-button.pwa-summary-action { min-height: 44px; height: auto; max-width: 100%; padding: var(--pwa-space-xs); color: var(--pwa-secondary); font-size: var(--pwa-text-body); }
+.pwa-root .pwa-summary-action .mantine-Button-label { min-width: 0; gap: var(--pwa-space-xs); }
+.pwa-root .pwa-summary-action svg { flex: none; }
+.pwa-root .pwa-summary-action .mantine-Button-label > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.pwa-root .provider_error .pwa-summary-action { color: var(--pwa-error); }
+.pwa-root .pwa-summary-reader-scroll { font: var(--pwa-text-body)/var(--pwa-leading-body) var(--pwa-font-ui); overflow-wrap: anywhere; }
+/* 长代码和表格在块内横滚，不阻断正文其他位置的右滑返回。 */
+.pwa-root .pwa-summary-reader-scroll .pwa-code-block pre,
+.pwa-root .pwa-summary-reader-scroll .pwa-markdown-table { touch-action: auto; }

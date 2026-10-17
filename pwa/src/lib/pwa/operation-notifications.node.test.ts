@@ -49,6 +49,60 @@ test("session changes revoke session and stop feedback but retain application fe
   expect(value.store.getState().notifications).toEqual([]);
 });
 
+test("session changes revoke displayed and queued session toasts before clearing errors", async () => {
+  const value = controller();
+  value.notify("Current model: old", { sessionScoped: true });
+  value.clearSession();
+  expect(value.store.getState().notifications).toEqual([]);
+  value.show("model_set-error");
+  value.notify("Thinking level set to high", { sessionScoped: true });
+  value.clearSession();
+  expect(value.store.getState().notifications).toEqual([]);
+  value.show("registry-save");
+  value.notify("Checking old configuration", { sessionScoped: true });
+  value.clearSession();
+  expect(value.store.getState().notifications[0].message).toBe(operationFeedbackMessage("registry-save"));
+  notifications.hide(OPERATION_NOTIFICATION_ID, value.store);
+  await Promise.resolve();
+  expect(value.store.getState().notifications).toEqual([]);
+  value.dispose();
+});
+
+test("session cleanup retains global toasts and update priority", async () => {
+  const value = controller();
+  value.notify("Settings saved");
+  value.clearSession();
+  expect(value.store.getState().notifications[0].message).toBe("Settings saved");
+  value.showUpdate("Update ready", { label: "Refresh", onClick: () => {} }, () => {});
+  value.show("model_set-error");
+  value.notify("Settings saved");
+  value.clearSession();
+  expect(value.store.getState().notifications[0].message).not.toBe("Settings saved");
+  notifications.hide(OPERATION_NOTIFICATION_ID, value.store);
+  await Promise.resolve();
+  expect(value.store.getState().notifications[0].message).toBe("Settings saved");
+  value.showUpdate("Update ready", { label: "Refresh", onClick: () => {} }, () => {});
+  value.notify("Old configuration", { sessionScoped: true });
+  value.clearSession();
+  expect(value.store.getState().notifications).toHaveLength(1);
+  notifications.hide(OPERATION_NOTIFICATION_ID, value.store);
+  await Promise.resolve();
+  expect(value.store.getState().notifications).toEqual([]);
+  value.dispose();
+});
+
+test("toast-only cleanup cancels old configuration without clearing a persistent operation error", async () => {
+  const value = controller();
+  value.show("stop-send-failed");
+  value.notify("Checking old configuration", { sessionScoped: true });
+  value.clearSession({ toastsOnly: true });
+  expect(value.store.getState().notifications[0].message).toBe(operationFeedbackMessage("stop-send-failed"));
+  notifications.hide(OPERATION_NOTIFICATION_ID, value.store);
+  await Promise.resolve();
+  expect(value.store.getState().notifications).toEqual([]);
+  value.dispose();
+});
+
 test("manual dismissal stays cleared until a new failure occurs", () => {
   const value = controller();
   value.show("model_set-error");

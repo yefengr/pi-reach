@@ -20,9 +20,10 @@ import { createOwnerBinding, type OwnerBinding } from "./runtime/create_owner_bi
 import { TimelineV2Service, type V2ActionFrame } from "./timeline/v2_service.js";
 import { TimelineRuntime } from "./timeline/runtime.js";
 import { UserDeliveryBinding } from "./timeline/user_delivery_binding.js";
-import { handleListModels, handleModelSet, handleSessionCompact, handleThinkingSet, getModelsList, type ActionCtx, type ActionReplySender, type CurrentModelHint } from "./actions/handlers.js";
+import { handleModelSet, handleSessionCompact, handleThinkingSet, getModelsList, type ActionCtx, type ActionReplySender, type CurrentModelHint } from "./actions/handlers.js";
 import { ensureModelRegistry } from "./actions/registry.js";
 import { SessionNewBridge } from "./actions/session_new_bridge.js";
+import { registerCompactionActivity } from "./actions/compaction_activity.js";
 import { defaultAgentName, loadLocalConfig } from "./session/local_config.js";
 import { resolveRelayUrl, toWebSocketUrl } from "./config.js";
 import { persistModelDefault, registerCommands, type RemoteCommandDependencies } from "./commands.js";
@@ -317,7 +318,7 @@ function actionSender(ownerId: string, channelId: string): ActionReplySender {
       const binding = activeOwners.get(ownerId);
       if (!binding) return;
       if (message.type === "action_ok" || message.type === "action_error") {
-        binding.channel.sendV2({ protocol_version: 2, type: message.type, target_channel_id: channelId, in_reply_to: message.in_reply_to, action: message.action, ...(message.type === "action_error" ? { error: message.error } : {}) } as ServerFrame);
+        binding.channel.sendV2({ ...message, protocol_version: 2, target_channel_id: channelId });
       }
     },
   };
@@ -355,7 +356,10 @@ function createBinding(relayClient: RelayClient, ownerId: string): OwnerBinding 
       return true;
     },
     onAction: (frame) => routeAction(ownerId, frame),
-    onListModels: () => getModelsList((lastEventCtx ?? lastCommandCtx) as ActionCtx | null, ensureModelRegistry((lastEventCtx ?? lastCommandCtx) as ActionCtx | null), currentModel),
+    onListModels: () => {
+      if (!piApi) throw new Error("model configuration unavailable");
+      return getModelsList((lastEventCtx ?? lastCommandCtx) as ActionCtx | null, ensureModelRegistry((lastEventCtx ?? lastCommandCtx) as ActionCtx | null), piApi.getThinkingLevel(), currentModel);
+    },
   });
 }
 
@@ -485,6 +489,8 @@ const extension: ExtensionFactory = (api): void => {
   const owner = new ExtensionOwner();
   const pi = owner.guard(api);
   registerCommands(pi, commandDependencies);
+  registerCompactionActivity(pi, (frame) => broadcastV2((service) => service.sessionId === frame.session_id ? [frame] : []),
+    (entry, manager) => { ensureTimeline(manager).publishSessionEntry(entry, manager); });
   pi.registerTool(createPublishFileTool({ getManager: () => currentSessionManager, isCurrent: () => owner.isCurrent(), getGeneration: () => files.generation, getGroupId: () => timeline?.currentGroupId ?? null, inspect: (path) => files.reader.inspectForPublication(path) }));
 
   pi.on("input", (event) => {

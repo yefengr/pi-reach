@@ -1,12 +1,16 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Menu } from "@mantine/core";
-import { ArrowLeft, Check, ChevronRight, Cpu, FilePlus2, Gauge, Minimize2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Cpu, FilePlus2, Gauge, LoaderCircle, Minimize2, RefreshCw } from "lucide-react";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { useI18n } from "@/lib/i18n";
+import { useDelayedVisibility } from "./use-delayed-visibility";
+import "./operation-feedback.css";
+
+export type ModelListStatus = "idle" | "loading" | "success" | "error";
 
 export type ComposerCommandAction = "session_new" | "session_compact" | "model_set" | "thinking_set";
 
-export const COMPOSER_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const satisfies readonly ThinkingLevel[];
+export const COMPOSER_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const satisfies readonly ThinkingLevel[];
 
 /** 会话命令菜单：输入区的「/」只提供新会话与压缩。 */
 export type ComposerCommandMenuPanelProps = {
@@ -52,6 +56,8 @@ export type ComposerModelSettingsMenuPanelProps = {
   isOnline: boolean;
   pendingAction: ComposerCommandAction | null;
   models: WireModel[];
+  modelsStatus?: ModelListStatus;
+  onRetryModels?: () => void;
   currentModel: WireModel | null;
   currentModelFallback: string | null;
   thinking: ThinkingLevel;
@@ -101,6 +107,8 @@ export function ComposerModelSettingsMenuPanel({
   isOnline,
   pendingAction,
   models,
+  modelsStatus = "success",
+  onRetryModels,
   currentModel,
   currentModelFallback,
   thinking,
@@ -113,6 +121,7 @@ export function ComposerModelSettingsMenuPanel({
   const { t } = useI18n();
   const c = t.commands;
   const { panelRef, changeView } = useCommandViewFocus(view);
+  const loadingVisible = useDelayedVisibility(modelsStatus === "loading");
   const actionDisabled = !isOnline || pendingAction !== null;
   const currentModelLabel = currentModel
     ? modelLabel(currentModel)
@@ -122,12 +131,14 @@ export function ComposerModelSettingsMenuPanel({
     return <div ref={panelRef} className="pwa-command-menu-panel" role="group" aria-label={c.changeModel}>
       <Menu.Item className="pwa-command-back" data-command-view="settings" leftSection={<ArrowLeft size={16} />} closeMenuOnClick={false} onClick={() => changeView("models", onBack)}>{t.common.back}</Menu.Item>
       <Menu.Label className="pwa-command-menu-heading">{c.changeModel}</Menu.Label>
+      {loadingVisible ? <p className="pwa-command-empty pwa-operation-list-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.operationFeedback.modelsLoading}</p> : null}
+      {modelsStatus === "error" && !loadingVisible ? <><p className="pwa-command-empty" role="status">{t.operationFeedback.modelsError}</p><Menu.Item leftSection={<RefreshCw size={16} />} closeMenuOnClick={false} disabled={!isOnline} onClick={onRetryModels}>{t.common.retry}</Menu.Item></> : null}
       {models.length ? models.map((model) => {
         const selected = isCurrentModel(model, currentModel);
         return <Menu.Item className="pwa-command-row pwa-command-choice" data-selected={selected || undefined} key={`${model.provider}:${model.id}`} disabled={actionDisabled} leftSection={<Cpu size={16} />} rightSection={selected ? <Check className="pwa-command-check" size={16} aria-label={c.currentModel} /> : null} onClick={() => onSetModel(model)}>
           <span className="pwa-command-copy"><span>{modelLabel(model)}</span><small>{model.id}</small></span>
         </Menu.Item>;
-      }) : <p className="pwa-command-empty">{c.noModels}</p>}
+      }) : modelsStatus === "success" && !loadingVisible ? <p className="pwa-command-empty">{c.noModels}</p> : null}
     </div>;
   }
 

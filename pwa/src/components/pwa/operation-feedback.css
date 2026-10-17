@@ -1,0 +1,15 @@
+.pwa-operation-status {
+  display: flex;
+  align-items: center;
+  gap: var(--pwa-space-xs);
+  min-height: 44px;
+  color: var(--pwa-running);
+  font-size: 14px;
+  line-height: var(--pwa-leading-ui);
+}
+.pwa-operation-status > svg { flex: 0 0 auto; }
+.pwa-operation-status[data-unknown] { color: var(--pwa-secondary); }
+.pwa-operation-status[data-failed] { color: var(--pwa-error); }
+.pwa-operation-list-status { margin: 0; color: var(--pwa-secondary); }
+.pwa-operation-list-status > svg { vertical-align: middle; margin-right: var(--pwa-space-xs); }
+.pwa-operation-model-pending { color: var(--pwa-running); }

@@ -292,7 +292,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
           </div>
           <div className="pwa-navigation-scroll" ref={scrollRef}>
             <WorkspaceRunningPiSection activeDevice={activeDevice} endpoints={navigation.endpoints} activeEndpointId={navigation.activeEndpointId} selectedHistoryId={navigation.selectedHistoryId} snapshotReady={navigation.snapshotReady} completedEndpointIds={navigation.completedEndpointIds} onSelectEndpoint={wrappedEndpoint} headingId="pwa-sheet-running-heading" variant="sheet" />
-            <WorkspaceHistorySection activeDevice={activeDevice} history={navigation.history} selectedHistoryId={navigation.selectedHistoryId} onSelectHistory={wrappedHistory} headingId="pwa-sheet-history-heading" variant="sheet" />
+            <WorkspaceHistorySection activeDevice={activeDevice} history={navigation.history} historyListStatus={navigation.historyListStatus} onRetryHistory={navigation.onRetryHistory} selectedHistoryId={navigation.selectedHistoryId} onSelectHistory={wrappedHistory} headingId="pwa-sheet-history-heading" variant="sheet" />
           </div>
           <WorkspaceNavigationFooter className="pwa-session-sheet-foot" onPair={wrappedPair} onSettings={wrappedSettings} autoFocusSettings={autoFocusSettings} />
         </div>
