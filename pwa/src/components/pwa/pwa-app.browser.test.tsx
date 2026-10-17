@@ -808,7 +808,7 @@ function operationFeedback(): HTMLElement {
 type OperationHarness = Awaited<ReturnType<typeof renderReadyTimeline>>;
 type TestedAction = "session_new" | "session_compact" | "model_set" | "thinking_set";
 const rawOperationError = "WebSocket Relay endpoint_id=550e8400-e29b-41d4-a716-446655440000";
-const compactIncompleteMessage = "Compaction did not complete; it may have been cancelled. Check the current conversation before trying again.";
+const compactIncompleteMessage = "No compaction summary was created. You can continue the conversation; if it is short, add more content before trying compaction again.";
 
 async function issueOperation({ screen, channel }: OperationHarness, action: TestedAction, sendResult = true) {
   const previousRequests = channel.frames.filter((frame) => frame.type === action).length;
@@ -1110,6 +1110,28 @@ test("saves session names, follows renames, and keeps replaced sessions separate
     await flushMicrotasks();
     await expect.element(screen.getByRole("heading", { level: 1, name: /Renamed session$/ })).toBeVisible();
     expect((await summaries()).find((entry) => entry.sessionId === "session-1")?.name).toBe("Renamed session");
+  } finally { await screen.unmount(); }
+});
+
+test("model metadata refresh preserves the live message list and session channel", async () => {
+  const { channel, list, screen } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const event = numberedEvents(1)[0]!;
+    channel.emit({ protocol_version: 2, type: "timeline_event", session_id: "session-1", leaf_id: "generation-session-1", event });
+    await expect.poll(() => list.textContent).toContain("Record 1");
+    const content = list.textContent;
+    expect(content).not.toBe("");
+    const helloCount = channel.frames.filter((frame) => frame.type === "session_hello").length;
+    for (const [model, thinking] of [["Model A", "low"], ["Model B", "high"]]) {
+      const before = channel.frames.filter((frame) => frame.type === "list_models").length;
+      relayHarness.instances[0]!.emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", model, thinking } });
+      await expect.poll(() => channel.frames.filter((frame) => frame.type === "list_models").length).toBeGreaterThan(before);
+      expect(document.querySelector(".pwa-message-list")).toBe(list);
+      expect(list.textContent).toBe(content);
+      expect(channelHarness.channels).toHaveLength(1);
+      expect(relayHarness.instances).toHaveLength(1);
+      expect(channel.frames.filter((frame) => frame.type === "session_hello")).toHaveLength(helloCount);
+    }
   } finally { await screen.unmount(); }
 });
 

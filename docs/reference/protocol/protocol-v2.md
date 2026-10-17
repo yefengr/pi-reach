@@ -227,6 +227,8 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 
 配对完成后，PWA 必须先发送 `session_hello`；收到 `session_ready` 前不得发送 ready-only 业务 frame。
 
+普通业务请求的 `leaf_id` 可以引用当前 channel 最近一次 hello 时的 tip，或该 tip 之后、当前分支上的祖先。模型、思考级别和消息的正常追加不触发 branch replacement；未知叶、其他分支或 hello 之前的叶仍被拒绝。显式分支／会话切换使旧 channel 的业务请求失效，须重新 hello，即使切走后又回到同一 tip。历史分页快照仍严格匹配请求叶；停止请求还必须匹配当前运行的 `group_id`。
+
 ### PWA -> Extension
 
 - `pair_request`

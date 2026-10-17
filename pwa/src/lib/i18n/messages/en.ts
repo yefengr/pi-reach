@@ -15,7 +15,7 @@ export const en = {
     creatingSession: "Creating a new session…",
     openingSession: "Opening the new session…",
     compacting: "Compacting context…",
-    compactIncomplete: "Compaction did not complete; it may have been cancelled. Check the current conversation before trying again.",
+    compactIncomplete: "No compaction summary was created. You can continue the conversation; if it is short, add more content before trying compaction again.",
     compactCancelled: "Compaction cancelled",
     compactFailed: "Could not compact context.",
     unknown: "Result not confirmed. Check the connection before trying again.",

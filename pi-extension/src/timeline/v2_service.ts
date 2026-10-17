@@ -13,6 +13,7 @@ import {
 import { attachmentReplayFrames, type AttachmentReplay } from "./attachment_delivery.js";
 import { userMessageIdempotencyPayload } from "./attachment_content.js";
 import { TimelineHistoryPager } from "./history.js";
+import { TimelineRequestScope } from "./request_scope.js";
 import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js";
 
 export type V2ActionFrame = Extract<
@@ -49,6 +50,7 @@ type QueuedMessageItem = Extract<ServerFrame, { type: "queued_message_state" }>[
 export class TimelineV2Service {
   private readonly state: V2SessionState;
   private readonly pager: TimelineHistoryPager;
+  private readonly requestScope: TimelineRequestScope;
   private readonly sessionManager: SessionManager;
   private readonly senderRef: string;
   private readonly extensionVersion: string;
@@ -65,6 +67,7 @@ export class TimelineV2Service {
 
   constructor(options: V2ServiceOptions) {
     this.sessionManager = options.sessionManager;
+    this.requestScope = new TimelineRequestScope(this.sessionManager);
     this.senderRef = options.senderRef;
     this.extensionVersion = options.extensionVersion;
     this.state = new V2SessionState({ sessionId: options.sessionManager.getSessionId(), leafId: options.sessionManager.getLeafId() ?? null });
@@ -119,17 +122,11 @@ export class TimelineV2Service {
   }
 
   reset(reason: "branch_changed" | "session_replaced"): ServerFrame[] {
-    return this.state.snapshot().channels.map((channel) => ({
-      protocol_version: 2,
-      type: "reset" as const,
-      target_channel_id: channel.channelId,
-      session_id: this.sessionId,
-      leaf_id: this.leafId,
-      reason,
-    }));
+    return this.state.snapshot().channels.map((channel) => this.requestScope.resetFrame(channel.channelId, reason));
   }
 
   refreshScope(): boolean {
+    this.requestScope.invalidate();
     const sessionId = this.sessionId;
     const leafId = this.leafId;
     if (sessionId === this.state.sessionId && leafId === this.state.leafId) return false;
@@ -304,6 +301,7 @@ export class TimelineV2Service {
 
   private ready(frame: Extract<ClientFrame, { type: "session_hello" }>): ServerFrame {
     this.state.hello(this.senderRef, frame.channel_id);
+    this.requestScope.hello(frame.channel_id);
     const headSeq = this.runtime.recover(this.sessionManager).at(-1)?.event_seq ?? 0;
     return {
       protocol_version: 2,
@@ -524,18 +522,11 @@ export class TimelineV2Service {
     if (!("channel_id" in frame) || !this.state.get(this.senderRef, frame.channel_id)) {
       return this.error("id" in frame ? frame.id : "v2", "invalid_channel", "session_hello required", "channel_id" in frame ? frame.channel_id : undefined);
     }
-    const sessionMismatch = "session_id" in frame && frame.session_id !== this.sessionId;
-    const leafMismatch = "leaf_id" in frame && frame.leaf_id !== this.leafId;
-    if (sessionMismatch || leafMismatch) {
-      return {
-        protocol_version: 2,
-        type: "reset",
-        target_channel_id: frame.channel_id,
-        session_id: this.sessionId,
-        leaf_id: this.leafId,
-        reason: sessionMismatch ? "session_replaced" : "branch_changed",
-      };
-    }
+    const reason = this.requestScope.invalidReason(frame.channel_id, {
+      sessionId: "session_id" in frame ? frame.session_id : undefined,
+      leafId: "leaf_id" in frame ? frame.leaf_id : undefined,
+    });
+    if (reason) return this.requestScope.resetFrame(frame.channel_id, reason);
     this.state.touch(this.senderRef, frame.channel_id);
     return null;
   }

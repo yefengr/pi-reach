@@ -17,7 +17,7 @@ export const zh: Messages = {
     creatingSession: "正在新建会话…",
     openingSession: "正在打开新会话…",
     compacting: "正在压缩上下文…",
-    compactIncomplete: "压缩未完成，也可能已取消。请查看当前会话后再决定是否重试。",
+    compactIncomplete: "未生成压缩摘要。你可以继续对话；如果会话较短，积累更多内容后再尝试压缩。",
     compactCancelled: "已取消压缩",
     compactFailed: "未能压缩上下文。",
     unknown: "结果待确认，请先检查连接再操作。",
