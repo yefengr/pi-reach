@@ -1118,6 +1118,7 @@ test.each(["session_compact", "model_set", "thinking_set"] as const)("shows the 
     expect(operationFeedback()).toBeTruthy();
     replyOperation(context.channel, retry, true);
     if (action === "thinking_set") await expect.element(context.screen.getByText("Thinking level set to high.", { exact: true })).toBeVisible();
+    else if (action === "model_set") await expect.element(context.screen.getByText("Model switched to Vision model.", { exact: true })).toBeVisible();
     else await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
   } finally { await context.screen.unmount(); }
 });
@@ -1160,9 +1161,9 @@ test("registry failure replaces an action error and survives an unrelated succes
   const db = await openPwaDatabase();
   const put = vi.spyOn(db.endpoints, "put");
   try {
-    const first = await issueOperation(context, "model_set");
-    replyOperation(context.channel, first);
-    await expect.element(context.screen.getByText("Could not change the model. Try again.")).toBeVisible();
+    // 已发送配置的错误会进入实际值读回；此处用确定未发送的失败建立持久错误。
+    await issueOperation(context, "model_set", false);
+    await expect.element(context.screen.getByText("Could not change the model. Check the connection and try again.")).toBeVisible();
     const retry = await issueOperation(context, "model_set");
     put.mockRejectedValueOnce(new Error(rawOperationError));
     relayHarness.instances[0].emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Updated Pi", cwd: "/workspace" } });
@@ -1181,9 +1182,8 @@ test("entering saved history revokes session feedback and ignores old channel re
   await seedArchivedSession();
   const context = await renderReadyTimeline(renderWorkspaceApp);
   try {
-    const request = await issueOperation(context, "model_set");
-    replyOperation(context.channel, request);
-    await expect.element(context.screen.getByText("Could not change the model. Try again.")).toBeVisible();
+    const request = await issueOperation(context, "model_set", false);
+    await expect.element(context.screen.getByText("Could not change the model. Check the connection and try again.")).toBeVisible();
     await expect.poll(() => document.querySelector(".pwa-history-row")?.textContent).toContain("Archived note");
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
     await expect.element(context.screen.getByRole("heading", { level: 1, name: /Archived note$/ })).toBeVisible();
@@ -3065,9 +3065,8 @@ test.each([1280, 390])("operation notification keeps the settings page beneath c
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen } = context;
   try {
-    const request = await issueOperation(context, "model_set");
-    replyOperation(context.channel, request);
-    await expect.element(screen.getByText("Could not change the model. Try again.")).toBeVisible();
+    await issueOperation(context, "model_set", false);
+    await expect.element(screen.getByText("Could not change the model. Check the connection and try again.")).toBeVisible();
     const notice = operationFeedback();
     if (width < 768) {
       await screen.getByRole("button", { name: "Open navigation" }).click();
