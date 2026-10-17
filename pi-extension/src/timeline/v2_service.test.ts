@@ -156,6 +156,7 @@ describe("TimelineV2Service", () => {
     const onListModels = vi.fn(() => ({
       models: [{ id: "vision-1", name: "Vision", provider: "test", reasoning: false, context_window: 1000, vision: true }],
       current: { id: "vision-1", name: "Vision", provider: "test", reasoning: false, context_window: 1000, vision: true },
+      thinking_level: "off" as const,
     }));
     const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime: new TimelineRuntime(), onUserMessage: () => false, onListModels });
     const request = {
@@ -316,10 +317,13 @@ describe("TimelineV2Service", () => {
   test("cancel invokes a parameterless callback and returns a direct acknowledgement", () => {
     const session = SessionManager.inMemory(process.cwd());
     const onCancel = vi.fn(() => true);
+    const runtime = new TimelineRuntime();
+    runtime.onAgentStart();
+    runtime.onMessageStart({ role: "user", content: "run", timestamp: 1 }, session);
     const service = new TimelineV2Service({
       sessionManager: session,
       senderRef: "owner-1",
-      runtime: new TimelineRuntime(),
+      runtime,
       onUserMessage: () => false,
       extensionVersion: "1.2.3",
       onCancel,
@@ -329,6 +333,7 @@ describe("TimelineV2Service", () => {
       protocol_version: 2,
       type: "cancel",
       id: "cancel-1",
+      group_id: runtime.currentGroupId!,
       channel_id: "channel-1",
       leaf_id: service.leafId,
     });
@@ -343,10 +348,13 @@ describe("TimelineV2Service", () => {
 
   test("cancel callback failures remain direct internal errors", () => {
     const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    runtime.onAgentStart();
+    runtime.onMessageStart({ role: "user", content: "run", timestamp: 1 }, session);
     const service = new TimelineV2Service({
       sessionManager: session,
       senderRef: "owner-1",
-      runtime: new TimelineRuntime(),
+      runtime,
       onUserMessage: () => false,
       extensionVersion: "1.2.3",
       onCancel: () => { throw new Error("abort failed"); },
@@ -356,6 +364,7 @@ describe("TimelineV2Service", () => {
       protocol_version: 2,
       type: "cancel",
       id: "cancel-1",
+      group_id: runtime.currentGroupId!,
       channel_id: "channel-1",
       leaf_id: service.leafId,
     })[0]).toMatchObject({
@@ -363,7 +372,7 @@ describe("TimelineV2Service", () => {
       target_channel_id: "channel-1",
       in_reply_to: "cancel-1",
       code: "internal_error",
-      message: expect.stringContaining("abort failed"),
+      message: "Could not stop the target run.",
     });
   });
 

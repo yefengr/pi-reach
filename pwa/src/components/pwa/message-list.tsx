@@ -1,7 +1,7 @@
 import { useMemo, type RefObject } from "react";
 import { Button } from "@mantine/core";
-import { CircleAlert, LoaderCircle } from "lucide-react";
-import { AssistantBlocks, MarkdownContent, ThinkingContent } from "./timeline-content";
+import { LoaderCircle } from "lucide-react";
+import { AssistantBlocks, ThinkingContent } from "./timeline-content";
 import { ConversationTimeline, GapNotice } from "./conversation-timeline";
 import { useTimelineEnterFade } from "./use-timeline-enter-fade";
 import "./timeline-reconnect.css";
@@ -86,14 +86,6 @@ function visibleGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<
   return { before, atEnd: pending };
 }
 
-function eventText(event: TimelineEvent): string {
-  if (event.kind === "user" || event.kind === "assistant") return blockText(event);
-  if (event.kind === "provider_error") return event.message;
-  if (event.kind === "compaction") return typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
-  if (event.kind === "branch_summary") return typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
-  return "";
-}
-
 function UserBlocks({ event }: { event: Extract<TimelineEvent, { kind: "user" }> }) {
   const { t, format } = useI18n();
   return <div className="pwa-user-blocks">{event.blocks.map((block, index) => block.type === "text" ? <p key={index}>{block.text}</p> : "omitted" in block ? <div className="pwa-image-omitted" key={index}>{t.timeline.imageOmitted(block.mime_type, format.number(block.byte_length))}</div> : <img className="pwa-message-image" key={index} src={`data:${block.mime_type};base64,${block.data}`} alt={t.timeline.attachmentAlt(index + 1)} />)}</div>;
@@ -103,9 +95,8 @@ function EventCard({ event, metadata }: { event: Exclude<TimelineEvent, { kind: 
   const { t } = useI18n();
   if (event.kind === "user") return <article className="pwa-message user"><span className="pwa-sr-only">{userScreenReaderLabel(event, t.timeline)}</span>{metadata ? <div className="pwa-user-blocks">{metadata.text ? <p>{metadata.text}</p> : null}<AttachmentCards items={readonlyAttachmentItems(metadata.attachments)} /></div> : <UserBlocks event={event} />}</article>;
   if (event.kind === "assistant") return <article className="pwa-message assistant"><span className="pwa-sr-only">{t.timeline.srPi}</span><AssistantBlocks blocks={event.blocks} /></article>;
-  // 模型服务错误留在原位：错误色轻底、图标与文字说明。
-  if (event.kind === "provider_error") return <article className="pwa-message provider_error"><p className="pwa-message-status"><CircleAlert size={16} aria-hidden="true" />{t.timeline.providerError}</p><MarkdownContent text={event.message} /></article>;
-  return <article className={`pwa-message ${event.kind}`}><p className="pwa-message-status">{t.timeline.system}</p><p>{eventText(event)}</p></article>;
+  // 摘要和服务错误由 ConversationTimeline 提供安全阅读入口，不在会话中铺开正文。
+  return null;
 }
 
 /** 待发送消息：气泡下方以 12px secondary 状态行显示「发送中」或「投递状态未知」＋「重试」。 */

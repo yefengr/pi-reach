@@ -256,7 +256,7 @@ export const TimelineEventFragmentSchema = timelineEventFragmentSchema;
 export const HistoryFragmentSchema = historyFragmentSchema;
 
 
-export const thinkingLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh"]);
+export const thinkingLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export type ThinkingLevel = z.infer<typeof thinkingLevelSchema>;
 export const actionNameSchema = z.enum(["session_new", "session_compact", "model_set", "thinking_set"]);
 export const byeReasonSchema = z.enum(["peer_stop", "session_replaced", "shutdown"]);
@@ -294,7 +294,7 @@ export const CLIENT_FRAME_TYPES = [
 export const SERVER_FRAME_TYPES = [
   "pair_ok", "pair_error", "session_ready", "user_message_started", "user_message_status", "timeline_event",
   "timeline_partial", "timeline_event_fragment", "session_history_chunk", "protocol_error", "reset", "pong",
-  "cancelled", "action_ok", "action_error", "models_list", "queued_message_state", "bye",
+  "cancelled", "action_ok", "action_error", "compaction_activity", "models_list", "queued_message_state", "bye",
   "extension_info",
   "attachment_capabilities", "attachment_state", "attachment_error", "attachment_discarded",
   "file_opened", "file_chunk", "file_closed", "file_error",

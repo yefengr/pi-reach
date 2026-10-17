@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listTimelineSessions, type TimelineSessionSummary } from "./timeline-store";
 
 type UseHistorySessionListOptions = {
@@ -9,6 +9,7 @@ type UseHistorySessionListOptions = {
 
 type HistorySessionList = {
   historySessions: TimelineSessionSummary[];
+  historyListStatus: "idle" | "loading" | "success" | "error";
   refreshHistory: () => Promise<void>;
   invalidateHistoryList: () => void;
 };
@@ -16,17 +17,20 @@ type HistorySessionList = {
 /** Keeps local history reads scoped to the computer that started them. */
 export function useHistorySessionList({ deviceId, onError, onSessionsLoaded }: UseHistorySessionListOptions): HistorySessionList {
   const [loadedSessions, setLoadedSessions] = useState<TimelineSessionSummary[]>([]);
+  const [readState, setReadState] = useState<{ deviceId: string | null; status: HistorySessionList["historyListStatus"] }>({ deviceId: null, status: "idle" });
   const deviceIdRef = useRef(deviceId);
   const requestGenerationRef = useRef(0);
   const mountedRef = useRef(false);
   const onErrorRef = useRef(onError);
   const onSessionsLoadedRef = useRef(onSessionsLoaded);
-  useEffect(() => {
+  useLayoutEffect(() => {
     requestGenerationRef.current += 1;
     deviceIdRef.current = deviceId;
+  }, [deviceId]);
+  useLayoutEffect(() => {
     onErrorRef.current = onError;
     onSessionsLoadedRef.current = onSessionsLoaded;
-  }, [deviceId, onError, onSessionsLoaded]);
+  }, [onError, onSessionsLoaded]);
 
   const invalidateHistoryList = useCallback(() => {
     requestGenerationRef.current += 1;
@@ -45,15 +49,21 @@ export function useHistorySessionList({ deviceId, onError, onSessionsLoaded }: U
     if (!isCurrentRequest()) return;
     if (!requestedDeviceId) {
       setLoadedSessions([]);
+      setReadState({ deviceId: null, status: "idle" });
       return;
     }
+    setReadState({ deviceId: requestedDeviceId, status: "loading" });
     try {
       const sessions = await listTimelineSessions(requestedDeviceId);
       if (!isCurrentRequest()) return;
       setLoadedSessions(sessions);
+      setReadState({ deviceId: requestedDeviceId, status: "success" });
       onSessionsLoadedRef.current(sessions);
     } catch {
-      if (isCurrentRequest()) onErrorRef.current("Could not read saved conversations.");
+      if (isCurrentRequest()) {
+        setReadState({ deviceId: requestedDeviceId, status: "error" });
+        onErrorRef.current("Could not read saved conversations.");
+      }
     }
   }, [deviceId]);
 
@@ -75,5 +85,6 @@ export function useHistorySessionList({ deviceId, onError, onSessionsLoaded }: U
     [deviceId, loadedSessions],
   );
 
-  return { historySessions, refreshHistory, invalidateHistoryList };
+  const historyListStatus = !deviceId ? "idle" : readState.deviceId !== deviceId ? "loading" : readState.status;
+  return { historySessions, historyListStatus, refreshHistory, invalidateHistoryList };
 }

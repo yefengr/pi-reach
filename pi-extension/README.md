@@ -8,6 +8,8 @@ When you're away from your desk, Pi Reach lets you watch Pi's replies and tool c
 
 ## Quick start
 
+Requires Pi 1.3.0 or a compatible newer 1.x release, and Node.js 22.19.0 or newer. Update the PWA before upgrading the Extension; the operation feedback frames require matching PWA and Extension versions.
+
 1. Install the Extension:
 
    ```bash

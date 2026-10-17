@@ -3,6 +3,8 @@ import { flushSync } from "react-dom";
 import { ThinkingContent, MarkdownContent } from "./timeline-content";
 import { initialToolGroupRunningIndicators, ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
+import { SummaryEntry, SummaryReader } from "./summary-reader";
+import { isSummaryEvent } from "./summary-presentation";
 import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
 import type { PublishedFileRead } from "./published-file";
@@ -137,6 +139,8 @@ export function ConversationTimeline({ items, live, completions, running = false
   const [reader, setReader] = useState<string | null>(null);
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
+  const [summaryReader, setSummaryReader] = useState<{ key: string; sessionId: string; trigger: HTMLButtonElement } | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [fileReader, setFileReader] = useState<{ file: PublishedFileDescriptor; trigger: HTMLButtonElement; scopeToken: object } | null>(null);
   // 记录已打开的是哪一个阅读器：挂载与打开分两步，期间被关闭或换目标时旧的打开请求自然失效。
   const [fileOpenedFor, setFileOpenedFor] = useState<object | null>(null);
@@ -153,6 +157,8 @@ export function ConversationTimeline({ items, live, completions, running = false
 
   const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
+  const summaryItem = summaryReader ? view.entries.find(entry => entry.kind === "record" && entry.key === summaryReader.key) : null;
+  const summaryEvent = summaryItem?.kind === "record" && summaryItem.item.kind === "event" && summaryItem.item.event.session_id === summaryReader?.sessionId && isSummaryEvent(summaryItem.item.event) ? summaryItem.item.event : null;
   const idlePartials = useIdlePartials(view.entries, live && !running);
   const runEnded = (groupId: string) => completions?.has(groupId) === true;
   const activity = timelineActivity(view.entries, live, running, runEnded, idlePartials);
@@ -170,12 +176,12 @@ export function ConversationTimeline({ items, live, completions, running = false
     return choice?.expanded === true;
   }) || view.entries.some(entry => entry.kind === "thinking" && thinking.get(entry.key) === true);
   // 历史窗口替换可能移除阅读内容；阅读锁随可见内容同步，并保留到 Reader 退出结束。
-  const reading = reader !== null || scopedFileReader !== null || readingInline(toolChoices, thinkingChoices);
+  const reading = reader !== null || summaryReader !== null || scopedFileReader !== null || readingInline(toolChoices, thinkingChoices);
   useEffect(() => { onReadingChange?.(reading); fileReadingChange?.(reading); }, [onReadingChange, fileReadingChange, reading]);
   useEffect(() => () => { onReadingChange?.(false); fileReadingChange?.(false); }, [onReadingChange, fileReadingChange]);
 
   const notifyReading = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => {
-    onReadingChange?.(reader !== null || scopedFileReader !== null || readingInline(tools, thinking));
+    onReadingChange?.(reader !== null || summaryReader !== null || scopedFileReader !== null || readingInline(tools, thinking));
   };
   const chooseThinking = (key: string, expanded: boolean) => {
     const choices = new Map(thinkingChoices).set(key, expanded);
@@ -189,7 +195,7 @@ export function ConversationTimeline({ items, live, completions, running = false
     notifyReading(choices, thinkingChoices);
   };
   const openReader = (key: string, trigger: HTMLButtonElement) => {
-    if (scopedFileReader !== null) return;
+    if (scopedFileReader !== null || summaryReader !== null) return;
     setReaderOrigin(trigger);
     onReadingChange?.(true);
     setReader(key);
@@ -208,8 +214,27 @@ export function ConversationTimeline({ items, live, completions, running = false
     onReadingChange?.(readingInline(toolChoices, thinkingChoices));
   };
 
+  const openSummaryReader = (key: string, sessionId: string, trigger: HTMLButtonElement) => {
+    if (reader !== null || scopedFileReader !== null || summaryReader !== null) return;
+    onReadingChange?.(true);
+    setSummaryReader({ key, sessionId, trigger });
+    setSummaryOpen(true);
+  };
+  const finishSummaryReader = () => {
+    const trigger = summaryReader?.trigger;
+    setSummaryOpen(false);
+    setSummaryReader(null);
+    // 不覆盖退出期间用户主动转移到其他有效控件的焦点。
+    const active = document.activeElement;
+    if (!active || active === document.body || active === document.documentElement || !active.isConnected || active.closest("[role='dialog']")) {
+      if (summaryEvent && trigger?.isConnected && trigger.getClientRects().length > 0 && !trigger.closest("[inert], [aria-hidden='true']") && !trigger.disabled) trigger.focus({ preventScroll: true });
+      else listRef.current?.focus({ preventScroll: true });
+    }
+    onReadingChange?.(readingInline(toolChoices, thinkingChoices));
+  };
+
   const openFileReader: PublishedFileRead = (file, trigger) => {
-    if (!files || reader !== null || scopedFileReader !== null) return;
+    if (!files || reader !== null || summaryReader !== null || scopedFileReader !== null) return;
     const next = { file, trigger, scopeToken: files.scopeToken };
     // 阅读器随 opened=true 一起挂载时 Mantine 的过渡初始即“已进入”，不播放进入动画；
     // 先以收起态挂载，下一帧再打开。期间被关闭或换目标则放弃。
@@ -230,7 +255,13 @@ export function ConversationTimeline({ items, live, completions, running = false
     else listRef.current?.focus({ preventScroll: true });
   };
   const renderEntry = (entry: PresentationEntry) => {
-      if (entry.kind === "record") return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader)}</Fragment>;
+      if (entry.kind === "record") {
+        if (entry.item.kind === "event" && isSummaryEvent(entry.item.event)) {
+          const event = entry.item.event;
+          return <SummaryEntry key={entry.key} event={event} onRead={trigger => openSummaryReader(entry.key, event.session_id, trigger)} />;
+        }
+        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader)}</Fragment>;
+      }
       if (entry.kind === "text") return <TextRow entry={entry} key={entry.key} />;
       if (entry.kind === "thinking") return <ThinkingContent
         key={entry.key}
@@ -269,6 +300,7 @@ export function ConversationTimeline({ items, live, completions, running = false
     {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
     {activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
+    <SummaryReader event={summaryEvent} opened={summaryOpen && summaryEvent !== null} onClose={() => setSummaryOpen(false)} onExitTransitionEnd={finishSummaryReader} />
     {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;
 }

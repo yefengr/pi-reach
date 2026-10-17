@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type Clipbo
 import { ActionIcon, FileButton, Menu, Textarea, UnstyledButton } from "@mantine/core";
 import { ArrowUp, Camera, ChevronDown, Files, LoaderCircle, Plus, Slash, Square } from "lucide-react";
 import { AttachmentCards, type ComposerAttachmentItem } from "./attachment-cards";
-import { ComposerCommandMenu, ComposerModelSettingsMenu, type ComposerCommandAction } from "./composer-command-menu";
+import { ComposerCommandMenu, ComposerModelSettingsMenu, type ComposerCommandAction, type ModelListStatus } from "./composer-command-menu";
 import { pwaFadeTransition, useMenuExitAction, usePwaMotionDuration } from "./use-pwa-motion";
 import { useComposerAutosize } from "./use-composer-autosize";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
@@ -90,6 +90,7 @@ type MessageComposerProps = {
   onRemoveAttachment: (id: string) => void;
   onRetryAttachment: (id: string) => void;
   commandModels: WireModel[];
+  commandModelsStatus?: ModelListStatus;
   commandCurrentModel: WireModel | null;
   commandCurrentModelFallback: string | null;
   commandThinking: ThinkingLevel;
@@ -118,6 +119,7 @@ export function MessageComposer({
   onRemoveAttachment,
   onRetryAttachment,
   commandModels,
+  commandModelsStatus,
   commandCurrentModel,
   commandCurrentModelFallback,
   commandThinking,
@@ -158,6 +160,7 @@ export function MessageComposer({
   const modelFocusIntentRef = useRef<"first" | "last" | null>(null);
   const modelFocusFrameRef = useRef<number | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelExitPending, setModelExitPending] = useState(false);
 
   const setImageMenuOpened = useCallback((opened: boolean) => {
     const wasOpen = imageMenuOpenRef.current;
@@ -235,13 +238,15 @@ export function MessageComposer({
   }, []);
 
   const hasMessage = Boolean(draft.trim() || attachments.length);
+  const newSessionPending = commandPendingAction === "session_new";
+  const modelPending = modelExitPending || commandPendingAction === "model_set" || commandPendingAction === "thinking_set";
   const showStop = isOnline && isWorking;
-  const addDisabled = !canAttach || sendingAttachments;
+  const addDisabled = !canAttach || sendingAttachments || newSessionPending;
   const notice = attachmentNotice || (!isOnline ? t.composer.sendAfterReconnect : null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (sendPendingRef.current || !isOnline || showStop || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)) return;
+    if (sendPendingRef.current || !isOnline || showStop || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)) return;
     sendPendingRef.current = true;
     try {
       await onSend();
@@ -345,7 +350,8 @@ export function MessageComposer({
 
   const closeModelThen = (callback: () => void) => {
     if (modelAction.hasPending()) return;
-    modelAction.queue(callback);
+    setModelExitPending(true);
+    modelAction.queue(() => { callback(); setModelExitPending(false); });
     modelTriggerRef.current?.focus({ preventScroll: true });
     setModelMenuOpened(false);
   };
@@ -372,7 +378,7 @@ export function MessageComposer({
       {notice ? <p className="pwa-composer-hint" role="status">{notice}</p> : null}
       <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
       <div className="pwa-composer-card">
-        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments} rows={1} />
+        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments || newSessionPending} rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">
             <div className="pwa-composer-menu">
@@ -415,7 +421,7 @@ export function MessageComposer({
             <div className="pwa-composer-command">
               <Menu width="var(--pwa-command-menu-width)" middlewares={floatingMiddlewares} opened={commandMenuOpen} onChange={(opened) => { if (opened) commandFocusOriginRef.current = "trigger"; setCommandMenuOpened(opened); }} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-start" offset={{ mainAxis: 8, crossAxis: -52 }} transitionProps={{ transition: pwaFadeTransition, duration: menuDuration, onEnter: consumeCommandFocusIntent }} onExitTransitionEnd={finishCommandExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex={8}>
                 <Menu.Target>
-                  <ActionIcon ref={commandTriggerRef} className="pwa-composer-icon" type="button" onKeyDown={handleCommandTriggerKeyDown} disabled={!isOnline} aria-label={t.commands.piCommands} title={t.commands.piCommands}><Slash size={20} /></ActionIcon>
+                  <ActionIcon ref={commandTriggerRef} className="pwa-composer-icon" type="button" onKeyDown={handleCommandTriggerKeyDown} disabled={!isOnline || newSessionPending} aria-label={t.commands.piCommands} title={t.commands.piCommands}><Slash size={20} /></ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown ref={commandDropdownRef} inert={!commandMenuOpen} className="pwa-command-menu-dropdown" aria-label={t.commands.piCommands}>
                   <ComposerCommandMenu
@@ -432,10 +438,10 @@ export function MessageComposer({
           <div className="pwa-composer-actions">
             <Menu width="var(--pwa-command-menu-width)" middlewares={floatingMiddlewares} opened={modelMenuOpen} onChange={setModelMenuOpened} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-end" offset={8} transitionProps={{ transition: pwaFadeTransition, duration: menuDuration, onEnter: consumeModelFocusIntent }} onExitTransitionEnd={finishModelExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex={8}>
               <Menu.Target>
-                <UnstyledButton ref={modelTriggerRef} className="pwa-composer-model" onKeyDown={handleModelTriggerKeyDown} disabled={!isOnline} aria-label={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)} title={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)}>
+                <UnstyledButton ref={modelTriggerRef} className="pwa-composer-model" onKeyDown={handleModelTriggerKeyDown} disabled={!isOnline || newSessionPending} aria-busy={modelPending || undefined} aria-label={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)} title={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)}>
                   <span className="pwa-composer-model-name">{modelName ?? t.commands.modelSettings}</span>
                   <span className="pwa-composer-model-thinking" aria-hidden="true"> · {commandThinking}</span>
-                  <ChevronDown size={16} aria-hidden="true" />
+                  {modelPending ? <LoaderCircle className="pwa-spin pwa-operation-model-pending" size={16} aria-label={t.operationFeedback.modelPending} /> : <ChevronDown size={16} aria-hidden="true" />}
                 </UnstyledButton>
               </Menu.Target>
               <Menu.Dropdown ref={modelDropdownRef} inert={!modelMenuOpen} className="pwa-command-menu-dropdown" aria-label={t.commands.modelSettings}>
@@ -444,6 +450,8 @@ export function MessageComposer({
                   isOnline={isOnline}
                   pendingAction={commandPendingAction}
                   models={commandModels}
+                  modelsStatus={commandModelsStatus}
+                  onRetryModels={onCommandsOpen}
                   currentModel={commandCurrentModel}
                   currentModelFallback={commandCurrentModelFallback}
                   thinking={commandThinking}
@@ -452,7 +460,7 @@ export function MessageComposer({
                 />
               </Menu.Dropdown>
             </Menu>
-            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" color="piReach" type="button" onClick={onStop} disabled={stopping} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="submit" disabled={!isOnline || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
+            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" color="piReach" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="submit" disabled={!isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
           </div>
         </div>
       </div>

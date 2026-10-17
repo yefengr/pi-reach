@@ -16,8 +16,8 @@
  *   - `ctx.newSession()`         — only on `ExtensionCommandContext`;
  *                                  resolves with `{cancelled}` flag
  *   - `pi.setModel(model)`       — returns `false` if no auth configured
- *   - `pi.setThinkingLevel(lvl)` — synchronous
- *   - `ctx.getModel()`           — optional, undefined before first turn
+ *   - `pi.setThinkingLevel(lvl)` — synchronous; read actual via getThinkingLevel
+ *   - `ctx.model`                — live public model getter
  *   - `ModelRegistry.{refresh,getAvailable,find}` — see `registry.ts`
  */
 
@@ -26,6 +26,7 @@ import type {
   ServerMessage,
   WireModel,
   ActionName,
+  ThinkingLevel,
 } from "../protocol/types.js";
 
 /**
@@ -76,7 +77,8 @@ export interface ActionReplySender {
  */
 export interface ActionPi {
   setModel(model: Model<any>): Promise<boolean>;
-  setThinkingLevel(level: import("../protocol/types.js").ThinkingLevel): void;
+  setThinkingLevel(level: ThinkingLevel): void;
+  getThinkingLevel(): ThinkingLevel;
 }
 
 /**
@@ -90,7 +92,12 @@ export interface ActionPi {
  * a runtime TypeError.
  */
 export interface ActionCtx {
-  compact?: (options?: object) => void;
+  compact?: (options?: {
+    customInstructions?: string;
+    onComplete?: (result: unknown) => void;
+    onError?: (error: Error) => void;
+  }) => void;
+  sessionManager?: { getSessionId(): string };
   /**
    * Starts a new session. `withSession` is the SDK's blessed hook for
    * post-replacement work: it receives a FRESH, command-capable ctx bound to
@@ -100,7 +107,7 @@ export interface ActionCtx {
   newSession?: (options?: {
     withSession?: (ctx: ActionCtx) => Promise<void>;
   }) => Promise<{ cancelled: boolean }>;
-  /** Pi 0.84.4 exposes the active model directly on ExtensionContext. */
+  /** SDK 1.3.0 exposes the active model as a live public context getter. */
   model?: Model<any>;
   /** Compatibility path for SDK contexts that expose the getter only. */
   getModel?: () => Model<any> | undefined;
@@ -145,10 +152,6 @@ export function wireFromModel(model: Model<any>): WireModel {
 
 // ── ack helpers ────────────────────────────────────────────────────────────
 
-function ok(sender: ActionReplySender, msg: { id: string }, action: ActionName): void {
-  sender.send({ type: "action_ok", in_reply_to: msg.id, action });
-}
-
 function fail(
   sender: ActionReplySender,
   msg: { id: string },
@@ -159,31 +162,15 @@ function fail(
   sender.send({ type: "action_error", in_reply_to: msg.id, action, error });
 }
 
-/** Run a synchronous action with uniform success/failure replies. */
-function runSync(
-  sender: ActionReplySender,
-  msg: { id: string },
-  action: ActionName,
-  body: () => void,
-): void {
-  try {
-    body();
-    ok(sender, msg, action);
-  } catch (e) {
-    fail(sender, msg, action, e);
-  }
-}
-
 /** Run an async action with uniform success/failure replies. */
 async function runAsync(
   sender: ActionReplySender,
   msg: { id: string },
   action: ActionName,
-  body: () => Promise<void>,
+  body: () => Promise<Extract<ServerMessage, { type: "action_ok" }>>,
 ): Promise<boolean> {
   try {
-    await body();
-    ok(sender, msg, action);
+    sender.send(await body());
     return true;
   } catch (e) {
     fail(sender, msg, action, e);
@@ -205,18 +192,38 @@ export function handleSessionCompact(
   msg: SessionCompactMsg,
   onSettled?: () => void,
 ): void {
-  runSync(sender, msg, "session_compact", () => {
+  let accepted = false;
+  let settled = false;
+  let deferred: (() => void) | undefined;
+  const finish = (success: boolean): void => {
+    if (settled) return;
+    settled = true;
+    const reply = (): void => {
+      if (success) sender.send({ type: "action_ok", in_reply_to: msg.id, action: "session_compact", phase: "completed" });
+      else fail(sender, msg, "session_compact", new Error("Context compaction failed or was cancelled."));
+      onSettled?.();
+    };
+    // SDK fakes and extension hooks may complete synchronously inside compact().
+    if (accepted) reply(); else deferred = reply;
+  };
+  try {
     if (!ctx?.compact) throw new Error("compact unavailable (no active session ctx)");
-    // Force the summary to English regardless of the conversation language —
-    // the summary is surfaced to the app via the `compaction` message, which
-    // is an English-only surface. `customInstructions` is appended to the SDK's
-    // compaction prompt (best-effort: the model writes the summary).
     ctx.compact({
       customInstructions:
         "Always write the compaction summary in English, even if the conversation is in another language.",
-      ...(onSettled ? { onComplete: onSettled, onError: onSettled } : {}),
+      onComplete: () => finish(true),
+      onError: () => finish(false),
     });
-  });
+    sender.send({ type: "action_ok", in_reply_to: msg.id, action: "session_compact", phase: "accepted" });
+    accepted = true;
+    deferred?.();
+  } catch {
+    if (!accepted) {
+      settled = true;
+      fail(sender, msg, "session_compact", new Error(ctx?.compact ? "Context compaction could not start." : "compact unavailable (no active session ctx)"));
+      onSettled?.();
+    }
+  }
 }
 
 export async function handleSessionNew(
@@ -225,10 +232,7 @@ export async function handleSessionNew(
   msg: SessionNewMsg,
   onReplaced?: (freshCtx: ActionCtx) => void,
 ): Promise<boolean> {
-  // Returns true only when a fresh session was actually created. index.ts
-  // keys the Pi-side reset (clear _messageBuffer, restamp _sessionStartedAt,
-  // fan out an empty session_history) off this signal — a `cancelled`/errored
-  // new-session must NOT reset, so we return runAsync's success boolean.
+  // The bridge sends this result before finishing the old-owner handoff.
   return runAsync(sender, msg, "session_new", async () => {
     if (!ctx?.newSession) throw new Error("newSession unavailable (no command ctx yet)");
     // newSession marks the caller's captured ctx (index.ts's `_lastCtx`) STALE
@@ -236,13 +240,19 @@ export async function handleSessionNew(
     // compact-after-New-session crash). `withSession` hands back a fresh,
     // command-capable ctx bound to the new session; forward it via onReplaced
     // so the caller re-captures and keeps later actions off the stale ctx.
+    let sessionId: string | undefined;
     const result = await ctx.newSession({
-      withSession: async (freshCtx) => { onReplaced?.(freshCtx); },
+      withSession: async (freshCtx) => {
+        sessionId = freshCtx.sessionManager?.getSessionId();
+        onReplaced?.(freshCtx);
+      },
     });
     // `cancelled: true` happens when the SDK's hook chain vetoes the new
     // session (e.g. an extension's `session_before_switch` returned a
     // refusal). Surface as a typed error rather than silent success.
     if (result.cancelled) throw new Error("cancelled by extension hook");
+    if (!sessionId) throw new Error("new session identity unavailable");
+    return { type: "action_ok", in_reply_to: msg.id, action: "session_new", session_id: sessionId };
   });
 }
 
@@ -251,9 +261,12 @@ export function handleThinkingSet(
   sender: ActionReplySender,
   msg: ThinkingSetMsg,
 ): void {
-  runSync(sender, msg, "thinking_set", () => {
+  try {
     pi.setThinkingLevel(msg.level);
-  });
+    sender.send({ type: "action_ok", in_reply_to: msg.id, action: "thinking_set", thinking_level: pi.getThinkingLevel() });
+  } catch (error) {
+    fail(sender, msg, "thinking_set", error);
+  }
 }
 
 export async function handleModelSet(
@@ -284,12 +297,16 @@ export async function handleModelSet(
     // writes the default; this path doesn't). `onPersist` writes the new
     // default so the app's choice survives. Best-effort — the caller's writer
     // must not throw, so a failed settings write never fails the model change.
+    const actualModel = ctx?.model;
+    if (!actualModel) throw new Error("active model unavailable after model change");
+    const thinkingLevel = pi.getThinkingLevel();
     try {
-      onModelSet?.(model);
+      onModelSet?.(actualModel);
     } catch {
       // State synchronization must not turn a successful model change into an error.
     }
-    onPersist?.(model.provider, model.id);
+    onPersist?.(actualModel.provider, actualModel.id);
+    return { type: "action_ok", in_reply_to: msg.id, action: "model_set", model: wireFromModel(actualModel), thinking_level: thinkingLevel };
   });
 }
 
@@ -316,8 +333,9 @@ function resolveCurrentModel(
   available: readonly Model<any>[],
   hint?: CurrentModelHint,
 ): Model<any> | undefined {
-  // A structured hint is updated by model_select/model_set and must win over
-  // the session-start context, whose model property can be an older snapshot.
+  // SDK 1.3.0 exposes a live model getter; re-read it even after failed writes.
+  const actual = ctx?.model;
+  if (actual) return actual;
   if (hint) {
     if (typeof hint !== "string") {
       if (isFullModel(hint)) return hint;
@@ -334,16 +352,15 @@ function resolveCurrentModel(
     );
   }
 
-  // The property is the canonical Pi 0.84.4 source. Keep getModel() for older
-  // contexts and test fakes that expose only the legacy accessor.
-  return ctx?.model ?? ctx?.getModel?.();
+  return ctx?.getModel?.();
 }
 
 export function getModelsList(
   ctx: ActionCtx | null,
   reg: ActionModelRegistry,
+  thinkingLevel: ThinkingLevel,
   currentModelHint?: CurrentModelHint,
-): { models: WireModel[]; current?: WireModel } {
+): { models: WireModel[]; current?: WireModel; thinking_level: ThinkingLevel } {
   // Prefer Pi's LIVE session registry when available so the app sees models
   // registered dynamically by extensions via `pi.registerProvider(...)`.
   // Fall back to Pi Reach's own disk-backed registry when no ctx exists.
@@ -356,7 +373,7 @@ export function getModelsList(
     : available;
   const models = listedModels.map(wireFromModel);
   const current = resolveCurrentModel(ctx, available, currentModelHint);
-  return { models, ...(current ? { current: wireFromModel(current) } : {}) };
+  return { models, ...(current ? { current: wireFromModel(current) } : {}), thinking_level: thinkingLevel };
 }
 
 export function handleListModels(
@@ -364,11 +381,12 @@ export function handleListModels(
   reg: ActionModelRegistry,
   sender: ActionReplySender,
   msg: ListModelsMsg,
+  pi: Pick<ActionPi, "getThinkingLevel">,
 ): void {
   // refresh() can throw if `models.json` is malformed — wrap in try so the
   // app gets an explicit error reply instead of a silent drop.
   try {
-    sender.send({ type: "models_list", in_reply_to: msg.id, ...getModelsList(ctx, reg) });
+    sender.send({ type: "models_list", in_reply_to: msg.id, ...getModelsList(ctx, reg, pi.getThinkingLevel()) });
   } catch (e) {
     sender.send({
       type: "error",

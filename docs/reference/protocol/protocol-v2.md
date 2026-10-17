@@ -284,12 +284,25 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `action_ok`
 - `action_error`
 - `models_list`
+- `compaction_activity`
 - `queued_message_state`
 - `bye`
 
 扩展版本通过独立诊断请求获取，不改变 `session_hello` / `session_ready` 的握手格式。PWA 收到匹配的 `session_ready` 后，发送一次 `extension_info_request`，携带 `id`、`channel_id`、当前 `session_id` 和 `leaf_id`；扩展按既有 ready、channel 和会话边界校验后，返回定向 `extension_info`，携带 `target_channel_id`、`in_reply_to` 和 `version`（1–256 字符的非空字符串）。版本在扩展模块加载时固定，表示 Pi Reach 扩展版本，而非 Pi coding agent 的版本。
 
 PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，断开或切换后清除，不读取配对缓存兜底。匹配版本查询的 `protocol_error` 只影响版本展示；旧扩展不支持查询或查询失败时显示「版本不可用」，不阻断聊天或触发重连。不轮询、不重试，也不主动推送新 inner frame 给未查询的页面。先部署 PWA 再发布扩展的顺序保持不变，新旧页面与扩展仍可使用原有握手建立会话。同一 Owner 的回复会到达其所有连接；旧页面若与新页面同时在线，可能因不认识新诊断响应而显示协议提示，但不改变握手或连接状态。
+
+## 操作反馈
+
+操作请求沿用 ready-only 的 channel、session 和 leaf 校验，定向回执以 `target_channel_id` 与 `in_reply_to` 关联原请求。发送成功和受理都不代表业务完成。
+
+- `cancel` 必须携带目标 `group_id`；Extension 仅在其等于当前运行轮次时调用停止。`cancelled` 只确认受理，PWA 等待该轮正式 `run_end`；匹配的 `protocol_error` 解除等待。晚到请求不得停止下一轮。
+- `action_ok` 按 `action` 严格区分字段：`model_set` 返回实际 `model` 与 `thinking_level`；`thinking_set` 返回实际 `thinking_level`；`session_new` 返回新目标 `session_id`；`session_compact` 返回 `phase=accepted/completed/cancelled`。`action_error` 保留原关联字段。配置失败后可重新 `list_models` 核实实际值，不假定回滚。
+- `models_list` 必须携带实际 `thinking_level`，可选 `current` 为实际当前模型。思考级别包括 `off/minimal/low/medium/high/xhigh/max`，实际值由 Pi 的模型能力限制决定。
+- `session_new` 成功回执先于旧 Owner 分离。PWA 汇合目标 ID、匹配目标的 `session_ready` 和必要首屏数据后切换展示；等待时保留旧内容，断线或超时不自动重发。
+- `compaction_activity` 为非持久化会话广播，包含 `session_id`、`leaf_id`、`status=running/completed/failed/cancelled` 和 `reason=manual/threshold/overflow`。它反映公开 hooks 可观察到的活动，不携带摘要或请求 ID，也不确认某个远程请求。摘要继续使用正式 timeline；远程结果由其调用回调关联。
+
+这些字段使用严格 schema，PWA 与 Extension 需要配套升级；发布顺序仍为先 PWA 后 Extension。旧端缺少字段或不认识广播时可能拒绝帧，不能将原有握手格式未变视为业务兼容保证。不增加旧端能力探测或降级协议。
 
 ## 会话附件
 

@@ -182,9 +182,22 @@ test("keeps compaction and branch summaries visible alongside hidden custom even
   const compaction: TimelineEvent = { event_id: "compaction-1", session_id: "session-1", leaf_id: "history-1", timestamp: 2, kind: "compaction", payload: "Compacted history", truncated: false };
   const branch: TimelineEvent = { event_id: "branch-1", session_id: "session-1", leaf_id: "history-1", timestamp: 3, kind: "branch_summary", payload: "Branch summary", truncated: false };
   const html = renderList([{ kind: "event", event: compaction }, { kind: "event", event: branch }, { kind: "event", event: customEvent }]);
-  expect(html).toContain("Compacted history");
+  expect(html).toContain("Context summary");
   expect(html).toContain("Branch summary");
+  expect(html).not.toContain("Compacted history");
   expect(html).not.toContain("notice");
+});
+
+test("summary and provider-error rows expose only safe reader entries", () => {
+  const base = { event_id: "summary", session_id: "session", leaf_id: "leaf", timestamp: 1 };
+  const html = renderList([
+    { kind: "event", event: { ...base, kind: "compaction", payload: { summary: "ORIGINAL_BODY", details: "INTERNAL_DETAILS" }, truncated: false } },
+    { kind: "event", event: { ...base, event_id: "error", kind: "provider_error", group_id: "group", message: "PRIVATE_TOKEN HTTP 429 <script>request body</script>" } },
+  ]);
+  expect(html).toContain("Context summary");
+  expect(html).toContain("Model service error");
+  expect(html).toContain('aria-haspopup="dialog"');
+  expect(html).not.toMatch(/ORIGINAL_BODY|INTERNAL_DETAILS|PRIVATE_TOKEN|429|request body/);
 });
 
 describe("attachment history presentation", () => {

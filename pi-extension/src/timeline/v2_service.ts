@@ -35,7 +35,7 @@ export type V2ServiceOptions = {
   onQueueSnapshot?: () => ServerFrame[];
   onQueuedMessageClear?: (targetId?: string) => string[];
   onQueuedMessageSteer?: (targetId: string) => "sent" | "failed" | "missing";
-  onListModels?: () => Pick<Extract<ServerFrame, { type: "models_list" }>, "models" | "current">;
+  onListModels?: () => Pick<Extract<ServerFrame, { type: "models_list" }>, "models" | "current" | "thinking_level">;
 };
 
 export type V2Broadcast = Extract<
@@ -383,6 +383,9 @@ export class TimelineV2Service {
   private handleCancel(frame: Extract<ClientFrame, { type: "cancel" }>): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
+    if (frame.group_id !== this.runtime.currentGroupId) {
+      return [this.error(frame.id, "invalid_message", "The target run is no longer active.", frame.channel_id)];
+    }
     try {
       if (!(this.onCancel?.() ?? false)) {
         return [this.error(frame.id, "internal_error", "no active request to cancel", frame.channel_id)];
@@ -391,9 +394,8 @@ export class TimelineV2Service {
         type: "cancelled",
         in_reply_to: frame.id,
       });
-    } catch (cancelError) {
-      const detail = cancelError instanceof Error ? cancelError.message : String(cancelError);
-      return [this.error(frame.id, "internal_error", `cancel failed: ${detail}`, frame.channel_id)];
+    } catch {
+      return [this.error(frame.id, "internal_error", "Could not stop the target run.", frame.channel_id)];
     }
   }
 

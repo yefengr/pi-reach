@@ -1,4 +1,4 @@
-import type { WireImage, ThinkingLevel, WireModel } from "@pi-reach/protocol/session";
+import type { WireImage, ThinkingLevel, WireModel, ServerFrame } from "@pi-reach/protocol/session";
 export type { WireImage, ThinkingLevel, WireModel } from "@pi-reach/protocol/session";
 
 export type PairErrorCode =
@@ -33,7 +33,7 @@ export type ClientMessage =
   | { type: "queued_message_set"; id: string; text: string; images?: WireImage[] }
   | { type: "queued_message_clear"; id: string; target_id?: string }
   | { type: "approve_tool"; id: string; tool_call_id: string; decision: "allow" | "deny" }
-  | { type: "cancel"; id: string; target_id: string }
+  | { type: "cancel"; id: string; group_id: string }
   | { type: "ping"; id: string }
   | { type: "session_sync"; id: string; limit?: number }
   // Plan/28 — Typed app actions on the paired Pi session. Each carries a
@@ -141,7 +141,7 @@ export type ServerMessage =
   | { type: "tool_request"; tool_call_id: string; tool: string; args: Record<string, unknown> }
   | { type: "tool_result"; tool_call_id: string; result?: unknown; error?: string }
   | { type: "error"; in_reply_to?: string; code: ErrorCode; message: string }
-  | { type: "cancelled"; in_reply_to: string; target_id: string }
+  | { type: "cancelled"; in_reply_to: string }
   | { type: "pong"; in_reply_to: string }
   | { type: "bye"; reason: ByeReason }
   | {
@@ -159,9 +159,12 @@ export type ServerMessage =
   // `models_list` is the response to a `list_models` request; the optional
   // `current` echoes the model the Pi is using right now so the app can
   // highlight the selected row without a second round-trip.
-  | { type: "action_ok"; in_reply_to: string; action: ActionName }
+  | Omit<Extract<ServerFrame, { type: "action_ok"; action: "model_set" }>, "protocol_version" | "target_channel_id">
+  | Omit<Extract<ServerFrame, { type: "action_ok"; action: "thinking_set" }>, "protocol_version" | "target_channel_id">
+  | Omit<Extract<ServerFrame, { type: "action_ok"; action: "session_new" }>, "protocol_version" | "target_channel_id">
+  | Omit<Extract<ServerFrame, { type: "action_ok"; action: "session_compact" }>, "protocol_version" | "target_channel_id">
   | { type: "action_error"; in_reply_to: string; action: ActionName; error: string }
-  | { type: "models_list"; in_reply_to: string; models: WireModel[]; current?: WireModel };
+  | { type: "models_list"; in_reply_to: string; models: WireModel[]; current?: WireModel; thinking_level: ThinkingLevel };
 
 /**
  * Plan/28 — Stable names for the typed actions the app can request. Kept

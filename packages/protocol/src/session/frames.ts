@@ -77,7 +77,7 @@ export const userMessageFrameSchema = strictObject({ ...protocol, type: z.litera
 export const userMessageObservedFrameSchema = strictObject({ ...protocol, type: z.literal("user_message_observed"), id: idSchema, ...channelRequest, client_request_id: idSchema, message_id: idSchema, status: z.literal("committed") });
 export const sessionSyncFrameSchema = strictObject({ ...protocol, type: z.literal("session_sync"), id: idSchema, ...channelRequest, before: eventSequenceSchema.nullable(), limit: z.number().int().min(1).finite().max(80).default(80) });
 export const pingFrameSchema = strictObject({ ...protocol, type: z.literal("ping"), id: idSchema, ...channelRequest });
-export const cancelFrameSchema = strictObject({ ...protocol, type: z.literal("cancel"), id: idSchema, ...channelRequest });
+export const cancelFrameSchema = strictObject({ ...protocol, type: z.literal("cancel"), id: idSchema, ...channelRequest, group_id: idSchema });
 export const sessionNewFrameSchema = strictObject({ ...protocol, type: z.literal("session_new"), id: idSchema, ...channelRequest });
 export const sessionCompactFrameSchema = strictObject({ ...protocol, type: z.literal("session_compact"), id: idSchema, ...channelRequest });
 export const modelSetFrameSchema = strictObject({ ...protocol, type: z.literal("model_set"), id: idSchema, ...channelRequest, provider: idSchema, model_id: idSchema });
@@ -148,9 +148,16 @@ export const protocolErrorFrameSchema = z.union([
 export const resetFrameSchema = strictObject({ ...directResponse, type: z.literal("reset"), session_id: idSchema, leaf_id: leafIdSchema, reason: z.enum(["branch_changed", "session_replaced", "conflict", "invalid_cursor"]) });
 export const pongFrameSchema = strictObject({ ...directResponse, type: z.literal("pong"), in_reply_to: idSchema });
 export const cancelledFrameSchema = strictObject({ ...directResponse, type: z.literal("cancelled"), in_reply_to: idSchema });
-export const actionOkFrameSchema = strictObject({ ...directResponse, type: z.literal("action_ok"), in_reply_to: idSchema, action: actionNameSchema });
+const actionOkBase = { ...directResponse, type: z.literal("action_ok"), in_reply_to: idSchema };
+export const actionOkFrameSchema = z.discriminatedUnion("action", [
+  strictObject({ ...actionOkBase, action: z.literal("model_set"), model: wireModelSchema, thinking_level: thinkingLevelSchema }),
+  strictObject({ ...actionOkBase, action: z.literal("thinking_set"), thinking_level: thinkingLevelSchema }),
+  strictObject({ ...actionOkBase, action: z.literal("session_new"), session_id: idSchema }),
+  strictObject({ ...actionOkBase, action: z.literal("session_compact"), phase: z.enum(["accepted", "completed", "cancelled"]) }),
+]);
+export const compactionActivityFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("compaction_activity"), status: z.enum(["running", "completed", "failed", "cancelled"]), reason: z.enum(["manual", "threshold", "overflow"]) });
 export const actionErrorFrameSchema = strictObject({ ...directResponse, type: z.literal("action_error"), in_reply_to: idSchema, action: actionNameSchema, error: textSchema.min(1) });
-export const modelsListFrameSchema = strictObject({ ...directResponse, type: z.literal("models_list"), in_reply_to: idSchema, models: z.array(wireModelSchema).max(MAX_ARRAY_ITEMS), current: wireModelSchema.optional() });
+export const modelsListFrameSchema = strictObject({ ...directResponse, type: z.literal("models_list"), in_reply_to: idSchema, models: z.array(wireModelSchema).max(MAX_ARRAY_ITEMS), current: wireModelSchema.optional(), thinking_level: thinkingLevelSchema });
 export const queuedMessageStateFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("queued_message_state"), snapshot_id: idSchema, chunk_index: z.number().int().nonnegative().finite(), final: z.boolean(), items: z.array(queuedMessageItemSchema).max(MAX_ARRAY_ITEMS) });
 export const byeFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("bye"), reason: byeReasonSchema });
 
@@ -221,7 +228,7 @@ export const fileClosedFrameSchema = strictObject({ ...fileResponse, type: z.lit
 export const fileErrorFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_error"), transfer_id: idSchema.optional(), code: fileErrorCodeSchema });
 
 export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema]);
-export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema, fileOpenedFrameSchema, fileChunkFrameSchema, fileClosedFrameSchema, fileErrorFrameSchema]);
+export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, compactionActivityFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema, fileOpenedFrameSchema, fileChunkFrameSchema, fileClosedFrameSchema, fileErrorFrameSchema]);
 
 export const ClientFrameSchema = clientFrameSchema;
 export const ServerFrameSchema = serverFrameSchema;
@@ -229,7 +236,7 @@ export const SessionHistoryChunkSchema = sessionHistoryChunkFrameSchema;
 export type ClientFrame = z.input<typeof clientFrameSchema>;
 export type ServerFrame = z.infer<typeof serverFrameSchema>;
 export type DirectClientFrame = Exclude<ClientFrame, { type: "pair_request" | "ping" }>;
-export type OwnerBroadcastServerFrame = Extract<ServerFrame, { type: "timeline_event" | "timeline_partial" | "timeline_event_fragment" | "queued_message_state" | "bye" }>;
+export type OwnerBroadcastServerFrame = Extract<ServerFrame, { type: "timeline_event" | "timeline_partial" | "timeline_event_fragment" | "queued_message_state" | "compaction_activity" | "bye" }>;
 export const clientFrameTypes = new Set<string>(CLIENT_FRAME_TYPES);
 export const serverFrameTypes = new Set<string>(SERVER_FRAME_TYPES);
 export const ClientFrameTypes = clientFrameTypes;

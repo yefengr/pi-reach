@@ -430,7 +430,8 @@ test("focuses a new empty desktop session after its confirmation dialog exits", 
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;
   try {
-    await issueOperation(context, "session_new");
+    const request = await issueOperation(context, "session_new");
+    replyOperation(channel, request, true);
     expect(document.querySelector(".pwa-confirm-dialog")).not.toBeNull();
     channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
@@ -511,6 +512,293 @@ test("keeps queued messages beside the composer and inserts the original item on
   await screen.unmount();
 });
 
+test.each([["result-first", 1280], ["ready-first", 1280], ["data-first", 1280], ["result-first", 390]] as const)("operation feedback new session keeps old projection until correlated result, ready and first page: %s at %ipx", async (order, width) => {
+  await page.viewport(width, 844);
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    emitEvent(channel, numberedEvents(1)[0]!);
+    await expect.poll(listText).toContain("Record 1");
+    const request = await issueOperation(context, "session_new");
+    await expect.element(screen.getByText("Creating a new session…", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+    await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeDisabled();
+    expect(document.querySelector(".pwa-composer-command .pwa-spin")).toBeNull();
+    for (const selector of [".pwa-composer-send", ".pwa-composer-command button", ".pwa-composer-menu button"]) {
+      const bounds = document.querySelector(selector)!.getBoundingClientRect();
+      expect(Math.round(bounds.width)).toBeGreaterThanOrEqual(44);
+      expect(Math.round(bounds.height)).toBeGreaterThanOrEqual(44);
+    }
+    const result = { protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: request.id, action: "session_new", session_id: "target-new" };
+    if (order === "result-first") {
+      channel.emit(result);
+      await expect.element(screen.getByText("Opening the new session…", { exact: true })).toBeVisible();
+    }
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    expect(listText()).toContain("Record 1");
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "target-new", 1));
+    await expect.poll(() => historyRequests(next).length).toBeGreaterThan(0);
+    if (order === "ready-first") next.emit(result);
+    await flushMicrotasks();
+    expect(listText()).toContain("Record 1");
+    next.emit(recentHistoryFrame(next, "target-new", sessionEvents("target-new", "New content", 1)));
+    if (order === "data-first") {
+      await expect.poll(async () => (await loadTimeline({ deviceId: "owner-device-key", endpointId: "daemon-endpoint", sessionId: "target-new", leafId: "generation-target-new" })).length).toBe(1);
+      expect(listText()).toContain("Record 1");
+      next.emit(result);
+    }
+    await expect.poll(listText).toContain("New content 1");
+    expect(listText()).not.toContain("Record 1");
+    await expect.poll(() => document.querySelector(".pwa-operation-status")).toBeNull();
+    await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
+    expect(next.frames.filter((frame) => frame.type === "session_new")).toHaveLength(0);
+  } finally { await screen.unmount(); }
+});
+
+test("operation feedback disconnect keeps unknown creation and old projection, and unrelated ready cannot confirm it", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    emitEvent(channel, numberedEvents(1)[0]!);
+    await expect.poll(listText).toContain("Record 1");
+    const request = await issueOperation(context, "session_new");
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    await expect.element(screen.getByText("Result not confirmed. Check the connection before trying again.", { exact: true })).toBeVisible();
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "unrelated-empty"));
+    await expect.poll(() => next.frames.some((frame) => frame.type === "list_models")).toBe(true);
+    expect(listText()).toContain("Record 1");
+    await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeDisabled();
+    expect(channel.frames.filter((frame) => frame.type === "session_new")).toHaveLength(1);
+    expect(next.frames.filter((frame) => frame.type === "session_new")).toHaveLength(0);
+    next.emit({ protocol_version: 2, type: "action_ok", target_channel_id: next.channelId, in_reply_to: "other-request", action: "session_new", session_id: "unrelated-empty" });
+    await flushMicrotasks();
+    expect(listText()).toContain("Record 1");
+    next.emit({ protocol_version: 2, type: "action_error", target_channel_id: next.channelId, in_reply_to: request.id, action: "session_new", error: rawOperationError });
+    await expect.element(screen.getByText("Could not start a new session. Try again.", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
+  } finally { await screen.unmount(); }
+});
+
+test("operation feedback compact accepted and unrelated activity never settle its remote request", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const request = await issueOperation(context, "session_compact");
+    const response = { protocol_version: 2, type: "action_ok", target_channel_id: context.channel.channelId, in_reply_to: request.id, action: "session_compact" };
+    context.channel.emit({ ...response, phase: "accepted" });
+    context.channel.emit({ protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "threshold", status: "completed" });
+    await expect.element(context.screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    context.channel.emit({ ...response, in_reply_to: "old", phase: "completed" });
+    await flushMicrotasks();
+    expect(document.querySelector(".pwa-operation-status")).not.toBeNull();
+    context.channel.emit({ ...response, phase: "cancelled" });
+    await expect.element(context.screen.getByText("Compaction cancelled", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-operation-status .pwa-spin")).toBeNull();
+    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+  } finally { await context.screen.unmount(); }
+});
+
+function markWorking() {
+  relayHarness.instances[0]!.emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", working: true } });
+}
+function runEnd(group: string, sequence: number): TimelineEvent {
+  return { event_id: `end-${group}`, event_seq: sequence, session_id: "session-1", leaf_id: "generation-session-1", timestamp: sequence, group_id: group, kind: "run_end", status: "complete" };
+}
+
+test("operation feedback stop freezes group, blocks double clicks, and run_end before cancelled cannot lock the next run", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    emitEvent(channel, numberedEvents(1)[0]!); markWorking();
+    const stop = screen.getByRole("button", { name: "Stop current task", exact: true });
+    await expect.element(stop).toBeEnabled();
+    stop.element().dispatchEvent(new MouseEvent("click", { bubbles: true })); stop.element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(channel.frames.filter((frame) => frame.type === "cancel")).toHaveLength(1);
+    const request = channel.frames.findLast((frame) => frame.type === "cancel")!;
+    expect(request).toMatchObject({ group_id: "group-1" });
+    await expect.element(screen.getByRole("button", { name: "Stopping current task", exact: true })).toBeDisabled();
+    emitEvent(channel, runEnd("group-1", 2));
+    emitEvent(channel, numberedEvents(1, 3)[0]!);
+    await expect.element(stop).toBeEnabled();
+    await stop.click();
+    const next = channel.frames.findLast((frame) => frame.type === "cancel")!;
+    expect(next).toMatchObject({ group_id: "group-3" });
+    channel.emit({ protocol_version: 2, type: "cancelled", in_reply_to: request.id });
+    await expect.element(screen.getByRole("button", { name: "Stopping current task", exact: true })).toBeDisabled();
+    channel.emit({ protocol_version: 2, type: "cancelled", in_reply_to: next.id });
+    await expect.element(screen.getByRole("button", { name: "Stopping current task", exact: true })).toBeDisabled();
+    emitEvent(channel, runEnd("group-3", 4));
+    await expect.element(stop).toBeEnabled();
+  } finally { await screen.unmount(); }
+});
+
+test("operation feedback correlated stop protocol_error restores the control and permits a deliberate retry", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    emitEvent(channel, numberedEvents(1)[0]!); markWorking();
+    const stop = screen.getByRole("button", { name: "Stop current task", exact: true });
+    await expect.element(stop).toBeEnabled(); await stop.click();
+    const request = channel.frames.findLast((frame) => frame.type === "cancel")!;
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: "old", code: "invalid_message", message: rawOperationError });
+    await expect.element(screen.getByRole("button", { name: "Stopping current task", exact: true })).toBeDisabled();
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: request.id, code: "invalid_message", message: rawOperationError });
+    await expect.element(stop).toBeEnabled();
+    await expect.element(screen.getByText("Could not send the stop request. Check the connection and try again.", { exact: true })).toBeVisible();
+    await stop.click();
+    expect(channel.frames.filter((frame) => frame.type === "cancel")).toHaveLength(2);
+  } finally { await screen.unmount(); }
+});
+
+test("operation feedback model keeps current value and fixed spinner until actual model and max thinking arrive", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const request = await issueOperation(context, "model_set");
+    const chip = context.screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+    await expect.element(chip).toHaveAttribute("aria-busy", "true");
+    expect(chip.element().textContent).toContain("Text model");
+    expect(chip.element().getAttribute("aria-busy")).toBe("true");
+    const spinner = chip.element().querySelector<SVGElement>(".pwa-spin")!;
+    expect(Math.round(Number.parseFloat(getComputedStyle(spinner).width))).toBe(16);
+    const actual = { id: "actual-model", provider: "test", name: "Actual model", reasoning: true, context_window: 200_000, vision: false };
+    context.channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: context.channel.channelId, in_reply_to: request.id, action: "model_set", model: actual, thinking_level: "max" });
+    await expect.poll(() => chip.element().textContent).toContain("Actual model");
+    await expect.element(chip).not.toHaveAttribute("aria-busy", "true");
+    expect(chip.element().textContent).toContain("max");
+    expect(chip.element().querySelector(".pwa-spin")).toBeNull();
+    await chip.click();
+    await context.screen.getByRole("menuitem", { name: /Thinking level/ }).click();
+    await expect.element(context.screen.getByRole("menuitem", { name: /^max\b/ })).toHaveAttribute("data-selected", "true");
+  } finally { await context.screen.unmount(); }
+});
+
+test("operation feedback models distinguish first loading, error, retry and refresh failure while keeping entries", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const { screen, channel } = context;
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
+    expect(screen.getByText("No models available.", { exact: true }).query()).toBeNull();
+    await expect.element(screen.getByText("Loading models…", { exact: true })).toBeVisible();
+    const failure = () => channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")!.id, code: "internal_error", message: rawOperationError });
+    failure();
+    await expect.element(screen.getByText("Could not load models.", { exact: true })).toBeVisible();
+    await screen.getByRole("menuitem", { name: "Retry", exact: true }).click();
+    const model = { id: "kept", provider: "test", name: "Kept model", reasoning: false, vision: false, context_window: 1000 };
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")!.id, models: [model], current: model, thinking_level: "off" });
+    await expect.element(screen.getByRole("menuitem", { name: /test \/ Kept model/ })).toBeVisible();
+    await screen.getByRole("menuitem", { name: "Back", exact: true }).click();
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
+    await screen.getByRole("menuitem", { name: /Change model/ }).click();
+    failure();
+    await expect.element(screen.getByText("Could not load models.", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("menuitem", { name: /test \/ Kept model/ })).toBeVisible();
+    await screen.getByRole("menuitem", { name: "Retry", exact: true }).click();
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")!.id, models: [], thinking_level: "off" });
+    await expect.element(screen.getByText("No models available.", { exact: true })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: /test \/ Kept model/ }).query()).toBeNull();
+  } finally { await context.screen.unmount(); }
+});
+
+test.each([1280, 390])("operation feedback local history distinguishes first failure and keeps previous entries on failed refresh at %ipx", async (width) => {
+  await seedArchivedSession();
+  await page.viewport(width, 844);
+  let rejectInitial!: (error: Error) => void;
+  vi.mocked(listTimelineSessions).mockImplementationOnce(() => new Promise((_, reject) => { rejectInitial = reject; }));
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    if (width < 768) await screen.getByRole("button", { name: "Open navigation", exact: true }).click();
+    const section = () => document.querySelector<HTMLElement>(`section[aria-labelledby="pwa-${width < 768 ? "sheet" : "desktop"}-history-heading"]`)!;
+    await expect.poll(() => typeof rejectInitial).toBe("function");
+    await expect.poll(() => section()?.textContent).toContain("Loading local history…");
+    expect(section().textContent).not.toContain("No local history yet");
+    rejectInitial(new Error("private storage details"));
+    await expect.poll(() => section().textContent).toContain("Could not read saved conversations.");
+    section().querySelector<HTMLButtonElement>("button")!.click();
+    await expect.poll(() => section().querySelectorAll(".pwa-history-row").length).toBe(1);
+    vi.mocked(listTimelineSessions).mockRejectedValueOnce(new Error("private refresh details"));
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1"));
+    await expect.poll(() => section().textContent).toContain("Could not read saved conversations.");
+    expect(section().querySelectorAll(".pwa-history-row")).toHaveLength(1);
+    expect(section().textContent).not.toMatch(/private|No local history yet/);
+    section().querySelector<HTMLButtonElement>("button:not(.pwa-history-row)")!.click();
+    await expect.poll(() => section().textContent).not.toContain("Could not read saved conversations.");
+    expect(section().querySelectorAll(".pwa-history-row")).toHaveLength(1);
+  } finally { await screen.unmount(); }
+});
+
+test("operation feedback thinking failure rechecks actual configuration and applies a clamped successful value", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const request = await issueOperation(context, "thinking_set");
+    const chip = context.screen.getByRole("button", { name: /^Model and thinking settings, current/ });
+    await expect.element(chip).toHaveAttribute("aria-busy", "true");
+    const count = context.channel.frames.filter((frame) => frame.type === "list_models").length;
+    replyOperation(context.channel, request);
+    await expect.poll(() => context.channel.frames.filter((frame) => frame.type === "list_models").length).toBe(count + 1);
+    const actual = { id: "verified", provider: "test", name: "Verified model", reasoning: true, vision: false, context_window: 1000 };
+    context.channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: context.channel.frames.findLast((frame) => frame.type === "list_models")!.id, models: [actual], current: actual, thinking_level: "max" });
+    await expect.poll(() => chip.element().textContent).toContain("max");
+    const next = await issueOperation(context, "thinking_set");
+    context.channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: context.channel.channelId, in_reply_to: next.id, action: "thinking_set", thinking_level: "low" });
+    await expect.poll(() => chip.element().textContent).toContain("low");
+    await expect.element(chip).not.toHaveAttribute("aria-busy", "true");
+    expect(chip.element().textContent).toContain("Verified model");
+  } finally { await context.screen.unmount(); }
+});
+
+test("operation feedback local compaction activity is scoped and remote error does not duplicate a late hook failure", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "threshold" };
+    channel.emit({ ...activity, session_id: "other", status: "running" });
+    await flushMicrotasks();
+    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    channel.emit({ ...activity, status: "running" });
+    await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    channel.emit({ ...activity, status: "failed" });
+    await expect.element(screen.getByText("Could not compact context.", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+    const request = await issueOperation(context, "session_compact");
+    replyOperation(channel, request);
+    await expect.element(screen.getByText(compactIncompleteMessage, { exact: true })).toBeVisible();
+    expect(operationFeedback().classList.contains("pwa-toast-info")).toBe(true);
+    expect(operationFeedback().querySelector(".lucide-info")).not.toBeNull();
+    expect(operationFeedback().querySelector(".lucide-circle-alert")).toBeNull();
+    channel.emit({ ...activity, status: "failed" });
+    await flushMicrotasks();
+    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    channel.emit({ ...activity, status: "running" });
+    channel.emit({ ...activity, status: "cancelled" });
+    await expect.element(screen.getByText("Compaction cancelled", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-operation-status .pwa-spin")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("operation feedback empty target ready before result keeps creation unconfirmed and focuses only after confirmation", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const request = await issueOperation(context, "session_new");
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "empty-target"));
+    await expect.poll(() => next.frames.some((frame) => frame.type === "list_models")).toBe(true);
+    await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeDisabled();
+    await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    screen.getByRole("button", { name: "Session details", exact: true }).element().focus();
+    next.emit({ protocol_version: 2, type: "action_ok", target_channel_id: next.channelId, in_reply_to: request.id, action: "session_new", session_id: "empty-target" });
+    await expect.poll(() => document.querySelector(".pwa-operation-status")).toBeNull();
+    await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toHaveFocus();
+    await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
+  } finally { await screen.unmount(); }
+});
+
 function operationFeedback(): HTMLElement {
   const feedback = document.querySelector<HTMLElement>("#pwa-operation-feedback.pwa-operation-notification");
   if (!feedback) throw new Error("Expected operation feedback.");
@@ -520,13 +808,14 @@ function operationFeedback(): HTMLElement {
 type OperationHarness = Awaited<ReturnType<typeof renderReadyTimeline>>;
 type TestedAction = "session_new" | "session_compact" | "model_set" | "thinking_set";
 const rawOperationError = "WebSocket Relay endpoint_id=550e8400-e29b-41d4-a716-446655440000";
+const compactIncompleteMessage = "Compaction did not complete; it may have been cancelled. Check the current conversation before trying again.";
 
 async function issueOperation({ screen, channel }: OperationHarness, action: TestedAction, sendResult = true) {
   const previousRequests = channel.frames.filter((frame) => frame.type === action).length;
   if (action === "model_set") {
     const current = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
     const vision = { ...current, id: "vision-model", name: "Vision model", vision: true };
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [current, vision], current });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [current, vision], current, thinking_level: "off" });
     await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
   }
   if (action === "model_set") {
@@ -559,7 +848,11 @@ async function issueOperation({ screen, channel }: OperationHarness, action: Tes
 }
 
 function replyOperation(channel: OperationHarness["channel"], request: ClientFrame, success = false) {
-  channel.emit({ protocol_version: 2, type: success ? "action_ok" : "action_error", target_channel_id: channel.channelId, in_reply_to: request.id, action: request.type, error: rawOperationError });
+  const result = request.type === "session_new" ? { session_id: "fresh-empty-session" }
+    : request.type === "session_compact" ? { phase: "completed" }
+      : request.type === "model_set" ? { model: { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true }, thinking_level: "off" }
+        : { thinking_level: "high" };
+  channel.emit({ protocol_version: 2, type: success ? "action_ok" : "action_error", target_channel_id: channel.channelId, in_reply_to: request.id, action: request.type, ...(success ? result : { error: rawOperationError }) });
 }
 
 test.each([
@@ -567,18 +860,24 @@ test.each([
   ["session_compact", "Could not compact the conversation. Try again."],
   ["model_set", "Could not change the model. Try again."],
   ["thinking_set", "Could not change the thinking level. Try again."],
-] as const)("reports %s failures in one safe notification and ignores stale replies", async (action, message) => {
+] as const)("reports %s action or protocol failures in one safe notification and ignores stale replies", async (action, message) => {
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;
   try {
     const request = await issueOperation(context, action);
     if (action === "session_new") await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
     if (action === "model_set") await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    // 压缩的 action_error 不能区分失败与取消；只有协议拒绝沿用错误反馈。
+    const reject = (request: ClientFrame) => action === "session_compact"
+      ? channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: request.id, code: "internal_error", message: rawOperationError })
+      : replyOperation(channel, request);
     replyOperation(channel, { ...request, id: "obsolete-request" });
     await flushMicrotasks();
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();
-    replyOperation(channel, request);
+    reject(request);
     await expect.element(screen.getByText(message, { exact: true })).toBeVisible();
+    expect(operationFeedback().classList.contains("pwa-toast-error")).toBe(true);
+    expect(operationFeedback().querySelector(".lucide-circle-alert")).not.toBeNull();
     expect(operationFeedback().textContent).not.toMatch(/WebSocket|Relay|endpoint_id|550e8400/);
     expect(document.querySelector(".pwa-toast")).toBeNull();
     expect(document.querySelectorAll(".pwa-operation-notification")).toHaveLength(1);
@@ -590,7 +889,7 @@ test.each([
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();
     const retry = await issueOperation(context, action);
     if (action === "session_new") await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
-    replyOperation(channel, retry);
+    reject(retry);
     await expect.element(screen.getByText(message, { exact: true })).toBeVisible();
     const card = operationFeedback();
     const finalRetry = await issueOperation(context, action);
@@ -602,12 +901,77 @@ test.each([
   } finally { await screen.unmount(); }
 });
 
+test("operation feedback session_compact action_error is neutral, unlocks retry, preserves focus and auto-closes", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const request = await issueOperation(context, "session_compact");
+    channel.emit({ protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "threshold", status: "running" });
+    await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    const input = screen.getByPlaceholder("Message your agent…");
+    input.element().focus();
+    replyOperation(channel, request);
+    await expect.element(screen.getByText(compactIncompleteMessage, { exact: true })).toBeVisible();
+    const notice = operationFeedback();
+    expect(notice.classList.contains("pwa-toast-info")).toBe(true);
+    expect(notice.querySelector(".lucide-info")).not.toBeNull();
+    expect(notice.querySelector(".lucide-circle-alert")).toBeNull();
+    expect(notice.textContent).not.toContain(rawOperationError);
+    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    await expect.element(input).toHaveFocus();
+    const dismiss = screen.getByRole("button", { name: "Dismiss operation notification" });
+    dismiss.element().focus();
+    await dismiss.click();
+    await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
+    await expect.element(input).toHaveFocus();
+    replyOperation(channel, request);
+    await flushMicrotasks();
+    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+    const retry = await issueOperation(context, "session_compact");
+    await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    input.element().focus();
+    replyOperation(channel, retry);
+    await expect.element(screen.getByText(compactIncompleteMessage, { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-operation-notification"), { timeout: 6_000 }).toBeNull();
+    await expect.element(input).toHaveFocus();
+  } finally { await screen.unmount(); }
+}, 20_000);
+
+test("operation feedback session_compact info waits behind a persistent action error", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    replyOperation(channel, await issueOperation(context, "model_set"));
+    const error = screen.getByText("Could not change the model. Try again.", { exact: true });
+    await expect.element(error).toBeVisible();
+    replyOperation(channel, await issueOperation(context, "session_compact"));
+    await flushMicrotasks();
+    await expect.element(error).toBeVisible();
+    expect(operationFeedback().classList.contains("pwa-toast-error")).toBe(true);
+    expect(operationFeedback().querySelector(".lucide-circle-alert")).not.toBeNull();
+    expect(screen.getByText(compactIncompleteMessage, { exact: true }).query()).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-operation-status")).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 4_300));
+    await expect.element(error).toBeVisible();
+    await screen.getByRole("button", { name: "Dismiss operation notification" }).click();
+    await expect.element(screen.getByText(compactIncompleteMessage, { exact: true })).toBeVisible();
+    expect(operationFeedback().classList.contains("pwa-toast-info")).toBe(true);
+    expect(document.querySelectorAll(".pwa-operation-notification")).toHaveLength(1);
+    // 点击关闭后鼠标仍在复用的通知卡片上；离开卡片才恢复普通提示计时。
+    await userEvent.hover(screen.getByPlaceholder("Message your agent…").element());
+    await expect.poll(() => document.querySelector(".pwa-operation-notification"), { timeout: 6_000 }).toBeNull();
+  } finally { await screen.unmount(); }
+}, 20_000);
+
 test.each(["session_compact", "model_set", "thinking_set"] as const)("shows the %s send failure without a raw transport error", async (action) => {
   const context = await renderReadyTimeline(renderWorkspaceApp);
   try {
     await issueOperation(context, action, false);
     await expect.poll(() => document.querySelector(".pwa-operation-notification")?.textContent).toContain("Check the connection and try again.");
     expect(operationFeedback().textContent).not.toMatch(/Relay|WebSocket/);
+    expect(operationFeedback().classList.contains("pwa-toast-error")).toBe(true);
+    expect(operationFeedback().querySelector(".lucide-circle-alert")).not.toBeNull();
     expect(document.querySelector(".pwa-toast")).toBeNull();
     const retry = await issueOperation(context, action);
     expect(operationFeedback()).toBeTruthy();
@@ -630,6 +994,8 @@ test("keeps a rejected new-session send only in its still-open confirmation", as
 test("keeps stop failure until a matching cancelled response arrives", async () => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
+    emitEvent(channel, numberedEvents(1)[0]!);
+    await expect.poll(listText).toContain("Record 1");
     relayHarness.instances[0].emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", working: true } });
     const stop = screen.getByRole("button", { name: "Stop current task", exact: true });
     await expect.element(stop).toBeEnabled();
@@ -652,10 +1018,10 @@ test("registry failure replaces an action error and survives an unrelated succes
   const db = await openPwaDatabase();
   const put = vi.spyOn(db.endpoints, "put");
   try {
-    const first = await issueOperation(context, "session_compact");
+    const first = await issueOperation(context, "model_set");
     replyOperation(context.channel, first);
-    await expect.element(context.screen.getByText("Could not compact the conversation. Try again.")).toBeVisible();
-    const retry = await issueOperation(context, "session_compact");
+    await expect.element(context.screen.getByText("Could not change the model. Try again.")).toBeVisible();
+    const retry = await issueOperation(context, "model_set");
     put.mockRejectedValueOnce(new Error(rawOperationError));
     relayHarness.instances[0].emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Updated Pi", cwd: "/workspace" } });
     const message = context.screen.getByText("Could not save Pi details on this device. Refresh the app to try again.");
@@ -673,9 +1039,9 @@ test("entering saved history revokes session feedback and ignores old channel re
   await seedArchivedSession();
   const context = await renderReadyTimeline(renderWorkspaceApp);
   try {
-    const request = await issueOperation(context, "session_compact");
+    const request = await issueOperation(context, "model_set");
     replyOperation(context.channel, request);
-    await expect.element(context.screen.getByText("Could not compact the conversation. Try again.")).toBeVisible();
+    await expect.element(context.screen.getByText("Could not change the model. Try again.")).toBeVisible();
     await expect.poll(() => document.querySelector(".pwa-history-row")?.textContent).toContain("Archived note");
     await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-history-row")!);
     await expect.element(context.screen.getByRole("heading", { level: 1, name: /Archived note$/ })).toBeVisible();
@@ -833,8 +1199,8 @@ test("clears a stale Toast only when sending starts and preserves operation feed
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;
   try {
-    replyOperation(channel, await issueOperation(context, "session_compact"));
-    await expect.element(screen.getByText("Could not compact the conversation. Try again.")).toBeVisible();
+    replyOperation(channel, await issueOperation(context, "model_set"));
+    await expect.element(screen.getByText("Could not change the model. Try again.")).toBeVisible();
     const notice = operationFeedback();
     channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, code: "too_large", message: rawOperationError });
     const stale = screen.getByText("This message is too large to send.", { exact: true });
@@ -847,7 +1213,7 @@ test("clears a stale Toast only when sending starts and preserves operation feed
     await expect.element(input).toHaveValue("");
     expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(1);
     expect(operationFeedback()).toBe(notice);
-    expect(notice.textContent).toContain("Could not compact the conversation. Try again.");
+    expect(notice.textContent).toContain("Could not change the model. Try again.");
   } finally { await screen.unmount(); }
 });
 
@@ -855,8 +1221,8 @@ test.each([true, false])("clears a stale Toast when session_new starts (send=%s)
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;
   try {
-    replyOperation(channel, await issueOperation(context, "session_compact"));
-    await expect.element(screen.getByText("Could not compact the conversation. Try again.")).toBeVisible();
+    replyOperation(channel, await issueOperation(context, "model_set"));
+    await expect.element(screen.getByText("Could not change the model. Try again.")).toBeVisible();
     const notice = operationFeedback();
     channel.emitMalformed(rawOperationError);
     const stale = screen.getByText("Pi could not process this request. Try again.", { exact: true });
@@ -864,7 +1230,7 @@ test.each([true, false])("clears a stale Toast when session_new starts (send=%s)
     await issueOperation(context, "session_new", sendResult);
     await expect.element(stale).not.toBeInTheDocument();
     expect(operationFeedback()).toBe(notice);
-    expect(notice.textContent).toContain("Could not compact the conversation. Try again.");
+    expect(notice.textContent).toContain("Could not change the model. Try again.");
     if (!sendResult) await expect.element(screen.getByText("Could not start a fresh session. Check the connection and try again.")).toBeVisible();
   } finally { await screen.unmount(); }
 });
@@ -907,7 +1273,7 @@ test("confirms leaving an attachment send, preserves the original draft and reje
   const { channel, screen } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const model = { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true };
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [model], current: model });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [model], current: model, thinking_level: "off" });
     const input = screen.getByPlaceholder("Message your agent…");
     await input.fill("Keep scope-bound image draft");
     const clipboard = new DataTransfer();
@@ -2048,7 +2414,7 @@ test("routes session actions through the live channel with current model and thi
   try {
     const model = { id: "test-sonnet", provider: "anthropic", name: "Test Sonnet", reasoning: true, context_window: 200_000, vision: true };
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [model], current: model });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [model], current: model, thinking_level: "off" });
 
     const actions = screen.getByRole("button", { name: "Session details" });
     await actions.click();
@@ -2062,7 +2428,7 @@ test("routes session actions through the live channel with current model and thi
     await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "session_compact", leaf_id: "generation-session-1" }));
     const compact = channel.frames.at(-1);
-    channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: compact?.id, action: "session_compact" });
+    channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: compact?.id, action: "session_compact", phase: "completed" });
 
     // 模型与思考级别都从输入区的模型标签进入；会话菜单不再重复这两项。
     await screen.getByRole("button", { name: /^Model and thinking settings, current Test Sonnet/ }).click();
@@ -2070,7 +2436,7 @@ test("routes session actions through the live channel with current model and thi
     await screen.getByRole("menuitem", { name: /anthropic \/ Test Sonnet/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "model_set", provider: "anthropic", model_id: "test-sonnet" }));
     const modelSet = channel.frames.at(-1);
-    channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: modelSet?.id, action: "model_set" });
+    channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: modelSet?.id, action: "model_set", model, thinking_level: "off" });
 
     await screen.getByRole("button", { name: /^Model and thinking settings, current/ }).click();
     await screen.getByRole("menuitem", { name: /Thinking level/ }).click();
@@ -2087,7 +2453,7 @@ test("keeps attachment capability independent of switching to a vision model", a
     const textOnlyModel = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
     const visionModel = { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true };
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel, thinking_level: "off" });
 
     const addImage = screen.getByRole("button", { name: "Add attachments" });
     await expect.element(addImage).toBeEnabled();
@@ -2097,15 +2463,13 @@ test("keeps attachment capability independent of switching to a vision model", a
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "model_set", provider: "test", model_id: "vision-model" }));
     const modelSet = channel.frames.at(-1);
     await expect.element(addImage).toBeEnabled();
-
-    channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: modelSet?.id, action: "model_set" });
-    await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(3));
-    const refreshedModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
-    const staleModelRequest = channel.frames.filter((frame) => frame.type === "list_models").at(-2);
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: staleModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel });
+    const staleModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
+    channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: modelSet?.id, action: "model_set", model: visionModel, thinking_level: "off" });
+    await expect.element(screen.getByRole("button", { name: /^Model and thinking settings, current Vision model/ })).toBeVisible();
+    expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(2);
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: staleModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel, thinking_level: "off" });
     await expect.element(addImage).toBeEnabled();
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: refreshedModelRequest?.id, models: [textOnlyModel, visionModel], current: visionModel });
-    await expect.element(addImage).toBeEnabled();
+    await expect.element(screen.getByRole("button", { name: /^Model and thinking settings, current Vision model/ })).toBeVisible();
   } finally {
     await screen.unmount();
   }
@@ -2117,7 +2481,7 @@ test("keeps attachment capability independent of external endpoint model updates
     const textOnlyModel = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
     const visionModel = { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true };
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel, thinking_level: "off" });
 
     const addImage = screen.getByRole("button", { name: "Add attachments" });
     await expect.element(addImage).toBeEnabled();
@@ -2125,7 +2489,7 @@ test("keeps attachment capability independent of external endpoint model updates
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(2));
     expect(channelHarness.channels).toHaveLength(1);
     const refreshedModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: refreshedModelRequest?.id, models: [textOnlyModel, visionModel], current: visionModel });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: refreshedModelRequest?.id, models: [textOnlyModel, visionModel], current: visionModel, thinking_level: "off" });
     await expect.element(addImage).toBeEnabled();
   } finally {
     await screen.unmount();
@@ -2138,14 +2502,14 @@ test("uses the endpoint model as a unique capability fallback when current is om
     const textOnlyModel = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
     const visionModel = { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true };
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [textOnlyModel, visionModel], current: textOnlyModel, thinking_level: "off" });
 
     const addImage = screen.getByRole("button", { name: "Add attachments" });
     await expect.element(addImage).toBeEnabled();
     relayHarness.instances[0]?.emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", model: "vision-model" } });
     await vi.waitFor(() => expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(2));
     const refreshedModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: refreshedModelRequest?.id, models: [textOnlyModel, visionModel] });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: refreshedModelRequest?.id, models: [textOnlyModel, visionModel], thinking_level: "off" });
     await expect.element(addImage).toBeEnabled();
   } finally {
     await screen.unmount();
@@ -2330,7 +2694,7 @@ test("preserves the session, draft, attachment, tool row and reader across layou
   try {
     const relay = relayHarness.instances[0];
     const model = { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true };
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.find((frame) => frame.type === "list_models")?.id, models: [model], current: model });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.find((frame) => frame.type === "list_models")?.id, models: [model], current: model, thinking_level: "off" });
     const input = screen.getByRole("textbox");
     await input.fill("Keep this draft across layouts");
     await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
@@ -2532,14 +2896,14 @@ test("ignores version callbacks from a replaced Relay while saving settings", as
   }
 });
 
-test.each([1280, 390])("keeps the settings page beneath confirmation and restores focus at %ipx", async (width) => {
+test.each([1280, 390])("operation notification keeps the settings page beneath confirmation and restores focus at %ipx", async (width) => {
   await page.viewport(width, 844);
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen } = context;
   try {
-    const request = await issueOperation(context, "session_compact");
+    const request = await issueOperation(context, "model_set");
     replyOperation(context.channel, request);
-    await expect.element(screen.getByText("Could not compact the conversation. Try again.")).toBeVisible();
+    await expect.element(screen.getByText("Could not change the model. Try again.")).toBeVisible();
     const notice = operationFeedback();
     if (width < 768) {
       await screen.getByRole("button", { name: "Open navigation" }).click();
@@ -3075,7 +3439,7 @@ test("legacy capability failure disables attachments but keeps text and vision m
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const model = { id: "vision-model", provider: "test", name: "Vision model", reasoning: false, context_window: 200_000, vision: true };
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [model], current: model });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [model], current: model, thinking_level: "off" });
     await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeDisabled();
     await expect.element(screen.getByText("Upgrade the computer's extension to upload attachments.", { exact: true })).toBeVisible();
     await screen.getByPlaceholder("Message your agent…").fill("Legacy text works");
@@ -3336,7 +3700,7 @@ test("shows the directory and model under the empty-session hint", async () => {
     await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
     await expect.poll(() => document.querySelector(".pwa-chat-empty-context")?.textContent).toBe("workspace");
     const model = { id: "text-model", provider: "test", name: "Text model", reasoning: false, context_window: 200_000, vision: false };
-    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [model], current: model });
+    channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: channel.frames.findLast((frame) => frame.type === "list_models")?.id, models: [model], current: model, thinking_level: "off" });
     await expect.poll(() => document.querySelector(".pwa-chat-empty-context")?.textContent).toBe("workspace · Text model");
   } finally {
     await screen.unmount();
