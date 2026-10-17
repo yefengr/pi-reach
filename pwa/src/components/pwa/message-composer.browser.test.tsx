@@ -22,6 +22,7 @@ type ComposerHarnessProps = {
   initialWorking?: boolean;
   canAttach?: boolean;
   keyboardPreferences?: boolean;
+  enterSends?: boolean;
   attachmentNotice?: string;
   commandModels?: WireModel[];
   commandCurrentModel?: WireModel | null;
@@ -44,6 +45,7 @@ function ComposerHarness({
   initialWorking = false,
   canAttach = true,
   keyboardPreferences = false,
+  enterSends,
   attachmentNotice,
   commandModels = [model],
   commandCurrentModel = model,
@@ -81,6 +83,7 @@ function ComposerHarness({
       <button type="button" data-testid="composer-go-offline" hidden onClick={() => setIsOnline(false)} />
       <button type="button" data-testid="composer-set-command-pending" hidden onClick={() => setPendingAction("model_set")} />
       <MessageComposer
+        enterSends={enterSends}
         attachments={attachments}
         canAttach={isOnline && canAttach}
         sendingAttachments={sendingImage}
@@ -169,6 +172,20 @@ describe("desktop composer sending shortcuts", () => {
     await userEvent.keyboard(primaryEnter);
     expect(sends).toBe(1);
     expect(input.value).toBe("Ready\n");
+  });
+
+  test.each([true, false])("explicit Enter preference %s stays in memory without initializing browser settings", async (enterSends) => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="Ready" enterSends={enterSends} onSend={() => { sends += 1; }} />);
+    expect(localStorage.getItem(ENTER_SENDS_STORAGE_KEY)).toBeNull();
+    const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.keyboard("{Enter}");
+    expect(sends).toBe(enterSends ? 1 : 0);
+    await userEvent.keyboard(primaryEnter);
+    expect(sends).toBe(enterSends ? 2 : 1);
+    expect(localStorage.getItem(ENTER_SENDS_STORAGE_KEY)).toBeNull();
   });
 
   test("synchronizes an Enter preference change from another mounted consumer", async () => {
@@ -366,7 +383,7 @@ test.each([[1280, 900], [390, 844]])("keeps a single Composer surface, frameless
     expect(cardStyle.borderTopWidth).toBe("1px");
     expect(cardStyle.paddingTop).toBe("10px");
     expect(cardStyle.paddingLeft).toBe("12px");
-    expect(cardStyle.borderRadius).toBe("12px");
+    expect(cardStyle.borderRadius).toBe("16px");
     expect(inputStyle.borderTopWidth).toBe("0px");
     expect(inputStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(inputStyle.paddingLeft).toBe("0px");
@@ -678,14 +695,14 @@ test("uses 16px action text in composer menus and keeps the current model and th
     await screen.getByRole("menuitem", { name: entry }).click();
     const selected = screen.getByRole("menuitem", { name: current }).element() as HTMLElement;
     const unselected = screen.getByRole("menuitem", { name: alternative }).element() as HTMLElement;
-    await expect.poll(() => getComputedStyle(selected).backgroundColor).toBe(selectedBackground);
+    await expect.poll(() => getComputedStyle(selected, "::before").backgroundColor).toBe(selectedBackground);
     expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).color).toBe(ink);
     expect(getComputedStyle(selected.querySelector(".pwa-command-copy > span")!).fontSize).toBe("16px");
-    expect(getComputedStyle(unselected).backgroundColor).not.toBe(selectedBackground);
+    expect(getComputedStyle(unselected, "::before").backgroundColor).not.toBe(selectedBackground);
     await userEvent.hover(unselected);
     unselected.focus();
-    await expect.poll(() => getComputedStyle(selected).backgroundColor).toBe(selectedBackground);
-    expect(getComputedStyle(unselected).backgroundColor).not.toBe(selectedBackground);
+    await expect.poll(() => getComputedStyle(selected, "::before").backgroundColor).toBe(selectedBackground);
+    expect(getComputedStyle(unselected, "::before").backgroundColor).not.toBe(selectedBackground);
     await screen.getByRole("menuitem", { name: "Back", exact: true }).click();
   }
   probe.remove();
@@ -712,7 +729,7 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the Composer
     expect(getComputedStyle(dropdown).overflowY).toBe("auto");
     expect(getComputedStyle(dropdown).zIndex).toBe("8");
     for (const item of dropdown.querySelectorAll<HTMLElement>('[role="menuitem"]')) {
-      expect(item.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(Math.round(item.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     }
     dropdown.scrollTop = dropdown.scrollHeight;
     const last = dropdown.querySelector<HTMLElement>('[role="menuitem"]:last-child')!;

@@ -136,6 +136,7 @@ export const zh: Messages = {
     unpairedBody: "在电脑上的 Pi 中运行下面的命令。",
     copyCommand: "复制命令",
     copied: "已复制",
+    copyFailed: "复制失败，请选择文字后手动复制。",
     startPairing: "开始配对",
     noPiTitle: "没有在线的 Pi",
     noPiBody: "在电脑上启动 Pi 后，会自动出现在这里。",

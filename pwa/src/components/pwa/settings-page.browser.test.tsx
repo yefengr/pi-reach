@@ -163,7 +163,9 @@ test("copies only versions and statuses, excluding the current Pi identity and R
   expect(writeText).toHaveBeenCalledWith(`PWA: ${pwaVersion}\nRelay: 2.3.4\nExtension: 3.4.5`);
   expect(writeText.mock.calls[0]?.[0]).not.toContain("private-");
   expect(writeText.mock.calls[0]?.[0]).not.toContain(relayUrl);
-  await expect.element(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+  await expect.element(screen.getByRole("button", { name: "Copy version information", exact: true })).toBeInTheDocument();
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Copied");
+  expect(document.querySelector(".pwa-settings-about-heading .pwa-copy-icons[data-copied]")).not.toBeNull();
 });
 
 test("the desktop settings header clears a translucent status bar", async () => {

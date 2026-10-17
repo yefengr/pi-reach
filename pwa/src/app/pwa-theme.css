@@ -25,6 +25,7 @@
   --pwa-on-accent: #FFFFFF;
   --pwa-scrim: #00000047;
   --pwa-shadow-color: #0000001A;
+  --pwa-shadow-composer: 0 2px 12px var(--pwa-shadow-color);
   --pwa-complete: #347953;
   --pwa-complete-wash: #EAF3EC;
   --pwa-running: #90611F;
@@ -71,6 +72,7 @@
   --pwa-on-accent: #142237;
   --pwa-scrim: #0000008C;
   --pwa-shadow-color: #0000004D;
+  --pwa-shadow-composer: none;
   --pwa-complete: #95CBA8;
   --pwa-complete-wash: #26392E;
   --pwa-running: #DFBA77;
@@ -119,6 +121,7 @@
     --pwa-on-accent: #142237;
     --pwa-scrim: #0000008C;
     --pwa-shadow-color: #0000004D;
+    --pwa-shadow-composer: none;
     --pwa-complete: #95CBA8;
     --pwa-complete-wash: #26392E;
     --pwa-running: #DFBA77;
@@ -170,6 +173,8 @@
   --pwa-radius-sm: 6px;
   --pwa-radius-md: 8px;
   --pwa-radius-lg: 12px;
+  /* 主要输入操作表面独立于 Modal、Drawer 与贴边主区的圆角。 */
+  --pwa-radius-composer: 16px;
 
   /* 通用间距档位，按内容关系选用（见 DESIGN「间距」）；Mantine spacing xs–xl 依次引用 8／12／16／24／32。
      页面 gutter（桌面 20、移动 16）不是通用档位，由布局层单独定义。 */
@@ -196,6 +201,15 @@
   --pwa-duration-expand-out: 120ms;
   --pwa-duration-toast: 180ms;
   --pwa-duration-fade: 120ms;
+  --pwa-duration-press-in: 90ms;
+  --pwa-duration-press-out: 120ms;
+  --pwa-duration-menu-in: 160ms;
+  --pwa-duration-menu-out: 120ms;
+  --pwa-duration-feedback: 120ms;
+  /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
+  --pwa-menu-row-padding: 6px;
+  --pwa-navigation-row-padding: 6px;
+  --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容的淡入；标准曲线前段很快，需要比通用淡化长才看得出渐入过程。 */
   --pwa-duration-content: 240ms;
   /* 手动查看获取完成后，满格进度的停留时长；属于状态确认，减少动态效果时不缩短。 */
@@ -237,6 +251,8 @@
     --pwa-duration-expand-in: var(--pwa-duration-fade);
     --pwa-duration-expand-out: var(--pwa-duration-fade);
     --pwa-duration-toast: var(--pwa-duration-fade);
+    --pwa-duration-menu-in: var(--pwa-duration-fade);
+    --pwa-duration-menu-out: var(--pwa-duration-fade);
     --pwa-duration-content: var(--pwa-duration-fade);
   }
 

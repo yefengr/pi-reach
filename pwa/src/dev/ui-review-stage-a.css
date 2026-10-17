@@ -1,0 +1,82 @@
+/* 阶段 A 剩余对照：两列（当前版 / 原候选），复用 ui-review.css 的页面骨架。 */
+.pwa-ui-review.pwa-stage-a .pwa-review-compare-grid { grid-template-columns: repeat(2, minmax(320px, 1fr)); }
+.pwa-ui-review.pwa-stage-a .pwa-review-section { gap: var(--pwa-space-lg); }
+
+/* 01 按压：绘制层缩至 0.97，按下 90ms，释放回到 120ms；点击区与布局不变。 */
+[data-variant="candidate"] .pwa-icon-button::before {
+  transition: transform 120ms var(--pwa-ease-standard), background-color var(--pwa-duration-fade) var(--pwa-ease-standard);
+}
+[data-variant="candidate"] .pwa-icon-button:active:not(:disabled):not([data-disabled])::before {
+  transform: scale(0.97);
+  transition-duration: 90ms;
+}
+[data-variant="candidate"] .pwa-button,
+[data-variant="candidate"] .pwa-composer-send { transition: transform 120ms var(--pwa-ease-standard); }
+[data-variant="candidate"] .pwa-button:active:not(:disabled):not([data-disabled]),
+[data-variant="candidate"] .pwa-composer-send:active:not(:disabled):not([data-disabled]) {
+  transform: scale(0.985);
+  transition-duration: 90ms;
+}
+/* 减少动态效果时只换底色，不做缩放；状态仍然可见。 */
+@media (prefers-reduced-motion: reduce) {
+  [data-variant="candidate"] .pwa-icon-button:active:not(:disabled):not([data-disabled])::before,
+  [data-variant="candidate"] .pwa-button:active:not(:disabled):not([data-disabled]),
+  [data-variant="candidate"] .pwa-composer-send:active:not(:disabled):not([data-disabled]) { transform: none; }
+}
+
+/* 03 附件卡片：操作表面改用 surface 底与极轻抬升，圆角 10 与外层 12 协调；高度与操作槽不变。 */
+[data-variant="candidate"] .pwa-attachment-card {
+  border-radius: 10px;
+  background: var(--pwa-surface);
+  box-shadow: 0 1px 2px var(--pwa-shadow-color);
+  transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard), box-shadow var(--pwa-duration-fade) var(--pwa-ease-standard);
+}
+@media (hover: hover) {
+  [data-variant="candidate"] .pwa-attachment-card:hover { border-color: var(--pwa-control-line); }
+}
+:root[data-mantine-color-scheme="dark"] [data-variant="candidate"] .pwa-attachment-card {
+  border-color: var(--pwa-control-line);
+  box-shadow: none;
+}
+
+/* 试件排版：按压组与按钮行沿用 Composer 工具栏的间距语义。 */
+.pwa-ui-review .pwa-stage-a-press { display: grid; gap: var(--pwa-space-md); justify-items: start; }
+.pwa-ui-review .pwa-stage-a-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pwa-space-xs); }
+
+/*
+ * 变量①：暖灰表面。只替换中性表面色，字号、间距、布局与文字色都不变。
+ * 浅色实测（对 #2A2A2A ink／#606060 secondary／#446396 accent）：
+ * ink 12.3–13.9:1，secondary 4.57–6.19:1，accent 4.83–5.96:1，control-line/bg 3.67:1，
+ * hover/bg 1.21，active/hover 1.10，selected/panel 1.20，disabled≠hover。
+ * 深色实测：secondary 5.70–8.76:1，accent 6.28–8.18:1，control-line/bg 4.23:1。
+ */
+.pwa-ui-review[data-surface="warm"] {
+  --pwa-bg: rgb(253 251 247);
+  --pwa-surface: rgb(255 253 250);
+  --pwa-panel: rgb(247 243 236);
+  --pwa-message: rgb(242 237 229);
+  --pwa-hover: rgb(235 229 220);
+  --pwa-selected: rgb(229 223 213);
+  --pwa-neutral-active: rgb(225 219 208);
+  --pwa-disabled-bg: rgb(239 235 227);
+  --pwa-line: rgb(226 220 210);
+  --pwa-control-line: rgb(138 130 118);
+}
+:root[data-mantine-color-scheme="dark"] .pwa-ui-review[data-surface="warm"] {
+  --pwa-bg: rgb(32 30 27);
+  --pwa-surface: rgb(45 42 38);
+  --pwa-panel: rgb(40 38 34);
+  --pwa-message: rgb(53 50 45);
+  --pwa-hover: rgb(53 50 45);
+  --pwa-selected: rgb(58 55 50);
+  --pwa-neutral-active: rgb(64 61 55);
+  --pwa-disabled-bg: rgb(42 40 36);
+  --pwa-line: rgb(70 66 60);
+  --pwa-control-line: rgb(132 128 120);
+}
+
+/* 表面色判读样本：中文长文、代码与元数据各一行，换色时只换底色不换排版。 */
+.pwa-ui-review .pwa-stage-a-surface-sample { display: grid; gap: var(--pwa-space-sm); max-width: 680px; }
+.pwa-ui-review .pwa-stage-a-surface-sample p { margin: 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
+.pwa-ui-review .pwa-stage-a-surface-sample code { display: block; overflow-x: auto; padding: var(--pwa-space-sm); border-radius: var(--pwa-radius-md); color: var(--pwa-code-text); background: var(--pwa-code-surface); font: 14px/1.55 var(--pwa-font-mono); }
+.pwa-ui-review .pwa-stage-a-surface-sample small { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }

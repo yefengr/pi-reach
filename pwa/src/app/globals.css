@@ -4,6 +4,7 @@
 @import "./workspace-shell.css";
 @import "./queued-messages.css";
 @import "./keyboard-shortcuts.css";
+@import "./pwa-controls.css";
 
 /* Tailwind 只提供 preflight 与入口；业务组件不使用其间距、颜色和圆角工具类，颜色一律引用 --pwa-* token。 */
 @theme inline {
@@ -214,9 +215,9 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button.pwa-latest-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); } }
 
-.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); }
+.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); container: pwa-composer / inline-size; }
 .pwa-image-input { display: none; }
-.pwa-composer-card { min-width: 0; padding: 10px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-composer-card { min-width: 0; padding: 10px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
 .pwa-composer-preview { position: relative; max-width: 100%; margin: 2px 2px 8px; }
 .pwa-composer-preview img { display: block; max-width: min(240px, 100%); height: 76px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); object-fit: cover; background: var(--pwa-code-bg); }
@@ -233,7 +234,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pwa-composer-tools,
 .pwa-composer-actions { display: flex; align-items: center; min-width: 0; gap: 6px; }
-.pwa-composer-actions { justify-content: flex-end; }
+.pwa-composer-actions { flex: 1 1 auto; justify-content: flex-end; }
 /* 模型标签：发送按钮左侧的文字按钮，显示当前模型与思考级别；视觉高 32、点击区 44，手机只显示模型名。 */
 .pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
 .pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-sm); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
@@ -245,6 +246,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-composer-model > svg { flex: 0 0 auto; }
 .pwa-composer-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pwa-composer-model-thinking { flex: 0 0 auto; }
+/* 420px 以下的输入容器先让出次级思考说明；不因桌面视口宽就挤压窄面板。 */
+@container pwa-composer (max-width: 420px) {
+  .pwa-ui-scope .pwa-composer-model { max-width: 160px; flex: 0 1 auto; }
+  .pwa-composer-model-thinking { display: none; }
+}
 @media (max-width: 767.98px) {
   .pwa-ui-scope .pwa-composer-model { max-width: 160px; }
   .pwa-composer-model-thinking { display: none; }
@@ -269,7 +275,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-command-menu-dropdown { /* 浮层宽度上限扣除两侧留白，留白取 16 与安全区中的较大值。 */ --pwa-command-menu-width: min(340px, calc(100vw - max(16px, var(--pwa-safe-left)) - max(16px, var(--pwa-safe-right)))); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-command-menu-panel { display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; }
 .pwa-command-row,
-.pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
+.pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: var(--pwa-menu-row-padding) 10px; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
 .pwa-command-menu-dropdown .mantine-Menu-itemLabel { min-width: 0; }
 .pwa-command-menu-dropdown .mantine-Menu-itemSection { flex-shrink: 0; margin: 0; }
 .pwa-command-row:focus-visible:not(:disabled),
@@ -287,6 +293,9 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-menu-heading,
 .pwa-command-empty { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 .pwa-command-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 模型名称与标识可完整换行；菜单自身滚动，不把长名字截成无法区分的前缀。 */
+.pwa-menu-motion .pwa-command-copy > span,
+.pwa-menu-motion .pwa-command-copy small { white-space: normal; overflow-wrap: anywhere; }
 .pwa-command-chevron { flex: 0 0 auto; color: var(--pwa-secondary); }
 .pwa-command-check { flex: 0 0 auto; color: var(--pwa-ink); }
 /* 当前模型／思考等级：持久的 selected 中性底与 ink 文字，悬停和键盘高亮时保持不变。 */

@@ -1,0 +1,20 @@
+.pwa-copy-icons { display: grid; place-items: center; flex: none; width: 16px; height: 16px; }
+.pwa-copy-icons > svg { grid-area: 1 / 1; transition: opacity var(--pwa-duration-feedback, var(--pwa-duration-fade)) var(--pwa-ease-standard); }
+.pwa-copy-icons .pwa-copy-icon-check { opacity: 0; }
+.pwa-copy-icons[data-copied] .pwa-copy-icon-copy { opacity: 0; }
+.pwa-copy-icons[data-copied] .pwa-copy-icon-check { opacity: 1; }
+
+/* 错误脱离工具栏布局，保留原文选择与相邻关闭按钮的命中区。 */
+.pwa-copy-error {
+  max-width: calc(100vw - max(var(--pwa-space-md), var(--pwa-safe-left, 0px)) - max(var(--pwa-space-md), var(--pwa-safe-right, 0px)));
+  padding: var(--pwa-space-xs) var(--pwa-space-sm);
+  border: 1px solid var(--pwa-line);
+  border-radius: var(--pwa-radius-md);
+  color: var(--pwa-error);
+  background: var(--pwa-surface);
+  box-shadow: var(--pwa-shadow-float);
+  font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}

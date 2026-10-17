@@ -11,12 +11,27 @@ import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing PWA root element");
 
-createRoot(root).render(
-  <StrictMode>
-    <PwaUiProvider>
-      <PwaAppShell runtimeNotice={<ServiceWorkerRegister />}>
-        <PwaApp />
-      </PwaAppShell>
-    </PwaUiProvider>
-  </StrictMode>,
-);
+const appRoot = createRoot(root);
+
+// 开发评审不挂载连接、数据库或 Service Worker；生产构建会移除整个动态入口。
+const reviewPath = import.meta.env.DEV ? window.location.pathname : "";
+
+if (reviewPath === "/app/ui-review") {
+  void import("./dev/ui-review").then(({ UiReviewPage }) => {
+    appRoot.render(<StrictMode><UiReviewPage /></StrictMode>);
+  });
+} else if (reviewPath === "/app/ui-review-stage-a") {
+  void import("./dev/ui-review-stage-a").then(({ UiReviewStageAPage }) => {
+    appRoot.render(<StrictMode><UiReviewStageAPage /></StrictMode>);
+  });
+} else {
+  appRoot.render(
+    <StrictMode>
+      <PwaUiProvider>
+        <PwaAppShell runtimeNotice={<ServiceWorkerRegister />}>
+          <PwaApp />
+        </PwaAppShell>
+      </PwaUiProvider>
+    </StrictMode>,
+  );
+}

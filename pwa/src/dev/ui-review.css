@@ -1,0 +1,152 @@
+.pwa-root.pwa-ui-review {
+  display: block;
+  height: 100dvh;
+  min-height: 0;
+  background: var(--pwa-bg);
+  color: var(--pwa-ink);
+  /* 历史对照密度固定，不继承阶段B按输入能力切换的正式默认。 */
+  --pwa-menu-row-padding: 6px;
+  --pwa-navigation-row-padding: 6px;
+}
+
+/* 评审试件保留各自原有按压；避免正式内部缩放叠加到旧候选或基线。 */
+.pwa-ui-scope .pwa-root.pwa-ui-review .pwa-button .mantine-Button-inner,
+.pwa-ui-scope .pwa-root.pwa-ui-review .pwa-icon-button .mantine-ActionIcon-icon { transform: none !important; }
+.pwa-ui-scope .pwa-root.pwa-ui-review[data-variant="baseline"] .pwa-icon-button:active::before,
+.pwa-ui-scope .pwa-root.pwa-ui-review :is([data-variant="baseline"], [data-variant="deepseek"]) .pwa-icon-button:active::before { transform: none !important; }
+
+.pwa-ui-review .pwa-review-scroll { height: 100%; overflow-y: auto; }
+.pwa-ui-review .pwa-review-layout { width: 100%; max-width: 840px; margin-inline: auto; padding: var(--pwa-space-lg) var(--pwa-space-md) var(--pwa-space-2xl); }
+.pwa-ui-review .pwa-review-header { display: grid; gap: var(--pwa-space-md); margin-bottom: var(--pwa-space-xl); }
+.pwa-ui-review .pwa-review-header h1 { font-size: 24px; font-weight: var(--pwa-weight-strong); }
+.pwa-ui-review .pwa-review-header p,
+.pwa-ui-review .pwa-review-header h1,
+.pwa-ui-review .pwa-review-section h2,
+.pwa-ui-review .pwa-review-section p { margin: 0; }
+.pwa-ui-review .pwa-review-eyebrow { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
+.pwa-ui-review .pwa-review-controls,
+.pwa-ui-review .pwa-review-controls > div,
+.pwa-ui-review .pwa-review-copy-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pwa-space-xs); }
+.pwa-ui-review .pwa-review-controls { gap: var(--pwa-space-md); }
+.pwa-ui-review .pwa-review-controls button,
+.pwa-ui-review .pwa-review-copy-controls button,
+.pwa-ui-review .pwa-review-menu-trigger { min-height: 44px; }
+.pwa-ui-review button[aria-pressed="true"] { background: var(--pwa-selected); color: var(--pwa-ink); border-color: var(--pwa-control-line); }
+.pwa-ui-review .pwa-review-section { display: grid; gap: var(--pwa-space-md); padding-block: var(--pwa-space-lg); border-top: 1px solid var(--pwa-line); }
+.pwa-ui-review .pwa-review-section h2 { font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); }
+.pwa-ui-review .pwa-review-note { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-body); }
+.pwa-ui-review .pwa-review-specimen { width: 100%; max-width: 680px; min-width: 0; margin-inline: auto; }
+.pwa-ui-review[data-review-width="narrow"] .pwa-review-specimen { max-width: 320px; }
+.pwa-ui-review .pwa-review-specimen .pwa-composer { padding: 0; }
+.pwa-ui-review .pwa-review-specimen .pwa-composer-actions { flex: 1; }
+.pwa-ui-review .pwa-review-specimen .pwa-composer-model { flex-shrink: 1; }
+.pwa-ui-review .pwa-review-result { margin-top: var(--pwa-space-md) !important; overflow-wrap: anywhere; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
+.pwa-ui-review .pwa-review-copy-text { margin-top: var(--pwa-space-md) !important; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pwa-ui-review .pwa-review-code { max-width: 100%; margin: var(--pwa-space-md) 0 0; padding: var(--pwa-space-md); overflow-x: auto; color: var(--pwa-code-text); background: var(--pwa-code-surface); border-radius: var(--pwa-radius-md); font: 14px/1.55 var(--pwa-font-mono); }
+.pwa-ui-review .pwa-review-copy { flex: 0 0 44px; min-width: 44px; }
+
+/* 各版使用相同的完整文字；容器宽度与换行不是候选密度变化。 */
+.pwa-ui-review .pwa-command-copy,
+.pwa-ui-review .pwa-command-copy > span,
+.pwa-ui-review .pwa-command-copy > small { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+
+/* 阶段A的Composer基线保留原外观，不随正式B默认值改变而覆盖既有三版评审。 */
+.pwa-ui-review[data-variant="baseline"] .pwa-composer-card,
+.pwa-ui-review [data-variant="baseline"] .pwa-composer-card { border-radius: var(--pwa-radius-lg); box-shadow: none; }
+[data-variant="candidate"] .pwa-composer-card { border-radius: 16px; box-shadow: 0 2px 12px var(--pwa-shadow-color); }
+[data-variant="candidate"][data-review-appearance="dark"] .pwa-composer-card { border-color: var(--pwa-control-line); box-shadow: none; }
+[data-variant="candidate"] .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
+/* 菜单经 Portal 挂在 .pwa-root 下，不在列容器里，因此密度规则按浮层自身的 data-variant 作用域。 */
+.pwa-review-menu[data-variant="candidate"] .pwa-command-menu-panel { gap: var(--pwa-space-2xs); }
+
+@media (pointer: fine) {
+  .pwa-review-menu[data-variant="candidate"] .pwa-command-row,
+  .pwa-review-menu[data-variant="candidate"] .pwa-command-back { min-height: 40px; padding: var(--pwa-space-2xs) var(--pwa-space-xs); }
+}
+
+@media (any-pointer: coarse) {
+  .pwa-review-menu[data-variant="candidate"] .pwa-command-row,
+  .pwa-review-menu[data-variant="candidate"] .pwa-command-back { min-height: 44px; }
+}
+
+/* DS 候选：层次不用常驻投影，改由落地边与 3px 聚焦光晕表达；工具栏分隔只在聚焦时浮出。 */
+[data-variant="deepseek"] .pwa-composer-card {
+  border-radius: 14px;
+  box-shadow: 0 1px 0 var(--pwa-line);
+  transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard), box-shadow var(--pwa-duration-fade) var(--pwa-ease-standard);
+}
+@media (hover: hover) {
+  [data-variant="deepseek"] .pwa-composer-card:hover:not(:focus-within) { border-color: var(--pwa-control-line); }
+}
+[data-variant="deepseek"] .pwa-composer-card:focus-within {
+  border-color: var(--pwa-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pwa-accent) 16%, transparent);
+}
+/* 分隔线常驻占位，只切换颜色，聚焦与否不改变输入区尺寸。 */
+[data-variant="deepseek"] .pwa-composer-footer {
+  margin-top: var(--pwa-space-2xs);
+  padding-top: var(--pwa-space-2xs);
+  border-top: 1px solid transparent;
+  transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard);
+}
+[data-variant="deepseek"] .pwa-composer-card:focus-within .pwa-composer-footer { border-top-color: var(--pwa-line); }
+[data-variant="deepseek"] .pwa-composer-model,
+[data-variant="deepseek"] .pwa-composer-model::before { border-radius: var(--pwa-radius-md); }
+:root[data-mantine-color-scheme="dark"] [data-variant="deepseek"] .pwa-composer-card { box-shadow: none; }
+:root[data-mantine-color-scheme="dark"] [data-variant="deepseek"] .pwa-composer-card:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pwa-accent) 24%, transparent);
+}
+
+/* 密度由输入方式决定：细指针密集扫描，粗指针守住 44 触控并锁住滚动链。 */
+.pwa-review-menu[data-variant="deepseek"] {
+  --pwa-review-menu-row: 36px;
+  --pwa-review-menu-max-height: min(420px, 60dvh);
+  padding: var(--pwa-space-2xs);
+  max-height: var(--pwa-review-menu-max-height);
+  scroll-padding-block: var(--pwa-space-xs);
+}
+.pwa-review-menu[data-variant="deepseek"] .pwa-command-row,
+.pwa-review-menu[data-variant="deepseek"] .pwa-command-back {
+  min-height: var(--pwa-review-menu-row);
+  padding-block: var(--pwa-space-2xs);
+  padding-inline: var(--pwa-space-xs);
+}
+.pwa-review-menu[data-variant="deepseek"] .pwa-command-menu-heading { padding-block: var(--pwa-space-2xs); }
+@media (any-pointer: coarse), (hover: none) {
+  .pwa-review-menu[data-variant="deepseek"] {
+    --pwa-review-menu-row: 44px;
+    --pwa-review-menu-max-height: min(380px, 58dvh);
+    padding: var(--pwa-space-xs);
+    overscroll-behavior: contain;
+  }
+  .pwa-review-menu[data-variant="deepseek"] .pwa-command-menu-panel { gap: var(--pwa-space-2xs); }
+}
+
+/* DS 复制反馈：图标在固定槽位交叠淡入，结果同时写进可见文字，读屏只播报一次。 */
+[data-variant="deepseek"] .pwa-copy-inline { display: inline-flex; align-items: center; gap: var(--pwa-space-xs); min-width: 0; }
+[data-variant="deepseek"] .pwa-copy-inline-icons { display: grid; place-items: center; width: 16px; height: 16px; }
+[data-variant="deepseek"] .pwa-copy-inline-icons > svg { grid-area: 1 / 1; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard), transform var(--pwa-duration-fade) var(--pwa-ease-standard); }
+[data-variant="deepseek"] .pwa-copy-inline-icon-check { opacity: 0; transform: scale(0.85); }
+[data-variant="deepseek"] .pwa-copy-inline-icons[data-copied] .pwa-copy-inline-icon-copy { opacity: 0; transform: scale(1.08); }
+[data-variant="deepseek"] .pwa-copy-inline-icons[data-copied] .pwa-copy-inline-icon-check { opacity: 1; transform: none; }
+[data-variant="deepseek"] .pwa-copy-inline-status { min-width: 4em; max-width: 16em; overflow-wrap: anywhere; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+[data-variant="deepseek"] .pwa-copy-inline-status[data-state="success"] { color: var(--pwa-complete); }
+[data-variant="deepseek"] .pwa-copy-inline-status[data-state="error"] { color: var(--pwa-error); }
+
+/* 横向对比：同一类试件占一行、三版各占一列，同行顶部对齐；窄屏在网格内横向滚动。 */
+.pwa-ui-review[data-layout="compare"] .pwa-review-layout { max-width: 1320px; }
+.pwa-ui-review .pwa-review-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(320px, 1fr));
+  gap: var(--pwa-space-md);
+  align-items: start;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.pwa-ui-review .pwa-review-compare-head { display: grid; gap: var(--pwa-space-xs); min-width: 0; padding-bottom: var(--pwa-space-sm); border-bottom: 1px solid var(--pwa-line); }
+.pwa-ui-review .pwa-review-compare-head h3 { margin: 0; font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); }
+.pwa-ui-review .pwa-review-compare-row { grid-column: 1 / -1; margin: 0; padding-top: var(--pwa-space-sm); border-top: 1px solid var(--pwa-line); color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); }
+.pwa-ui-review .pwa-review-compare-cell { min-width: 0; }
+
+/* 评审页之间的入口：沿用正文行高，点击区保持 44。 */
+.pwa-ui-review .pwa-review-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--pwa-accent); text-decoration: underline; text-underline-offset: 2px; }
