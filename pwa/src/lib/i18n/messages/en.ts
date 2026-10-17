@@ -27,6 +27,7 @@ export const en = {
     configChecking: "The model or thinking adjustment did not complete normally. Checking the current configuration…",
     configUnconfirmed: "Could not confirm the current model and thinking level. Reconnect to check.",
     configConfirmed: (model: string, level: string) => `Current model: ${model}; thinking level: ${level}.`,
+    modelUpdated: (model: string) => `Model switched to ${model}.`,
     thinkingUpdated: (level: string) => `Thinking level set to ${level}.`,
     thinkingAdjusted: (level: string) => `Thinking level adjusted to ${level}.`,
     modelPending: "Updating model and thinking…",

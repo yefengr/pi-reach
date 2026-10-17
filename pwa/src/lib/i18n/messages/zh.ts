@@ -29,6 +29,7 @@ export const zh: Messages = {
     configChecking: "模型/思考调整未能正常完成，正在确认当前配置…",
     configUnconfirmed: "未能确认当前模型与思考级别，请恢复连接后确认。",
     configConfirmed: (model, level) => `当前模型：${model}；思考级别：${level}。`,
+    modelUpdated: (model) => `模型已切换为 ${model}。`,
     thinkingUpdated: (level) => `思考级别已设置为 ${level}。`,
     thinkingAdjusted: (level) => `思考级别已调整为 ${level}。`,
     modelPending: "正在更新模型与思考级别…",

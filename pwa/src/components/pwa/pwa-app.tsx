@@ -537,7 +537,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       setReportedThinking(frame.thinking_level);
       if (frame.action === "model_set") {
         setCurrentModel(frame.model);
-        if (confirming) operationNotifications.notify(getMessages().operationFeedback.configConfirmed(frame.model.name, frame.thinking_level), { kind: "info", sessionScoped: true });
+        const feedback = getMessages().operationFeedback;
+        operationNotifications.notify(confirming ? feedback.configConfirmed(frame.model.name, frame.thinking_level) : feedback.modelUpdated(frame.model.name), { kind: confirming ? "info" : "success", sessionScoped: true });
       } else {
         const feedback = getMessages().operationFeedback;
         operationNotifications.notify(pending.requestedThinking && pending.requestedThinking !== frame.thinking_level

@@ -654,7 +654,8 @@ test("operation feedback correlated stop protocol_error restores the control and
   } finally { await screen.unmount(); }
 });
 
-test("operation feedback model keeps current value and fixed spinner until actual model and max thinking arrive", async () => {
+test.each([1280, 390])("operation feedback model keeps current value until actual result and shows success at %ipx", async width => {
+  await page.viewport(width, 844);
   const context = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const request = await issueOperation(context, "model_set");
@@ -665,12 +666,17 @@ test("operation feedback model keeps current value and fixed spinner until actua
     const spinner = chip.element().querySelector<SVGElement>(".pwa-spin")!;
     expect(Math.round(Number.parseFloat(getComputedStyle(spinner).width))).toBe(16);
     const actual = { id: "actual-model", provider: "test", name: "Actual model", reasoning: true, context_window: 200_000, vision: false };
+    context.channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: context.channel.channelId, in_reply_to: "stale-model-request", action: "model_set", model: actual, thinking_level: "max" });
+    await flushMicrotasks();
+    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+    expect(chip.element().textContent).toContain("Text model");
     context.channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: context.channel.channelId, in_reply_to: request.id, action: "model_set", model: actual, thinking_level: "max" });
     await expect.poll(() => chip.element().textContent).toContain("Actual model");
     await expect.element(chip).not.toHaveAttribute("aria-busy", "true");
     expect(chip.element().textContent).toContain("max");
     expect(chip.element().querySelector(".pwa-spin")).toBeNull();
-    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+    await expect.element(context.screen.getByText("Model switched to Actual model.", { exact: true })).toBeVisible();
+    expect(operationFeedback().querySelector(".lucide-circle-check")).not.toBeNull();
     await chip.click();
     await context.screen.getByRole("menuitem", { name: /Thinking level/ }).click();
     await expect.element(context.screen.getByRole("menuitem", { name: /^max\b/ })).toHaveAttribute("data-selected", "true");
@@ -873,7 +879,8 @@ test.each([false, true])("operation feedback new configuration send failure canc
     const next = await issueOperation(context, "model_set");
     replyOperation(channel, next, true);
     await expect.poll(() => screen.getByRole("button", { name: /^Model and thinking settings, current/ }).element().textContent).toContain("Vision model");
-    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+    await expect.element(screen.getByText("Model switched to Vision model.", { exact: true })).toBeVisible();
+    expect(operationFeedback().textContent).not.toContain("Current model:");
   } finally { await screen.unmount(); }
 });
 
@@ -1025,7 +1032,7 @@ test.each([
     if (!configuration) expect(operationFeedback()).toBe(card);
     replyOperation(channel, finalRetry, true);
     if (action === "thinking_set") await expect.element(screen.getByText("Thinking level set to high.", { exact: true })).toBeVisible();
-    else if (action === "model_set") await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
+    else if (action === "model_set") await expect.element(screen.getByText("Model switched to Vision model.", { exact: true })).toBeVisible();
     else await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
     expect(channelHarness.channels).toHaveLength(1);
   } finally { await screen.unmount(); }
