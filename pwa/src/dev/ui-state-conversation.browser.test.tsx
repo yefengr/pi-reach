@@ -193,23 +193,25 @@ test("flow preserves thinking, tool expansion, reader and draft through formal l
   await userEvent.click(toolGroup);
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!);
   await expect.poll(reader).not.toBeNull();
-  const selected = reader();
+  // 抽屉为模态：阅读器打开时页面控件在遮罩后不可操作，先关闭再推进。
+  expect(document.querySelector(".pwa-scrim")).not.toBeNull();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(reader).toBeNull();
   await next(3);
-  await expect.poll(() => reader()?.textContent).toContain("追加输出");
-  expect(reader()).toBe(selected);
   await next(4);
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!);
   await expect.poll(() => reader()?.textContent).toContain("正式结果：检查完成");
-  expect(reader()).toBe(selected);
   expect(group()).toBe(toolGroup);
   expect(toolGroup.getAttribute("aria-expanded")).toBe("true");
   expect(document.querySelector(".pwa-turn-meta")).not.toBeNull();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(reader).toBeNull();
   await next(5);
-  expect(reader()).toBe(selected);
   expect(document.querySelector('[data-publication-id="notes"]')).not.toBeNull();
   expect(input()).toBe(composer);
   expect(composer.value).toBe("连续推进不丢失");
   await next(6);
-  await expect.poll(reader).toBeNull();
+  expect(reader()).toBeNull();
   expect(document.querySelector(".pwa-tool-group")).toBeNull();
   await page.getByRole("button", { name: "重放流程", exact: true }).click();
   expect(document.querySelector("[data-flow-step]")?.getAttribute("data-flow-step")).toBe("0");
@@ -225,6 +227,9 @@ test("flow file selection survives ordinary controls and closes on the explicit 
   for (let step = 1; step <= 5; step++) await next(step);
   await userEvent.click(document.querySelector<HTMLButtonElement>('[data-publication-id="notes"] .pwa-published-actions button')!);
   await expect.poll(() => document.querySelector(".pwa-file-reader-scroll")).not.toBeNull();
+  // 模态抽屉需要先关闭才能推进到下一个步骤；源变化后阅读器不再挂载。
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => document.querySelector(".pwa-file-reader-scroll")).toBeNull();
   await next(6);
   await expect.poll(() => document.querySelector(".pwa-file-reader-scroll")).toBeNull();
   await screen.unmount();

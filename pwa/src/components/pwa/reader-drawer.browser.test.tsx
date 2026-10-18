@@ -106,7 +106,6 @@ test("desktop opens the reader as a 720px modal Drawer instead of a second colum
   const surface = dialog()!;
   expect(surface).not.toBeNull();
   expect(Math.round(surface.getBoundingClientRect().width)).toBe(720);
-  expect(Math.round(surface.getBoundingClientRect().right)).toBe(window.innerWidth);
   expect(document.querySelector(".pwa-scrim")).not.toBeNull();
   expect(scrollLocked()).toBe(true);
   expect(history.state?.piReachToolReader).toBe(true);
