@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
@@ -26,11 +28,33 @@ test.each([320, 390, 1440].flatMap(width => ["light", "dark"].map(theme => ({ wi
   expect(cards[0].querySelector(".pwa-attachment-name")!.getAttribute("title")).toBe(file.fileName);
   expect(document.querySelectorAll(".pwa-attachment-progress")).toHaveLength(1);
   expect(document.querySelector('[data-status="complete"] button')).toBeNull();
-  expect(document.querySelector('[data-status="complete"] .pwa-attachment-status')).toBeNull();
+  expect(document.querySelector('[data-status="complete"] .pwa-attachment-status')).toHaveTextContent("2 KiB");
   expect(document.querySelector('[data-status="failed"] .pwa-attachment-progress')).toBeNull();
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   await screen.getByRole("button", { name: "Retry failed.txt" }).click();
   expect(retry).toHaveBeenCalledWith("failed");
+  await screen.unmount();
+});
+
+test("upload completion preserves the filename and metadata slots", async () => {
+  let update!: (status: ComposerAttachmentItem["status"]) => void;
+  function Harness() {
+    const [status, setStatus] = useState<ComposerAttachmentItem["status"]>("draft");
+    update = next => flushSync(() => setStatus(next));
+    return <AttachmentCards items={[{ ...file, status, receivedBytes: 1024 }]} onRemove={() => {}} />;
+  }
+  const screen = await renderPwa(<Harness />);
+  const positions = new Set<string>();
+  for (const status of ["draft", "preparing", "uploading", "complete"] as const) {
+    update(status);
+    const card = document.querySelector(".pwa-attachment-card")!;
+    const name = card.querySelector(".pwa-attachment-name")!.getBoundingClientRect();
+    positions.add(`${Math.round(card.getBoundingClientRect().height)}:${Math.round(name.top)}:${Math.round(name.height)}`);
+  }
+  expect(positions.size).toBe(1);
+  expect(document.querySelector(".pwa-attachment-progress")).toBeNull();
+  expect(document.querySelector(".pwa-attachment-status")).toHaveTextContent("2 KiB");
+  expect(document.querySelector(".pwa-attachment-ready")).not.toBeNull();
   await screen.unmount();
 });
 

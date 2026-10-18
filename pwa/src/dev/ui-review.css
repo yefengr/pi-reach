@@ -7,7 +7,13 @@
   /* 历史对照密度固定，不继承阶段B按输入能力切换的正式默认。 */
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;
+  /* 原评审时序仅在DEV试件保留，正式文件查看不再等待。 */
+  --pwa-duration-fetch-settle: 600ms;
+  --pwa-duration-collapse-in: var(--pwa-duration-expand-in);
+  --pwa-duration-collapse-out: var(--pwa-duration-expand-out);
 }
+
+.pwa-ui-review .pwa-timeline-chevron { transition-duration: var(--pwa-duration-expand-in) !important; }
 
 /* 评审试件保留各自原有按压；避免正式内部缩放叠加到旧候选或基线。 */
 .pwa-ui-scope .pwa-root.pwa-ui-review .pwa-button .mantine-Button-inner,

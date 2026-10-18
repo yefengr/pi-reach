@@ -7,6 +7,8 @@ import { SummaryEntry, SummaryReader } from "./summary-reader";
 import { isSummaryEvent } from "./summary-presentation";
 import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
+import { useWorkPanel } from "./work-panel-layout";
+import { readerFocusable, useReaderIntent } from "./use-work-panel-reader";
 import type { PublishedFileRead } from "./published-file";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
@@ -137,6 +139,8 @@ export function ConversationTimeline({ items, live, completions, running = false
     });
   }, []);
   const [reader, setReader] = useState<string | null>(null);
+  const panel = useWorkPanel();
+  const { changeSelection, acceptsSelection } = useReaderIntent();
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
   const [summaryReader, setSummaryReader] = useState<{ key: string; sessionId: string; trigger: HTMLButtonElement } | null>(null);
@@ -194,34 +198,51 @@ export function ConversationTimeline({ items, live, completions, running = false
     setToolChoices(choices);
     notifyReading(choices, thinkingChoices);
   };
+  const replacePanel = panel?.canSplit === true && summaryReader === null
+    && (scopedFileReader === null || files?.getState(scopedFileReader.file.publication_id)?.preview?.kind === "text");
+  const clearOtherReaders = () => {
+    changeSelection();
+    setReader(null);
+    setReaderOpen(false);
+    setReaderOrigin(null);
+    setFileReader(null);
+    setFileOpenedFor(null);
+  };
+  const restoreReadingFocus = (trigger: HTMLButtonElement | null | undefined) => {
+    const active = document.activeElement;
+    if (readerFocusable(active) && !active.closest(".pwa-reader-portal, .pwa-file-reader")) return;
+    if (readerFocusable(trigger)) trigger.focus({ preventScroll: true });
+    else listRef.current?.focus({ preventScroll: true });
+  };
   const openReader = (key: string, trigger: HTMLButtonElement) => {
-    if (scopedFileReader !== null || summaryReader !== null) return;
+    if ((scopedFileReader !== null || summaryReader !== null) && !replacePanel) return;
+    clearOtherReaders();
     setReaderOrigin(trigger);
     onReadingChange?.(true);
     setReader(key);
     setReaderOpen(true);
   };
   const finishReader = () => {
+    if (reader === null) return;
+    changeSelection();
     setReaderOpen(false);
     setReader(null);
     setReaderOrigin(null);
-    // 背景位置由时间线锚点持续维护，退出时只回焦，避免旧 scrollTop 覆盖补偿；来源行已不在时回焦到列表。
-    if (readerValue !== null && readerOrigin?.isConnected && readerOrigin.getClientRects().length > 0) {
-      readerOrigin.focus({ preventScroll: true });
-    } else {
-      listRef.current?.focus({ preventScroll: true });
-    }
+    // 退出只回焦失效的阅读器焦点，不覆盖用户已在输入区等位置的焦点。
+    restoreReadingFocus(readerValue !== null ? readerOrigin : null);
     onReadingChange?.(readingInline(toolChoices, thinkingChoices));
   };
 
   const openSummaryReader = (key: string, sessionId: string, trigger: HTMLButtonElement) => {
-    if (reader !== null || scopedFileReader !== null || summaryReader !== null) return;
+    if ((reader !== null || scopedFileReader !== null || summaryReader !== null) && !replacePanel) return;
+    clearOtherReaders();
     onReadingChange?.(true);
     setSummaryReader({ key, sessionId, trigger });
     setSummaryOpen(true);
   };
   const finishSummaryReader = () => {
     const trigger = summaryReader?.trigger;
+    changeSelection();
     setSummaryOpen(false);
     setSummaryReader(null);
     // 不覆盖退出期间用户主动转移到其他有效控件的焦点。
@@ -234,7 +255,9 @@ export function ConversationTimeline({ items, live, completions, running = false
   };
 
   const openFileReader: PublishedFileRead = (file, trigger) => {
-    if (!files || reader !== null || summaryReader !== null || scopedFileReader !== null) return;
+    // acquire 的 await 捕获本次选择；旧文件迟到完成不能抢走后来主动选择的详情。
+    if (!files || !acceptsSelection() || ((reader !== null || summaryReader !== null || scopedFileReader !== null) && !replacePanel)) return;
+    clearOtherReaders();
     const next = { file, trigger, scopeToken: files.scopeToken };
     // 阅读器随 opened=true 一起挂载时 Mantine 的过渡初始即“已进入”，不播放进入动画；
     // 先以收起态挂载，下一帧再打开。期间被关闭或换目标则放弃。
@@ -249,10 +272,10 @@ export function ConversationTimeline({ items, live, completions, running = false
   const finishFileReader = () => {
     if (!ownsFileReader()) return;
     const trigger = scopedFileReader?.trigger;
+    changeSelection();
     setFileOpenedFor(null);
     setFileReader(null);
-    if (trigger?.isConnected && trigger.getClientRects().length > 0) trigger.focus({ preventScroll: true });
-    else listRef.current?.focus({ preventScroll: true });
+    restoreReadingFocus(trigger);
   };
   const renderEntry = (entry: PresentationEntry) => {
       if (entry.kind === "record") {
@@ -275,6 +298,7 @@ export function ConversationTimeline({ items, live, completions, running = false
       return <ToolCard
         key={entry.key}
         value={entry.value}
+        readerModal={panel?.canSplit !== true}
         status={"partial_id" in entry.value && !live ? "unknown" : undefined}
         onRead={trigger => openReader(entry.key, trigger)}
       />;
@@ -301,6 +325,6 @@ export function ConversationTimeline({ items, live, completions, running = false
     {activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     <SummaryReader event={summaryEvent} opened={summaryOpen && summaryEvent !== null} onClose={() => setSummaryOpen(false)} onExitTransitionEnd={finishSummaryReader} />
-    {scopedFileReader ? <PublishedFileReader file={scopedFileReader.file} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
+    {scopedFileReader ? <PublishedFileReader key={scopedFileReader.file.publication_id} file={scopedFileReader.file} source={scopedFileReader.trigger} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;
 }

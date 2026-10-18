@@ -40,14 +40,15 @@ function StatusIcon({ status }: { status: ReturnType<typeof toolStatus> }) {
 }
 
 /**
- * 工具详情阅读器：桌面为右侧 720px Drawer，移动端全屏。
- * 打开时压入一条不改变 URL 的历史记录，系统返回与浏览器后退关闭阅读器而不离开会话。
+ * 工具详情阅读器：宽屏与对话并排，窄屏为右侧 Drawer，移动端全屏。
+ * 覆盖模式压入一条历史记录，系统返回关闭阅读器而不离开会话。
  */
 export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
 
+  useLayoutEffect(() => { if (opened) followRef.current = true; }, [opened, value?.tool_call_id]);
   const outputKey = value ? JSON.stringify([value.tool_call_id, "blocks" in value ? value.blocks : null, "result" in value ? value.result : null]) : "";
   useLayoutEffect(() => {
     // 运行中的工具实时更新：停在底部时跟随，向上回看时不跟随。
@@ -65,7 +66,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
 
-  return <ReaderShell opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd}
+  return <ReaderShell workPanel opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd}
     title={title} closeLabel={t.tools.closeReader} historyKey="piReachToolReader" describedBy="pwa-tool-reader-description"
     actions={<>
       <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`} title={statusLabel}><StatusIcon status={status} /><span className="pwa-sr-only">{statusLabel}</span></span>

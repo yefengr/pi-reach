@@ -1,0 +1,15 @@
+/* 标记只由 Provider 的有限循环观察器维护，也覆盖循环画在伪元素上的情况。 */
+[data-pwa-animation="paused"],
+[data-pwa-animation="paused"]::before,
+[data-pwa-animation="paused"]::after {
+  animation-play-state: paused !important;
+}
+
+/* 媒体变化在 React／observer 回调之前立即生效；保留静态状态图形和文字。 */
+@media (prefers-reduced-motion: reduce) {
+  [data-pwa-animation],
+  [data-pwa-animation]::before,
+  [data-pwa-animation]::after {
+    animation-play-state: paused !important;
+  }
+}

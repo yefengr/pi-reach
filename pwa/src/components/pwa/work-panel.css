@@ -1,0 +1,27 @@
+/* 以主区真实宽度分栏；safe 在外层消费一次，聊天与详情均保留独立滚动。 */
+.pwa-root .pwa-work-panel-layout { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
+.pwa-root .pwa-work-panel-conversation { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.pwa-root .pwa-work-panel-layout[data-split] { grid-template-columns: minmax(480px, 1fr) 16px var(--pwa-work-panel-width); }
+/* 44px命中区在16px槽两侧各借14px专用空白，不覆盖正文链接、滚动条或操作按钮。 */
+.pwa-root .pwa-work-panel-layout[data-split] .pwa-work-panel-conversation { padding-right: 14px; }
+.pwa-root .pwa-work-panel-gutter { position: relative; min-width: 0; }
+.pwa-root .pwa-work-panel-resize { position: absolute; inset: 0 -14px; z-index: 2; cursor: col-resize; touch-action: none; }
+.pwa-root .pwa-work-panel-resize::before { content: ""; position: absolute; inset: 16px 21px; border-radius: var(--pwa-radius-xs); background: var(--pwa-line); transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-work-panel-resize:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
+.pwa-root .pwa-work-panel-resize:focus-visible::before, .pwa-root [data-resizing] .pwa-work-panel-resize::before { background: var(--pwa-accent); }
+.pwa-root .pwa-work-panel-layout[data-resizing] { cursor: col-resize; user-select: none; }
+.pwa-root .pwa-work-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; color: var(--pwa-ink); background: var(--pwa-bg); }
+.pwa-root .pwa-work-panel-host { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; padding-left: 14px; }
+.pwa-root .pwa-work-panel-host .pwa-tool-reader-header { min-height: var(--pwa-topbar-height); padding-top: 0; padding-left: 16px; padding-right: 8px; }
+.pwa-root .pwa-work-panel-host :is(.pwa-tool-reader-scroll, .pwa-file-reader-scroll) { padding-inline: 16px; padding-bottom: 16px; }
+.pwa-root .pwa-work-panel-toolbar { display: flex; justify-content: flex-end; flex: none; min-height: 44px; padding: 0 8px max(8px, var(--pwa-main-safe-bottom)) 16px; }
+.pwa-root .pwa-work-panel-reset { min-width: 44px; min-height: 44px; padding: 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); background: transparent; font: inherit; font-size: var(--pwa-text-meta); cursor: pointer; }
+.pwa-root .pwa-work-panel-reset:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
+@media (hover: hover) {
+  .pwa-root .pwa-work-panel-reset:hover { background: var(--pwa-hover); }
+  .pwa-root .pwa-work-panel-resize:hover::before { background: var(--pwa-accent); }
+}
+.pwa-root .pwa-work-panel-gutter[hidden] { display: none; }
+/* 迁移等待 Drawer 宿主期间保留旧正文几何，display:none 会清零滚动位置。 */
+.pwa-root .pwa-work-panel-layout:not([data-split]) .pwa-work-panel { position: absolute; inset: 0 0 0 auto; width: var(--pwa-work-panel-width); visibility: hidden; pointer-events: none; }
+.pwa-root .pwa-reader-portal, .pwa-root .pwa-reader-modal-host { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }

@@ -106,6 +106,8 @@ const EXCEPTIONS: Exception[] = [
   { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-code-copy", property: "margin-block", values: [-4], reason: ALIGN },
   { file: "components/pwa/timeline-row.css", selector: ".pwa-timeline-row", property: "margin", values: [6], reason: "工具状态行间距 6（阅读密度）" },
   { file: "components/pwa/timeline-row.css", selector: ".pwa-timeline-toggle", property: "padding", values: [6], reason: "工具状态行折叠头的阅读密度" },
+  { file: "components/pwa/work-panel.css", selector: ".pwa-root .pwa-work-panel-layout[data-split] .pwa-work-panel-conversation", property: "padding-right", values: [14], reason: "44px分隔条命中区超出16px槽的单侧14px，聊天为此预留专用空白" },
+  { file: "components/pwa/work-panel.css", selector: ".pwa-root .pwa-work-panel-host", property: "padding-left", values: [14], reason: "44px分隔条命中区超出16px槽的单侧14px，详情为此预留专用空白" },
   { file: "components/pwa/tool-reader.css", selector: ".pwa-ui-scope .pwa-button.pwa-tool-details-button", property: "margin-left", values: [-8], reason: ALIGN },
   { file: "components/pwa/tool-reader.css", selector: ".pwa-root .pwa-reader-error", property: "padding", values: [10], reason: NOTICE },
   { file: "components/pwa/tool-reader.css", selector: ".pwa-root .pwa-reader-error > svg", property: "margin-top", values: [2], reason: OPTICAL },

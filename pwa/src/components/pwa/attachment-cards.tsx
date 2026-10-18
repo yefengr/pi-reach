@@ -44,7 +44,7 @@ function AttachmentCard({ item, onRemove, onRetry, disabled }: { item: ComposerA
     : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(item.byteLength / 1024)} KiB`;
   const active = item.status === "preparing" || item.status === "uploading" || item.status === "paused";
   const removeLabel = active ? t.attachments.cancel(item.fileName) : t.attachments.remove(item.fileName);
-  const status = item.status === "draft" ? size : item.status === "preparing" ? t.attachments.preparing
+  const status = item.status === "draft" || item.status === "complete" ? size : item.status === "preparing" ? t.attachments.preparing
     : item.status === "paused" ? t.attachments.paused : item.status === "failed" ? item.errorText || t.attachments.writeFailed : null;
   return <div className="pwa-attachment-card" data-status={item.status} role="group" aria-label={item.status === "complete" ? t.attachments.ready(item.fileName) : item.fileName}>
     <AttachmentThumbnail preview={item.preview} fileName={item.fileName} />

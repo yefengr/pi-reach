@@ -97,6 +97,8 @@ async function fileHarness({ text = longText, markdown = false, image = false, s
   await trigger.click();
   await expect.poll(() => window.history.state?.piReachFileReader).toBeTruthy();
   await expect.poll(() => Math.round(element(".pwa-file-reader").getBoundingClientRect().right)).toBe(window.innerWidth);
+  // 覆盖层到位和正文解析分属两次提交；手势必须等实际内容挂载。
+  await expect.poll(() => document.querySelector(image ? ".pwa-file-image-stage img" : markdown ? ".pwa-file-markdown" : ".pwa-file-plain")).not.toBeNull();
   const surface = element(".pwa-file-reader");
   if (synthetic) syntheticCapture(surface);
   return { screen, surface, trigger, pin, unpin, reading, cancel, modal, updateText };

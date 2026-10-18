@@ -199,6 +199,10 @@
   --pwa-duration-modal-out: 140ms;
   --pwa-duration-expand-in: 160ms;
   --pwa-duration-expand-out: 120ms;
+  --pwa-duration-collapse-in: 180ms;
+  --pwa-duration-collapse-out: 140ms;
+  --pwa-duration-image-in: 260ms;
+  --pwa-duration-image-out: 220ms;
   --pwa-duration-toast: 180ms;
   --pwa-duration-fade: 120ms;
   --pwa-duration-press-in: 90ms;
@@ -212,8 +216,6 @@
   --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容的淡入；标准曲线前段很快，需要比通用淡化长才看得出渐入过程。 */
   --pwa-duration-content: 240ms;
-  /* 手动查看获取完成后，满格进度的停留时长；属于状态确认，减少动态效果时不缩短。 */
-  --pwa-duration-fetch-settle: 600ms;
   /* 位移类动效乘以该系数；减少动态效果时为 0，只保留透明度淡化。 */
   --pwa-motion-shift: 1;
 
@@ -238,7 +240,7 @@
 
 /*
  * 减少动态效果只跟随系统设置：取消位移、缩放与尺寸过渡，颜色与透明度改为短淡化；
- * 加载、运行中等表达状态的动画照常运行。
+ * 加载与运行状态保留静态图标和文字，持续循环由活动可见性规则暂停。
  */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -250,6 +252,10 @@
     --pwa-duration-modal-out: var(--pwa-duration-fade);
     --pwa-duration-expand-in: var(--pwa-duration-fade);
     --pwa-duration-expand-out: var(--pwa-duration-fade);
+    --pwa-duration-collapse-in: var(--pwa-duration-fade);
+    --pwa-duration-collapse-out: var(--pwa-duration-fade);
+    --pwa-duration-image-in: var(--pwa-duration-fade);
+    --pwa-duration-image-out: var(--pwa-duration-fade);
     --pwa-duration-toast: var(--pwa-duration-fade);
     --pwa-duration-menu-in: var(--pwa-duration-fade);
     --pwa-duration-menu-out: var(--pwa-duration-fade);

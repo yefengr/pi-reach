@@ -174,12 +174,13 @@ test("slow motion scales only duration tokens and restores them", async () => {
   expect(read("--pwa-duration-menu-in")).toBe("640ms");
   expect(read("--pwa-duration-press-in")).toBe("360ms");
   expect(read("--pwa-duration-feedback")).toBe("480ms");
-  // 完成态刻意停留不受慢放影响。
-  expect(read("--pwa-duration-fetch-settle")).toBe("600ms");
+  // 旧完成态时钟只在历史DEV作用域保留，不由正式主题继承，也不受慢放影响。
+  expect(getComputedStyle(root()).getPropertyValue("--pwa-duration-fetch-settle").trim()).toBe("600ms");
+  expect(read("--pwa-duration-fetch-settle")).toBe("");
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await expect.poll(() => read("--pwa-duration-fade")).toBe("120ms");
   expect(read("--pwa-duration-menu-in")).toBe("120ms");
-  expect(read("--pwa-duration-fetch-settle")).toBe("600ms");
+  expect(getComputedStyle(root()).getPropertyValue("--pwa-duration-fetch-settle").trim()).toBe("600ms");
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await expect.poll(() => read("--pwa-duration-menu-in")).toBe("640ms");
   await screen.getByRole("button", { name: "1×", exact: true }).click();
