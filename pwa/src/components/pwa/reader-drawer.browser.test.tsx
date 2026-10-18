@@ -218,6 +218,24 @@ test("a top Modal owns Escape, then the next Escape closes the reader", async ()
   await expect.poll(() => document.activeElement).toBe(origin);
 });
 
+test("system Back with a top Modal keeps the reader record so the next Back closes it", async () => {
+  const { screen, controls } = await mount();
+  await openTool();
+  await expect.poll(() => history.state?.piReachToolReader).toBe(true);
+  flushSync(() => controls.current!.top());
+  await expect.element(screen.getByRole("dialog", { name: "Top confirmation" })).toBeVisible();
+  await settle();
+  history.back();
+  // 上层叠层拥有本次返回：阅读器保留，记录也要补回，否则关闭上层后的 Back 会直接离开页面。
+  await expect.poll(() => history.state?.piReachToolReader).toBe(true);
+  expect(dialog()).not.toBeNull();
+  await screen.getByRole("button", { name: "Dismiss" }).click();
+  await expect.element(screen.getByRole("dialog", { name: "Top confirmation" })).not.toBeInTheDocument();
+  history.back();
+  await expect.poll(dialog).toBeNull();
+  await expect.poll(() => history.state?.piReachToolReader).toBeUndefined();
+});
+
 test("system Back closes only the reader and keeps the transfer unpinned", async () => {
   const { screen } = await mount();
   await screen.getByRole("button", { name: "View", exact: true }).click();
