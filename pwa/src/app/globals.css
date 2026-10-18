@@ -367,7 +367,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-layout-reset-note { margin: 6px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
 .pwa-rename-dialog,
-.pwa-confirm-dialog { width: min(400px, 100%); min-width: 0; padding: 24px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
+.pwa-confirm-dialog { width: min(400px, 100%); min-width: 0; padding: 24px; border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
 .pwa-rename-head,
 .pwa-confirm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .pwa-rename-head h2,
@@ -395,7 +395,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 遮罩始终只有一层：Modal 叠在带遮罩的 Drawer 上时，下层遮罩隐去，不叠加加深。 */
 .pwa-root:has(.mantine-Modal-overlay) .mantine-Drawer-overlay { opacity: 0 !important; }
 /* 配对弹窗（表单类，480）：与重命名弹窗同一表面；扫码取景、配对码输入与其他方式的文字按钮自上而下排列。 */
-.pwa-pairing-dialog { width: min(480px, 100%); min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
+.pwa-pairing-dialog { width: min(480px, 100%); min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
 .pwa-pairing-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px -10px 0 0; padding: 0; background: transparent; }
 .pwa-pairing-title { font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-pairing-body { min-width: 0; padding: 0; }

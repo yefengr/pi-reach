@@ -227,5 +227,5 @@
 
 - 危险确认（`destructive` 红色主按钮）在展厅没有入口，V1-a 只核对了非破坏确认框；结论对该变体不自动成立。
 - 粗指针、混合输入、iOS／Android 真机与 200% 缩放未纳入本轮；V1-c2 的取舍只由桌面浅色与深色静止画面及 hover 支撑。
-- 核对中发现规范与实现不一致：DESIGN 写「浮层用 `--pwa-shadow-float` 加 1px `line` 边框，模态用 `--pwa-shadow-modal` 加 `scrim`」，而 `.pwa-confirm-dialog`、`.pwa-pairing-dialog`、`.pwa-startup-card` 为 scrim + `shadow-modal` + 1px `line` 三者叠加。该差异无视觉收益争议，属文档与实现对齐问题，本轮未改，需另行确认归属。
+- 核对中发现实现与规范不一致：DESIGN 与品牌刷新方案都把 1px `line` 边框只归给浮层，模态用 `shadow-modal` 加 `scrim`，而 `.pwa-confirm-dialog`、`.pwa-rename-dialog`、`.pwa-pairing-dialog`、`.pwa-keyboard-dialog` 四个居中 Modal 额外带 1px `line` 边框，三个 Drawer 则不带。该边框从初始提交即存在，深色对比 1.46:1、浅色 1.32:1，在遮罩上无可解释的视觉作用，判定为实现偏差。已按规范删除这四处边框，并在 DESIGN 显式写明 Modal 不再额外描边。`.pwa-startup-card` 不在不一致范围内：它是页面内卡片，DESIGN 组件规则已明确其 1px `line`。
 - V1-c2 已同步到 [DESIGN](../../DESIGN.md#设置页)；其余候选未改变现行设计真源。
