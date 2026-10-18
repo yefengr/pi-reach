@@ -42,7 +42,7 @@ export const pwaMenuTransition = {
   out: {
     opacity: 0,
     // 整层缩放会同时缩小44px命中区；菜单只沿真实锚点方向轻移与淡化。
-    transform: "translate(calc(var(--pwa-menu-shift-x, 0px) * var(--pwa-motion-shift, 1)), calc(var(--pwa-menu-shift-y, -4px) * var(--pwa-motion-shift, 1)))",
+    transform: "translate(calc(var(--pwa-menu-shift-x, 0px) * var(--pwa-motion-shift, 1)), calc(var(--pwa-menu-shift-y, calc(-1 * var(--pwa-menu-offset))) * var(--pwa-motion-shift, 1)))",
     pointerEvents: "none",
     transitionTimingFunction: "var(--pwa-ease-exit)",
   },

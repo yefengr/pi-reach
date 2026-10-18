@@ -74,17 +74,28 @@ export function useWorkPanelReader({ enabled, opened, onClose, onExitTransitionE
   useLayoutEffect(() => {
     const target = docked && opened ? panel?.host : modalHost;
     let focusFrame = 0;
+    let restoreAutofocus = () => {};
     if (target && container.parentElement !== target) {
       const focused = rememberedFocus.current;
       moveContent(container, target);
-      // Mantine 在下一个任务自动聚焦标题；迁移后恢复有效的原控件，不覆盖其他主动焦点。
+      if (!docked && focused && readerFocusable(focused) && container.contains(focused)) {
+        // FocusTrap 的零延时任务可能晚于迁移帧；让它直接选择原控件，避免再次把焦点移到标题。
+        const defaults = [...container.querySelectorAll<HTMLElement>("[data-autofocus]")].map(element => ({ element, value: element.getAttribute("data-autofocus")! }));
+        defaults.forEach(({ element }) => element.removeAttribute("data-autofocus"));
+        focused.setAttribute("data-autofocus", "true");
+        restoreAutofocus = () => {
+          focused.removeAttribute("data-autofocus");
+          defaults.forEach(({ element, value }) => element.setAttribute("data-autofocus", value));
+        };
+      }
+      // 迁移帧恢复有效的原控件，不覆盖其他主动焦点。
       if (focused) focusFrame = requestAnimationFrame(() => {
         const active = document.activeElement;
         if (readerFocusable(focused) && container.contains(focused)
           && (!readerFocusable(active) || active === focused || active.matches("[data-autofocus]"))) focused.focus({ preventScroll: true });
       });
     } else if (!target && !opened) container.remove();
-    return () => cancelAnimationFrame(focusFrame);
+    return () => { cancelAnimationFrame(focusFrame); restoreAutofocus(); };
   }, [container, docked, opened, panel?.host, modalHost]);
   const previouslyOpen = useRef(false);
   const previouslyDocked = useRef(docked);

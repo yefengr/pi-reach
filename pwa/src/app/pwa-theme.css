@@ -210,6 +210,10 @@
   --pwa-duration-menu-in: 160ms;
   --pwa-duration-menu-out: 120ms;
   --pwa-duration-feedback: 120ms;
+  /* 只作用于内部绘制层；外层44px命中区与焦点轮廓不缩放。 */
+  --pwa-press-icon-scale: 0.97;
+  --pwa-press-button-scale: 0.98;
+  --pwa-menu-offset: 4px;
   /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;

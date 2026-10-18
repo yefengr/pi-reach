@@ -24,6 +24,10 @@ if (reviewPath === "/app/ui-review") {
   void import("./dev/ui-review-stage-a").then(({ UiReviewStageAPage }) => {
     appRoot.render(<StrictMode><UiReviewStageAPage /></StrictMode>);
   });
+} else if (reviewPath === "/app/ui-states") {
+  void import("./dev/ui-states").then(({ UiStateGalleryPage }) => {
+    appRoot.render(<StrictMode><UiStateGalleryPage /></StrictMode>);
+  });
 } else {
   appRoot.render(
     <StrictMode>

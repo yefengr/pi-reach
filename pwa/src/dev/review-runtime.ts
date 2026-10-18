@@ -15,7 +15,7 @@ export function createReviewColorSchemeManager(): MantineColorSchemeManager {
 
 /**
  * 慢放只缩放动画时长 token，不改曲线、位移距离与业务时序。
- * --pwa-duration-fetch-settle 是刻意停留的完成态，不是动画，故不参与缩放。
+ * 历史对照的完成态停留与复制确认等业务时钟不参与缩放。
  */
 const DURATION_TOKENS = [
   "--pwa-duration-sidebar",
@@ -25,6 +25,10 @@ const DURATION_TOKENS = [
   "--pwa-duration-modal-out",
   "--pwa-duration-expand-in",
   "--pwa-duration-expand-out",
+  "--pwa-duration-collapse-in",
+  "--pwa-duration-collapse-out",
+  "--pwa-duration-image-in",
+  "--pwa-duration-image-out",
   "--pwa-duration-toast",
   "--pwa-duration-fade",
   "--pwa-duration-press-in",

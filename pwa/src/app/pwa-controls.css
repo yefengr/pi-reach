@@ -10,11 +10,11 @@
 }
 .pwa-ui-scope .pwa-root .pwa-icon-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled])::before,
 .pwa-ui-scope .pwa-icon-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) .mantine-ActionIcon-icon {
-  transform: scale(0.97);
+  transform: scale(var(--pwa-press-icon-scale));
   transition-duration: var(--pwa-duration-press-in);
 }
 .pwa-ui-scope .pwa-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) .mantine-Button-inner {
-  transform: scale(0.98);
+  transform: scale(var(--pwa-press-button-scale));
   transition-duration: var(--pwa-duration-press-in);
 }
 .pwa-ui-scope .pwa-root .pwa-icon-button:is(:disabled, [data-disabled])::before,
@@ -37,11 +37,11 @@
 /* 从 Mantine 实际定位结果而不是调用时的预设方向推导锚点，翻转后仍从来源进入。 */
 .pwa-menu-motion {
   --pwa-menu-shift-x: 0px;
-  --pwa-menu-shift-y: -4px;
+  --pwa-menu-shift-y: calc(-1 * var(--pwa-menu-offset));
 }
-.pwa-menu-motion[data-position^="top"] { --pwa-menu-shift-y: 4px; }
-.pwa-menu-motion[data-position^="left"] { --pwa-menu-shift-x: 4px; --pwa-menu-shift-y: 0px; }
-.pwa-menu-motion[data-position^="right"] { --pwa-menu-shift-x: -4px; --pwa-menu-shift-y: 0px; }
+.pwa-menu-motion[data-position^="top"] { --pwa-menu-shift-y: var(--pwa-menu-offset); }
+.pwa-menu-motion[data-position^="left"] { --pwa-menu-shift-x: var(--pwa-menu-offset); --pwa-menu-shift-y: 0px; }
+.pwa-menu-motion[data-position^="right"] { --pwa-menu-shift-x: calc(-1 * var(--pwa-menu-offset)); --pwa-menu-shift-y: 0px; }
 
 /* 视觉底与完整命中区分离：细指针单行可画成40高，目标仍至少44且不相互覆盖。
    双行或完整长名称按内容撑高，不能为了紧凑裁掉文字。 */

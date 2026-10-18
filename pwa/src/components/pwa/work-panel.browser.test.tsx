@@ -361,6 +361,46 @@ test("real saved history keeps its visible paragraph anchored when a panel opens
   await expect.element(screen.getByRole("textbox")).toBeDisabled();
 });
 
+test.each(["tool", "file"] as const)("delayed modal autofocus preserves the original %s control after the Portal has moved", async kind => {
+  const { screen } = await mount();
+  if (kind === "tool") await openTool();
+  else {
+    await screen.getByRole("button", { name: "View", exact: true }).click();
+    await expect.poll(() => panel().querySelector("h1")).not.toBeNull();
+  }
+  const focused = kind === "tool"
+    ? screen.getByRole("button", { name: "Copy all output" }).element()
+    : panel().querySelector<HTMLAnchorElement>("a[download]")!;
+  focused.focus();
+  const timers: Pick<Window, "setTimeout"> = window;
+  const nativeTimeout = timers.setTimeout.bind(window);
+  const deferred: { timer: number; run: () => void }[] = [];
+  // 让无延时的初始化晚于迁移帧执行，覆盖浏览器允许的另一种任务顺序。
+  const timeout = vi.spyOn(timers, "setTimeout").mockImplementation((handler, delay, ...args) => {
+    if (delay === undefined && typeof handler === "function") {
+      const timer = nativeTimeout(() => {}, 60_000);
+      deferred.push({ timer, run: () => handler(...args) });
+      return timer;
+    }
+    return nativeTimeout(handler, delay, ...args);
+  });
+  try {
+    await page.viewport(390, 844);
+    await expect.element(screen.getByRole("dialog", { name: kind === "tool" ? "read" : file.file_name, exact: true })).toBeVisible();
+    await settle();
+    expect(deferred.length).toBeGreaterThan(0);
+    for (const task of deferred.splice(0)) { clearTimeout(task.timer); task.run(); }
+    await settle();
+    expect(document.activeElement).toBe(focused);
+  } finally {
+    timeout.mockRestore();
+    for (const task of deferred) clearTimeout(task.timer);
+    await screen.getByRole("button", { name: kind === "tool" ? "Close tool details" : "Close file reader", exact: true }).click();
+    await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+    await expect.poll(() => Boolean(history.state?.piReachFileReader || history.state?.piReachToolReader)).toBe(false);
+  }
+});
+
 test("a valid focused reader control remains focused through phone and wide migration", async () => {
   const { screen } = await mount();
   await openTool();
