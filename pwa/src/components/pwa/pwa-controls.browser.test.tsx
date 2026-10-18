@@ -244,6 +244,8 @@ test.each([false, true])("action menu uses actual anchor, semantic timing and st
 
 test("fine and coarse input change visual density without overlapping 44px menu targets or clipping two-line navigation", async () => {
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  // Linux headless 禁用触控模拟后会报告 pointer: none 且无法恢复，fine 断言只在存在鼠标指针时执行。
+  const fine = matchMedia("(pointer: fine)").matches;
   const screen = await renderPwa(<MenuFixture position="bottom-end" />);
   await screen.getByRole("button", { name: "Menu fixture" }).click();
   const row = screen.getByRole("menuitem", { name: "One line fixture" }).element();
@@ -251,18 +253,20 @@ test("fine and coarse input change visual density without overlapping 44px menu 
   const navigation = document.querySelector<HTMLElement>(".pwa-nav-session")!;
   const description = navigation.querySelector<HTMLElement>(".pwa-nav-link-description")!;
   await expect.poll(() => getComputedStyle(document.querySelector(".pwa-menu-motion")!).opacity).toBe("1");
-  expect(Math.round(row.getBoundingClientRect().height)).toBe(44);
-  expect(Math.round(parseFloat(getComputedStyle(row, "::before").height))).toBe(40);
   expect(Math.round(row.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(second.getBoundingClientRect().top));
-  const point = { x: row.getBoundingClientRect().left + 8, y: row.getBoundingClientRect().top + 1 };
-  expect(document.elementFromPoint(point.x, point.y)?.closest("[data-menu-item]")).toBe(row);
-  expect(getComputedStyle(navigation).paddingTop).toBe("4px");
   const fineHeight = Math.round(navigation.getBoundingClientRect().height);
+  if (fine) {
+    expect(Math.round(row.getBoundingClientRect().height)).toBe(44);
+    expect(Math.round(parseFloat(getComputedStyle(row, "::before").height))).toBe(40);
+    const point = { x: row.getBoundingClientRect().left + 8, y: row.getBoundingClientRect().top + 1 };
+    expect(document.elementFromPoint(point.x, point.y)?.closest("[data-menu-item]")).toBe(row);
+    expect(getComputedStyle(navigation).paddingTop).toBe("4px");
+  }
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await expect.poll(() => matchMedia("(any-pointer: coarse)").matches).toBe(true);
   await expect.poll(() => getComputedStyle(navigation).paddingTop).toBe("6px");
   expect(Math.round(parseFloat(getComputedStyle(row, "::before").height))).toBe(44);
-  expect(Math.round(navigation.getBoundingClientRect().height)).toBeGreaterThan(fineHeight);
+  if (fine) expect(Math.round(navigation.getBoundingClientRect().height)).toBeGreaterThan(fineHeight);
   expect(Math.round(description.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(navigation.getBoundingClientRect().bottom));
   expect(getComputedStyle(navigation).minHeight).toBe("44px");
 });

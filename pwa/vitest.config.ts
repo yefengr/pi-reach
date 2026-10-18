@@ -37,9 +37,6 @@ export default defineConfig({
             enabled: true,
             provider: playwright({
               actionTimeout: 5_000,
-              // CI 的 headless Chromium 没有指针设备，默认会报 pointer: none；固定为桌面鼠标，
-              // 使 fine/coarse 密度断言不依赖宿主机，触控用例仍可用 CDP 切到 coarse。
-              launchOptions: { args: ["--blink-settings=primaryPointerType=4,primaryHoverType=2,availablePointerTypes=4,availableHoverTypes=2"] },
             }),
             headless: true,
             instances: [

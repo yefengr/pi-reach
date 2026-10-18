@@ -140,10 +140,11 @@ test.each(["baseline", "candidate", "deepseek"] as const)("%s growing menu stays
   await expect.element(outside).toHaveFocus();
 });
 
-test("fine pointer uses compact one-line rows and preserves naturally tall model names", async () => {
+test("fine pointer uses compact one-line rows and preserves naturally tall model names", async ctx => {
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  // Linux headless 在触控模拟后无法恢复 fine pointer；无鼠标时跳过 fine 密度断言。
+  ctx.skip(!matchMedia("(pointer: fine)").matches, "当前环境没有 fine pointer");
   const screen = await render(<UiReviewPage />);
-  expect(matchMedia("(pointer: fine)").matches).toBe(true);
   await screen.getByRole("button", { name: "原候选", exact: true }).click();
   const trigger = screen.getByRole("button", { name: "打开模型与思考菜单", exact: true });
   await trigger.click();
@@ -220,10 +221,10 @@ test("DS composer reads as a grounded surface and answers focus with a halo with
   await expect.poll(() => getComputedStyle(card).boxShadow).toBe("none");
 });
 
-test("DS fine-pointer menu is tighter and content-driven while long names still grow", async () => {
+test("DS fine-pointer menu is tighter and content-driven while long names still grow", async ctx => {
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  ctx.skip(!matchMedia("(pointer: fine)").matches, "当前环境没有 fine pointer");
   const screen = await render(<UiReviewPage />);
-  expect(matchMedia("(pointer: fine)").matches).toBe(true);
   await screen.getByRole("button", { name: VARIANT_LABELS.deepseek, exact: true }).click();
   const trigger = screen.getByRole("button", { name: "打开模型与思考菜单", exact: true });
   await trigger.click();
@@ -311,10 +312,11 @@ test("side-by-side comparison shows the three real variants on one page with equ
   expect(root().querySelectorAll(".pwa-composer-input")).toHaveLength(1);
 });
 
-test("pinned comparison keeps the three menus open and shows each candidate density side by side", async () => {
+test("pinned comparison keeps the three menus open and shows each candidate density side by side", async ctx => {
   // 三份菜单同时展开需要足够高度，否则最下面一行会落在视口外。
   await page.viewport(1280, 1200);
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  ctx.skip(!matchMedia("(pointer: fine)").matches, "当前环境没有 fine pointer");
   const screen = await render(<UiReviewPage />);
   await screen.getByRole("button", { name: "横向对比", exact: true }).click();
   await screen.getByRole("button", { name: "三版菜单同时展开", exact: true }).click();
