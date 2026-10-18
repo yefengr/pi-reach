@@ -9,22 +9,12 @@ export async function waitForReaderHistoryClear(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => Boolean(history.state?.piReachFileReader || history.state?.piReachToolReader))).toBe(false);
 }
 
-export async function expectTextReader(page: Page, split: boolean): Promise<Locator> {
-  const layout = page.locator(".pwa-work-panel-layout");
-  if (split) {
-    await expect(layout).toHaveAttribute("data-split", "true");
-    const panel = page.getByRole("complementary", { name: "Detail panel", exact: true });
-    await expect(panel).toBeVisible();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(panel.locator(".pwa-reader-portal")).toHaveCount(1);
-    await expect(panel.getByRole("link", { name: "Save file", exact: true })).toBeVisible();
-    await waitForReaderHistoryClear(page);
-    return panel;
-  }
-  await expect(layout).not.toHaveAttribute("data-split");
+/** 工具与文本共用一个右侧 Drawer：桌面 720px、移动全屏，均有遮罩与 history。 */
+export async function expectTextReader(page: Page): Promise<Locator> {
   const reader = page.getByRole("dialog", { name: FILE_NAME, exact: true });
   await expect(reader).toBeVisible();
   await expect(reader.getByRole("link", { name: "Save file", exact: true })).toBeVisible();
+  await expect(page.locator(".pwa-work-panel, .pwa-work-panel-layout")).toHaveCount(0);
   return reader;
 }
 
@@ -49,59 +39,16 @@ async function openStreamTool(page: Page, saved = false): Promise<Locator> {
   await expect(tool).toBeVisible();
   await tool.focus();
   await tool.click();
-  const panel = page.getByRole("complementary", { name: "Detail panel", exact: true });
-  await expect(page.locator(".pwa-work-panel-layout")).toHaveAttribute("data-split", "true");
+  const panel = page.getByRole("dialog", { name: "bash", exact: true });
+  await expect(panel).toBeVisible();
   await expect(panel.locator(".pwa-tool-reader-scroll")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Close tool details", exact: true })).toBeVisible();
-  await expect(panel.locator(".pwa-reader-portal")).toHaveCount(1);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("body")).toHaveAttribute("data-scroll-locked");
   return panel;
 }
 
 async function expectSameBody(body: ElementHandle<HTMLElement | SVGElement>): Promise<void> {
   expect(await body.evaluate(node => node.isConnected && document.querySelector(".pwa-tool-reader-scroll, .pwa-file-reader-scroll") === node)).toBe(true);
-}
-
-async function migrateReader(page: Page, kind: "tool" | "file"): Promise<void> {
-  const selector = kind === "tool" ? ".pwa-tool-reader-scroll" : ".pwa-file-reader-scroll";
-  const body = await page.locator(selector).elementHandle();
-  if (!body) throw new Error("Reader body is unavailable before migration.");
-  // 工具详情除标题与关闭外没有常驻控件，迁移后只验证焦点仍在阅读器内；文件用保存链接验证具体控件。
-  const control = kind === "file"
-    ? page.getByRole("complementary", { name: "Detail panel", exact: true }).getByRole("link", { name: "Save file", exact: true })
-    : null;
-  if (control) await control.focus();
-  const focused = control ? await control.elementHandle() : null;
-  if (control && !focused) throw new Error("Reader control is unavailable before migration.");
-  const expectFocusKept = async () => {
-    if (focused) {
-      await expect.poll(() => focused.evaluate(node => node.isConnected && document.activeElement === node)).toBe(true);
-      return;
-    }
-    await expect.poll(() => page.evaluate(() => {
-      const active = document.activeElement;
-      return active instanceof HTMLElement && active !== document.body
-        && active.closest(".pwa-reader-portal, .pwa-work-panel-host") !== null;
-    })).toBe(true);
-  };
-  const title = kind === "tool" ? "bash" : FILE_NAME;
-  await page.setViewportSize(PHONE);
-  const dialog = page.getByRole("dialog", { name: title, exact: true });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.locator(selector)).toBeVisible();
-  await expect(page.locator(".pwa-work-panel-layout")).not.toHaveAttribute("data-split");
-  await expect.poll(() => dialog.evaluate(node => Math.round(node.getBoundingClientRect().width))).toBe(PHONE.width);
-  await expect.poll(() => page.evaluate(key => Boolean(history.state?.[key]), kind === "tool" ? "piReachToolReader" : "piReachFileReader")).toBe(true);
-  await expectSameBody(body);
-  await expectFocusKept();
-  await page.setViewportSize(WIDE);
-  await expect(page.locator(".pwa-work-panel-layout")).toHaveAttribute("data-split", "true");
-  await waitForReaderHistoryClear(page);
-  await expect(dialog).toHaveCount(0);
-  await expectSameBody(body);
-  await expectFocusKept();
-  await body.dispose();
-  await focused?.dispose();
 }
 
 async function verifyPhoneBack(page: Page): Promise<void> {
@@ -110,6 +57,7 @@ async function verifyPhoneBack(page: Page): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "bash", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".pwa-reader-text")).toContainText("E2E stream complete");
+  await expect.poll(() => dialog.evaluate(node => Math.round(node.getBoundingClientRect().width))).toBe(PHONE.width);
   await expect.poll(() => page.evaluate(() => Boolean(history.state?.piReachToolReader))).toBe(true);
   await page.evaluate(() => history.back());
   await waitForReaderHistoryClear(page);
@@ -159,7 +107,7 @@ async function verifySavedHistory(page: Page, newDraft: string): Promise<void> {
   await expect(composer).toHaveValue(newDraft);
 }
 
-export async function verifyWorkPanelLive(
+export async function verifyReaderDrawerLive(
   owners: readonly [Page, Page], sessionId: string,
   startFreshSession: (previousSessionId: string) => Promise<{ sessionId?: string | null }>,
 ): Promise<string> {
@@ -179,58 +127,68 @@ export async function verifyWorkPanelLive(
   await expect(output).toContainText("E2E stream start");
   await expect(panel.locator(".pwa-tool-reader-status")).toHaveClass(/pwa-tool-status-running/);
   await expect(page.getByRole("button", { name: "Stop current task", exact: true })).toBeVisible();
+  // 抽屉为模态覆盖：对话被遮罩隔开，不能边读边输入。
+  await expect(page.locator("body")).toHaveAttribute("data-scroll-locked");
+  await expect(composer).not.toBeFocused();
   const body = await panel.locator(".pwa-tool-reader-scroll").elementHandle();
   if (!body) throw new Error("Streaming tool body is unavailable.");
   const ticks = (text: string) => Array.from(text.matchAll(/E2E stream tick (\d+)/g), match => Number(match[1]));
   const firstTick = Math.max(0, ...ticks(await output.innerText()));
-  const draft = "E2E draft kept while tool streams";
-  await composer.fill(draft);
-  await expect(composer).toBeFocused();
-  await expect(panel).toBeVisible();
-  await expect(page.locator("body")).not.toHaveAttribute("data-scroll-locked");
-  await waitForReaderHistoryClear(page);
   await expect.poll(async () => Math.max(0, ...ticks(await output.innerText()))).toBeGreaterThan(firstTick);
   await expectSameBody(body);
-  expect(await originalComposer.evaluate(node => node === document.querySelector(".pwa-composer textarea"))).toBe(true);
-  await expect(composer).toHaveValue(draft);
   await expect(output).toContainText("E2E stream complete", { timeout: 60_000 });
   // stdout 的完成 marker 不能替代真实工具状态和正式 run_end。
   await expect(panel.locator(".pwa-tool-reader-status")).toHaveClass(/pwa-tool-status-complete/);
   await expect(page.locator(".pwa-turn-meta")).toHaveCount(completions + 1, { timeout: 60_000 });
   for (const owner of owners) await expect(owner.getByRole("button", { name: "Stop current task", exact: true })).toHaveCount(0);
+  await panel.getByRole("button", { name: "Close tool details", exact: true }).click();
+  await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
+  await expect(page.locator("body")).not.toHaveAttribute("data-scroll-locked");
+  const draft = "E2E draft kept after reading the stream";
+  await composer.fill(draft);
   await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expectDurableMessage(owners, draft);
   await expect(composer).toHaveValue("");
-  await expectSameBody(body);
   const nextDraft = "E2E draft survives other Owner leaf";
   await composer.fill(nextDraft);
   await expect(otherOwner.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
   await expect(otherOwner.getByRole("button", { name: "Stop current task", exact: true })).toHaveCount(0);
+  const reopened = await openStreamTool(page);
+  const reopenedBody = await reopened.locator(".pwa-tool-reader-scroll").elementHandle();
+  if (!reopenedBody) throw new Error("Reopened tool body is unavailable.");
   await otherOwner.locator(".pwa-composer textarea").fill("E2E second Owner advances leaf");
   await expect(otherOwner.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
   await otherOwner.getByRole("button", { name: "Send message", exact: true }).click();
   await expectDurableMessage(owners, "E2E second Owner advances leaf");
-  await expectSameBody(body);
-  await expect(composer).toHaveValue(nextDraft);
-  await migrateReader(page, "tool");
-  await fileCard(page).getByRole("button", { name: "View", exact: true }).click();
-  const textReader = await expectTextReader(page, true);
-  await expect(textReader.getByRole("heading", { name: "Published fixture report", exact: true })).toBeVisible();
+  // leaf 推进只更新正文，不重建抽屉或阅读内容。
+  await expectSameBody(reopenedBody);
+  await expect(reopened.locator(".pwa-reader-text")).toContainText("E2E stream complete");
+  await reopened.getByRole("button", { name: "Close tool details", exact: true }).click();
   await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
   await expect(composer).toHaveValue(nextDraft);
-  await migrateReader(page, "file");
-  await openStreamTool(page);
+  await fileCard(page).getByRole("button", { name: "View", exact: true }).click();
+  const textReader = await expectTextReader(page);
+  await expect(textReader.getByRole("heading", { name: "Published fixture report", exact: true })).toBeVisible();
+  await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
+  await textReader.getByRole("button", { name: "Close file reader", exact: true }).click();
+  await waitForReaderHistoryClear(page);
   await expect(page.locator(".pwa-file-reader-scroll")).toHaveCount(0);
+  await expect(composer).toHaveValue(nextDraft);
+  await openStreamTool(page);
   await verifyPhoneBack(page);
   await expect(composer).toHaveValue(nextDraft);
   await openStreamTool(page);
   await expect(page.getByRole("button", { name: "Stop current task", exact: true })).toHaveCount(0);
+  // 抽屉为模态，切换到新会话前先结束阅读；切换后不应残留任何阅读器。
+  await page.getByRole("button", { name: "Close tool details", exact: true }).click();
+  await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
+  await waitForReaderHistoryClear(page);
   const fresh = await startFreshSession(sessionId);
   expect(fresh.sessionId).toBeTruthy();
   expect(fresh.sessionId).not.toBe(sessionId);
   await expect(page.locator(".pwa-tool-reader-scroll, .pwa-file-reader-scroll")).toHaveCount(0);
-  await expect(page.locator(".pwa-work-panel-layout")).not.toHaveAttribute("data-split");
+  await expect(page.locator(".pwa-work-panel, .pwa-work-panel-layout")).toHaveCount(0);
   await waitForReaderHistoryClear(page);
   await expect(composer).toHaveValue("");
   await expect(page.locator(".pwa-message.user")).toHaveCount(0);
@@ -242,6 +200,7 @@ export async function verifyWorkPanelLive(
   await expectDurableMessage(owners, newDraft);
   await expect(page.getByRole("button", { name: "Stop current task", exact: true })).toHaveCount(0);
   await body.dispose();
+  await reopenedBody.dispose();
   await originalComposer.dispose();
   return fresh.sessionId!;
 }

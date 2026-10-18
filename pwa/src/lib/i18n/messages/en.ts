@@ -36,11 +36,6 @@ export const en = {
     historyLoading: "Loading local history…",
     historyError: "Could not read saved conversations.",
   },
-  workPanel: {
-    label: "Detail panel",
-    resize: "Resize detail panel",
-    resetWidth: "Reset panel width",
-  },
   files: {
     view: "View",
     viewImage: "View image",

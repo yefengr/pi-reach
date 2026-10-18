@@ -95,7 +95,7 @@ function PublishedTextReader({ file, opened, onClose, onExitTransitionEnd }: Pub
     if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
     return () => observer.disconnect();
   }, [scroll, preview]);
-  return <ReaderShell workPanel opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd} onEnterTransitionEnd={() => setEntered(true)} title={name} closeLabel={t.files.closeReader} historyKey="piReachFileReader" className="pwa-file-reader" actions={state?.phase === "ready" && state.url ? <ActionIcon component="a" className="pwa-icon-button" href={state.url} download={fileSaveName(name)} aria-label={t.files.save} title={t.files.save}><Download size={20} aria-hidden="true" /></ActionIcon> : null}>
+  return <ReaderShell opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd} onEnterTransitionEnd={() => setEntered(true)} title={name} closeLabel={t.files.closeReader} historyKey="piReachFileReader" className="pwa-file-reader" actions={state?.phase === "ready" && state.url ? <ActionIcon component="a" className="pwa-icon-button" href={state.url} download={fileSaveName(name)} aria-label={t.files.save} title={t.files.save}><Download size={20} aria-hidden="true" /></ActionIcon> : null}>
     {!entered && text !== undefined ? <div className="pwa-file-reader-scroll" aria-busy="true" /> : preview ? <div ref={setScroll} className="pwa-file-reader-scroll"><FileTextContent text={preview.text} markdown={markdown} />{preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}</div> : <p className="pwa-published-meta">{t.files.noPreview}</p>}
   </ReaderShell>;
 }

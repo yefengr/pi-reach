@@ -7,8 +7,7 @@ import { SummaryEntry, SummaryReader } from "./summary-reader";
 import { isSummaryEvent } from "./summary-presentation";
 import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
-import { useWorkPanel } from "./work-panel-layout";
-import { readerFocusable, useReaderIntent } from "./use-work-panel-reader";
+import { readerFocusable, useReaderIntent } from "./reader-shared";
 import type { PublishedFileRead } from "./published-file";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
@@ -139,7 +138,6 @@ export function ConversationTimeline({ items, live, completions, running = false
     });
   }, []);
   const [reader, setReader] = useState<string | null>(null);
-  const panel = useWorkPanel();
   const { changeSelection, acceptsSelection } = useReaderIntent();
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
@@ -198,8 +196,6 @@ export function ConversationTimeline({ items, live, completions, running = false
     setToolChoices(choices);
     notifyReading(choices, thinkingChoices);
   };
-  const replacePanel = panel?.canSplit === true && summaryReader === null
-    && (scopedFileReader === null || files?.getState(scopedFileReader.file.publication_id)?.preview?.kind === "text");
   const clearOtherReaders = () => {
     changeSelection();
     setReader(null);
@@ -210,12 +206,13 @@ export function ConversationTimeline({ items, live, completions, running = false
   };
   const restoreReadingFocus = (trigger: HTMLButtonElement | null | undefined) => {
     const active = document.activeElement;
-    if (readerFocusable(active) && !active.closest(".pwa-reader-portal, .pwa-file-reader")) return;
+    if (readerFocusable(active) && !active.closest(".pwa-tool-reader, .pwa-file-reader")) return;
     if (readerFocusable(trigger)) trigger.focus({ preventScroll: true });
     else listRef.current?.focus({ preventScroll: true });
   };
   const openReader = (key: string, trigger: HTMLButtonElement) => {
-    if ((scopedFileReader !== null || summaryReader !== null) && !replacePanel) return;
+    // 抽屉打开时对话被遮罩隔离，程序化到达的第二份内容不替换当前正文。
+    if (scopedFileReader !== null || summaryReader !== null) return;
     clearOtherReaders();
     setReaderOrigin(trigger);
     onReadingChange?.(true);
@@ -234,7 +231,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   };
 
   const openSummaryReader = (key: string, sessionId: string, trigger: HTMLButtonElement) => {
-    if ((reader !== null || scopedFileReader !== null || summaryReader !== null) && !replacePanel) return;
+    if (reader !== null || scopedFileReader !== null || summaryReader !== null) return;
     clearOtherReaders();
     onReadingChange?.(true);
     setSummaryReader({ key, sessionId, trigger });
@@ -256,7 +253,7 @@ export function ConversationTimeline({ items, live, completions, running = false
 
   const openFileReader: PublishedFileRead = (file, trigger) => {
     // acquire 的 await 捕获本次选择；旧文件迟到完成不能抢走后来主动选择的详情。
-    if (!files || !acceptsSelection() || ((reader !== null || summaryReader !== null || scopedFileReader !== null) && !replacePanel)) return;
+    if (!files || !acceptsSelection() || reader !== null || summaryReader !== null || scopedFileReader !== null) return;
     clearOtherReaders();
     const next = { file, trigger, scopeToken: files.scopeToken };
     // 阅读器随 opened=true 一起挂载时 Mantine 的过渡初始即“已进入”，不播放进入动画；
@@ -298,7 +295,6 @@ export function ConversationTimeline({ items, live, completions, running = false
       return <ToolCard
         key={entry.key}
         value={entry.value}
-        readerModal={panel?.canSplit !== true}
         status={"partial_id" in entry.value && !live ? "unknown" : undefined}
         onRead={trigger => openReader(entry.key, trigger)}
       />;

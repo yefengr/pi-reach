@@ -47,7 +47,13 @@ export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop 
       pushed = true;
     }, 0);
     const onPopState = (event: PopStateEvent) => {
-      if (!pushed || ignorePopRef.current?.()) return;
+      if (!pushed) return;
+      if (ignorePopRef.current?.()) {
+        // 上层叠层拥有本次返回：补回被弹出的阅读器记录，使关闭上层后的下一次 Back 仍只关闭阅读器，
+        // 而不是直接离开页面。历史长度不变（消耗一条后重新压入一条）。
+        window.history.pushState({ ...(window.history.state ?? {}), [stateKey]: marker }, "");
+        return;
+      }
       closedByHistory = true;
       const close = () => {
         if (event.hasUAVisualTransition === true) setInstant(true);
