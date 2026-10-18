@@ -15,6 +15,7 @@
 - 页面入口：`index.html` 与 `src/main.tsx`，通过 `/app` 访问；业务组件：`src/components/pwa/`；浏览器业务运行态与存储：`src/lib/pwa/`。
 - 协议与传输适配：`src/lib/pi-reach/`；公共 wire 定义来自 `../packages/protocol/`，旧入口只作薄适配，业务与连接状态留在端内。Mantine theme：`src/lib/ui/pi-reach-theme.ts`；产品样式：`src/app/globals.css` 与 `src/app/pwa-theme.css`。
 - 开发预览：`pnpm dev` 后访问 `/app/ui-states` 查看当前真实组件的受控状态；`/app/ui-review` 与 `/app/ui-review-stage-a` 保留历史对照。入口由 `src/main.tsx` 的 DEV 分支动态加载，生产构建须核对未包含展厅与评审标识。
+- 状态展厅同时演示对话边界与连续输出、导航／只读历史、设置／配对码／确认／通知；导航与回执均由本页内存状态驱动。设置、快捷键和 Composer 传入显式内存偏好，配对仅输入码；不得挂载持久化应用壳、注册 Service Worker、连接 Pi／Relay 或请求摄像头。完整路由、真实连接和设备能力另用正式工作区验收。
 - 当前状态所有权见 [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)，设计与组件边界见 [`../docs/DESIGN.md`](../docs/DESIGN.md)；本文件不重复维护架构正文或 token 表。
 
 ## 常用命令

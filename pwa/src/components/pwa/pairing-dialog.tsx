@@ -20,6 +20,8 @@ type PairingDialogProps = {
   focusOrigin?: HTMLElement | null;
   focusFallbackSelectors?: readonly string[];
   withinPortal?: boolean;
+  /** 展厅等隔离场景只允许输入码，不挂载摄像头或文件入口。 */
+  codeOnly?: boolean;
 };
 
 function canFocus(element: HTMLElement): boolean {
@@ -39,10 +41,10 @@ function formatCodeInput(value: string): string {
  * 配对弹窗（表单类 Modal，宽 480）：移动端默认扫码，桌面默认输入配对码，其余方式以文字按钮置于下方。
  * 输满 8 位有效字符自动提交；连接中输入与按钮暂不可用；失败原因显示在输入框下方并保留已输入内容。
  */
-export function PairingDialog({ opened, connecting, error, onSubmit, onClearError, onClose, focusOrigin = null, focusFallbackSelectors = [], withinPortal = true }: PairingDialogProps) {
+export function PairingDialog({ opened, connecting, error, onSubmit, onClearError, onClose, focusOrigin = null, focusFallbackSelectors = [], withinPortal = true, codeOnly = false }: PairingDialogProps) {
   const { t } = useI18n();
   const p = t.pairing;
-  const [mode, setMode] = useState<PairingMode>(defaultMode);
+  const [mode, setMode] = useState<PairingMode>(() => codeOnly ? "code" : defaultMode());
   const [value, setValue] = useState("");
   const [notice, setNotice] = useState<LocalNotice | null>(null);
   const [wasOpened, setWasOpened] = useState(opened);
@@ -53,7 +55,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
   if (wasOpened !== opened) {
     setWasOpened(opened);
     if (opened) {
-      setMode(defaultMode());
+      setMode(codeOnly ? "code" : defaultMode());
       setValue("");
       setNotice(null);
     }
@@ -108,7 +110,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
   };
 
   const errorText = error ? p.errors[error] : notice === "noQrFound" ? p.noQrFound : null;
-  const scanning = opened && mode === "scan" && !connecting;
+  const scanning = !codeOnly && opened && mode === "scan" && !connecting;
 
   return <Modal
     ref={dialogRef}
@@ -151,11 +153,11 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
       <Button type="submit" disabled={connecting || !value.trim()}>{p.submit}</Button>
     </form>}
     {connecting ? <p className="pwa-pairing-status" role="status"><Loader size={16} type="oval" color="var(--pwa-running)" aria-hidden="true" />{p.connecting}</p> : null}
-    <div className="pwa-pairing-methods">
+    {!codeOnly ? <div className="pwa-pairing-methods">
       {mode === "code"
         ? cameraSupported() ? <Button className="pwa-pairing-method" variant="transparent" color="piReach" type="button" leftSection={<ScanLine size={16} aria-hidden="true" />} disabled={connecting} onClick={() => { onClearError(); setNotice(null); setMode("scan"); }}>{p.scanQr}</Button> : null
         : <Button className="pwa-pairing-method" variant="transparent" color="piReach" type="button" leftSection={<Keyboard size={16} aria-hidden="true" />} disabled={connecting} onClick={() => setMode("code")}>{p.enterCode}</Button>}
       <QrImageButton disabled={connecting} onScan={receiveScan} onNotFound={() => { onClearError(); setMode("code"); setNotice("noQrFound"); }} />
-    </div>
+    </div> : null}
   </Modal>;
 }
