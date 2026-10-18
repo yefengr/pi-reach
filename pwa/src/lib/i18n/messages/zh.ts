@@ -42,7 +42,6 @@ export const zh: Messages = {
     label: "详情面板",
     resize: "调整详情面板宽度",
     resetWidth: "恢复默认宽度",
-    returnToChat: "回到对话",
   },
   files: {
     view: "查看",

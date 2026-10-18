@@ -98,7 +98,7 @@ afterEach(async () => {
 });
 
 test("real workspace opens one nonmodal tool panel and keeps the real Composer editable and sendable", async () => {
-  const { screen } = await mount();
+  await mount();
   const input = draft();
   await userEvent.fill(input, "Draft before opening");
   await openTool();
@@ -108,8 +108,9 @@ test("real workspace opens one nonmodal tool panel and keeps the real Composer e
   expect(history.state?.piReachToolReader).toBeUndefined();
   expect(draft()).toBe(input);
   expect(input.value).toBe("Draft before opening");
-  await screen.getByRole("button", { name: "Return to conversation" }).click();
-  await expect.poll(() => document.activeElement).toBe(input);
+  // 详情面板不再提供「回到对话」入口，用户直接点击输入框继续对话。
+  await userEvent.click(input);
+  expect(document.activeElement).toBe(input);
   await userEvent.fill(input, "Still able to send");
   await userEvent.keyboard("{Enter}");
   expect(send).toHaveBeenCalledTimes(1);
@@ -388,7 +389,8 @@ test("real saved history keeps its visible paragraph anchored when a panel opens
     await settle();
     expect(Math.abs(offset() - before)).toBeLessThanOrEqual(2);
   }
-  await screen.getByRole("button", { name: "Return to conversation" }).click();
+  // 模拟用户已把焦点放在消息列表，关闭详情不得抢走该焦点。
+  list.focus();
   expect(document.activeElement).toBe(list);
   await screen.getByRole("button", { name: "Close tool details" }).click();
   await expect.poll(split).toBe(false);
@@ -452,4 +454,21 @@ test("a valid focused reader control remains focused through phone and wide migr
   await settle();
   expect(document.activeElement).toBe(copy);
   await expect.poll(() => history.state?.piReachToolReader).toBeUndefined();
+});
+
+test("docked detail content fades in while the column switch stays instant", async () => {
+  const { screen } = await mount();
+  await openTool();
+  const portal = panel().querySelector<HTMLElement>(".pwa-work-panel-host > .pwa-reader-portal")!;
+  const motion = getComputedStyle(portal);
+  // 淡入只作用于正文内容；列宽与分隔槽在同一帧落位，不做尺寸过渡。
+  expect(motion.animationName).toBe("pwa-work-panel-enter");
+  expect(motion.animationDuration).toBe("0.12s");
+  expect(getComputedStyle(panel()).transitionDuration).toBe("0s");
+  await settle();
+  expect(portal.getAnimations()).toHaveLength(0);
+  // 面板内切换详情沿用同一正文宿主，不重播进入动画。
+  await openTool(1);
+  expect(panel().querySelector(".pwa-reader-portal")).toBe(portal);
+  expect(portal.getAnimations()).toHaveLength(0);
 });

@@ -40,7 +40,6 @@ export const en = {
     label: "Detail panel",
     resize: "Resize detail panel",
     resetWidth: "Reset panel width",
-    returnToChat: "Return to conversation",
   },
   files: {
     view: "View",

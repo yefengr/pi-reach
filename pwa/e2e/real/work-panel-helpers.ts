@@ -137,8 +137,6 @@ async function verifySavedHistory(page: Page, newDraft: string): Promise<void> {
   const panel = await openStreamTool(page, true);
   await expect(panel.locator(".pwa-reader-text")).toContainText("E2E stream complete");
   await expect(panel.locator(".pwa-tool-reader-status")).toHaveClass(/pwa-tool-status-complete/);
-  await panel.getByRole("button", { name: "Return to conversation", exact: true }).click();
-  await expect(page.locator(".pwa-message-list")).toBeFocused();
   await panel.getByRole("button", { name: "Close tool details", exact: true }).click();
   await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
   const online = page.locator("#pwa-desktop-navigation .pwa-nav-session");
