@@ -463,7 +463,6 @@ export const en = {
     searchResults: "Search results",
     returnedDiff: "Returned diff",
     parameters: "Parameters",
-    copyAll: "Copy all output",
     outputTruncated: "Output was too long and has been truncated.",
     noToolSelected: "No tool selected",
     closeReader: "Close tool details",

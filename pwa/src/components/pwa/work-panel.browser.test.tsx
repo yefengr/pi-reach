@@ -399,16 +399,11 @@ test("real saved history keeps its visible paragraph anchored when a panel opens
   await expect.element(screen.getByRole("textbox")).toBeDisabled();
 });
 
-test.each(["tool", "file"] as const)("delayed modal autofocus preserves the original %s control after the Portal has moved", async kind => {
+test("delayed modal autofocus preserves the original file control after the Portal has moved", async () => {
   const { screen } = await mount();
-  if (kind === "tool") await openTool();
-  else {
-    await screen.getByRole("button", { name: "View", exact: true }).click();
-    await expect.poll(() => panel().querySelector("h1")).not.toBeNull();
-  }
-  const focused = kind === "tool"
-    ? screen.getByRole("button", { name: "Copy all output" }).element()
-    : panel().querySelector<HTMLAnchorElement>("a[download]")!;
+  await screen.getByRole("button", { name: "View", exact: true }).click();
+  await expect.poll(() => panel().querySelector("h1")).not.toBeNull();
+  const focused = panel().querySelector<HTMLAnchorElement>("a[download]")!;
   focused.focus();
   const timers: Pick<Window, "setTimeout"> = window;
   const nativeTimeout = timers.setTimeout.bind(window);
@@ -424,7 +419,7 @@ test.each(["tool", "file"] as const)("delayed modal autofocus preserves the orig
   });
   try {
     await page.viewport(390, 844);
-    await expect.element(screen.getByRole("dialog", { name: kind === "tool" ? "read" : file.file_name, exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("dialog", { name: file.file_name, exact: true })).toBeVisible();
     await settle();
     expect(deferred.length).toBeGreaterThan(0);
     for (const task of deferred.splice(0)) { clearTimeout(task.timer); task.run(); }
@@ -433,7 +428,7 @@ test.each(["tool", "file"] as const)("delayed modal autofocus preserves the orig
   } finally {
     timeout.mockRestore();
     for (const task of deferred) clearTimeout(task.timer);
-    await screen.getByRole("button", { name: kind === "tool" ? "Close tool details" : "Close file reader", exact: true }).click();
+    await screen.getByRole("button", { name: "Close file reader", exact: true }).click();
     await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
     await expect.poll(() => Boolean(history.state?.piReachFileReader || history.state?.piReachToolReader)).toBe(false);
   }
@@ -441,23 +436,23 @@ test.each(["tool", "file"] as const)("delayed modal autofocus preserves the orig
 
 test("a valid focused reader control remains focused through phone and wide migration", async () => {
   const { screen } = await mount();
-  await openTool();
-  const copy = screen.getByRole("button", { name: "Copy all output" }).element();
-  copy.focus();
+  await screen.getByRole("button", { name: "View", exact: true }).click();
+  await expect.poll(() => panel().querySelector("h1")).not.toBeNull();
+  const save = panel().querySelector<HTMLAnchorElement>("a[download]")!;
+  save.focus();
   await page.viewport(390, 844);
-  await expect.element(screen.getByRole("dialog", { name: "read", exact: true })).toBeVisible();
+  await expect.element(screen.getByRole("dialog", { name: file.file_name, exact: true })).toBeVisible();
   await settle();
-  expect(document.activeElement).toBe(copy);
-  expect(document.querySelector(".pwa-tool-card .pwa-tool-action")?.getAttribute("aria-haspopup")).toBe("dialog");
+  expect(document.activeElement).toBe(save);
   await page.viewport(1440, 1000);
   await expect.poll(split).toBe(true);
   await settle();
-  expect(document.activeElement).toBe(copy);
-  await expect.poll(() => history.state?.piReachToolReader).toBeUndefined();
+  expect(document.activeElement).toBe(save);
+  await expect.poll(() => history.state?.piReachFileReader).toBeUndefined();
 });
 
 test("docked detail content fades in while the column switch stays instant", async () => {
-  const { screen } = await mount();
+  await mount();
   await openTool();
   const portal = panel().querySelector<HTMLElement>(".pwa-work-panel-host > .pwa-reader-portal")!;
   const motion = getComputedStyle(portal);

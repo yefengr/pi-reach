@@ -1,6 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
 import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
-import { CopyButton } from "./copy-button";
 import { ReaderShell } from "./reader-shell";
 import { ToolImage } from "./tool-output";
 import { toolContentBlocks, toolError, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
@@ -62,7 +61,6 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const blocks = value ? toolContentBlocks(value, { input: false }) : [];
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
-  const allText = blocks.flatMap((block) => block.kind === "text" ? [block.text] : []).join("\n\n");
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
 
@@ -70,7 +68,6 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     title={title} closeLabel={t.tools.closeReader} historyKey="piReachToolReader" describedBy="pwa-tool-reader-description"
     actions={<>
       <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`} title={statusLabel}><StatusIcon status={status} /><span className="pwa-sr-only">{statusLabel}</span></span>
-      {allText ? <CopyButton text={allText} label={t.tools.copyAll} /> : null}
     </>}>
         <div className="pwa-tool-reader-scroll" ref={scrollRef} onScroll={(event) => {
           const target = event.currentTarget;
