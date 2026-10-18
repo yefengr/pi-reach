@@ -1,6 +1,5 @@
 .pwa-keyboard-dialog {
   max-width: 100%;
-  border: 1px solid var(--pwa-line);
   border-radius: var(--pwa-radius-lg);
   background: var(--pwa-surface);
   color: var(--pwa-ink);
