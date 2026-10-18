@@ -317,7 +317,17 @@ test("failed initial catchup can be retried once without losing concurrent outpu
 
 test("scope replacement starts from authoritative history and reduced motion skips fading", async () => {
   const matchMedia = window.matchMedia.bind(window);
-  vi.spyOn(window, "matchMedia").mockImplementation((query) => query === "(prefers-reduced-motion: reduce)" ? { ...matchMedia(query), matches: true } : matchMedia(query));
+  // 只改 matches 会让内建方法随原型丢失，监听方需要在同一实例上继续订阅。
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+    const list = matchMedia(query);
+    if (query !== "(prefers-reduced-motion: reduce)") return list;
+    return {
+      get matches() { return true; }, media: list.media, onchange: null,
+      addEventListener: list.addEventListener.bind(list), removeEventListener: list.removeEventListener.bind(list),
+      addListener: list.addListener.bind(list), removeListener: list.removeListener.bind(list),
+      dispatchEvent: list.dispatchEvent.bind(list),
+    } as MediaQueryList;
+  });
   vi.mocked(loadTimeline).mockImplementation(async () => []);
   const screen = await render(<Harness />);
   try {
