@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Badge, Button, Drawer, Menu, NavLink, Popover } from "@mantine/core";
-import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, pwaFadeTransition, useMenuExitAction } from "@/components/pwa/use-pwa-motion";
+import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, pwaFadeTransition, useMenuExitAction, usePwaMenuTransition } from "@/components/pwa/use-pwa-motion";
 import { ChevronDown, Computer, Ellipsis, Link2, Pencil, Trash2 } from "lucide-react";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
@@ -40,7 +40,7 @@ export function displayDevice(device: PwaDeviceRecord): string {
 
 function ComputerActionsMenu({ device, onRename, onRemove, onMenuChange }: { device: PwaDeviceRecord; onRename: () => void; onRemove: () => void; onMenuChange?: (opened: boolean) => void }) {
   const { t } = useI18n();
-  const menuDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
+  const menuTransition = usePwaMenuTransition();
   const floatingMiddlewares = useFloatingSafeMiddlewares();
   const menuAction = useMenuExitAction();
   const [opened, setOpened] = useState(false);
@@ -61,14 +61,15 @@ function ComputerActionsMenu({ device, onRename, onRemove, onMenuChange }: { dev
     withinPortal
     portalProps={{ target: ".pwa-root" }}
     position="bottom-end"
+    preventPositionChangeWhenVisible={false}
     zIndex={230}
     returnFocus
     onChange={setMenuOpened}
     onExitTransitionEnd={() => { onMenuChange?.(false); menuAction.finish(); }}
-    transitionProps={{ transition: pwaFadeTransition, duration: menuDuration }}
+    transitionProps={menuTransition}
   >
     <Menu.Target><ActionIcon className="pwa-peer-menu-trigger" type="button" aria-label={t.devices.actionsFor(label)} title={t.devices.actions}><Ellipsis size={20} /></ActionIcon></Menu.Target>
-    <Menu.Dropdown inert={!opened} className="pwa-peer-menu-panel" data-mantine-stop-propagation="true" onKeyDown={(event) => {
+    <Menu.Dropdown inert={!opened} className="pwa-peer-menu-panel pwa-menu-motion" data-mantine-stop-propagation="true" onKeyDown={(event) => {
       if (event.key === "Escape") event.stopPropagation();
     }}>
       <Menu.Item leftSection={<Pencil size={16} />} aria-label={t.devices.renameLabel(label)} onClick={() => closeThen(onRename)}>{t.devices.rename}</Menu.Item>

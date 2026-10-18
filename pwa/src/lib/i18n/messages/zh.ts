@@ -38,6 +38,12 @@ export const zh: Messages = {
     historyLoading: "正在读取本地历史…",
     historyError: "未能读取本地会话。",
   },
+  workPanel: {
+    label: "详情面板",
+    resize: "调整详情面板宽度",
+    resetWidth: "恢复默认宽度",
+    returnToChat: "回到对话",
+  },
   files: {
     view: "查看",
     viewImage: "查看图片",
@@ -136,6 +142,7 @@ export const zh: Messages = {
     unpairedBody: "在电脑上的 Pi 中运行下面的命令。",
     copyCommand: "复制命令",
     copied: "已复制",
+    copyFailed: "复制失败，请选择文字后手动复制。",
     startPairing: "开始配对",
     noPiTitle: "没有在线的 Pi",
     noPiBody: "在电脑上启动 Pi 后，会自动出现在这里。",

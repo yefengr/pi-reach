@@ -1,0 +1,69 @@
+.pwa-root.pwa-ui-states {
+  --pwa-main-safe-left: 0px;
+  --pwa-main-safe-right: 0px;
+  --pwa-main-safe-bottom: 0px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--pwa-ink);
+  background: var(--pwa-bg);
+  font-family: var(--pwa-font-ui);
+}
+.pwa-ui-states-header {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pwa-space-sm);
+  padding: max(var(--pwa-space-lg), var(--pwa-safe-top)) max(var(--pwa-space-lg), var(--pwa-safe-right)) var(--pwa-space-md) max(var(--pwa-space-lg), var(--pwa-safe-left));
+  border-bottom: 1px solid var(--pwa-line);
+}
+.pwa-ui-states-heading h1 { margin: 0; font-size: var(--pwa-text-page); font-weight: 600; }
+.pwa-ui-states-heading p, .pwa-ui-states-note, .pwa-ui-states-motion { margin: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: 1.65; }
+.pwa-ui-states-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--pwa-space-sm); }
+.pwa-ui-states-controls .mantine-NativeSelect-root { min-width: 160px; }
+.pwa-ui-states-controls button, .pwa-ui-states-controls select, .pwa-ui-states-actions button { min-height: 44px; }
+.pwa-ui-states-workspace {
+  width: 100%;
+  flex: 1 0 560px;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+  align-self: center;
+  min-width: 0;
+}
+.pwa-ui-states-workspace[data-narrow] { max-width: 760px; }
+.pwa-ui-states-actions { display: flex; align-items: center; flex-wrap: wrap; flex: none; gap: var(--pwa-space-sm); padding: var(--pwa-space-xs) var(--pwa-space-md); }
+.pwa-ui-states-actions span { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
+.pwa-ui-states-actions .mantine-NativeSelect-root { min-width: 160px; max-width: 100%; }
+.pwa-ui-states-actions select { min-height: 44px; }
+.pwa-ui-states-coverage { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: 1.65; }
+.pwa-ui-states-coverage summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--pwa-ink); }
+.pwa-ui-states-coverage p { margin: 0 0 var(--pwa-space-xs); }
+.pwa-ui-states-frame, .pwa-ui-states-frame-content { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; min-width: 0; }
+.pwa-ui-states-frame-content[hidden] { display: none; }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame .pwa-layout { grid-template-columns: minmax(0, 1fr); }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame:not([data-navigation]) .pwa-main { margin: 0; border-radius: 0; }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame:not([data-navigation]) .pwa-desktop-navigation { display: none; }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation] .pwa-layout { grid-template-columns: var(--pwa-sidebar-span) minmax(0, 1fr); }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation][data-collapsed] { --pwa-main-flush: 1; }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation][data-collapsed] .pwa-layout { grid-template-columns: 0px minmax(0, 1fr); }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-desktop-navigation { visibility: hidden; }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-main { border-radius: 0; }
+.pwa-ui-states-local-result { margin: 0; padding: var(--pwa-space-xs) var(--pwa-space-md); color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
+.pwa-ui-states-surfaces { flex: none; display: flex; flex-direction: column; gap: var(--pwa-space-sm); padding: var(--pwa-space-md); border-bottom: 1px solid var(--pwa-line); }
+.pwa-ui-states-surface-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--pwa-space-sm); }
+.pwa-ui-states-surface-controls button, .pwa-ui-states-surface-controls select { min-height: 44px; }
+.pwa-ui-states-settings[hidden] { display: none; }
+.pwa-ui-states-settings { position: fixed; inset: 0; z-index: 30; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--pwa-bg); }
+.pwa-root.pwa-ui-states[data-settings-open] > .pwa-ui-states-header,
+.pwa-root.pwa-ui-states[data-settings-open] > .pwa-ui-states-workspace { visibility: hidden; }
+@media (max-width: 767.98px) {
+  .pwa-ui-states-header { padding-inline: max(var(--pwa-space-md), var(--pwa-safe-left)) max(var(--pwa-space-md), var(--pwa-safe-right)); }
+  .pwa-ui-states-controls { align-items: stretch; }
+  .pwa-ui-states-controls > * { flex: 1 1 160px; }
+  .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation] .pwa-layout { grid-template-columns: minmax(0, 1fr); }
+  .pwa-root.pwa-ui-states .pwa-ui-states-frame .pwa-desktop-navigation,
+  .pwa-ui-states-sidebar-control { display: none; }
+}

@@ -51,6 +51,18 @@ describe("group heading queue", () => {
     expect(shown(stepGroupHead(state, values, true, settled, none, true), values)).toBeNull();
   });
 
+  test("formal completion on a later leaf keeps the current head without replaying or requeueing", () => {
+    const first = running("a");
+    const state = initialGroupHead([first], true, appendedOf(first));
+    const completed = { ...done("a"), leaf_id: "result-leaf" };
+    const next = stepGroupHead(state, [completed], true, fresh, none, true);
+    expect(next).toBe(state);
+    expect(groupHeadTool(next, [completed], true)).toBe(completed);
+    expect(next.queue).toHaveLength(1);
+    expect(next.animate).toBe(false);
+    expect(stepGroupHead(next, [completed], true, settled, none, true).summary).toBe(true);
+  });
+
   test("a completed last head never becomes summary while an earlier tool is running", () => {
     let values = [running("a"), running("b")];
     const state = initialGroupHead(values, true, none);

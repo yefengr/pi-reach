@@ -9,11 +9,20 @@ type KeyboardShortcutsDialogProps = {
   onClose: () => void;
   /** 路由切换时由目标页面接管焦点，不返回旧页面的来源。 */
   returnFocus: boolean;
+  enterSends?: boolean;
 };
 
-export function KeyboardShortcutsDialog({ opened, onClose, returnFocus }: KeyboardShortcutsDialogProps) {
-  const { t } = useI18n();
+export function KeyboardShortcutsDialog({ enterSends, ...props }: KeyboardShortcutsDialogProps) {
+  return enterSends === undefined ? <PersistedKeyboardShortcutsDialog {...props} /> : <KeyboardShortcutsDialogContent {...props} enterSends={enterSends} />;
+}
+
+function PersistedKeyboardShortcutsDialog(props: Omit<KeyboardShortcutsDialogProps, "enterSends">) {
   const [enterSends] = useEnterSends();
+  return <KeyboardShortcutsDialogContent {...props} enterSends={enterSends} />;
+}
+
+function KeyboardShortcutsDialogContent({ opened, onClose, returnFocus, enterSends }: Omit<KeyboardShortcutsDialogProps, "enterSends"> & { enterSends: boolean }) {
+  const { t } = useI18n();
   return <Modal
     opened={opened}
     onClose={onClose}

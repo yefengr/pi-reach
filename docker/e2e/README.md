@@ -68,12 +68,15 @@ pnpm --filter pwa test:e2e:remote
 - Owner A 通过 `Session actions` 的 `New session` 和确认框建立独立验收会话，避免保留卷内的旧附件混入本轮断言；不删除历史卷；
 - 上传二进制、零字节文本和 PNG 原件，移除另一个尚未发送的文件，核对发送前未落盘、发送后原件大小和 SHA-256 与输入一致；
 - 核对真实 Pi 用户消息的文件清单指向对应原件，内容仅含 text blocks；两个 Owner 均能看到正式附件卡片和图片小预览，刷新后从正式历史恢复，页面不显示电脑端路径；
-- 上传后再次新建会话，并核对 interactive `/state` 的 session ID 已变化；
+- 通过精确 fixture 指令调用实际 `publish_file`，两个 Owner 均可查看 Markdown、预览图片并下载三种原件，核对字节和 SHA-256；文本在宽主区打开非模态 `aside`，图片沿用独立阅读器；
+- 通过精确 fixture 指令调用实际 `bash`，持续约 10 秒输出合成内容；核对运行中增量输出、完成及普通 leaf 推进后同一详情正文和 Composer 草稿保留，只有主动操作才替换文件／工具详情；
+- 在 1600px 与 390px 视口之间迁移工具和文本阅读器，核对正文节点、复制／保存控件焦点、手机全屏、Back 与阅读器 history 清理；图片和文本另测明暗布局；
+- 新建会话关闭旧详情并隔离草稿；打开浏览器保存的旧历史时核对工具完成结果与文件元数据只读，再返回在线新会话并继续发送；
 - 限定执行 `docker compose ... restart relay`，观察 Host 和两个页面断连后自动恢复为 Connected；
 - 刷新两个页面，使用摘要核对各自 IndexedDB `identities` 的 Owner public key 与 `devices` 记录未变化，并再次恢复 Connected；
 - 配对完成后为两个 context 启动失败保留 trace；失败截图会遮罩 Pairing code 输入框，测试输出不打印短码、Owner secret 或 control capability。
 
-interactive 容器显式加载 `host/e2e-provider.ts`，只返回确定性的空 assistant stop，用于让真实 Pi 写入用户正文并完成生命周期。它不请求网络、读取真实模型凭据或执行工具；生产启动入口不加载该 provider。
+interactive 容器显式加载 `host/e2e-provider.ts`。普通消息返回确定性的空 assistant stop；最后一条纯文本 user 消息精确为 `E2E publish file fixtures` 时，调用固定三个文件的原生 `publish_file`；精确为 `E2E stream tool fixture` 时，调用一个固定的原生 `bash` 命令。命令只运行 Node 定时器并向 stdout 输出合成标记，约 10 秒后自行结束，不插入用户参数、不读写文件或请求网络。工具由真实 Pi 执行；收到工具结果后 provider 正常结束，不重扫历史触发消息。它不读取真实模型凭据，生产启动入口不加载该 provider。
 
 可选的旧页面共存测试通过 `PI_REACH_E2E_LEGACY_DIST` 指向明确基线的旧 PWA 构建目录。同一浏览器身份下打开旧资产，检查附件文件名与规范化历史可读，并在旧页刷新后验证普通文字投递。资产拦截所需的 loopback 权限仅授予测试 origin；该场景不等于真实 Service Worker 缓存升级验收，也不保证旧页刷新前没有协议或 stale-scope 提示。未提供此变量时不运行旧页面分支。
 
@@ -92,4 +95,4 @@ interactive 容器显式加载 `host/e2e-provider.ts`，只返回确定性的空
 
 ## 未覆盖范围
 
-真实浏览器入口只使用桌面 Chromium，不代表 Safari、Firefox、移动 viewport 或物理设备验收。附件与文字会进入真实 Pi session，但由本地确定性 provider 驱动，不验证模型理解、推理、tool execution 或 thinking；也不覆盖离线 Service Worker 启动、真实 BFCache 冻结恢复、手机文件选择或移动网络切换。协议 runner 的 revoke、peer stop 和 Pi 进程重启矩阵保持在原入口，不在浏览器场景重复执行。
+真实浏览器入口使用桌面 Chromium，包含 1600px 宽屏与 390px 手机视口，不代表 Safari、Firefox 或物理设备验收。附件、文字、文件发布与固定 bash 命令进入真实 Pi 链路，由本地确定性 provider 驱动；不验证真实模型理解、推理、自主工具选择或 thinking，也不覆盖离线 Service Worker 启动、真实 BFCache 冻结恢复、手机文件选择或移动网络切换。协议 runner 的 revoke、peer stop 和 Pi 进程重启矩阵保持在原入口，不在浏览器场景重复执行。

@@ -1,4 +1,4 @@
-import { createRef, useState, type ComponentProps } from "react";
+import { act, createRef, useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
@@ -44,12 +44,15 @@ beforeEach(() => {
     constructor(private callback: IntersectionObserverCallback) {}
     observe(element: Element) { observers.push({ callback: this.callback, element }); }
     disconnect() {}
+    unobserve() {}
   });
 });
 afterEach(async () => {
   await page.viewport(1280, 900);
   vi.unstubAllGlobals();
   urls.forEach(url => URL.revokeObjectURL(url));
+  document.documentElement.style.removeProperty("--pwa-duration-image-in");
+  document.documentElement.style.removeProperty("--pwa-duration-image-out");
   urls = [];
 });
 
@@ -299,8 +302,8 @@ test.each([390, 1280].flatMap(width => [false, true].map(reduce => ({ width, red
   }
 });
 
-/** 获取后打开阅读器前有 600ms 完成态停留，为慢机器留出余量。 */
-const FETCH_SETTLE_WAIT = { timeout: 3000 };
+/** 首次获取和阅读器进出共用宽松等待窗口，不再包含固定完成态停留。 */
+const FILE_READER_WAIT = { timeout: 3000 };
 
 /** 首次查看：先经历获取再就绪；就绪后主线程忙于重渲染，模拟真机上帧已到期才继续打开阅读器。 */
 function fetchOnFirstView(h: Awaited<ReturnType<typeof harness>>) {
@@ -333,7 +336,7 @@ test("first view after fetching still slides the reader in", async () => {
     };
     requestAnimationFrame(tick);
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
-    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FILE_READER_WAIT).toBeVisible();
     await new Promise(resolve => setTimeout(resolve, 500));
     stop = true;
     expect(h.open).toHaveBeenCalledWith(descriptor, "view");
@@ -351,7 +354,7 @@ test("first view returns focus to the View button that started the fetch", async
   fetchOnFirstView(h);
   const trigger = h.screen.getByRole("button", { name: "View", exact: true });
   await trigger.click();
-  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
+  await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FILE_READER_WAIT).toBeVisible();
   await expect.poll(() => document.activeElement?.tagName).toBe("H2");
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
@@ -361,37 +364,33 @@ test("first view returns focus to the View button that started the fetch", async
   await h.screen.unmount();
 });
 
-test("first view settles a full progress bar before the reader covers the card, cached views open at once", async () => {
+test("first view keeps the progress slot stable and cached views do not replay fetching", async () => {
   const h = await harness({ items: [event(published())] });
   fetchOnFirstView(h);
   const seen: string[] = [];
   const heights = new Set<number>();
-  const doneLabels = new Set<string | null>();
+  const actionWidths = new Set<number>();
   const record = () => {
     const card = document.querySelector<HTMLElement>(".pwa-published-file");
     if (card) heights.add(Math.round(card.getBoundingClientRect().height));
+    const actions = document.querySelector(".pwa-published-actions");
+    if (actions) actionWidths.add(Math.round(actions.getBoundingClientRect().width));
     if (document.querySelector(".pwa-file-reader") && !seen.includes("reader")) seen.push("reader");
     const status = document.querySelector(".pwa-published-file [role=status]")?.textContent;
-    const value = document.querySelector(".pwa-published-file [role=progressbar]")?.getAttribute("aria-valuenow");
-    if (status === "Fetched") doneLabels.add(document.querySelector(".pwa-published-file [role=progressbar]")?.getAttribute("aria-label") ?? null);
-    const entry = status ? `${status}:${value}` : null;
-    if (entry && seen.at(-1) !== entry) seen.push(entry);
+    if (status && seen.at(-1) !== status) seen.push(status);
   };
   const observer = new MutationObserver(record);
   observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
   record();
   try {
     await h.screen.getByRole("button", { name: "View", exact: true }).click();
-    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FETCH_SETTLE_WAIT).toBeVisible();
-    // 进度补满并停留后才交给阅读器；阅读器打开后卡片不再保留进度。
-    expect(seen.indexOf("Fetched:100")).toBeGreaterThan(-1);
-    expect(seen.indexOf("Fetched:100")).toBeLessThan(seen.indexOf("reader"));
-    // 进度原地替换大小行，获取前后卡片高度不变。
+    await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true }), FILE_READER_WAIT).toBeVisible();
     expect(seen.some(entry => entry.startsWith("Fetching "))).toBe(true);
+    expect(seen).not.toContain("Fetched");
     expect([...heights]).toHaveLength(1);
-    // 完成态的进度条名称与状态文字一致，读屏不会同时听到「正在获取」和「完成」。
-    expect([...doneLabels]).toEqual(["Fetched"]);
+    expect([...actionWidths]).toHaveLength(1);
     expect(document.querySelector(".pwa-published-file [role=status], .pwa-published-file [role=progressbar]")).toBeNull();
+    await expect.poll(() => document.activeElement?.tagName).toBe("H2");
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
     seen.length = 0;
@@ -404,6 +403,50 @@ test("first view settles a full progress bar before the reader covers the card, 
     observer.disconnect();
     window.history.replaceState(null, "");
   }
+});
+
+async function commitFetch(settle: () => void) {
+  const previous = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  try { await act(async () => settle()); }
+  finally { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", previous); }
+}
+
+test("first view hands off ready content without advancing a completion timer and gates repeated clicks", async () => {
+  const h = await harness();
+  let finish!: () => void;
+  h.open.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const button = h.screen.getByRole("button", { name: "View", exact: true }).element() as HTMLButtonElement;
+    flushSync(() => { button.click(); button.click(); });
+    expect(h.open).toHaveBeenCalledTimes(1);
+    await commitFetch(() => {
+      h.publish({ phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "safe", url: blobUrl() });
+      finish();
+    });
+    expect(h.onRead).toHaveBeenCalledExactlyOnceWith(descriptor, button);
+    expect(document.querySelector(".pwa-published-file [role=progressbar]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+    await h.screen.unmount();
+  }
+});
+
+test.each(["cancel", "scope", "unmount"])("a late fetch cannot open a reader after %s", async action => {
+  const h = await harness();
+  let finish!: () => void;
+  h.open.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  if (action === "cancel") await h.screen.getByRole("button", { name: "Cancel", exact: true }).click();
+  if (action === "scope") h.replaceScope();
+  if (action === "unmount") await h.screen.unmount();
+  await commitFetch(() => {
+    if (action !== "unmount") h.publish({ phase: "ready", receivedBytes: 20, preview: { kind: "text" }, text: "late", url: blobUrl() });
+    finish();
+  });
+  expect(h.onRead).not.toHaveBeenCalled();
+  if (action !== "unmount") await h.screen.unmount();
 });
 
 test("a failed fetch replaces the size line in place and every action is an icon", async () => {
@@ -657,8 +700,8 @@ test("decode error never loops and retry is explicitly manual", async () => {
   expect(h.open).not.toHaveBeenCalled();
   expect(h.onRead).not.toHaveBeenCalled();
   await h.screen.getByRole("button", { name: "Retry", exact: true }).click();
-  // 重试经过一次重新获取，完成态停留后才交给阅读器。
-  await expect.poll(() => h.onRead.mock.calls.length, FETCH_SETTLE_WAIT).toBe(1);
+  // 重试经过一次真实获取，就绪后直接交给阅读器。
+  await expect.poll(() => h.onRead.mock.calls.length, FILE_READER_WAIT).toBe(1);
   await h.screen.unmount();
 });
 
@@ -682,4 +725,132 @@ test("publishing during a run is visible immediately, singleton reader survives 
   expect(document.activeElement?.tagName).not.toBe("TEXTAREA");
   await expect.poll(() => h.unpin.mock.calls.length).toBe(1);
   await h.screen.unmount();
+});
+
+async function imageReaderHarness() {
+  const url = blobUrl(imageBlob);
+  const h = await harness({ file: image, items: [event(published(image))], initial: { phase: "ready", receivedBytes: 100, preview: imagePreview, url } });
+  const source = h.screen.getByRole("button", { name: "View image", exact: true }).element() as HTMLButtonElement;
+  await expect.poll(() => { const image = source.querySelector("img"); return image?.complete && image.naturalWidth > 0; }).toBe(true);
+  return { ...h, source };
+}
+const imageClone = () => document.querySelector<HTMLImageElement>(".pwa-published-image-transition");
+
+test("image source handoff owns one geometric layer and keeps pins until Drawer exit", async () => {
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-duration-image-in", "1500ms");
+  document.documentElement.style.setProperty("--pwa-duration-image-out", "1500ms");
+  const h = await imageReaderHarness();
+  h.source.click();
+  await expect.poll(imageClone).not.toBeNull();
+  const clone = imageClone()!;
+  expect(document.querySelectorAll(".pwa-published-image-transition")).toHaveLength(1);
+  expect((clone.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform).not.toBe("none");
+  expect(getComputedStyle(document.querySelector(".pwa-file-reader")!).transform).toBe("none");
+  expect(h.source.querySelector("img")!.style.visibility).toBe("hidden");
+  expect(document.querySelector<HTMLImageElement>(".pwa-file-image-stage img")!.style.visibility).toBe("hidden");
+  clone.getAnimations()[0].finish();
+  await expect.poll(imageClone).toBeNull();
+  expect(h.source.querySelector("img")!.style.visibility).toBe("");
+  (h.screen.getByRole("button", { name: "Close file reader" }).element() as HTMLButtonElement).click();
+  await expect.poll(imageClone).not.toBeNull();
+  expect(h.unpin).not.toHaveBeenCalled();
+  imageClone()!.getAnimations()[0].finish();
+  await expect.poll(imageClone).toBeNull();
+  expect(h.unpin).not.toHaveBeenCalled();
+  await expect.poll(() => document.querySelector(".pwa-file-reader"), { timeout: 4000 }).toBeNull();
+  expect(h.unpin).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(h.source);
+  expect(h.source.querySelector("img")!.style.visibility).toBe("");
+  await h.screen.unmount();
+});
+
+test("image source handoff reverses from its current geometry and cancels on runtime reduced motion", async () => {
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-duration-image-in", "1500ms");
+  document.documentElement.style.setProperty("--pwa-duration-image-out", "1500ms");
+  const h = await imageReaderHarness();
+  try {
+    h.source.click();
+    await expect.poll(imageClone).not.toBeNull();
+    const first = imageClone()!;
+    first.getAnimations()[0].pause();
+    first.getAnimations()[0].currentTime = 400;
+    const before = first.getBoundingClientRect();
+    flushSync(() => (h.screen.getByRole("button", { name: "Close file reader" }).element() as HTMLButtonElement).click());
+    await expect.poll(() => imageClone() !== null && imageClone() !== first).toBe(true);
+    const second = imageClone()!;
+    second.getAnimations()[0].pause();
+    second.getAnimations()[0].currentTime = 0;
+    const after = second.getBoundingClientRect();
+    expect(Math.round(after.left)).toBe(Math.round(before.left));
+    expect(Math.round(after.top)).toBe(Math.round(before.top));
+    expect(Math.round(after.width)).toBe(Math.round(before.width));
+    expect(document.querySelectorAll(".pwa-published-image-transition")).toHaveLength(1);
+    await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+    await expect.poll(imageClone).toBeNull();
+    expect(h.source.querySelector("img")!.style.visibility).toBe("");
+    await expect.poll(() => document.querySelector(".pwa-file-reader"), { timeout: 4000 }).toBeNull();
+    expect(h.unpin).toHaveBeenCalledTimes(1);
+  } finally {
+    await h.screen.unmount();
+    await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+  }
+});
+
+test.each(["scope", "resize", "hidden", "clipped"])("an active image handoff cleans its drawing layer after %s", async action => {
+  await page.viewport(390, 844);
+  document.documentElement.style.setProperty("--pwa-duration-image-in", "1500ms");
+  const h = await imageReaderHarness();
+  let hidden: ReturnType<typeof vi.spyOn> | undefined;
+  try {
+    h.source.click();
+    await expect.poll(imageClone).not.toBeNull();
+    if (action === "scope") h.replaceScope();
+    if (action === "resize") await page.viewport(420, 844);
+    if (action === "hidden") {
+      hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+      document.dispatchEvent(new Event("visibilitychange"));
+    }
+    if (action === "clipped") Object.assign(h.source.parentElement!.style, { maxHeight: "96px", overflow: "hidden" });
+    await expect.poll(imageClone).toBeNull();
+    expect(h.source.querySelector("img")!.style.visibility).toBe("");
+    const target = document.querySelector<HTMLImageElement>(".pwa-file-image-stage img");
+    if (target) expect(target.style.visibility).toBe("");
+    if (action === "scope") {
+      expect(document.querySelector(".pwa-file-reader")).toBeNull();
+      expect(h.unpin).toHaveBeenCalledTimes(1);
+    }
+  } finally {
+    hidden?.mockRestore();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await h.screen.unmount();
+  }
+});
+
+test.each(["removed", "clipped", "animation failure"])("image source handoff falls back when the source is %s", async reason => {
+  await page.viewport(390, 844);
+  const h = await imageReaderHarness();
+  const animate = reason === "animation failure" ? vi.spyOn(HTMLImageElement.prototype, "animate").mockImplementation(() => { throw new Error("unavailable"); }) : null;
+  try {
+    if (reason === "clipped") Object.assign(h.source.parentElement!.style, { maxHeight: "96px", overflow: "hidden" });
+    h.source.click();
+    await expect.element(h.screen.getByRole("dialog", { name: image.file_name, exact: true })).toBeVisible();
+    if (reason === "removed") {
+      imageClone()?.getAnimations()[0].finish();
+      await expect.poll(imageClone).toBeNull();
+      h.setItems([event(published({ ...descriptor, publication_id: "retained" }))]);
+    }
+    await expect.poll(() => document.activeElement?.tagName).toBe("H2");
+    expect(imageClone()).toBeNull();
+    expect(getComputedStyle(document.querySelector(".pwa-file-reader")!).transform).toBe("none");
+    (h.screen.getByRole("button", { name: "Close file reader" }).element() as HTMLButtonElement).click();
+    await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+    expect(imageClone()).toBeNull();
+    expect(h.source.querySelector("img")!.style.visibility).toBe("");
+    if (reason === "removed") expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
+  } finally {
+    animate?.mockRestore();
+    await h.screen.unmount();
+  }
 });

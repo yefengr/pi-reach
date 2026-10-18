@@ -15,6 +15,7 @@ import { useSwipe } from "@/components/pwa/use-swipe";
 import type { SettingsOrigin, SettingsRoute } from "@/lib/pwa/settings-route";
 import { useI18n } from "@/lib/i18n";
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
+import { WorkPanelLayout } from "./work-panel-layout";
 import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, isKeyboardInput, shortcutLabel, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
 
 const MOBILE_QUERY = "(max-width: 767.98px)";
@@ -306,7 +307,7 @@ export function PwaWorkspaceLayout({
           {operationNotifications}
           <PwaRuntimeNoticeSlot />
         </div>
-        {children}
+        <WorkPanelLayout>{children}</WorkPanelLayout>
       </main>
     </div>
     {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={navigationDrag.gesture === "rollback" ? null : sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={onNavigationExitTransitionEnd} /> : null}

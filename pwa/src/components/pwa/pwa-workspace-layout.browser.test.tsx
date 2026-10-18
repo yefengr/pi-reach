@@ -1200,10 +1200,10 @@ test("landscape side safe areas are avoided once by the edge-touching layers", a
     await expect.element(expand).toBeVisible();
     await expect.poll(() => Math.round(expand.element().getBoundingClientRect().left)).toBe(safe + 8);
     await expect.poll(() => [main.getBoundingClientRect().left, main.getBoundingClientRect().right].map(Math.round)).toEqual([0, 844]);
-    expect(getComputedStyle(titleBar).paddingLeft).toBe(`${56 + safe}px`);
-    expect(getComputedStyle(titleBar).paddingRight).toBe(`${8 + safe}px`);
+    expect(Math.round(Number.parseFloat(getComputedStyle(titleBar).paddingLeft))).toBe(56 + safe);
+    expect(Math.round(Number.parseFloat(getComputedStyle(titleBar).paddingRight))).toBe(8 + safe);
     const collapsedNotices = getComputedStyle(document.querySelector(".pwa-main-notices")!);
-    expect([collapsedNotices.paddingLeft, collapsedNotices.paddingRight]).toEqual([`${safe}px`, `${safe}px`]);
+    expect([collapsedNotices.paddingLeft, collapsedNotices.paddingRight].map(value => Math.round(Number.parseFloat(value)))).toEqual([safe, safe]);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-left");
     document.documentElement.style.removeProperty("--pwa-safe-right");

@@ -104,6 +104,7 @@ test("preserves each injected environment on fresh offline startup and settings 
       await expect(input).toHaveAttribute("placeholder", relayUrl);
       await input.fill("");
       await page.getByRole("button", { name: "Save settings" }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Settings saved" })).toBeVisible();
       await page.reload();
       await expect(input).toHaveValue(relayUrl);
     } finally {
@@ -158,7 +159,8 @@ test("opens an empty PWA without horizontal overflow and activates the app servi
   await pwa.open();
 
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.locator(".pwa-loading")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Copy command", exact: true })).toBeEnabled();
   const dimensions = await page.evaluate(() => ({
     body: document.body.scrollWidth,
     document: document.documentElement.scrollWidth,

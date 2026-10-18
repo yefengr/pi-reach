@@ -2,13 +2,19 @@ import { createAssistantMessageEventStream, type AssistantMessage, type ToolCall
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const PUBLISH_TRIGGER = "E2E publish file fixtures";
+const STREAM_TRIGGER = "E2E stream tool fixture";
+const STREAM_COMMAND = [
+  "node -e 'console.log(\"E2E stream start\"); let tick = 0;",
+  "const timer = setInterval(() => { tick += 1; console.log(\"E2E stream tick \" + tick);",
+  "if (tick === 10) { clearInterval(timer); console.log(\"E2E stream complete\"); } }, 1000);'",
+].join(" ");
 const PUBLISH_PATHS = [
   "/workspace/pi-reach-published-files/report-中文.md",
   "/workspace/pi-reach-published-files/image.png",
   "/workspace/pi-reach-published-files/data.bin",
 ];
 
-/** 仅隔离 Docker 验收使用：无网络、无凭据，仅精确指令触发固定发布工具。 */
+/** 仅隔离 Docker 验收使用：无网络、无凭据，仅精确指令触发固定工具。 */
 export default function registerE2eProvider(pi: ExtensionAPI) {
   pi.registerProvider("pi-reach-e2e", {
     api: "pi-reach-e2e",
@@ -26,7 +32,9 @@ export default function registerE2eProvider(pi: ExtensionAPI) {
         : null;
       const calls: ToolCall[] = text === PUBLISH_TRIGGER ? PUBLISH_PATHS.map(path => ({
         type: "toolCall", id: `e2e-publish-${crypto.randomUUID()}`, name: "publish_file", arguments: { path },
-      })) : [];
+      })) : text === STREAM_TRIGGER ? [{
+        type: "toolCall", id: `e2e-stream-${crypto.randomUUID()}`, name: "bash", arguments: { command: STREAM_COMMAND },
+      }] : [];
       const message: AssistantMessage = {
         role: "assistant" as const, api: model.api, provider: model.provider, model: model.id,
         content: [], timestamp: Date.now(), stopReason: "pending" as const,

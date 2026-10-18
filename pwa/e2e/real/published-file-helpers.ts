@@ -3,6 +3,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { expect, type Locator, type Page, type TestInfo } from "playwright/test";
+import { expectTextReader, waitForReaderHistoryClear } from "./work-panel-helpers";
 
 const TRIGGER = "E2E publish file fixtures";
 const ROOT = "/workspace/pi-reach-published-files";
@@ -109,31 +110,37 @@ async function verifyVisuals(page: Page): Promise<void> {
   const directory = fileURLToPath(new URL("../../../.pi/tmp/screenshots/session-files/", import.meta.url));
   await mkdir(directory, { recursive: true });
   for (const theme of ["light", "dark"] as const) {
-    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setViewportSize({ width: 1600, height: 900 });
     await page.getByRole("button", { name: "Open settings", exact: true }).click();
     const settings = page.getByRole("main", { name: "Settings", exact: true });
     await settings.getByRole("radio", { name: theme === "light" ? /^Light\b/ : /^Dark\b/ }).check();
     await settings.getByRole("button", { name: "Back to workspace", exact: true }).click();
-    for (const [layout, width, height] of [["desktop", 1280, 900], ["mobile", 390, 844]] as const) {
+    for (const [layout, width, height] of [["desktop", 1600, 900], ["mobile", 390, 844]] as const) {
       await page.setViewportSize({ width, height });
       await card(page, "image.png").scrollIntoViewIfNeeded();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.screenshot({ path: `${directory}/${layout}-${theme}-files.png`, animations: "disabled" });
       for (const file of ["report-中文.md", "image.png"]) {
         await card(page, file).getByRole("button", { name: file === "image.png" ? "View image" : "View", exact: true }).click();
-        const reader = page.getByRole("dialog", { name: file, exact: true });
+        const reader = file === "image.png"
+          ? page.getByRole("dialog", { name: file, exact: true })
+          : await expectTextReader(page, width === 1600);
         await expect(reader).toBeVisible();
+        if (file === "image.png") await expect(reader.getByRole("img", { name: file, exact: true })).toBeVisible();
+        else await expect(reader.getByRole("heading", { name: "Published fixture report", exact: true })).toBeVisible();
         await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await page.screenshot({ path: `${directory}/${layout}-${theme}-${file === "image.png" ? "image" : "text"}.png`, animations: "disabled" });
         await reader.getByRole("button", { name: "Close file reader", exact: true }).click();
-        await expect(reader).toHaveCount(0);
+        await waitForReaderHistoryClear(page);
+        await expect(page.locator(".pwa-file-reader-scroll, .pwa-file-image-stage")).toHaveCount(0);
       }
     }
   }
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 1600, height: 900 });
 }
 
 async function verifyOwner(page: Page, files: Fixture[], testInfo: TestInfo, label: string): Promise<string[]> {
+  await page.setViewportSize({ width: 1600, height: 900 });
   await expect(page.locator(".pwa-published-file")).toHaveCount(files.length, { timeout: 60_000 });
   const ids: string[] = [];
   for (const file of files) {
@@ -151,19 +158,21 @@ async function verifyOwner(page: Page, files: Fixture[], testInfo: TestInfo, lab
 
   // 首次 View 点击须在异步获取后直接打开阅读器。
   await card(page, "report-中文.md").getByRole("button", { name: "View", exact: true }).click();
-  const reader = page.getByRole("dialog", { name: "report-中文.md", exact: true });
+  const reader = await expectTextReader(page, true);
   await expect(reader).toBeVisible({ timeout: 60_000 });
   await expect(reader.getByRole("heading", { name: "Published fixture report", exact: true })).toBeVisible();
   await expect(reader.locator("strong")).toHaveText("原名与原件");
   await expect(reader.getByRole("table")).toBeVisible();
   await reader.getByRole("button", { name: "Close file reader", exact: true }).click();
-  await expect(reader).toHaveCount(0);
+  await waitForReaderHistoryClear(page);
+  await expect(page.locator(".pwa-file-reader-scroll")).toHaveCount(0);
 
   await card(page, "image.png").getByRole("button", { name: "View image", exact: true }).click();
   const imageReader = page.getByRole("dialog", { name: "image.png", exact: true });
   await expect(imageReader).toBeVisible();
   await expect(imageReader.getByRole("img", { name: "image.png", exact: true })).toBeVisible();
   await imageReader.getByRole("button", { name: "Close file reader", exact: true }).click();
+  await waitForReaderHistoryClear(page);
   await expect(imageReader).toHaveCount(0);
   for (const [index, file] of files.entries()) {
     await saveAndVerify(page, card(page, file.name), file, testInfo.outputPath(`${label}-${index}-${file.name}`));

@@ -1698,6 +1698,8 @@ test("published files: verified ready result survives a short disconnect without
 });
 
 test.each(["bye", "reset"] as const)("published files: %s closes the old reader while formal content stays mounted", async type => {
+  // 该组断言覆盖模态阅读器的 history 与回焦；宽屏非模态面板由 work-panel 用例覆盖。
+  await page.viewport(800, 900);
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;
   const revoke = vi.spyOn(URL, "revokeObjectURL");
@@ -1706,7 +1708,7 @@ test.each(["bye", "reset"] as const)("published files: %s closes the old reader 
     const origin = screen.getByRole("button", { name: "View", exact: true }).element();
     await screen.getByRole("button", { name: "View", exact: true }).click();
     await expect.element(screen.getByRole("dialog", { name: "report.txt", exact: true })).toBeVisible();
-    await expect.poll(() => typeof window.history.state?.piReachFileReader).toBe("string");
+    await expect.poll(() => window.history.state?.piReachFileReader).toBe(true);
     const list = document.querySelector(".pwa-message-list");
     channel.emit({ protocol_version: 2, type, session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced",
       ...(type === "reset" ? { target_channel_id: channel.channelId, in_reply_to: "server-reset" } : {}) });
@@ -1722,10 +1724,11 @@ test.each(["bye", "reset"] as const)("published files: %s closes the old reader 
     emitEvent(next, { ...numberedEvents(1)[0]!, event_id: "new-scope-output", session_id: "session-2", leaf_id: "generation-session-2" });
     await expect.element(screen.getByText("Record 1", { exact: true })).toBeVisible();
     expect(document.querySelector(".pwa-file-reader")).toBeNull();
-  } finally { revoke.mockRestore(); await screen.unmount(); }
+  } finally { revoke.mockRestore(); await screen.unmount(); await page.viewport(1280, 900); }
 });
 
 test("published files: selecting another Pi closes the reader before its new handshake", async () => {
+  await page.viewport(800, 900);
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen } = context;
   try {
@@ -1744,10 +1747,11 @@ test("published files: selecting another Pi closes the reader before its new han
     channelHarness.channels[1]!.emit(readyFrame(channelHarness.channels[1]!, "second-session"));
     await expect.element(screen.getByText("Send a message to Pi to begin.")).toBeVisible();
     expect(document.querySelector(".pwa-file-reader")).toBeNull();
-  } finally { await screen.unmount(); }
+  } finally { await screen.unmount(); await page.viewport(1280, 900); }
 });
 
 test("published files: an open reader survives live updates and a short disconnect", async () => {
+  await page.viewport(800, 900);
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;
   try {
@@ -1766,7 +1770,7 @@ test("published files: an open reader survives live updates and a short disconne
     expect(screen.getByRole("link", { name: "Save file", exact: true }).last().element().getAttribute("href")).toBe(url);
     await screen.getByRole("button", { name: "Close file reader", exact: true }).click();
     await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
-  } finally { await screen.unmount(); }
+  } finally { await screen.unmount(); await page.viewport(1280, 900); }
 });
 
 test("published files: a rejected new-session action preserves the verified result until actual replacement", async () => {
@@ -2913,14 +2917,15 @@ test("preserves the session, draft, attachment, tool row and reader across layou
       assertSessionUnchanged();
     }
     await screen.getByRole("button", { name: "View read tool details" }).click();
-    const reader = screen.getByRole("dialog").element();
+    // 阅读正文容器在分栏与覆盖之间迁移时保持不变，按容器断言跨断点身份。
+    const reader = document.querySelector(".pwa-reader-portal")!;
     for (const width of [390, 1280]) {
       await page.viewport(width, 900);
-      expect(screen.getByRole("dialog").element()).toBe(reader);
+      expect(document.querySelector(".pwa-reader-portal")).toBe(reader);
       assertSessionUnchanged();
     }
     await screen.getByRole("button", { name: "Close tool details" }).click();
-    await expect.element(page.elementLocator(reader)).not.toBeInTheDocument();
+    expect(document.querySelector(".pwa-reader-portal")).toBeNull();
     await expect.element(screen.getByRole("button", { name: "View read tool details" })).toHaveFocus();
     assertSessionUnchanged();
   } finally {

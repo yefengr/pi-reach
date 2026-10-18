@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type BrowserContext, type Page, type TestInfo } from "playwright/test";
 import { verifyPublishedFiles } from "./published-file-helpers";
+import { verifyWorkPanelLive } from "./work-panel-helpers";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const COMPOSE_FILE = "docker/e2e/compose.yml";
@@ -339,11 +340,11 @@ async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: str
   }
 }
 
-test("pairs two browser Owners, uploads and publishes exact originals, and preserves native Pi and Relay recovery", async ({ browser, baseURL }, testInfo) => {
+test("pairs two browser Owners, verifies live work panels and exact originals, and preserves native Pi and Relay recovery", async ({ browser, baseURL }, testInfo) => {
   if (!baseURL) throw new Error("Remote Playwright baseURL is required.");
 
-  const ownerAContext = await browser.newContext({ baseURL, serviceWorkers: "block", viewport: { width: 1280, height: 900 } });
-  const ownerBContext = await browser.newContext({ baseURL, serviceWorkers: "block", viewport: { width: 1280, height: 900 } });
+  const ownerAContext = await browser.newContext({ baseURL, serviceWorkers: "block", viewport: { width: 1600, height: 900 } });
+  const ownerBContext = await browser.newContext({ baseURL, serviceWorkers: "block", viewport: { width: 1600, height: 900 } });
   const ownerAPage = await ownerAContext.newPage();
   const ownerBPage = await ownerBContext.newPage();
   let tracingStarted = false;
@@ -404,8 +405,11 @@ test("pairs two browser Owners, uploads and publishes exact originals, and prese
       expect(legacyFileRequests.get(legacyPage)?.count).toBe(0);
       await expect(legacyPage.locator(".pwa-published-file")).toHaveCount(0);
     }
-    const afterSession = await startFreshSession(ownerAPage, attachmentSession.sessionId!);
-    expect(afterSession.sessionId).not.toBe(attachmentSession.sessionId);
+    const afterSessionId = await verifyWorkPanelLive(
+      [ownerAPage, ownerBPage], attachmentSession.sessionId!,
+      previousSessionId => startFreshSession(ownerAPage, previousSessionId),
+    );
+    expect(afterSessionId).not.toBe(attachmentSession.sessionId);
     await Promise.all([
       expect(ownerAPage.getByLabel("Connected", { exact: true })).toBeVisible(),
       expect(ownerBPage.getByLabel("Connected", { exact: true })).toBeVisible(),

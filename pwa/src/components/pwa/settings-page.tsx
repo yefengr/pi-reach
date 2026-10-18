@@ -8,7 +8,15 @@ import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
 import { version as pwaVersion } from "../../../package.json";
 
+export type SettingsPagePreferences = {
+  language: LanguagePreference;
+  setLanguage: (value: LanguagePreference) => void;
+  enterSends: boolean;
+  setEnterSends: (value: boolean) => void;
+};
+
 type SettingsPageProps = {
+  preferences?: SettingsPagePreferences;
   relayUrl: string;
   defaultRelayUrl: string;
   relayVersion: string | null;
@@ -30,13 +38,23 @@ type SettingsPageProps = {
  * 独立设置页：不保留工作区侧栏，内容最大宽 640，分区间距 32。
  * 移动端返回箭头与标题同一行；桌面返回为带文字的按钮，标题在其下方。
  */
-export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: SettingsPageProps) {
+export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
+  return preferences ? <SettingsPageContent {...props} preferences={preferences} /> : <PersistedSettingsPage {...props} />;
+}
+
+function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
+  const { preference } = useI18n();
+  const [enterSends, setEnterSends] = useEnterSends();
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends }} />;
+}
+
+function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
   const [value, setValue] = useState(relayUrl);
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
-  const { t, preference } = useI18n();
-  const [enterSends, setEnterSends] = useEnterSends();
+  const { t } = useI18n();
+  const { enterSends, setEnterSends } = preferences;
   const s = t.settings;
   const versionText = (version: string | null, status: ConnectionViewState) => {
     if (status === "online") return version ?? s.versionUnavailable;
@@ -81,7 +99,7 @@ export function SettingsPage({ relayUrl, defaultRelayUrl, relayVersion, relaySta
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
         <p className="pwa-settings-section-description">{s.languageHint}</p>
-        <Radio.Group aria-label={s.language} className="pwa-appearance-options" name="pwa-language" value={preference} onChange={(next) => setLanguagePreference(next as LanguagePreference)}>
+        <Radio.Group aria-label={s.language} className="pwa-appearance-options" name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
           <Stack gap="xs">
             <Radio className="pwa-appearance-option" value="system" label={<span className="pwa-appearance-copy"><Globe size={20} /><span><strong>{s.followBrowser}</strong><small>{s.followBrowserHint}</small></span></span>} />
             <Radio className="pwa-appearance-option" value="zh" label={<span className="pwa-appearance-copy"><Languages size={20} /><span><strong lang="zh-CN">{s.chinese}</strong><small>{s.chineseHint}</small></span></span>} />

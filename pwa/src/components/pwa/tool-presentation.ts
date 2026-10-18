@@ -1,5 +1,6 @@
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { getMessages } from "@/lib/i18n";
+import { timelineToolKey } from "@/lib/pwa/timeline-presentation";
 
 export type ToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }>;
 export type ToolStatus = "running" | "complete" | "error" | "interrupted" | "unknown";
@@ -37,7 +38,7 @@ export function isRecord(value: unknown): value is RecordValue {
 }
 
 export function toolIdentity(value: ToolValue): string {
-  return JSON.stringify([value.session_id, value.leaf_id, value.group_id, value.tool_call_id]);
+  return timelineToolKey(value);
 }
 
 export function isToolPartial(value: ToolValue): value is Extract<TimelinePartial, { kind: "tool" }> {

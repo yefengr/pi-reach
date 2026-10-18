@@ -162,9 +162,17 @@ test("moves invisible run_end gaps past duplicate traces and preserves trailing 
   expect(projectTimelineGaps(trailing, new Set(["end"]), projectTimeline(trailing).entries)).toEqual({ keys: new Set(), toolBreakKeys: new Set(), atEnd: true });
 });
 
-test("isolates repeated tool ids between sessions and history generations", () => {
+test("keeps a tool's identity when the same session and turn advance their leaf", () => {
+  const first = projectTimeline([item({ ...partial("same"), leaf_id: null })]);
+  const completed = projectTimeline([item(tool("same", 2))], first);
+  const advanced = projectTimeline([item({ ...tool("same", 2), leaf_id: "later-leaf" })], completed);
+  expect(completed.entries[0]!.key).toBe(first.entries[0]!.key);
+  expect(advanced.entries[0]!.key).toBe(first.entries[0]!.key);
+});
+
+test("isolates repeated tool ids between sessions and turns", () => {
   const first = projectTimeline([item(tool("same", 1))]);
-  for (const scope of [{ session_id: "other" }, { leaf_id: "other" }, { group_id: "other" }]) {
+  for (const scope of [{ session_id: "other" }, { group_id: "other" }]) {
     const view = projectTimeline([item({ ...tool("same", 1), ...scope })], first);
     expect(view.entries).toHaveLength(1);
     expect(view.entries[0].key).not.toBe(first.entries[0].key);

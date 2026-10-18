@@ -34,31 +34,31 @@
 @media (hover: hover) { .pwa-timeline-toggle:hover { background: var(--pwa-hover); } }
 .pwa-timeline-toggle:active { background: var(--pwa-hover); }
 .pwa-timeline-toggle:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
-.pwa-timeline-chevron { width: 16px; height: 16px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-expand-in) var(--pwa-ease-standard); }
-.pwa-timeline-toggle[aria-expanded="true"] > .pwa-timeline-chevron { transform: rotate(90deg); }
+.pwa-timeline-chevron { width: 16px; height: 16px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-standard); }
+.pwa-timeline-toggle[aria-expanded="true"] > .pwa-timeline-chevron { transform: rotate(90deg); transition-duration: var(--pwa-duration-collapse-in); }
 
-/* 展开：进入 160ms、退出 120ms；内容略微位移并淡入淡出。减少动态效果时只保留透明度。 */
+/* 展开：进入 180ms、退出 140ms；内容略微位移并淡入淡出。减少动态效果时只保留透明度。 */
 .pwa-collapse {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows var(--pwa-duration-expand-out) var(--pwa-ease-standard), opacity var(--pwa-duration-expand-out) var(--pwa-ease-standard);
+  transition: grid-template-rows var(--pwa-duration-collapse-out) var(--pwa-ease-standard), opacity var(--pwa-duration-collapse-out) var(--pwa-ease-standard);
 }
 .pwa-collapse[data-open] {
   grid-template-rows: 1fr;
   opacity: 1;
-  transition-duration: var(--pwa-duration-expand-in);
+  transition-duration: var(--pwa-duration-collapse-in);
 }
 .pwa-collapse-inner {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   transform: translateY(calc(-4px * var(--pwa-motion-shift)));
-  transition: transform var(--pwa-duration-expand-out) var(--pwa-ease-standard);
+  transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-standard);
 }
 .pwa-collapse[data-open] > .pwa-collapse-inner {
   transform: none;
-  transition-duration: var(--pwa-duration-expand-in);
+  transition-duration: var(--pwa-duration-collapse-in);
 }
 
 /* 工具组组头与思考标题保持正文字号；只有展开内容使用较小字号。 */

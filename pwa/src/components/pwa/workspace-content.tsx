@@ -10,6 +10,8 @@ import type { ThinkingLevel } from "@/lib/pi-reach/types";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_PAGE_SIZE } from "@/lib/pwa/timeline-history-loader";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
+import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
+import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor } from "@/lib/pwa/timeline-viewport-anchor";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 
@@ -84,6 +86,34 @@ export function HistoryWorkspace({ items, loading = false, restore = null, visib
     prependAnchorRef.current = null;
     list.scrollTop = list.scrollHeight - anchor;
   }, [listRef, visibleCount]);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    // 历史没有实时跟随控制器；复用相同的行锚点算法，独立处理分栏和侧栏重排。
+    let anchor = captureTimelineViewportAnchor(list);
+    let restoredTop: number | null = null;
+    const remember = () => {
+      if (restoredTop !== null && Math.abs(list.scrollTop - restoredTop) <= 1) { restoredTop = null; return; }
+      restoredTop = null;
+      anchor = captureTimelineViewportAnchor(list);
+    };
+    const restoreAnchor = () => {
+      const before = list.scrollTop;
+      if (!anchor || !restoreTimelineViewportAnchor(list, anchor)) anchor = captureTimelineViewportAnchor(list);
+      // 程序恢复产生的异步 scroll 不重写原锚点，避免调宽时取整误差累积。
+      if (list.scrollTop !== before) restoredTop = list.scrollTop;
+    };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(restoreAnchor);
+    observer?.observe(list);
+    for (const child of list.children) observer?.observe(child);
+    list.addEventListener("scroll", remember, { passive: true });
+    list.addEventListener(TIMELINE_GEOMETRY_EVENT, restoreAnchor);
+    return () => {
+      observer?.disconnect();
+      list.removeEventListener("scroll", remember);
+      list.removeEventListener(TIMELINE_GEOMETRY_EVENT, restoreAnchor);
+    };
+  }, [listRef, visibleItems]);
   const loadEarlier = () => {
     const list = listRef.current;
     if (list) prependAnchorRef.current = list.scrollHeight - list.scrollTop;

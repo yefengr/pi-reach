@@ -93,9 +93,9 @@
 .pwa-root .pwa-nav-heading-copy em { min-width: 0; overflow: hidden; font-size: var(--pwa-text-meta); font-style: normal; font-weight: var(--pwa-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-nav-empty { margin: 0; padding: 4px 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
-/* 会话行：上下 6、左右 8（文字与品牌、分组标题同一左缘 16），行间 2；悬停 hover，选中 selected＋ink。 */
+/* 会话双行按内容撑高；纯细指针上下4，触控／混合6，左右8与分组标题对齐。 */
 .pwa-root .pwa-nav-session,
-.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: 6px 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: var(--pwa-navigation-row-padding) 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-nav-session .pwa-nav-link-body,
 .pwa-root .pwa-history-row .pwa-nav-link-body { min-width: 0; display: grid; gap: 2px; }
 .pwa-root .pwa-nav-session .pwa-nav-link-label,

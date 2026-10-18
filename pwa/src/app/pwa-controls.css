@@ -1,0 +1,94 @@
+/* 微交互只改变绘制层；覆盖 Mantine 的根节点 active 位移，命中区与焦点轮廓保持原位。 */
+.pwa-ui-scope .pwa-button:active,
+.pwa-ui-scope .pwa-icon-button:active { transform: none; }
+.pwa-ui-scope .pwa-root .pwa-icon-button::before {
+  transition: transform var(--pwa-duration-press-out) var(--pwa-ease-standard), background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard);
+}
+.pwa-ui-scope .pwa-button .mantine-Button-inner,
+.pwa-ui-scope .pwa-icon-button .mantine-ActionIcon-icon {
+  transition: transform var(--pwa-duration-press-out) var(--pwa-ease-standard);
+}
+.pwa-ui-scope .pwa-root .pwa-icon-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled])::before,
+.pwa-ui-scope .pwa-icon-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) .mantine-ActionIcon-icon {
+  transform: scale(var(--pwa-press-icon-scale));
+  transition-duration: var(--pwa-duration-press-in);
+}
+.pwa-ui-scope .pwa-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) .mantine-Button-inner {
+  transform: scale(var(--pwa-press-button-scale));
+  transition-duration: var(--pwa-duration-press-in);
+}
+.pwa-ui-scope .pwa-root .pwa-icon-button:is(:disabled, [data-disabled])::before,
+.pwa-ui-scope .pwa-icon-button:is(:disabled, [data-disabled]) .mantine-ActionIcon-icon,
+.pwa-ui-scope .pwa-button:is(:disabled, [data-disabled]) .mantine-Button-inner {
+  transform: none;
+  transition-duration: 0ms;
+}
+
+/* 鼠标移出时撤销 :active 绘制；触控显式状态由 pointercancel 等原生事件清理。 */
+@media (hover: hover) {
+  .pwa-ui-scope .pwa-root .pwa-icon-button:active:not(:hover):not(:focus-visible)::before,
+  .pwa-ui-scope .pwa-icon-button:active:not(:hover):not(:focus-visible) .mantine-ActionIcon-icon,
+  .pwa-ui-scope .pwa-button:active:not(:hover):not(:focus-visible) .mantine-Button-inner {
+    transform: none;
+    transition-duration: 0ms;
+  }
+}
+
+/* 从 Mantine 实际定位结果而不是调用时的预设方向推导锚点，翻转后仍从来源进入。 */
+.pwa-menu-motion {
+  --pwa-menu-shift-x: 0px;
+  --pwa-menu-shift-y: calc(-1 * var(--pwa-menu-offset));
+}
+.pwa-menu-motion[data-position^="top"] { --pwa-menu-shift-y: var(--pwa-menu-offset); }
+.pwa-menu-motion[data-position^="left"] { --pwa-menu-shift-x: var(--pwa-menu-offset); --pwa-menu-shift-y: 0px; }
+.pwa-menu-motion[data-position^="right"] { --pwa-menu-shift-x: calc(-1 * var(--pwa-menu-offset)); --pwa-menu-shift-y: 0px; }
+
+/* 视觉底与完整命中区分离：细指针单行可画成40高，目标仍至少44且不相互覆盖。
+   双行或完整长名称按内容撑高，不能为了紧凑裁掉文字。 */
+.pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item] {
+  position: relative;
+  isolation: isolate;
+  min-height: 44px;
+  background: transparent;
+  outline-offset: calc(-1 * var(--pwa-menu-visual-inset));
+}
+.pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: var(--pwa-menu-visual-inset) 0;
+  border-radius: inherit;
+  background: transparent;
+  pointer-events: none;
+}
+.pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item]:where(:focus-visible, [data-hovered]):where(:not(:disabled):not([data-disabled]))::before { background: var(--pwa-hover); }
+@media (hover: hover) {
+  .pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item]:where(:hover):where(:not(:disabled):not([data-disabled]))::before { background: var(--pwa-hover); }
+}
+.pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item][data-selected]::before { background: var(--pwa-selected); }
+
+@media (hover: hover) and (pointer: fine) {
+  :root {
+    --pwa-menu-row-padding: 4px;
+    --pwa-navigation-row-padding: 4px;
+    --pwa-menu-visual-inset: 2px;
+  }
+}
+/* 大窗口不代表只有鼠标：有任一粗指针就保持可触控密度。 */
+@media (any-pointer: coarse), (hover: none) {
+  :root {
+    --pwa-menu-row-padding: 6px;
+    --pwa-navigation-row-padding: 6px;
+    --pwa-menu-visual-inset: 0px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Mantine 只在 mounted 切换时更新缓存时长；当前菜单也必须立即响应系统偏好。 */
+  .pwa-menu-motion[style] { transition-duration: var(--pwa-duration-fade) !important; }
+  .pwa-ui-scope .pwa-root .pwa-icon-button:is(:active, [data-pwa-pressed])::before,
+  .pwa-ui-scope .pwa-icon-button:is(:active, [data-pwa-pressed]) .mantine-ActionIcon-icon,
+  .pwa-ui-scope .pwa-button:is(:active, [data-pwa-pressed]) .mantine-Button-inner {
+    transform: none !important;
+  }
+}

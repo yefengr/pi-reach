@@ -6,7 +6,9 @@
 .pwa-root .pwa-published-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pwa-text-body); font-weight: 600; }
 .pwa-root .pwa-published-meta, .pwa-root .pwa-published-error { font-size: var(--pwa-text-meta); line-height: 1.4; color: var(--pwa-secondary); overflow-wrap: anywhere; }
 .pwa-root .pwa-published-error { color: var(--pwa-error); }
-.pwa-root .pwa-published-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.pwa-root .pwa-published-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px; }
+/* 可预览文件保留两个44px操作槽和既有间隔，获取／取消交接不挤动名称。 */
+.pwa-root .pwa-published-actions[data-previewable] { min-width: calc(44px * 2 + 2px); }
 /* 进度占用大小行：行高与大小文字一致，状态文字等宽数字避免百分比变化时抖动。 */
 .pwa-root .pwa-published-progress { display: flex; align-items: center; gap: 8px; }
 .pwa-root .pwa-published-progress .mantine-Progress-root { flex: 1; min-width: 48px; max-width: 160px; }
@@ -30,6 +32,8 @@
 .pwa-root .pwa-file-plain { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.55 var(--pwa-font-mono); }
 .pwa-root .pwa-file-image-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: hidden; background: var(--pwa-panel); touch-action: none; }
 .pwa-root .pwa-file-image-stage img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; pointer-events: none; }
+/* clone仅拥有图片几何，阅读器背景原位淡化；退出和资源释放仍由Drawer负责。 */
+.pwa-root .pwa-published-image-transition { position: fixed; z-index: 31; display: block; max-width: none; max-height: none; margin: 0; object-fit: fill; pointer-events: none; user-select: none; visibility: visible; }
 .pwa-root .pwa-file-zoom { display: flex; justify-content: center; gap: 4px; padding: 8px calc(8px + var(--pwa-safe-right)) max(8px, var(--pwa-safe-bottom)) 8px; }
 @media (max-width: 767.98px) {
   .pwa-root .pwa-file-reader, .pwa-root .pwa-file-reader-scroll { touch-action: pan-y; }
@@ -39,4 +43,8 @@
   .pwa-root .pwa-file-reader-scroll { padding: 16px calc(16px + var(--pwa-safe-right)) max(16px, var(--pwa-safe-bottom)) calc(16px + var(--pwa-safe-left)); }
   .pwa-root .pwa-published-row { flex-wrap: wrap; }
   .pwa-root .pwa-published-actions { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Mantine已挂载Transition可能保留旧数值；系统偏好在当前帧取消几何并缩短淡化。 */
+  .pwa-root :is(.pwa-file-reader, .pwa-file-reader-overlay)[data-image-reader][style] { transition-duration: var(--pwa-duration-fade) !important; }
 }

@@ -36,6 +36,12 @@ export const en = {
     historyLoading: "Loading local history…",
     historyError: "Could not read saved conversations.",
   },
+  workPanel: {
+    label: "Detail panel",
+    resize: "Resize detail panel",
+    resetWidth: "Reset panel width",
+    returnToChat: "Return to conversation",
+  },
   files: {
     view: "View",
     viewImage: "View image",
@@ -134,6 +140,7 @@ export const en = {
     unpairedBody: "Run this command in Pi on your computer.",
     copyCommand: "Copy command",
     copied: "Copied",
+    copyFailed: "Copy failed. Select the text and copy it manually.",
     startPairing: "Start pairing",
     noPiTitle: "No Pi online",
     noPiBody: "Start Pi on your computer and it will appear here automatically.",

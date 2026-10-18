@@ -36,6 +36,25 @@ export const pwaFadeTransition = {
   transitionProperty: "opacity",
 } as MantineTransition;
 
+/** 菜单由实际 data-position 提供来源方向；不改变只读 Popover、Modal 或 Drawer 的过渡。 */
+export const pwaMenuTransition = {
+  in: { opacity: 1, transform: "translate(0, 0)", transitionTimingFunction: "var(--pwa-ease-enter)" },
+  out: {
+    opacity: 0,
+    // 整层缩放会同时缩小44px命中区；菜单只沿真实锚点方向轻移与淡化。
+    transform: "translate(calc(var(--pwa-menu-shift-x, 0px) * var(--pwa-motion-shift, 1)), calc(var(--pwa-menu-shift-y, calc(-1 * var(--pwa-menu-offset))) * var(--pwa-motion-shift, 1)))",
+    pointerEvents: "none",
+    transitionTimingFunction: "var(--pwa-ease-exit)",
+  },
+  transitionProperty: "opacity, transform",
+} as MantineTransition;
+
+export function usePwaMenuTransition() {
+  const duration = usePwaMotionDuration("--pwa-duration-menu-in", 160);
+  const exitDuration = usePwaMotionDuration("--pwa-duration-menu-out", 120);
+  return { transition: pwaMenuTransition, duration, exitDuration };
+}
+
 /** Drawer 与设置页转场一致：面板全程不透明的纯位移；减少动态效果时 --pwa-motion-shift 为 0，位移消失并改为淡化。 */
 const drawerSlide = (axis: "X" | "Y", sign: "" | "-"): MantineTransition => ({
   in: { opacity: 1, transform: `translate${axis}(0)` },
