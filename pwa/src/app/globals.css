@@ -331,12 +331,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-versions dd { margin: 0; text-align: right; color: var(--pwa-secondary); overflow-wrap: anywhere; user-select: text; }
 .pwa-root .pwa-settings-version-target { margin-top: 12px; overflow-wrap: anywhere; }
 .pwa-appearance-options { display: block; margin-top: 16px; }
-.pwa-appearance-option { min-height: 72px; margin: 0; padding: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); transition: background var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-appearance-option { min-height: 72px; margin: 0; padding: 12px; border: 1px solid transparent; border-radius: var(--pwa-radius-md); background: var(--pwa-surface); transition: background var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-appearance-option:hover { background: var(--pwa-hover); } }
-/* 选中项只加深描边；颜色只留给单选圆点。 */
+/* 未选中项不描边，避免多个卡片同时争注意力；选中项用 ink 描边，颜色只留给单选圆点。 */
 .pwa-appearance-option:has(input:checked) { border-color: var(--pwa-ink); background: var(--pwa-surface); }
 .pwa-appearance-option .mantine-Radio-inner { align-self: center; }
-/* 未选中的圆点是需要识别的控件轮廓，用 control-line（≥ 3:1）；卡片外框仍是装饰性 line。 */
+/* 未选中的圆点是需要识别的控件轮廓，用 control-line（≥ 3:1）；卡片外框只在选中时出现。 */
 .pwa-appearance-option .mantine-Radio-radio { border-color: var(--pwa-control-line); }
 .pwa-appearance-option .mantine-Radio-radio:checked { border-color: var(--pwa-accent); background: var(--pwa-accent); }
 .pwa-appearance-option .mantine-Radio-labelWrapper { min-width: 0; flex: 1; }
