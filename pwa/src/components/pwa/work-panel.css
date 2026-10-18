@@ -25,3 +25,9 @@
 /* 迁移等待 Drawer 宿主期间保留旧正文几何，display:none 会清零滚动位置。 */
 .pwa-root .pwa-work-panel-layout:not([data-split]) .pwa-work-panel { position: absolute; inset: 0 0 0 auto; width: var(--pwa-work-panel-width); visibility: hidden; pointer-events: none; }
 .pwa-root .pwa-reader-portal, .pwa-root .pwa-reader-modal-host { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* 详情内容进入只淡化，不改布局时序；关闭与列宽切换直接落态。 */
+@keyframes pwa-work-panel-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.pwa-root .pwa-work-panel-host > .pwa-reader-portal { animation: pwa-work-panel-enter var(--pwa-duration-fade) var(--pwa-ease-standard); }

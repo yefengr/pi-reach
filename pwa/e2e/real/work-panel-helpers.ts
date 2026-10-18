@@ -52,7 +52,7 @@ async function openStreamTool(page: Page, saved = false): Promise<Locator> {
   const panel = page.getByRole("complementary", { name: "Detail panel", exact: true });
   await expect(page.locator(".pwa-work-panel-layout")).toHaveAttribute("data-split", "true");
   await expect(panel.locator(".pwa-tool-reader-scroll")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Copy all output", exact: true })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Close tool details", exact: true })).toBeVisible();
   await expect(panel.locator(".pwa-reader-portal")).toHaveCount(1);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   return panel;
@@ -66,12 +66,24 @@ async function migrateReader(page: Page, kind: "tool" | "file"): Promise<void> {
   const selector = kind === "tool" ? ".pwa-tool-reader-scroll" : ".pwa-file-reader-scroll";
   const body = await page.locator(selector).elementHandle();
   if (!body) throw new Error("Reader body is unavailable before migration.");
-  const control = kind === "tool"
-    ? page.getByRole("button", { name: "Copy all output", exact: true })
-    : page.getByRole("complementary", { name: "Detail panel", exact: true }).getByRole("link", { name: "Save file", exact: true });
-  await control.focus();
-  const focused = await control.elementHandle();
-  if (!focused) throw new Error("Reader control is unavailable before migration.");
+  // 工具详情除标题与关闭外没有常驻控件，迁移后只验证焦点仍在阅读器内；文件用保存链接验证具体控件。
+  const control = kind === "file"
+    ? page.getByRole("complementary", { name: "Detail panel", exact: true }).getByRole("link", { name: "Save file", exact: true })
+    : null;
+  if (control) await control.focus();
+  const focused = control ? await control.elementHandle() : null;
+  if (control && !focused) throw new Error("Reader control is unavailable before migration.");
+  const expectFocusKept = async () => {
+    if (focused) {
+      await expect.poll(() => focused.evaluate(node => node.isConnected && document.activeElement === node)).toBe(true);
+      return;
+    }
+    await expect.poll(() => page.evaluate(() => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && active !== document.body
+        && active.closest(".pwa-reader-portal, .pwa-work-panel-host") !== null;
+    })).toBe(true);
+  };
   const title = kind === "tool" ? "bash" : FILE_NAME;
   await page.setViewportSize(PHONE);
   const dialog = page.getByRole("dialog", { name: title, exact: true });
@@ -81,15 +93,15 @@ async function migrateReader(page: Page, kind: "tool" | "file"): Promise<void> {
   await expect.poll(() => dialog.evaluate(node => Math.round(node.getBoundingClientRect().width))).toBe(PHONE.width);
   await expect.poll(() => page.evaluate(key => Boolean(history.state?.[key]), kind === "tool" ? "piReachToolReader" : "piReachFileReader")).toBe(true);
   await expectSameBody(body);
-  await expect.poll(() => focused.evaluate(node => node.isConnected && document.activeElement === node)).toBe(true);
+  await expectFocusKept();
   await page.setViewportSize(WIDE);
   await expect(page.locator(".pwa-work-panel-layout")).toHaveAttribute("data-split", "true");
   await waitForReaderHistoryClear(page);
   await expect(dialog).toHaveCount(0);
   await expectSameBody(body);
-  await expect.poll(() => focused.evaluate(node => node.isConnected && document.activeElement === node)).toBe(true);
+  await expectFocusKept();
   await body.dispose();
-  await focused.dispose();
+  await focused?.dispose();
 }
 
 async function verifyPhoneBack(page: Page): Promise<void> {
@@ -98,7 +110,6 @@ async function verifyPhoneBack(page: Page): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "bash", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".pwa-reader-text")).toContainText("E2E stream complete");
-  await expect(dialog.getByRole("button", { name: "Copy all output", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => Boolean(history.state?.piReachToolReader))).toBe(true);
   await page.evaluate(() => history.back());
   await waitForReaderHistoryClear(page);
@@ -137,8 +148,6 @@ async function verifySavedHistory(page: Page, newDraft: string): Promise<void> {
   const panel = await openStreamTool(page, true);
   await expect(panel.locator(".pwa-reader-text")).toContainText("E2E stream complete");
   await expect(panel.locator(".pwa-tool-reader-status")).toHaveClass(/pwa-tool-status-complete/);
-  await panel.getByRole("button", { name: "Return to conversation", exact: true }).click();
-  await expect(page.locator(".pwa-message-list")).toBeFocused();
   await panel.getByRole("button", { name: "Close tool details", exact: true }).click();
   await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
   const online = page.locator("#pwa-desktop-navigation .pwa-nav-session");

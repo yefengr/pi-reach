@@ -42,7 +42,6 @@ export const zh: Messages = {
     label: "详情面板",
     resize: "调整详情面板宽度",
     resetWidth: "恢复默认宽度",
-    returnToChat: "回到对话",
   },
   files: {
     view: "查看",
@@ -467,7 +466,6 @@ export const zh: Messages = {
     searchResults: "搜索结果",
     returnedDiff: "返回的 diff",
     parameters: "参数",
-    copyAll: "复制全部输出",
     outputTruncated: "输出过长，已截断",
     noToolSelected: "未选择工具",
     closeReader: "关闭工具详情",

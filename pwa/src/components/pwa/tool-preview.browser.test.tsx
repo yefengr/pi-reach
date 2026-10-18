@@ -199,7 +199,7 @@ test("every tool lists its arguments as is in the first block, without duplicati
   }
 });
 
-test("the desktop reader header is a left-aligned tool name with status, copy and close on the right", async () => {
+test("the desktop reader header is a left-aligned tool name with status and close on the right", async () => {
   const command = "pnpm --filter pwa test:unit";
   const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
