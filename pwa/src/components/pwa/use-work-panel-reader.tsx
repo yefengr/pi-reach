@@ -47,7 +47,9 @@ export function useWorkPanelReader({ enabled, opened, onClose, onExitTransitionE
   const panel = useWorkPanel();
   const owner = useId();
   const docked = enabled && panel?.canSplit === true;
-  const [container] = useState(() => {
+  // 服务端渲染没有 DOM，正文宿主要在浏览器首次渲染时才创建。
+  const [container] = useState<HTMLDivElement | null>(() => {
+    if (typeof document === "undefined") return null;
     const node = document.createElement("div");
     node.className = "pwa-reader-portal";
     return node;
@@ -55,6 +57,7 @@ export function useWorkPanelReader({ enabled, opened, onClose, onExitTransitionE
   const [modalHost, setModalHost] = useState<HTMLDivElement | null>(null);
   const rememberedFocus = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
+    if (!container) return;
     // 宿主变为 hidden/inert 时浏览器会先撤销焦点，保留此前仍属于正文的控件。
     const focus = (event: FocusEvent) => {
       if (event.target instanceof HTMLElement && container.contains(event.target)) rememberedFocus.current = event.target;
@@ -72,6 +75,7 @@ export function useWorkPanelReader({ enabled, opened, onClose, onExitTransitionE
     return () => claim(owner, false);
   }, [claim, docked, opened, owner]);
   useLayoutEffect(() => {
+    if (!container) return;
     const target = docked && opened ? panel?.host : modalHost;
     let focusFrame = 0;
     let restoreAutofocus = () => {};
@@ -100,6 +104,7 @@ export function useWorkPanelReader({ enabled, opened, onClose, onExitTransitionE
   const previouslyOpen = useRef(false);
   const previouslyDocked = useRef(docked);
   useLayoutEffect(() => {
+    if (!container) return;
     let focusFrame = 0;
     if (opened && docked) {
       callbacks.current.onEntered?.();
@@ -115,7 +120,7 @@ export function useWorkPanelReader({ enabled, opened, onClose, onExitTransitionE
     return () => cancelAnimationFrame(focusFrame);
   }, [opened, docked, container]);
   useLayoutEffect(() => {
-    if (!docked || !opened) return;
+    if (!container || !docked || !opened) return;
     const keydown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.repeat
         || !readerFocusable(container) || hasKeyboardOverlay()) return;
@@ -126,11 +131,11 @@ export function useWorkPanelReader({ enabled, opened, onClose, onExitTransitionE
     document.addEventListener("keydown", keydown);
     return () => document.removeEventListener("keydown", keydown);
   }, [container, docked, opened]);
-  useLayoutEffect(() => () => container.remove(), [container]);
+  useLayoutEffect(() => () => { container?.remove(); }, [container]);
   const onExit = useCallback(() => {
     // 宽窄迁移也会让 Drawer 退出；它不代表用户结束阅读。
     if (!callbacks.current.opened) callbacks.current.onExitTransitionEnd?.();
   }, []);
-  const portal = (children: ReactNode) => createPortal(children, container);
+  const portal = (children: ReactNode) => (container ? createPortal(children, container) : <>{children}</>);
   return { docked, modalOpened: opened && !docked, setModalHost, portal, onExit };
 }
