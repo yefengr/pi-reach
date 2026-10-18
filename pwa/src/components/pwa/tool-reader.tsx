@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef } from "react";
+import { Fragment, useLayoutEffect, useRef } from "react";
 import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 import { ReaderShell } from "./reader-shell";
 import { ToolImage } from "./tool-output";
-import { toolContentBlocks, toolError, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { toolContentBlocks, toolError, toolReaderArguments, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import "./tool-reader.css";
 
@@ -58,6 +58,8 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   const status = value ? toolStatus(value) : "unknown";
   // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
   const callText = value ? toolReaderCall(value) : undefined;
+  // 参数对象可以拆成名称与值两部分：只有名称加重，长参数块不会整块压过输出正文。
+  const callArguments = value ? toolReaderArguments(value) : undefined;
   const blocks = value ? toolContentBlocks(value, { input: false }) : [];
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
@@ -74,7 +76,9 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
           followRef.current = target.scrollHeight - target.scrollTop - target.clientHeight <= FOLLOW_THRESHOLD_PX;
         }}>
           {value === null ? <p className="pwa-tool-empty">{t.tools.noDetails}</p> : <>
-            {callText ? <pre className="pwa-tool-reader-command">{callText}</pre> : null}
+            {callArguments
+              ? <pre className="pwa-tool-reader-command">{callArguments.map(({ name, value: argument }, index) => <Fragment key={`${name}:${index}`}><span className="pwa-tool-reader-arg-name">{name}:</span>{` ${argument}`}{index < callArguments.length - 1 ? "\n" : null}</Fragment>)}</pre>
+              : callText ? <pre className="pwa-tool-reader-command">{callText}</pre> : null}
             {error ? <div className="pwa-reader-error" role="alert"><CircleAlert size={16} aria-hidden="true" /><pre>{error}</pre></div> : null}
             {bodyBlocks.map((block, index) => block.kind === "image"
               ? <ToolImage key={`image:${index}`} block={block} index={index} preview={false} />

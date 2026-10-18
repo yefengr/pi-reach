@@ -159,15 +159,19 @@ test("the reader call line fills its first line before wrapping a hyphenated pat
     const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
     const range = document.createRange();
     range.selectNodeContents(call);
-    const lines = [...range.getClientRects()];
-    expect(lines.length).toBeGreaterThan(1);
+    // 参数名与值是不同元素，同一行会返回多个矩形：按首行最高边取最右一个再比较。
+    const rects = [...range.getClientRects()];
+    expect(rects.length).toBeGreaterThan(1);
+    const firstTop = Math.min(...rects.map(rect => Math.round(rect.top)));
+    const firstLineRight = Math.max(...rects.filter(rect => Math.round(rect.top) === firstTop).map(rect => rect.right));
     // 首行排到距右缘不足一个字符宽才换行，不在 "pwa-" 的连字符处提前断开。
     const character = document.createRange();
-    character.setStart(call.firstChild!, 0);
-    character.setEnd(call.firstChild!, 1);
+    const firstText = document.createTreeWalker(call, NodeFilter.SHOW_TEXT).nextNode() as Text;
+    character.setStart(firstText, 0);
+    character.setEnd(firstText, 1);
     // 按整像素比较，避免 Linux CI 字体栅格化带来的亚像素差异。
     const characterWidth = Math.ceil(character.getBoundingClientRect().width);
-    expect(Math.round(call.getBoundingClientRect().right - lines[0].right)).toBeLessThanOrEqual(characterWidth);
+    expect(Math.round(call.getBoundingClientRect().right - firstLineRight)).toBeLessThanOrEqual(characterWidth);
   } finally {
     await screen.unmount();
   }

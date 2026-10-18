@@ -464,7 +464,10 @@ test.each([
     const summary = `**检查**${suffix}`;
     update(summary);
     expect(title()).toBe("Thinking…");
-    expect(document.querySelector(".pwa-text-plain")?.textContent).toBe(summary);
+    // 正文与回复同样渲染 Markdown：星号不再作为字符显示，加粗转为 strong。
+    const summaryBody = document.querySelector(".pwa-text-plain")!;
+    expect(summaryBody.querySelector("strong")?.textContent).toBe("检查");
+    expect(summaryBody.textContent).toBe(`检查${suffix}`);
     advance(THINKING_SUMMARY_WINDOW_MS - 1);
     expect(title()).toBe("Thinking…");
     advance(1);
@@ -636,7 +639,8 @@ test.each([1280, 390])("streaming thinking uses a first-line summary and a runni
   expect(document.querySelector(".pwa-thinking-content")).toBeNull();
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!);
   await expect.element(page.elementLocator(document.querySelector(".pwa-thinking-content .pwa-text-plain")!)).toBeVisible();
-  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(text);
+  // 正文按 Markdown 渲染：段落与行内容保留，首尾空白由解析器归一。
+  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe("检查   工具\t分组\n后续原文不应显示在标题中。");
 });
 
 test.each([1280, 390])("thinking and tool-group chevrons stay aligned across streaming completion at %ipx", async width => {
@@ -726,19 +730,24 @@ test.each([1280, 390])("streaming thinking keeps manual choices through live upd
   toggle.focus();
   await userEvent.keyboard("{Enter}");
   const text = `${thinking.delta}\n\n**Second step**\nAdditional live reasoning.`;
+  // 思考正文与回复同样渲染 Markdown；两个段落各自保留行内换行，加粗转为 strong。
+  const renderedText = "First step\nInspecting the request.\nSecond step\nAdditional live reasoning.";
   await update([partialItem({ ...thinking, delta: text })]);
   expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   expect(reading.at(-1)).toBe(true);
   await expect.element(page.elementLocator(document.querySelector(".pwa-thinking-content .pwa-text-plain")!)).toBeVisible();
-  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(text);
+  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(renderedText);
+  expect([...document.querySelectorAll(".pwa-thinking-content strong")].map(node => node.textContent)).toEqual(["First step", "Second step"]);
+  const paragraphs = [...document.querySelectorAll<HTMLElement>(".pwa-thinking-content .pwa-markdown > *")];
+  expect(getComputedStyle(paragraphs[1]).marginTop).toBe("23.1px");
   expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Second step");
   const completed: TimelineEvent = { ...assistantEvent, blocks: [{ type: "thinking", text }, { type: "text", text: "The final answer." }] };
   await update([eventItem(completed)]);
   expect(document.querySelector(".pwa-thinking-head")).toBe(toggle);
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   expect(toggle.querySelector(".pwa-thinking-title")?.textContent).toBe("Second step");
-  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(text);
+  expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(renderedText);
   expect(reading.at(-1)).toBe(true);
   expect(document.querySelector(".pwa-thinking-live")).toBeNull();
   await expect.element(screen.getByText("The final answer.")).toBeVisible();
@@ -996,6 +1005,12 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
       expect(getComputedStyle(thought).fontFamily).toBe(getComputedStyle(reply).fontFamily);
       expect(getComputedStyle(thought).lineHeight).toBe("23.1px");
       expect(getComputedStyle(thought).color).toBe(getComputedStyle(document.querySelector(".pwa-thinking-title")!).color);
+      // 思考正文按 Markdown 渲染，块级元素仍为 14px 次级文字，块间正好一行。
+      expect(thought.tagName).toBe("DIV");
+      const thoughtBlocks = [...thought.querySelectorAll<HTMLElement>(".pwa-markdown > *")];
+      expect(thoughtBlocks.length).toBeGreaterThan(0);
+      expect(getComputedStyle(thoughtBlocks[0]).marginTop).toBe("0px");
+      expect(getComputedStyle(thoughtBlocks[0]).fontSize).toBe("14px");
       for (const description of document.querySelectorAll(".pwa-tool-card .pwa-tool-action-copy > span")) {
         expect(getComputedStyle(description).fontSize).toBe("14px");
         expect(getComputedStyle(description).fontFamily).toContain("ui-monospace");
@@ -1095,6 +1110,11 @@ test.each([1280, 390])("tool groups have a right chevron, no group check and cli
       // 阅读器首块原样列出参数，正文只放真实结果，不再拼出请求修改。
       await expect.element(screen.getByText("Successfully replaced text")).toBeVisible();
       expect(document.querySelector(".pwa-tool-reader-command")?.textContent).toBe("path: src/settings.ts\noldText: enabled = false\nnewText: enabled = true");
+      // 参数名承担识别、值保持常规字重；整块不再与抽屉标题等重。
+      const argumentNames = [...document.querySelectorAll<HTMLElement>(".pwa-tool-reader-arg-name")];
+      expect(argumentNames.map(node => node.textContent)).toEqual(["path:", "oldText:", "newText:"]);
+      expect(argumentNames.every(node => getComputedStyle(node).fontWeight === "600")).toBe(true);
+      expect(getComputedStyle(document.querySelector<HTMLElement>(".pwa-tool-reader-command")!).fontWeight).toBe("400");
       expect(document.querySelector(".pwa-tool-reader-scroll")!.textContent).not.toContain("Requested changes");
       expect(document.querySelector(".pwa-tool-reader-scroll .hljs")).toBeNull();
       await closeReader();
