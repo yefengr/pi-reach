@@ -31,7 +31,7 @@ export function ToolCard({ value, onRead, status: statusOverride, readerModal = 
   const status = toolStatus(value, statusOverride);
   const summary = toolInlineText(toolHeaderSummary(value));
 
-  return <article className={`pwa-tool-card pwa-tool-card-${status} pwa-timeline-row`} data-tool-status={status} data-tool-key={JSON.stringify([value.session_id, value.leaf_id, value.group_id, value.tool_call_id])}>
+  return <article className={`pwa-tool-card pwa-tool-card-${status} pwa-timeline-row`} data-tool-status={status} data-tool-key={toolIdentity(value)}>
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup={readerModal ? "dialog" : undefined} onClick={event => onRead(event.currentTarget)}>
         <span className="pwa-tool-action-copy"><strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}</span>

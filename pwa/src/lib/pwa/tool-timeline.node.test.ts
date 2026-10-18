@@ -4,6 +4,8 @@ import { toolPartial, toolTimelineEvent } from "../../../../pi-extension/src/tim
 import { decodeServerFrameV2 } from "../pi-reach/protocol-v2/codec";
 import { TimelineRuntime, type TimelineScope } from "./timeline-runtime";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
+import { projectTimeline } from "./timeline-presentation";
+import { observeTools, toolSegments } from "@/components/pwa/tool-groups";
 
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
 const association = { groupId: "group", tool: "read", args: { path: "README.md" }, correlation: null };
@@ -37,6 +39,27 @@ test.each([false, true])("Extension tool snapshots reach PWA and settle independ
     expect.objectContaining({ partial: expect.objectContaining({ tool_call_id: "call-b" }) }),
   ]);
   expect(settled.items).toContainEqual({ kind: "event", event });
+});
+
+test("tool identity survives the leaf advancing between live output and its formal result", () => {
+  const runtime = new TimelineRuntime();
+  runtime.setScope(scope);
+  const receive = (frame: ExtensionFrame) => runtime.receive(decodeServerFrameV2(encodeExtensionFrame(frame))).items;
+  const running = projectTimeline(receive(toolPartial("call-a", association, scope, {
+    content: [{ type: "text", text: "Live output" }],
+  })!));
+  const observed = observeTools(running.entries, new Map());
+  const result = toolTimelineEvent(
+    { event_id: "result-a", session_id: scope.sessionId, leaf_id: "result-leaf", timestamp: 2 },
+    association.groupId,
+    { toolCallId: "call-a", content: [{ type: "text", text: "Final output" }] },
+    association,
+  );
+  const settled = projectTimeline(receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: "result-leaf", event: { ...result, event_seq: 2 } }), running);
+  expect(settled.entries).toHaveLength(1);
+  expect(settled.entries[0]).toMatchObject({ key: running.entries[0]!.key, value: { status: "complete", leaf_id: "result-leaf" } });
+  expect(toolSegments(settled.entries, new Set(), observeTools(settled.entries, observed))[0]!.key)
+    .toBe(toolSegments(running.entries, new Set(), observed)[0]!.key);
 });
 
 test("large live output stays decodable and images never become preview text", () => {

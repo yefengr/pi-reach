@@ -118,6 +118,42 @@ test("real workspace opens one nonmodal tool panel and keeps the real Composer e
   expect(document.activeElement).toBe(input);
 });
 
+test.each([1440, 390])("a running tool keeps its reader, draft and expansion when completion advances the leaf at %ipx", async width => {
+  await page.viewport(width, 1000);
+  const { screen, controls } = await mount();
+  const running = { kind: "partial", createdAt: 2, partial: {
+    protocol_version: 2, type: "timeline_partial", ...base, partial_id: "tool:stream", kind: "tool",
+    tool_call_id: "stream", tool: "bash", args: { command: "fixed fixture" }, status: "delta", blocks: [{ type: "text", text: "First output" }],
+  } } satisfies TimelineViewItem;
+  flushSync(() => controls.current!.setRows([running]));
+  const input = draft();
+  await userEvent.fill(input, "Keep my live draft");
+  const group = document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!;
+  await userEvent.click(group);
+  const source = document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!;
+  await userEvent.click(source);
+  const reader = () => document.querySelector<HTMLElement>(".pwa-tool-reader-scroll");
+  await expect.poll(reader).not.toBeNull();
+  await settle();
+  const body = reader()!;
+  flushSync(() => controls.current!.setRows([{ ...running, partial: { ...running.partial, blocks: [{ type: "text", text: "Later output" }] } }]));
+  await expect.poll(() => body.querySelector(".pwa-reader-text")?.textContent).toBe("Later output");
+  const completed: TimelineViewItem = { kind: "event", event: {
+    ...base, leaf_id: "completed-leaf", event_id: "stream-result", kind: "tool", tool_call_id: "stream", tool: "bash",
+    args: { command: "fixed fixture" }, status: "complete", truncated: false, result: [{ type: "text", text: "Complete output" }],
+  } };
+  flushSync(() => controls.current!.setRows([completed]));
+  await expect.poll(() => reader()?.querySelector(".pwa-reader-text")?.textContent).toBe("Complete output");
+  expect(reader()).toBe(body);
+  expect(body.isConnected).toBe(true);
+  expect(document.querySelector(".pwa-tool-card .pwa-tool-action")).toBe(source);
+  expect(group.getAttribute("aria-expanded")).toBe("true");
+  expect(draft()).toBe(input);
+  expect(input.value).toBe("Keep my live draft");
+  await screen.getByRole("button", { name: "Close tool details", exact: true }).click();
+  await expect.poll(reader).toBeNull();
+});
+
 test("explicit clicks replace tool and text in the single panel; appended output never takes it over", async () => {
   const { screen, controls } = await mount();
   await openTool();

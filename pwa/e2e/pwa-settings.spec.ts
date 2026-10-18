@@ -50,10 +50,12 @@ test("restores the entry metadata default after clearing a saved custom Relay", 
   await expect(input).toHaveAttribute("placeholder", deploymentDefault);
   await input.fill(TEST_RELAY_URL);
   await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Settings saved" })).toBeVisible();
   await page.reload();
   await expect(input).toHaveValue(TEST_RELAY_URL);
   await input.fill("   ");
   await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Settings saved" })).toBeVisible();
   await page.reload();
   await expect(input).toHaveValue(deploymentDefault);
 });
