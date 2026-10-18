@@ -5,7 +5,7 @@ import { UiStateGalleryPage } from "./ui-states";
 import { GALLERY_CODE, type GalleryState } from "./ui-state-fixtures";
 
 const input = () => document.querySelector<HTMLTextAreaElement>(".pwa-composer textarea")!;
-const split = () => document.querySelector(".pwa-work-panel-layout")?.hasAttribute("data-split");
+const drawer = () => document.querySelector('[role="dialog"].pwa-tool-reader, [role="dialog"].pwa-file-reader');
 const file = (id: string) => document.querySelector<HTMLElement>(`[data-publication-id="${id}"]`)!;
 async function settle() {
   await Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished));
@@ -28,7 +28,7 @@ async function closeReader() {
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => Boolean(history.state?.piReachFileReader || history.state?.piReachToolReader)).toBe(false);
   await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
-  await expect.poll(split).toBe(false);
+  await expect.poll(drawer).toBeNull();
 }
 beforeEach(async () => { await page.viewport(1440, 1000); });
 afterEach(async () => {
@@ -43,7 +43,7 @@ test("real state fixtures expose thinking, running tools, failures and explicit 
   await choose("tools");
   await openTool();
   expect(document.querySelector(".pwa-tool-reader-scroll")?.textContent).toContain("此命令没有实际执行");
-  expect(split()).toBe(true);
+  expect(drawer()).not.toBeNull();
   await closeReader();
   await choose("failure");
   expect(document.querySelector('.pwa-attachment-card[data-status="failed"]')).not.toBeNull();
@@ -82,27 +82,21 @@ test("one real Composer retains its draft through theme, speed, width and fixtur
   expect(composer.value).toBe("保留这个草稿");
 });
 
-test("tool and text share one panel, then the same reader migrates to a narrow Drawer and returns focus", async () => {
+test("tool and text share one reader Drawer that keeps its scroll and returns focus", async () => {
   await render(<UiStateGalleryPage />);
   await choose("files");
   await openTool();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-  expect(document.body.hasAttribute("data-scroll-locked")).toBe(false);
+  expect(drawer()).not.toBeNull();
+  expect(document.body.hasAttribute("data-scroll-locked") || document.documentElement.hasAttribute("data-scroll-locked")).toBe(true);
+  await closeReader();
   await viewFile("notes");
-  await expect.poll(split).toBe(true);
-  expect(document.querySelectorAll(".pwa-work-panel-host .pwa-reader-portal")).toHaveLength(1);
+  await expect.element(page.getByRole("dialog", { name: "界面演示.md", exact: true })).toBeVisible();
   await expect.poll(() => document.querySelector(".pwa-file-reader-scroll h1")?.textContent).toBe("阅读与对话并排");
   await settle();
   const reader = document.querySelector<HTMLElement>(".pwa-file-reader-scroll")!;
   const heading = reader.querySelectorAll("h2")[2]!;
   reader.scrollTop += heading.getBoundingClientRect().top - reader.getBoundingClientRect().top;
   expect(reader.scrollTop).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "窄主区 · 760px", exact: true }).click();
-  await expect.element(page.getByRole("dialog", { name: "界面演示.md", exact: true })).toBeVisible();
-  await settle();
-  expect(document.querySelector(".pwa-file-reader-scroll")).toBe(reader);
-  expect(reader.scrollTop).toBeGreaterThan(0);
-  await expect.poll(() => history.state?.piReachFileReader).toBeTruthy();
   await closeReader();
   expect(document.activeElement).not.toBe(document.body);
   expect(file("notes").contains(document.activeElement)).toBe(true);
@@ -124,7 +118,7 @@ test("real phone viewport opens full-screen text and image readers and Back clea
   await userEvent.click(file("picture").querySelector<HTMLButtonElement>(".pwa-published-image")!);
   await expect.element(page.getByRole("dialog", { name: "内存布局.png", exact: true })).toBeVisible();
   await expect.poll(() => document.querySelector<HTMLImageElement>('[role="dialog"] img')?.naturalWidth).toBe(640);
-  expect(split()).toBe(false);
+  expect(drawer()).not.toBeNull();
   await closeReader();
 });
 

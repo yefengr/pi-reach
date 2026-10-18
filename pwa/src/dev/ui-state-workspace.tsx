@@ -4,7 +4,6 @@ import { Button } from "@mantine/core";
 import { MessageComposer } from "@/components/pwa/message-composer";
 import { MessageList } from "@/components/pwa/message-list";
 import { PwaConnectionBanner } from "@/components/pwa/pwa-app-actions";
-import { WorkPanelLayout } from "@/components/pwa/work-panel-layout";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "@/components/pwa/published-files-context";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -85,7 +84,7 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
       next.set("reading", assets.current.ready("reading"));
       updateStates(next);
     }}>演示获取完成</Button><span>获取中固定为 50%，只在点击后改变。</span></div> : null}
-    <WorkPanelLayout>
+    <div className="pwa-workspace-body"><div className="pwa-workspace-column">
       {state === "history" ? <GalleryHistory items={conversation.items} /> : <GalleryTimeline key={`${state}:${epoch}`} state={state} conversation={conversation} />}
       <div className="pwa-chat-footer" ref={initializeAssets} hidden={state === "history"} inert={state === "history"} style={state === "history" ? { display: "none" } : undefined}>
         <MessageComposer enterSends={true} draft={draft} onDraftChange={setDraft} attachmentNotice={conversation.online ? result : null}
@@ -99,6 +98,6 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
           onNewSession={() => setResult("已演示新会话，草稿保留；未创建远程会话。")}
           onCompactSession={() => setResult("已演示压缩；未执行远程操作。")} />
       </div>
-    </WorkPanelLayout>
+    </div></div>
   </PublishedFilesProvider>;
 }

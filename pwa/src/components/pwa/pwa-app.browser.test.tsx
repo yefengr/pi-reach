@@ -1698,7 +1698,7 @@ test("published files: verified ready result survives a short disconnect without
 });
 
 test.each(["bye", "reset"] as const)("published files: %s closes the old reader while formal content stays mounted", async type => {
-  // 该组断言覆盖模态阅读器的 history 与回焦；宽屏非模态面板由 work-panel 用例覆盖。
+  // 该组断言覆盖模态阅读器的 history 与回焦；宽屏 Drawer 由 reader-drawer 用例覆盖。
   await page.viewport(800, 900);
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;
@@ -2917,15 +2917,15 @@ test("preserves the session, draft, attachment, tool row and reader across layou
       assertSessionUnchanged();
     }
     await screen.getByRole("button", { name: "View read tool details" }).click();
-    // 阅读正文容器在分栏与覆盖之间迁移时保持不变，按容器断言跨断点身份。
-    const reader = document.querySelector(".pwa-reader-portal")!;
+    // 正文在同一个 Drawer 中保持挂载，断点变化不重建阅读内容。
+    const reader = document.querySelector(".pwa-tool-reader-scroll")!;
     for (const width of [390, 1280]) {
       await page.viewport(width, 900);
-      expect(document.querySelector(".pwa-reader-portal")).toBe(reader);
+      expect(document.querySelector(".pwa-tool-reader-scroll")).toBe(reader);
       assertSessionUnchanged();
     }
     await screen.getByRole("button", { name: "Close tool details" }).click();
-    expect(document.querySelector(".pwa-reader-portal")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
     await expect.element(screen.getByRole("button", { name: "View read tool details" })).toHaveFocus();
     assertSessionUnchanged();
   } finally {

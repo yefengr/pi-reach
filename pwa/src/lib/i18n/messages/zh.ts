@@ -38,11 +38,6 @@ export const zh: Messages = {
     historyLoading: "正在读取本地历史…",
     historyError: "未能读取本地会话。",
   },
-  workPanel: {
-    label: "详情面板",
-    resize: "调整详情面板宽度",
-    resetWidth: "恢复默认宽度",
-  },
   files: {
     view: "查看",
     viewImage: "查看图片",

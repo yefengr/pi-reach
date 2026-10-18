@@ -3,7 +3,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { expect, type Locator, type Page, type TestInfo } from "playwright/test";
-import { expectTextReader, waitForReaderHistoryClear } from "./work-panel-helpers";
+import { expectTextReader, waitForReaderHistoryClear } from "./reader-helpers";
 
 const TRIGGER = "E2E publish file fixtures";
 const ROOT = "/workspace/pi-reach-published-files";
@@ -124,7 +124,7 @@ async function verifyVisuals(page: Page): Promise<void> {
         await card(page, file).getByRole("button", { name: file === "image.png" ? "View image" : "View", exact: true }).click();
         const reader = file === "image.png"
           ? page.getByRole("dialog", { name: file, exact: true })
-          : await expectTextReader(page, width === 1600);
+          : await expectTextReader(page);
         await expect(reader).toBeVisible();
         if (file === "image.png") await expect(reader.getByRole("img", { name: file, exact: true })).toBeVisible();
         else await expect(reader.getByRole("heading", { name: "Published fixture report", exact: true })).toBeVisible();
@@ -158,7 +158,7 @@ async function verifyOwner(page: Page, files: Fixture[], testInfo: TestInfo, lab
 
   // 首次 View 点击须在异步获取后直接打开阅读器。
   await card(page, "report-中文.md").getByRole("button", { name: "View", exact: true }).click();
-  const reader = await expectTextReader(page, true);
+  const reader = await expectTextReader(page);
   await expect(reader).toBeVisible({ timeout: 60_000 });
   await expect(reader.getByRole("heading", { name: "Published fixture report", exact: true })).toBeVisible();
   await expect(reader.locator("strong")).toHaveText("原名与原件");

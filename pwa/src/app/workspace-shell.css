@@ -140,6 +140,9 @@
 /* 主区与会话标题区。 */
 .pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: var(--pwa-main-card-top) var(--pwa-main-card-right) var(--pwa-main-card-bottom) 0; border-radius: var(--pwa-radius-lg); background: var(--pwa-bg); transition: border-radius var(--pwa-sidebar-motion) var(--pwa-ease-standard); }
 .pwa-root[data-sidebar-collapsed] .pwa-main { border-radius: 0; }
+/* 会话列：外层消费主区左右安全区，内层为消息列表与输入区提供独立滚动上下文。 */
+.pwa-root .pwa-workspace-body { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
+.pwa-root .pwa-workspace-column { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* 侧栏展开时标题区位于卡片内，不贴屏幕顶边，状态栏安全区已由卡片上边距承担；收起后主区贴边，标题区按顶栏规格自行避让状态栏。 */
 .pwa-root .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-main-safe-top)); padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-left: var(--pwa-main-inset-start); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }

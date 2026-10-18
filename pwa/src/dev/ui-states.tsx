@@ -9,7 +9,7 @@ import { UiStateWorkspace } from "./ui-state-workspace";
 import { UiStateNavigation } from "./ui-state-navigation";
 import { UiStateSurfaces, type GallerySurface } from "./ui-state-surfaces";
 import { GALLERY_DEVICES } from "./ui-state-shell-fixtures";
-import { readerFocusable } from "@/components/pwa/use-work-panel-reader";
+import { readerFocusable } from "@/components/pwa/reader-shared";
 import "./ui-states.css";
 
 function GalleryContent() {

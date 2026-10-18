@@ -5,7 +5,7 @@ import { SessionSheet } from "@/components/pwa/session-sheet";
 import { WorkspaceTitleBar } from "@/components/pwa/workspace-title-bar";
 import { SessionActionsMenu } from "@/components/pwa/session-actions-menu";
 import { ConfirmActionDialog } from "@/components/pwa/confirm-action-dialog";
-import { readerFocusable } from "@/components/pwa/use-work-panel-reader";
+import { readerFocusable } from "@/components/pwa/reader-shared";
 import { ChooseComputerWorkspace, NoPiWorkspace, UnpairedWorkspace } from "@/components/pwa/workspace-content";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import { GALLERY_DEVICES, GALLERY_ENDPOINTS, GALLERY_HISTORY } from "./ui-state-shell-fixtures";

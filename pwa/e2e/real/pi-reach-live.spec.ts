@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type BrowserContext, type Page, type TestInfo } from "playwright/test";
 import { verifyPublishedFiles } from "./published-file-helpers";
-import { verifyWorkPanelLive } from "./work-panel-helpers";
+import { verifyReaderDrawerLive } from "./reader-helpers";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const COMPOSE_FILE = "docker/e2e/compose.yml";
@@ -405,7 +405,7 @@ test("pairs two browser Owners, verifies live work panels and exact originals, a
       expect(legacyFileRequests.get(legacyPage)?.count).toBe(0);
       await expect(legacyPage.locator(".pwa-published-file")).toHaveCount(0);
     }
-    const afterSessionId = await verifyWorkPanelLive(
+    const afterSessionId = await verifyReaderDrawerLive(
       [ownerAPage, ownerBPage], attachmentSession.sessionId!,
       previousSessionId => startFreshSession(ownerAPage, previousSessionId),
     );

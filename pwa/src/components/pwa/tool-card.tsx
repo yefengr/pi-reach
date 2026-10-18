@@ -13,7 +13,6 @@ type ToolCardProps = {
   value: ToolValue;
   onRead: (trigger: HTMLButtonElement) => void;
   status?: ToolStatus;
-  readerModal?: boolean;
 };
 
 function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: readonly string[] }) {
@@ -26,14 +25,14 @@ function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: re
 }
 
 /** 完成的工具只显示对勾，运行中、失败、中断与未知状态保留文字；各状态的可访问名称不变。 */
-export function ToolCard({ value, onRead, status: statusOverride, readerModal = true }: ToolCardProps) {
+export function ToolCard({ value, onRead, status: statusOverride }: ToolCardProps) {
   const { t } = useI18n();
   const status = toolStatus(value, statusOverride);
   const summary = toolInlineText(toolHeaderSummary(value));
 
   return <article className={`pwa-tool-card pwa-tool-card-${status} pwa-timeline-row`} data-tool-status={status} data-tool-key={toolIdentity(value)}>
     <div className="pwa-tool-head">
-      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup={readerModal ? "dialog" : undefined} onClick={event => onRead(event.currentTarget)}>
+      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
         <span className="pwa-tool-action-copy"><strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}</span>
         <span className={`pwa-tool-status pwa-tool-status-${status}`} role="status" aria-label={t.tools.statusLabel(value.tool, t.tools.status[status])}><ToolStatusIcon status={status} toolKeys={[toolIdentity(value)]} />{status === "complete" ? null : <span>{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>}</span>
       </button>
