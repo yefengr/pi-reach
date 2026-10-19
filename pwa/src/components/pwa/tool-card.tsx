@@ -62,9 +62,9 @@ export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tool
 }
 
 /** 组头调用文字：每次换成新的工具时从下方进入一次，组头首次出现时不播放。 */
-function ToolGroupCurrent({ value, animate }: { value: ToolValue; animate: boolean }) {
+function ToolGroupCurrent({ value, status, animate }: { value: ToolValue; status: ToolStatus | null; animate: boolean }) {
   const summary = toolInlineText(toolHeaderSummary(value));
-  return <span className="pwa-tool-group-current" data-enter={animate ? "" : undefined}>
+  return <span className="pwa-tool-group-current" data-status={status ?? undefined} data-enter={animate ? "" : undefined}>
     <strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}
   </span>;
 }
@@ -124,7 +124,7 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, batchClose
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, [currentLabel, busy ? t.tools.groupBusy(runningCount) : null, summary].filter(Boolean).join(" · "))} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
         <span className="pwa-tool-action-copy">{current
-          ? <ToolGroupCurrent key={toolIdentity(current)} value={current} animate={head.animate} />
+          ? <ToolGroupCurrent key={toolIdentity(current)} value={current} status={currentStatus} animate={head.animate} />
           : <ToolGroupSummary summary={summary} />}</span>
         {/* 状态槽和旋转图标不随轮播工具重建；同一个图标注册组内全部运行身份。 */}
         {headStatus ? <span className={`pwa-tool-group-status pwa-tool-status pwa-tool-status-${headStatus}`}><ToolStatusIcon status={headStatus} toolKeys={busy ? runningKeys : []} /></span> : null}
