@@ -382,6 +382,7 @@ test.each([1280, 390])("empty thinking settles into one static historical trace 
   await update([eventItem(empty), eventItem(later)], { running: true, isLive: true });
   const trace = document.querySelector<HTMLElement>(".pwa-thinking-trace")!;
   await expect.element(page.elementLocator(trace)).toHaveTextContent("Thinking");
+  expect(getComputedStyle(trace.querySelector(".pwa-thinking-title")!).fontStyle).toBe("italic");
   expect(document.querySelectorAll(".pwa-thinking-trace")).toHaveLength(1);
   expect(trace.querySelector("button, svg, [role='status'], [aria-expanded], .pwa-collapse")).toBeNull();
   // 历史痕迹不是运行指示，不能压制本轮 Working 兜底。
@@ -1006,6 +1007,7 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
       expect(getComputedStyle(thoughtContainer).paddingLeft).toBe("0px");
       expect(Math.round(thought.getBoundingClientRect().left)).toBe(replyLeft);
       expect(getComputedStyle(thought).fontSize).toBe("14px");
+      expect(getComputedStyle(thought).fontStyle).toBe("italic");
       expect(getComputedStyle(thought).fontFamily).toBe(getComputedStyle(reply).fontFamily);
       expect(getComputedStyle(thought).lineHeight).toBe("23.1px");
       expect(getComputedStyle(thought).color).toBe(getComputedStyle(document.querySelector(".pwa-thinking-title")!).color);
@@ -1035,8 +1037,12 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
         expect(getComputedStyle(action.querySelector(".pwa-tool-action-copy")!).whiteSpace).toBe("nowrap");
       }
       expect(getComputedStyle(document.querySelector(".pwa-thinking-title")!).fontSize).toBe("16px");
-      for (const label of document.querySelectorAll(".pwa-thinking-title, .pwa-tool-card .pwa-tool-action-copy strong")) {
-        if (label.closest(".pwa-tool-card")) expect(getComputedStyle(label).fontSize).toBe("14px");
+      for (const label of document.querySelectorAll(".pwa-thinking-title")) {
+        expect(getComputedStyle(label).fontStyle).toBe("italic");
+        expect(getComputedStyle(label).fontWeight).toBe("600");
+      }
+      for (const label of document.querySelectorAll(".pwa-tool-card .pwa-tool-action-copy strong")) {
+        expect(getComputedStyle(label).fontSize).toBe("14px");
         expect(getComputedStyle(label).fontStyle).toBe("normal");
         expect(getComputedStyle(label).fontWeight).toBe("600");
       }
@@ -1065,7 +1071,7 @@ test.each(["light", "dark"] as const)("thinking keeps nested markdown blocks at 
   const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
   try {
     document.documentElement.setAttribute("data-mantine-color-scheme", theme);
-    const text = "> ## 引用标题\n>\n> 引用正文。\n\n| 状态 | 说明 |\n| --- | --- |\n| 内存 | 不连接远程服务 |";
+    const text = "> ## 引用标题\n>\n> 引用正文 `inline`。\n\n| 状态 | 说明 |\n| --- | --- |\n| 内存 | 不连接远程服务 |";
     const screen = await renderPwa(<ThinkingContent text={text} expanded />);
     const markdown = document.querySelector<HTMLElement>(".pwa-thinking .pwa-markdown")!;
     const quote = markdown.querySelector<HTMLElement>("blockquote")!;
@@ -1075,8 +1081,12 @@ test.each(["light", "dark"] as const)("thinking keeps nested markdown blocks at 
     expect(getComputedStyle(quote).borderLeftWidth).toBe("2px");
     expect(getComputedStyle(heading).fontSize).toBe("14px");
     expect(getComputedStyle(heading).marginTop).toBe("0px");
+    expect(getComputedStyle(heading).fontStyle).toBe("italic");
     expect(getComputedStyle(markdown.querySelector<HTMLElement>("table")!).fontSize).toBe("14px");
     expect(getComputedStyle(cell).fontSize).toBe("14px");
+    expect(getComputedStyle(cell).fontStyle).toBe("italic");
+    // 行内代码保持正体，避免等宽字符倾斜影响阅读。
+    expect(getComputedStyle(markdown.querySelector<HTMLElement>("code")!).fontStyle).toBe("normal");
     await screen.unmount();
   } finally {
     if (originalTheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalTheme);

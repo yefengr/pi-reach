@@ -74,8 +74,12 @@
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
 /* 思考行：进行中显示旋转图标与最新完整标题，无标题时用合并更新的首行摘要或「Thinking…」；完成态沿用最新标题或「Thinking」，图标淡出后标题滑回左缘，箭头列不动。空历史仅显示静态「Thinking」，不可展开。
-   标题与正式回复同为 16px，展开内容为 14px 次级文字，不带引用竖线与缩进。 */
+   标题与正式回复同为 16px，展开内容为 14px 次级文字，不带引用竖线与缩进；标题和正文使用斜体，代码与操作按钮保持正体。 */
 .pwa-thinking { color: var(--pwa-secondary); }
+.pwa-thinking.pwa-timeline-row .pwa-thinking-title,
+.pwa-thinking .pwa-text-plain { font-style: italic; }
+/* 代码需要直立字形才能保持等宽对齐；展开全文等操作文字不属于思考内容。 */
+.pwa-thinking :is(.pwa-code-block, .pwa-markdown code, .pwa-button) { font-style: normal; }
 .pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }
 .pwa-thinking-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pwa-thinking-heading { display: flex; align-items: center; }
