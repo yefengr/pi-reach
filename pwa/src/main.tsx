@@ -7,9 +7,13 @@ import { PwaApp } from "@/components/pwa/pwa-app";
 import { PwaAppShell } from "@/components/pwa/pwa-app-shell";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
+import { applyStoredTextSize } from "@/lib/ui/text-size";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing PWA root element");
+
+// 渲染前恢复字号，避免首屏先按标准档排版再跳变。
+applyStoredTextSize();
 
 const appRoot = createRoot(root);
 

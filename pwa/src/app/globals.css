@@ -227,7 +227,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-composer .pwa-composer-input,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:hover,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:focus,
-.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: 44px; min-height: 44px; max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: 10px 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: 16px/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: 44px; min-height: 44px; max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: 10px 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: 400 var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-ui-scope .pwa-composer .pwa-composer-input:disabled { background: transparent; }
 .pwa-composer .pwa-composer-input::placeholder { color: var(--pwa-secondary); }
 .pwa-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -569,7 +569,7 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-rename-dialog,
   .pwa-confirm-dialog { padding: 20px 16px 16px; }
   /* 移动端所有输入框 16px，避免 iOS 聚焦时自动放大。 */
-  .pwa-ui-scope .pwa-input input { font-size: 16px; }
+  .pwa-ui-scope .pwa-input input { font-size: max(16px, var(--pwa-text-body)); }
   /* 移动端弹窗正文到操作区统一为 16，与确认弹窗一致。 */
   .pwa-rename-actions { margin-top: var(--pwa-space-md); }
   .pwa-rename-actions .pwa-button { flex: 1; }

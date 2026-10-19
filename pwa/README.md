@@ -69,7 +69,7 @@ src/
 └── lib/
     ├── pwa/                     # browser runtime and IndexedDB persistence
     ├── pi-reach/                 # protocol adapters and transport
-    └── ui/                      # Mantine theme and appearance key
+    └── ui/                      # Mantine theme, appearance and text size keys
 scripts/
 ├── pwa-routing.mjs              # shared development / preview HTTP behavior
 └── start-e2e-server.mjs          # local static preview

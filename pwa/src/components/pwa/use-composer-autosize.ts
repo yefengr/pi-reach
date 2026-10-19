@@ -7,7 +7,16 @@ const COMPACT_READING_PADDING = 8;
 const LAYOUT_EPSILON = 1;
 const pixels = (value: string) => Number.parseFloat(value) || 0;
 
-function availableInputHeight(input: HTMLTextAreaElement, sixLines: number) {
+function inputMetrics(input: HTMLTextAreaElement) {
+  const style = getComputedStyle(input);
+  return {
+    padding: pixels(style.paddingTop) + pixels(style.paddingBottom),
+    border: pixels(style.borderTopWidth) + pixels(style.borderBottomWidth),
+    lineHeight: pixels(style.lineHeight),
+  };
+}
+
+function availableInputHeight(input: HTMLTextAreaElement, sixLines: number, minimum: number) {
   const main = input.closest<HTMLElement>(".pwa-main");
   const list = main?.querySelector<HTMLElement>(".pwa-message-list");
   const footer = input.closest<HTMLElement>(".pwa-chat-footer");
@@ -24,13 +33,13 @@ function availableInputHeight(input: HTMLTextAreaElement, sixLines: number) {
   const space = main.getBoundingClientRect().bottom - list.getBoundingClientRect().top - footerChrome;
   const compact = space - sixLines < normalReadingSpace;
   const available = space - (compact ? compactReadingSpace : normalReadingSpace);
-  const budget = available < MIN_INPUT_HEIGHT - LAYOUT_EPSILON ? "conflict" : compact ? "constrained" : null;
+  const budget = available < minimum - LAYOUT_EPSILON ? "conflict" : compact ? "constrained" : null;
   const previousBudget = main.dataset.composerBudget ?? null;
   if (budget) main.dataset.composerBudget = budget;
   else delete main.dataset.composerBudget;
   // 预算切换会改变消息区内边距（尺寸不变，ResizeObserver 不触发），需通知时间线重新贴底或恢复锚点。
   if ((previousBudget === null) !== (budget === null)) list.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
-  return Math.max(MIN_INPUT_HEIGHT, Math.min(sixLines, available));
+  return Math.max(minimum, Math.min(sixLines, available));
 }
 
 function contentHeight(input: HTMLTextAreaElement) {
@@ -56,14 +65,13 @@ export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | nu
   const resize = useCallback(() => {
     const input = inputRef.current;
     if (!input || input.getBoundingClientRect().width === 0) return;
-    const style = getComputedStyle(input);
-    const padding = pixels(style.paddingTop) + pixels(style.paddingBottom);
-    const border = pixels(style.borderTopWidth) + pixels(style.borderBottomWidth);
-    const sixLines = MAX_VISUAL_LINES * pixels(style.lineHeight) + padding + border;
-    const maximum = availableInputHeight(input, sixLines);
+    const { border, lineHeight, padding } = inputMetrics(input);
+    const minimum = Math.max(MIN_INPUT_HEIGHT, lineHeight + padding + border);
+    const sixLines = MAX_VISUAL_LINES * lineHeight + padding + border;
+    const maximum = availableInputHeight(input, sixLines, minimum);
     const needed = contentHeight(input) + border;
     input.style.maxHeight = `${maximum}px`;
-    const height = Math.max(MIN_INPUT_HEIGHT, Math.min(needed, maximum));
+    const height = Math.max(minimum, Math.min(needed, maximum));
     input.style.height = `${height}px`;
     input.style.overflowY = needed > height + LAYOUT_EPSILON ? "auto" : "hidden";
   }, [inputRef]);
