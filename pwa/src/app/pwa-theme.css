@@ -176,7 +176,7 @@
   /* 主要输入操作表面独立于 Modal、Drawer 与贴边主区的圆角。 */
   --pwa-radius-composer: 16px;
 
-  /* 通用间距档位，按内容关系选用（见 DESIGN「间距」）；Mantine spacing xs–xl 依次引用 8／12／16／24／32。
+  /* 通用间距档位，按内容关系选用（见 DESIGN「间距」）；Mantine spacing 2xs–2xl 依次引用 4／8／12／16／24／32／48。
      页面 gutter（桌面 20、移动 16）不是通用档位，由布局层单独定义。 */
   --pwa-space-2xs: 4px;
   --pwa-space-xs: 8px;
@@ -185,6 +185,12 @@
   --pwa-space-lg: 24px;
   --pwa-space-xl: 32px;
   --pwa-space-2xl: 48px;
+
+  /* 领域细档：2／6／10，只在对应语义内使用（见 DESIGN「间距」）。 */
+  --pwa-space-pair: 2px;
+  --pwa-space-status: 6px;
+  --pwa-space-menu-pad: 10px;
+  --pwa-space-composer: 10px;
 
   --pwa-shadow-float: 0 4px 16px var(--pwa-shadow-color);
   --pwa-shadow-modal: 0 12px 32px var(--pwa-shadow-color);

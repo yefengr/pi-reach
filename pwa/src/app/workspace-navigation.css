@@ -22,7 +22,7 @@
 .pwa-root .pwa-device-trigger-copy {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: var(--pwa-space-pair);
   text-align: left;
 }
 
@@ -252,7 +252,7 @@
 
 .pwa-root .pwa-peer-menu-panel button {
   min-height: 44px;
-  padding-inline: 10px;
+  padding-inline: var(--pwa-space-menu-pad);
   border-radius: var(--pwa-radius-sm);
   font-size: var(--pwa-text-meta);
 }
@@ -314,7 +314,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px calc(10px + var(--pwa-safe-right)) calc(12px + var(--pwa-safe-bottom)) calc(10px + var(--pwa-safe-left));
+  padding: var(--pwa-space-menu-pad) calc(var(--pwa-space-menu-pad) + var(--pwa-safe-right)) calc(12px + var(--pwa-safe-bottom)) calc(var(--pwa-space-menu-pad) + var(--pwa-safe-left));
 }
 
 .pwa-root .pwa-device-drawer-body .pwa-device-panel {

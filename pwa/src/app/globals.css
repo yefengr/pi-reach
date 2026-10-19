@@ -214,9 +214,9 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button.pwa-latest-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); } }
 
-.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); container: pwa-composer / inline-size; }
+.pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); container: pwa-composer / inline-size; }
 .pwa-image-input { display: none; }
-.pwa-composer-card { min-width: 0; padding: 10px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-composer-card { min-width: 0; padding: var(--pwa-space-composer) 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
 .pwa-composer-preview { position: relative; max-width: 100%; margin: 2px 2px 8px; }
 .pwa-composer-preview img { display: block; max-width: min(240px, 100%); height: 76px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); object-fit: cover; background: var(--pwa-code-bg); }
@@ -227,7 +227,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-composer .pwa-composer-input,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:hover,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:focus,
-.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: 44px; min-height: 44px; max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: 10px 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: 400 var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: 44px; min-height: 44px; max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: var(--pwa-space-composer) 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: 400 var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-ui-scope .pwa-composer .pwa-composer-input:disabled { background: transparent; }
 .pwa-composer .pwa-composer-input::placeholder { color: var(--pwa-secondary); }
 .pwa-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -269,12 +269,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-command-menu-dropdown { border: 1px solid var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); }
 .pwa-root .pwa-composer-menu-panel { min-width: 190px; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-composer-menu-panel { bottom: calc(100% + 8px); left: 0; }
-.pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
+.pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 var(--pwa-space-menu-pad); border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
 @media (hover: hover) { .pwa-composer-menu-panel button:hover { color: var(--pwa-ink); background: var(--pwa-hover); } }
 .pwa-root .pwa-command-menu-dropdown { /* 浮层宽度上限扣除两侧留白，留白取 16 与安全区中的较大值。 */ --pwa-command-menu-width: min(340px, calc(100vw - max(16px, var(--pwa-safe-left)) - max(16px, var(--pwa-safe-right)))); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-command-menu-panel { display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; }
 .pwa-command-row,
-.pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: var(--pwa-menu-row-padding) 10px; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
+.pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: var(--pwa-menu-row-padding) var(--pwa-space-menu-pad); border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
 .pwa-command-menu-dropdown .mantine-Menu-itemLabel { min-width: 0; }
 .pwa-command-menu-dropdown .mantine-Menu-itemSection { flex-shrink: 0; margin: 0; }
 .pwa-command-row:focus-visible:not(:disabled),
@@ -285,7 +285,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-row:disabled,
 .pwa-command-row:disabled .pwa-command-copy code,
 .pwa-command-row:disabled .pwa-command-copy > span { color: var(--pwa-secondary); cursor: not-allowed; }
-.pwa-command-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.pwa-command-copy { display: grid; min-width: 0; flex: 1; gap: var(--pwa-space-pair); }
 .pwa-command-copy code,
 .pwa-command-copy > span { overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-command-copy small,
@@ -302,16 +302,16 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-choice[data-selected]:hover:not(:disabled),
 .pwa-command-choice[data-selected]:focus-visible:not(:disabled) { color: var(--pwa-ink); background: var(--pwa-selected); }
 .pwa-command-choice[data-selected] .pwa-command-copy > span { color: var(--pwa-ink); }
-.pwa-command-menu-heading { padding: 8px 10px 6px; font-weight: 600; text-transform: uppercase; }
+.pwa-command-menu-heading { padding: 8px var(--pwa-space-menu-pad) 6px; font-weight: 600; text-transform: uppercase; }
 .pwa-command-back { color: var(--pwa-secondary); }
-.pwa-command-empty { margin: 0; padding: 12px 10px; line-height: var(--pwa-leading-ui); }
+.pwa-command-empty { margin: 0; padding: 12px var(--pwa-space-menu-pad); line-height: var(--pwa-leading-ui); }
 
 /* 独立设置页：与工作区同为 bg 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
 /* 设置层左右都贴屏幕边缘，由页面自身内缩左右安全区；内部 640 容器及其内边距不再叠加。 */
 .pwa-root .pwa-settings-page { min-height: 100%; padding-inline: var(--pwa-safe-left) var(--pwa-safe-right); color: var(--pwa-ink); background: var(--pwa-bg); }
 /* 桌面设置页没有固定顶栏，顶部吸附一条与页面同底色的遮挡条，内容不滚入透明状态栏；负外边距使其不占布局高度。 */
 .pwa-root .pwa-status-bar-shield { position: sticky; z-index: 1; top: 0; height: var(--pwa-safe-top); margin-bottom: calc(-1 * var(--pwa-safe-top)); background: var(--pwa-bg); }
-.pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) 20px calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
+.pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) var(--pwa-gutter) calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
 .pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }
 .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { margin-left: -8px; padding-inline: 8px; }
 .pwa-root .pwa-settings-title { margin: 0; font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
@@ -323,7 +323,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 一般内容到表单主操作 16。 */
 .pwa-root .pwa-settings-form { margin-top: var(--pwa-space-md); display: grid; justify-items: start; gap: var(--pwa-space-md); }
 .pwa-root .pwa-settings-form .pwa-field { width: 100%; }
-.pwa-root .pwa-settings-actions { margin-top: 16px; display: grid; justify-items: start; gap: 16px; }
+.pwa-root .pwa-settings-actions { margin-top: 16px; display: grid; justify-items: start; gap: 8px; }
 .pwa-root .pwa-settings-about-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .pwa-root .pwa-settings-versions { margin: 8px 0 0; display: grid; gap: 12px; font-size: var(--pwa-text-body); }
 .pwa-root .pwa-settings-versions > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
@@ -342,7 +342,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-appearance-option .mantine-Radio-label { display: block; padding-left: 10px; color: var(--pwa-ink); }
 .pwa-appearance-copy { display: flex; align-items: center; gap: 10px; }
 .pwa-appearance-copy > svg { flex: 0 0 auto; color: var(--pwa-secondary); }
-.pwa-appearance-copy > span { min-width: 0; display: grid; gap: 2px; }
+.pwa-appearance-copy > span { min-width: 0; display: grid; gap: var(--pwa-space-pair); }
 .pwa-appearance-copy strong { font-size: var(--pwa-text-list); font-weight: 600; }
 .pwa-appearance-copy small { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 /* 表单输入：单行高 44，surface 底、1px control-line 边框；聚焦为贴边强调色轮廓，边框不变。 */
@@ -401,7 +401,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-pairing-description { margin: 8px 0 16px; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-pairing-form { display: grid; gap: var(--pwa-space-md); }
 .pwa-ui-scope .pwa-pairing-input input { font-family: var(--pwa-font-mono); letter-spacing: 0.04em; }
-.pwa-field-error { display: inline-flex; align-items: flex-start; gap: 6px; }
+.pwa-field-error { display: inline-flex; align-items: flex-start; gap: var(--pwa-space-status); }
 .pwa-field-error svg { flex: 0 0 auto; margin-top: 1px; }
 .pwa-pairing-hint { margin: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-pairing-error { margin: 8px 0 0; color: var(--pwa-error); font-size: var(--pwa-text-meta); }
@@ -439,7 +439,7 @@ body:has(.pwa-root) { overflow: hidden; }
   --alert-radius: var(--pwa-radius-sm) !important;
   align-self: center;
   flex: 0 0 auto;
-  width: min(var(--pwa-reading-width, 680px), calc(100% - 2 * var(--pwa-gutter)));
+  width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter)));
   margin: 8px auto 0;
   padding: 8px 12px;
   border: 1px solid var(--alert-bd);
@@ -466,8 +466,8 @@ body:has(.pwa-root) { overflow: hidden; }
   --alert-color: var(--pwa-ink) !important;
   --alert-bd: var(--pwa-line) !important;
   /* 位于应用壳顶层、横跨全宽：两侧 gutter 加各侧安全区。 */
-  width: min(680px, calc(100% - 2 * var(--pwa-gutter) - var(--pwa-safe-left) - var(--pwa-safe-right)));
-  max-width: 680px;
+  width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter) - var(--pwa-safe-left) - var(--pwa-safe-right)));
+  max-width: var(--pwa-reading-width);
   margin: 8px auto 0;
   padding: 10px 8px 10px 12px;
   border: 1px solid var(--alert-bd);
@@ -479,7 +479,7 @@ body:has(.pwa-root) { overflow: hidden; }
   line-height: var(--pwa-leading-ui);
 }
 .pwa-runtime-notice .pwa-runtime-notice-wrapper { align-items: center; min-width: 0; }
-.pwa-runtime-notice .pwa-runtime-notice-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
+.pwa-runtime-notice .pwa-runtime-notice-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pwa-space-pair) 12px; }
 .pwa-runtime-notice .pwa-runtime-notice-title { grid-column: 1; margin: 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: 600; line-height: var(--pwa-leading-ui); }
 .pwa-runtime-notice .pwa-runtime-notice-message,
 .pwa-runtime-notice-content { display: contents; }
@@ -487,7 +487,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-runtime-notice-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pwa-runtime-notice .pwa-runtime-notice-dismiss { flex: 0 0 44px; align-self: center; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -4px -4px -4px 4px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); }
 @media (hover: hover) { .pwa-runtime-notice .pwa-runtime-notice-dismiss:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-hover); } }
-.pwa-toast { position: relative; flex: 0 0 auto; max-width: min(680px, calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font-size: var(--pwa-text-meta); order: 3; align-self: center; margin: 8px auto; padding: 12px; border-color: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line)); color: var(--pwa-error); background: var(--pwa-error-wash); }
+.pwa-toast { position: relative; flex: 0 0 auto; max-width: min(var(--pwa-reading-width), calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font-size: var(--pwa-text-meta); order: 3; align-self: center; margin: 8px auto; padding: 12px; border-color: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line)); color: var(--pwa-error); background: var(--pwa-error-wash); }
 .pwa-toast > span { min-width: 0; max-height: min(14dvh, 100px); overflow-y: auto; overflow-wrap: anywhere; }
 .pwa-ui-scope .pwa-toast-dismiss { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -6px -8px -6px 0; padding: 0; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: inherit; background: transparent; cursor: pointer; }
 @media (hover: hover) { .pwa-ui-scope .pwa-toast-dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pwa-error) 42%, var(--pwa-line)); background: var(--pwa-error-wash); } }
@@ -543,8 +543,8 @@ body:has(.pwa-root) { overflow: hidden; }
 @media (max-width: 767.98px) {
   /* 移动端与桌面保持同一块输入表面的内边距。 */
   /* 移动设置页：返回箭头与标题组成固定顶栏，尺寸同 .pwa-topbar；左右各让出内容区 16px 铺满屏宽，由顶栏遮挡状态栏。 */
-  .pwa-root .pwa-settings-inner { padding: 0 16px calc(48px + var(--pwa-safe-bottom, 0px)); }
-  .pwa-root .pwa-settings-header { position: sticky; z-index: 2; top: 0; min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 4px; margin: 0 -16px; padding: var(--pwa-safe-top) 16px 0 4px; background: var(--pwa-bg); }
+  .pwa-root .pwa-settings-inner { padding: 0 var(--pwa-gutter) calc(48px + var(--pwa-safe-bottom, 0px)); }
+  .pwa-root .pwa-settings-header { position: sticky; z-index: 2; top: 0; min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 4px; margin: 0 calc(-1 * var(--pwa-gutter)); padding: var(--pwa-safe-top) var(--pwa-gutter) 0 4px; background: var(--pwa-bg); }
   .pwa-root .pwa-status-bar-shield { display: none; }
   /* 只剩箭头时与其他图标按钮同色：常态 secondary、悬停 ink；桌面带文字时仍为强调色文字按钮。 */
   .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { width: 44px; height: 44px; margin: 0; padding: 0; border-radius: 50%; color: var(--pwa-secondary); }
@@ -567,7 +567,7 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-confirm-dialog { width: 100%; }
   .pwa-pairing-dialog,
   .pwa-rename-dialog,
-  .pwa-confirm-dialog { padding: 20px 16px 16px; }
+  .pwa-confirm-dialog { padding: 16px; }
   /* 移动端所有输入框 16px，避免 iOS 聚焦时自动放大。 */
   .pwa-ui-scope .pwa-input input { font-size: max(16px, var(--pwa-text-body)); }
   /* 移动端弹窗正文到操作区统一为 16，与确认弹窗一致。 */

@@ -25,7 +25,7 @@
 /* 长文件名单行省略，完整名称见 title 提示。 */
 .pwa-root .pwa-file-reader-header h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; font: var(--pwa-weight-strong) var(--pwa-text-title)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-file-reader-body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
-.pwa-root .pwa-file-reader-scroll { flex: 1; min-height: 0; padding: 16px calc(20px + var(--pwa-safe-right)) max(20px, var(--pwa-safe-bottom)) 20px; overflow: auto; overscroll-behavior: contain; }
+.pwa-root .pwa-file-reader-scroll { flex: 1; min-height: 0; padding: 16px calc(var(--pwa-gutter) + var(--pwa-safe-right)) max(var(--pwa-gutter), var(--pwa-safe-bottom)) var(--pwa-gutter); overflow: auto; overscroll-behavior: contain; }
 /* 围栏代码是原始 pre：块内横向滚动，不撑宽阅读器正文，否则整块正文都会被右滑返回排除。 */
 .pwa-root .pwa-file-markdown pre { box-sizing: border-box; max-width: 100%; margin: 8px 0; padding: 12px; overflow-x: auto; border-radius: var(--pwa-radius-md); color: var(--pwa-code-text); background: var(--pwa-code-surface); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
 .pwa-root .pwa-file-markdown pre code { padding: 0; color: inherit; background: transparent; font: inherit; white-space: pre; overflow-wrap: normal; }

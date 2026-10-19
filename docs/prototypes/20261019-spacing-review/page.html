@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>间距规范复核（2026-10-19） · Pi Reach</title>
+<link rel="stylesheet" href="./shared.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="eyebrow">PWA · 间距规范 · 已确认</p>
+      <h1>间距</h1>
+      <p class="lede">2026-10-19 评审稿：左侧调整前、右侧调整后；两处像素变化已落地，其余是口径统一。</p>
+    </div>
+  </header>
+
+  <ul class="stats">
+    <li class="stat"><b>2</b>处已落地</li>
+    <li class="stat"><b>2</b>项口径统一</li>
+    <li class="stat">例外 <b>77 → 21</b></li>
+    <li class="stat">守卫用例 <b>6 / 6</b></li>
+  </ul>
+
+  <section aria-labelledby="compare-heading">
+    <h2 id="compare-heading">直接对比</h2>
+    <p class="note">左侧调整前、右侧调整后，同一宽度与字号；红色斜纹是标注，不是界面元素，只有它覆盖的间距不同。</p>
+
+    <div class="cmp-block">
+      <div class="cmp-head">
+        <h3>移动端确认弹窗 · 顶部内边距</h3>
+        <p class="delta"><span>20</span><em>→</em><span>16</span><b>−4px</b></p>
+      </div>
+      <div class="cmp">
+        <div class="cmp-pane">
+          <p class="cmp-tag">调整前</p>
+          <div class="cmp-frame">
+            <div class="dialog cmp-dialog" style="--pad:20px">
+              <span class="padmark" style="--h:20px" aria-hidden="true"><i>20</i></span>
+              <div class="dhead">
+                <h3 class="dtitle">删除这台电脑的配对？</h3>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+              </div>
+              <p class="ddesc">删除后需要重新运行配对命令。本地历史保留在本机。</p>
+              <div class="dactions"><span class="btn">取消</span><span class="btn danger">删除</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="cmp-pane">
+          <p class="cmp-tag rec">调整后</p>
+          <div class="cmp-frame">
+            <div class="dialog cmp-dialog" style="--pad:16px">
+              <span class="padmark" style="--h:16px" aria-hidden="true"><i>16</i></span>
+              <div class="dhead">
+                <h3 class="dtitle">删除这台电脑的配对？</h3>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+              </div>
+              <p class="ddesc">删除后需要重新运行配对命令。本地历史保留在本机。</p>
+              <div class="dactions"><span class="btn">取消</span><span class="btn danger">删除</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cmp-foot">标题、正文与操作区整体上移 4px；弹窗宽度、左右内边距、按钮间距都不变。</p>
+    </div>
+
+    <div class="cmp-block">
+      <div class="cmp-head">
+        <h3>设置页 · 纵向按钮块</h3>
+        <p class="delta"><span>16</span><em>→</em><span>8</span><b>−8px</b></p>
+      </div>
+      <div class="cmp">
+        <div class="cmp-pane">
+          <p class="cmp-tag">调整前 · 16</p>
+          <div class="cmp-frame">
+            <div class="actions-demo">
+              <h4 class="demo-head">浏览器数据</h4>
+              <p class="demo-desc">这些数据只保存在当前浏览器。</p>
+              <div class="demo-stack">
+                <div>
+                  <span class="btn">重置布局</span>
+                  <p class="note-inline">只恢复侧栏与阅读列位置。</p>
+                </div>
+                <div class="gapmark" style="--h:16px" aria-hidden="true"></div>
+                <div><span class="btn danger">清除本地数据</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cmp-pane">
+          <p class="cmp-tag rec">调整后 · 8</p>
+          <div class="cmp-frame">
+            <div class="actions-demo">
+              <h4 class="demo-head">浏览器数据</h4>
+              <p class="demo-desc">这些数据只保存在当前浏览器。</p>
+              <div class="demo-stack">
+                <div>
+                  <span class="btn">重置布局</span>
+                  <p class="note-inline">只恢复侧栏与阅读列位置。</p>
+                </div>
+                <div class="gapmark" style="--h:8px" aria-hidden="true"></div>
+                <div><span class="btn danger">清除本地数据</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cmp-foot">两个按钮块更靠近 8px，危险操作仍然独立一行；按钮自身尺寸不变。</p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>位置</th><th>调整前</th><th>调整后</th><th>视觉</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr><td>移动端确认弹窗顶部内边距</td><td data-label="调整前">20</td><td data-label="调整后">16</td><td data-label="视觉">−4px</td><td data-label="依据">20 不是档位，gutter 之外需登记或改档</td></tr>
+          <tr><td>设置页纵向按钮块</td><td data-label="调整前">16</td><td data-label="调整后">8</td><td data-label="视觉">−8px</td><td data-label="依据">「相邻独立按钮 8」补明横排与纵向同值</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="scale-heading">
+    <h2 id="scale-heading">刻度</h2>
+    <p class="note">通用档位七个；领域细档 2／6／10；gutter 由布局层单独定义。</p>
+    <ul class="legend">
+      <li><span><i class="key-tier"></i>通用档位</span></li>
+      <li><span><i class="key-fine"></i>领域细档</span></li>
+      <li><span><i class="key-gutter"></i>gutter（布局层）</span></li>
+    </ul>
+    <ul class="ruler">
+      <li><span class="swatch" style="--h:4px"></span><span class="v">4</span><span class="n">2xs</span></li>
+      <li><span class="swatch" style="--h:8px"></span><span class="v">8</span><span class="n">xs</span></li>
+      <li><span class="swatch" style="--h:12px"></span><span class="v">12</span><span class="n">sm</span></li>
+      <li><span class="swatch" style="--h:16px"></span><span class="v">16</span><span class="n">md</span></li>
+      <li><span class="swatch" style="--h:24px"></span><span class="v">24</span><span class="n">lg</span></li>
+      <li><span class="swatch" style="--h:32px"></span><span class="v">32</span><span class="n">xl</span></li>
+      <li><span class="swatch" style="--h:48px"></span><span class="v">48</span><span class="n">2xl</span></li>
+    </ul>
+    <ul class="ruler fine">
+      <li><span class="swatch fine" style="--h:2px"></span><span class="v">2</span><span class="n">双行文字</span></li>
+      <li><span class="swatch fine" style="--h:6px"></span><span class="v">6</span><span class="n">导航行 · 状态行</span></li>
+      <li><span class="swatch fine" style="--h:10px"></span><span class="v">10</span><span class="n">菜单 · Composer</span></li>
+      <li><span class="swatch gutter" style="--h:20px"></span><span class="v">20</span><span class="n">桌面 gutter</span></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="map-heading">
+    <h2 id="map-heading">关系映射</h2>
+    <p class="note">按内容关系取档位，同一间隔只由一个布局层负责；虚线区间即实际间距。</p>
+    <div class="relgrid">
+      <div class="rel">
+        <div class="relhead"><span>标题 → 说明</span><span>4</span></div>
+        <p class="t">设置</p>
+        <div class="band" style="--h:4px"></div>
+        <p class="d">默认档位与界面语言保存在当前浏览器。</p>
+      </div>
+      <div class="rel">
+        <div class="relhead"><span>标签 → 输入框</span><span>8</span></div>
+        <label class="flabel" for="p1">Relay 地址</label>
+        <div class="band" style="--h:8px"></div>
+        <div class="field-box" id="p1">wss://relay.example.com</div>
+      </div>
+      <div class="rel">
+        <div class="relhead"><span>相邻独立按钮</span><span>8</span></div>
+        <p class="d">删除后需要重新配对这台电脑。</p>
+        <div class="spacer" style="--h:16px"></div>
+        <div class="btn-row">
+          <span class="btn">取消</span><span class="hband" style="--w:8px"></span><span class="btn danger">删除配对</span>
+        </div>
+      </div>
+      <div class="rel">
+        <div class="relhead"><span>内容 → 主操作</span><span>16</span></div>
+        <div class="field-box">wss://relay.example.com</div>
+        <div class="band" style="--h:16px"></div>
+        <span class="btn primary">保存设置</span>
+      </div>
+      <div class="rel">
+        <div class="relhead"><span>弹窗正文 → 操作区</span><span>24</span></div>
+        <p class="d">桌面 24，移动 16。删除后本地历史仍保留。</p>
+        <div class="band" style="--h:24px"></div>
+        <div class="btn-row"><span class="btn">取消</span><span class="btn danger">清除</span></div>
+      </div>
+      <div class="rel">
+        <div class="relhead"><span>页面大分区</span><span>32</span></div>
+        <div class="panel-block strong">外观</div>
+        <div class="band" style="--h:32px"></div>
+        <div class="panel-block strong">字体大小</div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="comp-heading">
+    <h2 id="comp-heading">组件复核</h2>
+    <p class="note">按落地后的 CSS 复刻，标注为实际取值；橙色为领域细档，红色为本次调整项，调整前后见首节对比。</p>
+
+    <div class="grid2">
+      <figure class="card">
+        <figcaption>侧栏导航行 <code>.pwa-sidebar</code></figcaption>
+        <div class="stage">
+          <div class="sidebar">
+            <div class="brand">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 9h14"/><path d="M8 9v10"/><path d="M16 9v10"/></svg>
+              <span>Pi Reach</span>
+            </div>
+            <div class="device-row">
+              <span class="dot off"></span>
+              <span class="name">studio-mbp</span>
+              <svg class="icon" style="margin-left:auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <p class="group">在线 Pi</p>
+            <div class="navrow current">
+              <span class="navcopy"><span>修复连接重试</span><span class="navsub">pi-reach · 空闲</span></span>
+            </div>
+            <div class="navrow">
+              <span class="navcopy"><span>收拢菜单间距</span><span class="navsub">pwa · 运行中</span></span>
+              <span class="dot busy"></span>
+            </div>
+            <div class="navrow">
+              <span class="navcopy"><span>Relay 重连日志</span><span class="navsub">relay · 空闲</span></span>
+            </div>
+            <div class="sidefoot"><span class="sidetext">配对电脑</span><span class="sidetext">设置</span></div>
+          </div>
+        </div>
+        <ul class="chips">
+          <li class="chip tier">内边距 8</li>
+          <li class="chip fine">行间 2</li>
+          <li class="chip fine">行内 6 / 8</li>
+          <li class="chip tier">分组 12</li>
+        </ul>
+      </figure>
+
+      <figure class="card">
+        <figcaption>消息与工具行 <code>.pwa-timeline</code></figcaption>
+        <div class="stage plain">
+          <div class="thread">
+            <div class="msguser">帮我核对当前间距规范里 20 的归属。</div>
+            <div class="meta">14:02</div>
+            <div class="assistant">
+              <p>档位与 gutter 的口径不一致，需要先定一处。</p>
+              <div class="thinkrow">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <span>正在核对 token 使用</span>
+              </div>
+              <div class="toolrow">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 4h9l5 5v11H5z"/><path d="M14 4v5h5"/></svg>
+                <span>read</span>
+                <span class="toolcmd">docs/DESIGN.md</span>
+                <span class="toolstate">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>
+                </span>
+              </div>
+              <p>其余都是口径问题，不改像素。</p>
+            </div>
+          </div>
+        </div>
+        <ul class="chips">
+          <li class="chip tier">消息间 12</li>
+          <li class="chip tier">段间 8</li>
+          <li class="chip tier">元数据 4</li>
+          <li class="chip fine">状态行 6</li>
+        </ul>
+      </figure>
+    </div>
+
+    <div class="grid2">
+      <figure class="card">
+        <figcaption>Composer <code>.pwa-composer</code></figcaption>
+        <div class="stage">
+          <div class="composer">
+            <div class="ctext">继续，按新的间距口径收口</div>
+            <div class="cfoot">
+              <span class="model">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/></svg>
+                Sonnet 4.5
+              </span>
+              <span class="send">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+        <ul class="chips">
+          <li class="chip fine">卡片 10</li>
+          <li class="chip fine">操作区 6</li>
+          <li class="chip tier">标签 8 / 4</li>
+          <li class="chip tier">圆角 16</li>
+        </ul>
+      </figure>
+
+      <figure class="card">
+        <figcaption>菜单行 <code>.pwa-command-row</code></figcaption>
+        <div class="stage">
+          <div class="menu">
+            <p class="menuhead">模型与思考</p>
+            <div class="menuitem">
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4z"/><path d="m4 12 8 4 8-4"/></svg>
+              切换模型
+            </div>
+            <div class="menuitem current">
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 12l3-3"/></svg>
+              思考级别
+            </div>
+            <div class="menuitem">
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+              紧凑显示
+            </div>
+          </div>
+        </div>
+        <ul class="chips">
+          <li class="chip fine">容器 6</li>
+          <li class="chip fine">行 6 / 10</li>
+          <li class="chip tier">图标 8</li>
+          <li class="chip tier">行高 44</li>
+        </ul>
+      </figure>
+    </div>
+
+    <div class="grid2">
+      <figure class="card">
+        <figcaption>设置分区 <code>.pwa-settings-section</code></figcaption>
+        <div class="stage">
+          <div class="settings-rep">
+            <h3 class="sechead">字体大小</h3>
+            <p class="secdesc">只放大字号，不改变间距与点击区。</p>
+            <div class="cards">
+              <div class="radio-card sel">
+                <span class="radio"></span>
+                <span class="radiocopy"><strong>标准</strong><small>正文字号 16px</small></span>
+              </div>
+              <div class="radio-card">
+                <span class="radio"></span>
+                <span class="radiocopy"><strong>大</strong><small>正文字号 18px</small></span>
+              </div>
+            </div>
+            <div class="form">
+              <div class="field">
+                <label for="p2">Relay 地址</label>
+                <div class="field-box" id="p2">wss://relay.example.com</div>
+              </div>
+              <span class="btn primary">保存设置</span>
+            </div>
+            <div class="actions">
+              <div>
+                <span class="btn">重置布局</span>
+                <p class="note-inline">只恢复侧栏与阅读列位置。</p>
+              </div>
+              <span class="btn danger">清除本地数据</span>
+            </div>
+          </div>
+        </div>
+        <ul class="chips">
+          <li class="chip tier">标题说明 4</li>
+          <li class="chip tier">卡片 8</li>
+          <li class="chip tier">表单 16</li>
+          <li class="chip dec">纵向按钮块 8（原 16）</li>
+        </ul>
+      </figure>
+
+      <figure class="card">
+        <figcaption>确认弹窗 <code>.pwa-confirm-dialog</code></figcaption>
+        <div class="stage">
+          <div class="dialog-pair">
+            <div class="pane">
+              <span class="caption">桌面 · 24</span>
+              <div class="dialog">
+                <div class="dhead">
+                  <h3 class="dtitle">删除这台电脑的配对？</h3>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </div>
+                <p class="ddesc">删除后需要重新运行配对命令。本地历史保留在本机。</p>
+                <div class="dactions"><span class="btn">取消</span><span class="btn danger">删除</span></div>
+              </div>
+            </div>
+            <div class="pane">
+              <span class="caption">移动 · 16</span>
+              <div class="dialog mobile">
+                <div class="dhead">
+                  <h3 class="dtitle">删除这台电脑的配对？</h3>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </div>
+                <p class="ddesc">删除后需要重新运行配对命令。本地历史保留在本机。</p>
+                <div class="dactions"><span class="btn">取消</span><span class="btn danger">删除</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="chips">
+          <li class="chip tier">桌面 24</li>
+          <li class="chip tier">移动左右 16</li>
+          <li class="chip tier">操作区上 24</li>
+          <li class="chip dec">移动顶部 16（原 20）</li>
+        </ul>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="ledger-heading">
+    <h2 id="ledger-heading">口径账</h2>
+    <p class="note">口径变化不产生像素变化，但决定以后谁来保证一致。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项目</th><th>调整前</th><th>落地</th></tr></thead>
+        <tbody>
+          <tr><td>守卫档位集合</td><td data-label="调整前"><code>0 · 4 · 8 · 12 · 16 · 20 · 24 · 32 · 48</code></td><td data-label="落地">去掉 20；20 只作 gutter，出现即登记</td></tr>
+          <tr><td>产品 CSS 写法</td><td data-label="调整前">token 29 · 混用 32 · 字面量 190</td><td data-label="落地">纯 token 42 · 混用 35 · 已批准字面量 232</td></tr>
+          <tr><td>语义 token</td><td data-label="调整前">无</td><td data-label="落地"><code>pair</code> 2 · <code>status</code> 6 · <code>menu-pad</code> 10 · <code>composer</code> 10</td></tr>
+          <tr><td>登记例外</td><td data-label="调整前">77 条</td><td data-label="落地">21 条</td></tr>
+          <tr><td>守卫覆盖</td><td data-label="调整前">CSS 间距字面量</td><td data-label="落地">间距属性、间距类自定义属性、<code>scroll-*</code>、token 取值、冗余登记</td></tr>
+          <tr><td>Mantine spacing</td><td data-label="调整前">xs–xl（8–32）</td><td data-label="落地">2xs–2xl（4–48）</td></tr>
+          <tr><td>设置页与提示条常量</td><td data-label="调整前">写死 20 · 16 · 680</td><td data-label="落地">引用 <code>--pwa-gutter</code> · <code>--pwa-reading-width</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">项目原型 · 2026-10-19 已确认并落地；数值取自当日 <code>pwa/src</code> 与 <code>pwa-style-guard</code>。当前规则以 DESIGN「间距」为准。</p>
+</div>
+</body>
+</html>

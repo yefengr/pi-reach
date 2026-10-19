@@ -81,7 +81,7 @@
 .pwa-root .pwa-tool-reader-arg-name { font-weight: var(--pwa-weight-strong); }
 .pwa-root .pwa-tool-reader-actions { flex: 0 0 auto; display: flex; align-items: center; }
 .pwa-root .pwa-tool-reader-body { min-height: 0; display: flex; flex: 1 1 auto; flex-direction: column; padding: 0; overflow: hidden; }
-.pwa-root .pwa-tool-reader-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px calc(20px + var(--pwa-safe-right)) max(20px, var(--pwa-safe-bottom)) 20px; background: var(--pwa-bg); }
+.pwa-root .pwa-tool-reader-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px calc(var(--pwa-gutter) + var(--pwa-safe-right)) max(var(--pwa-gutter), var(--pwa-safe-bottom)) var(--pwa-gutter); background: var(--pwa-bg); }
 .pwa-root .pwa-tool-reader-scroll > * + * { margin-top: 12px; }
 .pwa-root .pwa-reader-error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--pwa-radius-md); color: var(--pwa-error); background: var(--pwa-error-wash); }
 .pwa-root .pwa-reader-error > svg { flex: 0 0 auto; margin-top: 2px; }

@@ -109,6 +109,8 @@ test.each([390, 767, 768, 1440].flatMap(width => ["light", "dark"].map(scheme =>
     expect(getComputedStyle(actions).gap).toBe("8px");
     // 弹窗正文到操作区：桌面 24、移动 16；标签到输入框只由公共标签间距负责。
     expect(getComputedStyle(actions).marginTop).toBe(width < 768 ? "16px" : "24px");
+    // 弹窗内边距：桌面 24、移动 16（DESIGN「间距」）。
+    expect(getComputedStyle(dialog.element()).padding).toBe(width < 768 ? "16px" : "24px");
     const label = document.querySelector(".pwa-rename-dialog label")!.getBoundingClientRect();
     expect(Math.round(input.getBoundingClientRect().top - label.bottom)).toBe(8);
     expect(dialog.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(0);

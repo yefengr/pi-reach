@@ -6,7 +6,7 @@
 .pwa-user-blocks { display: grid; gap: 8px; }
 .pwa-message.user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-message); }
 .pwa-message.assistant { padding: 0; }
-.pwa-message-status { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-message-status { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 4px; font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-message.provider_error { padding: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-error-wash); }
 .pwa-message.provider_error .pwa-message-status { color: var(--pwa-error); }
 .pwa-message.compaction, .pwa-message.branch_summary, .pwa-message.custom { padding: 0 0 0 12px; border-left: 2px solid var(--pwa-line); color: var(--pwa-soft-ink); font-size: var(--pwa-text-body); }
