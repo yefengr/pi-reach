@@ -220,6 +220,8 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   const { screen, update } = await liveList([question], live);
   const working = () => document.querySelector(".pwa-thinking-status");
   expect(working()?.textContent).toBe("Working…");
+  // 与它替代的思考标题／工具组头同字号，交接时不改变文字层级。
+  expect(getComputedStyle(working()!).fontSize).toBe("16px");
   await update([question, partialItem(thinking)]);
   expect(working()).toBeNull();
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
