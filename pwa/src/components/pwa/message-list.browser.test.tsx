@@ -226,6 +226,8 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   expect(workingStyle.fontWeight).toBe("600");
   expect(workingStyle.fontStyle).toBe("normal");
   expect(workingStyle.color).toBe(getComputedStyle(working()!.querySelector("svg")!).color);
+  // 图标与状态文字统一取 6px 语义档。
+  expect(workingStyle.gap).toBe("6px");
   await update([question, partialItem(thinking)]);
   expect(working()).toBeNull();
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();

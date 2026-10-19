@@ -2,7 +2,7 @@
 .pwa-root .pwa-published-file.is-image { max-width: 560px; }
 .pwa-root .pwa-published-row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px; border-radius: var(--pwa-radius-sm); }
 .pwa-root .pwa-published-row > svg { flex: none; color: var(--pwa-secondary); }
-.pwa-root .pwa-published-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pwa-root .pwa-published-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--pwa-space-pair); }
 .pwa-root .pwa-published-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pwa-text-body); font-weight: 600; }
 .pwa-root .pwa-published-meta, .pwa-root .pwa-published-error { font-size: var(--pwa-text-meta); line-height: 1.4; color: var(--pwa-secondary); overflow-wrap: anywhere; }
 .pwa-root .pwa-published-error { color: var(--pwa-error); }
@@ -21,7 +21,7 @@
 /* 圆角规则同工具详情阅读器：左侧两角为 12，移动全屏只在进出与跟手拖动时显示。 */
 .pwa-root .pwa-file-reader { display: flex; flex-direction: column; overflow: hidden; max-width: 100vw; border-radius: var(--pwa-radius-lg) 0 0 var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-bg); box-shadow: var(--pwa-shadow-modal); }
 /* 与工具详情阅读器一致：顶栏与正文同用主界面 bg，状态栏与主界面同色。 */
-.pwa-root .pwa-file-reader-header { padding-right: calc(8px + var(--pwa-safe-right)); padding-left: var(--pwa-gutter); background: var(--pwa-bg); }
+.pwa-root .pwa-file-reader-header { gap: var(--pwa-space-2xs); padding-right: calc(8px + var(--pwa-safe-right)); padding-left: var(--pwa-gutter); background: var(--pwa-bg); }
 /* 长文件名单行省略，完整名称见 title 提示。 */
 .pwa-root .pwa-file-reader-header h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; font: var(--pwa-weight-strong) var(--pwa-text-title)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-file-reader-body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; overflow: hidden; }

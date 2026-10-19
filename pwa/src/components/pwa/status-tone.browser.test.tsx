@@ -42,6 +42,8 @@ test.each(["light", "dark"])("status colors follow shared semantics in %s", asyn
   expect(new Set([secondary, running, error]).size).toBe(3);
 
   expect(color(".pwa-tool-status-interrupted")).toBe(secondary);
+  // 会话内工具行的图标与状态文字同样取 6px 语义档。
+  expect(getComputedStyle(document.querySelector(".pwa-tool-status")!).gap).toBe("6px");
   expect(color(".pwa-tool-status-error")).toBe(error);
   expect(color(".preview .pwa-tool-notice-preview")).toBe(secondary);
   expect(document.querySelector(".preview .pwa-tool-notice:not(.pwa-tool-notice-preview)")).toBeNull();

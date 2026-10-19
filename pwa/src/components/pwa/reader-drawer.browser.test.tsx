@@ -257,7 +257,10 @@ test("mobile keeps the full-screen reader with a back arrow", async () => {
   await openTool();
   const surface = dialog()!;
   expect(Math.round(surface.getBoundingClientRect().width)).toBe(390);
-  expect(surface.querySelector(".pwa-topbar-back")).not.toBeNull();
+  const back = surface.querySelector<HTMLElement>(".pwa-topbar-back")!;
+  // 返回按钮与标题相距 4px，由顶栏 gap 负责，不再用负 margin 抵消。
+  expect(getComputedStyle(surface.querySelector<HTMLElement>("header")!).gap).toBe("4px");
+  expect(getComputedStyle(back).marginRight).toBe("0px");
   expect(surface.querySelector(".pwa-tool-reader-close")).not.toBeNull();
   await screen.getByRole("button", { name: "Close tool details", exact: true }).click();
   await expect.poll(dialog).toBeNull();

@@ -73,6 +73,7 @@ test("model loading uses the real model menu and explicit completion", async () 
   await choose("models-loading");
   await openModels();
   await expect.poll(() => document.querySelector(".pwa-operation-list-status .pwa-spin")).not.toBeNull();
+  expect(getComputedStyle(document.querySelector(".pwa-operation-list-status")!).gap).toBe("6px");
   expect(document.querySelectorAll(".pwa-command-choice")).toHaveLength(0);
   await closeOverlay();
   await page.getByRole("button", { name: "演示模型加载完成", exact: true }).click();

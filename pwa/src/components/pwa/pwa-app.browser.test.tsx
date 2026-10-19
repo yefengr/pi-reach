@@ -894,6 +894,11 @@ test("operation feedback local compaction activity is scoped and remote error do
     expect(document.querySelector(".pwa-operation-status")).toBeNull();
     channel.emit({ ...activity, status: "running" });
     await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    // 状态行与输入卡片处在同一阅读列：行内容左缘和卡片左缘对齐。
+    const statusLine = document.querySelector<HTMLElement>(".pwa-operation-status")!;
+    const composerCard = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const contentLeft = statusLine.getBoundingClientRect().left + parseFloat(getComputedStyle(statusLine).paddingLeft);
+    expect(Math.round(contentLeft)).toBe(Math.round(composerCard.getBoundingClientRect().left));
     channel.emit({ ...activity, status: "failed" });
     await expect.element(screen.getByText("Could not compact context.", { exact: true })).toBeVisible();
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();

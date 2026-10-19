@@ -1,7 +1,8 @@
+/* 图标与状态文字统一取 6px 语义档（见 DESIGN「间距」）。 */
 .pwa-operation-status {
   display: flex;
   align-items: center;
-  gap: var(--pwa-space-xs);
+  gap: var(--pwa-space-status);
   min-height: 44px;
   color: var(--pwa-running);
   font-size: var(--pwa-text-list);
@@ -10,6 +11,7 @@
 .pwa-operation-status > svg { flex: 0 0 auto; }
 .pwa-operation-status[data-unknown] { color: var(--pwa-secondary); }
 .pwa-operation-status[data-failed] { color: var(--pwa-error); }
-.pwa-operation-list-status { margin: 0; color: var(--pwa-secondary); }
-.pwa-operation-list-status > svg { vertical-align: middle; margin-right: var(--pwa-space-xs); }
+/* 模型菜单的加载行与操作状态行同排版，不用行内 svg 的 margin 制造间距。 */
+.pwa-operation-list-status { margin: 0; display: flex; align-items: center; gap: var(--pwa-space-status); color: var(--pwa-secondary); }
+.pwa-operation-list-status > svg { flex: 0 0 auto; }
 .pwa-operation-model-pending { color: var(--pwa-running); }
