@@ -220,8 +220,12 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   const { screen, update } = await liveList([question], live);
   const working = () => document.querySelector(".pwa-thinking-status");
   expect(working()?.textContent).toBe("Working…");
-  // 与它替代的思考标题／工具组头同字号，交接时不改变文字层级。
-  expect(getComputedStyle(working()!).fontSize).toBe("16px");
+  // 与它替代的思考标题／工具组头同字号、同字重；运行色与图标一致，但保持正体。
+  const workingStyle = getComputedStyle(working()!);
+  expect(workingStyle.fontSize).toBe("16px");
+  expect(workingStyle.fontWeight).toBe("600");
+  expect(workingStyle.fontStyle).toBe("normal");
+  expect(workingStyle.color).toBe(getComputedStyle(working()!.querySelector("svg")!).color);
   await update([question, partialItem(thinking)]);
   expect(working()).toBeNull();
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
@@ -1249,12 +1253,19 @@ test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width,
       expect(parameter.scrollWidth).toBeGreaterThan(parameter.clientWidth);
     };
     assertGeometry();
-    expect(getComputedStyle(group.querySelector(".pwa-tool-group-status")!).color).toBe(tokenColor("--pwa-running"));
+    const runningColor = tokenColor("--pwa-running");
+    const currentCopy = () => group.querySelector<HTMLElement>(".pwa-tool-group-current")!;
+    expect(getComputedStyle(currentCopy().querySelector("strong")!).color).toBe(runningColor);
+    expect(getComputedStyle(currentCopy().querySelector(":scope > span")!).color).toBe(runningColor);
+    expect(getComputedStyle(group.querySelector(".pwa-tool-group-status")!).color).toBe(runningColor);
     for (const [status, token] of [["complete", "--pwa-complete"], ["error", "--pwa-error"], ["interrupted", "--pwa-secondary"]] as const) {
       const ended: Extract<TimelineEvent, { kind: "tool" }> = status === "error" ? { ...finished, status, error: "failed" }
         : status === "interrupted" ? { ...finished, status, result: undefined } : finished;
       await update([eventItem(assistantEvent), eventItem(earlierFailure), eventItem(ended)]);
       assertGeometry();
+      // 已完成的调用即使仍在组头轮播，文字也不再使用运行色。
+      const settled = group.querySelector<HTMLElement>(".pwa-tool-group-current");
+      if (settled) for (const node of settled.querySelectorAll<HTMLElement>("strong, span")) expect(getComputedStyle(node).color).not.toBe(runningColor);
       expect(getComputedStyle(group.querySelector(".pwa-tool-group-status")!).color).toBe(tokenColor(token));
       expect(group.querySelectorAll(".lucide-circle-alert")).toHaveLength(1);
     }

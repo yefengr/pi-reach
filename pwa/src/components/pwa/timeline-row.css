@@ -69,6 +69,9 @@
 /* 轮播调用使用组头字号；换成新工具时仅文字进入，减少动态效果时位移为 0。 */
 .pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current { display: flex; align-items: center; gap: 8px; color: inherit; font: inherit; }
 .pwa-root .pwa-tool-group .pwa-tool-group-current > span { font-size: var(--pwa-text-body); }
+/* 运行中的调用文字使用运行色；完成、失败等状态回到内容色，不把已完成调用标为运行中。 */
+.pwa-root .pwa-tool-group .pwa-tool-group-current[data-status="running"] strong,
+.pwa-root .pwa-tool-group .pwa-tool-group-current[data-status="running"] > span { color: var(--pwa-running); }
 .pwa-root .pwa-tool-group .pwa-tool-group-status { width: 16px; height: 16px; justify-content: center; overflow: visible; }
 /* 只让文字进入，状态原位交接，避免透明图标触发 Working 短暂插入。 */
 .pwa-root .pwa-tool-group .pwa-tool-group-current[data-enter] { animation: pwa-tool-group-current-in var(--pwa-duration-content) var(--pwa-ease-standard); }
