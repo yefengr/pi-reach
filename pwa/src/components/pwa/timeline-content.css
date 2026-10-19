@@ -24,8 +24,8 @@
 /* 一轮结束后的完成时间，与运行期间的即时兜底提示。 */
 .pwa-turn-meta { margin: 4px 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-turn-status-error { color: var(--pwa-error); }
-/* 与思考／工具组头保持相同的高度和外边距，状态替换不改变列表纵向尺寸。 */
-.pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-list); line-height: var(--pwa-leading-ui); }
+/* 与思考／工具组头保持相同的字号、高度和外边距，替换具体运行提示时不改变文字层级与列表纵向尺寸。 */
+.pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
 
 /* Markdown：标题只分两级且不大于会话标题；链接常显下划线；代码块与工具输出同底。 */
@@ -74,8 +74,12 @@
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
 /* 思考行：进行中显示旋转图标与最新完整标题，无标题时用合并更新的首行摘要或「Thinking…」；完成态沿用最新标题或「Thinking」，图标淡出后标题滑回左缘，箭头列不动。空历史仅显示静态「Thinking」，不可展开。
-   标题与正式回复同为 16px，展开内容为 14px 次级文字，不带引用竖线与缩进。 */
+   标题与正式回复同为 16px，展开内容为 14px 次级文字，不带引用竖线与缩进；标题和正文使用斜体，代码与操作按钮保持正体。 */
 .pwa-thinking { color: var(--pwa-secondary); }
+.pwa-thinking.pwa-timeline-row .pwa-thinking-title,
+.pwa-thinking .pwa-text-plain { font-style: italic; }
+/* 代码需要直立字形才能保持等宽对齐；展开全文等操作文字不属于思考内容。 */
+.pwa-thinking :is(.pwa-code-block, .pwa-markdown code, .pwa-button) { font-style: normal; }
 .pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }
 .pwa-thinking-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pwa-thinking-heading { display: flex; align-items: center; }

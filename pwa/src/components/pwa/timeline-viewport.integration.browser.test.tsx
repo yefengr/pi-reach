@@ -390,7 +390,7 @@ test.each(activityCases)("Working and Thinking replace each other without moving
   try {
     const working = list.querySelector<HTMLElement>(".pwa-thinking-status")!;
     expect(Math.round(working.getBoundingClientRect().height)).toBe(44);
-    expect(getComputedStyle(working).fontSize).toBe("14px");
+    expect(getComputedStyle(working).fontSize).toBe("16px");
     const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
     for (const thinking of [true, false, true]) {
       const samples = await sampleActivityLayout(list, () => update(thinking ? [history, partial("live-output", "**Checking results**\nReasoning in progress.", "thinking")] : [history]));
