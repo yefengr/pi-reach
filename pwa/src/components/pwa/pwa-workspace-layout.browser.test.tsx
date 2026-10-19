@@ -1418,6 +1418,28 @@ test.each([
   }
 });
 
+test("settings back keeps a focus the user moved during the exit animation at 1280 px", async () => {
+  await page.viewport(1280, 844);
+  const screen = await renderLayout({ events: [] });
+  try {
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+    window.history.back();
+    // 退出动画期间工作区已解除 inert；模拟键盘用户此时把焦点移到刷新按钮。
+    await expect.poll(() => document.querySelector(".pwa-workspace-view")?.hasAttribute("inert")).toBe(false);
+    expect(document.querySelector(".pwa-settings-view")).not.toBeNull();
+    const target = document.querySelector<HTMLElement>(".pwa-title-bar-refresh")!;
+    target.focus();
+    expect(document.activeElement).toBe(target);
+    await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-root")?.hasAttribute("data-view-transition")).toBe(false);
+    // 设置层卸载后的补救聚焦不能覆盖用户已经移动的焦点。
+    expect(document.activeElement).toBe(target);
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test.each([
   { width: 1280, prior: "body" },
   { width: 1280, prior: "control" },
