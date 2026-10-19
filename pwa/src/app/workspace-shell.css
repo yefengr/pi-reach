@@ -188,14 +188,14 @@
 /* 本地历史的只读说明条替换输入区。 */
 .pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 
-/* 骨架屏：hover 色块按真实布局排列，约 1.5 秒明暗呼吸，减少动态效果时静止。 */
+/* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }
-.pwa-skeleton { display: block; height: 14px; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); animation: pwa-breathe 1.5s linear infinite; }
+.pwa-skeleton { display: block; height: 14px; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); animation: pwa-breathe 2s linear infinite; }
 .pwa-root .pwa-skeleton-user { justify-self: end; width: 45%; height: 40px; border-radius: var(--pwa-radius-md); }
 .pwa-root .pwa-skeleton-short { width: 60%; }
 .pwa-root .pwa-nav-skeleton { display: grid; gap: 10px; padding: 8px; }
 .pwa-root .pwa-nav-skeleton .pwa-skeleton:last-child { width: 70%; }
-@keyframes pwa-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes pwa-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 @media (prefers-reduced-motion: reduce) { .pwa-skeleton { animation: none; } }
 
 @media (max-width: 767.98px) {
