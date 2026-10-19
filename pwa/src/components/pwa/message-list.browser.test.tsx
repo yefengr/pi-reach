@@ -421,6 +421,8 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   expect(status.querySelector("svg")?.getAttribute("width")).toBe("16");
   expect(getComputedStyle(status).fontSize).toBe("16px");
   expect(getComputedStyle(status).fontWeight).toBe("600");
+  // 思考标题保持中性色，运行状态只由左侧旋转图标表达。
+  expect(getComputedStyle(status).color).toBe(getComputedStyle(document.querySelector(".pwa-thinking")!).color);
   expect(Math.round(status.getBoundingClientRect().left)).toBe(Math.round(document.querySelector(".pwa-thinking-head")!.getBoundingClientRect().left));
   // 动画中的 SVG 包围盒会变化，图标自身仍保留固定布局宽度。
   expect(getComputedStyle(status.querySelector("svg")!).width).toBe("16px");
@@ -1255,15 +1257,16 @@ test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width,
     assertGeometry();
     const runningColor = tokenColor("--pwa-running");
     const currentCopy = () => group.querySelector<HTMLElement>(".pwa-tool-group-current")!;
-    expect(getComputedStyle(currentCopy().querySelector("strong")!).color).toBe(runningColor);
-    expect(getComputedStyle(currentCopy().querySelector(":scope > span")!).color).toBe(runningColor);
+    // 运行中的调用文字保持中性色，运行状态只由右侧图标表达。
+    expect(getComputedStyle(currentCopy().querySelector("strong")!).color).toBe(tokenColor("--pwa-ink"));
+    expect(getComputedStyle(currentCopy().querySelector(":scope > span")!).color).toBe(tokenColor("--pwa-secondary"));
     expect(getComputedStyle(group.querySelector(".pwa-tool-group-status")!).color).toBe(runningColor);
     for (const [status, token] of [["complete", "--pwa-complete"], ["error", "--pwa-error"], ["interrupted", "--pwa-secondary"]] as const) {
       const ended: Extract<TimelineEvent, { kind: "tool" }> = status === "error" ? { ...finished, status, error: "failed" }
         : status === "interrupted" ? { ...finished, status, result: undefined } : finished;
       await update([eventItem(assistantEvent), eventItem(earlierFailure), eventItem(ended)]);
       assertGeometry();
-      // 已完成的调用即使仍在组头轮播，文字也不再使用运行色。
+      // 完成、失败、中断的调用文字与运行态一样保持中性，不使用运行色。
       const settled = group.querySelector<HTMLElement>(".pwa-tool-group-current");
       if (settled) for (const node of settled.querySelectorAll<HTMLElement>("strong, span")) expect(getComputedStyle(node).color).not.toBe(runningColor);
       expect(getComputedStyle(group.querySelector(".pwa-tool-group-status")!).color).toBe(tokenColor(token));

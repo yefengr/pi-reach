@@ -83,7 +83,7 @@
 .pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }
 .pwa-thinking-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pwa-thinking-heading { display: flex; align-items: center; }
-.pwa-thinking-live { color: var(--pwa-running); }
+/* 思考标题保持中性文字，运行状态只由左侧旋转图标表达。 */
 /* 槽位含 16px 图标和 8px 间隔；仅状态切换改变宽度，正文增量不会重播。 */
 .pwa-thinking-icon-slot { position: relative; flex: 0 0 auto; width: 0; height: 16px; opacity: 0; visibility: hidden; transition: width var(--pwa-duration-expand-in) var(--pwa-ease-standard), opacity var(--pwa-duration-expand-in) var(--pwa-ease-standard), visibility 0s var(--pwa-duration-expand-in); }
 .pwa-thinking-icon-slot > svg { position: absolute; top: 0; left: 0; color: var(--pwa-running); }
