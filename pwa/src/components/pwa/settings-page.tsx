@@ -15,6 +15,8 @@ export type SettingsPagePreferences = {
   setLanguage: (value: LanguagePreference) => void;
   enterSends: boolean;
   setEnterSends: (value: boolean) => void;
+  textSize: PwaTextSize;
+  setTextSize: (value: PwaTextSize) => void;
 };
 
 type SettingsPageProps = {
@@ -47,7 +49,8 @@ export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
 function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   const { preference } = useI18n();
   const [enterSends, setEnterSends] = useEnterSends();
-  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends }} />;
+  const { textSize, setTextSize } = usePwaTextSize();
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize }} />;
 }
 
 function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
@@ -55,9 +58,8 @@ function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVers
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
-  const { textSize, setTextSize } = usePwaTextSize();
   const { t } = useI18n();
-  const { enterSends, setEnterSends } = preferences;
+  const { enterSends, setEnterSends, textSize, setTextSize } = preferences;
   const s = t.settings;
   const versionText = (version: string | null, status: ConnectionViewState) => {
     if (status === "online") return version ?? s.versionUnavailable;

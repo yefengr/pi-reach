@@ -7,6 +7,7 @@ import { PUBLISHED_FILE_TYPE, type PublishedFileDescriptor } from "@pi-reach/pro
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { renderPwa } from "@/test/browser/render";
+import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import { PublishedFile } from "./published-file";
 import { MessageList } from "./message-list";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "./published-files-context";
@@ -53,6 +54,8 @@ afterEach(async () => {
   urls.forEach(url => URL.revokeObjectURL(url));
   document.documentElement.style.removeProperty("--pwa-duration-image-in");
   document.documentElement.style.removeProperty("--pwa-duration-image-out");
+  window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
+  resetTextSizeStateForTest();
   urls = [];
 });
 
@@ -226,6 +229,18 @@ test("safe bounded file reader escapes raw HTML and blocks external resources", 
   await raw.screen.getByRole("button", { name: "Close file reader" }).click();
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
   await raw.screen.unmount();
+});
+
+test("plain text reader follows the code text size token", async () => {
+  setTextSize("large");
+  const plainFile: PublishedFileDescriptor = { ...descriptor, file_name: "notes.txt", mime_type: "text/plain" };
+  const h = await harness({ file: plainFile, items: [event(published(plainFile))], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, mimeType: "text/plain", text: "plain content", url: blobUrl() } });
+  await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  await expect.poll(() => document.querySelector(".pwa-file-plain")?.textContent).toContain("plain content");
+  expect(getComputedStyle(document.querySelector(".pwa-file-plain")!).fontSize).toBe("16px");
+  await h.screen.getByRole("button", { name: "Close file reader" }).click();
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+  await h.screen.unmount();
 });
 
 test("reader pins through exit, releases reading lock, returns focus, and Escape closes only top layer", async () => {
