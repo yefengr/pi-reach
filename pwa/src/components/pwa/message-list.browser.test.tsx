@@ -1057,6 +1057,29 @@ test.each([1280, 390])("reply and tools align while thinking retains its own che
   }
 });
 
+test.each(["light", "dark"] as const)("thinking keeps nested markdown blocks at the secondary size in %s mode", async (theme) => {
+  const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  try {
+    document.documentElement.setAttribute("data-mantine-color-scheme", theme);
+    const text = "> ## 引用标题\n>\n> 引用正文。\n\n| 状态 | 说明 |\n| --- | --- |\n| 内存 | 不连接远程服务 |";
+    const screen = await renderPwa(<ThinkingContent text={text} expanded />);
+    const markdown = document.querySelector<HTMLElement>(".pwa-thinking .pwa-markdown")!;
+    const quote = markdown.querySelector<HTMLElement>("blockquote")!;
+    const heading = quote.querySelector<HTMLElement>("h2")!;
+    const cell = markdown.querySelector<HTMLElement>("td")!;
+    // 引用竖线保留，但其中标题与表格不得放大到回复字号。
+    expect(getComputedStyle(quote).borderLeftWidth).toBe("2px");
+    expect(getComputedStyle(heading).fontSize).toBe("14px");
+    expect(getComputedStyle(heading).marginTop).toBe("0px");
+    expect(getComputedStyle(markdown.querySelector<HTMLElement>("table")!).fontSize).toBe("14px");
+    expect(getComputedStyle(cell).fontSize).toBe("14px");
+    await screen.unmount();
+  } finally {
+    if (originalTheme) document.documentElement.setAttribute("data-mantine-color-scheme", originalTheme);
+    else document.documentElement.removeAttribute("data-mantine-color-scheme");
+  }
+});
+
 test.each([1280, 390])("tool groups have a right chevron, no group check and clickable title-only children in both themes at %ipx", async width => {
   await page.viewport(width, 844);
   const calls: Extract<TimelineEvent, { kind: "tool" }>[] = [
