@@ -97,7 +97,7 @@
 .pwa-root .pwa-nav-session,
 .pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: var(--pwa-navigation-row-padding) 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-nav-session .pwa-nav-link-body,
-.pwa-root .pwa-history-row .pwa-nav-link-body { min-width: 0; display: grid; gap: 2px; }
+.pwa-root .pwa-history-row .pwa-nav-link-body { min-width: 0; display: grid; gap: var(--pwa-space-pair); }
 .pwa-root .pwa-nav-session .pwa-nav-link-label,
 .pwa-root .pwa-nav-session .pwa-nav-link-description,
 .pwa-root .pwa-history-row .pwa-nav-link-label,
@@ -162,7 +162,7 @@
 .pwa-root .pwa-composer-hint { margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); text-align: left; }
 
 /* 连接状态：在线为 accent 圆点加中性文字，连接中／重连运行色并带动态图形，离线中性色；带文字（移动端已连接时只显示圆点）。 */
-.pwa-connection { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); white-space: nowrap; }
+.pwa-connection { display: inline-flex; align-items: center; gap: var(--pwa-space-status); padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); white-space: nowrap; }
 .pwa-connection.online .pwa-status-dot { background: var(--pwa-accent); }
 .pwa-connection.connecting,
 .pwa-connection.retrying { color: var(--pwa-running); }
@@ -186,7 +186,7 @@
 .pwa-root .pwa-choose-pi-list .pwa-nav-link-section { color: var(--pwa-secondary); }
 
 /* 本地历史的只读说明条替换输入区。 */
-.pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: 10px max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 
 /* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }

@@ -62,7 +62,7 @@
 .pwa-queued-message-copy {
   flex: 1 1 auto;
   display: grid;
-  gap: 2px;
+  gap: var(--pwa-space-pair);
   min-width: 0;
   padding-block: 6px;
 }

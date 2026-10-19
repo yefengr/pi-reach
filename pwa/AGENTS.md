@@ -46,7 +46,7 @@
 - 应用运行在浏览器中，入口复用 `PwaUiProvider`、`PwaAppShell` 和 `PwaApp`。公开环境变量遵循 Vite 规则，不向 bundle 注入完整 `process.env` 或服务端凭据。
 - 组件 props 明确类型，不使用 `any`。
 - 基础控件直接复用 Mantine，不重新建立仅转发 props 的 `components/ui` 包装层。公共默认值、产品 class 与业务样式的分工遵循 [`../docs/DESIGN.md`](../docs/DESIGN.md)，不以旧 Tailwind-only 描述忽略现有 Mantine。
-- 保留业务 CSS 的现有组织方式；颜色、间距与圆角引用 `src/app/pwa-theme.css` 的 `--pwa-*` token。不擅自引入 CSS Modules 或 styled-components。
+- 保留业务 CSS 的现有组织方式；颜色与圆角引用 `src/app/pwa-theme.css` 的 `--pwa-*` token，间距按 [`DESIGN`](../docs/DESIGN.md#间距) 的通用档位与领域细档取值（可直接写 px，也可用语义 token）。不擅自引入 CSS Modules 或 styled-components。
 - 图片使用浏览器原生资源与现有错误 fallback；data URL 附件按实际消费者处理。界面只使用系统字体栈（见 `src/app/pwa-theme.css`），不引入或下载网络字体。品牌图标由 `scripts/render-brand-icons.mjs` 生成到 `public/`，修改标识几何后重新运行。
 - 涉及 Modal、Drawer、Menu、Popover 的调整必须核对 Portal、焦点返回、Escape 竞争、滚动和叠层关系；按项目 overlay 验证技能验收，不仅比较截图。
 
