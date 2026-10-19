@@ -56,10 +56,11 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
   }, [outputKey]);
 
   const status = value ? toolStatus(value) : "unknown";
-  // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
-  const callText = value ? toolReaderCall(value) : undefined;
   // 参数对象可以拆成名称与值两部分：只有名称加重，长参数块不会整块压过输出正文。
   const callArguments = value ? toolReaderArguments(value) : undefined;
+  // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
+  // 对象参数只用结构化结果，不再额外拼一份未使用的全文，避免大参数在流式渲染中重复序列化。
+  const callText = value && !callArguments ? toolReaderCall(value) : undefined;
   const blocks = value ? toolContentBlocks(value, { input: false }) : [];
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
