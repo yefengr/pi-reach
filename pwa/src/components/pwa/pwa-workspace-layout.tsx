@@ -216,17 +216,25 @@ export function PwaWorkspaceLayout({
 
   useLayoutEffect(() => {
     if (settingsRoute.change === 0) return;
-    if (settingsRoute.open) {
-      settingsTitleRef.current?.focus({ preventScroll: true });
-      return;
-    }
-    // 返回导航时焦点由导航内设置入口的 data-autofocus 接管。
+    if (!settingsRoute.open) return;
+    settingsTitleRef.current?.focus({ preventScroll: true });
+  }, [settingsRoute.change, settingsRoute.open]);
+
+  // 设置层与所属叠层（如快捷键帮助）完全卸载后再恢复焦点，避免弹窗清理覆盖入口焦点。
+  // 退出动画期间工作区已解除 inert，用户可能已将焦点移到其他控件；只在焦点丢失或仍停留在已卸载叠层时才补救。
+  // 返回导航时焦点由导航内设置入口的 data-autofocus 接管。
+  useLayoutEffect(() => {
+    if (settingsRoute.change === 0 || settingsRoute.open || settingsMounted) return;
     if (settingsRoute.origin?.kind === "navigation" && window.matchMedia(MOBILE_QUERY).matches) return;
+    const active = document.activeElement;
+    const lost = !active || active === document.body || !active.isConnected
+      || Boolean(active.closest?.(".pwa-settings-view, .pwa-keyboard-dialog"));
+    if (!lost) return;
     const target = [".pwa-desktop-navigation .pwa-nav-settings", ".pwa-session-trigger"]
       .map((selector) => document.querySelector<HTMLElement>(selector))
       .find(focusable);
     target?.focus({ preventScroll: true });
-  }, [settingsRoute.change, settingsRoute.open, settingsRoute.origin]);
+  }, [settingsMounted, settingsRoute.change, settingsRoute.open, settingsRoute.origin]);
 
   useEffect(() => {
     if (!settingsRoute.open) return;
