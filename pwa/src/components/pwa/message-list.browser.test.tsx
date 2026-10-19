@@ -1517,6 +1517,8 @@ test("fades in content that arrives in a loading list, without replaying for upd
     // 内容淡入取 --pwa-duration-content（240ms），比通用淡化长，肉眼能看到渐入过程。
     const fadeIndex = animate.mock.contexts.findIndex((element) => (element as Element).classList.contains("pwa-message-list"));
     expect(animate.mock.calls[fadeIndex]![1]).toMatchObject({ duration: 240 });
+    // 骨架与内容在同一帧交接，淡入从约 1/3 可见度起始，不留全空帧。
+    expect(animate.mock.calls[fadeIndex]![0]).toEqual([{ opacity: 0.35 }, { opacity: 1 }]);
     expect(document.querySelector(".pwa-earlier-button")).not.toBeNull();
     flushSync(() => setState({ items: [first, second], loading: false }));
     expect(fades()).toBe(1);
