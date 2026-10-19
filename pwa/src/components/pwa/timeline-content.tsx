@@ -77,8 +77,12 @@ export function LongText({ text, label, variant = "code", toggleLabels }: LongTe
   const last = text.charCodeAt(end - 1);
   if (end < text.length && last >= 0xD800 && last <= 0xDBFF) end -= 1;
   const long = end < text.length;
+  const shown = expanded || !long ? text : text.slice(0, end);
   return <div className="pwa-long-text">
-    <pre id={id} className={`${variant === "prose" ? "pwa-text-plain" : "pwa-tool-code"}${expanded ? " expanded" : ""}`}>{expanded || !long ? text : text.slice(0, end)}</pre>
+    {variant === "prose"
+      // 思考正文与回复共用同一 Markdown 渲染；容器仍是 14px 次级文字，块级元素不放大。
+      ? <div id={id} className={`pwa-text-plain${expanded ? " expanded" : ""}`}><MarkdownContent text={shown} /></div>
+      : <pre id={id} className={`pwa-tool-code${expanded ? " expanded" : ""}`}>{shown}</pre>}
     {long ? <Button variant="transparent" color="piReach" className="pwa-output-toggle" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded((value) => !value)}>{expanded ? toggleLabels?.showLess ?? t.timeline.showLess(label) : toggleLabels?.showFull ?? t.timeline.showFull(label)}</Button> : null}
   </div>;
 }

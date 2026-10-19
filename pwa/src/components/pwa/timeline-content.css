@@ -94,6 +94,11 @@
 .pwa-long-text { min-width: 0; }
 .pwa-text-plain { margin: 0; color: var(--pwa-soft-ink); font: var(--pwa-text-body)/var(--pwa-leading-body) var(--pwa-font-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
 .pwa-thinking .pwa-text-plain { color: var(--pwa-secondary); font-size: var(--pwa-text-list); }
+/* 思考正文与回复共用 Markdown 渲染，但块级元素保持 14px 次级文字；块间正好留一行，沿用原有纯文本的空行节奏。 */
+.pwa-thinking .pwa-text-plain .pwa-markdown > * { margin: 0; font-size: inherit; }
+.pwa-thinking .pwa-text-plain .pwa-markdown > * + * { margin-top: calc(var(--pwa-text-list) * var(--pwa-leading-body)); }
+/* 引用、列表等嵌套块里的标题与表格同样回到 14px，不能让思考正文在局部放大。 */
+.pwa-thinking .pwa-text-plain .pwa-markdown :is(h1, h2, h3, h4, h5, h6, table) { margin: 0; font-size: inherit; }
 .pwa-output-toggle { margin-top: 4px; }
 
 .pwa-chat-empty { display: grid; gap: 4px; margin: 48px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); text-align: center; }

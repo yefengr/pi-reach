@@ -299,14 +299,25 @@ export function toolCallText(value: ToolValue): string {
   return [heading, ...extra].join("\n");
 }
 
+/** 阅读器首块的参数结构：名称与值分开，界面只强调名称；参数不是对象时不拆分，按纯文本显示。 */
+export type ToolReaderArgument = { name: string; value: string };
+
+export function toolReaderArguments(value: ToolValue): ToolReaderArgument[] | undefined {
+  const args = toolInput(value);
+  if (args === undefined || !isRecord(args)) return undefined;
+  const entries = Object.entries(args);
+  if (!entries.length) return undefined;
+  return entries.map(([name, item]) => ({ name, value: typeof item === "string" ? item : safeJsonText(item, INPUT_IMAGE_PLACEHOLDER) }));
+}
+
 /** 详情阅读器正文首块：所有工具一致，每个参数一行「名称: 值」；文本值原样显示，其他值显示为 JSON。 */
 export function toolReaderCall(value: ToolValue): string | undefined {
   const args = toolInput(value);
   if (args === undefined) return undefined;
   if (!isRecord(args)) return typeof args === "string" ? args : safeJsonText(args, INPUT_IMAGE_PLACEHOLDER);
-  const entries = Object.entries(args);
-  if (!entries.length) return undefined;
-  return entries.map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item, INPUT_IMAGE_PLACEHOLDER)}`).join("\n");
+  const entries = toolReaderArguments(value);
+  if (!entries) return undefined;
+  return entries.map(({ name, value: text }) => `${name}: ${text}`).join("\n");
 }
 
 function parametersBlock(value: ToolValue): ToolContentBlock | undefined {
