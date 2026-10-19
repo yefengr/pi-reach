@@ -1,9 +1,10 @@
 import type { ComponentProps } from "react";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { SettingsPage } from "./settings-page";
 import { setLanguagePreference } from "@/lib/i18n";
+import { resetTextSizeStateForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 
 const relayUrl = "https://relay.example.test";
 const defaultRelayUrl = "https://relay.default.test";
@@ -34,7 +35,18 @@ function SettingsHarness({ events = [], onSave = async () => {}, backLabel = "Ba
   /></div></div>;
 }
 
-afterEach(async () => { vi.restoreAllMocks(); window.localStorage.removeItem("pi-reach-enter-sends"); await page.viewport(1280, 900); });
+beforeEach(() => {
+  window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
+  resetTextSizeStateForTest();
+});
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  window.localStorage.removeItem("pi-reach-enter-sends");
+  window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
+  resetTextSizeStateForTest();
+  await page.viewport(1280, 900);
+});
 
 test("forwards the raw relay value and prevents duplicate saves until its deferred callback settles", async () => {
   const savedValues: string[] = [];
@@ -83,7 +95,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   expect(inner.getBoundingClientRect().width).toBeLessThanOrEqual(640);
   expect(view.scrollWidth).toBeLessThanOrEqual(view.clientWidth);
   const sections = [...document.querySelectorAll<HTMLElement>(".pwa-settings-section")];
-  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Language", "Keyboard", "Connection", "Browser data", "About"]);
+  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Text size", "Language", "Keyboard", "Connection", "Browser data", "About"]);
   expect(sections[1]!.getBoundingClientRect().top - sections[0]!.getBoundingClientRect().bottom).toBeCloseTo(32, 0);
   const back = screen.getByRole("button", { name: "Back to workspace" }).element();
   const title = screen.getByRole("heading", { level: 1, name: "Settings" }).element();
@@ -278,6 +290,32 @@ test("invalid stored keyboard preferences fall back to Enter sending", async () 
   window.localStorage.setItem("pi-reach-enter-sends", "invalid");
   const screen = await renderPwa(<SettingsHarness />);
   await expect.element(screen.getByRole("switch", { name: "Enter sends messages" })).toBeChecked();
+});
+
+test("applies and remembers a text size tier immediately", async () => {
+  const screen = await renderPwa(<SettingsHarness />);
+  await expect.element(screen.getByRole("radio", { name: /^Standard/ })).toBeChecked();
+  expect(document.documentElement.dataset.pwaTextSize).toBe("standard");
+
+  await screen.getByRole("radio", { name: /^Large/ }).click();
+  expect(document.documentElement.dataset.pwaTextSize).toBe("large");
+  expect(window.localStorage.getItem(TEXT_SIZE_STORAGE_KEY)).toBe("large");
+  expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-text-body").trim()).toBe("18px");
+
+  await screen.getByRole("radio", { name: /^Extra large/ }).click();
+  expect(document.documentElement.dataset.pwaTextSize).toBe("xlarge");
+  expect(window.localStorage.getItem(TEXT_SIZE_STORAGE_KEY)).toBe("xlarge");
+  expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-text-body").trim()).toBe("20px");
+  await screen.unmount();
+});
+
+test("invalid stored text size falls back to standard", async () => {
+  window.localStorage.setItem(TEXT_SIZE_STORAGE_KEY, "small");
+  resetTextSizeStateForTest();
+  const screen = await renderPwa(<SettingsHarness />);
+  await expect.element(screen.getByRole("radio", { name: /^Standard/ })).toBeChecked();
+  expect(document.documentElement.dataset.pwaTextSize).toBe("standard");
+  await screen.unmount();
 });
 
 test("the relay form keeps 8px from label to input and 16px before the primary action", async () => {

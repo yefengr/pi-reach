@@ -40,7 +40,7 @@ Relay 把共享包作为生产依赖，复用 outer 类型与版本常量；服�
 
 安装与根验证入口先编译共享包，端侧构建按依赖顺序消费生成的 ESM 与声明；开发、watch 和局部验证命令由 [README](../README.md#本地开发) 维护。
 
-PWA 由 `index.html` 与 `src/main.tsx` 启动，继续复用原有 Provider、AppShell 和业务组件。Vite 输出 `pwa/dist/`，`@serwist/vite` 从 `src/app/sw.ts` 生成 `dist/sw.js`；预缓存将 HTML 映射到实际入口 `/app`，包含脚本、样式与应用图标等静态资源。现有注册组件仍手动注册 `/sw.js`，scope 为 `/app`。界面使用系统字体栈，不打包或下载网络字体；Mantine 外观脚本在应用 JS 执行前使用原存储键恢复主题。
+PWA 由 `index.html` 与 `src/main.tsx` 启动，继续复用原有 Provider、AppShell 和业务组件。Vite 输出 `pwa/dist/`，`@serwist/vite` 从 `src/app/sw.ts` 生成 `dist/sw.js`；预缓存将 HTML 映射到实际入口 `/app`，包含脚本、样式与应用图标等静态资源。现有注册组件仍手动注册 `/sw.js`，scope 为 `/app`。界面使用系统字体栈，不打包或下载网络字体；Mantine 外观脚本在应用 JS 执行前使用原存储键恢复主题，字号偏好由主入口在 React 渲染前恢复 `data-pwa-text-size`。
 
 生产容器以非 root Nginx 托管静态资源；开发与本地 E2E 分别使用 Vite dev 和 preview，共用路由插件并与 Nginx 保持 HTTP 契约一致。PWA、Relay 及 E2E Host、Owner 的 Docker 构建输入均包含 `packages/protocol` 源码，并经根 workspace 安装和构建。根开发 Node 工具链不改变 Extension 的 `engines` 或 Pi SDK peer 约束。命令见 [README](../README.md#本地开发)。
 

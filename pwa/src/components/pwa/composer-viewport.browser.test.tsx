@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageComposer } from "./message-composer";
 import type { ComposerAttachmentItem } from "./attachment-cards";
@@ -78,7 +79,12 @@ const sixLineHeight = (input: HTMLElement) => {
 const bottomGap = (list: HTMLElement) => list.scrollHeight - list.clientHeight - list.scrollTop;
 const offset = (node: Element, list: Element) => node.getBoundingClientRect().top - list.getBoundingClientRect().top;
 
-afterEach(async () => { vi.unstubAllGlobals(); await page.viewport(1280, 900); });
+afterEach(async () => {
+  vi.unstubAllGlobals();
+  window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
+  resetTextSizeStateForTest();
+  await page.viewport(1280, 900);
+});
 
 test.each([390, 767, 768, 1440])("grows through six visual lines, scrolls the seventh and shrinks on delete at %ipx", async width => {
   await page.viewport(width, 900);
@@ -229,5 +235,15 @@ test("falls back to dynamic viewport CSS without visualViewport", async () => {
   await settle();
   expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
   expect(view.shell.getBoundingClientRect().height).toBe(500);
+  await view.screen.unmount();
+});
+
+test("grows the single-line Composer input with the extra-large text size", async () => {
+  setTextSize("xlarge");
+  const view = await renderWorkspace();
+  const style = getComputedStyle(view.input);
+  const minimum = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  expect(minimum).toBeGreaterThan(44);
+  expect(view.input.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimum - 0.5);
   await view.screen.unmount();
 });

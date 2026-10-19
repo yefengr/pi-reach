@@ -1,8 +1,10 @@
 import { useRef, useState, type Ref } from "react";
 import { Button, Radio, Stack, Switch, TextInput } from "@mantine/core";
-import { ArrowLeft, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2 } from "lucide-react";
+import { ALargeSmall, ArrowLeft, CaseSensitive, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
+import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
+import type { PwaTextSize } from "@/lib/ui/text-size";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
@@ -13,6 +15,8 @@ export type SettingsPagePreferences = {
   setLanguage: (value: LanguagePreference) => void;
   enterSends: boolean;
   setEnterSends: (value: boolean) => void;
+  textSize: PwaTextSize;
+  setTextSize: (value: PwaTextSize) => void;
 };
 
 type SettingsPageProps = {
@@ -45,7 +49,8 @@ export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
 function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   const { preference } = useI18n();
   const [enterSends, setEnterSends] = useEnterSends();
-  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends }} />;
+  const { textSize, setTextSize } = usePwaTextSize();
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize }} />;
 }
 
 function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
@@ -54,7 +59,7 @@ function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVers
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
   const { t } = useI18n();
-  const { enterSends, setEnterSends } = preferences;
+  const { enterSends, setEnterSends, textSize, setTextSize } = preferences;
   const s = t.settings;
   const versionText = (version: string | null, status: ConnectionViewState) => {
     if (status === "online") return version ?? s.versionUnavailable;
@@ -93,6 +98,17 @@ function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVers
             <Radio className="pwa-appearance-option" value="system" label={<span className="pwa-appearance-copy"><Monitor size={20} /><span><strong>{s.system}</strong><small>{s.systemHint}</small></span></span>} />
             <Radio className="pwa-appearance-option" value="light" label={<span className="pwa-appearance-copy"><Sun size={20} /><span><strong>{s.light}</strong><small>{s.lightHint}</small></span></span>} />
             <Radio className="pwa-appearance-option" value="dark" label={<span className="pwa-appearance-copy"><Moon size={20} /><span><strong>{s.dark}</strong><small>{s.darkHint}</small></span></span>} />
+          </Stack>
+        </Radio.Group>
+      </section>
+      <section className="pwa-settings-section" aria-labelledby="pwa-text-size-heading">
+        <h2 id="pwa-text-size-heading" className="pwa-settings-section-title">{s.textSize}</h2>
+        <p className="pwa-settings-section-description">{s.textSizeHint}</p>
+        <Radio.Group aria-label={s.textSize} className="pwa-appearance-options" name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSize)}>
+          <Stack gap="xs">
+            <Radio className="pwa-appearance-option" value="standard" label={<span className="pwa-appearance-copy"><Type size={20} /><span><strong>{s.textSizeStandard}</strong><small>{s.textSizeStandardHint}</small></span></span>} />
+            <Radio className="pwa-appearance-option" value="large" label={<span className="pwa-appearance-copy"><ALargeSmall size={20} /><span><strong>{s.textSizeLarge}</strong><small>{s.textSizeLargeHint}</small></span></span>} />
+            <Radio className="pwa-appearance-option" value="xlarge" label={<span className="pwa-appearance-copy"><CaseSensitive size={20} /><span><strong>{s.textSizeXLarge}</strong><small>{s.textSizeXLargeHint}</small></span></span>} />
           </Stack>
         </Radio.Group>
       </section>

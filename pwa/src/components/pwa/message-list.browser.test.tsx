@@ -467,6 +467,7 @@ test.each([
     // 正文与回复同样渲染 Markdown：星号不再作为字符显示，加粗转为 strong。
     const summaryBody = document.querySelector(".pwa-text-plain")!;
     expect(summaryBody.querySelector("strong")?.textContent).toBe("检查");
+    expect(getComputedStyle(summaryBody.querySelector("strong")!).fontWeight).toBe("600");
     expect(summaryBody.textContent).toBe(`检查${suffix}`);
     advance(THINKING_SUMMARY_WINDOW_MS - 1);
     expect(title()).toBe("Thinking…");
@@ -739,6 +740,7 @@ test.each([1280, 390])("streaming thinking keeps manual choices through live upd
   await expect.element(page.elementLocator(document.querySelector(".pwa-thinking-content .pwa-text-plain")!)).toBeVisible();
   expect(document.querySelector(".pwa-thinking-content .pwa-text-plain")?.textContent).toBe(renderedText);
   expect([...document.querySelectorAll(".pwa-thinking-content strong")].map(node => node.textContent)).toEqual(["First step", "Second step"]);
+  for (const node of document.querySelectorAll(".pwa-thinking-content strong")) expect(getComputedStyle(node).fontWeight).toBe("600");
   const paragraphs = [...document.querySelectorAll<HTMLElement>(".pwa-thinking-content .pwa-markdown > *")];
   expect(getComputedStyle(paragraphs[1]).marginTop).toBe("23.1px");
   expect(document.querySelector(".pwa-thinking-live > span")?.textContent).toBe("Second step");

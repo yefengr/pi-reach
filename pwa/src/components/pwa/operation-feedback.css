@@ -4,7 +4,7 @@
   gap: var(--pwa-space-xs);
   min-height: 44px;
   color: var(--pwa-running);
-  font-size: 14px;
+  font-size: var(--pwa-text-list);
   line-height: var(--pwa-leading-ui);
 }
 .pwa-operation-status > svg { flex: 0 0 auto; }

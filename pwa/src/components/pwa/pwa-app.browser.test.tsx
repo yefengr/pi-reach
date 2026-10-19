@@ -3234,7 +3234,12 @@ test("synchronizes live session titles from registry metadata without replacing 
     });
     await expect.poll(() => trigger.element().querySelector(".pwa-session-trigger-title")?.textContent).toBe("Renamed session");
     const renamedName = trigger.element().querySelector<HTMLElement>(".pwa-session-trigger-title")!;
-    expect(renamedName.scrollWidth).toBeLessThanOrEqual(renamedName.clientWidth + 1);
+    // Linux 的 system-ui 字体比原栈更宽；会话名允许单行截断，确认它被裁剪在触发区内并使用省略号，而不是撑破顶栏。
+    const triggerRect = trigger.element().getBoundingClientRect();
+    const renamedRect = renamedName.getBoundingClientRect();
+    expect(renamedRect.left).toBeGreaterThanOrEqual(triggerRect.left);
+    expect(renamedRect.right).toBeLessThanOrEqual(triggerRect.right + 1);
+    expect(getComputedStyle(renamedName).textOverflow).toBe("ellipsis");
     expect(channelHarness.channels).toHaveLength(1);
     await trigger.click();
     const renamedPi = navigation.getByRole("button", { name: /Renamed session/ });

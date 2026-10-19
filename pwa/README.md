@@ -64,13 +64,12 @@ index.html                       # metadata, root element and appearance boot sc
 vite.config.ts                   # build, routing plugin and Serwist integration
 src/
 ├── main.tsx                     # React entry and existing providers / application shell
-├── fonts.css                    # local fonts and existing font variables
 ├── app/                         # business styles and sw.ts service worker source
 ├── components/pwa/              # workspace UI
 └── lib/
     ├── pwa/                     # browser runtime and IndexedDB persistence
     ├── pi-reach/                 # protocol adapters and transport
-    └── ui/                      # Mantine theme and appearance key
+    └── ui/                      # Mantine theme, appearance and text size keys
 scripts/
 ├── pwa-routing.mjs              # shared development / preview HTTP behavior
 └── start-e2e-server.mjs          # local static preview
