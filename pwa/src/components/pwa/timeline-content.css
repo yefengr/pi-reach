@@ -33,6 +33,7 @@
 .pwa-markdown > :first-child { margin-top: 0; }
 .pwa-markdown > :last-child { margin-bottom: 0; }
 .pwa-markdown p { margin: 8px 0; }
+.pwa-markdown strong, .pwa-markdown b { font-weight: var(--pwa-weight-strong); }
 .pwa-markdown h1, .pwa-markdown h2, .pwa-markdown h3, .pwa-markdown h4, .pwa-markdown h5, .pwa-markdown h6 { margin: 16px 0 8px; font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-markdown h1, .pwa-markdown h2 { font-size: var(--pwa-text-title); }
 .pwa-markdown h3, .pwa-markdown h4, .pwa-markdown h5, .pwa-markdown h6 { font-size: var(--pwa-text-body); }

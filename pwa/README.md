@@ -64,7 +64,6 @@ index.html                       # metadata, root element and appearance boot sc
 vite.config.ts                   # build, routing plugin and Serwist integration
 src/
 ├── main.tsx                     # React entry and existing providers / application shell
-├── fonts.css                    # local fonts and existing font variables
 ├── app/                         # business styles and sw.ts service worker source
 ├── components/pwa/              # workspace UI
 └── lib/
