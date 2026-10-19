@@ -61,7 +61,7 @@ function GallerySurfaceControls({ inactive, open, outcome, setOutcome, controlle
       <Button variant="default" onClick={() => controller.show("preference-save")}>错误 Toast</Button>
       <Button variant="default" onClick={() => controller.showUpdate("发现新版本（仅本页演示）。", { label: "刷新（仅演示）", onClick: () => refresh(true) }, () => refresh(false))}>更新 Toast</Button>
     </div>
-    <p className="pwa-ui-states-note">设置仅演示页面和操作结果，不演示 /app/settings 路由转场。语言仅预览选中状态，不切换全局翻译；发送键偏好仅用于本页设置与帮助。配对只展示本地连接中与错误，不发送配对码。</p>
+    <p className="pwa-ui-states-note">设置仅演示页面和操作结果，不演示 /app/settings 路由转场。语言仅预览选中状态，不切换全局翻译；字号仅预览选中状态，不改变全局字号；发送键偏好仅用于本页设置与帮助。配对只展示本地连接中与错误，不发送配对码。</p>
   </section>;
 }
 

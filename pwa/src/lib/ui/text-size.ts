@@ -8,6 +8,9 @@ export const DEFAULT_TEXT_SIZE: PwaTextSize = "standard";
 
 const TEXT_SIZES: readonly PwaTextSize[] = ["standard", "large", "xlarge"];
 
+/** 这些开发展厅使用受控字号，不继承正式应用的持久化偏好。 */
+const REVIEW_ONLY_PATHS = new Set(["/app/ui-review", "/app/ui-review-stage-a", "/app/ui-states"]);
+
 export function isPwaTextSize(value: unknown): value is PwaTextSize {
   return typeof value === "string" && (TEXT_SIZES as readonly string[]).includes(value);
 }
@@ -69,6 +72,10 @@ export function subscribeTextSize(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+export function shouldRestoreTextSize(pathname: string): boolean {
+  return !REVIEW_ONLY_PATHS.has(pathname);
 }
 
 /** 在 React 渲染前恢复偏好，避免首屏先按标准档排版再跳变。 */

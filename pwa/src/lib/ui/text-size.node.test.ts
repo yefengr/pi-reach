@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { DEFAULT_TEXT_SIZE, TEXT_SIZE_STORAGE_KEY, isPwaTextSize, resolveTextSize } from "./text-size";
+import { DEFAULT_TEXT_SIZE, TEXT_SIZE_STORAGE_KEY, isPwaTextSize, resolveTextSize, shouldRestoreTextSize } from "./text-size";
 
 describe("text size preference", () => {
   test("accepts only the three supported tiers", () => {
@@ -21,5 +21,14 @@ describe("text size preference", () => {
     expect(isPwaTextSize("large")).toBe(true);
     expect(isPwaTextSize("small")).toBe(false);
     expect(isPwaTextSize(null)).toBe(false);
+  });
+
+  test("keeps review-only pages on their controlled text size", () => {
+    expect(shouldRestoreTextSize("")).toBe(true);
+    expect(shouldRestoreTextSize("/app")).toBe(true);
+    expect(shouldRestoreTextSize("/app/settings")).toBe(true);
+    expect(shouldRestoreTextSize("/app/ui-review")).toBe(false);
+    expect(shouldRestoreTextSize("/app/ui-review-stage-a")).toBe(false);
+    expect(shouldRestoreTextSize("/app/ui-states")).toBe(false);
   });
 });
