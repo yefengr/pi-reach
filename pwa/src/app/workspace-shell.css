@@ -1,7 +1,8 @@
 /* 工作区骨架：导航常驻的桌面侧栏、会话标题区与主区阅读列；移动端单栏，标题区即顶栏。 */
-/* 页面 gutter 与阅读器宽度放在 :root，供工作区外的运行时提示条和 Portal 叠层共用。 */
+/* 页面 gutter、阅读列宽与阅读器宽度放在 :root，供工作区外的运行时提示条和 Portal 叠层共用。 */
 :root {
   --pwa-gutter: 20px;
+  --pwa-reading-width: 680px;
   /* 桌面右侧阅读器：内容宽 720，面板另加右安全区，由 .pwa-tool-reader 的 max-width 限制在视口内。 */
   --pwa-reader-drawer-width: calc(720px + var(--pwa-safe-right));
 }
@@ -16,7 +17,6 @@
 .pwa-root {
   --pwa-sidebar-width: 260px;
   --pwa-sidebar-span: calc(var(--pwa-sidebar-width) + var(--pwa-safe-left));
-  --pwa-reading-width: 680px;
   --pwa-sidebar-motion: var(--pwa-duration-sidebar);
   --pwa-main-card-gap: var(--pwa-space-xs);
   --pwa-main-flush: 0;
