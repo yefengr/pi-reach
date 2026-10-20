@@ -62,18 +62,19 @@
     "@types/node": "catalog:",
     "@types/ws": "^8.18.1",
     "tsx": "^4.22.0",
+    "typebox": "^1.1.38",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^1.3.0"
+    "@earendil-works/pi-coding-agent": "^1.3.0",
+    "typebox": "*"
   },
   "dependencies": {
     "@napi-rs/keyring": "^1.3.0",
     "@noble/ed25519": "catalog:",
     "qrcode-terminal": "^0.12.0",
-    "typebox": "^1.1.38",
     "ws": "^8.21.0",
     "zod": "catalog:"
   }
