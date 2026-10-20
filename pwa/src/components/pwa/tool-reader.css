@@ -62,7 +62,7 @@
 /* 主机真实截断需要关注，用运行色；预览只是界面缩短、展开可见全部，用中性色。 */
 .pwa-root .pwa-tool-notice { margin: 4px 0 0; color: var(--pwa-running); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-root .pwa-tool-notice-preview { color: var(--pwa-secondary); }
-.pwa-root .pwa-tool-output-image { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; object-position: left top; border-radius: var(--pwa-radius-xs); background: var(--pwa-panel); }
+.pwa-root .pwa-tool-output-image { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; object-position: left top; border-radius: var(--pwa-radius-md); background: var(--pwa-panel); }
 .pwa-root .pwa-image-omitted { margin: 0; color: var(--pwa-secondary); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); overflow-wrap: anywhere; }
 
 /* 工具详情阅读器：桌面右侧 720px Drawer，移动端全屏；输出不带行号、长行自动换行。

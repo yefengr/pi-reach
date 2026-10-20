@@ -23,7 +23,7 @@
   min-height: 44px;
   padding: 4px 6px 4px 0;
   border: 0;
-  border-radius: var(--pwa-radius-sm);
+  border-radius: var(--pwa-radius-md);
   color: inherit;
   background: transparent;
   text-align: left;

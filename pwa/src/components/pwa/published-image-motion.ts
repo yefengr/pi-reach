@@ -55,11 +55,11 @@ export function animatePublishedImage({ image, source, sourceUrl, root, directio
   clone.className = "pwa-published-image-transition";
   clone.alt = "";
   clone.setAttribute("aria-hidden", "true");
-  Object.assign(clone.style, { left: `${large.left}px`, top: `${large.top}px`, width: `${large.width}px`, height: `${large.height}px`, transformOrigin: "0 0" });
+  // fixed 图片层独立改变几何，不用 scale 连同 8px 圆角一起缩放；反向仍从当前屏幕边界接续。
+  const geometry = (bounds: ImageBounds) => ({ left: `${bounds.left}px`, top: `${bounds.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` });
+  Object.assign(clone.style, geometry(large), { transform: "none" });
   const sourceVisibility = thumbnail.style.visibility;
   const targetVisibility = image.style.visibility;
-  const transform = (bounds: ImageBounds) => `translate(${bounds.left - large.left}px, ${bounds.top - large.top}px) scale(${bounds.width / large.width}, ${bounds.height / large.height})`;
-  const start = transform(small);
   let animation: Animation | null = null;
   let timer: number | undefined;
   let observer: MutationObserver | undefined;
@@ -84,7 +84,7 @@ export function animatePublishedImage({ image, source, sourceUrl, root, directio
     portal.append(clone);
     thumbnail.style.visibility = "hidden";
     image.style.visibility = "hidden";
-    animation = clone.animate(direction === "in" ? [{ transform: start }, { transform: "none" }] : [{ transform: from ? transform(from) : "none" }, { transform: start }], { duration, easing: pwaStandardEasing(root), fill: "both" });
+    animation = clone.animate(direction === "in" ? [geometry(small), geometry(large)] : [geometry(from ?? large), geometry(small)], { duration, easing: pwaStandardEasing(root), fill: "both" });
     animation.finished.then(cleanup, cleanup);
     timer = window.setTimeout(cleanup, duration + 50);
     window.addEventListener("resize", cleanup);

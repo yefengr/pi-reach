@@ -195,7 +195,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-main-inset-end) 12px var(--pwa-main-inset-start); pointer-events: none; }
 
 /* 按钮层级：主操作实心强调色；次级为表面＋边线；文字按钮无底无框；危险入口为错误色轮廓。 */
-.pwa-ui-scope .pwa-button { min-height: 44px; height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-button { min-height: 44px; height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-md); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
@@ -219,7 +219,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-card { min-width: 0; padding: var(--pwa-space-composer) 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
 .pwa-composer-preview { position: relative; max-width: 100%; margin: 2px 2px 8px; }
-.pwa-composer-preview img { display: block; max-width: min(240px, 100%); height: 76px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-sm); object-fit: cover; background: var(--pwa-code-bg); }
+.pwa-composer-preview img { display: block; max-width: min(240px, 100%); height: 76px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); object-fit: cover; background: var(--pwa-code-bg); }
 .pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; } }
@@ -235,8 +235,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-actions { display: flex; align-items: center; min-width: 0; gap: 6px; }
 .pwa-composer-actions { flex: 1 1 auto; justify-content: flex-end; }
 /* 模型标签：发送按钮左侧的文字按钮，显示当前模型与思考级别；视觉高 32、点击区 44，手机只显示模型名。 */
-.pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
-.pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-sm); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-md); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
+.pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled)::before { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); } }
@@ -269,12 +269,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-command-menu-dropdown { border: 1px solid var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); }
 .pwa-root .pwa-composer-menu-panel { min-width: 190px; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-composer-menu-panel { bottom: calc(100% + 8px); left: 0; }
-.pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 var(--pwa-space-menu-pad); border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
+.pwa-composer-menu-panel button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 var(--pwa-space-menu-pad); border: 0; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; cursor: pointer; }
 @media (hover: hover) { .pwa-composer-menu-panel button:hover { color: var(--pwa-ink); background: var(--pwa-hover); } }
 .pwa-root .pwa-command-menu-dropdown { /* 浮层宽度上限扣除两侧留白，留白取 16 与安全区中的较大值。 */ --pwa-command-menu-width: min(340px, calc(100vw - max(16px, var(--pwa-safe-left)) - max(16px, var(--pwa-safe-right)))); width: var(--pwa-command-menu-width); max-height: min(380px, 58dvh); overflow-y: auto; padding: 6px; border-radius: var(--pwa-radius-md); }
 .pwa-command-menu-panel { display: grid; grid-template-columns: minmax(0, 1fr); color: inherit; }
 .pwa-command-row,
-.pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: var(--pwa-menu-row-padding) var(--pwa-space-menu-pad); border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
+.pwa-command-back { --menu-item-hover: var(--pwa-hover); width: 100%; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: var(--pwa-menu-row-padding) var(--pwa-space-menu-pad); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-align: left; }
 .pwa-command-menu-dropdown .mantine-Menu-itemLabel { min-width: 0; }
 .pwa-command-menu-dropdown .mantine-Menu-itemSection { flex-shrink: 0; margin: 0; }
 .pwa-command-row:focus-visible:not(:disabled),
@@ -348,7 +348,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 表单输入：单行高 44，surface 底、1px control-line 边框；聚焦为贴边强调色轮廓，边框不变。 */
 .pwa-ui-scope .pwa-input input,
 .pwa-ui-scope .pwa-textarea textarea,
-.pwa-ui-scope .pwa-select .mantine-Select-input { box-sizing: border-box; min-height: 44px; padding-inline: 12px; border: 1px solid var(--pwa-control-line); border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: var(--pwa-surface); font-size: var(--pwa-text-body); }
+.pwa-ui-scope .pwa-select .mantine-Select-input { box-sizing: border-box; min-height: 44px; padding-inline: 12px; border: 1px solid var(--pwa-control-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); font-size: var(--pwa-text-body); }
 .pwa-ui-scope .pwa-input input:focus,
 .pwa-ui-scope .pwa-textarea textarea:focus,
 .pwa-ui-scope .pwa-select .mantine-Select-input:focus { border-color: var(--pwa-control-line); outline: 2px solid var(--pwa-accent); outline-offset: 0; }
@@ -436,14 +436,14 @@ body:has(.pwa-root) { overflow: hidden; }
 
 .pwa-connection-banner {
   order: 2;
-  --alert-radius: var(--pwa-radius-sm) !important;
+  --alert-radius: var(--pwa-radius-md) !important;
   align-self: center;
   flex: 0 0 auto;
   width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter)));
   margin: 8px auto 0;
   padding: 8px 12px;
   border: 1px solid var(--alert-bd);
-  border-radius: var(--pwa-radius-sm);
+  border-radius: var(--pwa-radius-md);
   color: var(--alert-color);
   background: var(--alert-bg);
   box-shadow: none;
@@ -485,11 +485,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-runtime-notice-content { display: contents; }
 .pwa-runtime-notice-description { grid-column: 1; min-width: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
 .pwa-runtime-notice-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.pwa-runtime-notice .pwa-runtime-notice-dismiss { flex: 0 0 44px; align-self: center; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -4px -4px -4px 4px; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: var(--pwa-secondary); }
+.pwa-runtime-notice .pwa-runtime-notice-dismiss { flex: 0 0 44px; align-self: center; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -4px -4px -4px 4px; border: 1px solid transparent; border-radius: var(--pwa-radius-md); color: var(--pwa-secondary); }
 @media (hover: hover) { .pwa-runtime-notice .pwa-runtime-notice-dismiss:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-hover); } }
 .pwa-toast { position: relative; flex: 0 0 auto; max-width: min(var(--pwa-reading-width), calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font-size: var(--pwa-text-meta); order: 3; align-self: center; margin: 8px auto; padding: 12px; border-color: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line)); color: var(--pwa-error); background: var(--pwa-error-wash); }
 .pwa-toast > span { min-width: 0; max-height: min(14dvh, 100px); overflow-y: auto; overflow-wrap: anywhere; }
-.pwa-ui-scope .pwa-toast-dismiss { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -6px -8px -6px 0; padding: 0; border: 1px solid transparent; border-radius: var(--pwa-radius-sm); color: inherit; background: transparent; cursor: pointer; }
+.pwa-ui-scope .pwa-toast-dismiss { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin: -6px -8px -6px 0; padding: 0; border: 1px solid transparent; border-radius: var(--pwa-radius-md); color: inherit; background: transparent; cursor: pointer; }
 @media (hover: hover) { .pwa-ui-scope .pwa-toast-dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pwa-error) 42%, var(--pwa-line)); background: var(--pwa-error-wash); } }
 
 /* Toast：顶部居中、会话标题区与主区提示（连接提示条等）下方的最顶层浮层；surface 底、浮层阴影＋line 边框、圆角 8、最大宽 400。 */
@@ -514,8 +514,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-operation-notifications .pwa-operation-notification-message { color: inherit; font: inherit; overflow-wrap: anywhere; }
 .pwa-operation-notifications .pwa-toast-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* 操作按钮点击区 44，视觉底色仍为 36 高：底色画在上下各内缩 4 的伪元素上，焦点轮廓同样内缩。 */
-.pwa-operation-notifications .pwa-toast-action { position: relative; isolation: isolate; flex: 0 0 auto; white-space: nowrap; min-height: 44px; padding: 0 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
-.pwa-operation-notifications .pwa-toast-action::before { content: ""; position: absolute; z-index: -1; inset: 4px 0; border-radius: var(--pwa-radius-sm); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-operation-notifications .pwa-toast-action { position: relative; isolation: isolate; flex: 0 0 auto; white-space: nowrap; min-height: 44px; padding: 0 8px; border: 0; border-radius: var(--pwa-radius-md); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
+.pwa-operation-notifications .pwa-toast-action::before { content: ""; position: absolute; z-index: -1; inset: 4px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-operation-notifications .pwa-toast-action:focus-visible { outline-offset: -4px; }
 @media (hover: hover) { .pwa-operation-notifications .pwa-toast-action:hover::before { background: var(--pwa-hover); } }
 .pwa-operation-notifications .pwa-operation-notification-close { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; color: var(--pwa-secondary); }

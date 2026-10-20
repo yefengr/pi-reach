@@ -97,7 +97,7 @@
 
 /* 会话双行按内容撑高；纯细指针上下4，触控／混合6，左右8与分组标题对齐。 */
 .pwa-root .pwa-nav-session,
-.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 var(--pwa-space-pair); padding: var(--pwa-navigation-row-padding) 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 var(--pwa-space-pair); padding: var(--pwa-navigation-row-padding) 8px; border: 0; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-nav-session .pwa-nav-link-body,
 .pwa-root .pwa-history-row .pwa-nav-link-body { min-width: 0; display: grid; gap: var(--pwa-space-pair); }
 .pwa-root .pwa-nav-session .pwa-nav-link-label,
@@ -183,7 +183,7 @@
 .pwa-root .pwa-workspace-state p { max-width: min(var(--pwa-reading-width), 480px); margin: 8px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-root .pwa-workspace-state > .pwa-button { margin-top: 16px; }
 /* 未配对空状态的命令块：panel 底、高 44，右侧复制按钮。 */
-.pwa-root .pwa-command-block { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 16px; padding-left: 12px; border-radius: var(--pwa-radius-sm); background: var(--pwa-panel); }
+.pwa-root .pwa-command-block { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 16px; padding-left: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-panel); }
 .pwa-root .pwa-command-block code { padding: 0; color: var(--pwa-ink); background: transparent; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
 /* 选择 Pi：有边界的可点行，悬停 hover、按下 neutral-active，右侧箭头提示可进入。 */
 .pwa-root .pwa-choose-pi-list { width: min(var(--pwa-reading-width), 100%); display: grid; gap: 8px; margin-top: 16px; text-align: left; }
@@ -220,7 +220,7 @@
   .pwa-root .pwa-title-bar-heading { display: none; }
   /* 已连接时只显示圆点，把宽度留给会话名；文字仍供读屏，其他状态照常显示。 */
   .pwa-root .pwa-title-bar .pwa-connection.online .pwa-connection-label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .pwa-root .pwa-session-trigger { min-width: 0; min-height: 44px; flex: 1 1 auto; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+  .pwa-root .pwa-session-trigger { min-width: 0; min-height: 44px; flex: 1 1 auto; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 0; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: transparent; font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
   .pwa-root .pwa-session-trigger:focus-visible { outline: none; }
   .pwa-root .pwa-session-trigger-icon { position: relative; width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 50%; color: var(--pwa-secondary); }
   .pwa-root .pwa-session-trigger-icon::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }

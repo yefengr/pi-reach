@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
-import { ActionIcon, Button, Menu, NavLink } from "@mantine/core";
+import { ActionIcon, Badge, Button, Menu, NavLink, TextInput } from "@mantine/core";
 import { Copy } from "lucide-react";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
@@ -159,6 +159,50 @@ test("Composer owns its radius and light elevation without changing the shared r
   await expect.poll(() => getComputedStyle(card).boxShadow).toBe("none");
   expect(getComputedStyle(card).borderRadius).toBe("16px");
   expect(getComputedStyle(card).borderTopWidth).toBe("1px");
+});
+
+test.each([1280, 390])("shared radii stay 4/8/12 with a 16px Composer across appearances at width %s", async width => {
+  await page.viewport(width, 900);
+  const screen = await renderPwa(<>
+    <Button data-testid="radius-button">Radius fixture</Button>
+    <TextInput aria-label="Radius input fixture" />
+    <Badge data-testid="radius-badge">Badge fixture</Badge>
+    <Badge className="pwa-presence-label" data-testid="radius-presence">Online fixture</Badge>
+    <Badge className="pwa-current-label" data-testid="radius-current">Current fixture</Badge>
+    <MenuFixture />
+    <ComposerFixture />
+  </>);
+  const radii = [
+    [screen.getByTestId("radius-button").element(), "8px"],
+    [screen.getByRole("textbox", { name: "Radius input fixture" }).element(), "8px"],
+    [screen.getByTestId("radius-badge").element(), "4px"],
+    [screen.getByTestId("radius-presence").element(), "4px"],
+    [screen.getByTestId("radius-current").element(), "4px"],
+    [document.querySelector(".pwa-nav-session")!, "8px"],
+    [document.querySelector(".pwa-composer-card")!, "16px"],
+  ] as const;
+  for (const appearance of ["Light fixture", "Dark fixture"]) {
+    await screen.getByRole("button", { name: appearance }).click();
+    for (const [element, radius] of radii) expect(getComputedStyle(element).borderRadius).toBe(radius);
+    const root = getComputedStyle(document.documentElement);
+    for (const [token, value] of [["xs", "4px"], ["md", "8px"], ["lg", "12px"], ["composer", "16px"]]) {
+      expect(root.getPropertyValue(`--pwa-radius-${token}`).trim()).toBe(value);
+    }
+    const icon = document.querySelector(".pwa-composer-send")!;
+    expect(getComputedStyle(icon).borderRadius).toBe("50%");
+    expect(getComputedStyle(icon, "::before").borderRadius).toBe("50%");
+    expect(rect(icon).slice(2)).toEqual([44, 44]);
+    const trigger = screen.getByRole("button", { name: "Menu fixture" }).element() as HTMLButtonElement;
+    trigger.focus();
+    await screen.getByRole("button", { name: "Menu fixture" }).click();
+    const row = screen.getByRole("menuitem", { name: "One line fixture" }).element();
+    expect(getComputedStyle(document.querySelector(".pwa-menu-motion")!).borderRadius).toBe("8px");
+    expect(getComputedStyle(row).borderRadius).toBe("8px");
+    expect(getComputedStyle(row, "::before").borderRadius).toBe("8px");
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector(".pwa-menu-motion")).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(trigger);
+  }
 });
 
 test("a narrow Composer adapts to its own container even on desktop without shrinking targets or clearing the draft", async () => {

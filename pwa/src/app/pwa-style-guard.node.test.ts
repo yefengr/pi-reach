@@ -25,6 +25,14 @@ const SPACING_TOKENS = new Map([
   ["--pwa-space-menu-pad", 10],
   ["--pwa-space-composer", 10],
 ]);
+/** 通用圆角三档；主要输入表面独立使用 16px。 */
+const RADIUS_TOKENS = new Map([
+  ["--pwa-radius-xs", "4px"],
+  ["--pwa-radius-md", "8px"],
+  ["--pwa-radius-lg", "12px"],
+  ["--pwa-radius-composer", "16px"],
+]);
+const RADIUS_VALUE = /^(?:0|50%|inherit|var\(--pwa-radius-(?:xs|md|lg)\))$/;
 /** 边框与轮廓宽度只用细线。 */
 const BORDER_WIDTHS = new Set([0, 1, 2, 3]);
 const SPACING_PROPERTY = /^(?:(?:scroll-)?(?:margin|padding)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|(?:row-|column-)?gap)$/;
@@ -137,6 +145,47 @@ describe("CSS static guard", () => {
     expect(offenders).toEqual([]);
     expect(duplicates).toEqual([]);
     expect(new Set(definitions.map((entry) => entry.property)).size).toBe(SPACING_TOKENS.size);
+  });
+
+  test("radius tokens are defined once with the three shared sizes and the Composer size", () => {
+    const definitions = all.filter((entry) => entry.property.startsWith("--pwa-radius-"));
+    const offenders = definitions.filter((entry) => entry.file !== THEME_FILE
+      || RADIUS_TOKENS.get(entry.property) !== entry.value).map(keyOf);
+    expect(offenders).toEqual([]);
+    for (const token of RADIUS_TOKENS.keys()) {
+      expect(definitions.filter((entry) => entry.property === token), token).toHaveLength(1);
+    }
+  });
+
+  test("production radii use shared tokens, edge or circle geometry, with Composer isolated", () => {
+    const offenders = all.filter((entry) => !entry.file.startsWith("dev/")
+      && entry.property.includes("radius") && !entry.property.startsWith("--pwa-radius-")).filter((entry) => {
+      const value = entry.value.replace(/\s*!important$/, "");
+      if (value === "var(--pwa-radius-composer)") {
+        return entry.file !== "app/globals.css" || entry.selector !== ".pwa-composer-card" || entry.property !== "border-radius";
+      }
+      return !value.split(/\s+/).every((part) => RADIUS_VALUE.test(part));
+    }).map(keyOf);
+    expect(offenders).toEqual([]);
+  });
+
+  test("image radii follow display roles rather than their content source", () => {
+    const roles = [
+      ["components/pwa/attachment-cards.css", ".pwa-attachment-thumb", "xs"],
+      ["app/queued-messages.css", ".pwa-queued-message-images img", "xs"],
+      ["components/pwa/timeline-content.css", ".pwa-message-image", "md"],
+      ["components/pwa/timeline-content.css", ".pwa-markdown img", "md"],
+      ["components/pwa/tool-reader.css", ".pwa-root .pwa-tool-output-image", "md"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image", "md"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image img", "md"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-file-image-stage img", "md"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image-transition", "md"],
+    ] as const;
+    for (const [file, selector, size] of roles) {
+      const matches = all.filter((entry) => entry.file === file && entry.selector === selector && entry.property === "border-radius");
+      expect(matches, `${file}: ${selector}`).toHaveLength(1);
+      expect(matches[0].value).toBe(`var(--pwa-radius-${size})`);
+    }
   });
 
   test("border and outline widths stay hairline", () => {

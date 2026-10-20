@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { ToolPreview } from "./tool-preview";
 import { ToolReader } from "./tool-reader";
-import { toolHasOverflow, type ToolValue } from "./tool-presentation";
+import { TOOL_INLINE_IMAGE_MAX_HEIGHT, toolHasOverflow, type ToolValue } from "./tool-presentation";
+import { AttachmentCards } from "./attachment-cards";
+import { QueuedMessages } from "./queued-messages";
 
 const base = {
   event_id: "event", session_id: "session", leaf_id: "history", group_id: "group", timestamp: 0,
@@ -17,6 +19,54 @@ function value(result: string): ToolValue {
 }
 
 afterEach(async () => { await page.viewport(1280, 900); });
+
+test.each([1280, 390])("content images stay 8px and small thumbnails stay 4px at width %s", async width => {
+  await page.viewport(width, 844);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 32;
+  const data = canvas.toDataURL("image/jpeg").split(",")[1];
+  const current: ToolValue = { ...base, result: [{ type: "image", mimeType: "image/jpeg", data }] };
+  function Harness() {
+    const [opened, setOpened] = useState(false);
+    return <>
+      <ToolPreview value={current} />
+      <AttachmentCards items={[{ id: "thumbnail", fileName: "thumbnail.jpg", byteLength: atob(data).length, status: "draft", preview: { mime_type: "image/jpeg", data, byte_length: atob(data).length, width: 32, height: 32 } }]} />
+      <QueuedMessages items={[{ id: "queued", text: "Queued image fixture", images: [{ mime: "image/jpeg", data }], status: "Queued", canManage: false }]} isOnline={false} onInsert={() => {}} onCancel={() => {}} />
+      <button type="button" onClick={() => setOpened(true)}>Open image fixture</button>
+      <ToolReader value={current} opened={opened} onClose={() => setOpened(false)} />
+    </>;
+  }
+  const screen = await renderPwa(<Harness />);
+  const previousScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  try {
+    const content = document.querySelector<HTMLImageElement>(".pwa-tool-preview img")!;
+    const thumbnail = document.querySelector<HTMLImageElement>("img.pwa-attachment-thumb")!;
+    const queued = document.querySelector<HTMLImageElement>(".pwa-queued-message-images img")!;
+    await expect.poll(() => [content, thumbnail, queued].every(image => image.complete && image.naturalWidth > 0)).toBe(true);
+    for (const scheme of ["light", "dark"]) {
+      document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
+      expect(getComputedStyle(content).borderRadius).toBe("8px");
+      expect(getComputedStyle(content).maxHeight).toBe(`${TOOL_INLINE_IMAGE_MAX_HEIGHT}px`);
+      expect(getComputedStyle(thumbnail).borderRadius).toBe("4px");
+      expect(getComputedStyle(queued).borderRadius).toBe("4px");
+      expect(Math.round(thumbnail.getBoundingClientRect().width)).toBe(32);
+      expect(Math.round(queued.getBoundingClientRect().width)).toBe(24);
+      await screen.getByRole("button", { name: "Open image fixture" }).click();
+      await expect.element(screen.getByRole("dialog")).toBeVisible();
+      const readerImage = document.querySelector<HTMLImageElement>(".pwa-tool-reader img")!;
+      await expect.poll(() => readerImage.complete && readerImage.naturalWidth > 0).toBe(true);
+      expect(getComputedStyle(readerImage).borderRadius).toBe("8px");
+      expect(getComputedStyle(readerImage).maxHeight).toBe("none");
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
+      await expect.poll(() => window.history.state?.piReachToolReader === true).toBe(false);
+    }
+  } finally {
+    if (previousScheme === null) document.documentElement.removeAttribute("data-mantine-color-scheme");
+    else document.documentElement.setAttribute("data-mantine-color-scheme", previousScheme);
+    await screen.unmount();
+  }
+});
 
 test("View all follows logical and measured overflow through streaming changes", async () => {
   await page.viewport(390, 844);
