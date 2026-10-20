@@ -158,7 +158,7 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
   if (!activeDevice) return null;
   return <section className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={historyListStatus === "loading" || undefined}>
     <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong><em>{t.navigation.savedInBrowser}</em></span>{history.length > 0 || historyListStatus === "success" ? <small className="pwa-tabular">{history.length}</small> : null}</div>
-    {loadingVisible ? <p className="pwa-nav-empty" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> {t.operationFeedback.historyLoading}</p> : null}
+    {loadingVisible ? <p className="pwa-nav-empty pwa-nav-empty-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.operationFeedback.historyLoading}</p> : null}
     {historyListStatus === "error" && !loadingVisible ? <div className="pwa-nav-empty" role="status">{t.operationFeedback.historyError}<Button variant="transparent" type="button" onClick={onRetryHistory}>{t.common.retry}</Button></div> : null}
     {history.length === 0 ? historyListStatus === "success" && !loadingVisible ? <p className="pwa-nav-empty">{t.navigation.historyEmpty}</p> : null : history.map((entry) => {
       const current = entry.id === selectedHistoryId;

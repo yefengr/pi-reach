@@ -25,7 +25,7 @@
 .pwa-turn-meta { margin: 4px 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-turn-status-error { color: var(--pwa-error); }
 /* 与思考／工具组头保持相同的字号、字重、高度和外边距；运行色与左侧图标一致，保持正体，不与思考标题共用斜体。 */
-.pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: 44px; margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
 
 /* Markdown：标题只分两级且不大于会话标题；链接常显下划线；代码块与工具输出同底。 */
@@ -115,4 +115,4 @@
 .pwa-timeline-notice.pwa-timeline-gap { margin: 16px 0; }
 /* 顶部更早记录入口：按钮、加载动画、失败与离线说明共用同一高度，切换状态时内容不跳动。 */
 .pwa-earlier { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; margin: 0 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: center; }
-.pwa-earlier-loading { display: inline-flex; align-items: center; gap: 8px; }
+.pwa-earlier-loading { display: inline-flex; align-items: center; gap: var(--pwa-space-status); }

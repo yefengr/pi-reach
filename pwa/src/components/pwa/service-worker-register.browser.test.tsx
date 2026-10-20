@@ -165,6 +165,20 @@ test("keeps the notice dismiss action at a 44px touch target", async () => {
   expect(rect.height).toBeGreaterThanOrEqual(44);
 });
 
+test("runtime notice keeps the reading width in the shell fallback", async () => {
+  // 启动与故障态没有 .pwa-root，提示条落在应用壳 fallback，仍需读取全局阅读列宽。
+  const screen = await render(
+    <PwaUiProvider><PwaAppShell runtimeNotice={<NoticeHarness installPrompt />}>
+      <div className="pwa-loading">Loading</div>
+    </PwaAppShell></PwaUiProvider>,
+  );
+  try {
+    await expect.poll(() => Math.round(document.querySelector<HTMLElement>(".pwa-runtime-notice-fallback .pwa-runtime-notice")?.getBoundingClientRect().width ?? 0)).toBe(680);
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("does not put update actions into the persistent install notice", async () => {
   const screen = await renderPwa(<NoticeHarness installPrompt />);
   await expect.element(screen.getByText("Install Pi Reach")).toBeVisible();

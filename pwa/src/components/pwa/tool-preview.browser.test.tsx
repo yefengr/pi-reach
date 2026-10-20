@@ -222,6 +222,10 @@ test("the desktop reader header is a left-aligned tool name with status and clos
     expect(status.textContent).toBe("Complete");
     expect(Math.round(status.getBoundingClientRect().width)).toBe(16);
     expect(status.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.getBoundingClientRect().right);
+    // 状态图标与关闭按钮之间只由 actions 的 6px gap 负责，图标自身不再叠加 margin。
+    expect(getComputedStyle(status).gap).toBe("6px");
+    expect(getComputedStyle(status).marginRight).toBe("0px");
+    expect(getComputedStyle(document.querySelector<HTMLElement>(".pwa-tool-reader-actions")!).gap).toBe("6px");
     expect(document.querySelector(".pwa-tool-reader-actions .pwa-tool-reader-close")).not.toBeNull();
     expect(document.querySelector(".pwa-topbar-back")).toBeNull();
     // 桌面右侧 Drawer 朝向主区的左侧两角始终为 12，贴屏幕的右侧为直角。

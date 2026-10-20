@@ -51,7 +51,6 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-runtime-notice .pwa-runtime-notice-dismiss", property: "margin", values: [-4], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-toast-dismiss", property: "margin", values: [-6, -8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-app-shell[data-compact-height] .pwa-runtime-notice-description", property: "margin", values: [-1], reason: OPTICAL },
-  { file: "app/workspace-shell.css", selector: ".pwa-ui-scope .pwa-root .pwa-topbar > .pwa-topbar-back", property: "margin-right", values: [-4], reason: ALIGN },
   { file: "app/workspace-shell.css", selector: ".pwa-root[data-sidebar-collapsed] .pwa-title-bar", property: "padding-left", values: [56], reason: "收起侧栏后标题区避让展开入口（8＋44＋4），另加左安全区" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-workspace-state", property: "padding", values: [260], reason: "主区空状态顶部 clamp(48px, 24dvh, 260px) 的上限" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-title-bar .pwa-connection.online .pwa-connection-label", property: "margin", values: [-1], reason: OPTICAL },

@@ -1,7 +1,8 @@
 /* 工作区骨架：导航常驻的桌面侧栏、会话标题区与主区阅读列；移动端单栏，标题区即顶栏。 */
-/* 页面 gutter 与阅读器宽度放在 :root，供工作区外的运行时提示条和 Portal 叠层共用。 */
+/* 页面 gutter、阅读列宽与阅读器宽度放在 :root，供工作区外的运行时提示条和 Portal 叠层共用。 */
 :root {
   --pwa-gutter: 20px;
+  --pwa-reading-width: 680px;
   /* 桌面右侧阅读器：内容宽 720，面板另加右安全区，由 .pwa-tool-reader 的 max-width 限制在视口内。 */
   --pwa-reader-drawer-width: calc(720px + var(--pwa-safe-right));
 }
@@ -16,7 +17,6 @@
 .pwa-root {
   --pwa-sidebar-width: 260px;
   --pwa-sidebar-span: calc(var(--pwa-sidebar-width) + var(--pwa-safe-left));
-  --pwa-reading-width: 680px;
   --pwa-sidebar-motion: var(--pwa-duration-sidebar);
   --pwa-main-card-gap: var(--pwa-space-xs);
   --pwa-main-flush: 0;
@@ -92,10 +92,12 @@
 .pwa-root .pwa-nav-heading-copy strong { flex: 0 0 auto; font-size: inherit; font-weight: inherit; }
 .pwa-root .pwa-nav-heading-copy em { min-width: 0; overflow: hidden; font-size: var(--pwa-text-meta); font-style: normal; font-weight: var(--pwa-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-nav-empty { margin: 0; padding: 4px 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+/* 带图标的加载行按状态行排版；纯文字与带操作的空态仍保持普通块流。 */
+.pwa-root .pwa-nav-empty-status { display: flex; align-items: center; gap: var(--pwa-space-status); }
 
 /* 会话双行按内容撑高；纯细指针上下4，触控／混合6，左右8与分组标题对齐。 */
 .pwa-root .pwa-nav-session,
-.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 2px; padding: var(--pwa-navigation-row-padding) 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-history-row { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 var(--pwa-space-pair); padding: var(--pwa-navigation-row-padding) 8px; border: 0; border-radius: var(--pwa-radius-sm); color: var(--pwa-ink); background: transparent; text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-nav-session .pwa-nav-link-body,
 .pwa-root .pwa-history-row .pwa-nav-link-body { min-width: 0; display: grid; gap: var(--pwa-space-pair); }
 .pwa-root .pwa-nav-session .pwa-nav-link-label,
@@ -115,27 +117,29 @@
 .pwa-root .pwa-nav-session[data-disabled],
 .pwa-root .pwa-history-row[data-disabled] { cursor: default; opacity: 1; }
 .pwa-root .pwa-pi-directory { color: var(--pwa-secondary); }
-.pwa-root .pwa-pi-status { display: inline-flex; align-items: center; gap: 4px; }
+.pwa-root .pwa-pi-status { display: inline-flex; align-items: center; gap: var(--pwa-space-status); }
 .pwa-root .pwa-pi-status-running { color: var(--pwa-running); }
 .pwa-notice-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-accent); }
 
+/* 底部两个导航式按钮沿用导航行的 2px 行距，不按表单的独立按钮间距。 */
 .pwa-root .pwa-sidebar-foot,
-.pwa-root .pwa-session-sheet-foot { min-width: 0; flex: 0 0 auto; display: grid; gap: 2px; padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
+.pwa-root .pwa-session-sheet-foot { min-width: 0; flex: 0 0 auto; display: grid; gap: var(--pwa-space-pair); padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
 .pwa-root .pwa-sidebar-foot .pwa-button,
 .pwa-root .pwa-session-sheet-foot .pwa-button { min-width: 0; width: 100%; justify-content: flex-start; padding-inline: 10px; }
 .pwa-root .pwa-sidebar-foot .pwa-button .mantine-Button-inner,
 .pwa-root .pwa-session-sheet-foot .pwa-button .mantine-Button-inner { justify-content: flex-start; }
 
-/* 会话「更多」的只读信息弹层：完整会话名换行，原生只读路径字段支持键盘选择与复制。 */
-.pwa-session-info { display: grid; gap: 4px; padding: 8px 10px; }
+/* 会话「更多」的只读信息弹层：完整会话名换行，原生只读路径字段支持键盘选择与复制。
+   名称／路径／元数据是多行只读信息块，行距按「标题与说明」4。 */
+.pwa-session-info { display: grid; gap: var(--pwa-space-2xs); padding: 8px 10px; }
 .pwa-session-info-name { color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; white-space: normal; }
 .pwa-root .pwa-session-info-cwd { min-height: 0; padding: 0; border: 0; border-radius: 0; color: var(--pwa-secondary); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-mono); overflow-wrap: anywhere; resize: none; user-select: text; }
 .pwa-session-info-meta { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
 /* 顶栏：页面与全屏叠层共用 48px 单行，安全区叠加在上内边距，内容垂直居中。左右内边距与底色由各顶栏决定。 */
 .pwa-root .pwa-topbar { flex: 0 0 auto; min-width: 0; min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); display: flex; align-items: center; gap: 8px; margin: 0; padding-top: var(--pwa-safe-top); padding-bottom: 0; }
-/* 左侧返回按钮与标题相距 4px，与移动标题区、设置页一致。 */
-.pwa-ui-scope .pwa-root .pwa-topbar > .pwa-topbar-back { flex: none; margin-right: -4px; }
+/* 返回按钮不收缩；与标题的 4px 间距由阅读器顶栏的 gap 提供。 */
+.pwa-ui-scope .pwa-root .pwa-topbar > .pwa-topbar-back { flex: none; }
 
 /* 主区与会话标题区。 */
 .pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: var(--pwa-main-card-top) var(--pwa-main-card-right) var(--pwa-main-card-bottom) 0; border-radius: var(--pwa-radius-lg); background: var(--pwa-bg); transition: border-radius var(--pwa-sidebar-motion) var(--pwa-ease-standard); }
