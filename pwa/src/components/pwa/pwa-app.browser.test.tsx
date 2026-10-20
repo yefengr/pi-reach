@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { setLanguagePreference } from "@/lib/i18n";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
@@ -917,6 +918,23 @@ test("operation feedback local compaction activity is scoped and remote error do
     await expect.element(screen.getByText("Compaction cancelled", { exact: true })).toBeVisible();
     expect(document.querySelector(".pwa-compaction-status")).toBeNull();
   } finally { await screen.unmount(); }
+});
+
+test("compaction terminal notice follows interface language changes", async () => {
+  setLanguagePreference("en");
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "manual" };
+    channel.emit({ ...activity, status: "failed" });
+    await expect.element(screen.getByText("Could not compact context.", { exact: true })).toBeVisible();
+    setLanguagePreference("zh");
+    await expect.element(screen.getByText("未能压缩上下文。", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-compaction-notice")?.textContent).toBe("未能压缩上下文。");
+  } finally {
+    setLanguagePreference("en");
+    await screen.unmount();
+  }
 });
 
 test("disconnect keeps a started compaction in the timeline only", async () => {

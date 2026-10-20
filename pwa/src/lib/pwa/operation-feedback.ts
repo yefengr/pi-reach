@@ -19,7 +19,7 @@ export type PendingSessionAction = {
 export type PendingStop = { id: string; groupId: string; sessionId: string; leafId: string | null; startedAt: number; unknown: boolean; accepted?: boolean };
 export type CompactionActivity = { sessionId: string; status: "running" | "completed" | "failed" | "cancelled" | "unknown" };
 /** 本地、不持久化的时间线提示；afterSeq 为发生时的最后一条正式记录。 */
-export type CompactionNotice = { id: string; sessionId: string; afterSeq: number; tone: "neutral" | "error"; text: string };
+export type CompactionNotice = { id: string; sessionId: string; afterSeq: number; kind: "failed" | "cancelled" | "unknown" };
 
 /** 输入区提示行：进行中的操作只由旋转图标表达，文字保持中性色。 */
 export type OperationHint = { text: string; tone: "running" | "neutral"; busy: boolean };
@@ -47,13 +47,10 @@ export function operationHint(pending: PendingSessionAction | null, stop: Pendin
   return null;
 }
 
-/** 压缩终态进入消息流，锚定在发生时的最后一条记录之后。 */
-export function compactionTerminal(activity: CompactionActivity | null, messages: OperationHintMessages): { text: string; tone: "neutral" | "error" } | null {
+/** 压缩终态种类；文案在渲染时按当前语言取，切换语言不需要重建提示。 */
+export function compactionTerminalKind(activity: CompactionActivity | null): CompactionNotice["kind"] | null {
   if (!activity) return null;
-  if (activity.status === "failed") return { text: messages.compactFailed, tone: "error" };
-  if (activity.status === "cancelled") return { text: messages.compactCancelled, tone: "neutral" };
-  if (activity.status === "unknown") return { text: messages.unknown, tone: "neutral" };
-  return null;
+  return activity.status === "failed" || activity.status === "cancelled" || activity.status === "unknown" ? activity.status : null;
 }
 
 export function actionReply(pending: PendingSessionAction | null, frame: Extract<ServerFrame, { type: "action_ok" | "action_error" }>): PendingSessionAction | null {

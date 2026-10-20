@@ -1565,7 +1565,7 @@ test("fades in content that arrives in a loading list, without replaying for upd
 test("compaction notices stay anchored behind the record they followed", async () => {
   const first = { ...assistantEvent, event_id: "notice-first", event_seq: 1, blocks: [{ type: "text" as const, text: "Before notice" }] };
   const later = { ...assistantEvent, event_id: "notice-later", event_seq: 2, blocks: [{ type: "text" as const, text: "After notice" }] };
-  const notice = { id: "notice-1", sessionId: "session-1", afterSeq: 1, tone: "error" as const, text: "Could not compact context." };
+  const notice = { id: "notice-1", sessionId: "session-1", afterSeq: 1, kind: "failed" as const };
   const { update } = await liveList([eventItem(first)], { notices: [notice] });
   const noticeRow = () => document.querySelector<HTMLElement>(".pwa-compaction-notice")!;
   const messageWith = (text: string) => [...document.querySelectorAll<HTMLElement>(".pwa-message")].find(row => row.textContent?.includes(text))!;

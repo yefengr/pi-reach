@@ -73,9 +73,12 @@ export function CompactionStatus() {
   return <p className="pwa-thinking-status pwa-compaction-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.operationFeedback.compacting}</p>;
 }
 
-/** 压缩终态是本地提示，不是会话记录；不写入历史，随聊天区重建消失。 */
+/** 压缩终态是本地提示，不是会话记录；文案按当前语言渲染，切换语言即时生效。 */
 export function CompactionNoticeRow({ notice }: { notice: CompactionNotice }) {
-  return <p className={`pwa-compaction-notice${notice.tone === "error" ? " is-error" : ""}`} role="status">{notice.text}</p>;
+  const { t } = useI18n();
+  const text = notice.kind === "failed" ? t.operationFeedback.compactFailed
+    : notice.kind === "cancelled" ? t.operationFeedback.compactCancelled : t.operationFeedback.unknown;
+  return <p className={`pwa-compaction-notice${notice.kind === "failed" ? " is-error" : ""}`} role="status">{text}</p>;
 }
 
 export function GapNotice() {

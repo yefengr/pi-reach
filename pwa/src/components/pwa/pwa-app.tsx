@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Button } from "@mantine/core";
 import { MessageComposer } from "@/components/pwa/message-composer";
 import { useSessionActions } from "@/lib/pwa/use-session-actions";
-import { compactionTerminal, currentRunGroup, OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint, stopHasEnded, type CompactionActivity, type CompactionNotice } from "@/lib/pwa/operation-feedback";
+import { compactionTerminalKind, currentRunGroup, OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint, stopHasEnded, type CompactionActivity, type CompactionNotice } from "@/lib/pwa/operation-feedback";
 import type { ModelListStatus } from "./composer-command-menu";
 import { RenamePairingDialog } from "@/components/pwa/rename-pairing-dialog";
 import { ConfirmActionDialog } from "@/components/pwa/confirm-action-dialog";
@@ -202,13 +202,13 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     previousCompactionActivityRef.current = compactionActivity;
     if (!compactionActivity || compactionActivity.status === "running" || compactionActivity.status === "completed") return;
     if (previous?.status === compactionActivity.status && previous.sessionId === compactionActivity.sessionId) return;
-    const notice = compactionTerminal(compactionActivity, t.operationFeedback);
-    if (!notice) return;
+    const kind = compactionTerminalKind(compactionActivity);
+    if (!kind) return;
     const sessionId = compactionActivity.sessionId;
     const afterSeq = timelineItems.reduce((max, item) => item.kind === "event" && item.event.event_seq !== undefined ? Math.max(max, item.event.event_seq) : max, 0);
     compactionNoticeSequenceRef.current += 1;
-    setCompactionNotices((current) => [...current, { id: `compaction:${compactionNoticeSequenceRef.current}`, sessionId, afterSeq, ...notice }]);
-  }, [compactionActivity, t, timelineItems]);
+    setCompactionNotices((current) => [...current, { id: `compaction:${compactionNoticeSequenceRef.current}`, sessionId, afterSeq, kind }]);
+  }, [compactionActivity, timelineItems]);
 
   // 切换会话时丢弃旧会话的本地提示；断线期间范围为空但会话内容仍在，保留提示等待重连。
   useLayoutEffect(() => {
@@ -281,6 +281,14 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     onDeviceSelected,
     onPreferenceSaveError: reportPreferenceSaveFailure,
   });
+
+  // 切换电脑／Pi／历史会重建聊天区；断线不改变选择，因此不会触发，提示可留到重连。
+  const noticeSelectionKey = `${activeDevice?.deviceId ?? ""}|${activeEndpointId ?? ""}|${selectedHistory?.id ?? ""}`;
+  const [noticeSelection, setNoticeSelection] = useState(noticeSelectionKey);
+  if (noticeSelection !== noticeSelectionKey) {
+    setNoticeSelection(noticeSelectionKey);
+    setCompactionNotices([]);
+  }
 
   const activeEndpoint = useMemo(() => activeDevice && activeEndpointId ? endpoints.find((endpoint) => endpoint.deviceId === activeDevice.deviceId && endpoint.endpointId === activeEndpointId) ?? null : null, [activeDevice, activeEndpointId, endpoints]);
   useEffect(() => {
