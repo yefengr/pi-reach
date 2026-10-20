@@ -2,8 +2,9 @@ import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/sch
 import { matchesFormalMessage } from "./timeline-identity";
 import type { TimelinePartialView, TimelinePending, TimelineViewItem } from "./timeline-runtime";
 
-const DRAIN_TICKS = 8;
-const MAX_RELEASE_PER_TICK = 64;
+const DRAIN_WINDOW_MS = 128;
+const BASE_TICK_MS = 16;
+const MAX_RELEASE_PER_MS = 64 / BASE_TICK_MS;
 const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
   : undefined;
@@ -15,7 +16,7 @@ type StreamState = {
   targetGraphemes: string[];
   visibleCount: number;
   visibleText: string;
-  ticks: number;
+  elapsedMs: number;
   seen: boolean;
 };
 
@@ -42,6 +43,8 @@ type NonStreamToken =
 export type StreamDisplayBufferChange = {
   items: TimelineViewItem[];
   shouldRender: boolean;
+  /** 状态/结构变化绕过普通内容的显示提交窗口。 */
+  urgent: boolean;
   hasPending: boolean;
 };
 
@@ -56,6 +59,14 @@ function hasBlocks(partial: TimelinePartial): boolean {
 
 function streamsImmediately(partial: TimelinePartial): boolean {
   return partial.kind === "tool" || hasBlocks(partial);
+}
+
+function samePartialState(previous: TimelinePartial, next: TimelinePartial): boolean {
+  // 参数和正文同属内容；不为判断紧急状态递归序列化可能很大的工具参数。
+  if (previous.kind !== next.kind || previous.status !== next.status || previous.session_id !== next.session_id
+    || previous.group_id !== next.group_id || previous.partial_id !== next.partial_id) return false;
+  return previous.kind !== "tool" || next.kind === "tool"
+    && previous.tool_call_id === next.tool_call_id && previous.tool === next.tool;
 }
 
 function blocksExtend(previous: TimelinePartial, next: TimelinePartial): boolean {
@@ -206,74 +217,14 @@ export class StreamDisplayBuffer {
         .filter((item): item is TimelinePartialView => item.kind === "partial")
         .map((item) => [item.partial.partial_id, item]),
     );
-    let needsSnapshot = !sameNonStreamTokens(this.renderedNonStreamTokens, nonStreamTokens(this.authoritative));
+    let urgent = !sameNonStreamTokens(this.renderedNonStreamTokens, nonStreamTokens(this.authoritative));
+    let needsSnapshot = urgent;
 
     for (const state of this.streams.values()) state.seen = false;
     for (const partial of currentPartials.values()) {
-      const id = partial.partial.partial_id;
-      const targetText = partialText(partial.partial);
-      const existing = this.streams.get(id);
-      if (!existing) {
-        const targetGraphemes = segmentText(targetText);
-        const immediate = streamsImmediately(partial.partial);
-        const visibleCount = immediate ? targetGraphemes.length : Math.min(2, targetGraphemes.length);
-        this.streams.set(id, {
-          thinkingTextEpoch: {},
-          partial,
-          targetText,
-          targetGraphemes,
-          visibleCount,
-          visibleText: targetGraphemes.slice(0, visibleCount).join(""),
-          ticks: immediate ? DRAIN_TICKS : 0,
-          seen: true,
-        });
-        needsSnapshot = true;
-        continue;
-      }
-
-      const targetChanged = existing.targetText !== targetText;
-      const modeChanged = partial.partial.kind !== existing.partial.partial.kind || hasBlocks(partial.partial) !== hasBlocks(existing.partial.partial);
-      const textExtends = !hasBlocks(partial.partial) && (!targetChanged || targetText.startsWith(existing.targetText));
-      const appendOnly = !modeChanged && (hasBlocks(partial.partial)
-        ? blocksExtend(existing.partial.partial, partial.partial)
-        : textExtends);
-      if (!appendOnly) {
-        existing.thinkingTextEpoch = {};
-        needsSnapshot = true;
-      }
-      // 空 blocks 追加一个空思考块时 join 不变，仍须创建对应展示条目。
-      if (partial.partial.blocks?.length !== existing.partial.partial.blocks?.length) needsSnapshot = true;
-      const immediate = streamsImmediately(partial.partial);
-      if (targetChanged && immediate) {
-        const targetGraphemes = segmentText(targetText);
-        existing.targetText = targetText;
-        existing.targetGraphemes = targetGraphemes;
-        existing.visibleCount = targetGraphemes.length;
-        existing.visibleText = targetText;
-        existing.ticks = DRAIN_TICKS;
-        needsSnapshot = true;
-      } else if (targetChanged && textExtends) {
-        appendTargetGraphemes(existing, targetText);
-        existing.targetText = targetText;
-        existing.visibleCount = Math.min(existing.visibleCount, existing.targetGraphemes.length);
-        // New output starts a fresh catch-up window, including after this lane drained.
-        existing.ticks = 0;
-      } else if (targetChanged) {
-        const targetGraphemes = segmentText(targetText);
-        existing.targetText = targetText;
-        existing.targetGraphemes = targetGraphemes;
-        existing.visibleCount = Math.min(2, targetGraphemes.length);
-        existing.visibleText = targetGraphemes.slice(0, existing.visibleCount).join("");
-        existing.ticks = 0;
-        needsSnapshot = true;
-      } else if (immediate && !streamsImmediately(existing.partial.partial)) {
-        existing.visibleCount = existing.targetGraphemes.length;
-        existing.visibleText = targetText;
-        existing.ticks = DRAIN_TICKS;
-        needsSnapshot = true;
-      }
-      existing.partial = partial;
-      existing.seen = true;
+      const changed = this.ingestPartial(partial);
+      needsSnapshot ||= changed.needsSnapshot;
+      urgent ||= changed.urgent;
     }
 
     for (const [id, state] of this.streams) {
@@ -282,11 +233,67 @@ export class StreamDisplayBuffer {
       if (!state.seen || formal) {
         this.streams.delete(id);
         needsSnapshot = true;
+        urgent = true;
       }
     }
 
     if (!needsSnapshot) return this.unchanged();
-    return this.rebuild(previous, true);
+    return { ...this.rebuild(previous, true), urgent };
+  }
+
+  private ingestPartial(partial: TimelinePartialView): { needsSnapshot: boolean; urgent: boolean } {
+    const id = partial.partial.partial_id;
+    const targetText = partialText(partial.partial);
+    const existing = this.streams.get(id);
+    const immediate = streamsImmediately(partial.partial);
+    if (!existing) {
+      const targetGraphemes = segmentText(targetText);
+      const visibleCount = immediate ? targetGraphemes.length : Math.min(2, targetGraphemes.length);
+      this.streams.set(id, {
+        thinkingTextEpoch: {}, partial, targetText, targetGraphemes, visibleCount,
+        visibleText: targetGraphemes.slice(0, visibleCount).join(""),
+        elapsedMs: immediate ? DRAIN_WINDOW_MS : 0, seen: true,
+      });
+      return { needsSnapshot: true, urgent: true };
+    }
+    const targetChanged = existing.targetText !== targetText;
+    const modeChanged = partial.partial.kind !== existing.partial.partial.kind || hasBlocks(partial.partial) !== hasBlocks(existing.partial.partial);
+    const textExtends = !hasBlocks(partial.partial) && (!targetChanged || targetText.startsWith(existing.targetText));
+    const appendOnly = !modeChanged && (hasBlocks(partial.partial)
+      ? blocksExtend(existing.partial.partial, partial.partial) : textExtends);
+    // 新 block（包括空思考块）是结构变化，纯块正文增长则合并提交。
+    const urgent = !appendOnly || !samePartialState(existing.partial.partial, partial.partial)
+      || partial.partial.blocks?.length !== existing.partial.partial.blocks?.length;
+    const argsChanged = existing.partial.partial.kind === "tool" && partial.partial.kind === "tool"
+      && existing.partial.partial.args !== partial.partial.args;
+    let needsSnapshot = urgent || argsChanged;
+    if (!appendOnly) existing.thinkingTextEpoch = {};
+    if (targetChanged && immediate) {
+      existing.targetGraphemes = segmentText(targetText);
+      existing.visibleCount = existing.targetGraphemes.length;
+      existing.visibleText = targetText;
+      existing.elapsedMs = DRAIN_WINDOW_MS;
+      needsSnapshot = true;
+    } else if (targetChanged && textExtends) {
+      appendTargetGraphemes(existing, targetText);
+      existing.visibleCount = Math.min(existing.visibleCount, existing.targetGraphemes.length);
+      existing.elapsedMs = 0;
+    } else if (targetChanged) {
+      existing.targetGraphemes = segmentText(targetText);
+      existing.visibleCount = Math.min(2, existing.targetGraphemes.length);
+      existing.visibleText = existing.targetGraphemes.slice(0, existing.visibleCount).join("");
+      existing.elapsedMs = 0;
+      needsSnapshot = true;
+    } else if (immediate && !streamsImmediately(existing.partial.partial)) {
+      existing.visibleCount = existing.targetGraphemes.length;
+      existing.visibleText = targetText;
+      existing.elapsedMs = DRAIN_WINDOW_MS;
+      needsSnapshot = true;
+    }
+    existing.targetText = targetText;
+    existing.partial = partial;
+    existing.seen = true;
+    return { needsSnapshot, urgent };
   }
 
   reset(authoritative: readonly TimelineViewItem[]): StreamDisplayBufferChange {
@@ -304,7 +311,7 @@ export class StreamDisplayBuffer {
         targetGraphemes,
         visibleCount: targetGraphemes.length,
         visibleText: targetText,
-        ticks: DRAIN_TICKS,
+        elapsedMs: DRAIN_WINDOW_MS,
         seen: true,
       });
     }
@@ -319,15 +326,21 @@ export class StreamDisplayBuffer {
     return [...this.displayed];
   }
 
-  advance(): StreamDisplayBufferChange {
+  /** 前台恢复直接接管最新权威正文，不重播后台尾巴。 */
+  flush(): StreamDisplayBufferChange {
+    return this.reset(this.authoritative);
+  }
+
+  advance(elapsedMs = BASE_TICK_MS): StreamDisplayBufferChange {
     const previous = this.displayed;
     let changed = false;
     for (const state of this.streams.values()) {
       const backlog = state.targetGraphemes.length - state.visibleCount;
       if (backlog > 0) {
-        state.ticks += 1;
-        const ticksLeft = Math.max(1, DRAIN_TICKS - state.ticks + 1);
-        const release = Math.min(MAX_RELEASE_PER_TICK, Math.max(1, Math.ceil(backlog / ticksLeft)));
+        const elapsed = Math.max(0, elapsedMs);
+        const remaining = Math.max(1, DRAIN_WINDOW_MS - state.elapsedMs);
+        const release = Math.min(Math.ceil(MAX_RELEASE_PER_MS * elapsed), Math.ceil(backlog * Math.min(1, elapsed / remaining)));
+        state.elapsedMs += elapsed;
         state.visibleCount = Math.min(state.targetGraphemes.length, state.visibleCount + release);
         state.visibleText = expectedVisibleText(state);
         changed = true;
@@ -366,13 +379,14 @@ export class StreamDisplayBuffer {
   }
 
   private unchanged(): StreamDisplayBufferChange {
-    return { items: this.snapshot(), shouldRender: false, hasPending: this.hasPending() };
+    return { items: this.snapshot(), shouldRender: false, urgent: false, hasPending: this.hasPending() };
   }
 
   private change(previous: readonly TimelineViewItem[], forceRender: boolean): StreamDisplayBufferChange {
     return {
       items: this.snapshot(),
       shouldRender: forceRender || !sameItems(previous, this.displayed),
+      urgent: false,
       hasPending: this.hasPending(),
     };
   }

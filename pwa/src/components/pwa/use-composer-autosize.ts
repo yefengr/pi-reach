@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, type RefObject } from "react";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
+import { usePwaTextSize } from "./use-pwa-text-size";
 
 const MAX_VISUAL_LINES = 6;
 const MIN_INPUT_HEIGHT = 44;
@@ -61,7 +62,8 @@ function contentHeight(input: HTMLTextAreaElement) {
 }
 
 /** 按实际视觉行增长；读高度不写 scrollTop，由 useTimelineViewport 维持贴底或阅读锚点。 */
-export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | null>) {
+export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | null>, value: string) {
+  const { textSize } = usePwaTextSize();
   const resize = useCallback(() => {
     const input = inputRef.current;
     if (!input || input.getBoundingClientRect().width === 0) return;
@@ -76,8 +78,8 @@ export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | nu
     input.style.overflowY = needed > height + LAYOUT_EPSILON ? "auto" : "hidden";
   }, [inputRef]);
 
-  // 草稿、附件、队列均可能由本次 render 改变；布局提交后统一测量，不依赖换行符数量。
-  useLayoutEffect(() => { resize(); });
+  // 草稿和字号变化立即测量；附件、队列和外层空间变化由 ResizeObserver 合并处理。
+  useLayoutEffect(() => { resize(); }, [resize, value, textSize]);
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input) return;

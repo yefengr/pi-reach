@@ -16,6 +16,7 @@ import { PendingCapacityError, TimelineRuntime } from "@/lib/pwa/timeline-runtim
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { PwaApp } from "./pwa-app";
 import { connectionBannerTiming } from "./pwa-app-actions";
+import { useComposerAutosize } from "./use-composer-autosize";
 import { RELAY_PROBE_TIMEOUT_MS } from "@/lib/pwa/use-relay-connection";
 
 const relayHarness = vi.hoisted(() => ({
@@ -58,6 +59,7 @@ const channelHarness = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/pwa/timeline-store", { spy: true });
+vi.mock("./use-composer-autosize", { spy: true });
 
 vi.mock("@/lib/pi-reach/relay-client", () => ({
   RelayClient: class {
@@ -279,6 +281,7 @@ beforeEach(async () => {
   // 连接提示条默认在断线 10 秒后出现；集成测试立即显示，延迟本身由 use-delayed-visibility 测试覆盖。
   connectionBannerTiming.delayMs = 0;
   vi.mocked(loadTimeline).mockClear();
+  vi.mocked(useComposerAutosize).mockClear();
   window.localStorage.removeItem("pi-reach-sidebar-collapsed");
   await page.viewport(1280, 900);
   relayHarness.instances.length = 0;
@@ -485,6 +488,30 @@ async function renderReadyTimeline(renderApp = () => renderPwa(<PwaApp />)) {
   Object.defineProperty(list, "scrollTo", { configurable: true, value: scrollTo });
   return { channel, list, screen, scrollTo };
 }
+
+test("streaming replies preserve the composer render boundary, draft and open command menu", async () => {
+  const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    markWorking();
+    channel.emit(partialFrame("render-boundary", "stream-run", "First"));
+    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("First");
+    const input = screen.getByRole("textbox", { name: /Message your agent/i });
+    await input.fill("Keep this draft");
+    const textarea = input.element();
+    await screen.getByRole("button", { name: "Pi commands", exact: true }).click();
+    await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).toBeVisible();
+    const renders = vi.mocked(useComposerAutosize).mock.calls.length;
+    for (const delta of [" second", " third", " fourth"]) channel.emit(partialFrame("render-boundary", "stream-run", delta));
+    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("First second third fourth");
+    expect(vi.mocked(useComposerAutosize).mock.calls.length).toBe(renders);
+    expect(input.element()).toBe(textarea);
+    await expect.element(input).toHaveValue("Keep this draft");
+    await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await screen.getByRole("button", { name: "Stop current task", exact: true }).click();
+    expect(channel.frames.findLast(frame => frame.type === "cancel")).toMatchObject({ group_id: "stream-run" });
+  } finally { await screen.unmount(); }
+});
 
 test("keeps queued messages beside the composer and inserts the original item only once", async () => {
   const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
