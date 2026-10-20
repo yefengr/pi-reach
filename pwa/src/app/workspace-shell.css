@@ -163,7 +163,9 @@
 /* 工作区内的运行时提示条 Portal 到提示区槽位，提示区已避让安全区，这里只留 gutter；
    启动与故障态挂在应用壳顶层的备用槽位，仍按 globals.css 自行扣除左右安全区。 */
 .pwa-root .pwa-main-notices .pwa-runtime-notice { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); }
-.pwa-root .pwa-composer-hint { margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); text-align: left; }
+/* 输入约束与操作状态共用一行；进行中只由旋转图标表达，文字保持中性色。 */
+.pwa-root .pwa-composer-hint { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
+.pwa-root .pwa-composer-hint > svg { flex: 0 0 auto; }
 
 /* 连接状态：在线为 accent 圆点加中性文字，连接中／重连运行色并带动态图形，离线中性色；带文字（移动端已连接时只显示圆点）。 */
 .pwa-connection { display: inline-flex; align-items: center; gap: var(--pwa-space-status); padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); white-space: nowrap; }

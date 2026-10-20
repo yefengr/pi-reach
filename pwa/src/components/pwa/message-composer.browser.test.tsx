@@ -7,6 +7,7 @@ import { renderPwa } from "@/test/browser/render";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { MessageComposer } from "./message-composer";
 import type { ComposerAttachmentItem } from "./attachment-cards";
+import type { OperationHint } from "@/lib/pwa/operation-feedback";
 
 const model: WireModel = {
   id: "claude-sonnet-4",
@@ -24,6 +25,7 @@ type ComposerHarnessProps = {
   keyboardPreferences?: boolean;
   enterSends?: boolean;
   attachmentNotice?: string;
+  operationHint?: OperationHint | null;
   commandModels?: WireModel[];
   commandCurrentModel?: WireModel | null;
   commandCurrentModelFallback?: string | null;
@@ -47,6 +49,7 @@ function ComposerHarness({
   keyboardPreferences = false,
   enterSends,
   attachmentNotice,
+  operationHint,
   commandModels = [model],
   commandCurrentModel = model,
   commandCurrentModelFallback = null,
@@ -88,6 +91,7 @@ function ComposerHarness({
         canAttach={isOnline && canAttach}
         sendingAttachments={sendingImage}
         attachmentNotice={attachmentNotice}
+        operationHint={operationHint}
         isOnline={isOnline}
         isWorking={isWorking}
         stopping={stopping}
@@ -1183,4 +1187,34 @@ test("keeps the model settings and the Pi command menu exclusive, closes on Esca
   } finally {
     await screen.unmount();
   }
+});
+
+
+test("operation hint owns the single notice line and keeps a 12px spinner 8px above the card", async () => {
+  await page.viewport(390, 844);
+  const screen = await renderPwa(<ComposerHarness operationHint={{ text: "Creating a new session…", tone: "running", busy: true }} attachmentNotice="Uploads paused" />);
+  try {
+    expect(document.querySelectorAll(".pwa-composer-hint")).toHaveLength(1);
+    const hint = document.querySelector<HTMLElement>(".pwa-composer-hint")!;
+    expect(hint.textContent).toContain("Creating a new session…");
+    expect(hint.textContent).not.toContain("Uploads paused");
+    expect(hint.getAttribute("data-tone")).toBe("running");
+    const spinner = hint.querySelector("svg")!;
+    const text = hint.querySelector("span")!;
+    expect(Math.round(spinner.getBoundingClientRect().width)).toBe(12);
+    expect(Math.round(text.getBoundingClientRect().left - spinner.getBoundingClientRect().right)).toBe(6);
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    expect(Math.round(card.getBoundingClientRect().top - hint.getBoundingClientRect().bottom)).toBe(8);
+  } finally { await screen.unmount(); }
+});
+
+test("unconfirmed operation hint is neutral without a spinner", async () => {
+  await page.viewport(390, 844);
+  const screen = await renderPwa(<ComposerHarness operationHint={{ text: "Compaction not confirmed. Reconnect to check before compacting again.", tone: "neutral", busy: false }} />);
+  try {
+    const hint = document.querySelector<HTMLElement>(".pwa-composer-hint")!;
+    expect(hint.getAttribute("data-tone")).toBe("neutral");
+    expect(hint.querySelector("svg")).toBeNull();
+    expect(hint.textContent).toContain("Compaction not confirmed.");
+  } finally { await screen.unmount(); }
 });

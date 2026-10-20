@@ -1560,3 +1560,31 @@ test("fades in content that arrives in a loading list, without replaying for upd
     await screen.unmount();
   }
 });
+
+/** 本地压缩提示必须停在发生时的记录之后，不随新消息漂到列表末尾。 */
+test("compaction notices stay anchored behind the record they followed", async () => {
+  const first = { ...assistantEvent, event_id: "notice-first", event_seq: 1, blocks: [{ type: "text" as const, text: "Before notice" }] };
+  const later = { ...assistantEvent, event_id: "notice-later", event_seq: 2, blocks: [{ type: "text" as const, text: "After notice" }] };
+  const notice = { id: "notice-1", sessionId: "session-1", afterSeq: 1, tone: "error" as const, text: "Could not compact context." };
+  const { update } = await liveList([eventItem(first)], { notices: [notice] });
+  const noticeRow = () => document.querySelector<HTMLElement>(".pwa-compaction-notice")!;
+  const messageWith = (text: string) => [...document.querySelectorAll<HTMLElement>(".pwa-message")].find(row => row.textContent?.includes(text))!;
+  expect(noticeRow().textContent).toBe("Could not compact context.");
+  expect(noticeRow().classList.contains("is-error")).toBe(true);
+  expect(messageWith("Before notice").compareDocumentPosition(noticeRow()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+  await update([eventItem(first), eventItem(later)]);
+  expect(noticeRow()).not.toBeNull();
+  expect(messageWith("Before notice").compareDocumentPosition(noticeRow()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(noticeRow().compareDocumentPosition(messageWith("After notice")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("running compaction row follows the last record", async () => {
+  const screen = await renderMessageList([eventItem({ ...assistantEvent, event_id: "compaction-body", event_seq: 1, blocks: [{ type: "text" as const, text: "Ready" }] })], { compacting: true });
+  try {
+    const row = document.querySelector<HTMLElement>(".pwa-compaction-status")!;
+    const message = [...document.querySelectorAll<HTMLElement>(".pwa-message")].find(item => item.textContent?.includes("Ready"))!;
+    expect(row.textContent).toContain("Compacting context…");
+    expect(message.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  } finally { await screen.unmount(); }
+});
