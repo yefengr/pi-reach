@@ -767,7 +767,8 @@ test("image source handoff owns one geometric layer and keeps pins until Drawer 
   expect(getComputedStyle(clone).borderRadius).toBe("8px");
   expect(getComputedStyle(h.source.querySelector("img")!).borderRadius).toBe("8px");
   expect(getComputedStyle(document.querySelector(".pwa-file-image-stage img")!).borderRadius).toBe("8px");
-  expect((clone.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform).not.toBe("none");
+  const frames = (clone.getAnimations()[0].effect as KeyframeEffect).getKeyframes();
+  expect(frames[0].width).not.toBe(frames[1].width);
   expect(getComputedStyle(document.querySelector(".pwa-file-reader")!).transform).toBe("none");
   expect(h.source.querySelector("img")!.style.visibility).toBe("hidden");
   expect(document.querySelector<HTMLImageElement>(".pwa-file-image-stage img")!.style.visibility).toBe("hidden");
