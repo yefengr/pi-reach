@@ -42,9 +42,11 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
     updateTransform(imageGesture(gesture.current.transform, gesture.current.points, [...pointers.current.values()]));
   };
   const end = (event: PointerEvent<HTMLDivElement>) => { pointers.current.delete(event.pointerId); rebase(); };
+  // 手动缩放仍用 transform；反向补偿圆角，避免屏幕半径随图片放大。
+  const imageRadius = `calc(var(--pwa-radius-md) / ${transform.scale})`;
   return <>
     <div className="pwa-file-image-stage" data-swipe-ignore onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
-      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" color="piReach" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
+      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" color="piReach" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ borderRadius: imageRadius, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
     </div>
     <div className="pwa-file-zoom">
       <ActionIcon variant="subtle" aria-label={t.files.zoomOut} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale / 1.5))}><Minus size={20} /></ActionIcon>
