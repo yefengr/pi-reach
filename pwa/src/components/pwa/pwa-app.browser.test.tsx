@@ -919,6 +919,23 @@ test("operation feedback local compaction activity is scoped and remote error do
   } finally { await screen.unmount(); }
 });
 
+test("disconnect keeps a started compaction in the timeline only", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    await issueOperation(context, "session_compact");
+    const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "manual" };
+    channel.emit({ ...activity, status: "running" });
+    await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    relayHarness.instances[0]!.emitState("closed");
+    await expect.element(screen.getByText("Compaction not confirmed. Reconnect to check before compacting again.", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-compaction-notice")).not.toBeNull();
+    // 时间线已经说明同一件事；输入区最多保留断线约束，不重复压缩未确认。
+    expect(document.querySelector(".pwa-composer-hint")?.textContent ?? "").not.toContain("Compaction not confirmed");
+    expect(document.querySelector(".pwa-composer-hint")?.textContent).toContain("You can send once the connection is back.");
+  } finally { await screen.unmount(); }
+});
+
 test("compaction terminal notice disappears when a later compaction succeeds", async () => {
   const context = await renderReadyTimeline(renderWorkspaceApp);
   const { screen, channel } = context;

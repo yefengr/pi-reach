@@ -210,12 +210,12 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     setCompactionNotices((current) => [...current, { id: `compaction:${compactionNoticeSequenceRef.current}`, sessionId, afterSeq, ...notice }]);
   }, [compactionActivity, t, timelineItems]);
 
-  // 切换会话或回到空时间线时丢弃旧会话的本地提示；成功压缩在活动帧处单独清空。
+  // 切换会话时丢弃旧会话的本地提示；断线期间范围为空但会话内容仍在，保留提示等待重连。
   useLayoutEffect(() => {
     const sessionId = timelineRuntimeRef.current.currentScope?.sessionId ?? null;
-    if (noticeSessionRef.current === sessionId) return;
+    if (sessionId === null || noticeSessionRef.current === sessionId) return;
     noticeSessionRef.current = sessionId;
-    setCompactionNotices((current) => sessionId === null ? [] : current.filter((notice) => notice.sessionId === sessionId));
+    setCompactionNotices((current) => current.filter((notice) => notice.sessionId === sessionId));
   }, [timelineItems, timelineRuntimeRef]);
 
   const switchOut = useSwitchOutFade(messageListRef);
@@ -1102,8 +1102,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const visibleTimelineItems = newSessionPending ? pendingAction.projection ?? timelineItems : timelineItems;
   const compactingNow = displayEndpoint !== null && exitedDisplay === null
     && (compactionActivity?.status === "running" || (pendingAction?.action === "session_compact" && pendingAction.phase !== "unknown"));
-  // 压缩行已经在消息末尾时，不再用「请求未确认」占用输入区提示，避免同一件事出现两处。
-  const operationNotice = compactingNow ? null : operationHint(pendingAction, stopRequest, t.operationFeedback);
+  // 压缩已经在消息末尾（进行中或终态）时，不再用「请求未确认」占用输入区提示，避免同一件事出现两处。
+  const compactionVisible = compactingNow || (pendingAction?.action === "session_compact" && compactionActivity !== null);
+  const operationNotice = compactionVisible ? null : operationHint(pendingAction, stopRequest, t.operationFeedback);
   const canAttach = !newSessionPending && connection === "online" && attachments.snapshot.capability.status === "supported" && !attachments.snapshot.active;
   // 选择其他 Pi：只有一个在线时直接进入，多个时回到主区选择列表。
   const chooseOtherPi = () => { if (onlinePis.length === 1) openLiveEndpoint(onlinePis[0]!.endpointId); else setExitedEndpoint(null); };
