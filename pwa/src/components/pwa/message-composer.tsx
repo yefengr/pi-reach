@@ -6,6 +6,7 @@ import { ComposerCommandMenu, ComposerModelSettingsMenu, type ComposerCommandAct
 import { useMenuExitAction, usePwaMenuTransition } from "./use-pwa-motion";
 import { useComposerAutosize } from "./use-composer-autosize";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
+import type { OperationHint } from "@/lib/pwa/operation-feedback";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
@@ -79,6 +80,8 @@ type MessageComposerProps = {
   canAttach: boolean;
   sendingAttachments: boolean;
   attachmentNotice?: string | null;
+  /** 新建、停止与配置确认的进行中提示；与输入约束共用一行，优先级高于附件与断线提示。 */
+  operationHint?: OperationHint | null;
   isOnline: boolean;
   isWorking: boolean;
   stopping: boolean;
@@ -120,6 +123,7 @@ function MessageComposerContent({
   canAttach,
   sendingAttachments,
   attachmentNotice,
+  operationHint = null,
   isOnline,
   isWorking,
   stopping,
@@ -255,6 +259,8 @@ function MessageComposerContent({
   const showStop = isOnline && isWorking;
   const addDisabled = !canAttach || sendingAttachments || newSessionPending;
   const notice = attachmentNotice || (!isOnline ? t.composer.sendAfterReconnect : null);
+  // 操作状态是当前最具体、最短命的一行，压过附件与断线提示；它结束后约束提示自动恢复。
+  const hint = operationHint ?? (notice ? { text: notice, tone: "neutral" as const, busy: false } : null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -387,7 +393,10 @@ function MessageComposerContent({
     <form className="pwa-composer" onSubmit={handleSubmit}>
       <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/*" capture="environment" disabled={addDisabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file && !addDisabled) onAddFiles([file]); event.currentTarget.value = ""; }} />
       {queuedMessages}
-      {notice ? <p className="pwa-composer-hint" role="status">{notice}</p> : null}
+      {hint ? <p className="pwa-composer-hint" role="status" data-tone={hint.tone}>
+        {hint.busy ? <LoaderCircle className="pwa-spin" size={12} strokeWidth={2.4} aria-hidden="true" /> : null}
+        <span>{hint.text}</span>
+      </p> : null}
       <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
       <div className="pwa-composer-card">
         <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments || newSessionPending} rows={1} />

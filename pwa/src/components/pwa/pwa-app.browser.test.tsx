@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { setLanguagePreference } from "@/lib/i18n";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
@@ -551,7 +552,7 @@ test.each([["result-first", 1280], ["ready-first", 1280], ["data-first", 1280], 
     }
     await expect.poll(listText).toContain("New content 1");
     expect(listText()).not.toContain("Record 1");
-    await expect.poll(() => document.querySelector(".pwa-operation-status")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-composer-hint")).toBeNull();
     await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
     expect(next.frames.filter((frame) => frame.type === "session_new")).toHaveLength(0);
   } finally { await screen.unmount(); }
@@ -593,10 +594,10 @@ test("operation feedback compact accepted and unrelated activity never settle it
     await expect.element(context.screen.getByText("Compacting context…", { exact: true })).toBeVisible();
     context.channel.emit({ ...response, in_reply_to: "old", phase: "completed" });
     await flushMicrotasks();
-    expect(document.querySelector(".pwa-operation-status")).not.toBeNull();
+    expect(document.querySelector(".pwa-compaction-status")).not.toBeNull();
     context.channel.emit({ ...response, phase: "cancelled" });
     await expect.element(context.screen.getByText("Compaction cancelled", { exact: true })).toBeVisible();
-    expect(document.querySelector(".pwa-operation-status .pwa-spin")).toBeNull();
+    expect(document.querySelector(".pwa-compaction-status")).toBeNull();
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();
   } finally { await context.screen.unmount(); }
 });
@@ -891,14 +892,15 @@ test("operation feedback local compaction activity is scoped and remote error do
     const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "threshold" };
     channel.emit({ ...activity, session_id: "other", status: "running" });
     await flushMicrotasks();
-    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    expect(document.querySelector(".pwa-compaction-status")).toBeNull();
     channel.emit({ ...activity, status: "running" });
     await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
-    // 状态行与输入卡片处在同一阅读列：行内容左缘和卡片左缘对齐。
-    const statusLine = document.querySelector<HTMLElement>(".pwa-operation-status")!;
-    const composerCard = document.querySelector<HTMLElement>(".pwa-composer-card")!;
-    const contentLeft = statusLine.getBoundingClientRect().left + parseFloat(getComputedStyle(statusLine).paddingLeft);
-    expect(Math.round(contentLeft)).toBe(Math.round(composerCard.getBoundingClientRect().left));
+    // 压缩行在消息流内，与消息文本同处阅读列，而不是与输入卡片对齐。
+    const statusLine = document.querySelector<HTMLElement>(".pwa-compaction-status")!;
+    const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+    const listStyle = getComputedStyle(list);
+    const contentLeft = list.getBoundingClientRect().left + parseFloat(listStyle.paddingLeft);
+    expect(Math.round(statusLine.getBoundingClientRect().left)).toBe(Math.round(contentLeft));
     channel.emit({ ...activity, status: "failed" });
     await expect.element(screen.getByText("Could not compact context.", { exact: true })).toBeVisible();
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();
@@ -910,11 +912,61 @@ test("operation feedback local compaction activity is scoped and remote error do
     expect(operationFeedback().querySelector(".lucide-circle-alert")).toBeNull();
     channel.emit({ ...activity, status: "failed" });
     await flushMicrotasks();
-    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    expect(document.querySelector(".pwa-compaction-notice")).not.toBeNull();
     channel.emit({ ...activity, status: "running" });
     channel.emit({ ...activity, status: "cancelled" });
     await expect.element(screen.getByText("Compaction cancelled", { exact: true })).toBeVisible();
-    expect(document.querySelector(".pwa-operation-status .pwa-spin")).toBeNull();
+    expect(document.querySelector(".pwa-compaction-status")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("compaction terminal notice follows interface language changes", async () => {
+  setLanguagePreference("en");
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "manual" };
+    channel.emit({ ...activity, status: "failed" });
+    await expect.element(screen.getByText("Could not compact context.", { exact: true })).toBeVisible();
+    setLanguagePreference("zh");
+    await expect.element(screen.getByText("未能压缩上下文。", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-compaction-notice")?.textContent).toBe("未能压缩上下文。");
+  } finally {
+    setLanguagePreference("en");
+    await screen.unmount();
+  }
+});
+
+test("disconnect keeps a started compaction in the timeline only", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    await issueOperation(context, "session_compact");
+    const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "manual" };
+    channel.emit({ ...activity, status: "running" });
+    await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    relayHarness.instances[0]!.emitState("closed");
+    await expect.element(screen.getByText("Compaction not confirmed. Reconnect to check before compacting again.", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-compaction-notice")).not.toBeNull();
+    // 时间线已经说明同一件事；输入区最多保留断线约束，不重复压缩未确认。
+    expect(document.querySelector(".pwa-composer-hint")?.textContent ?? "").not.toContain("Compaction not confirmed");
+    expect(document.querySelector(".pwa-composer-hint")?.textContent).toContain("You can send once the connection is back.");
+  } finally { await screen.unmount(); }
+});
+
+test("compaction terminal notice disappears when a later compaction succeeds", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: "manual" };
+    channel.emit({ ...activity, status: "failed" });
+    await expect.element(screen.getByText("Could not compact context.", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-compaction-notice")?.classList.contains("is-error")).toBe(true);
+    channel.emit({ ...activity, status: "running" });
+    await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    channel.emit({ ...activity, status: "completed" });
+    await expect.poll(() => document.querySelector(".pwa-compaction-notice")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-compaction-status")).toBeNull();
   } finally { await screen.unmount(); }
 });
 
@@ -932,7 +984,7 @@ test("operation feedback empty target ready before result keeps creation unconfi
     await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
     screen.getByRole("button", { name: "Session details", exact: true }).element().focus();
     next.emit({ protocol_version: 2, type: "action_ok", target_channel_id: next.channelId, in_reply_to: request.id, action: "session_new", session_id: "empty-target" });
-    await expect.poll(() => document.querySelector(".pwa-operation-status")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-composer-hint")).toBeNull();
     await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toHaveFocus();
     await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
   } finally { await screen.unmount(); }
@@ -1059,7 +1111,7 @@ test("operation feedback session_compact action_error is neutral, unlocks retry,
     expect(notice.querySelector(".lucide-info")).not.toBeNull();
     expect(notice.querySelector(".lucide-circle-alert")).toBeNull();
     expect(notice.textContent).not.toContain(rawOperationError);
-    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    expect(document.querySelector(".pwa-composer-hint")).toBeNull();
     await expect.element(input).toHaveFocus();
     const dismiss = screen.getByRole("button", { name: "Dismiss operation notification" });
     dismiss.element().focus();
@@ -1074,7 +1126,7 @@ test("operation feedback session_compact action_error is neutral, unlocks retry,
     input.element().focus();
     replyOperation(channel, retry);
     await expect.element(screen.getByText(compactIncompleteMessage, { exact: true })).toBeVisible();
-    expect(document.querySelector(".pwa-operation-status")).toBeNull();
+    expect(document.querySelector(".pwa-composer-hint")).toBeNull();
     // 显式完成一次离开：关闭前的悬停节点已被卸载，浏览器不保证为它补发 mouseout。
     await userEvent.hover(operationFeedback());
     await userEvent.hover(input.element());
@@ -1097,7 +1149,7 @@ test("operation feedback session_compact info waits behind a persistent action e
     expect(operationFeedback().classList.contains("pwa-toast-error")).toBe(true);
     expect(operationFeedback().querySelector(".lucide-circle-alert")).not.toBeNull();
     expect(screen.getByText(compactIncompleteMessage, { exact: true }).query()).toBeNull();
-    await expect.poll(() => document.querySelector(".pwa-operation-status")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-composer-hint")).toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 4_300));
     await expect.element(error).toBeVisible();
     await screen.getByRole("button", { name: "Dismiss operation notification" }).click();

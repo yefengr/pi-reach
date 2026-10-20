@@ -1,15 +1,17 @@
 import { useEffect } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { renderPwa } from "@/test/browser/render";
+import { useI18n } from "@/lib/i18n";
 import { useSessionActions } from "./use-session-actions";
-import { OperationFeedback } from "@/components/pwa/operation-feedback";
-import { OPERATION_CONFIRMATION_TIMEOUT_MS } from "./operation-feedback";
+import { OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint } from "./operation-feedback";
 
 type Actions = ReturnType<typeof useSessionActions>;
 function Harness({ expose }: { expose: (actions: Actions) => void }) {
   const actions = useSessionActions();
+  const { t } = useI18n();
+  const hint = operationHint(actions.pendingAction, actions.stopRequest, t.operationFeedback);
   useEffect(() => { expose(actions); });
-  return <><OperationFeedback pending={actions.pendingAction} stop={actions.stopRequest} compaction={null} /><output data-testid="action">{actions.pendingAction?.phase ?? "none"}</output><output data-testid="stop">{actions.stopRequest ? actions.stopRequest.unknown ? "unknown" : "waiting" : "none"}</output></>;
+  return <>{hint ? <p>{hint.text}</p> : null}<output data-testid="action">{actions.pendingAction?.phase ?? "none"}</output><output data-testid="stop">{actions.stopRequest ? actions.stopRequest.unknown ? "unknown" : "waiting" : "none"}</output></>;
 }
 afterEach(() => vi.useRealTimers());
 
@@ -46,7 +48,6 @@ test.each([
   try {
     actions.setPendingAction({ id: "request", sessionId: "session", action, phase: "unknown", startedAt: Date.now() });
     await expect.element(screen.getByText(message, { exact: true })).toBeVisible();
-    expect(document.querySelector(".pwa-operation-status button")).toBeNull();
   } finally { await screen.unmount(); }
 });
 

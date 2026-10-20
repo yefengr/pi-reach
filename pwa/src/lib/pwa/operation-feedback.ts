@@ -17,6 +17,41 @@ export type PendingSessionAction = {
   projection?: TimelineViewItem[];
 };
 export type PendingStop = { id: string; groupId: string; sessionId: string; leafId: string | null; startedAt: number; unknown: boolean; accepted?: boolean };
+export type CompactionActivity = { sessionId: string; status: "running" | "completed" | "failed" | "cancelled" | "unknown" };
+/** 本地、不持久化的时间线提示；afterSeq 为发生时的最后一条正式记录。 */
+export type CompactionNotice = { id: string; sessionId: string; afterSeq: number; kind: "failed" | "cancelled" | "unknown" };
+
+/** 输入区提示行：进行中的操作只由旋转图标表达，文字保持中性色。 */
+export type OperationHint = { text: string; tone: "running" | "neutral"; busy: boolean };
+type OperationHintMessages = {
+  creatingSession: string; openingSession: string; compacting: string;
+  compactCancelled: string; compactFailed: string; unknown: string;
+  newUnknown: string; configUnknown: string; stopUnknown: string;
+  requestingStop: string; stopAccepted: string;
+};
+
+/** 新建、停止与配置确认的提示；压缩由时间线负责，不在这里出现。 */
+export function operationHint(pending: PendingSessionAction | null, stop: PendingStop | null, messages: OperationHintMessages): OperationHint | null {
+  if (stop) return stop.unknown
+    ? { text: messages.stopUnknown, tone: "neutral", busy: false }
+    : { text: stop.accepted ? messages.stopAccepted : messages.requestingStop, tone: "running", busy: true };
+  if (!pending) return null;
+  if (pending.action === "session_new") return pending.phase === "unknown"
+    ? { text: messages.newUnknown, tone: "neutral", busy: false }
+    : { text: pending.targetSessionId ? messages.openingSession : messages.creatingSession, tone: "running", busy: true };
+  if (pending.action === "session_compact") return pending.phase === "unknown"
+    ? { text: messages.unknown, tone: "neutral", busy: false } : null;
+  if ((pending.action === "model_set" || pending.action === "thinking_set") && pending.phase === "unknown") {
+    return { text: messages.configUnknown, tone: "neutral", busy: false };
+  }
+  return null;
+}
+
+/** 压缩终态种类；文案在渲染时按当前语言取，切换语言不需要重建提示。 */
+export function compactionTerminalKind(activity: CompactionActivity | null): CompactionNotice["kind"] | null {
+  if (!activity) return null;
+  return activity.status === "failed" || activity.status === "cancelled" || activity.status === "unknown" ? activity.status : null;
+}
 
 export function actionReply(pending: PendingSessionAction | null, frame: Extract<ServerFrame, { type: "action_ok" | "action_error" }>): PendingSessionAction | null {
   if (!pending || frame.in_reply_to !== pending.id || frame.action !== pending.action) return pending;

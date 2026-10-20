@@ -1,8 +1,8 @@
-import { useMemo, type RefObject } from "react";
+import { useLayoutEffect, useMemo, type RefObject } from "react";
 import { Button } from "@mantine/core";
 import { LoaderCircle } from "lucide-react";
 import { AssistantBlocks, ThinkingContent } from "./timeline-content";
-import { ConversationTimeline, GapNotice } from "./conversation-timeline";
+import { CompactionNoticeRow, CompactionStatus, ConversationTimeline, GapNotice } from "./conversation-timeline";
 import { useTimelineEnterFade } from "./use-timeline-enter-fade";
 import "./timeline-reconnect.css";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
@@ -16,6 +16,10 @@ import { PublishedFile, type PublishedFileRead } from "./published-file";
 import { AttachmentCards, readonlyAttachmentItems } from "./attachment-cards";
 import { useAutoLoadEarlier } from "./use-auto-load-earlier";
 import { useDelayedVisibility } from "./use-delayed-visibility";
+import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
+import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
+
+const NO_NOTICES: readonly CompactionNotice[] = [];
 
 type MessageListProps = {
   items: TimelineViewItem[];
@@ -51,6 +55,10 @@ type MessageListProps = {
   skeletonVisible?: boolean;
   /** 在线 Pi 是否正在运行（整次运行）；历史阅读恒为 false。 */
   running?: boolean;
+  /** 压缩上下文进行中；历史阅读恒为 false。 */
+  compacting?: boolean;
+  /** 压缩终态提示，按 afterSeq 插在对应记录之后；不写入历史。 */
+  notices?: readonly CompactionNotice[];
 };
 
 function blockText(event: TimelineEvent | TimelinePartial): string {
@@ -150,13 +158,20 @@ function EarlierRecords({ loading, failed, offline, onLoad }: { loading: boolean
   return <div className="pwa-earlier"><Button variant="default" className="pwa-earlier-button" type="button" onClick={onLoad}>{t.timeline.loadMore}</Button></div>;
 }
 
-export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadEarlier, loadEarlierFailed = false, autoLoadEarlier = true, gapBefore, listRef, bottomSentinelRef, onScroll, onRetryUnknown, onCancelQueued, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, projectionItems = items, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false }: MessageListProps) {
+export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadEarlier, loadEarlierFailed = false, autoLoadEarlier = true, gapBefore, listRef, bottomSentinelRef, onScroll, onRetryUnknown, onCancelQueued, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, projectionItems = items, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false, compacting = false, notices = NO_NOTICES }: MessageListProps) {
   const { t } = useI18n();
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
   const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
   const visibleItems = items.filter(isVisibleItem);
   const gaps = useMemo(() => visibleGaps(items, gapBefore), [items, gapBefore]);
   const liveRunning = isLive && running;
+  const liveCompacting = isLive && compacting;
+  // 压缩行与终态提示不随 items 变化，尺寸感知不到它们的高度变化，需主动通知时间线重新贴底或恢复锚点。
+  // 用提示 id 作为依赖，避免每次渲染的新数组触发重复贴底。
+  const noticeKey = notices.map((notice) => notice.id).join("|");
+  useLayoutEffect(() => {
+    listRef.current?.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
+  }, [liveCompacting, noticeKey, listRef]);
   const loadingEmpty = visibleItems.length === 0 && loading;
   useTimelineEnterFade(listRef, visibleItems.length === 0, loading);
   const completions = useMemo(() => runCompletions(
@@ -177,7 +192,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   }}>
     {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

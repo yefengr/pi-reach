@@ -13,6 +13,7 @@ import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolBatchClosed, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
+import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -24,6 +25,10 @@ type ConversationTimelineProps = {
   completions?: ReadonlyMap<string, RunCompletion>;
   /** 在线 Pi 正在运行（working）：本轮没有具体运行指示时显示「Working…」。 */
   running?: boolean;
+  /** 压缩上下文进行中：本轮没有具体运行指示时在末尾显示压缩状态。 */
+  compacting?: boolean;
+  /** 压缩终态提示，按 afterSeq 插在对应记录之后。 */
+  notices?: readonly CompactionNotice[];
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
   renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead) => ReactNode;
@@ -34,6 +39,7 @@ type ConversationTimelineProps = {
 };
 
 const NO_GAPS: ReadonlySet<string> = new Set();
+const NO_NOTICES: readonly CompactionNotice[] = [];
 /**
  * 投影快照、工具首次被观察到的顺序（决定工具组身份，历史补齐不改变已有组），以及最近一次更新中在线新追加的工具（进入组头排队）。
  * `appended` 只保留最近一次更新的新增，不累计：组之后被拆分或合并而重新挂载时，已在组头显示过的工具不会再次排队。
@@ -61,13 +67,36 @@ function WorkingStatus() {
   return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.working}</p>;
 }
 
+/** 压缩进行中沿用 Working 行的高度与字号，避免与终态切换时跳动。 */
+export function CompactionStatus() {
+  const { t } = useI18n();
+  return <p className="pwa-thinking-status pwa-compaction-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.operationFeedback.compacting}</p>;
+}
+
+/** 压缩终态是本地提示，不是会话记录；文案按当前语言渲染，切换语言即时生效。 */
+export function CompactionNoticeRow({ notice }: { notice: CompactionNotice }) {
+  const { t } = useI18n();
+  const text = notice.kind === "failed" ? t.operationFeedback.compactFailed
+    : notice.kind === "cancelled" ? t.operationFeedback.compactCancelled : t.operationFeedback.unknown;
+  return <p className={`pwa-compaction-notice${notice.kind === "failed" ? " is-error" : ""}`} role="status">{text}</p>;
+}
+
 export function GapNotice() {
   const { t } = useI18n();
   return <p className="pwa-timeline-notice pwa-timeline-gap">{t.timeline.gapNotSaved}</p>;
 }
 
-function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], segmentOf: Map<string, ToolSegment>, gapKeys: ReadonlySet<string>, renderSegment: (segment: ToolSegment) => ReactNode, render: (entry: PresentationEntry) => ReactNode) {
+function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], segmentOf: Map<string, ToolSegment>, gapKeys: ReadonlySet<string>, notices: readonly CompactionNotice[], renderSegment: (segment: ToolSegment) => ReactNode, render: (entry: PresentationEntry) => ReactNode) {
   const rows: ReactNode[] = [];
+  // 终态提示是本地行，按发生时的最后一条记录插入；不持久化，也不参与分组与序号。
+  const pendingNotices = [...notices].sort((left, right) => left.afterSeq - right.afterSeq);
+  let noticeIndex = 0;
+  const flushNotices = (beforeSeq: number) => {
+    while (noticeIndex < pendingNotices.length && pendingNotices[noticeIndex]!.afterSeq < beforeSeq) {
+      const notice = pendingNotices[noticeIndex++]!;
+      rows.push(<CompactionNoticeRow key={`compaction:${notice.id}`} notice={notice} />);
+    }
+  };
   let segmentGroup: string | undefined;
   let hasOutput = false;
   let interrupted = false;
@@ -83,6 +112,8 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
       hasOutput = false;
       interrupted = false;
     }
+    // 先结束上一轮（补上完成时间），再插入发生在两轮之间的本地提示。
+    flushNotices(entry.seq ?? Infinity);
     if (isPiOutputEntry(entry)) hasOutput = true;
     if (entry.kind === "text" && entry.interrupted) interrupted = true;
     if (gapKeys.has(entry.key)) rows.push(<GapNotice key={`gap:${entry.key}`} />);
@@ -94,6 +125,7 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
     rows.push(render(entry));
   }
   closeSegment();
+  flushNotices(Infinity);
   return rows;
 }
 
@@ -123,7 +155,7 @@ function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): 
   return keys;
 }
 
-export function ConversationTimeline({ items, live, completions, running = false, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
+export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
   const [thinkingChoices, setThinkingChoices] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [toolChoices, setToolChoices] = useState<ReadonlyMap<string, ToolExpansion>>(() => new Map());
   const [toolIndicators, setToolIndicators] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
@@ -313,12 +345,12 @@ export function ConversationTimeline({ items, live, completions, running = false
     onExpandedChange={expanded => chooseSegment(segment, expanded)}
   >{segment.tools.map(renderEntry)}</ToolGroupCard>;
   // 发布记录保留 group_id，同一轮的完成时间仍只在段末追加一次。
-  const rows = conversationRows(view.entries, completions, segmentOf, gapKeys, renderSegment, renderEntry);
+  const rows = conversationRows(view.entries, completions, segmentOf, gapKeys, notices, renderSegment, renderEntry);
 
   return <>
     {rows}
     {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
-    {activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
+    {compacting ? <CompactionStatus /> : activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     <SummaryReader event={summaryEvent} opened={summaryOpen && summaryEvent !== null} onClose={() => setSummaryOpen(false)} onExitTransitionEnd={finishSummaryReader} />
     {scopedFileReader ? <PublishedFileReader key={scopedFileReader.file.publication_id} file={scopedFileReader.file} source={scopedFileReader.trigger} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
