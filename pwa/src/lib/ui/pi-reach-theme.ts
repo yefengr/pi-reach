@@ -53,7 +53,7 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
   lineHeights: { xs: "var(--pwa-leading-ui)", sm: "var(--pwa-leading-ui)", md: "var(--pwa-leading-body)", lg: "var(--pwa-leading-ui)", xl: "var(--pwa-leading-ui)" },
   spacing: { "2xs": "var(--pwa-space-2xs)", xs: "var(--pwa-space-xs)", sm: "var(--pwa-space-sm)", md: "var(--pwa-space-md)", lg: "var(--pwa-space-lg)", xl: "var(--pwa-space-xl)", "2xl": "var(--pwa-space-2xl)" },
   defaultRadius: "sm",
-  radius: { xs: "var(--pwa-radius-xs)", sm: "var(--pwa-radius-sm)", md: "var(--pwa-radius-md)", lg: "var(--pwa-radius-lg)", xl: "var(--pwa-radius-lg)" },
+  radius: { xs: "var(--pwa-radius-xs)", sm: "var(--pwa-radius-md)", md: "var(--pwa-radius-md)", lg: "var(--pwa-radius-lg)", xl: "var(--pwa-radius-lg)" },
   shadows: {
     xs: "var(--pwa-shadow-float)",
     sm: "var(--pwa-shadow-float)",

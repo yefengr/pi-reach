@@ -93,7 +93,7 @@
   align-items: stretch;
   margin-bottom: 4px;
   border: 1px solid transparent;
-  border-radius: var(--pwa-radius-sm);
+  border-radius: var(--pwa-radius-md);
   transition: background var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 
@@ -140,7 +140,7 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--pwa-line);
-  border-radius: var(--pwa-radius-sm);
+  border-radius: var(--pwa-radius-md);
   color: var(--pwa-secondary);
 }
 
@@ -199,7 +199,7 @@
   align-items: center;
   padding: 2px 6px;
   border: 1px solid var(--pwa-line);
-  border-radius: 999px;
+  border-radius: var(--pwa-radius-xs);
   color: var(--pwa-secondary);
   /* 状态标签只用描边与文字，不继承 Mantine 浅色变体的底色；运行中另用状态轻底。 */
   background: transparent;
@@ -253,7 +253,7 @@
 .pwa-root .pwa-peer-menu-panel button {
   min-height: 44px;
   padding-inline: var(--pwa-space-menu-pad);
-  border-radius: var(--pwa-radius-sm);
+  border-radius: var(--pwa-radius-md);
   font-size: var(--pwa-text-meta);
 }
 

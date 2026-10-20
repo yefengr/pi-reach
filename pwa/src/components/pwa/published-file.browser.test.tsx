@@ -680,6 +680,9 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   const h = await harness({ file: image, items: [event(published(image))], initial: { phase: "ready", receivedBytes: 100, preview: imagePreview, url: blobUrl(imageBlob) } });
   visibility(true);
   expect(h.pin).toHaveBeenCalledTimes(1);
+  const embedded = document.querySelector<HTMLElement>(".pwa-published-image")!;
+  expect(getComputedStyle(embedded).borderRadius).toBe("8px");
+  expect(getComputedStyle(embedded.querySelector("img")!).borderRadius).toBe("8px");
   await h.screen.getByRole("button", { name: "View image" }).click();
   await expect.element(h.screen.getByRole("button", { name: "Zoom in" })).toBeVisible();
   expect(h.pin).toHaveBeenCalledTimes(2);
@@ -687,6 +690,7 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   expect(h.unpin).toHaveBeenCalledTimes(1);
   await h.screen.getByRole("button", { name: "Zoom in" }).click();
   const stage = document.querySelector<HTMLDivElement>(".pwa-file-image-stage")!;
+  expect(getComputedStyle(stage.querySelector("img")!).borderRadius).toBe("8px");
   const pointer = (type: string, id: number, x: number, y: number) => stage.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, pointerType: "touch", clientX: x, clientY: y }));
   // 合成事件没有 UA 活跃指针，单独屏蔽 capture；真实指针捕获由浏览器负责。
   stage.setPointerCapture = () => {};
@@ -760,6 +764,9 @@ test("image source handoff owns one geometric layer and keeps pins until Drawer 
   await expect.poll(imageClone).not.toBeNull();
   const clone = imageClone()!;
   expect(document.querySelectorAll(".pwa-published-image-transition")).toHaveLength(1);
+  expect(getComputedStyle(clone).borderRadius).toBe("8px");
+  expect(getComputedStyle(h.source.querySelector("img")!).borderRadius).toBe("8px");
+  expect(getComputedStyle(document.querySelector(".pwa-file-image-stage img")!).borderRadius).toBe("8px");
   expect((clone.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform).not.toBe("none");
   expect(getComputedStyle(document.querySelector(".pwa-file-reader")!).transform).toBe("none");
   expect(h.source.querySelector("img")!.style.visibility).toBe("hidden");
