@@ -21,7 +21,8 @@ const PREVIEW_LINES = 20;
 type AssistantBlock = Extract<TimelineEvent, { kind: "assistant" }>["blocks"][number];
 
 /** 顶部标题栏放围栏语言名与复制按钮，代码区只负责横向滚动，长行不会滚到按钮下方。 */
-function CodeBlock({ text, language, label }: { text: string; language: string | undefined; label: string | undefined }) {
+// 流式追加只改变消息尾部时，闭合代码块的三个标量输入不变；memo 保留其 DOM、复制状态与高亮缓存。
+const CodeBlock = memo(function CodeBlock({ text, language, label }: { text: string; language: string | undefined; label: string | undefined }) {
   const { t } = useI18n();
   const html = useMemo(() => highlightCode(text, language), [language, text]);
   return <div className="pwa-code-block">
@@ -31,7 +32,7 @@ function CodeBlock({ text, language, label }: { text: string; language: string |
     </div>
     <pre>{html === undefined ? <code>{text}</code> : <code className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: html }} />}</pre>
   </div>;
-}
+});
 
 const remarkPlugins = [remarkGfm];
 
