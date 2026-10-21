@@ -139,6 +139,35 @@ export function projectTimelineGaps(items: readonly TimelineViewItem[], gapBefor
   return { keys, toolBreakKeys, atEnd: region >= 0 && !anchored.has(region) };
 }
 
+/** 内容与全部展示字段一致时沿用上一份条目，浅比较的子组件才能跳过重渲染。 */
+function sameEntry(previous: PresentationEntry, next: PresentationEntry): boolean {
+  if (previous.kind !== next.kind || previous.key !== next.key || previous.seq !== next.seq) return false;
+  switch (next.kind) {
+    case "text":
+      return previous.kind === "text" && previous.text === next.text && previous.streaming === next.streaming
+        && previous.interrupted === next.interrupted && previous.groupId === next.groupId && previous.timestamp === next.timestamp;
+    case "thinking":
+      return previous.kind === "thinking" && previous.text === next.text && previous.streaming === next.streaming
+        && previous.groupId === next.groupId && previous.thinkingTextEpoch === next.thinkingTextEpoch;
+    case "tool":
+      return previous.kind === "tool" && previous.value === next.value;
+    case "record":
+      return previous.kind === "record" && (previous.item === next.item
+        || previous.item.kind === "event" && next.item.kind === "event" && previous.item.event === next.item.event);
+  }
+}
+
+/** 只复用展示条目对象，不重写 runtime、顺序或任何数据。 */
+function reuseEntries(entries: PresentationEntry[], previous: readonly PresentationEntry[]): PresentationEntry[] {
+  if (previous.length === 0) return entries;
+  const known = new Map(previous.map(entry => [entry.key, entry]));
+  return entries.map(entry => {
+    const previousEntry = known.get(entry.key);
+    return previousEntry !== undefined && sameEntry(previousEntry, entry) ? previousEntry : entry;
+  });
+}
+
 export function projectTimeline(items: readonly TimelineViewItem[], previous?: PresentationSnapshot): PresentationSnapshot {
-  return { items, entries: reconcileOrder(flatten(items), previous?.entries ?? []) };
+  const previousEntries = previous?.entries ?? [];
+  return { items, entries: reuseEntries(reconcileOrder(flatten(items), previousEntries), previousEntries) };
 }

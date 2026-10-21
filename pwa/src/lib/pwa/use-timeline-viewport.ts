@@ -36,12 +36,33 @@ const BOTTOM_EPSILON = 1;
 export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
 const OBSERVED_CONTENT_EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty";
 
-function maxScrollTop(list: HTMLDivElement): number {
-  return Math.max(0, list.scrollHeight - list.clientHeight);
+function maxScrollTop(list: HTMLDivElement, scrollHeight = list.scrollHeight): number {
+  return Math.max(0, scrollHeight - list.clientHeight);
 }
 
-function isAtBottom(list: HTMLDivElement): boolean {
-  return maxScrollTop(list) - list.scrollTop <= BOTTOM_EPSILON;
+function isAtBottom(list: HTMLDivElement, bottomEdge: number): boolean {
+  return bottomEdge - list.scrollTop <= BOTTOM_EPSILON;
+}
+
+/** 已同步过的直接 children：用于在同一次 items 变更中跳过无变化的观察器差分。 */
+type ObservedChildSnapshot = {
+  elements: Element[];
+  classNames: (string | null)[];
+};
+
+function childClassName(child: Element): string | null {
+  return child instanceof HTMLElement ? child.className : null;
+}
+
+function isSameObservedChildren(snapshot: ObservedChildSnapshot, children: HTMLCollection): boolean {
+  if (snapshot.elements.length !== children.length) return false;
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
+    if (snapshot.elements[index] !== child) return false;
+    // className 变化会改变角色排除结果，必须与身份一起比较。
+    if (snapshot.classNames[index] !== childClassName(child)) return false;
+  }
+  return true;
 }
 
 function reducedMotionPreferred(): boolean {
@@ -64,6 +85,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   const geometryListenerCleanupRef = useRef<(() => void) | null>(null);
   const resizeObserverListRef = useRef<HTMLDivElement | null>(null);
   const observedElementsRef = useRef(new Set<Element>());
+  const observedChildSnapshotRef = useRef<ObservedChildSnapshot | null>(null);
   const pendingSessionAnchorRef = useRef<TimelineViewportAnchor | null>(null);
 
   useLayoutEffect(() => { enabledRef.current = enabled; }, [enabled]);
@@ -85,14 +107,17 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       pendingFollowFrameRef.current = null;
       const list = messageListRef.current;
       if (!enabledRef.current || list !== scheduledList || !followingOutputRef.current || readingDetailsRef.current) return;
-      if (isAtBottom(list)) {
+      // 同一次同步操作内复用高度：底部判断、程序滚动目标与 scrollTo 都基于这一份几何。
+      const height = list.scrollHeight;
+      const bottomEdge = maxScrollTop(list, height);
+      if (isAtBottom(list, bottomEdge)) {
         programmaticScrollRef.current = null;
         return;
       }
       // Latest 的平滑滚动拥有当前位置；结束后再追上期间新增的输出。
       if (programmaticScrollRef.current?.list === list && programmaticScrollRef.current.smooth) return;
-      markProgrammaticScroll(list, maxScrollTop(list));
-      list.scrollTo({ top: list.scrollHeight, behavior: "auto" });
+      markProgrammaticScroll(list, bottomEdge);
+      list.scrollTo({ top: height, behavior: "auto" });
     });
   }, [markProgrammaticScroll]);
 
@@ -131,6 +156,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     resizeObserverRef.current = null;
     resizeObserverListRef.current = null;
     observedElementsRef.current.clear();
+    observedChildSnapshotRef.current = null;
   }, []);
 
   const refreshResizeObserver = useCallback((list: HTMLDivElement) => {
@@ -148,8 +174,9 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
         if (followingOutputRef.current && !readingDetailsRef.current) {
           // 尺寸钳制产生的 scroll 事件会晚于此次布局变化到达，需登记为程序滚动，否则被当成用户上滑而停止跟随。
           cancelPendingFollow();
-          markProgrammaticScroll(list, maxScrollTop(list));
-          list.scrollTo({ top: list.scrollHeight, behavior: "auto" });
+          const height = list.scrollHeight;
+          markProgrammaticScroll(list, maxScrollTop(list, height));
+          list.scrollTo({ top: height, behavior: "auto" });
           return;
         }
         handleGeometryChange(list);
@@ -160,8 +187,16 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
 
     const observer = resizeObserverRef.current;
     if (!observer) return;
+    const children = list.children;
+    const previousSnapshot = observedChildSnapshotRef.current;
+    // 内容流更新通常只换子树文本：身份与类名一致时无需重建 Set、重跑排除匹配或做观察目标差分。
+    if (previousSnapshot && isSameObservedChildren(previousSnapshot, children)) return;
     const nextElements = new Set<Element>([list]);
-    for (const child of list.children) {
+    const elements: Element[] = [];
+    const classNames: (string | null)[] = [];
+    for (const child of children) {
+      elements.push(child);
+      classNames.push(childClassName(child));
       if (child instanceof HTMLElement && !child.matches(OBSERVED_CONTENT_EXCLUSIONS)) nextElements.add(child);
     }
     for (const element of observedElementsRef.current) {
@@ -171,6 +206,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       if (!observedElementsRef.current.has(element)) observer.observe(element);
     }
     observedElementsRef.current = nextElements;
+    observedChildSnapshotRef.current = { elements, classNames };
   }, [cancelPendingFollow, disconnectResizeObserver, handleGeometryChange, markProgrammaticScroll]);
 
   const reset = useCallback(() => {
@@ -319,8 +355,9 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     const list = messageListRef.current;
     if (!list) return;
     const smooth = !reducedMotionPreferred();
-    markProgrammaticScroll(list, maxScrollTop(list), smooth);
-    list.scrollTo({ top: list.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    const height = list.scrollHeight;
+    markProgrammaticScroll(list, maxScrollTop(list, height), smooth);
+    list.scrollTo({ top: height, behavior: smooth ? "smooth" : "auto" });
   }, [markProgrammaticScroll, reset]);
 
   useEffect(() => () => {

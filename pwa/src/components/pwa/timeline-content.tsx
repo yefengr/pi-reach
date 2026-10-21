@@ -1,4 +1,4 @@
-import { isValidElement, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { isValidElement, memo, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, LoaderCircle } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,7 +21,8 @@ const PREVIEW_LINES = 20;
 type AssistantBlock = Extract<TimelineEvent, { kind: "assistant" }>["blocks"][number];
 
 /** 顶部标题栏放围栏语言名与复制按钮，代码区只负责横向滚动，长行不会滚到按钮下方。 */
-function CodeBlock({ text, language, label }: { text: string; language: string | undefined; label: string | undefined }) {
+// 流式追加只改变消息尾部时，闭合代码块的三个标量输入不变；memo 保留其 DOM、复制状态与高亮缓存。
+const CodeBlock = memo(function CodeBlock({ text, language, label }: { text: string; language: string | undefined; label: string | undefined }) {
   const { t } = useI18n();
   const html = useMemo(() => highlightCode(text, language), [language, text]);
   return <div className="pwa-code-block">
@@ -31,7 +32,9 @@ function CodeBlock({ text, language, label }: { text: string; language: string |
     </div>
     <pre>{html === undefined ? <code>{text}</code> : <code className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: html }} />}</pre>
   </div>;
-}
+});
+
+const remarkPlugins = [remarkGfm];
 
 const markdownComponents: Components = {
   // 链接在新标签页打开，不向目标页暴露来源窗口。
@@ -45,9 +48,10 @@ const markdownComponents: Components = {
   ...markdownTableComponents,
 };
 
-export function MarkdownContent({ text }: { text: string }) {
-  return <div className="pwa-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{text}</ReactMarkdown></div>;
-}
+// 历史消息正文在流式追加时保持不变；只按文本比较，避免整段重新解析 Markdown。
+export const MarkdownContent = memo(function MarkdownContent({ text }: { text: string }) {
+  return <div className="pwa-markdown"><ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>{text}</ReactMarkdown></div>;
+});
 
 /** 保留正文顺序，仅将相邻同类片段合并为一个阅读区域。 */
 function adjacentBlocks(blocks: readonly AssistantBlock[]): AssistantBlock[] {

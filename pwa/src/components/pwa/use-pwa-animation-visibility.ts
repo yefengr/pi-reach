@@ -48,18 +48,29 @@ export function usePwaAnimationVisibility(scopeRef: RefObject<HTMLDivElement | n
     };
     const mutation = new MutationObserver(records => {
       if (disposed) return;
-      const roots = new Set<Node>();
+      const roots = new Set<Element>();
       for (const record of records) {
-        if (record.type === "attributes") roots.add(record.target);
-        else {
-          record.addedNodes.forEach(node => roots.add(node));
-          record.removedNodes.forEach(node => roots.add(node));
+        if (record.type === "attributes") {
+          if (record.target instanceof Element) roots.add(record.target);
+          continue;
+        }
+        for (const node of record.addedNodes) {
+          if (node instanceof Element) roots.add(node);
+        }
+        for (const node of record.removedNodes) {
+          if (node instanceof Element) roots.add(node);
         }
       }
-      // 一批中父子同时变更时只处理最外层；文字增量不触发 scope 全树查询。
-      for (const node of roots) {
-        if ([...roots].some(parent => parent !== node && parent.contains(node))) continue;
-        visit(node);
+      // 一批中父子同时变更时只处理最外层：沿 parentElement 祖先链做 Set 成员测试，避免两两 contains。
+      for (const element of roots) {
+        let covered = false;
+        for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
+          if (roots.has(parent)) {
+            covered = true;
+            break;
+          }
+        }
+        if (!covered) visit(element);
       }
     });
     const refresh = () => { for (const element of visible.keys()) paint(element); };

@@ -156,6 +156,42 @@ test("pseudo-element loops pause and ordinary streaming updates never rescan the
   expect(getComputedStyle(view.skeleton, "::after").animationPlayState).toBe("paused");
 });
 
+test("large same-level mutation batches avoid pairwise containment scans", async () => {
+  const view = await harness();
+  const batch = document.createElement("div");
+  view.fixture.append(batch);
+  await frames();
+  const contains = vi.spyOn(Node.prototype, "contains");
+  const total = 60;
+  for (let index = 0; index < total; index += 1) {
+    batch.append(index % 2 === 0 ? document.createElement("span") : document.createTextNode(`text-${index}`));
+  }
+  await frames();
+  // 基线按 Root 两两调用 contains（约 total² 次），去重后不应再成对扫描。
+  expect(contains.mock.calls.length).toBeLessThan(total);
+  contains.mockRestore();
+});
+
+test("nested mutation roots reconcile only the outermost node", async () => {
+  const view = await harness();
+  const holders: HTMLElement[] = [];
+  const loops: HTMLElement[] = [];
+  for (let index = 0; index < 20; index += 1) {
+    const holder = document.createElement("div");
+    const loop = document.createElement("div");
+    loop.className = "pwa-skeleton";
+    holders.push(holder);
+    loops.push(loop);
+    view.fixture.append(holder);
+    holder.append(loop);
+  }
+  const contains = vi.spyOn(Node.prototype, "contains");
+  await expect.poll(() => loops.every(loop => loop.getAttribute(marker) === "running")).toBe(true);
+  // 每个 holder 只查一次子树，子节点自身不再作为 Root 重复处理。
+  expect(contains.mock.calls.length).toBeLessThan(holders.length * 2);
+  contains.mockRestore();
+});
+
 test("DEV review is untouched and unmount disconnects observers and listeners", async () => {
   const view = await harness();
   const review = document.createElement("div");

@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { TimelineEventFragmentAssembler } from "@/lib/pwa/timeline-transfer";
 import { TimelineHistoryLoader } from "@/lib/pwa/timeline-history-loader";
 import { TimelineRuntime, type TimelinePreviewTarget, type TimelineScope, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
+import { StreamDisplayScheduler } from "@/lib/pwa/stream-display-scheduler";
 import { clearTimelineBranchCheckpoint, discardTimelineEventsAfter, ensureTimelineBranchCheckpoint, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents, type TimelineBranchCheckpoint } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 
-const STREAM_DISPLAY_TICK_MS = 16;
 const RECONNECT_TRANSITION_MS = 160;
 
 export type TimelineReconnectPhase = "fade-out" | "hidden" | "fade-in" | null;
@@ -74,8 +74,6 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   const runtimeRef = useRef(new TimelineRuntime());
   const historyLoaderRef = useRef<TimelineHistoryLoader | null>(null);
   const fragmentAssemblerRef = useRef<TimelineEventFragmentAssembler | null>(null);
-  const streamBufferRef = useRef(new StreamDisplayBuffer());
-  const streamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const itemsRef = useRef<TimelineViewItem[]>([]);
   const contextGenerationRef = useRef(0);
@@ -99,33 +97,29 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     setItems(next);
   }, []);
 
-  const scheduleStreamDisplay = useCallback(() => {
-    if (streamTimerRef.current || !streamBufferRef.current.hasPending()) return;
-    const tick = () => {
-      streamTimerRef.current = setTimeout(() => {
-        streamTimerRef.current = null;
-        if (replacementGateRef.current) return;
-        const change = streamBufferRef.current.advance();
-        if (change.shouldRender) {
-          updateItems(change.items);
-          const groups = new Set(change.items.flatMap((item) => item.kind === "partial" ? [item.partial.group_id] : []));
-          for (const groupId of groups) receiveRealtimeOutput(groupId);
-        }
-        if (change.hasPending) tick();
-      }, STREAM_DISPLAY_TICK_MS);
-    };
-    tick();
-  }, [receiveRealtimeOutput, updateItems]);
+  const [streamDisplay] = useState(() => new StreamDisplayScheduler(new StreamDisplayBuffer(), () => undefined));
+  useLayoutEffect(() => {
+    streamDisplay.setPublisher((next, realtime) => {
+      updateItems(next);
+      if (!realtime) return;
+      const groups = new Set(next.flatMap((item) => item.kind === "partial" ? [item.partial.group_id] : []));
+      for (const groupId of groups) receiveRealtimeOutput(groupId);
+    });
+  }, [receiveRealtimeOutput, streamDisplay, updateItems]);
 
   const renderChange = useCallback((change: TimelineRuntimeChange, resetDisplay: boolean) => {
-    if (resetDisplay && streamTimerRef.current) clearTimeout(streamTimerRef.current);
-    if (resetDisplay) streamTimerRef.current = null;
-    const displayChange = resetDisplay
-      ? streamBufferRef.current.reset(change.items)
-      : streamBufferRef.current.ingest(change.items);
-    if (displayChange.shouldRender) updateItems(displayChange.items);
-    if (displayChange.hasPending) scheduleStreamDisplay();
-  }, [scheduleStreamDisplay, updateItems]);
+    streamDisplay.update(change.items, resetDisplay);
+  }, [streamDisplay]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => streamDisplay.setHidden(document.hidden);
+    onVisibilityChange();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      streamDisplay.cancel();
+    };
+  }, [streamDisplay]);
 
   const applyTimelineChange = useCallback((change: TimelineRuntimeChange, resetDisplay = false) => {
     if (change.pendingCapacityExceeded) reportHistoryFailure("Too many queued messages or attachments. Existing messages were kept. Reconnect after the queue gets smaller.");
@@ -201,6 +195,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
 
   const startLive = useCallback(({ scope, headSeq, send, onHistoryChanged, onBranchMismatch }: StartLiveOptions) => {
     const generation = ++contextGenerationRef.current;
+    streamDisplay.cancel();
     clearTransitionTimer();
     disposeLoader();
     replacementGateRef.current = false;
@@ -360,13 +355,12 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     replacementGateRef.current = true;
     deferredChangeRef.current = null;
     renderChange(prepared.change, true);
-    if (streamTimerRef.current) clearTimeout(streamTimerRef.current);
-    streamTimerRef.current = null;
+    streamDisplay.cancel();
 
     // 暂存期间保持旧投影可见；失败时保留暂存门禁，重试成功后再提交。
     void loadPreparedRange();
     return prepared.plan;
-  }, [applyTimelineChange, clearTransitionTimer, disposeLoader, finishReplacement, renderChange, reportHistoryFailure, runBranchCheck]);
+  }, [applyTimelineChange, clearTransitionTimer, disposeLoader, finishReplacement, renderChange, reportHistoryFailure, runBranchCheck, streamDisplay]);
 
   const retryCatchup = useCallback(async (): Promise<boolean> => {
     const failed = failedCatchupRef.current;
@@ -468,9 +462,9 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     previewTokenRef.current += 1;
     contextGenerationRef.current += 1;
     clearTransitionTimer();
-    if (streamTimerRef.current) clearTimeout(streamTimerRef.current);
+    streamDisplay.cancel();
     historyLoaderRef.current?.dispose();
-  }, [clearTransitionTimer]);
+  }, [clearTransitionTimer, streamDisplay]);
 
   return {
     items,

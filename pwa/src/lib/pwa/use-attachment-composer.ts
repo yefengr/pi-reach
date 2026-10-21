@@ -67,7 +67,7 @@ class ComposerBridge {
 }
 
 export function useAttachmentComposer(onReady: (message: AttachmentReadyMessage) => boolean, t: Messages["attachments"]) {
-  const [, render] = useState(0);
+  const [revision, render] = useState(0);
   const [bridge] = useState(() => new ComposerBridge());
   const [previews, setPreviews] = useState<ReadonlyMap<string, AttachmentPreview>>(() => new Map());
   useLayoutEffect(() => {
@@ -83,11 +83,12 @@ export function useAttachmentComposer(onReady: (message: AttachmentReadyMessage)
     window.addEventListener("pagehide", pageHide);
     return () => { aliveRef.current = false; bridge.callbacks(() => false, () => {}); window.removeEventListener("pagehide", pageHide); composer.dispose(); };
   }, [bridge, composer]);
-  const snapshot = composer.snapshot();
-  const items: readonly ComposerAttachmentItem[] = snapshot.items.map((item) => ({
+  // 所有业务变更都经 bridge 通知；无关的时间线 render 不重新构造附件 props。
+  const snapshot = useMemo(() => composer.snapshot(), [composer, revision]);
+  const items: readonly ComposerAttachmentItem[] = useMemo(() => snapshot.items.map((item) => ({
     ...item, preview: item.attachment?.preview ?? previews.get(item.id),
     ...(item.errorCode ? { errorText: attachmentErrorText(item.errorCode, t) } : {}),
-  }));
+  })), [snapshot.items, previews, t]);
   const notice = snapshot.committing ? t.committingNotice : snapshot.issue ? {
     too_many: t.tooMany, too_large: t.tooLarge, total_too_large: t.totalTooLarge, invalid_file: t.invalidFile,
     unsupported: t.upgrade, failed: t.failedNotice, disconnected: t.disconnectedNotice,

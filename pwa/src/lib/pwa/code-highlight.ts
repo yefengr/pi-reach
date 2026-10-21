@@ -30,11 +30,24 @@ export function languageForFence(fence: string | undefined): string | undefined 
 }
 
 /**
+ * 按 LF 数量判断是否超过行数上限：数到第 MAX_HIGHLIGHT_LINES 个 LF 即判定超限，不创建临时行数组。
+ * CRLF 中的 LF 计数，单独的 CR、U+2028、U+2029 不计数，与原先 split 的口径一致。
+ */
+function exceedsHighlightLines(text: string): boolean {
+  let offset = -1;
+  for (let line = 0; line < MAX_HIGHLIGHT_LINES; line += 1) {
+    offset = text.indexOf("\n", offset + 1);
+    if (offset === -1) return false;
+  }
+  return true;
+}
+
+/**
  * 返回 highlight.js 对已转义文本生成的标记；超过上限或无法识别时返回 undefined，调用方按纯文本显示。
  * 只接受 highlight() 的输出作为 HTML，原文不得直接注入。
  */
 export function highlightCode(text: string, language: string | undefined): string | undefined {
-  if (!language || text.length > MAX_HIGHLIGHT_CHARACTERS || text.split("\n", MAX_HIGHLIGHT_LINES + 1).length > MAX_HIGHLIGHT_LINES) return undefined;
+  if (!language || text.length > MAX_HIGHLIGHT_CHARACTERS || exceedsHighlightLines(text)) return undefined;
   try {
     return hljs.highlight(text, { language, ignoreIllegals: true }).value;
   } catch {

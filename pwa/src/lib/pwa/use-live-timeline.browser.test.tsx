@@ -6,7 +6,7 @@ import { render } from "vitest-browser-react";
 import { useLiveTimeline } from "./use-live-timeline";
 import { receiveTimelineFrame } from "./timeline-frame-handler";
 import type { PeerChannel } from "../pi-reach/peer-channel";
-import type { TimelineScope } from "./timeline-runtime";
+import type { TimelineScope, TimelineViewItem } from "./timeline-runtime";
 import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { MessageList } from "@/components/pwa/message-list";
@@ -49,7 +49,7 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
   expect(api.historyLoaderRef.current?.receive(frame)).toBe(true);
 }
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
-afterEach(async () => { piRunning = false; vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
+afterEach(async () => { piRunning = false; vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
 
 test("moving-leaf model output renders before the formal message arrives", async () => {
   piRunning = true;
@@ -542,6 +542,93 @@ test("a cold start of an empty session clears saved records left from another br
     expect(vi.mocked(discardTimelineEventsAfter)).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: scope.sessionId }), 0);
     expect(vi.mocked(replaceTimelineEvents)).not.toHaveBeenCalled();
   } finally { await screen.unmount(); }
+});
+
+function DisplayHarness({ onDisplay }: { onDisplay: (items: TimelineViewItem[]) => void }) {
+  const channelRef = useRef<PeerChannel | null>(null);
+  const timeline = useLiveTimeline({ channelRef, enabled: true, reportHistoryFailure: report });
+  useLayoutEffect(() => { api = timeline; });
+  useLayoutEffect(() => onDisplay(timeline.items), [timeline.items, onDisplay]);
+  return null;
+}
+
+function displayPartial(delta: string, mode: "assistant" | "thinking" | "blocks" | "tool" = "assistant"): ServerFrame {
+  const base = { protocol_version: 2 as const, type: "timeline_partial" as const, session_id: scope.sessionId, leaf_id: scope.leafId, group_id: "display-run", partial_id: mode === "thinking" ? "display:thinking:0" : "display:assistant:0", status: "delta" as const };
+  if (mode === "tool") return { ...base, kind: "tool", tool: "bash", tool_call_id: "display-call", delta };
+  if (mode === "blocks") return { ...base, kind: "assistant", blocks: [{ type: "text", text: delta }] };
+  return { ...base, kind: mode, delta };
+}
+function displayText(items: TimelineViewItem[]): string | undefined {
+  const item = items[0];
+  return item?.kind === "partial" ? item.partial.blocks?.map(block => block.text).join("\n") ?? item.partial.delta : undefined;
+}
+
+test.each(["assistant", "thinking", "blocks", "tool"] as const)("hook coalesces %s frame bursts into one latest display commit per window", async mode => {
+  const onDisplay = vi.fn();
+  const screen = await render(<DisplayHarness onDisplay={onDisplay} />);
+  try {
+    flushSync(() => api.applyTimelineChange(api.runtimeRef.current.setScope(scope), true));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    flushSync(() => api.applyTimelineChange(api.runtimeRef.current.receive(displayPartial("ok", mode))));
+    const before = onDisplay.mock.calls.length;
+    for (let i = 0; i < 100; i++) flushSync(() => api.applyTimelineChange(api.runtimeRef.current.receive(displayPartial(mode === "blocks" ? `ok${"x".repeat(i + 1)}` : "x", mode))));
+    expect(onDisplay).toHaveBeenCalledTimes(before);
+    flushSync(() => vi.advanceTimersByTime(33));
+    expect(onDisplay).toHaveBeenCalledTimes(before + 1);
+    flushSync(() => vi.advanceTimersByTime(99));
+    expect(displayText(api.items)).toBe(`ok${"x".repeat(100)}`);
+    expect(onDisplay.mock.calls.length).toBeLessThanOrEqual(before + 4);
+  } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
+test("hidden hook keeps receiving and saving formal events and resumes with the latest full snapshot", async () => {
+  const onDisplay = vi.fn();
+  const screen = await render(<DisplayHarness onDisplay={onDisplay} />);
+  const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+  try {
+    flushSync(() => api.applyTimelineChange(api.runtimeRef.current.setScope(scope), true));
+    flushSync(() => api.applyTimelineChange(api.runtimeRef.current.receive(displayPartial("Starting answer"))));
+    hidden.mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    const before = onDisplay.mock.calls.length;
+    flushSync(() => api.applyTimelineChange(api.runtimeRef.current.receive(displayPartial(" latest background tail"))));
+    expect(onDisplay).toHaveBeenCalledTimes(before);
+    hidden.mockReturnValue(false);
+    flushSync(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(displayText(api.items)).toBe("Starting answer latest background tail");
+    hidden.mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    const beforeFormal = onDisplay.mock.calls.length;
+    receiveLive({ ...events(1, 1)[0]!, event_id: "display", group_id: "display-run" });
+    expect(api.runtimeRef.current.formalEvents()).toHaveLength(1);
+    await expect.poll(() => vi.mocked(mergeTimelineEvents).mock.calls.length).toBe(1);
+    expect(onDisplay).toHaveBeenCalledTimes(beforeFormal);
+    hidden.mockReturnValue(false);
+    flushSync(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(api.items.some(item => item.kind === "event")).toBe(true);
+    expect(api.items.some(item => item.kind === "partial")).toBe(false);
+  } finally { hidden.mockRestore(); await screen.unmount(); }
+});
+
+test.each(["disconnect", "clearTimeline", "switchLive", "startLive", "unmount"] as const)("%s prevents an old display timer from writing into the next lifecycle", async action => {
+  const onDisplay = vi.fn();
+  const screen = await render(<DisplayHarness onDisplay={onDisplay} />);
+  let mounted = true;
+  try {
+    flushSync(() => api.applyTimelineChange(api.runtimeRef.current.setScope(scope), true));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    flushSync(() => api.applyTimelineChange(api.runtimeRef.current.receive(displayPartial("Old scope with a buffered tail"))));
+    if (action === "unmount") { await screen.unmount(); mounted = false; }
+    else flushSync(() => {
+      if (action === "switchLive") api.switchLive(null);
+      else if (action === "startLive") start(1, { ...scope, sessionId: "next-scope" });
+      else api[action]();
+    });
+    const before = onDisplay.mock.calls.length;
+    flushSync(() => vi.advanceTimersByTime(200));
+    expect(onDisplay).toHaveBeenCalledTimes(before);
+    if (action !== "unmount") expect(displayText(api.items)).toBeUndefined();
+  } finally { vi.useRealTimers(); if (mounted) await screen.unmount(); }
 });
 
 const checkpoint50 = { eventSeq: 50, eventId: "session-50" };

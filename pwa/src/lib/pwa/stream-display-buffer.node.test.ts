@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "./timeline-runtime";
@@ -372,6 +372,82 @@ test("blocks epochs refresh on kind and mode changes, reset and deletion restart
   expect(reset).not.toBe(blocked);
   buffer.ingest([]);
   expect(epoch(buffer.ingest([blocksPartial(blocks, "thinking")]).items[0])).not.toBe(reset);
+});
+
+function segmentSpy() {
+  return vi.spyOn(Intl.Segmenter.prototype, "segment");
+}
+
+test("immediate streams never segment text for init, append, replacement, reset or flush", () => {
+  const segment = segmentSpy();
+  const buffer = new StreamDisplayBuffer();
+  expect(text(buffer.ingest([partial("tool", "g", "tool output", "tool")]).items[0])).toBe("tool output");
+  expect(text(buffer.ingest([partial("tool", "g", "tool output extended", "tool")]).items[0])).toBe("tool output extended");
+  expect(text(buffer.ingest([partial("tool", "g", "tool replaced", "tool")]).items[0])).toBe("tool replaced");
+  const blocks = buffer.ingest([blocksPartial([{ type: "text", text: "Answer" }, { type: "thinking", text: "**Thought**" }])]);
+  expect(blocks.items[0]?.kind === "partial" && blocks.items[0].partial.blocks?.map(block => block.text)).toEqual(["Answer", "**Thought**"]);
+  buffer.ingest([blocksPartial([{ type: "text", text: "Answer more" }, { type: "thinking", text: "**Thought** continues" }])]);
+  buffer.ingest([blocksPartial([{ type: "text", text: "Replaced" }])]);
+  buffer.advance();
+  const reset = buffer.reset([partial("p", "g", "answer after reset"), partial("tool", "g", "tool after reset", "tool")]);
+  expect(reset.items.map(text)).toEqual(["answer after reset", "tool after reset"]);
+  expect(text(buffer.flush().items[0])).toBe("answer after reset");
+  buffer.advance();
+  expect(segment).not.toHaveBeenCalled();
+  segment.mockRestore();
+});
+
+test("paced lanes segment on demand, keep the displayed prefix and never resegment on ticks", () => {
+  const segment = segmentSpy();
+  const buffer = new StreamDisplayBuffer();
+  const target = "👍🏽abc and a long tail";
+  expect(text(buffer.ingest([partial("p", "g", "👍🏽abc")]).items[0])).toBe("👍🏽a");
+  const appended = buffer.ingest([partial("p", "g", target)]);
+  expect(text(appended.items[0])).toBe("👍🏽a");
+  const segmentsAfterAppend = segment.mock.calls.length;
+  expect(segmentsAfterAppend).toBeGreaterThan(0);
+  while (buffer.hasPending()) {
+    const tick = buffer.advance();
+    expect(target.startsWith(text(tick.items[0])!)).toBe(true);
+    expect(text(tick.items[0])!.startsWith("👍🏽a")).toBe(true);
+  }
+  expect(text(buffer.snapshot()[0])).toBe(target);
+  expect(segment.mock.calls.length).toBe(segmentsAfterAppend);
+  // 即时展示切换到按需展示：用已显示前缀重建游标，不重播也不丢字。
+  buffer.reset([blocksPartial([{ type: "text", text: "answer" }])]);
+  const enteredPaced = buffer.ingest([partial("p", "g", "answer plus tail")]);
+  expect(text(enteredPaced.items[0])).toBe("answer");
+  while (buffer.hasPending()) buffer.advance();
+  expect(text(buffer.snapshot()[0])).toBe("answer plus tail");
+  const segmentsAfterDrain = segment.mock.calls.length;
+  const immediate = buffer.ingest([blocksPartial([{ type: "text", text: "answer plus tail" }])]);
+  const blocks = immediate.items[0];
+  if (blocks?.kind !== "partial" || blocks.partial.blocks === undefined) throw new Error("invalid fixture");
+  expect(blocks.partial.blocks.map(block => block.text)).toEqual(["answer plus tail"]);
+  expect(buffer.hasPending()).toBe(false);
+  buffer.advance();
+  expect(segment.mock.calls.length).toBe(segmentsAfterDrain);
+  segment.mockRestore();
+});
+
+test("mixed lanes keep immediate text whole while only the paced lane builds a cursor", () => {
+  const segment = segmentSpy();
+  const buffer = new StreamDisplayBuffer();
+  const change = buffer.ingest([
+    partial("a", "g", "plain lane"),
+    partial("tool", "g", "tool output", "tool"),
+    blocksPartial([{ type: "text", text: "Blocks answer" }]),
+  ]);
+  expect(text(change.items[0])).toBe("pl");
+  expect(text(change.items[1])).toBe("tool output");
+  const blocks = change.items[2];
+  if (blocks?.kind !== "partial" || blocks.partial.blocks === undefined) throw new Error("invalid fixture");
+  expect(blocks.partial.blocks.map(block => block.text)).toEqual(["Blocks answer"]);
+  expect(segment.mock.calls.length).toBeLessThanOrEqual(1);
+  while (buffer.hasPending()) buffer.advance();
+  expect(text(buffer.snapshot()[0])).toBe("plain lane");
+  expect(segment.mock.calls.length).toBeLessThanOrEqual(1);
+  segment.mockRestore();
 });
 
 test("reset renders the latest authoritative formal event in full", () => {

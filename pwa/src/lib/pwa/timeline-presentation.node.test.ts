@@ -179,3 +179,74 @@ test("isolates repeated tool ids between sessions and turns", () => {
   }
   expect(projectTimeline([], first).entries).toEqual([]);
 });
+
+test("reuses unchanged entries while only the streaming tail advances", () => {
+  const end = item({ ...base, event_id: "end", timestamp: 3, kind: "run_end", status: "complete" });
+  const history = [item(answer("history", "History")), item(tool("read", 2)), end];
+  const live = (text: string): TimelineViewItem => item({
+    protocol_version: 2, type: "timeline_partial", ...base, partial_id: "bench-answer:assistant:0",
+    kind: "assistant", status: "delta", delta: text,
+  });
+  const first = projectTimeline([...history, live("Strea")]);
+  const next = projectTimeline([...history, live("Stream")], first);
+  expect(next.entries.slice(0, -1).every((entry, index) => entry === first.entries[index])).toBe(true);
+  expect(next.entries.at(-1)).not.toBe(first.entries.at(-1));
+  expect(next.entries.at(-1)).toMatchObject({ kind: "text", text: "Stream" });
+});
+
+test("reuses unchanged scalar fields and shared immutable tool values across a rebuild", () => {
+  const epoch = {};
+  const unchangedTool = tool("read", 2);
+  const thinking = (): TimelineViewItem => ({
+    kind: "partial", createdAt: 1, thinkingTextEpoch: epoch,
+    partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "bench-answer:thinking:0", kind: "thinking", status: "delta", delta: "Reasoning" },
+  });
+  const first = projectTimeline([item(answer("history", "History")), item(unchangedTool), thinking()]);
+  const rebuilt = projectTimeline([item(answer("history", "History")), item(unchangedTool), thinking()], first);
+  expect(rebuilt.entries).toHaveLength(3);
+  for (const [index, entry] of rebuilt.entries.entries()) expect(entry).toBe(first.entries[index]);
+});
+
+test("rebuilds text entries when a displayed field changes without the key", () => {
+  const first = projectTimeline([item(answer("answer", "Answer"))]);
+  const changed = (nextItem: TimelineViewItem) => {
+    const view = projectTimeline([nextItem], first);
+    expect(view.entries[0]!.key).toBe(first.entries[0]!.key);
+    expect(view.entries[0]).not.toBe(first.entries[0]);
+  };
+  changed(item({ ...answer("answer", "Answer"), timestamp: 5 }));
+  changed(item({ ...answer("answer", "Answer"), event_seq: 7 }));
+  changed(item({ ...answer("answer", "Answer"), status: "interrupted" }));
+  changed(item(answer("answer", "Different")));
+});
+
+test("rebuilds thinking entries when the streaming epoch or text changes", () => {
+  const thinking = (epoch: object, text: string): TimelineViewItem => ({
+    kind: "partial", createdAt: 1, thinkingTextEpoch: epoch,
+    partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "bench-answer:thinking:0", kind: "thinking", status: "delta", delta: text },
+  });
+  const epoch = {};
+  const first = projectTimeline([thinking(epoch, "Reasoning")]);
+  expect(projectTimeline([thinking(epoch, "Reasoning")], first).entries[0]).toBe(first.entries[0]);
+  const nextEpoch = projectTimeline([thinking({}, "Reasoning")], first);
+  expect(nextEpoch.entries[0]!.key).toBe(first.entries[0]!.key);
+  expect(nextEpoch.entries[0]).not.toBe(first.entries[0]);
+  const nextText = projectTimeline([thinking(epoch, "Reasoning further")], first);
+  expect(nextText.entries[0]).not.toBe(first.entries[0]);
+});
+
+test("rebuilds tool and record entries when their displayed value changes", () => {
+  const toolFirst = projectTimeline([item(tool("read", 2))]);
+  const running = projectTimeline([item({ ...partial("read"), delta: "more" })], toolFirst);
+  expect(running.entries[0]!.key).toBe(toolFirst.entries[0]!.key);
+  expect(running.entries[0]).not.toBe(toolFirst.entries[0]);
+  const completed = projectTimeline([item(tool("read", 2))], running);
+  expect(completed.entries[0]!.key).toBe(toolFirst.entries[0]!.key);
+  expect(completed.entries[0]).not.toBe(running.entries[0]);
+
+  const end = (timestamp: number): TimelineViewItem => item({ ...base, event_id: "end", timestamp, kind: "run_end", status: "complete" });
+  const ended = projectTimeline([end(3)]);
+  const later = projectTimeline([end(4)], ended);
+  expect(later.entries[0]!.key).toBe(ended.entries[0]!.key);
+  expect(later.entries[0]).not.toBe(ended.entries[0]);
+});

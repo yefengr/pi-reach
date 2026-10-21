@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from "react";
 import { ActionIcon, FileButton, Menu, Textarea, UnstyledButton } from "@mantine/core";
 import { ArrowUp, Camera, ChevronDown, Files, LoaderCircle, Plus, Slash, Square } from "lucide-react";
 import { AttachmentCards, type ComposerAttachmentItem } from "./attachment-cards";
@@ -106,19 +106,28 @@ type MessageComposerProps = {
   queuedMessages?: ReactNode;
 };
 
-/** 显式键盘偏好用于隔离试件；正式调用仍订阅浏览器中保存的偏好。 */
-export function MessageComposer({ enterSends, ...props }: MessageComposerProps & { enterSends?: boolean }) {
-  return enterSends === undefined
-    ? <PersistedMessageComposer {...props} />
-    : <MessageComposerContent {...props} enterSends={enterSends} />;
+type ComposerContentProps = Omit<MessageComposerProps, "queuedMessages">;
+const QueuedMessagesContext = createContext<ReactNode>(null);
+
+function ComposerQueuedMessages() {
+  return useContext(QueuedMessagesContext);
 }
 
-function PersistedMessageComposer(props: MessageComposerProps) {
+/** 队列可随时间线更新，但不让它的新插槽引用反复渲染输入框和菜单。 */
+export function MessageComposer({ enterSends, queuedMessages, ...props }: MessageComposerProps & { enterSends?: boolean }) {
+  return <QueuedMessagesContext.Provider value={queuedMessages}>
+    {enterSends === undefined
+      ? <PersistedMessageComposer {...props} />
+      : <MessageComposerContent {...props} enterSends={enterSends} />}
+  </QueuedMessagesContext.Provider>;
+}
+
+const PersistedMessageComposer = memo(function PersistedMessageComposer(props: ComposerContentProps) {
   const [enterSends] = useEnterSends();
   return <MessageComposerContent {...props} enterSends={enterSends} />;
-}
+});
 
-function MessageComposerContent({
+const MessageComposerContent = memo(function MessageComposerContent({
   attachments,
   canAttach,
   sendingAttachments,
@@ -145,9 +154,8 @@ function MessageComposerContent({
   onSetModel,
   onSetThinking,
   onCommandsOpen,
-  queuedMessages,
   enterSends,
-}: MessageComposerProps & { enterSends: boolean }) {
+}: ComposerContentProps & { enterSends: boolean }) {
   const floatingMiddlewares = useFloatingSafeMiddlewares();
   const { t } = useI18n();
   const menuTransition = usePwaMenuTransition();
@@ -227,7 +235,7 @@ function MessageComposerContent({
     scheduleFocusReturn(modelFocusFrameRef, modelTriggerRef, () => !modelMenuOpenRef.current);
   }, [modelAction, onCommandsOpen, setCommandMenuOpened, setImageMenuOpened]);
 
-  useComposerAutosize(textareaRef);
+  useComposerAutosize(textareaRef, draft);
 
   useEffect(() => {
     if (!commandMenuOpen) return;
@@ -392,7 +400,7 @@ function MessageComposerContent({
   return (
     <form className="pwa-composer" onSubmit={handleSubmit}>
       <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/*" capture="environment" disabled={addDisabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file && !addDisabled) onAddFiles([file]); event.currentTarget.value = ""; }} />
-      {queuedMessages}
+      <ComposerQueuedMessages />
       {hint ? <p className="pwa-composer-hint" role="status" data-tone={hint.tone}>
         {hint.busy ? <LoaderCircle className="pwa-spin" size={12} strokeWidth={2.4} aria-hidden="true" /> : null}
         <span>{hint.text}</span>
@@ -487,7 +495,7 @@ function MessageComposerContent({
       </div>
     </form>
   );
-}
+});
 
 type ReadOnlyComposerProps = {
   notice: string;

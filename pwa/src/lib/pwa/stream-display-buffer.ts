@@ -2,20 +2,27 @@ import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/sch
 import { matchesFormalMessage } from "./timeline-identity";
 import type { TimelinePartialView, TimelinePending, TimelineViewItem } from "./timeline-runtime";
 
-const DRAIN_TICKS = 8;
-const MAX_RELEASE_PER_TICK = 64;
+const DRAIN_WINDOW_MS = 128;
+const BASE_TICK_MS = 16;
+const MAX_RELEASE_PER_MS = 64 / BASE_TICK_MS;
+const INITIAL_BURST = 2;
 const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
   : undefined;
+
+type GraphemeCursor = {
+  graphemes: string[];
+  visibleCount: number;
+};
 
 type StreamState = {
   thinkingTextEpoch: object;
   partial: TimelinePartialView;
   targetText: string;
-  targetGraphemes: string[];
-  visibleCount: number;
+  /** null 表示即时展示：正文已全部可见，不保留字素游标。 */
+  cursor: GraphemeCursor | null;
   visibleText: string;
-  ticks: number;
+  elapsedMs: number;
   seen: boolean;
 };
 
@@ -42,6 +49,8 @@ type NonStreamToken =
 export type StreamDisplayBufferChange = {
   items: TimelineViewItem[];
   shouldRender: boolean;
+  /** 状态/结构变化绕过普通内容的显示提交窗口。 */
+  urgent: boolean;
   hasPending: boolean;
 };
 
@@ -58,6 +67,14 @@ function streamsImmediately(partial: TimelinePartial): boolean {
   return partial.kind === "tool" || hasBlocks(partial);
 }
 
+function samePartialState(previous: TimelinePartial, next: TimelinePartial): boolean {
+  // 参数和正文同属内容；不为判断紧急状态递归序列化可能很大的工具参数。
+  if (previous.kind !== next.kind || previous.status !== next.status || previous.session_id !== next.session_id
+    || previous.group_id !== next.group_id || previous.partial_id !== next.partial_id) return false;
+  return previous.kind !== "tool" || next.kind === "tool"
+    && previous.tool_call_id === next.tool_call_id && previous.tool === next.tool;
+}
+
 function blocksExtend(previous: TimelinePartial, next: TimelinePartial): boolean {
   const before = previous.blocks;
   const after = next.blocks;
@@ -72,14 +89,38 @@ function segmentText(text: string): string[] {
   return Array.from(text);
 }
 
-function appendTargetGraphemes(previous: StreamState, targetText: string): void {
-  const suffix = targetText.slice(previous.targetText.length);
-  const lastGrapheme = previous.targetGraphemes.pop();
+/** 按需展示的初始游标：先显示少量字素，其余按原 burst 逻辑追赶。 */
+function initialCursor(targetText: string): GraphemeCursor {
+  const graphemes = segmentText(targetText);
+  return { graphemes, visibleCount: Math.min(INITIAL_BURST, graphemes.length) };
+}
+
+function cursorText(cursor: GraphemeCursor): string {
+  return cursor.graphemes.slice(0, cursor.visibleCount).join("");
+}
+
+function appendTargetGraphemes(cursor: GraphemeCursor, baseText: string, targetText: string): void {
+  const suffix = targetText.slice(baseText.length);
+  const lastGrapheme = cursor.graphemes.pop();
   if (lastGrapheme === undefined) {
-    previous.targetGraphemes.push(...segmentText(suffix));
+    cursor.graphemes.push(...segmentText(suffix));
     return;
   }
-  previous.targetGraphemes.push(...segmentText(`${lastGrapheme}${suffix}`));
+  cursor.graphemes.push(...segmentText(`${lastGrapheme}${suffix}`));
+}
+
+/** 从即时展示切入按需展示：用已显示正文重建游标，不重播也不丢失已显示前缀。 */
+function appendLaneText(state: StreamState, targetText: string): void {
+  let cursor = state.cursor;
+  if (cursor === null) {
+    const graphemes = segmentText(state.visibleText);
+    cursor = { graphemes, visibleCount: graphemes.length };
+    state.cursor = cursor;
+  }
+  // 即时展示下 visibleText 恒等于 targetText，因此旧目标正文就是游标基准。
+  appendTargetGraphemes(cursor, state.targetText, targetText);
+  cursor.visibleCount = Math.min(cursor.visibleCount, cursor.graphemes.length);
+  state.elapsedMs = 0;
 }
 
 function itemId(item: TimelineViewItem): string {
@@ -179,12 +220,9 @@ function projectedPartial(state: StreamState): TimelinePartialView {
   };
 }
 
-function expectedVisibleText(state: StreamState): string {
-  return state.targetGraphemes.slice(0, state.visibleCount).join("");
-}
-
 function isDrained(state: StreamState): boolean {
-  return state.visibleCount >= state.targetGraphemes.length && state.visibleText === state.targetText;
+  if (state.cursor === null) return state.visibleText === state.targetText;
+  return state.cursor.visibleCount >= state.cursor.graphemes.length && state.visibleText === state.targetText;
 }
 
 /**
@@ -206,74 +244,14 @@ export class StreamDisplayBuffer {
         .filter((item): item is TimelinePartialView => item.kind === "partial")
         .map((item) => [item.partial.partial_id, item]),
     );
-    let needsSnapshot = !sameNonStreamTokens(this.renderedNonStreamTokens, nonStreamTokens(this.authoritative));
+    let urgent = !sameNonStreamTokens(this.renderedNonStreamTokens, nonStreamTokens(this.authoritative));
+    let needsSnapshot = urgent;
 
     for (const state of this.streams.values()) state.seen = false;
     for (const partial of currentPartials.values()) {
-      const id = partial.partial.partial_id;
-      const targetText = partialText(partial.partial);
-      const existing = this.streams.get(id);
-      if (!existing) {
-        const targetGraphemes = segmentText(targetText);
-        const immediate = streamsImmediately(partial.partial);
-        const visibleCount = immediate ? targetGraphemes.length : Math.min(2, targetGraphemes.length);
-        this.streams.set(id, {
-          thinkingTextEpoch: {},
-          partial,
-          targetText,
-          targetGraphemes,
-          visibleCount,
-          visibleText: targetGraphemes.slice(0, visibleCount).join(""),
-          ticks: immediate ? DRAIN_TICKS : 0,
-          seen: true,
-        });
-        needsSnapshot = true;
-        continue;
-      }
-
-      const targetChanged = existing.targetText !== targetText;
-      const modeChanged = partial.partial.kind !== existing.partial.partial.kind || hasBlocks(partial.partial) !== hasBlocks(existing.partial.partial);
-      const textExtends = !hasBlocks(partial.partial) && (!targetChanged || targetText.startsWith(existing.targetText));
-      const appendOnly = !modeChanged && (hasBlocks(partial.partial)
-        ? blocksExtend(existing.partial.partial, partial.partial)
-        : textExtends);
-      if (!appendOnly) {
-        existing.thinkingTextEpoch = {};
-        needsSnapshot = true;
-      }
-      // 空 blocks 追加一个空思考块时 join 不变，仍须创建对应展示条目。
-      if (partial.partial.blocks?.length !== existing.partial.partial.blocks?.length) needsSnapshot = true;
-      const immediate = streamsImmediately(partial.partial);
-      if (targetChanged && immediate) {
-        const targetGraphemes = segmentText(targetText);
-        existing.targetText = targetText;
-        existing.targetGraphemes = targetGraphemes;
-        existing.visibleCount = targetGraphemes.length;
-        existing.visibleText = targetText;
-        existing.ticks = DRAIN_TICKS;
-        needsSnapshot = true;
-      } else if (targetChanged && textExtends) {
-        appendTargetGraphemes(existing, targetText);
-        existing.targetText = targetText;
-        existing.visibleCount = Math.min(existing.visibleCount, existing.targetGraphemes.length);
-        // New output starts a fresh catch-up window, including after this lane drained.
-        existing.ticks = 0;
-      } else if (targetChanged) {
-        const targetGraphemes = segmentText(targetText);
-        existing.targetText = targetText;
-        existing.targetGraphemes = targetGraphemes;
-        existing.visibleCount = Math.min(2, targetGraphemes.length);
-        existing.visibleText = targetGraphemes.slice(0, existing.visibleCount).join("");
-        existing.ticks = 0;
-        needsSnapshot = true;
-      } else if (immediate && !streamsImmediately(existing.partial.partial)) {
-        existing.visibleCount = existing.targetGraphemes.length;
-        existing.visibleText = targetText;
-        existing.ticks = DRAIN_TICKS;
-        needsSnapshot = true;
-      }
-      existing.partial = partial;
-      existing.seen = true;
+      const changed = this.ingestPartial(partial);
+      needsSnapshot ||= changed.needsSnapshot;
+      urgent ||= changed.urgent;
     }
 
     for (const [id, state] of this.streams) {
@@ -282,11 +260,64 @@ export class StreamDisplayBuffer {
       if (!state.seen || formal) {
         this.streams.delete(id);
         needsSnapshot = true;
+        urgent = true;
       }
     }
 
     if (!needsSnapshot) return this.unchanged();
-    return this.rebuild(previous, true);
+    return { ...this.rebuild(previous, true), urgent };
+  }
+
+  private ingestPartial(partial: TimelinePartialView): { needsSnapshot: boolean; urgent: boolean } {
+    const id = partial.partial.partial_id;
+    const targetText = partialText(partial.partial);
+    const existing = this.streams.get(id);
+    const immediate = streamsImmediately(partial.partial);
+    if (!existing) {
+      const cursor = immediate ? null : initialCursor(targetText);
+      this.streams.set(id, {
+        thinkingTextEpoch: {}, partial, targetText, cursor,
+        visibleText: cursor === null ? targetText : cursorText(cursor),
+        elapsedMs: cursor === null ? DRAIN_WINDOW_MS : 0, seen: true,
+      });
+      return { needsSnapshot: true, urgent: true };
+    }
+    const targetChanged = existing.targetText !== targetText;
+    const modeChanged = partial.partial.kind !== existing.partial.partial.kind || hasBlocks(partial.partial) !== hasBlocks(existing.partial.partial);
+    const textExtends = !hasBlocks(partial.partial) && (!targetChanged || targetText.startsWith(existing.targetText));
+    const appendOnly = !modeChanged && (hasBlocks(partial.partial)
+      ? blocksExtend(existing.partial.partial, partial.partial) : textExtends);
+    // 新 block（包括空思考块）是结构变化，纯块正文增长则合并提交。
+    const urgent = !appendOnly || !samePartialState(existing.partial.partial, partial.partial)
+      || partial.partial.blocks?.length !== existing.partial.partial.blocks?.length;
+    const argsChanged = existing.partial.partial.kind === "tool" && partial.partial.kind === "tool"
+      && existing.partial.partial.args !== partial.partial.args;
+    let needsSnapshot = urgent || argsChanged;
+    if (!appendOnly) existing.thinkingTextEpoch = {};
+    if (targetChanged && immediate) {
+      // 即时展示不建立字素游标，也无需分割全文。
+      existing.cursor = null;
+      existing.visibleText = targetText;
+      existing.elapsedMs = DRAIN_WINDOW_MS;
+      needsSnapshot = true;
+    } else if (targetChanged && textExtends) {
+      appendLaneText(existing, targetText);
+    } else if (targetChanged) {
+      const cursor = initialCursor(targetText);
+      existing.cursor = cursor;
+      existing.visibleText = cursorText(cursor);
+      existing.elapsedMs = 0;
+      needsSnapshot = true;
+    } else if (immediate && !streamsImmediately(existing.partial.partial)) {
+      existing.cursor = null;
+      existing.visibleText = targetText;
+      existing.elapsedMs = DRAIN_WINDOW_MS;
+      needsSnapshot = true;
+    }
+    existing.targetText = targetText;
+    existing.partial = partial;
+    existing.seen = true;
+    return { needsSnapshot, urgent };
   }
 
   reset(authoritative: readonly TimelineViewItem[]): StreamDisplayBufferChange {
@@ -296,15 +327,14 @@ export class StreamDisplayBuffer {
     const partials = this.authoritative.filter((item): item is TimelinePartialView => item.kind === "partial");
     for (const partial of partials) {
       const targetText = partialText(partial.partial);
-      const targetGraphemes = segmentText(targetText);
+      // 重置直接接管最新正文，不保留游标也不分割全文。
       this.streams.set(partial.partial.partial_id, {
         thinkingTextEpoch: {},
         partial,
         targetText,
-        targetGraphemes,
-        visibleCount: targetGraphemes.length,
+        cursor: null,
         visibleText: targetText,
-        ticks: DRAIN_TICKS,
+        elapsedMs: DRAIN_WINDOW_MS,
         seen: true,
       });
     }
@@ -319,21 +349,32 @@ export class StreamDisplayBuffer {
     return [...this.displayed];
   }
 
-  advance(): StreamDisplayBufferChange {
+  /** 前台恢复直接接管最新权威正文，不重播后台尾巴。 */
+  flush(): StreamDisplayBufferChange {
+    return this.reset(this.authoritative);
+  }
+
+  advance(elapsedMs = BASE_TICK_MS): StreamDisplayBufferChange {
     const previous = this.displayed;
     let changed = false;
     for (const state of this.streams.values()) {
-      const backlog = state.targetGraphemes.length - state.visibleCount;
+      const cursor = state.cursor;
+      if (cursor === null) continue;
+      const backlog = cursor.graphemes.length - cursor.visibleCount;
       if (backlog > 0) {
-        state.ticks += 1;
-        const ticksLeft = Math.max(1, DRAIN_TICKS - state.ticks + 1);
-        const release = Math.min(MAX_RELEASE_PER_TICK, Math.max(1, Math.ceil(backlog / ticksLeft)));
-        state.visibleCount = Math.min(state.targetGraphemes.length, state.visibleCount + release);
-        state.visibleText = expectedVisibleText(state);
+        const elapsed = Math.max(0, elapsedMs);
+        const remaining = Math.max(1, DRAIN_WINDOW_MS - state.elapsedMs);
+        const release = Math.min(Math.ceil(MAX_RELEASE_PER_MS * elapsed), Math.ceil(backlog * Math.min(1, elapsed / remaining)));
+        state.elapsedMs += elapsed;
+        cursor.visibleCount = Math.min(cursor.graphemes.length, cursor.visibleCount + release);
+        state.visibleText = cursorText(cursor);
         changed = true;
-      } else if (state.visibleText !== expectedVisibleText(state)) {
-        state.visibleText = expectedVisibleText(state);
-        changed = true;
+      } else {
+        const expected = cursorText(cursor);
+        if (state.visibleText !== expected) {
+          state.visibleText = expected;
+          changed = true;
+        }
       }
     }
     if (!changed) return this.unchanged();
@@ -366,13 +407,14 @@ export class StreamDisplayBuffer {
   }
 
   private unchanged(): StreamDisplayBufferChange {
-    return { items: this.snapshot(), shouldRender: false, hasPending: this.hasPending() };
+    return { items: this.snapshot(), shouldRender: false, urgent: false, hasPending: this.hasPending() };
   }
 
   private change(previous: readonly TimelineViewItem[], forceRender: boolean): StreamDisplayBufferChange {
     return {
       items: this.snapshot(),
       shouldRender: forceRender || !sameItems(previous, this.displayed),
+      urgent: false,
       hasPending: this.hasPending(),
     };
   }
