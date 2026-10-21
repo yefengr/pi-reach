@@ -17,6 +17,8 @@ export type TimelineViewport = {
   receiveRealtimeOutput: (groupKey: string) => void;
   handleScroll: (nearBottom: boolean) => void;
   showLatest: () => void;
+  /** 成功提交本端新消息后恢复跟随；定位随本次 DOM 提交在绘制前完成。 */
+  followOwnSend: () => void;
   reset: () => void;
   setReadingDetails: (reading: boolean) => void;
   prepareHistoryPrepend: () => void;
@@ -100,26 +102,26 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     programmaticScrollRef.current = { list, target, last: list.scrollTop, smooth };
   }, []);
 
+  const followNow = useCallback(() => {
+    const list = messageListRef.current;
+    if (!enabledRef.current || !list || !followingOutputRef.current || readingDetailsRef.current) return;
+    // Latest 的平滑滚动拥有当前位置；结束后再追上期间新增的输出。
+    if (programmaticScrollRef.current?.list === list && programmaticScrollRef.current.smooth) return;
+    const height = list.scrollHeight;
+    const bottomEdge = maxScrollTop(list, height);
+    if (isAtBottom(list, bottomEdge)) return;
+    markProgrammaticScroll(list, bottomEdge);
+    list.scrollTo({ top: height, behavior: "auto" });
+  }, [markProgrammaticScroll]);
+
   const scheduleFollow = useCallback(() => {
     const scheduledList = messageListRef.current;
     if (!enabledRef.current || !scheduledList || pendingFollowFrameRef.current !== null) return;
     pendingFollowFrameRef.current = requestAnimationFrame(() => {
       pendingFollowFrameRef.current = null;
-      const list = messageListRef.current;
-      if (!enabledRef.current || list !== scheduledList || !followingOutputRef.current || readingDetailsRef.current) return;
-      // 同一次同步操作内复用高度：底部判断、程序滚动目标与 scrollTo 都基于这一份几何。
-      const height = list.scrollHeight;
-      const bottomEdge = maxScrollTop(list, height);
-      if (isAtBottom(list, bottomEdge)) {
-        programmaticScrollRef.current = null;
-        return;
-      }
-      // Latest 的平滑滚动拥有当前位置；结束后再追上期间新增的输出。
-      if (programmaticScrollRef.current?.list === list && programmaticScrollRef.current.smooth) return;
-      markProgrammaticScroll(list, bottomEdge);
-      list.scrollTo({ top: height, behavior: "auto" });
+      if (messageListRef.current === scheduledList) followNow();
     });
-  }, [markProgrammaticScroll]);
+  }, [followNow]);
 
   const captureReadingAnchor = useCallback((preserveScrollTopFallback = false) => {
     const list = messageListRef.current;
@@ -275,12 +277,17 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
         readingAnchorRef.current = captureTimelineViewportAnchor(list);
         return;
       }
-      scheduleFollow();
+      cancelPendingFollow();
+      followNow();
       return;
     }
     if (!followingOutputRef.current || readingDetailsRef.current) restoreReadingAnchor(list);
-    else scheduleFollow();
-  }, [cancelPendingFollow, disconnectResizeObserver, enabled, items, markProgrammaticScroll, refreshResizeObserver, restoreReadingAnchor, scheduleFollow]);
+    else {
+      // 子组件（包括 Composer 缩高）已提交布局；不留到下一帧才修正新消息的位置。
+      cancelPendingFollow();
+      followNow();
+    }
+  }, [cancelPendingFollow, disconnectResizeObserver, enabled, items, markProgrammaticScroll, refreshResizeObserver, restoreReadingAnchor, followNow]);
 
   const consumeProgrammaticScroll = useCallback((): boolean => {
     const guard = programmaticScrollRef.current;
@@ -349,6 +356,11 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     pendingSessionAnchorRef.current = position && !position.following ? position.anchor : null;
   }, []);
 
+  const followOwnSend = useCallback(() => {
+    pendingSessionAnchorRef.current = null;
+    reset();
+  }, [reset]);
+
   const showLatest = useCallback(() => {
     pendingSessionAnchorRef.current = null;
     reset();
@@ -375,6 +387,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     receiveRealtimeOutput,
     handleScroll,
     showLatest,
+    followOwnSend,
     reset,
     setReadingDetails,
     prepareHistoryPrepend,

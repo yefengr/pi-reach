@@ -1500,6 +1500,53 @@ test("keeps current handshake protocol feedback after the matching session_ready
   } finally { await screen.unmount(); }
 });
 
+test.each([
+  { attachment: false, accepted: true }, { attachment: true, accepted: true },
+  { attachment: false, accepted: false }, { attachment: true, accepted: false },
+])("own sends restore following only after transport accepts them (attachment=$attachment accepted=$accepted)", async ({ attachment, accepted }) => {
+  const { screen, channel, list, scrollTo } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Follow my new message");
+    if (attachment) {
+      const clipboard = new DataTransfer();
+      clipboard.items.add(new File(["Contents"], "follow-note.txt", { type: "text/plain" }));
+      input.element().dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
+      await expect.element(screen.getByText("follow-note.txt", { exact: true })).toBeVisible();
+      channelHarness.holdFinish = true;
+    }
+    list.scrollTop = 300;
+    list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
+    scrollTo.mockClear();
+    scrollTo.mockImplementation((options: ScrollToOptions) => {
+      list.scrollTop = (options.top ?? list.scrollHeight) - list.clientHeight;
+      list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    if (!attachment) channelHarness.nextSendResults.push(accepted);
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    if (attachment) {
+      await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+      channelHarness.nextSendResults.push(accepted);
+      channelHarness.finishReplies[0]!();
+    }
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message").length).toBe(1);
+    if (!accepted) {
+      await expect.element(input).toHaveValue("Follow my new message");
+      await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(list.scrollTop).toBe(300);
+      return;
+    }
+    await expect.element(input).toHaveValue("");
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "auto" });
+    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).not.toBeInTheDocument();
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1100 });
+    channel.emit(partialFrame("own-send-reply", "own-send-run", "Reply after the new message"));
+    await expect.poll(() => scrollTo).toHaveBeenCalledWith({ top: 1100, behavior: "auto" });
+  } finally { await screen.unmount(); }
+});
+
 test("message send failure keeps draft and delivery feedback out of global notifications", async () => {
   const { screen } = await renderReadyTimeline(renderWorkspaceApp);
   try {

@@ -31,7 +31,9 @@ type ConversationTimelineProps = {
   notices?: readonly CompactionNotice[];
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
-  renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead) => ReactNode;
+  renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead, userMessageIn: boolean) => ReactNode;
+  /** 列表由空态进入首条本端 pending；初次加载已有内容不播放。 */
+  enterInitialPending?: boolean;
   /** 这些正式事件之前缺少记录，在对应条目前显示一行说明。 */
   gapBefore?: ReadonlySet<string>;
   /** 最后一处缺口之后没有可见条目，在时间线末尾显示说明。 */
@@ -130,8 +132,11 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
 }
 
 /** 投影时间线并划分工具段；工具的首次观察顺序随投影一起保存，决定工具组身份。 */
-function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>) {
-  const [timeline, setTimeline] = useState<TimelineState>(() => ({ view: projectTimeline([]), observed: new Map(), appended: new Set() }));
+function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>, enterInitialPending: boolean) {
+  const [timeline, setTimeline] = useState<TimelineState>(() => {
+    const view = projectTimeline(items, enterInitialPending ? projectTimeline([]) : undefined);
+    return { view, observed: observeTools(view.entries, new Map()), appended: new Set(appendedTools(view.entries, [])) };
+  });
   let { view, observed, appended } = timeline;
   if (view.items !== items) {
     view = projectTimeline(items, timeline.view);
@@ -155,7 +160,7 @@ function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): 
   return keys;
 }
 
-export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
+export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, enterInitialPending = false, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
   const [thinkingChoices, setThinkingChoices] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [toolChoices, setToolChoices] = useState<ReadonlyMap<string, ToolExpansion>>(() => new Map());
   const [toolIndicators, setToolIndicators] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
@@ -189,7 +194,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   const currentFileReader = useRef(scopedFileReader);
   useLayoutEffect(() => { currentFileReader.current = scopedFileReader; }, [scopedFileReader]);
 
-  const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore);
+  const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore, enterInitialPending);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
   const summaryItem = summaryReader ? view.entries.find(entry => entry.kind === "record" && entry.key === summaryReader.key) : null;
   const summaryEvent = summaryItem?.kind === "record" && summaryItem.item.kind === "event" && summaryItem.item.event.session_id === summaryReader?.sessionId && isSummaryEvent(summaryItem.item.event) ? summaryItem.item.event : null;
@@ -312,7 +317,7 @@ export function ConversationTimeline({ items, live, completions, running = false
           const event = entry.item.event;
           return <SummaryEntry key={entry.key} event={event} onRead={trigger => openSummaryReader(entry.key, event.session_id, trigger)} />;
         }
-        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader)}</Fragment>;
+        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true)}</Fragment>;
       }
       if (entry.kind === "text") return <TextRow entry={entry} key={entry.key} />;
       if (entry.kind === "thinking") return <ThinkingContent

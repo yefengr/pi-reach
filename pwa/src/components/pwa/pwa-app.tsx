@@ -175,6 +175,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     receiveRealtimeOutput,
     handleScroll,
     showLatest,
+    followOwnSend,
     reset: resetOutputFollowing,
     captureSessionPosition,
     restoreSessionPosition,
@@ -237,7 +238,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       if (!channel.send(prepared.frame)) {
         applyTimelineChange(timelineRuntimeRef.current.markUnknownDelivery(prepared.frame.client_request_id));
         setError("Message could not be sent. Check the connection and try again.");
+        return false;
       }
+      followOwnSend();
       if (draftVersionRef.current === message.context.draftVersion && draftKeyRef.current === message.context.draftKey) setDraftFor(message.context.draftKey, "");
       return true;
     } catch (sendError) {
@@ -863,8 +866,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     }
     if (!prepared) return;
     if (!channel.send(prepared.frame)) { applyTimelineChange(timelineRuntimeRef.current.markUnknownDelivery(prepared.frame.client_request_id)); setError("Message could not be sent. Check the connection and try again."); return; }
+    followOwnSend();
     applyTimelineChange(prepared.change); setDraftFor(draftKey, "");
-  }, [applyTimelineChange, attachmentComposer, draft, draftKey, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
+  }, [applyTimelineChange, attachmentComposer, draft, draftKey, followOwnSend, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
   const loadEarlier = useCallback(() => {
     if (connection !== "online" || loadingEarlier) return;
     handleScroll(false);

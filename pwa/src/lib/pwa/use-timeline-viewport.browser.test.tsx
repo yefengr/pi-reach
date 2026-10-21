@@ -208,7 +208,7 @@ test("loading history into an empty viewport stays at its beginning", async () =
   } finally { await screen.unmount(); }
 });
 
-test("coalesces rendered items and realtime output into one follow frame", async () => {
+test("positions rendered items before a frame and coalesces later realtime output", async () => {
   const frames: FrameRequestCallback[] = [];
   const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
     frames.push(callback);
@@ -220,8 +220,11 @@ test("coalesces rendered items and realtime output into one follow frame", async
   const { screen, scrollTo, viewport, setItems } = await renderViewport();
   try {
     flushSync(() => setItems([renderedTimelineItem]));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    // 浏览器已抵达同步目标；随后实时通知无需再滚动。
+    Object.defineProperty(viewport().messageListRef.current!, "scrollTop", { configurable: true, value: 1000 });
     viewport().receiveRealtimeOutput("group-1");
-
+    viewport().receiveRealtimeOutput("group-1");
     expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
     frames[0](0);
     expect(scrollTo).toHaveBeenCalledTimes(1);
@@ -549,9 +552,7 @@ test("reads list geometry once per synchronous follow, geometry event and Latest
     });
     flushSync(() => setItems([renderedTimelineItem]));
 
-    heightReads = 0;
-    clientReads = 0;
-    frames.shift()!(0);
+    expect(frames).toHaveLength(0);
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "auto" });
     expect(heightReads).toBe(1);
     expect(clientReads).toBe(1);

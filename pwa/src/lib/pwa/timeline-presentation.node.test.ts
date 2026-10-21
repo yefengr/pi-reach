@@ -1,10 +1,27 @@
 import { expect, test } from "vitest";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
-import type { TimelineViewItem } from "./timeline-runtime";
+import type { TimelinePending, TimelineViewItem } from "./timeline-runtime";
 import { projectTimelineGaps, projectTimeline } from "./timeline-presentation";
 import { observeTools, toolSegments } from "@/components/pwa/tool-groups";
 
 const base = { session_id: "s", leaf_id: "g", group_id: "group" } as const;
+
+test("new local pending keeps its presentation identity and entrance through real message ID handoff", () => {
+  const pending: TimelinePending = { kind: "pending", id: "local", clientRequestId: "local", requestId: "request", text: "Identical text", createdAt: 1, delivery: "pending" };
+  const empty = projectTimeline([]);
+  const first = projectTimeline([pending], empty);
+  expect(first.entries[0]).toMatchObject({ key: "pending:local", userMessageIn: true });
+  pending.messageId = "message";
+  const event: TimelineViewItem = { kind: "event", event: { ...base, event_id: "formal", message_id: "message", timestamp: 2, kind: "user", origin: "pwa", delivery: "normal", status: "committed", blocks: [{ type: "text", text: "Identical text" }] } };
+  const committed = projectTimeline([event], first);
+  expect(committed.entries[0]).toMatchObject({ key: "pending:local", userMessageIn: true, item: event });
+  expect(projectTimeline([event], committed).entries[0]).toBe(committed.entries[0]);
+  expect(projectTimeline([event]).entries[0]).not.toHaveProperty("userMessageIn");
+  expect(projectTimeline([pending]).entries[0]).not.toHaveProperty("userMessageIn");
+  const other = { ...pending, id: "other", messageId: undefined };
+  expect(projectTimeline([other], committed).entries[0]).toMatchObject({ key: "pending:other", userMessageIn: true });
+  expect(projectTimeline([{ ...other, delivery: "unknown_delivery" }], empty).entries[0]).not.toHaveProperty("userMessageIn");
+});
 function tool(id: string, timestamp: number): Extract<TimelineEvent, { kind: "tool" }> {
   return { ...base, event_id: `event-${id}`, timestamp, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, truncated: false, status: "complete", result: id };
 }
