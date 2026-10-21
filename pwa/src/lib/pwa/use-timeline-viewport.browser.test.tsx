@@ -381,3 +381,206 @@ test("cancels a pending follow animation frame on unmount", async () => {
 
   expect(cancelAnimationFrame).toHaveBeenCalledWith(42);
 });
+
+function trackingTimelineItem(id: string, text: string): TimelineViewItem {
+  return {
+    kind: "event",
+    event: {
+      event_id: id,
+      session_id: "session-1",
+      leaf_id: "generation-1",
+      timestamp: 0,
+      group_id: "group-1",
+      kind: "assistant",
+      status: "complete",
+      blocks: [{ type: "text", text }],
+    },
+  };
+}
+
+function installTrackingResizeObserver() {
+  const observed = new Set<Element>();
+  const recordObserve = vi.fn((element: Element) => { observed.add(element); });
+  const recordUnobserve = vi.fn((element: Element) => { observed.delete(element); });
+  const recordDisconnect = vi.fn(() => { observed.clear(); });
+  class TrackingResizeObserver {
+    observe(element: Element) { recordObserve(element); }
+    unobserve(element: Element) { recordUnobserve(element); }
+    disconnect() { recordDisconnect(); }
+  }
+  vi.stubGlobal("ResizeObserver", TrackingResizeObserver);
+  return { observed, recordObserve, recordUnobserve, recordDisconnect };
+}
+
+function appendRow(list: HTMLDivElement, label: string, className = "pwa-timeline-row"): HTMLElement {
+  const row = document.createElement("article");
+  row.className = className;
+  row.textContent = label;
+  list.append(row);
+  return row;
+}
+
+test("keeps observed direct children without rescanning when items update in place", async () => {
+  const { observed, recordObserve, recordUnobserve } = installTrackingResizeObserver();
+  const { screen, list, setItems } = await renderViewport({ items: [renderedTimelineItem] });
+  try {
+    const rows = [appendRow(list, "first"), appendRow(list, "second"), appendRow(list, "third")];
+    flushSync(() => setItems([trackingTimelineItem("first", "Initial content")]));
+    expect(observed).toEqual(new Set([list, ...rows]));
+    const observedCalls = recordObserve.mock.calls.length;
+    const unobservedCalls = recordUnobserve.mock.calls.length;
+    const matchesCalls = rows.map((row) => vi.spyOn(row, "matches"));
+
+    for (const text of ["Second content", "Third content", "Fourth content"]) {
+      flushSync(() => setItems([trackingTimelineItem("first", text)]));
+    }
+
+    expect(matchesCalls.reduce((total, spy) => total + spy.mock.calls.length, 0)).toBe(0);
+    expect(recordObserve.mock.calls.length).toBe(observedCalls);
+    expect(recordUnobserve.mock.calls.length).toBe(unobservedCalls);
+    expect(observed).toEqual(new Set([list, ...rows]));
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("re-observes direct children when identities or roles change", async () => {
+  const { observed, recordObserve, recordUnobserve } = installTrackingResizeObserver();
+  const { screen, list, setItems } = await renderViewport();
+  try {
+    const first = appendRow(list, "first");
+    const second = appendRow(list, "second");
+    let version = 0;
+    const bump = () => flushSync(() => setItems([trackingTimelineItem(`bump-${version}`, `content ${version += 1}`)]));
+
+    bump();
+    expect(observed).toEqual(new Set([list, first, second]));
+
+    const replacement = appendRow(list, "replacement");
+    list.replaceChild(replacement, second);
+    bump();
+    expect(recordUnobserve).toHaveBeenCalledWith(second);
+    expect(observed).toEqual(new Set([list, first, replacement]));
+
+    const inserted = appendRow(list, "inserted");
+    bump();
+    expect(recordObserve).toHaveBeenCalledWith(inserted);
+    expect(observed.has(inserted)).toBe(true);
+
+    list.removeChild(inserted);
+    bump();
+    expect(recordUnobserve).toHaveBeenCalledWith(inserted);
+    expect(observed.has(inserted)).toBe(false);
+
+    // 仅交换顺序不改变观察集合，但快照必须跟上，否则后续同长度替换会被漏掉。
+    list.insertBefore(replacement, first);
+    bump();
+    expect(observed).toEqual(new Set([list, first, replacement]));
+
+    first.className = "pwa-timeline-row pwa-earlier";
+    bump();
+    expect(recordUnobserve).toHaveBeenCalledWith(first);
+    expect(observed.has(first)).toBe(false);
+
+    first.className = "pwa-timeline-row";
+    bump();
+    expect(recordObserve).toHaveBeenCalledWith(first);
+    expect(observed.has(first)).toBe(true);
+
+    list.insertBefore(first, replacement);
+    bump();
+    const finalRow = appendRow(list, "final");
+    list.replaceChild(finalRow, replacement);
+    bump();
+    expect(observed).toEqual(new Set([list, first, finalRow]));
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("abandons the child snapshot for a new, disabled or empty list", async () => {
+  const { observed, recordObserve, recordDisconnect } = installTrackingResizeObserver();
+  const { screen, list, setItems, setEnabled, viewport } = await renderViewport();
+  try {
+    const row = appendRow(list, "row");
+    let version = 0;
+    const bump = () => flushSync(() => setItems([trackingTimelineItem(`bump-${version}`, `content ${version += 1}`)]));
+
+    bump();
+    expect(observed).toEqual(new Set([list, row]));
+
+    flushSync(() => setEnabled(false));
+    expect(observed.size).toBe(0);
+
+    flushSync(() => setEnabled(true));
+    expect(recordObserve).toHaveBeenCalledWith(list);
+    expect(observed).toEqual(new Set([list, row]));
+
+    const nextList = document.createElement("div");
+    const nextRow = appendRow(nextList, "next");
+    viewport().messageListRef.current = nextList;
+    bump();
+    expect(recordDisconnect).toHaveBeenCalled();
+    expect(observed).toEqual(new Set([nextList, nextRow]));
+
+    const emptyList = document.createElement("div");
+    viewport().messageListRef.current = emptyList;
+    bump();
+    expect(observed).toEqual(new Set([emptyList]));
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("reads list geometry once per synchronous follow, geometry event and Latest", async () => {
+  installTrackingResizeObserver();
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const { screen, list, scrollTo, viewport, setItems } = await renderViewport();
+  try {
+    let height = 1000;
+    let heightReads = 0;
+    let clientReads = 0;
+    Object.defineProperties(list, {
+      scrollHeight: { configurable: true, get: () => { heightReads += 1; return height; } },
+      clientHeight: { configurable: true, get: () => { clientReads += 1; return 400; } },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    flushSync(() => setItems([renderedTimelineItem]));
+
+    heightReads = 0;
+    clientReads = 0;
+    frames.shift()!(0);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "auto" });
+    expect(heightReads).toBe(1);
+    expect(clientReads).toBe(1);
+
+    height = 1200;
+    heightReads = 0;
+    clientReads = 0;
+    viewport().receiveRealtimeOutput("taller");
+    frames.shift()!(0);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1200, behavior: "auto" });
+    expect(heightReads).toBe(1);
+    expect(clientReads).toBe(1);
+
+    height = 1600;
+    heightReads = 0;
+    clientReads = 0;
+    list.dispatchEvent(new Event("pwa:timeline-geometry"));
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1600, behavior: "auto" });
+    expect(heightReads).toBe(1);
+    expect(clientReads).toBe(1);
+
+    height = 2000;
+    heightReads = 0;
+    clientReads = 0;
+    flushSync(() => viewport().showLatest());
+    expect(scrollTo.mock.calls.at(-1)?.[0]).toMatchObject({ top: 2000 });
+    expect(heightReads).toBe(1);
+    expect(clientReads).toBe(1);
+  } finally {
+    await screen.unmount();
+  }
+});
