@@ -90,7 +90,9 @@ export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | nu
     const observer = new ResizeObserver(schedule);
     const main = input.closest<HTMLElement>(".pwa-main");
     const footer = input.closest<HTMLElement>(".pwa-chat-footer");
-    for (const element of [input, main, footer]) if (element) observer.observe(element);
+    // 顶部标题与提示条出现/消失只改变工作区剩余高度，主区、footer 与输入区自身尺寸不变，需一并观察。
+    const body = input.closest<HTMLElement>(".pwa-workspace-body");
+    for (const element of [input, main, footer, body]) if (element) observer.observe(element);
     window.addEventListener("resize", schedule);
     return () => {
       cancelAnimationFrame(frame);
