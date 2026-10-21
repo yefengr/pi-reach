@@ -5,16 +5,22 @@ import type { TimelinePartialView, TimelinePending, TimelineViewItem } from "./t
 const DRAIN_WINDOW_MS = 128;
 const BASE_TICK_MS = 16;
 const MAX_RELEASE_PER_MS = 64 / BASE_TICK_MS;
+const INITIAL_BURST = 2;
 const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
   : undefined;
+
+type GraphemeCursor = {
+  graphemes: string[];
+  visibleCount: number;
+};
 
 type StreamState = {
   thinkingTextEpoch: object;
   partial: TimelinePartialView;
   targetText: string;
-  targetGraphemes: string[];
-  visibleCount: number;
+  /** null 表示即时展示：正文已全部可见，不保留字素游标。 */
+  cursor: GraphemeCursor | null;
   visibleText: string;
   elapsedMs: number;
   seen: boolean;
@@ -83,14 +89,38 @@ function segmentText(text: string): string[] {
   return Array.from(text);
 }
 
-function appendTargetGraphemes(previous: StreamState, targetText: string): void {
-  const suffix = targetText.slice(previous.targetText.length);
-  const lastGrapheme = previous.targetGraphemes.pop();
+/** 按需展示的初始游标：先显示少量字素，其余按原 burst 逻辑追赶。 */
+function initialCursor(targetText: string): GraphemeCursor {
+  const graphemes = segmentText(targetText);
+  return { graphemes, visibleCount: Math.min(INITIAL_BURST, graphemes.length) };
+}
+
+function cursorText(cursor: GraphemeCursor): string {
+  return cursor.graphemes.slice(0, cursor.visibleCount).join("");
+}
+
+function appendTargetGraphemes(cursor: GraphemeCursor, baseText: string, targetText: string): void {
+  const suffix = targetText.slice(baseText.length);
+  const lastGrapheme = cursor.graphemes.pop();
   if (lastGrapheme === undefined) {
-    previous.targetGraphemes.push(...segmentText(suffix));
+    cursor.graphemes.push(...segmentText(suffix));
     return;
   }
-  previous.targetGraphemes.push(...segmentText(`${lastGrapheme}${suffix}`));
+  cursor.graphemes.push(...segmentText(`${lastGrapheme}${suffix}`));
+}
+
+/** 从即时展示切入按需展示：用已显示正文重建游标，不重播也不丢失已显示前缀。 */
+function appendLaneText(state: StreamState, targetText: string): void {
+  let cursor = state.cursor;
+  if (cursor === null) {
+    const graphemes = segmentText(state.visibleText);
+    cursor = { graphemes, visibleCount: graphemes.length };
+    state.cursor = cursor;
+  }
+  // 即时展示下 visibleText 恒等于 targetText，因此旧目标正文就是游标基准。
+  appendTargetGraphemes(cursor, state.targetText, targetText);
+  cursor.visibleCount = Math.min(cursor.visibleCount, cursor.graphemes.length);
+  state.elapsedMs = 0;
 }
 
 function itemId(item: TimelineViewItem): string {
@@ -190,12 +220,9 @@ function projectedPartial(state: StreamState): TimelinePartialView {
   };
 }
 
-function expectedVisibleText(state: StreamState): string {
-  return state.targetGraphemes.slice(0, state.visibleCount).join("");
-}
-
 function isDrained(state: StreamState): boolean {
-  return state.visibleCount >= state.targetGraphemes.length && state.visibleText === state.targetText;
+  if (state.cursor === null) return state.visibleText === state.targetText;
+  return state.cursor.visibleCount >= state.cursor.graphemes.length && state.visibleText === state.targetText;
 }
 
 /**
@@ -247,12 +274,11 @@ export class StreamDisplayBuffer {
     const existing = this.streams.get(id);
     const immediate = streamsImmediately(partial.partial);
     if (!existing) {
-      const targetGraphemes = segmentText(targetText);
-      const visibleCount = immediate ? targetGraphemes.length : Math.min(2, targetGraphemes.length);
+      const cursor = immediate ? null : initialCursor(targetText);
       this.streams.set(id, {
-        thinkingTextEpoch: {}, partial, targetText, targetGraphemes, visibleCount,
-        visibleText: targetGraphemes.slice(0, visibleCount).join(""),
-        elapsedMs: immediate ? DRAIN_WINDOW_MS : 0, seen: true,
+        thinkingTextEpoch: {}, partial, targetText, cursor,
+        visibleText: cursor === null ? targetText : cursorText(cursor),
+        elapsedMs: cursor === null ? DRAIN_WINDOW_MS : 0, seen: true,
       });
       return { needsSnapshot: true, urgent: true };
     }
@@ -269,23 +295,21 @@ export class StreamDisplayBuffer {
     let needsSnapshot = urgent || argsChanged;
     if (!appendOnly) existing.thinkingTextEpoch = {};
     if (targetChanged && immediate) {
-      existing.targetGraphemes = segmentText(targetText);
-      existing.visibleCount = existing.targetGraphemes.length;
+      // 即时展示不建立字素游标，也无需分割全文。
+      existing.cursor = null;
       existing.visibleText = targetText;
       existing.elapsedMs = DRAIN_WINDOW_MS;
       needsSnapshot = true;
     } else if (targetChanged && textExtends) {
-      appendTargetGraphemes(existing, targetText);
-      existing.visibleCount = Math.min(existing.visibleCount, existing.targetGraphemes.length);
-      existing.elapsedMs = 0;
+      appendLaneText(existing, targetText);
     } else if (targetChanged) {
-      existing.targetGraphemes = segmentText(targetText);
-      existing.visibleCount = Math.min(2, existing.targetGraphemes.length);
-      existing.visibleText = existing.targetGraphemes.slice(0, existing.visibleCount).join("");
+      const cursor = initialCursor(targetText);
+      existing.cursor = cursor;
+      existing.visibleText = cursorText(cursor);
       existing.elapsedMs = 0;
       needsSnapshot = true;
     } else if (immediate && !streamsImmediately(existing.partial.partial)) {
-      existing.visibleCount = existing.targetGraphemes.length;
+      existing.cursor = null;
       existing.visibleText = targetText;
       existing.elapsedMs = DRAIN_WINDOW_MS;
       needsSnapshot = true;
@@ -303,13 +327,12 @@ export class StreamDisplayBuffer {
     const partials = this.authoritative.filter((item): item is TimelinePartialView => item.kind === "partial");
     for (const partial of partials) {
       const targetText = partialText(partial.partial);
-      const targetGraphemes = segmentText(targetText);
+      // 重置直接接管最新正文，不保留游标也不分割全文。
       this.streams.set(partial.partial.partial_id, {
         thinkingTextEpoch: {},
         partial,
         targetText,
-        targetGraphemes,
-        visibleCount: targetGraphemes.length,
+        cursor: null,
         visibleText: targetText,
         elapsedMs: DRAIN_WINDOW_MS,
         seen: true,
@@ -335,18 +358,23 @@ export class StreamDisplayBuffer {
     const previous = this.displayed;
     let changed = false;
     for (const state of this.streams.values()) {
-      const backlog = state.targetGraphemes.length - state.visibleCount;
+      const cursor = state.cursor;
+      if (cursor === null) continue;
+      const backlog = cursor.graphemes.length - cursor.visibleCount;
       if (backlog > 0) {
         const elapsed = Math.max(0, elapsedMs);
         const remaining = Math.max(1, DRAIN_WINDOW_MS - state.elapsedMs);
         const release = Math.min(Math.ceil(MAX_RELEASE_PER_MS * elapsed), Math.ceil(backlog * Math.min(1, elapsed / remaining)));
         state.elapsedMs += elapsed;
-        state.visibleCount = Math.min(state.targetGraphemes.length, state.visibleCount + release);
-        state.visibleText = expectedVisibleText(state);
+        cursor.visibleCount = Math.min(cursor.graphemes.length, cursor.visibleCount + release);
+        state.visibleText = cursorText(cursor);
         changed = true;
-      } else if (state.visibleText !== expectedVisibleText(state)) {
-        state.visibleText = expectedVisibleText(state);
-        changed = true;
+      } else {
+        const expected = cursorText(cursor);
+        if (state.visibleText !== expected) {
+          state.visibleText = expected;
+          changed = true;
+        }
       }
     }
     if (!changed) return this.unchanged();
