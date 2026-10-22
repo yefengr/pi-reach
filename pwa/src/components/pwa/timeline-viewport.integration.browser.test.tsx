@@ -168,6 +168,35 @@ test.each([1280, 390])("Thinking pauses following without showing Latest until n
   } finally { await screen.unmount(); }
 });
 
+test.each([1280, 390])("paused anchor compensation accepts native scroll and resumes on close at %ipx", async width => {
+  await page.viewport(width, 844);
+  const above = answer("above", paragraphs("Above", 4));
+  const reading = answer("reading", paragraphs("Reading", 18));
+  const { screen, list, replace, viewport } = await renderTimeline([above, reading]);
+  try {
+    expect(viewport().followingOutput).toBe(true);
+    flushSync(() => viewport().setReadingDetails(true));
+    const anchor = [...list.querySelectorAll("p")].find(node => node.getBoundingClientRect().bottom > list.getBoundingClientRect().top)!;
+    const before = { top: Math.round(offset(anchor, list)), scroll: list.scrollTop };
+    let nativeScrolls = 0;
+    const onScroll = (event: Event) => { if (event.isTrusted) nativeScrolls += 1; };
+    list.addEventListener("scroll", onScroll);
+    try {
+      replace([answer("above", paragraphs("Above", 12)), reading, answer("tail", paragraphs("Tail", 18))]);
+      await expect.poll(() => nativeScrolls).toBeGreaterThan(0);
+      await settleLayout();
+      expect(list.scrollTop).toBeGreaterThan(before.scroll);
+      expect(Math.round(offset(anchor, list))).toBe(before.top);
+      expect(bottomGap(list)).toBeGreaterThan(100);
+      expect(viewport().followingOutput).toBe(true);
+      flushSync(() => viewport().setReadingDetails(false));
+      await settleLayout();
+      expect(bottomGap(list)).toBeLessThanOrEqual(1);
+      expect(viewport().followingOutput).toBe(true);
+    } finally { list.removeEventListener("scroll", onScroll); }
+  } finally { await screen.unmount(); }
+});
+
 test("manual scrolling while Thinking is open updates the reading position", async () => {
   const thinking = partial("thinking", paragraphs("Thoughts", 5), "thinking");
   const tail = answer("tail", paragraphs("Below", 24));

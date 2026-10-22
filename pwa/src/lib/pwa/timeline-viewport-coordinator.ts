@@ -108,7 +108,9 @@ export class TimelineViewportCoordinator<C, A> {
     this.motion = this.layout.measure().animate ? this.layout.send(capture.value) : null;
     this.mode = this.motion ? "send" : "follow";
     this.publish("send");
-    this.process("send");
+    // owner 立即固定捕获尺寸；首个已提交布局（或无提交时的后继帧）才消费动画时间。
+    if (this.motion) this.schedule();
+    else this.process("send");
   }
 
   latest(): void {
@@ -259,7 +261,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.exiting = true;
     try {
       motion?.finish(settleInput);
-      if (anchor) layout?.restoreAnchor(anchor);
+      if (anchor && layout) this.restoreAnchor(layout, anchor);
       if (stopLatest && layout) layout.scroll(layout.top(), false);
       this.lastTop = layout?.top() ?? 0;
     } finally { this.exiting = false; }
@@ -287,6 +289,23 @@ export class TimelineViewportCoordinator<C, A> {
     if (!smooth) this.receipt = { target: actual, last: actual, smooth: false };
   }
 
+  private acceptRestoredTop(layout: ViewportLayout<C, A>): void {
+    const actual = layout.top();
+    this.lastTop = actual;
+    this.receipt = { target: actual, last: actual, smooth: false };
+  }
+
+  private restoreAnchor(layout: ViewportLayout<C, A>, anchor: A, migrate = false): boolean {
+    // 原生 scroll 异步回执用实际落点；同步适配器重入时也不能先被当作用户回看。
+    const exiting = this.exiting;
+    this.exiting = true;
+    let restored: boolean;
+    try { restored = layout.restoreAnchor(anchor, migrate); }
+    finally { this.exiting = exiting; }
+    if (restored && this.layout === layout) this.acceptRestoredTop(layout);
+    return restored;
+  }
+
   private process(reason: ViewportReason, now = this.scheduler.now()): void {
     if (this.processing || this.exiting) { this.pendingReasons.add(reason); return; }
     const layout = this.layout;
@@ -302,16 +321,16 @@ export class TimelineViewportCoordinator<C, A> {
 
   private advance(layout: ViewportLayout<C, A>, reason: ViewportReason, now: number): void {
     if (this.pendingAnchor) {
-      if (layout.restoreAnchor(this.pendingAnchor, true)) {
+      if (this.restoreAnchor(layout, this.pendingAnchor, true)) {
         this.pendingAnchor = null;
         this.userRead();
-        this.receipt = { target: layout.top(), last: layout.top(), smooth: false };
+        this.acceptRestoredTop(layout);
         if (this.trace && this.tracing()) this.record(reason, layout.measure(), null);
         return;
       }
     }
     if (!this.following || this.paused) {
-      if (this.anchor && !layout.restoreAnchor(this.anchor)) this.anchor = null;
+      if (this.anchor && !this.restoreAnchor(layout, this.anchor)) this.anchor = null;
       this.anchor ??= layout.captureAnchor();
       this.lastTop = layout.top();
       if (this.trace && this.tracing()) this.record(reason, layout.measure(), null);

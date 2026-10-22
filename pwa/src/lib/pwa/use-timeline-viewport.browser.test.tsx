@@ -280,7 +280,7 @@ test("restores a reading anchor after observed geometry changes without resuming
 
   const { screen, list, viewport, setItems } = await renderViewport();
   try {
-    Object.defineProperty(list, "scrollTop", { configurable: true, writable: true, value: 100 });
+    Object.defineProperty(list, "scrollTop", { configurable: true, writable: true, value: 80 });
     Object.defineProperty(list, "clientHeight", { configurable: true, value: 300 });
     const row = document.createElement("article");
     row.dataset.timelineKey = "answer-1";
@@ -293,6 +293,8 @@ test("restores a reading anchor after observed geometry changes without resuming
     vi.spyOn(paragraph, "getBoundingClientRect").mockImplementation(() => ({ top, bottom: top + 30 } as DOMRect));
 
     viewport().setReadingDetails(true);
+    // 实际移动位置才是用户回看；原地 scroll 仍可能是详情进入时的恢复回执。
+    list.scrollTop = 100;
     viewport().handleScroll(false);
     await vi.waitFor(() => expect(viewport().followingOutput).toBe(false));
     flushSync(() => setItems([renderedTimelineItem]));

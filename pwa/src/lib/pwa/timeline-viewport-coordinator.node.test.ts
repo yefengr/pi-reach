@@ -11,6 +11,8 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   let measures = 0;
   let reenter: (() => void) | null = null;
   let anchorAvailable = true;
+  let anchorShift = 0;
+  let finishShift = 0;
   const restored: number[] = [];
   const activityOrigins: number[] = [];
   const writes: number[] = [];
@@ -20,15 +22,15 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   const motion = (): ViewportMotion => {
     starts += 1;
     let start: number | null = null;
-    return { advance(now) { advances += 1; start ??= now; return { top: (top + bottom) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; } };
+    return { advance(now) { advances += 1; start ??= now; return { top: (top + bottom) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
   };
   const layout: ViewportLayout<number, number> = {
     measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate }; }, top: () => top,
     scroll(value) { writes.push(value); top = Math.min(bottom, value); reenter?.(); },
     captureSend: () => top, send: motion, activity: (from) => { activityOrigins.push(from); return motion(); },
-    captureAnchor: () => top, restoreAnchor: (anchor) => {
+    captureAnchor: () => top - anchorShift, restoreAnchor: (anchor) => {
       if (!anchorAvailable) return false;
-      restored.push(anchor); top = anchor; return true;
+      restored.push(anchor); top = Math.min(bottom, anchor + anchorShift); reenter?.(); return true;
     },
   };
   const core = new TimelineViewportCoordinator({ now: () => 0,
@@ -38,6 +40,8 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   core.bind(layout);
   return { core, layout, writes, frames, late, restored, activityOrigins,
     setAnchorAvailable(value: boolean) { anchorAvailable = value; },
+    shiftAnchor(value: number) { anchorShift = value; },
+    shiftOnFinish(value: number) { finishShift = value; },
     step(now = 0) { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); },
     setBottom(value: number) { bottom = value; }, setTop(value: number) { top = value; },
     reduce() { animate = false; }, reenter(callback: () => void) { reenter = callback; },
@@ -58,6 +62,90 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.core.state.mode).toBe("send");
     expect(f.frames.size).toBe(1);
     expect(f.core.state.following).toBe(true);
+  });
+
+  test.each(["commit", "frame"] as const)("send defers its first sample until %s, including no new items fallback", (first) => {
+    const f = fixture();
+    f.core.followOwnSend(f.core.captureOwnSend());
+    expect(f.advances).toBe(0);
+    expect(f.writes).toEqual([]);
+    expect(f.frames.size).toBe(1);
+    if (first === "commit") f.core.notify("commit");
+    else f.step(20);
+    expect(f.advances).toBe(1);
+    expect(f.frames.size).toBe(1);
+  });
+
+  test.each([false, true])("anchor receipt keeps paused follow through asynchronous scroll (sync=%s)", (sync) => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.core.details(true);
+    f.shiftAnchor(80); f.setBottom(300);
+    if (sync) f.reenter(() => f.core.scroll(false));
+    f.core.notify("geometry");
+    expect(f.layout.top()).toBe(180);
+    f.core.scroll(false);
+    expect(f.core.state).toMatchObject({ following: true, paused: true });
+    f.core.details(false);
+    expect(f.frames.size).toBe(1);
+    f.step();
+    expect(f.layout.top()).toBe(300);
+  });
+
+  test("anchor receipt does not swallow a different user position or resume an existing reader", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true); f.core.details(true);
+    f.shiftAnchor(80); f.setBottom(300); f.core.notify("geometry");
+    f.setTop(150); f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+    f.shiftAnchor(100); f.core.notify("geometry"); f.core.scroll(false);
+    f.core.details(false);
+    expect(f.core.state.following).toBe(false);
+    expect(f.frames.size).toBe(0);
+  });
+
+  test("failed anchor restore never fabricates a receipt at an unchanged top", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true); f.core.details(true);
+    // 先交付 details 进入时成功恢复的回执，再单独验证失败恢复没有伪造新回执。
+    f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+    f.setAnchorAvailable(false); f.setBottom(300); f.core.notify("geometry");
+    f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test("anchor receipt uses the accepted clamped landing", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true); f.core.details(true);
+    f.shiftAnchor(500); f.setBottom(300); f.core.notify("geometry");
+    expect(f.layout.top()).toBe(300);
+    f.core.scroll(false);
+    expect(f.core.state).toMatchObject({ following: true, paused: true });
+  });
+
+  test("exit preserve records the accepted landing after motion cleanup", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.core.followOwnSend(f.core.captureOwnSend()); f.core.notify("commit");
+    const before = f.layout.top();
+    f.setBottom(400); f.shiftOnFinish(80);
+    f.core.details(true);
+    expect(f.layout.top()).toBe(before + 80);
+    f.core.scroll(false);
+    expect(f.core.state).toMatchObject({ following: true, paused: true });
+    f.core.details(false); f.step();
+    expect(f.layout.top()).toBe(400);
+  });
+
+  test.each([false, true])("pending scope anchor receipt survives native landing (sync=%s)", (sync) => {
+    const f = fixture();
+    f.core.restorePosition({ following: false, anchor: 65 });
+    if (sync) f.reenter(() => f.core.scroll(false));
+    f.core.notify("commit"); f.core.scroll(false);
+    expect(f.layout.top()).toBe(65);
+    expect(f.core.state.following).toBe(false);
+    expect(f.frames.size).toBe(0);
   });
 
   test("same-height next draft releases owner and guarantees follow without RO", () => {
@@ -226,6 +314,7 @@ describe("TimelineViewportCoordinator", () => {
     const f = fixture();
     f.reenter(() => f.core.notify("geometry"));
     f.core.followOwnSend(f.core.captureOwnSend());
+    f.core.notify("commit");
     expect(f.advances).toBe(1);
     expect(f.frames.size).toBe(1);
     f.step(80);

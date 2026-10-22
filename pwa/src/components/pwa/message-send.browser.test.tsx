@@ -40,7 +40,7 @@ async function harness({ width = 390, compact = false, working = false, draft = 
   let setLive!: (live: boolean) => void;
   let setWorking!: (value: boolean) => void;
   let editDraft!: (text: string) => void;
-  let send!: () => void;
+  let send!: (afterActivation?: () => void) => void;
   let sent!: TimelinePending;
   function Harness() {
     const [items, setItems] = useState(initial);
@@ -53,9 +53,10 @@ async function harness({ width = 390, compact = false, working = false, draft = 
     editDraft = setText;
     viewport = useTimelineViewport(items);
     update = setItems;
-    send = () => {
+    send = (afterActivation) => {
       sent = { ...pending(), text };
       viewport.followOwnSend(viewport.captureOwnSend());
+      afterActivation?.();
       setItems([...items, sent]);
       setText("");
       setFiles([]);
@@ -72,7 +73,12 @@ async function harness({ width = 390, compact = false, working = false, draft = 
     live: (value: boolean) => flushSync(() => setLive(value)),
     work: (value: boolean, items?: TimelineViewItem[]) => flushSync(() => { setWorking(value); if (items) update(items); }),
     edit: (value: string) => flushSync(() => { document.querySelector(".pwa-composer-input")!.dispatchEvent(new Event("input", { bubbles: true })); editDraft(value); }),
-    send: () => flushSync(() => send()), update: (items: TimelineViewItem[]) => flushSync(() => update(items)),
+    send: (activationCost = 0) => {
+      const now = performance.now();
+      const clock = activationCost ? vi.spyOn(performance, "now").mockReturnValue(now) : null;
+      try { flushSync(() => send(() => clock?.mockReturnValue(now + activationCost))); }
+      finally { clock?.mockRestore(); }
+    }, update: (items: TimelineViewItem[]) => flushSync(() => update(items)),
     read: async () => { list.scrollTop -= 300; flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true }))); await frames(); },
   };
 }
@@ -429,15 +435,19 @@ test("Reduced Motion skips send layout motion while clearing the draft and resto
   } finally { await h.screen.unmount(); }
 });
 
-test("short-screen attachment handoff uses natural chrome budget from its first commit", async () => {
-  const h = await harness({ height: 400, attachment: true, draft: "One\nTwo\nThree\nFour\nFive" });
+test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width, attachment }))))("activation cost preserves first committed geometry at $width (attachment=$attachment)", async ({ width, attachment }) => {
+  const h = await harness({ width, height: attachment ? 400 : 650, attachment, draft: "One\nTwo\nThree\nFour\nFive" });
   try {
     const main = document.querySelector<HTMLElement>(".pwa-main")!;
     const old = h.list.querySelector(".pwa-message.assistant")!;
-    const before = top(old);
-    h.send();
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const input = document.querySelector<HTMLElement>(".pwa-composer-input")!;
+    const before = { old: top(old), footer: footer.getBoundingClientRect().height, input: input.getBoundingClientRect().height };
+    h.send(16);
     const firstBudget = main.dataset.composerBudget;
-    expect(top(old)).toBe(before);
+    expect(top(old)).toBe(before.old);
+    expect(footer.getBoundingClientRect().height).toBe(before.footer);
+    expect(input.getBoundingClientRect().height).toBe(before.input);
     await vi.waitFor(() => expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe(""));
     await frames();
     expect(main.dataset.composerBudget).toBe(firstBudget);
