@@ -1,6 +1,6 @@
 import { useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
@@ -32,18 +32,21 @@ function formal(value: TimelinePending): TimelineViewItem {
 const gap = (list: HTMLElement) => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop);
 const top = (node: Element) => Math.round(node.getBoundingClientRect().top);
 async function frames(count = 3) { for (let i = 0; i < count; i++) await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); }
-async function harness({ width = 390, compact = false, working = false, draft = "New message", live = true, initial = [history] }: { width?: number; compact?: boolean; working?: boolean; draft?: string; live?: boolean; initial?: TimelineViewItem[] } = {}) {
+async function harness({ width = 390, compact = false, working = false, draft = "New message", live = true, initial = [history], attachment = false, height }: { width?: number; compact?: boolean; working?: boolean; draft?: string; live?: boolean; initial?: TimelineViewItem[]; attachment?: boolean; height?: number } = {}) {
   await page.viewport(width, 844);
   let viewport!: TimelineViewport;
   let update!: (items: TimelineViewItem[]) => void;
   let setLive!: (live: boolean) => void;
+  let editDraft!: (text: string) => void;
   let send!: () => void;
   let sent!: TimelinePending;
   function Harness() {
     const [items, setItems] = useState(initial);
     const [text, setText] = useState(draft);
     const [online, setOnline] = useState(live);
+    const [files, setFiles] = useState<ComponentProps<typeof MessageComposer>["attachments"]>(attachment ? [{ id: "file", fileName: "send-note.txt", byteLength: 12, status: "complete" }] : []);
     setLive = setOnline;
+    editDraft = setText;
     viewport = useTimelineViewport(items);
     update = setItems;
     send = () => {
@@ -51,10 +54,11 @@ async function harness({ width = 390, compact = false, working = false, draft = 
       viewport.followOwnSend();
       setItems([...items, sent]);
       setText("");
+      setFiles([]);
     };
-    return <div className="pwa-app-shell"><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ display: "flex", flexDirection: "column", width: "100vw", height: compact ? 280 : 650, flex: "none" }}>
+    return <div className="pwa-app-shell"><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ display: "flex", flexDirection: "column", width: "100vw", height: height ?? (compact ? 280 : 650), flex: "none" }}>
       <MessageList items={items} isLive={online} running={working} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryUnknown={noop} onCancelQueued={noop} />
-      <div className="pwa-chat-footer"><MessageComposer {...composer} draft={text} onDraftChange={setText} onSend={send} /></div>
+      <div className="pwa-chat-footer"><MessageComposer {...composer} attachments={files} draft={text} onDraftChange={setText} onSend={send} /></div>
     </main></div>;
   }
   const screen = await renderPwa(<Harness />);
@@ -62,11 +66,13 @@ async function harness({ width = 390, compact = false, working = false, draft = 
   const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
   return { screen, list, viewport: () => viewport, sent: () => sent,
     live: (value: boolean) => flushSync(() => setLive(value)),
+    edit: (value: string) => flushSync(() => { document.querySelector(".pwa-composer-input")!.dispatchEvent(new Event("input", { bubbles: true })); editDraft(value); }),
     send: () => flushSync(() => send()), update: (items: TimelineViewItem[]) => flushSync(() => update(items)),
     read: async () => { list.scrollTop -= 300; flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true }))); await frames(); },
   };
 }
 afterEach(async () => {
+  vi.restoreAllMocks();
   document.documentElement.removeAttribute("data-pwa-text-size");
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await page.viewport(1280, 900);
@@ -86,24 +92,216 @@ test.each([390, 1280])("tail pending confirmation preserves extent and old body 
   } finally { await h.screen.unmount(); }
 });
 
-test.each([390, 1280])("own send follows before a frame, clears multiline Composer and remains interruptible at %ipx", async width => {
-  const h = await harness({ width, draft: "Line one\nLine two\nLine three\nLine four\nLine five" });
+function layoutClock() {
+  let now = 1000;
+  let nextId = 0;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  vi.spyOn(performance, "now").mockImplementation(() => now);
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { callbacks.set(++nextId, callback); return nextId; });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { callbacks.delete(id); });
+  return {
+    step: (elapsed: number) => { now = 1000 + elapsed; const pending = [...callbacks.values()]; callbacks.clear(); for (const callback of pending) callback(now); },
+    pending: () => callbacks.size,
+    snapshot: () => [...callbacks.values()],
+  };
+}
+
+test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width, attachment }))))("own send coordinates multiline shrink and scroll on one 160ms clock at $width (attachment=$attachment)", async ({ width, attachment }) => {
+  const h = await harness({ width, attachment, draft: "Line one\nLine two\nLine three\nLine four\nLine five" });
+  try {
+    const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const old = h.list.querySelector(".pwa-message.assistant")!;
+    const before = { input: input.getBoundingClientRect().height, scroll: h.list.scrollTop, footer: footer.getBoundingClientRect().height, old: top(old) };
+    const clock = layoutClock();
+    h.send();
+    expect(input.value).toBe("");
+    expect(input.getBoundingClientRect().height).toBe(before.input);
+    expect(Math.round(h.list.scrollTop)).toBe(Math.round(before.scroll));
+    expect(footer.getBoundingClientRect().height).toBe(before.footer);
+    expect(top(old)).toBe(before.old);
+    expect(gap(h.list)).toBeGreaterThan(1);
+    const samples: { input: number; scroll: number }[] = [];
+    for (const time of [0, 40, 80, 120, 160]) {
+      clock.step(time);
+      samples.push({ input: input.getBoundingClientRect().height, scroll: h.list.scrollTop });
+    }
+    expect(samples[1].input).toBeLessThan(before.input);
+    expect(samples[1].input).toBeGreaterThan(samples.at(-1)!.input);
+    expect(samples[1].scroll).toBeGreaterThan(before.scroll);
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i].input).toBeLessThanOrEqual(samples[i - 1].input);
+      expect(samples[i].scroll).toBeGreaterThanOrEqual(samples[i - 1].scroll - 1);
+    }
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.viewport().followingOutput).toBe(true);
+    clock.step(200);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("own-send scroll is interruptible without a later frame reclaiming the reading position", async () => {
+  const h = await harness({ draft: "Line one\nLine two\nLine three\nLine four\nLine five" });
   try {
     await h.read();
     expect(h.viewport().followingOutput).toBe(false);
+    const clock = layoutClock();
+    h.send();
+    clock.step(40);
+    flushSync(() => {
+      h.list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
+      h.list.scrollTop -= 100;
+      h.list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    expect(h.viewport().followingOutput).toBe(false);
+    const before = top(h.list.querySelector(".pwa-message.assistant")!);
+    clock.step(160);
+    h.update([history, h.sent(), { ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text: "First reply\n\nMore output" }] } }]);
+    clock.step(250);
+    expect(top(h.list.querySelector(".pwa-message.assistant")!)).toBe(before);
+    expect(h.viewport().followingOutput).toBe(false);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each(["tap", "toward-latest", "read-earlier"])("touch %s only interrupts the send when moving toward earlier content", async action => {
+  const h = await harness({ draft: "One\nTwo\nThree\nFour" });
+  try {
+    const clock = layoutClock();
+    h.send(); clock.step(40);
+    const touch = (type: string, y: number, end = false) => h.list.dispatchEvent(new TouchEvent(type, { bubbles: true, touches: end ? [] : [new Touch({ identifier: 1, target: h.list, clientY: y })] }));
+    flushSync(() => {
+      touch("touchstart", 100);
+      if (action !== "tap") touch("touchmove", action === "read-earlier" ? 120 : 80);
+      touch("touchend", 100, true);
+    });
+    expect(h.viewport().followingOutput).toBe(action !== "read-earlier");
+    clock.step(160);
+    if (action !== "read-earlier") expect(gap(h.list)).toBeLessThanOrEqual(1);
+  } finally { await h.screen.unmount(); }
+});
+
+test("Reduced Motion skips send layout motion while clearing the draft and restoring follow", async () => {
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  const h = await harness({ draft: "Line one\nLine two\nLine three\nLine four\nLine five" });
+  try {
+    await h.read();
+    const clock = layoutClock();
     h.send();
     expect(gap(h.list)).toBeLessThanOrEqual(1);
-    expect(h.viewport().followingOutput).toBe(true);
     expect(document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!.value).toBe("");
-    h.update([history, h.sent(), { ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text: "First reply" }] } }]);
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("short-screen attachment handoff uses natural chrome budget from its first commit", async () => {
+  const h = await harness({ height: 400, attachment: true, draft: "One\nTwo\nThree\nFour\nFive" });
+  try {
+    const main = document.querySelector<HTMLElement>(".pwa-main")!;
+    const old = h.list.querySelector(".pwa-message.assistant")!;
+    const before = top(old);
+    h.send();
+    const firstBudget = main.dataset.composerBudget;
+    expect(top(old)).toBe(before);
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe(""));
+    await frames();
+    expect(main.dataset.composerBudget).toBe(firstBudget);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
-    await frames();
-    await h.read();
-    expect(h.viewport().followingOutput).toBe(false);
+  } finally { await h.screen.unmount(); }
+});
+
+test("enabling Reduced Motion mid-send settles and releases the old clock", async () => {
+  const h = await harness({ draft: "One\nTwo\nThree\nFour" });
+  try {
+    const clock = layoutClock();
+    h.send(); clock.step(40);
+    const stale = clock.snapshot();
+    await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe(""));
     const before = h.list.scrollTop;
-    h.update([history, h.sent(), { ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text: "First reply\n\nMore output" }] } }]);
-    await frames();
-    expect(Math.round(h.list.scrollTop)).toBe(Math.round(before));
+    for (const callback of stale) callback(1200);
+    expect(h.list.scrollTop).toBe(before);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([false, true])("compact xlarge own send finishes without hiding status (Working=%s)", async working => {
+  document.documentElement.dataset.pwaTextSize = "xlarge";
+  const h = await harness({ compact: true, working, draft: "One\nTwo\nThree\nFour\nFive" });
+  try {
+    const before = h.list.scrollTop;
+    const clock = layoutClock();
+    h.send();
+    expect(h.list.scrollTop).toBe(before);
+    clock.step(160);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    const status = h.list.querySelector(".pwa-delivery-status")!;
+    expect(Math.round(status.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom));
+    expect(document.querySelector<HTMLInputElement>(".pwa-composer-input")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  } finally { await h.screen.unmount(); }
+});
+
+test("receipts and output arriving inside a send update its target without restarting the clock", async () => {
+  const h = await harness({ draft: "A new message" });
+  try {
+    const clock = layoutClock();
+    h.send();
+    clock.step(40);
+    h.sent().delivery = "received";
+    h.update([history, h.sent()]);
+    clock.step(80);
+    h.update([history, formal(h.sent()), { ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text: "First reply" }] } }]);
+    clock.step(160);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(document.querySelector(".pwa-chat-footer")!.getAttribute("style") ?? "").not.toContain("height");
+    expect(h.viewport().followingOutput).toBe(true);
+    clock.step(200);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each(["reset", "details", "history", "resize", "hidden", "unmount"])("%s releases the send clock and ignores its cancelled callbacks", async action => {
+  const h = await harness({ draft: "One\nTwo\nThree\nFour" });
+  let unmounted = false;
+  try {
+    const clock = layoutClock();
+    h.send(); clock.step(40);
+    const stale = clock.snapshot();
+    if (action === "unmount") { await h.screen.unmount(); unmounted = true; }
+    else flushSync(() => {
+      if (action === "reset") h.viewport().reset();
+      else if (action === "details") h.viewport().setReadingDetails(true);
+      else if (action === "resize") window.dispatchEvent(new Event("resize"));
+      else if (action === "hidden") { vi.spyOn(document, "hidden", "get").mockReturnValue(true); document.dispatchEvent(new Event("visibilitychange")); }
+      else h.viewport().prepareHistoryPrepend();
+    });
+    const before = { scroll: h.list.scrollTop, height: h.list.clientHeight };
+    for (const callback of stale) callback(1300);
+    expect(h.list.scrollTop).toBe(before.scroll);
+    expect(h.list.clientHeight).toBe(before.height);
+    // resize 同时安排普通 autosize 重测，它不属于已取消的发送时钟。
+    if (action === "resize") clock.step(300);
+    expect(clock.pending()).toBe(0);
+  } finally { if (!unmounted) await h.screen.unmount(); }
+});
+
+test("editing the next draft releases the old input-height owner before a second send", async () => {
+  const h = await harness({ draft: "One\nTwo\nThree\nFour" });
+  try {
+    const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
+    const clock = layoutClock();
+    h.send(); clock.step(40);
+    const stale = clock.snapshot();
+    h.edit("Next one\nNext two\nNext three\nNext four\nNext five");
+    const height = input.getBoundingClientRect().height;
+    expect(height).toBeGreaterThan(44);
+    for (const callback of stale) callback(1080);
+    expect(input.getBoundingClientRect().height).toBe(height);
+    h.send();
+    expect(input.getBoundingClientRect().height).toBe(height);
+    clock.step(200);
+    expect(input.getBoundingClientRect().height).toBe(44);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
   } finally { await h.screen.unmount(); }
 });
 
@@ -211,6 +409,7 @@ test.each([[390, false], [1280, false], [390, true]] as const)("keeps one sent b
     expect(animation).toBeDefined();
     expect(animation.effect!.getTiming().duration).toBe(reduced ? 120 : 160);
     animation.pause();
+    await vi.waitFor(() => expect(gap(h.list)).toBeLessThanOrEqual(1));
     await frames();
     expect(document.querySelector(".pwa-queued-messages")).toBeNull();
     const old = h.list.querySelector(".pwa-message.assistant")!;

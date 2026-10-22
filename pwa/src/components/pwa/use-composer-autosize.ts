@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, type RefObject } from "react";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
+import { ownSendFooterChrome, stageOwnSendInputSize } from "@/lib/pwa/own-send-transition";
 import { usePwaTextSize } from "./use-pwa-text-size";
 
 const MAX_VISUAL_LINES = 6;
@@ -30,7 +31,7 @@ function availableInputHeight(input: HTMLTextAreaElement, sixLines: number, mini
   const compactReadingSpace = Math.ceil(bodyLine + 2 * COMPACT_READING_PADDING + latestHeight);
   const normalReadingSpace = bodyLine + pixels(listStyle.getPropertyValue("--pwa-timeline-pad-top")) + pixels(listStyle.getPropertyValue("--pwa-timeline-pad-bottom")) + latestHeight;
   // 从真实布局扣除顶栏/通知及 footer 的非文字高度，附件与队列变化自然计入预算。
-  const footerChrome = footer.getBoundingClientRect().height - input.getBoundingClientRect().height;
+  const footerChrome = ownSendFooterChrome(input) ?? footer.getBoundingClientRect().height - input.getBoundingClientRect().height;
   const space = main.getBoundingClientRect().bottom - list.getBoundingClientRect().top - footerChrome;
   const compact = space - sixLines < normalReadingSpace;
   const available = space - (compact ? compactReadingSpace : normalReadingSpace);
@@ -72,10 +73,12 @@ export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | nu
     const sixLines = MAX_VISUAL_LINES * lineHeight + padding + border;
     const maximum = availableInputHeight(input, sixLines, minimum);
     const needed = contentHeight(input) + border;
-    input.style.maxHeight = `${maximum}px`;
     const height = Math.max(minimum, Math.min(needed, maximum));
+    const overflow = needed > height + LAYOUT_EPSILON ? "auto" : "hidden";
+    if (stageOwnSendInputSize(input, { height, maximum, overflow })) return;
+    input.style.maxHeight = `${maximum}px`;
     input.style.height = `${height}px`;
-    input.style.overflowY = needed > height + LAYOUT_EPSILON ? "auto" : "hidden";
+    input.style.overflowY = overflow;
   }, [inputRef]);
 
   // 草稿和字号变化立即测量；附件、队列和外层空间变化由 ResizeObserver 合并处理。

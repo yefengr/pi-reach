@@ -1551,7 +1551,7 @@ test.each([
     await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
     scrollTo.mockClear();
     scrollTo.mockImplementation((options: ScrollToOptions) => {
-      list.scrollTop = (options.top ?? list.scrollHeight) - list.clientHeight;
+      list.scrollTop = Math.min(options.top ?? list.scrollHeight, list.scrollHeight - list.clientHeight);
       list.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
     if (!attachment) channelHarness.nextSendResults.push(accepted);
@@ -1570,11 +1570,46 @@ test.each([
       return;
     }
     await expect.element(input).toHaveValue("");
-    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "auto" });
+    await expect.poll(() => list.scrollTop).toBe(600);
     await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).not.toBeInTheDocument();
     Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1100 });
     channel.emit(partialFrame("own-send-reply", "own-send-run", "Reply after the new message"));
     await expect.poll(() => scrollTo).toHaveBeenCalledWith({ top: 1100, behavior: "auto" });
+  } finally { await screen.unmount(); }
+});
+
+test.each([false, true])("successful own send releases actual workspace geometry after final submission (attachment=%s)", async attachment => {
+  await page.viewport(390, 844);
+  const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    // 本用例恢复浏览器原生布局与滚动，不沿用通道测试的固定几何 mock。
+    for (const key of ["scrollHeight", "clientHeight", "scrollTop", "scrollTo"]) Reflect.deleteProperty(list, key);
+    const seed = numberedEvents(1)[0]!;
+    if (seed.kind !== "assistant") throw new Error("Expected an assistant history fixture.");
+    emitEvent(channel, { ...seed, blocks: [{ type: "text", text: Array.from({ length: 35 }, (_, i) => `Earlier paragraph ${i}.`).join("\n\n") }] });
+    await expect.poll(() => list.querySelector(".pwa-message.assistant")).not.toBeNull();
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("One\nTwo\nThree\nFour\nFive");
+    if (attachment) {
+      pasteAttachments(input.element(), new File(["Note"], "layout-note.txt", { type: "text/plain" }));
+      await expect.element(screen.getByText("layout-note.txt", { exact: true })).toBeVisible();
+      channelHarness.holdFinish = true;
+    }
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    if (attachment) {
+      await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+      expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(0);
+      await expect.element(input).toHaveValue("One\nTwo\nThree\nFour\nFive");
+      channelHarness.finishReplies[0]!();
+    }
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
+    await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
+    expect(document.querySelector(".pwa-composer .pwa-attachment-card")).toBeNull();
+    expect(input.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    channel.emit(partialFrame("layout-reply", "layout-run", "Reply after final submission"));
+    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Reply after final submission");
+    await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
   } finally { await screen.unmount(); }
 });
 
@@ -3810,8 +3845,9 @@ test.each([false, true])("uploads originals and retains readonly text until IDs 
     expect(message).not.toHaveProperty("images");
     expect(message).not.toHaveProperty("attachments");
     await expect.element(input).not.toHaveAttribute("readonly");
-    await expect.element(input).toHaveValue("");
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
+    // transport=false 必须保留原草稿与附件，不能把最终提交失败当成已发送。
+    await expect.element(input).toHaveValue(unknownDelivery ? "Please review the original file" : "");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(unknownDelivery ? 1 : 0);
     if (unknownDelivery) {
       await expect.element(screen.getByText("Message could not be sent. Check the connection and try again.", { exact: true })).toBeVisible();
       await screen.getByRole("button", { name: "Retry delivery" }).click();
