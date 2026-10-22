@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { TIMELINE_GEOMETRY_EVENT, useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { TimelineRuntime, type TimelinePending, type TimelineRuntimeChange, type TimelineScope, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
@@ -112,6 +112,7 @@ function layoutClock() {
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { callbacks.delete(id); });
   return {
     step: (elapsed: number) => { now = 1000 + elapsed; const pending = [...callbacks.values()]; callbacks.clear(); for (const callback of pending) callback(now); },
+    elapse: (duration: number) => { now += duration; },
     pending: () => callbacks.size,
     snapshot: () => [...callbacks.values()],
   };
@@ -151,7 +152,16 @@ test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width,
   } finally { await h.screen.unmount(); }
 });
 
-test.each([false, true])("late Working follows continuously regardless of simultaneous receipt (receipt=%s)", async receipt => {
+/** 在子布局通知处理后、父 layout effect 之前模拟同步工作，不依赖机器执行速度。 */
+function withGeometryWork(list: HTMLElement, run: () => void, work: () => void): number {
+  let notices = 0;
+  const listener = () => { notices += 1; work(); };
+  list.addEventListener(TIMELINE_GEOMETRY_EVENT, listener);
+  try { run(); } finally { list.removeEventListener(TIMELINE_GEOMETRY_EVENT, listener); }
+  return notices;
+}
+
+test.each([false, true].flatMap(receipt => [0, 16].map(commitCost => ({ receipt, commitCost }))))("late Working follows continuously regardless of simultaneous receipt (receipt=$receipt, commitCost=$commitCost)", async ({ receipt, commitCost }) => {
   const h = await harness();
   try {
     h.send();
@@ -159,7 +169,8 @@ test.each([false, true])("late Working follows continuously regardless of simult
     await frames();
     const clock = layoutClock();
     const before = h.list.scrollTop;
-    h.work(true, receipt ? [history, h.sent()] : undefined);
+    const notices = withGeometryWork(h.list, () => h.work(true, receipt ? [history, h.sent()] : undefined), () => clock.elapse(commitCost));
+    expect(notices).toBeGreaterThan(0);
     expect(h.list.scrollTop).toBe(before);
     expect(gap(h.list)).toBeGreaterThan(1);
     clock.step(40);
@@ -435,7 +446,7 @@ test("Reduced Motion skips send layout motion while clearing the draft and resto
   } finally { await h.screen.unmount(); }
 });
 
-test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width, attachment }))))("activation cost preserves first committed geometry at $width (attachment=$attachment)", async ({ width, attachment }) => {
+test.each([390, 1280].flatMap(width => [false, true].flatMap(attachment => [0, 16].map(commitCost => ({ width, attachment, commitCost })))))("activation cost preserves first committed geometry at $width (attachment=$attachment, commitCost=$commitCost)", async ({ width, attachment, commitCost }) => {
   const h = await harness({ width, height: attachment ? 400 : 650, attachment, draft: "One\nTwo\nThree\nFour\nFive" });
   try {
     const main = document.querySelector<HTMLElement>(".pwa-main")!;
@@ -443,7 +454,10 @@ test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width,
     const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
     const input = document.querySelector<HTMLElement>(".pwa-composer-input")!;
     const before = { old: top(old), footer: footer.getBoundingClientRect().height, input: input.getBoundingClientRect().height };
-    h.send(16);
+    const notices = withGeometryWork(h.list, () => h.send(16), () => {
+      vi.mocked(performance.now).mockReturnValue(performance.now() + commitCost);
+    });
+    if (attachment) expect(notices).toBeGreaterThan(0);
     const firstBudget = main.dataset.composerBudget;
     expect(top(old)).toBe(before.old);
     expect(footer.getBoundingClientRect().height).toBe(before.footer);
@@ -492,8 +506,11 @@ test("receipts and output arriving inside a send update its target without resta
     const clock = layoutClock();
     h.send();
     clock.step(40);
+    const before = h.list.scrollTop;
+    clock.elapse(16);
     h.sent().delivery = "received";
     h.update([history, h.sent()]);
+    expect(h.list.scrollTop).toBe(before);
     clock.step(80);
     h.update([history, formal(h.sent()), { ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text: "First reply" }] } }]);
     clock.step(160);

@@ -9,6 +9,8 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   let starts = 0;
   let advances = 0;
   let measures = 0;
+  let now = 0;
+  const samples: number[] = [];
   let reenter: (() => void) | null = null;
   let anchorAvailable = true;
   let anchorShift = 0;
@@ -22,7 +24,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   const motion = (): ViewportMotion => {
     starts += 1;
     let start: number | null = null;
-    return { advance(now) { advances += 1; start ??= now; return { top: (top + bottom) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
+    return { advance(now) { advances += 1; samples.push(now); start ??= now; return { top: (top + bottom) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
   };
   const layout: ViewportLayout<number, number> = {
     measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate }; }, top: () => top,
@@ -33,18 +35,19 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
       restored.push(anchor); top = Math.min(bottom, anchor + anchorShift); reenter?.(); return true;
     },
   };
-  const core = new TimelineViewportCoordinator({ now: () => 0,
+  const core = new TimelineViewportCoordinator({ now: () => now,
     request(callback) { const id = ++next; frames.set(id, callback); late.push(callback); return id; },
     cancel(id) { frames.delete(id); },
   }, () => {}, trace, tracing);
   core.bind(layout);
-  return { core, layout, writes, frames, late, restored, activityOrigins,
+  return { core, layout, writes, frames, late, restored, activityOrigins, samples,
+    setNow(value: number) { now = value; },
     setAnchorAvailable(value: boolean) { anchorAvailable = value; },
     shiftAnchor(value: number) { anchorShift = value; },
     shiftOnFinish(value: number) { finishShift = value; },
-    step(now = 0) { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); },
+    step(value = now) { now = value; const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); },
     setBottom(value: number) { bottom = value; }, setTop(value: number) { top = value; },
-    reduce() { animate = false; }, reenter(callback: () => void) { reenter = callback; },
+    reduce() { animate = false; }, allowMotion() { animate = true; }, reenter(callback: () => void) { reenter = callback; },
     get finishes() { return finishes; }, get starts() { return starts; }, get advances() { return advances; },
     get measures() { return measures; },
   };
@@ -74,6 +77,95 @@ describe("TimelineViewportCoordinator", () => {
     else f.step(20);
     expect(f.advances).toBe(1);
     expect(f.frames.size).toBe(1);
+  });
+
+  test.each(["commit", "geometry", "activity"] as const)("%s initializes motion time; synchronous notices only refresh layout", (first) => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.setNow(20);
+    if (first !== "activity") f.core.followOwnSend(f.core.captureOwnSend());
+    f.setBottom(150);
+    f.setNow(36); f.core.notify(first);
+    f.setNow(52); f.core.notify("commit");
+    f.setNow(68); f.core.notify("geometry");
+    expect(f.samples).toEqual([36, 36, 36]);
+    expect(f.starts).toBe(1);
+    expect(f.frames.size).toBe(1);
+    f.step(76);
+    f.setBottom(200);
+    f.setNow(92); f.core.notify("activity");
+    f.setNow(108); f.core.notify("commit");
+    expect(f.samples.slice(-3)).toEqual([76, 76, 76]);
+    expect(f.starts).toBe(1);
+    f.step(196);
+    expect(f.finishes).toBe(1);
+    expect(f.layout.top()).toBe(200);
+    f.step(212);
+    expect(f.frames.size).toBe(0);
+  });
+
+  test("a send without a commit initializes on RAF and retains that time for later geometry", () => {
+    const f = fixture();
+    f.setNow(20); f.core.followOwnSend(f.core.captureOwnSend());
+    expect(f.samples).toEqual([]);
+    f.step(50);
+    f.setNow(66); f.core.notify("geometry");
+    expect(f.samples).toEqual([50, 50]);
+    f.step(210);
+    expect(f.finishes).toBe(1);
+  });
+
+  test("a frame timestamp before synchronous initialization cannot move motion time backward", () => {
+    const f = fixture();
+    f.setNow(100); f.core.followOwnSend(f.core.captureOwnSend()); f.core.notify("commit");
+    f.step(96);
+    f.step(116);
+    f.setNow(132); f.core.notify("geometry");
+    expect(f.samples).toEqual([100, 100, 116, 116]);
+    f.step(260);
+    expect(f.finishes).toBe(1);
+  });
+
+  test("a consecutive send starts a new motion time rather than inheriting the prior frame", () => {
+    const f = fixture();
+    f.setNow(100); f.core.followOwnSend(f.core.captureOwnSend()); f.core.notify("commit");
+    f.step(140);
+    const stale = [...f.frames.values()];
+    f.setNow(200); f.core.followOwnSend(f.core.captureOwnSend());
+    f.setNow(216); f.core.notify("commit");
+    expect(f.samples.at(-1)).toBe(216);
+    const count = f.samples.length;
+    stale.forEach(callback => callback(999));
+    expect(f.samples).toHaveLength(count);
+    f.step(376);
+    expect(f.finishes).toBe(2);
+  });
+
+  test.each(["input", "user", "details", "reset", "replace", "unmount", "reduce", "hidden", "viewport-resize"] as const)("%s discards the old motion time and rejects its late frames", (exit) => {
+    const f = fixture();
+    f.setNow(100); f.core.followOwnSend(f.core.captureOwnSend()); f.core.notify("commit");
+    f.step(140);
+    const stale = [...f.frames.values()];
+    if (exit === "input") f.core.input();
+    else if (exit === "user") f.core.userRead();
+    else if (exit === "details") f.core.details(true);
+    else if (exit === "reset") f.core.reset();
+    else if (exit === "replace" || exit === "unmount") f.core.bind(exit === "replace" ? { ...f.layout } : null);
+    else { if (exit === "reduce") f.reduce(); f.core.settle(exit); }
+    f.core.bind(f.layout); f.allowMotion();
+    f.setNow(500); f.core.followOwnSend(f.core.captureOwnSend()); f.core.notify("commit");
+    expect(f.samples.at(-1)).toBe(500);
+    const count = f.samples.length;
+    stale.forEach(callback => callback(999));
+    expect(f.samples).toHaveLength(count);
+    f.setNow(516); f.core.notify("geometry");
+    expect(f.samples.at(-1)).toBe(500);
+    f.step(660);
+    expect(f.core.state.mode).toBe("idle");
+    f.step(676);
+    f.setBottom(150); f.setNow(800); f.core.notify("activity");
+    expect(f.samples.at(-1)).toBe(800);
+    expect(f.core.state.mode).toBe("activity");
   });
 
   test.each([false, true])("anchor receipt keeps paused follow through asynchronous scroll (sync=%s)", (sync) => {
