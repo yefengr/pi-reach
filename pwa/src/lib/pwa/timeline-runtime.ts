@@ -48,6 +48,8 @@ export type TimelinePending = {
   senderRef?: string;
   cancelable?: boolean;
   queued?: boolean;
+  /** 权威队列快照声明该项已在途发送（editable===false）；只影响展示归属，不代表可操作性。 */
+  queueInFlight?: boolean;
   queuedAction?: "insert" | "cancel";
   queuedActionRequestId?: string;
   insertionStatus?: QueuedInsertionStatus;
@@ -127,6 +129,11 @@ function isSameSession(scope: TimelineScope | null, frame: { session_id: string 
 }
 function isMatchingScope(scope: TimelineScope | null, frame: { session_id: string; leaf_id: string | null }): boolean {
   return scope !== null && scope.sessionId === frame.session_id && scope.leafId === frame.leaf_id;
+}
+/** editable 只取自权威队列快照：false 即在途发送，与 sender 归属无关。 */
+function applyQueueInFlight(pending: Pending, editable: boolean): void {
+  if (editable) delete pending.queueInFlight;
+  else pending.queueInFlight = true;
 }
 function mergePartial(previous: TimelinePartial | undefined, next: TimelinePartial): TimelinePartial {
   if (!previous || ("blocks" in next && next.blocks !== undefined)) return next;
@@ -466,9 +473,10 @@ export class TimelineRuntime {
             existing.delivery = "accepted";
           }
           existing.cancelable = item.editable && item.sender_ref === scope.selfSenderRef;
+          applyQueueInFlight(existing, item.editable);
           continue;
         }
-        this.storePending({ kind: "pending", scope, id: `pending:${item.id}`, clientRequestId: item.id, text: item.text, ...(item.images ? { images: item.images } : {}), senderRef: item.sender_ref, queued: true, cancelable: item.editable && item.sender_ref === scope.selfSenderRef, createdAt: item.created_at, delivery: "accepted", requestId: item.id }, { text: item.text, ...(item.images ? { images: item.images } : {}) });
+        this.storePending({ kind: "pending", scope, id: `pending:${item.id}`, clientRequestId: item.id, text: item.text, ...(item.images ? { images: item.images } : {}), senderRef: item.sender_ref, queued: true, cancelable: item.editable && item.sender_ref === scope.selfSenderRef, ...(item.editable ? {} : { queueInFlight: true }), createdAt: item.created_at, delivery: "accepted", requestId: item.id }, { text: item.text, ...(item.images ? { images: item.images } : {}) });
       }
       this.clearQueuedSnapshot();
       const change = this.change();

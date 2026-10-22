@@ -540,6 +540,37 @@ test("keeps queued messages beside the composer and inserts the original item on
   await screen.unmount();
 });
 
+test.each([1280, 390])("keeps a just-sent message in the conversation while it drains from the queue at %ipx", async (width) => {
+  await page.viewport(width, 844);
+  const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByRole("textbox", { name: /Message your agent/i });
+    await input.fill("In-flight follow up");
+    // 每步至少真实绘制一帧，避免微任务轮转造成的假绿。
+    const painted = async () => { for (let index = 0; index < 3; index++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); };
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    const sent = channel.frames.findLast((frame) => frame.type === "user_message")!;
+    if (sent.type !== "user_message") throw new Error("missing local send");
+    await expect.poll(() => list.querySelectorAll(".pwa-message.user")).toHaveLength(1);
+    const bubble = list.querySelector(".pwa-message.user")!;
+    // 权威快照声明这条已在途：它仍在对话区，不进入排队条，也不重建气泡。
+    channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: "queue-in-flight", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
+    await painted();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    channel.emit({ protocol_version: 2, type: "user_message_started", target_channel_id: channel.channelId, in_reply_to: sent.id, session_id: "session-1", leaf_id: "generation-session-1", message: { id: "message-flight", group_id: "group-flight", blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal" } });
+    await painted();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    emitEvent(channel, { event_id: "message-flight", message_id: "message-flight", event_seq: 1, session_id: "session-1", leaf_id: "generation-session-1", group_id: "group-flight", timestamp: 2, kind: "user", blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal", status: "committed" });
+    await painted();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    expect(list.textContent).toContain("In-flight follow up");
+  } finally { await screen.unmount(); }
+});
+
 test.each([["result-first", 1280], ["ready-first", 1280], ["data-first", 1280], ["result-first", 390]] as const)("operation feedback new session keeps old projection until correlated result, ready and first page: %s at %ipx", async (order, width) => {
   await page.viewport(width, 844);
   const context = await renderReadyTimeline(renderWorkspaceApp);

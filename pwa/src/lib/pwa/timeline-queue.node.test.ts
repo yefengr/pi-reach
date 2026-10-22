@@ -399,6 +399,43 @@ test("sidecar budget includes retained fallback and legacy images, and oversized
   expect(queuedPending(runtime).attachments).toBeUndefined();
 });
 
+test("an in-flight queue item keeps its content and descriptor while leaving the waiting area", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const descriptor = attachmentDescriptor("file");
+  runtime.sendUserWithAttachments("later in flight", [descriptor], { clientRequestId: "q", requestId: "send" });
+  const flight = runtime.receive(snapshot([
+    { id: "q", text: "later in flight", sender_ref: "owner", editable: false, created_at: 1 },
+    { id: "peer-flight", text: "peer later", sender_ref: "other", editable: false, created_at: 2 },
+    { id: "peer-wait", text: "peer waiting", sender_ref: "other", editable: true, created_at: 3 },
+  ]));
+  // editable===false 是在途标志，与 sender 归属无关；cancelable 只表示能否操作队列条目。
+  expect(flight.items).toEqual([
+    expect.objectContaining({ clientRequestId: "q", queued: true, queueInFlight: true, cancelable: false, attachments: [descriptor] }),
+    expect.objectContaining({ clientRequestId: "peer-flight", queued: true, queueInFlight: true, cancelable: false }),
+    expect.objectContaining({ clientRequestId: "peer-wait", queued: true, cancelable: false }),
+  ]);
+  expect(flight.items[2]).not.toHaveProperty("queueInFlight");
+  // 权威快照恢复可编辑时清空在途标志并回到等待区，queued 仍是真实队列成员身份。
+  const requeued = runtime.receive(snapshot([{ id: "q", text: "later in flight", sender_ref: "owner", editable: true, created_at: 1 }], { snapshot_id: "snapshot-2" }));
+  expect(requeued.items).toEqual([expect.objectContaining({ clientRequestId: "q", queued: true, cancelable: true, delivery: "accepted" })]);
+  expect(requeued.items[0]).not.toHaveProperty("queueInFlight");
+});
+
+test("an in-flight item hands off to its formal event without leaving the conversation", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("later", undefined, { clientRequestId: "q", requestId: "send" })!;
+  expect(sent.change.items).toHaveLength(1);
+  expect(sent.change.items[0]).toMatchObject({ kind: "pending", clientRequestId: "q" });
+  expect(sent.change.items[0]).not.toHaveProperty("queueInFlight");
+  const flight = runtime.receive(snapshot([{ id: "q", text: "later", sender_ref: "owner", editable: false, created_at: 1 }]));
+  expect(flight.items[0]).toMatchObject({ id: "pending:q", queueInFlight: true });
+  expect(flight.items[0]).not.toHaveProperty("messageId");
+  const started = runtime.receive({ protocol_version: 2, type: "user_message_started", target_channel_id: "c", in_reply_to: "send", session_id: "s", leaf_id: "g", message: { id: "m", group_id: "group", blocks: [{ type: "text", text: "later" }], origin: "pwa", sender_ref: "owner", delivery: "normal" } });
+  expect(started.items).toEqual([expect.objectContaining({ id: "pending:q", messageId: "m", queued: false })]);
+  const committed = runtime.commit({ event_id: "m", message_id: "m", event_seq: 1, session_id: "s", leaf_id: "g", group_id: "group", timestamp: 2, kind: "user", blocks: [{ type: "text", text: "later" }], origin: "pwa", sender_ref: "owner", delivery: "normal", status: "committed" });
+  expect(committed.items.map((value) => value.kind)).toEqual(["event"]);
+});
+
 test("a confirmed cancellation returns the queued message with its attachment previews", () => {
   const runtime = queuedRuntime();
   runtime.commit(metadataEvent("meta", "q", "owner", "later with files", [attachmentDescriptor("attachment-1")]));

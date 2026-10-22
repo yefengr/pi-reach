@@ -4,8 +4,11 @@ import { afterEach, expect, test } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
-import type { TimelinePending, TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { TimelineRuntime, type TimelinePending, type TimelineRuntimeChange, type TimelineScope, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
+import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import { MessageList } from "./message-list";
+import { isQueuedMessage, QueuedMessagesPanel } from "./queued-messages-panel";
 import { MessageComposer } from "./message-composer";
 
 const noop = () => {};
@@ -153,6 +156,114 @@ test("the first send from an empty session animates without replaying initial pe
   try {
     expect(restored.list.querySelector(".pwa-message.user")!.getAnimations()).toHaveLength(0);
   } finally { await restored.screen.unmount(); }
+});
+
+const queueScope: TimelineScope = { deviceId: "d", endpointId: "e", runtimeInstanceId: "r", sessionId: "send-session", leafId: "leaf", selfSenderRef: "local-sender", channelId: "c" };
+const emptyChannel: { current: PeerChannel | null } = { current: null };
+type QueueFrame = Extract<ServerFrame, { type: "queued_message_state" }>;
+function queueSnapshot(id: string, text: string, editable: boolean): QueueFrame {
+  return { protocol_version: 2, type: "queued_message_state", session_id: "send-session", leaf_id: "leaf", snapshot_id: `queue-${id}-${String(editable)}`, chunk_index: 0, final: true, items: [{ id, text, sender_ref: "local-sender", editable, created_at: 1 }] };
+}
+function startedFrame(id: string, text: string): Extract<ServerFrame, { type: "user_message_started" }> {
+  return { protocol_version: 2, type: "user_message_started", target_channel_id: "c", in_reply_to: "send", session_id: "send-session", leaf_id: "leaf", message: { id, group_id: `group-${id}`, blocks: [{ type: "text", text }], origin: "pwa", sender_ref: "local-sender", delivery: "normal" } };
+}
+function formalEvent(id: string, text: string): Parameters<TimelineRuntime["commit"]>[0] {
+  return { event_id: id, message_id: id, event_seq: 2, session_id: "send-session", leaf_id: "leaf", group_id: `group-${id}`, timestamp: 2, kind: "user", blocks: [{ type: "text", text }], origin: "pwa", sender_ref: "local-sender", delivery: "normal", status: "committed" };
+}
+
+/** 真实 Runtime + 真实组件：验证本地发送到正式消息之间气泡和布局不重建。 */
+async function runtimeHarness({ width = 390 } = {}) {
+  await page.viewport(width, 844);
+  const runtime = new TimelineRuntime();
+  runtime.setScope(queueScope);
+  // 历史也必须经由 Runtime 的正式事件进入，才能在发送过程中真实保留在列表里。
+  const seeded = runtime.commit({ ...history.event, event_seq: 1 });
+  expect(seeded.items).toHaveLength(1);
+  let apply!: (change: TimelineRuntimeChange) => void;
+  let viewport!: TimelineViewport;
+  function Harness() {
+    const [items, setItems] = useState<TimelineViewItem[]>(seeded.items);
+    apply = (change) => flushSync(() => setItems(change.items));
+    viewport = useTimelineViewport(items);
+    return <div className="pwa-app-shell"><main className="pwa-main" style={{ display: "flex", flexDirection: "column", width: "100vw", height: 650, flex: "none" }}>
+      <MessageList items={items.filter((item) => !isQueuedMessage(item))} isLive hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryUnknown={noop} />
+      <div className="pwa-chat-footer"><MessageComposer {...composer} queuedMessages={<QueuedMessagesPanel items={items} isOnline runtimeRef={{ current: runtime }} channelRef={emptyChannel} applyChange={(change) => setItems(change.items)} onError={noop} />} /></div>
+    </main></div>;
+  }
+  const screen = await renderPwa(<Harness />);
+  await frames();
+  const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+  return { screen, list,
+    send: (text: string) => { const sent = runtime.sendUser(text, undefined, { clientRequestId: "local", requestId: "send" }); viewport.followOwnSend(); if (sent) apply(sent.change); },
+    receive: (frame: ServerFrame) => apply(runtime.receive(frame)),
+    commit: (event: Parameters<TimelineRuntime["commit"]>[0]) => apply(runtime.commit(event)),
+  };
+}
+
+test.each([[390, false], [1280, false], [390, true]] as const)("keeps one sent bubble without reflow while it drains from the queue at %ipx (reduced=%s)", async (width, reduced) => {
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: reduced ? "reduce" : "no-preference" }] });
+  const h = await runtimeHarness({ width });
+  try {
+    h.send("New message");
+    // 发送后立即捕获并暂停入口动画：真实帧继续推进，但 120/160ms 动画不会在多次采样中自然结束并退出 getAnimations。
+    const bubble = h.list.querySelector(".pwa-message.user")!;
+    const animation = bubble.getAnimations()[0];
+    expect(animation).toBeDefined();
+    expect(animation.effect!.getTiming().duration).toBe(reduced ? 120 : 160);
+    animation.pause();
+    await frames();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    const old = h.list.querySelector(".pwa-message.assistant")!;
+    const composerCard = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const statusText = h.list.querySelector<HTMLElement>(".pwa-delivery-status")!.textContent;
+    expect(statusText).toBeTruthy();
+    const stable = { height: Math.round(h.list.scrollHeight), client: Math.round(h.list.clientHeight), oldTop: top(old), composerTop: Math.round(composerCard.getBoundingClientRect().top) };
+    const assertStable = (label: string) => {
+      expect(document.querySelector(".pwa-message.user"), label).toBe(bubble);
+      expect(document.querySelector(".pwa-queued-messages"), label).toBeNull();
+      expect(gap(h.list), label).toBeLessThanOrEqual(1);
+      expect(Math.round(h.list.scrollHeight), label).toBe(stable.height);
+      expect(Math.round(h.list.clientHeight), label).toBe(stable.client);
+      expect(top(old), label).toBe(stable.oldTop);
+      expect(Math.round(composerCard.getBoundingClientRect().top), label).toBe(stable.composerTop);
+      expect(bubble.getAnimations()[0], label).toBe(animation);
+    };
+    assertStable("local pending");
+    h.receive(queueSnapshot("local", "New message", false));
+    await frames();
+    assertStable("in flight");
+    // 在途阶段不出现可操作的排队条，发送中状态仍保持在上一个气泡里。
+    expect(h.list.querySelector<HTMLElement>(".pwa-delivery-status")!.textContent).toBe(statusText);
+    h.receive(startedFrame("message-local", "New message"));
+    await frames();
+    assertStable("started");
+    h.commit(formalEvent("message-local", "New message"));
+    await frames();
+    assertStable("formal");
+    // 正式消息接管后就地隐藏发送状态，旧正文位置和列表 extent 不变。
+    expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();
+    animation.play();
+    await animation.finished;
+    expect(bubble.getAnimations().filter((value) => value.playState === "running")).toHaveLength(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("an editable queue item enters the conversation once it starts draining", async () => {
+  const h = await runtimeHarness();
+  try {
+    h.receive(queueSnapshot("queued-one", "Queued original", true));
+    await frames();
+    expect(document.querySelector(".pwa-queued-messages")).not.toBeNull();
+    expect(h.list.textContent).not.toContain("Queued original");
+    h.receive(queueSnapshot("queued-one", "Queued original", false));
+    await frames();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(h.list.textContent).toContain("Queued original");
+    // 在途时不再提供取消按钮，改显发送中状态。
+    const status = h.list.querySelector<HTMLElement>(".pwa-delivery-status")!;
+    expect(status.textContent).toBeTruthy();
+    expect(status.querySelector("button")).toBeNull();
+  } finally { await h.screen.unmount(); }
 });
 
 test("non-tail and unknown/queued statuses stay in flow without covering subsequent messages", async () => {

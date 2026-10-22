@@ -240,6 +240,26 @@ test.each([[1280, 900], [390, 844], [390, 500]])("keeps a scrolling queue above 
   }
 });
 
+test("hides an in-flight item from the waiting area while other-owner waiting items stay", async () => {
+  const runtime = new TimelineRuntime();
+  runtime.setScope(queueScope);
+  runtime.sendUser("Local in flight", undefined, { clientRequestId: "q", requestId: "send" });
+  runtime.receive(runtimeSnapshot([
+    { id: "q", text: "Local in flight", sender_ref: "owner", editable: false, created_at: 1 },
+    { id: "peer", text: "Peer waiting", sender_ref: "other", editable: true, created_at: 2 },
+  ]));
+  const screen = await renderPwa(<QueuePanelHarness runtime={runtime} onSend={() => true} />);
+  try {
+    const panel = document.querySelector<HTMLElement>(".pwa-queued-messages")!;
+    // 在途项交给对话区；其他 Owner 的等待项只读但仍留在等待区。
+    expect(panel.textContent).not.toContain("Local in flight");
+    expect(panel.querySelectorAll(".pwa-queued-message")).toHaveLength(1);
+    await expect.element(screen.getByText("Peer waiting", { exact: true })).toBeVisible();
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("keeps a single queued message on one compact row with icon actions", async () => {
   const screen = await renderPwa(<QueuedMessages items={[queuedItem({ text: `Single queued message ${"that keeps going ".repeat(12)}` })]} isOnline onInsert={() => {}} onCancel={() => {}} />);
   try {

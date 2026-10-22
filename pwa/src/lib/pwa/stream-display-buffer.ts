@@ -38,6 +38,7 @@ type NonStreamToken =
     delivery: TimelinePending["delivery"];
     cancelable: boolean | undefined;
     queued: boolean | undefined;
+    queueInFlight: boolean | undefined;
     queuedAction: TimelinePending["queuedAction"];
     queuedActionRequestId: string | undefined;
     insertionStatus: TimelinePending["insertionStatus"];
@@ -139,6 +140,7 @@ function sameItem(a: TimelineViewItem, b: TimelineViewItem): boolean {
       && a.messageId === b.messageId
       && a.cancelable === b.cancelable
       && a.queued === b.queued
+      && a.queueInFlight === b.queueInFlight
       && a.queuedAction === b.queuedAction
       && a.queuedActionRequestId === b.queuedActionRequestId
       && a.insertionStatus === b.insertionStatus
@@ -172,6 +174,7 @@ function nonStreamTokens(items: readonly TimelineViewItem[]): NonStreamToken[] {
         delivery: item.delivery,
         cancelable: item.cancelable,
         queued: item.queued,
+        queueInFlight: item.queueInFlight,
         queuedAction: item.queuedAction,
         queuedActionRequestId: item.queuedActionRequestId,
         insertionStatus: item.insertionStatus,
@@ -198,6 +201,7 @@ function sameNonStreamTokens(a: readonly NonStreamToken[], b: readonly NonStream
         && token.delivery === next.delivery
         && token.cancelable === next.cancelable
         && token.queued === next.queued
+        && token.queueInFlight === next.queueInFlight
         && token.queuedAction === next.queuedAction
         && token.queuedActionRequestId === next.queuedActionRequestId
         && token.insertionStatus === next.insertionStatus

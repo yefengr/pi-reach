@@ -450,6 +450,19 @@ test("mixed lanes keep immediate text whole while only the paced lane builds a c
   segment.mockRestore();
 });
 
+test("an in-flight queue transition stays urgent even when cancelable was already false", () => {
+  const buffer = new StreamDisplayBuffer();
+  const waiting = { kind: "pending", id: "local", clientRequestId: "local", requestId: "send", text: "New message", createdAt: 1, delivery: "accepted", queued: true, cancelable: false } as TimelineViewItem;
+  buffer.ingest([waiting]);
+  const inFlight = { ...waiting, queueInFlight: true } as TimelineViewItem;
+  const started = buffer.ingest([inFlight]);
+  expect(started.shouldRender).toBe(true);
+  expect(started.urgent).toBe(true);
+  expect(started.items[0]).toMatchObject({ queueInFlight: true });
+  // 重复的权威快照不重复提交，节拍和生命周期不变。
+  expect(buffer.ingest([inFlight]).shouldRender).toBe(false);
+});
+
 test("reset renders the latest authoritative formal event in full", () => {
   const buffer = new StreamDisplayBuffer();
   buffer.ingest([partial("p", "g", "a long response")]);
