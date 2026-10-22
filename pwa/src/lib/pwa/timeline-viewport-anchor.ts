@@ -1,5 +1,5 @@
 const READABLE_BLOCK_SELECTOR = "p, li, pre, blockquote, h1, h2, h3, h4, h5, h6, table, figure, .pwa-stream-text";
-const CONTENT_ROW_SELECTOR = "[data-timeline-key], [data-tool-key], .pwa-timeline-row, .pwa-message, article";
+const CONTENT_ROW_SELECTOR = "[data-timeline-key], [data-tool-key], .pwa-timeline-row, .pwa-user-row, .pwa-message, article";
 const EXCLUDED_SELECTOR = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty, [hidden]";
 
 type RowLocator = {

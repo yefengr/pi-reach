@@ -16,8 +16,18 @@
 .pwa-assistant-blocks { display: grid; gap: 12px; }
 
 /* 待发送消息下方的投递状态行：12px secondary，靠右。 */
-.pwa-pending { margin: 12px 0; }
-.pwa-pending > .pwa-message.user { margin: 0 0 0 auto; }
+.pwa-user-row { position: relative; min-width: 0; margin: 12px 0; }
+/* 入场位移只在气泡自身的静态框内绘制，不侵入下方发送状态或改变滚动几何。 */
+.pwa-user-bubble-frame { display: flow-root; width: fit-content; max-width: 80%; margin-left: auto; overflow: clip; border-radius: var(--pwa-radius-md); }
+.pwa-user-bubble-frame > .pwa-message.user { width: auto; max-width: none; margin: 0; }
+/* 只借用尾部已有留白；后面有正文或另一条 pending 时立即恢复正常流。 */
+.pwa-message-list > .pwa-pending-short:has(+ .pwa-bottom-sentinel) > .pwa-delivery-status,
+.pwa-message-list > .pwa-pending-short:has(+ .pwa-thinking-status + .pwa-bottom-sentinel) > .pwa-delivery-status { position: absolute; top: 100%; right: 0; width: max-content; max-width: 100%; margin-top: 0; }
+.pwa-user-message-in { animation: pwa-user-message-in var(--pwa-duration-message-in) var(--pwa-ease-enter); }
+@keyframes pwa-user-message-in {
+  from { opacity: 0; transform: translateY(calc(6px * var(--pwa-motion-shift))); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .pwa-delivery-status { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0 4px; margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-ui-scope .pwa-button.pwa-delivery-action { min-height: 44px; padding-inline: 8px; font-size: var(--pwa-text-meta); }
 
@@ -27,6 +37,9 @@
 /* 与思考／工具组头保持相同的字号、字重、高度和外边距；运行色与左侧图标一致，保持正体，不与思考标题共用斜体。 */
 .pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: 44px; margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
+/* 图标即时反馈，文字只淡入；不移动状态行、不延迟真实运行状态。 */
+.pwa-working-label { animation: pwa-working-label-in var(--pwa-duration-fade) var(--pwa-ease-enter); }
+@keyframes pwa-working-label-in { from { opacity: 0; } to { opacity: 1; } }
 /* 压缩终态是本地提示，不是会话记录；固定 44px 行高，与进行中行切换时不跳动。 */
 .pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: 44px; margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-compaction-notice.is-error { color: var(--pwa-error); }

@@ -17,6 +17,7 @@ import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 
 type ConversationTimelineProps = {
   items: readonly TimelineViewItem[];
@@ -31,7 +32,9 @@ type ConversationTimelineProps = {
   notices?: readonly CompactionNotice[];
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
-  renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead) => ReactNode;
+  renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead, userMessageIn: boolean) => ReactNode;
+  /** 列表由空态进入首条本端 pending；初次加载已有内容不播放。 */
+  enterInitialPending?: boolean;
   /** 这些正式事件之前缺少记录，在对应条目前显示一行说明。 */
   gapBefore?: ReadonlySet<string>;
   /** 最后一处缺口之后没有可见条目，在时间线末尾显示说明。 */
@@ -64,7 +67,7 @@ function TurnMeta({ completion, interrupted }: { completion: RunCompletion; inte
 
 function WorkingStatus() {
   const { t } = useI18n();
-  return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.working}</p>;
+  return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span className="pwa-working-label">{t.timeline.working}</span></p>;
 }
 
 /** 压缩进行中沿用 Working 行的高度与字号，避免与终态切换时跳动。 */
@@ -130,8 +133,11 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
 }
 
 /** 投影时间线并划分工具段；工具的首次观察顺序随投影一起保存，决定工具组身份。 */
-function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>) {
-  const [timeline, setTimeline] = useState<TimelineState>(() => ({ view: projectTimeline([]), observed: new Map(), appended: new Set() }));
+function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>, enterInitialPending: boolean) {
+  const [timeline, setTimeline] = useState<TimelineState>(() => {
+    const view = projectTimeline(items, enterInitialPending ? projectTimeline([]) : undefined);
+    return { view, observed: observeTools(view.entries, new Map()), appended: new Set(appendedTools(view.entries, [])) };
+  });
   let { view, observed, appended } = timeline;
   if (view.items !== items) {
     view = projectTimeline(items, timeline.view);
@@ -155,7 +161,7 @@ function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): 
   return keys;
 }
 
-export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
+export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, enterInitialPending = false, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
   const [thinkingChoices, setThinkingChoices] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [toolChoices, setToolChoices] = useState<ReadonlyMap<string, ToolExpansion>>(() => new Map());
   const [toolIndicators, setToolIndicators] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
@@ -189,7 +195,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   const currentFileReader = useRef(scopedFileReader);
   useLayoutEffect(() => { currentFileReader.current = scopedFileReader; }, [scopedFileReader]);
 
-  const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore);
+  const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore, enterInitialPending);
   const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
   const summaryItem = summaryReader ? view.entries.find(entry => entry.kind === "record" && entry.key === summaryReader.key) : null;
   const summaryEvent = summaryItem?.kind === "record" && summaryItem.item.kind === "event" && summaryItem.item.event.session_id === summaryReader?.sessionId && isSummaryEvent(summaryItem.item.event) ? summaryItem.item.event : null;
@@ -204,6 +210,13 @@ export function ConversationTimeline({ items, live, completions, running = false
     );
     return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
   });
+  const workingVisible = !compacting && activity.working && !thinkingActive && !toolsActive;
+  const previousWorking = useRef(workingVisible);
+  useLayoutEffect(() => {
+    if (previousWorking.current === workingVisible) return;
+    previousWorking.current = workingVisible;
+    listRef.current?.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "activity" } }));
+  }, [workingVisible, listRef]);
   // 手动展开思考与工具组都暂停自动跟随，保持当前阅读位置。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
     const choice = segmentExpansion(segment.tools, tools);
@@ -312,7 +325,7 @@ export function ConversationTimeline({ items, live, completions, running = false
           const event = entry.item.event;
           return <SummaryEntry key={entry.key} event={event} onRead={trigger => openSummaryReader(entry.key, event.session_id, trigger)} />;
         }
-        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader)}</Fragment>;
+        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true)}</Fragment>;
       }
       if (entry.kind === "text") return <TextRow entry={entry} key={entry.key} />;
       if (entry.kind === "thinking") return <ThinkingContent
@@ -350,7 +363,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   return <>
     {rows}
     {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
-    {compacting ? <CompactionStatus /> : activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
+    {compacting ? <CompactionStatus /> : workingVisible ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     <SummaryReader event={summaryEvent} opened={summaryOpen && summaryEvent !== null} onClose={() => setSummaryOpen(false)} onExitTransitionEnd={finishSummaryReader} />
     {scopedFileReader ? <PublishedFileReader key={scopedFileReader.file.publication_id} file={scopedFileReader.file} source={scopedFileReader.trigger} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}

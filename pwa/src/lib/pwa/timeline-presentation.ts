@@ -7,7 +7,7 @@ export type TimelineToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extra
 export type ToolEntry = { kind: "tool"; key: string; value: TimelineToolValue; seq?: number };
 export type ThinkingEntry = { kind: "thinking"; key: string; groupId: string; text: string; streaming: boolean; seq?: number; thinkingTextEpoch?: object };
 export type TextEntry = { kind: "text"; key: string; groupId: string; text: string; streaming: boolean; interrupted: boolean; seq?: number; timestamp?: number };
-export type RecordEntry = { kind: "record"; key: string; item: TimelineViewItem; seq?: number };
+export type RecordEntry = { kind: "record"; key: string; item: TimelineViewItem; seq?: number; userMessageIn?: boolean };
 export type PresentationEntry = ToolEntry | ThinkingEntry | TextEntry | RecordEntry;
 export type PresentationSnapshot = { items: readonly TimelineViewItem[]; entries: PresentationEntry[] };
 
@@ -152,7 +152,7 @@ function sameEntry(previous: PresentationEntry, next: PresentationEntry): boolea
     case "tool":
       return previous.kind === "tool" && previous.value === next.value;
     case "record":
-      return previous.kind === "record" && (previous.item === next.item
+      return previous.kind === "record" && previous.userMessageIn === next.userMessageIn && (previous.item === next.item
         || previous.item.kind === "event" && next.item.kind === "event" && previous.item.event === next.item.event);
   }
 }
@@ -167,7 +167,27 @@ function reuseEntries(entries: PresentationEntry[], previous: readonly Presentat
   });
 }
 
+/** 仅按真实消息 ID 承接本端 pending；不以正文、时间或到达顺序猜测消息身份。 */
+function reconcileUserRecords(entries: PresentationEntry[], previous: PresentationSnapshot | undefined): PresentationEntry[] {
+  const records = previous?.entries.filter((entry): entry is RecordEntry => entry.kind === "record") ?? [];
+  const known = new Map(records.map(entry => [entry.key, entry]));
+  const messages = new Map<string, RecordEntry>();
+  for (const entry of records) {
+    const item = entry.item;
+    if (item.kind === "pending" && item.messageId) messages.set(item.messageId, entry);
+    if (item.kind === "event" && item.event.kind === "user") messages.set(item.event.message_id, entry);
+  }
+  return entries.map(entry => {
+    if (entry.kind !== "record") return entry;
+    const item = entry.item;
+    const retained = item.kind === "event" && item.event.kind === "user" ? messages.get(item.event.message_id) : known.get(entry.key);
+    const userMessageIn = retained?.userMessageIn ?? (previous !== undefined && item.kind === "pending" && item.delivery === "pending" && !item.queued && !known.has(entry.key));
+    return { ...entry, key: retained?.key ?? entry.key, ...(userMessageIn ? { userMessageIn: true } : {}) };
+  });
+}
+
 export function projectTimeline(items: readonly TimelineViewItem[], previous?: PresentationSnapshot): PresentationSnapshot {
   const previousEntries = previous?.entries ?? [];
-  return { items, entries: reuseEntries(reconcileOrder(flatten(items), previousEntries), previousEntries) };
+  const entries = reconcileUserRecords(flatten(items), previous);
+  return { items, entries: reuseEntries(reconcileOrder(entries, previousEntries), previousEntries) };
 }

@@ -5,7 +5,9 @@ import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, type TimelinePending, type TimelineRuntime, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 
 export function isQueuedMessage(item: TimelineViewItem): item is TimelinePending {
-  return item.kind === "pending" && item.messageId === undefined && (item.queued === true || item.insertionStatus !== undefined);
+  if (item.kind !== "pending" || item.messageId !== undefined) return false;
+  // 插入提示是显式 notice，优先保留；在途项（editable===false）留在对话区，其余队列成员才进等待区。
+  return item.insertionStatus !== undefined || (item.queued === true && item.queueInFlight !== true);
 }
 
 function nearestInsertionDeadline(items: TimelineViewItem[]): number | null {

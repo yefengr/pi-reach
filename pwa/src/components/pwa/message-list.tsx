@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, type RefObject } from "react";
+import { useLayoutEffect, useMemo, useState, type RefObject } from "react";
 import { Button } from "@mantine/core";
 import { LoaderCircle } from "lucide-react";
 import { AssistantBlocks, ThinkingContent } from "./timeline-content";
@@ -6,14 +6,14 @@ import { CompactionNoticeRow, CompactionStatus, ConversationTimeline, GapNotice 
 import { useTimelineEnterFade } from "./use-timeline-enter-fade";
 import "./timeline-reconnect.css";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
-import type { TimelinePending, TimelineViewItem } from "@/lib/pwa/timeline-runtime";
-import { useI18n, type Messages } from "@/lib/i18n";
+import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { useI18n } from "@/lib/i18n";
 import type { TimelineReconnectPhase } from "@/lib/pwa/use-live-timeline";
 import { runCompletions } from "@/lib/pwa/run-completion";
 import { attachmentMessageKey, projectAttachmentMetadata, type TimelineAttachmentProjection } from "@/lib/pwa/timeline-attachments";
 import { publishedFileFromEvent, type AttachmentMetadata } from "@pi-reach/protocol/session";
 import { PublishedFile, type PublishedFileRead } from "./published-file";
-import { AttachmentCards, readonlyAttachmentItems } from "./attachment-cards";
+import { UserMessage } from "./user-message";
 import { useAutoLoadEarlier } from "./use-auto-load-earlier";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
@@ -66,11 +66,6 @@ function blockText(event: TimelineEvent | TimelinePartial): string {
   return "delta" in event && event.delta ? event.delta : "";
 }
 
-/** 发送方只为读屏标出；用户消息靠右、轻底，不显示时间。 */
-function userScreenReaderLabel(event: Extract<TimelineEvent, { kind: "user" }>, t: Messages["timeline"]): string {
-  return event.origin === "extension" ? t.srRemote : t.srYou;
-}
-
 /** 隐藏未知 custom、run_end 与纯空白正文；保留空思考记录，由投影合并为静态痕迹。 */
 function isVisibleItem(item: TimelineViewItem): boolean {
   if (item.kind !== "event") return true;
@@ -94,33 +89,12 @@ function visibleGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<
   return { before, atEnd: pending };
 }
 
-function UserBlocks({ event }: { event: Extract<TimelineEvent, { kind: "user" }> }) {
-  const { t, format } = useI18n();
-  return <div className="pwa-user-blocks">{event.blocks.map((block, index) => block.type === "text" ? <p key={index}>{block.text}</p> : "omitted" in block ? <div className="pwa-image-omitted" key={index}>{t.timeline.imageOmitted(block.mime_type, format.number(block.byte_length))}</div> : <img className="pwa-message-image" key={index} src={`data:${block.mime_type};base64,${block.data}`} alt={t.timeline.attachmentAlt(index + 1)} />)}</div>;
-}
-
 function EventCard({ event, metadata }: { event: Exclude<TimelineEvent, { kind: "tool" }>; metadata?: AttachmentMetadata }) {
   const { t } = useI18n();
-  if (event.kind === "user") return <article className="pwa-message user"><span className="pwa-sr-only">{userScreenReaderLabel(event, t.timeline)}</span>{metadata ? <div className="pwa-user-blocks">{metadata.text ? <p>{metadata.text}</p> : null}<AttachmentCards items={readonlyAttachmentItems(metadata.attachments)} /></div> : <UserBlocks event={event} />}</article>;
+  if (event.kind === "user") return <UserMessage value={event} metadata={metadata} entering={false} />;
   if (event.kind === "assistant") return <article className="pwa-message assistant"><span className="pwa-sr-only">{t.timeline.srPi}</span><AssistantBlocks blocks={event.blocks} /></article>;
   // 摘要和服务错误由 ConversationTimeline 提供安全阅读入口，不在会话中铺开正文。
   return null;
-}
-
-/** 待发送消息：气泡下方以 12px secondary 状态行显示「发送中」或「投递状态未知」＋「重试」。 */
-function PendingCard({ pending, onRetryUnknown, onCancelQueued }: { pending: TimelinePending; onRetryUnknown?: (clientRequestId: string) => void; onCancelQueued?: (clientRequestId: string) => void }) {
-  const { t } = useI18n();
-  const unknown = pending.delivery === "unknown_delivery";
-  const queued = pending.delivery === "accepted" && pending.messageId === undefined && pending.cancelable === true;
-  const status = unknown ? t.timeline.deliveryUnknown : queued ? t.timeline.queued : t.timeline.deliverySending;
-  return <div className="pwa-pending">
-    <article className="pwa-message user pending"><span className="pwa-sr-only">{t.timeline.srYou}</span><div className="pwa-user-blocks">{pending.text ? <p>{pending.text}</p> : null}{pending.images?.map((image, index) => <img className="pwa-message-image" key={index} src={`data:${image.mime};base64,${image.data}`} alt={t.timeline.attachmentAlt(index + 1)} />)}{pending.attachments?.length ? <AttachmentCards items={readonlyAttachmentItems(pending.attachments)} /> : null}</div></article>
-    <p className="pwa-delivery-status" role="status">
-      <span>{status}</span>
-      {unknown && onRetryUnknown ? <Button className="pwa-delivery-action" variant="transparent" color="piReach" size="compact-sm" type="button" onClick={() => onRetryUnknown(pending.clientRequestId)} aria-label={t.timeline.retryDelivery}>{t.common.retry}</Button> : null}
-      {queued && onCancelQueued ? <Button className="pwa-delivery-action" variant="transparent" color="piReach" size="compact-sm" type="button" onClick={() => onCancelQueued(pending.clientRequestId)} aria-label={t.timeline.cancelQueued}>{t.common.cancel}</Button> : null}
-    </p>
-  </div>;
 }
 
 function PartialCard({ partial }: { partial: Exclude<TimelinePartial, { kind: "tool" }> }) {
@@ -130,16 +104,17 @@ function PartialCard({ partial }: { partial: Exclude<TimelinePartial, { kind: "t
   return <article className="pwa-message assistant partial"><span className="pwa-sr-only">{t.timeline.srPi}</span>{partial.blocks ? <AssistantBlocks blocks={partial.blocks} streaming /> : text.trim() ? <div className="pwa-stream-text">{text}</div> : null}</article>;
 }
 
-function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["onRetryUnknown"], onCancelQueued: MessageListProps["onCancelQueued"], projection: TimelineAttachmentProjection, live: boolean, onRead: PublishedFileRead) {
+function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["onRetryUnknown"], onCancelQueued: MessageListProps["onCancelQueued"], projection: TimelineAttachmentProjection, live: boolean, onRead: PublishedFileRead, userMessageIn: boolean) {
   if (item.kind === "event") {
     const file = publishedFileFromEvent(item.event);
     if (file) return <PublishedFile key={item.event.event_id} file={file} live={live} onRead={onRead} />;
   }
-  if (item.kind === "pending") return <PendingCard pending={item} key={item.id} onRetryUnknown={onRetryUnknown} onCancelQueued={onCancelQueued} />;
+  if (item.kind === "pending") return <UserMessage value={item} entering={userMessageIn} onRetryUnknown={onRetryUnknown} onCancelQueued={onCancelQueued} />;
+  if (item.kind === "event" && item.event.kind === "user") return <UserMessage value={item.event} entering={userMessageIn} metadata={projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id))} />;
   const value = item.kind === "event" ? item.event : item.partial;
   // projectTimeline 将全部工具投影为 ToolEntry，由 ConversationTimeline 提供详情入口。
   if (value.kind === "tool") return null;
-  if (item.kind === "event" && item.event.kind !== "tool") return <EventCard event={item.event} key={item.event.event_id} metadata={item.event.kind === "user" ? projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id)) : undefined} />;
+  if (item.kind === "event" && item.event.kind !== "tool") return <EventCard event={item.event} key={item.event.event_id} />;
   if (item.kind === "partial" && item.partial.kind !== "tool") return <PartialCard partial={item.partial} key={item.partial.partial_id} />;
   return null;
 }
@@ -163,6 +138,12 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
   const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
   const visibleItems = items.filter(isVisibleItem);
+  const [visibility, setVisibility] = useState(() => ({ items, empty: visibleItems.length === 0, enterInitialPending: false }));
+  let enterInitialPending = visibility.enterInitialPending;
+  if (visibility.items !== items) {
+    enterInitialPending = visibility.empty && visibleItems.length > 0;
+    setVisibility({ items, empty: visibleItems.length === 0, enterInitialPending });
+  }
   const gaps = useMemo(() => visibleGaps(items, gapBefore), [items, gapBefore]);
   const liveRunning = isLive && running;
   const liveCompacting = isLive && compacting;
@@ -192,7 +173,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   }}>
     {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} enterInitialPending={enterInitialPending} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead, userMessageIn) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead, userMessageIn)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

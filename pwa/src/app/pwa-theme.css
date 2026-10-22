@@ -210,6 +210,7 @@
   --pwa-duration-image-out: 220ms;
   --pwa-duration-toast: 180ms;
   --pwa-duration-fade: 120ms;
+  --pwa-duration-message-in: 160ms;
   --pwa-duration-press-in: 90ms;
   --pwa-duration-press-out: 120ms;
   --pwa-duration-menu-in: 160ms;
@@ -288,6 +289,7 @@
     --pwa-duration-menu-in: var(--pwa-duration-fade);
     --pwa-duration-menu-out: var(--pwa-duration-fade);
     --pwa-duration-content: var(--pwa-duration-fade);
+    --pwa-duration-message-in: var(--pwa-duration-fade);
   }
 
   *,

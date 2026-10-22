@@ -540,6 +540,37 @@ test("keeps queued messages beside the composer and inserts the original item on
   await screen.unmount();
 });
 
+test.each([1280, 390])("keeps a just-sent message in the conversation while it drains from the queue at %ipx", async (width) => {
+  await page.viewport(width, 844);
+  const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByRole("textbox", { name: /Message your agent/i });
+    await input.fill("In-flight follow up");
+    // 每步至少真实绘制一帧，避免微任务轮转造成的假绿。
+    const painted = async () => { for (let index = 0; index < 3; index++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); };
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    const sent = channel.frames.findLast((frame) => frame.type === "user_message")!;
+    if (sent.type !== "user_message") throw new Error("missing local send");
+    await expect.poll(() => list.querySelectorAll(".pwa-message.user")).toHaveLength(1);
+    const bubble = list.querySelector(".pwa-message.user")!;
+    // 权威快照声明这条已在途：它仍在对话区，不进入排队条，也不重建气泡。
+    channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: "queue-in-flight", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
+    await painted();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    channel.emit({ protocol_version: 2, type: "user_message_started", target_channel_id: channel.channelId, in_reply_to: sent.id, session_id: "session-1", leaf_id: "generation-session-1", message: { id: "message-flight", group_id: "group-flight", blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal" } });
+    await painted();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    emitEvent(channel, { event_id: "message-flight", message_id: "message-flight", event_seq: 1, session_id: "session-1", leaf_id: "generation-session-1", group_id: "group-flight", timestamp: 2, kind: "user", blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal", status: "committed" });
+    await painted();
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    expect(list.textContent).toContain("In-flight follow up");
+  } finally { await screen.unmount(); }
+});
+
 test.each([["result-first", 1280], ["ready-first", 1280], ["data-first", 1280], ["result-first", 390]] as const)("operation feedback new session keeps old projection until correlated result, ready and first page: %s at %ipx", async (order, width) => {
   await page.viewport(width, 844);
   const context = await renderReadyTimeline(renderWorkspaceApp);
@@ -1497,6 +1528,88 @@ test("keeps current handshake protocol feedback after the matching session_ready
     channel.emit(readyFrame(channel, "session-1"));
     await expect.element(screen.getByPlaceholder("Message your agent…")).toBeEnabled();
     await expect.element(feedback).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
+test.each([
+  { attachment: false, accepted: true }, { attachment: true, accepted: true },
+  { attachment: false, accepted: false }, { attachment: true, accepted: false },
+])("own sends restore following only after transport accepts them (attachment=$attachment accepted=$accepted)", async ({ attachment, accepted }) => {
+  const { screen, channel, list, scrollTo } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Follow my new message");
+    if (attachment) {
+      const clipboard = new DataTransfer();
+      clipboard.items.add(new File(["Contents"], "follow-note.txt", { type: "text/plain" }));
+      input.element().dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
+      await expect.element(screen.getByText("follow-note.txt", { exact: true })).toBeVisible();
+      channelHarness.holdFinish = true;
+    }
+    list.scrollTop = 300;
+    list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
+    scrollTo.mockClear();
+    scrollTo.mockImplementation((options: ScrollToOptions) => {
+      list.scrollTop = Math.min(options.top ?? list.scrollHeight, list.scrollHeight - list.clientHeight);
+      list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    if (!attachment) channelHarness.nextSendResults.push(accepted);
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    if (attachment) {
+      await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+      channelHarness.nextSendResults.push(accepted);
+      channelHarness.finishReplies[0]!();
+    }
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message").length).toBe(1);
+    if (!accepted) {
+      await expect.element(input).toHaveValue("Follow my new message");
+      await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(list.scrollTop).toBe(300);
+      return;
+    }
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => list.scrollTop).toBe(600);
+    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).not.toBeInTheDocument();
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1100 });
+    channel.emit(partialFrame("own-send-reply", "own-send-run", "Reply after the new message"));
+    await expect.poll(() => scrollTo).toHaveBeenCalledWith({ top: 1100, behavior: "auto" });
+  } finally { await screen.unmount(); }
+});
+
+test.each([false, true])("successful own send releases actual workspace geometry after final submission (attachment=%s)", async attachment => {
+  await page.viewport(390, 844);
+  const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    // 本用例恢复浏览器原生布局与滚动，不沿用通道测试的固定几何 mock。
+    for (const key of ["scrollHeight", "clientHeight", "scrollTop", "scrollTo"]) Reflect.deleteProperty(list, key);
+    const seed = numberedEvents(1)[0]!;
+    if (seed.kind !== "assistant") throw new Error("Expected an assistant history fixture.");
+    emitEvent(channel, { ...seed, blocks: [{ type: "text", text: Array.from({ length: 35 }, (_, i) => `Earlier paragraph ${i}.`).join("\n\n") }] });
+    await expect.poll(() => list.querySelector(".pwa-message.assistant")).not.toBeNull();
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("One\nTwo\nThree\nFour\nFive");
+    if (attachment) {
+      pasteAttachments(input.element(), new File(["Note"], "layout-note.txt", { type: "text/plain" }));
+      await expect.element(screen.getByText("layout-note.txt", { exact: true })).toBeVisible();
+      channelHarness.holdFinish = true;
+    }
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    if (attachment) {
+      await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+      expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(0);
+      await expect.element(input).toHaveValue("One\nTwo\nThree\nFour\nFive");
+      channelHarness.finishReplies[0]!();
+    }
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
+    await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
+    expect(document.querySelector(".pwa-composer .pwa-attachment-card")).toBeNull();
+    expect(input.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    channel.emit(partialFrame("layout-reply", "layout-run", "Reply after final submission"));
+    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Reply after final submission");
+    await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
   } finally { await screen.unmount(); }
 });
 
@@ -3732,8 +3845,9 @@ test.each([false, true])("uploads originals and retains readonly text until IDs 
     expect(message).not.toHaveProperty("images");
     expect(message).not.toHaveProperty("attachments");
     await expect.element(input).not.toHaveAttribute("readonly");
-    await expect.element(input).toHaveValue("");
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
+    // transport=false 必须保留原草稿与附件，不能把最终提交失败当成已发送。
+    await expect.element(input).toHaveValue(unknownDelivery ? "Please review the original file" : "");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(unknownDelivery ? 1 : 0);
     if (unknownDelivery) {
       await expect.element(screen.getByText("Message could not be sent. Check the connection and try again.", { exact: true })).toBeVisible();
       await screen.getByRole("button", { name: "Retry delivery" }).click();

@@ -42,6 +42,8 @@ async function renderTimeline(initialItems: TimelineViewItem[]) {
     /** 切换会话：内容整体替换，不产生实时输出。 */
     replace: (items: TimelineViewItem[]) => flushSync(() => updateItems(items)),
     readAt: async (element: Element) => {
+      // 模拟用户回看须包含输入意图；单独写 scrollTop 也可能来自正在结束的程序滚动。
+      list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
       list.scrollTop += element.getBoundingClientRect().top - list.getBoundingClientRect().top - 2;
       flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
       await settleLayout();
@@ -101,6 +103,25 @@ test.each([1280, 390])("reading a later message survives Markdown height changes
       expect(viewport().followingOutput).toBe(false);
     }
     expect(viewport().unreadOutput).toBe(1);
+  } finally { await screen.unmount(); }
+});
+
+test.each([1280, 390])("history prepend preserves reading when only a tall user bubble is visible at %ipx", async width => {
+  await page.viewport(width, 844);
+  const user: TimelineViewItem = { kind: "event", event: {
+    ...scope, event_id: "user-long", message_id: "user-long", group_id: "user-run", timestamp: 1,
+    kind: "user", status: "committed", origin: "extension", delivery: "normal",
+    blocks: Array.from({ length: 30 }, (_, index) => ({ type: "text", text: `User paragraph ${index}. ${"Readable content. ".repeat(8)}` })),
+  } };
+  const { screen, list, readAt, replace, viewport } = await renderTimeline([user]);
+  try {
+    const target = screen.getByText(/^User paragraph 10\./).element();
+    await readAt(target);
+    const before = Math.round(offset(target, list));
+    replace([answer("earlier", paragraphs("Prepended", 12)), user]);
+    await settleLayout();
+    expect(Math.abs(Math.round(offset(target, list)) - before)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });
 

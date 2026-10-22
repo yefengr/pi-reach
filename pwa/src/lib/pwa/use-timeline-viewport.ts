@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { TimelineViewItem } from "./timeline-runtime";
+import { OwnSendTransition } from "./own-send-transition";
+import { ActivityFollowTransition } from "./timeline-follow-motion";
 import {
   captureTimelineViewportAnchor,
   restoreTimelineViewportAnchor,
@@ -17,6 +19,8 @@ export type TimelineViewport = {
   receiveRealtimeOutput: (groupKey: string) => void;
   handleScroll: (nearBottom: boolean) => void;
   showLatest: () => void;
+  /** 成功提交后恢复跟随，并在短期同一时钟内协调输入区回缩与贴底。 */
+  followOwnSend: () => void;
   reset: () => void;
   setReadingDetails: (reading: boolean) => void;
   prepareHistoryPrepend: () => void;
@@ -32,6 +36,7 @@ type ProgrammaticScroll = {
 };
 
 const BOTTOM_EPSILON = 1;
+const TOUCH_READ_THRESHOLD = 4;
 /** 内边距等不改变元素尺寸的布局变化（ResizeObserver 无法感知）由派发方通知时间线重新贴底或恢复锚点。 */
 export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
 const OBSERVED_CONTENT_EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty";
@@ -80,6 +85,12 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   const readingDetailsRef = useRef(false);
   const readingAnchorRef = useRef<TimelineViewportAnchor | null>(null);
   const pendingFollowFrameRef = useRef<number | null>(null);
+  const followGenerationRef = useRef(0);
+  const ownSendRef = useRef<OwnSendTransition | null>(null);
+  const activityFollowRef = useRef<ActivityFollowTransition | null>(null);
+  const handoffRef = useRef<HTMLDivElement | null>(null);
+  const lastTopRef = useRef(0);
+  const activityGeometryReadyRef = useRef(false);
   const programmaticScrollRef = useRef<ProgrammaticScroll | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const geometryListenerCleanupRef = useRef<(() => void) | null>(null);
@@ -91,6 +102,8 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   useLayoutEffect(() => { enabledRef.current = enabled; }, [enabled]);
 
   const cancelPendingFollow = useCallback(() => {
+    followGenerationRef.current += 1;
+    handoffRef.current = null;
     if (pendingFollowFrameRef.current === null) return;
     cancelAnimationFrame(pendingFollowFrameRef.current);
     pendingFollowFrameRef.current = null;
@@ -100,26 +113,70 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     programmaticScrollRef.current = { list, target, last: list.scrollTop, smooth };
   }, []);
 
-  const scheduleFollow = useCallback(() => {
+  const writeScroll = useCallback((list: HTMLDivElement, top: number) => {
+    // 先登记意图也兼容同步派发 scroll 的消费者，返回后再按真实落点校正。
+    markProgrammaticScroll(list, top);
+    list.scrollTo({ top, behavior: "auto" });
+    // 浏览器会钳制或取整请求值；异步 scroll 应匹配实际接受的位置。
+    lastTopRef.current = list.scrollTop;
+    markProgrammaticScroll(list, list.scrollTop);
+  }, [markProgrammaticScroll]);
+
+  const finishOwnSend = useCallback((preserveAnchor = false) => {
+    const transition = ownSendRef.current ?? activityFollowRef.current;
+    ownSendRef.current = null;
+    activityFollowRef.current = null;
+    if (!transition) return;
+    const anchor = preserveAnchor ? captureTimelineViewportAnchor(transition.list) : null;
+    transition.finish();
+    if (anchor) {
+      restoreTimelineViewportAnchor(transition.list, anchor);
+      markProgrammaticScroll(transition.list, transition.list.scrollTop);
+    }
+  }, [markProgrammaticScroll]);
+
+  const followNow = useCallback((now = performance.now()): boolean => {
+    const list = messageListRef.current;
+    if (!enabledRef.current || !list || !followingOutputRef.current || readingDetailsRef.current) return false;
+    // Latest 的平滑滚动拥有当前位置；结束后再追上期间新增的输出。
+    if (programmaticScrollRef.current?.list === list && programmaticScrollRef.current.smooth) return false;
+    const transition = ownSendRef.current ?? activityFollowRef.current;
+    if (transition) {
+      if (transition.list !== list || !list.isConnected || reducedMotionPreferred() || document.hidden) finishOwnSend();
+      else {
+        const step = transition.advance(now);
+        if (step.finished) {
+          // 先恢复自然布局再读取真实终点，不能让末帧和释放后的几何分属两次绘制。
+          finishOwnSend();
+          writeScroll(list, maxScrollTop(list));
+          handoffRef.current = list;
+          return true;
+        }
+        writeScroll(list, step.top);
+        return true;
+      }
+    }
+    const height = list.scrollHeight;
+    const bottomEdge = maxScrollTop(list, height);
+    if (handoffRef.current === list) {
+      handoffRef.current = null;
+      writeScroll(list, height);
+    } else if (!isAtBottom(list, bottomEdge)) writeScroll(list, height);
+    else lastTopRef.current = list.scrollTop;
+    activityGeometryReadyRef.current = true;
+    return false;
+  }, [finishOwnSend, writeScroll]);
+
+  const scheduleFollow = useCallback(function schedule() {
     const scheduledList = messageListRef.current;
     if (!enabledRef.current || !scheduledList || pendingFollowFrameRef.current !== null) return;
-    pendingFollowFrameRef.current = requestAnimationFrame(() => {
+    const generation = followGenerationRef.current;
+    pendingFollowFrameRef.current = requestAnimationFrame((now) => {
+      if (generation !== followGenerationRef.current) return;
       pendingFollowFrameRef.current = null;
-      const list = messageListRef.current;
-      if (!enabledRef.current || list !== scheduledList || !followingOutputRef.current || readingDetailsRef.current) return;
-      // 同一次同步操作内复用高度：底部判断、程序滚动目标与 scrollTo 都基于这一份几何。
-      const height = list.scrollHeight;
-      const bottomEdge = maxScrollTop(list, height);
-      if (isAtBottom(list, bottomEdge)) {
-        programmaticScrollRef.current = null;
-        return;
-      }
-      // Latest 的平滑滚动拥有当前位置；结束后再追上期间新增的输出。
-      if (programmaticScrollRef.current?.list === list && programmaticScrollRef.current.smooth) return;
-      markProgrammaticScroll(list, bottomEdge);
-      list.scrollTo({ top: height, behavior: "auto" });
+      if (messageListRef.current === scheduledList && followNow(now)) schedule();
     });
-  }, [markProgrammaticScroll]);
+  }, [followNow]);
 
   const captureReadingAnchor = useCallback((preserveScrollTopFallback = false) => {
     const list = messageListRef.current;
@@ -163,26 +220,86 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     if (typeof ResizeObserver === "undefined") return;
     if (resizeObserverListRef.current !== list || !resizeObserverRef.current) {
       disconnectResizeObserver();
+      activityGeometryReadyRef.current = false;
       const observer = new ResizeObserver(() => {
         if (resizeObserverRef.current !== observer || messageListRef.current !== list) return;
         handleGeometryChange(list);
       });
       resizeObserverRef.current = observer;
       resizeObserverListRef.current = list;
-      const onGeometry = () => {
+      const onGeometry = (event: Event) => {
         if (!enabledRef.current || messageListRef.current !== list) return;
         if (followingOutputRef.current && !readingDetailsRef.current) {
           // 尺寸钳制产生的 scroll 事件会晚于此次布局变化到达，需登记为程序滚动，否则被当成用户上滑而停止跟随。
+          if (programmaticScrollRef.current?.smooth) return;
+          const activityChanged = event instanceof CustomEvent && event.detail?.reason === "activity";
+          if (activityChanged && activityGeometryReadyRef.current && !ownSendRef.current && !activityFollowRef.current && !reducedMotionPreferred() && !document.hidden &&
+              Math.abs(maxScrollTop(list) - lastTopRef.current) > BOTTOM_EPSILON) {
+            activityFollowRef.current = new ActivityFollowTransition(list, lastTopRef.current);
+          }
+          if (ownSendRef.current || activityFollowRef.current) { if (followNow()) scheduleFollow(); return; }
           cancelPendingFollow();
-          const height = list.scrollHeight;
-          markProgrammaticScroll(list, maxScrollTop(list, height));
-          list.scrollTo({ top: height, behavior: "auto" });
+          followNow();
           return;
         }
         handleGeometryChange(list);
       };
+      const interrupt = () => {
+        if (!ownSendRef.current && !activityFollowRef.current && !handoffRef.current) return;
+        cancelPendingFollow();
+        finishOwnSend(true);
+        programmaticScrollRef.current = null;
+        readingAnchorRef.current = captureTimelineViewportAnchor(list);
+        followingOutputRef.current = false;
+        setFollowingOutput(false);
+      };
+      const main = list.closest(".pwa-main");
+      const onInput = (event: Event) => {
+        if (!(event.target instanceof HTMLTextAreaElement) || !ownSendRef.current) return;
+        // 下一条草稿重新交还 autosize，不让上一条发送动画继续覆盖它的尺寸。
+        cancelPendingFollow();
+        finishOwnSend(true);
+        // 等高输入不会触发 ResizeObserver，仍须完成已恢复的跟随。
+        scheduleFollow();
+      };
+      let touch: { id: number; y: number } | null = null;
+      const onTouchStart = (event: TouchEvent) => {
+        const first = event.touches[0];
+        touch = event.touches.length === 1 ? { id: first.identifier, y: first.clientY } : null;
+      };
+      const onTouchMove = (event: TouchEvent) => {
+        const first = event.touches[0];
+        if (event.touches.length !== 1 || first.identifier !== touch?.id) { touch = null; return; }
+        // 手指向下拖，才是向更早消息回看；轻点、反向移动及多指缩放不暂停跟随。
+        if (first.clientY - touch.y > TOUCH_READ_THRESHOLD) { touch = null; interrupt(); }
+      };
+      const onTouchEnd = () => { touch = null; };
+      const onWheel = (event: WheelEvent) => { if (event.deltaY < 0) interrupt(); };
+      const onKey = (event: KeyboardEvent) => { if (["ArrowUp", "PageUp", "Home"].includes(event.key)) interrupt(); };
+      const onPointerDown = (event: PointerEvent) => {
+        // 拖动原生滚动条也是明确用户输入，不由收尾保护吞掉。
+        if (event.pointerType === "mouse" && event.target === list) interrupt();
+      };
       list.addEventListener(TIMELINE_GEOMETRY_EVENT, onGeometry);
-      geometryListenerCleanupRef.current = () => list.removeEventListener(TIMELINE_GEOMETRY_EVENT, onGeometry);
+      list.addEventListener("wheel", onWheel, { passive: true });
+      list.addEventListener("touchstart", onTouchStart, { passive: true });
+      list.addEventListener("touchmove", onTouchMove, { passive: true });
+      list.addEventListener("touchend", onTouchEnd, { passive: true });
+      list.addEventListener("touchcancel", onTouchEnd, { passive: true });
+      list.addEventListener("keydown", onKey);
+      list.addEventListener("pointerdown", onPointerDown);
+      main?.addEventListener("input", onInput, true);
+      geometryListenerCleanupRef.current = () => {
+        list.removeEventListener(TIMELINE_GEOMETRY_EVENT, onGeometry);
+        list.removeEventListener("wheel", onWheel);
+        list.removeEventListener("touchstart", onTouchStart);
+        list.removeEventListener("touchmove", onTouchMove);
+        list.removeEventListener("touchend", onTouchEnd);
+        list.removeEventListener("touchcancel", onTouchEnd);
+        list.removeEventListener("keydown", onKey);
+        list.removeEventListener("pointerdown", onPointerDown);
+        main?.removeEventListener("input", onInput, true);
+      };
     }
 
     const observer = resizeObserverRef.current;
@@ -207,22 +324,26 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     }
     observedElementsRef.current = nextElements;
     observedChildSnapshotRef.current = { elements, classNames };
-  }, [cancelPendingFollow, disconnectResizeObserver, handleGeometryChange, markProgrammaticScroll]);
+  }, [cancelPendingFollow, disconnectResizeObserver, finishOwnSend, followNow, handleGeometryChange, scheduleFollow]);
 
   const reset = useCallback(() => {
     cancelPendingFollow();
+    finishOwnSend();
     readingDetailsRef.current = false;
     readingAnchorRef.current = null;
     programmaticScrollRef.current = null;
+    lastTopRef.current = messageListRef.current?.scrollTop ?? 0;
+    activityGeometryReadyRef.current = false;
     realtimeOutputKeysRef.current.clear();
     followingOutputRef.current = true;
     setFollowingOutput(true);
     setUnreadOutput(0);
-  }, [cancelPendingFollow]);
+  }, [cancelPendingFollow, finishOwnSend]);
 
   const setReadingDetails = useCallback((reading: boolean) => {
     if (reading) {
       cancelPendingFollow();
+      finishOwnSend(true);
       programmaticScrollRef.current = null;
       captureReadingAnchor();
       // 展开内容只暂停自动跟随；阅读位置是否离开底部仍由实际滚动决定。
@@ -230,7 +351,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       captureReadingAnchor();
     }
     readingDetailsRef.current = reading;
-  }, [cancelPendingFollow, captureReadingAnchor]);
+  }, [cancelPendingFollow, captureReadingAnchor, finishOwnSend]);
 
   const receiveRealtimeOutput = useCallback((groupKey: string) => {
     if (readingDetailsRef.current || !followingOutputRef.current) {
@@ -244,24 +365,27 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
 
   const prepareHistoryPrepend = useCallback(() => {
     cancelPendingFollow();
+    finishOwnSend(true);
     programmaticScrollRef.current = null;
     followingOutputRef.current = false;
     setFollowingOutput(false);
     captureReadingAnchor(true);
-  }, [cancelPendingFollow, captureReadingAnchor]);
+  }, [cancelPendingFollow, captureReadingAnchor, finishOwnSend]);
 
   useLayoutEffect(() => {
     if (!enabled) {
       cancelPendingFollow();
+      finishOwnSend();
       readingAnchorRef.current = null;
       programmaticScrollRef.current = null;
       disconnectResizeObserver();
+      activityGeometryReadyRef.current = false;
       return;
     }
     const list = messageListRef.current;
     if (!list) return;
     refreshResizeObserver(list);
-    if (!items?.length) return;
+    if (!items?.length) { activityGeometryReadyRef.current = false; return; }
     const pendingAnchor = pendingSessionAnchorRef.current;
     if (pendingAnchor) {
       // 切回看过的会话：锚点所在行加载出来后恢复离开时的位置；在此之前先停在底部。
@@ -275,12 +399,19 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
         readingAnchorRef.current = captureTimelineViewportAnchor(list);
         return;
       }
-      scheduleFollow();
+      cancelPendingFollow();
+      followNow();
       return;
     }
     if (!followingOutputRef.current || readingDetailsRef.current) restoreReadingAnchor(list);
-    else scheduleFollow();
-  }, [cancelPendingFollow, disconnectResizeObserver, enabled, items, markProgrammaticScroll, refreshResizeObserver, restoreReadingAnchor, scheduleFollow]);
+    else {
+      // 成功发送只合并目标；普通输出仍在绘制前贴底，不重启短期发送时钟。
+      if (ownSendRef.current || activityFollowRef.current) { if (followNow()) scheduleFollow(); }
+      else { cancelPendingFollow(); followNow(); }
+    }
+    // 子组件的布局通知先于此处；reset 后必须先建立新内容的基线才能创建状态过渡。
+    activityGeometryReadyRef.current = true;
+  }, [cancelPendingFollow, disconnectResizeObserver, enabled, finishOwnSend, items, markProgrammaticScroll, refreshResizeObserver, restoreReadingAnchor, followNow, scheduleFollow]);
 
   const consumeProgrammaticScroll = useCallback((): boolean => {
     const guard = programmaticScrollRef.current;
@@ -291,13 +422,21 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     }
     const current = list.scrollTop;
     if (!guard.smooth) {
-      if (Math.abs(current - guard.target) > BOTTOM_EPSILON) {
+      const reachable = Math.min(guard.target, maxScrollTop(list));
+      if (Math.abs(current - reachable) > BOTTOM_EPSILON) {
+        // 仅当前控制器及其下一帧收尾拥有纠正权；明确用户输入会先撤销所有权。
+        if (ownSendRef.current || activityFollowRef.current || handoffRef.current === list) {
+          writeScroll(list, reachable);
+          return true;
+        }
         programmaticScrollRef.current = null;
         return false;
       }
-      programmaticScrollRef.current = null;
+      lastTopRef.current = current;
+      if (!ownSendRef.current && !activityFollowRef.current && !handoffRef.current) programmaticScrollRef.current = null;
       return true;
     }
+    lastTopRef.current = current;
     // Markdown 收缩可能让旧目标超出新的滚动范围，抵达新底部也算完成。
     const reachableTarget = Math.min(guard.target, maxScrollTop(list));
     if (Math.abs(current - reachableTarget) <= BOTTOM_EPSILON) {
@@ -311,10 +450,11 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     }
     guard.last = current;
     return true;
-  }, [scheduleFollow]);
+  }, [scheduleFollow, writeScroll]);
 
   const handleScroll = useCallback((nearBottom: boolean) => {
     if (consumeProgrammaticScroll()) return;
+    lastTopRef.current = messageListRef.current?.scrollTop ?? 0;
     // 用户在恢复前主动往上回看时以用户的位置为准；内容清空导致的回到顶部不算。
     if (!nearBottom) pendingSessionAnchorRef.current = null;
     if (readingDetailsRef.current) {
@@ -327,14 +467,16 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     }
     if (nearBottom) {
       reset();
+      activityGeometryReadyRef.current = true;
       return;
     }
     cancelPendingFollow();
+    finishOwnSend(true);
     if (followingOutputRef.current) realtimeOutputKeysRef.current.clear();
     followingOutputRef.current = false;
     setFollowingOutput(false);
     captureReadingAnchor();
-  }, [cancelPendingFollow, captureReadingAnchor, consumeProgrammaticScroll, reset]);
+  }, [cancelPendingFollow, captureReadingAnchor, consumeProgrammaticScroll, finishOwnSend, reset]);
 
   const captureSessionPosition = useCallback((): TimelineSessionPosition | null => {
     const list = messageListRef.current;
@@ -349,6 +491,18 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     pendingSessionAnchorRef.current = position && !position.following ? position.anchor : null;
   }, []);
 
+  const followOwnSend = useCallback(() => {
+    pendingSessionAnchorRef.current = null;
+    // 连续发送从当前可见尺寸续接，不先跳到上一条消息的收缩终点。
+    ownSendRef.current?.finish(false);
+    ownSendRef.current = null;
+    reset();
+    const list = messageListRef.current;
+    if (enabledRef.current && list?.isConnected && !reducedMotionPreferred() && !document.hidden) {
+      ownSendRef.current = new OwnSendTransition(list);
+    }
+  }, [reset]);
+
   const showLatest = useCallback(() => {
     pendingSessionAnchorRef.current = null;
     reset();
@@ -360,12 +514,30 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     list.scrollTo({ top: height, behavior: smooth ? "smooth" : "auto" });
   }, [markProgrammaticScroll, reset]);
 
-  useEffect(() => () => {
-    cancelPendingFollow();
-    disconnectResizeObserver();
-    readingAnchorRef.current = null;
-    programmaticScrollRef.current = null;
-  }, [cancelPendingFollow, disconnectResizeObserver]);
+  useEffect(() => {
+    const settle = () => {
+      if (!ownSendRef.current && !activityFollowRef.current && !handoffRef.current) return;
+      cancelPendingFollow();
+      finishOwnSend();
+      followNow();
+    };
+    const onVisibility = () => { if (document.hidden) settle(); };
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onMotion = () => { if (motion.matches) settle(); };
+    window.addEventListener("resize", settle);
+    document.addEventListener("visibilitychange", onVisibility);
+    motion.addEventListener("change", onMotion);
+    return () => {
+      cancelPendingFollow();
+      finishOwnSend();
+      disconnectResizeObserver();
+      readingAnchorRef.current = null;
+      programmaticScrollRef.current = null;
+      window.removeEventListener("resize", settle);
+      document.removeEventListener("visibilitychange", onVisibility);
+      motion.removeEventListener("change", onMotion);
+    };
+  }, [cancelPendingFollow, disconnectResizeObserver, finishOwnSend, followNow]);
 
   return {
     followingOutput,
@@ -375,6 +547,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     receiveRealtimeOutput,
     handleScroll,
     showLatest,
+    followOwnSend,
     reset,
     setReadingDetails,
     prepareHistoryPrepend,
