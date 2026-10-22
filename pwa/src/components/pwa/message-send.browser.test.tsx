@@ -10,6 +10,7 @@ import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import { MessageList } from "./message-list";
 import { isQueuedMessage, QueuedMessagesPanel } from "./queued-messages-panel";
 import { MessageComposer } from "./message-composer";
+import { PwaMessageActions } from "./pwa-app-actions";
 
 const noop = () => {};
 const composer: ComponentProps<typeof MessageComposer> = {
@@ -37,6 +38,7 @@ async function harness({ width = 390, compact = false, working = false, draft = 
   let viewport!: TimelineViewport;
   let update!: (items: TimelineViewItem[]) => void;
   let setLive!: (live: boolean) => void;
+  let setWorking!: (value: boolean) => void;
   let editDraft!: (text: string) => void;
   let send!: () => void;
   let sent!: TimelinePending;
@@ -44,6 +46,8 @@ async function harness({ width = 390, compact = false, working = false, draft = 
     const [items, setItems] = useState(initial);
     const [text, setText] = useState(draft);
     const [online, setOnline] = useState(live);
+    const [running, updateWorking] = useState(working);
+    setWorking = updateWorking;
     const [files, setFiles] = useState<ComponentProps<typeof MessageComposer>["attachments"]>(attachment ? [{ id: "file", fileName: "send-note.txt", byteLength: 12, status: "complete" }] : []);
     setLive = setOnline;
     editDraft = setText;
@@ -57,8 +61,8 @@ async function harness({ width = 390, compact = false, working = false, draft = 
       setFiles([]);
     };
     return <div className="pwa-app-shell"><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ display: "flex", flexDirection: "column", width: "100vw", height: height ?? (compact ? 280 : 650), flex: "none" }}>
-      <MessageList items={items} isLive={online} running={working} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryUnknown={noop} onCancelQueued={noop} />
-      <div className="pwa-chat-footer"><MessageComposer {...composer} attachments={files} draft={text} onDraftChange={setText} onSend={send} /></div>
+      <MessageList items={items} isLive={online} running={running} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryUnknown={noop} onCancelQueued={noop} />
+      <div className="pwa-chat-footer"><PwaMessageActions show={!viewport.followingOutput} showLatest={!viewport.followingOutput} showRetry={false} unreadOutput={viewport.unreadOutput} onRetry={noop} onLatest={viewport.showLatest} /><MessageComposer {...composer} attachments={files} draft={text} onDraftChange={setText} onSend={send} /></div>
     </main></div>;
   }
   const screen = await renderPwa(<Harness />);
@@ -66,6 +70,7 @@ async function harness({ width = 390, compact = false, working = false, draft = 
   const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
   return { screen, list, viewport: () => viewport, sent: () => sent,
     live: (value: boolean) => flushSync(() => setLive(value)),
+    work: (value: boolean, items?: TimelineViewItem[]) => flushSync(() => { setWorking(value); if (items) update(items); }),
     edit: (value: string) => flushSync(() => { document.querySelector(".pwa-composer-input")!.dispatchEvent(new Event("input", { bubbles: true })); editDraft(value); }),
     send: () => flushSync(() => send()), update: (items: TimelineViewItem[]) => flushSync(() => update(items)),
     read: async () => { list.scrollTop -= 300; flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true }))); await frames(); },
@@ -137,6 +142,236 @@ test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width,
     expect(h.viewport().followingOutput).toBe(true);
     clock.step(200);
     expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([false, true])("late Working follows continuously regardless of simultaneous receipt (receipt=%s)", async receipt => {
+  const h = await harness();
+  try {
+    h.send();
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe(""));
+    await frames();
+    const clock = layoutClock();
+    const before = h.list.scrollTop;
+    h.work(true, receipt ? [history, h.sent()] : undefined);
+    expect(h.list.scrollTop).toBe(before);
+    expect(gap(h.list)).toBeGreaterThan(1);
+    clock.step(40);
+    expect(h.list.scrollTop).toBeGreaterThan(before);
+    expect(gap(h.list)).toBeGreaterThan(1);
+    clock.step(160);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.viewport().followingOutput).toBe(true);
+    clock.step(200);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([false, true])("real frames remain monotonic through send release and late Working (attachment=%s)", async attachment => {
+  const h = await harness({ attachment, draft: "One\nTwo\nThree\nFour" });
+  try {
+    const old = h.list.querySelector(".pwa-message.assistant")!;
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const context = getComputedStyle(footer).display;
+    const samples: number[] = [];
+    let latestFlashed = false;
+    const observer = new MutationObserver(() => { latestFlashed ||= document.querySelector(".pwa-message-actions") !== null; });
+    observer.observe(footer, { childList: true, subtree: true });
+    try {
+      h.send();
+      const sampleUntilSettled = async () => {
+        const deadline = performance.now() + 3000;
+        let settledFrames = 0;
+        while (settledFrames < 3 && performance.now() < deadline) {
+          await frames(1);
+          samples.push(top(old));
+          expect(getComputedStyle(footer).display).toBe(context);
+          settledFrames = footer.style.height === "" && gap(h.list) <= 1 ? settledFrames + 1 : 0;
+        }
+        expect(settledFrames).toBe(3);
+      };
+      await sampleUntilSettled();
+      expect(footer.style.height).toBe("");
+      h.work(true);
+      await sampleUntilSettled();
+      for (let i = 1; i < samples.length; i++) expect(samples[i]).toBeLessThanOrEqual(samples[i - 1] + 1);
+      expect(latestFlashed).toBe(false);
+      expect(h.viewport().followingOutput).toBe(true);
+      expect(gap(h.list)).toBeLessThanOrEqual(1);
+    } finally { observer.disconnect(); }
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([40, 145])("Working arriving at %ims updates the send without an instantaneous jump or a new clock", async time => {
+  const h = await harness();
+  try {
+    const clock = layoutClock();
+    h.send(); clock.step(time);
+    const before = h.list.scrollTop;
+    h.work(true);
+    expect(h.list.scrollTop).toBe(before);
+    clock.step(160);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    clock.step(200);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("Reduced Motion immediately settles Working geometry and keeps the status feedback", async () => {
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  const h = await harness();
+  try {
+    const clock = layoutClock();
+    h.work(true);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    const status = h.list.querySelector<HTMLElement>(".pwa-thinking-status")!;
+    expect(status.textContent).toBe("Working…");
+    expect(getComputedStyle(status.querySelector("svg")!).opacity).toBe("1");
+    expect(getComputedStyle(status.querySelector(".pwa-working-label")!).transform).toBe("none");
+    h.work(false);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.list.style.paddingBottom).toBe("");
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([40, 145, 160])("send handoff owns late programmatic scroll at %ims without flashing Latest", async time => {
+  const h = await harness({ attachment: true, draft: "One\nTwo\nThree" });
+  try {
+    const clock = layoutClock();
+    h.send(); clock.step(time);
+    const before = h.list.scrollTop;
+    flushSync(() => {
+      h.list.scrollTop -= 80;
+      h.list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    expect(Math.round(h.list.scrollTop)).toBe(Math.round(before));
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(document.querySelector(".pwa-message-actions")).toBeNull();
+    clock.step(160); clock.step(200);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each(["wheel", "scrollbar"])("real %s interruption wins over the send handoff guard", async input => {
+  const h = await harness();
+  try {
+    const clock = layoutClock();
+    h.send(); clock.step(160);
+    flushSync(() => {
+      h.list.dispatchEvent(input === "wheel" ? new WheelEvent("wheel", { deltaY: -80 }) : new PointerEvent("pointerdown", { pointerType: "mouse" }));
+      h.list.scrollTop -= 80;
+      h.list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    const top = h.list.scrollTop;
+    clock.step(200);
+    expect(h.list.scrollTop).toBe(top);
+    expect(h.viewport().followingOutput).toBe(false);
+    expect(document.querySelector(".pwa-message-actions")).not.toBeNull();
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([false, true])("Working removal has no single-frame clamp and releases temporary space (receipt=%s)", async receipt => {
+  const h = await harness({ working: true });
+  try {
+    const before = h.list.scrollTop;
+    const clock = layoutClock();
+    h.work(false, receipt ? [history] : undefined);
+    expect(Math.round(h.list.scrollTop)).toBe(Math.round(before));
+    clock.step(40);
+    expect(h.list.scrollTop).toBeLessThan(before);
+    clock.step(160); clock.step(200);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.list.style.paddingBottom).toBe("");
+    expect(h.viewport().followingOutput).toBe(true);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each(["reset", "details", "resize", "unmount"])("%s cancels a Working transition and its stale callbacks", async action => {
+  const h = await harness();
+  let unmounted = false;
+  try {
+    const clock = layoutClock();
+    h.work(true); clock.step(40);
+    const stale = clock.snapshot();
+    if (action === "unmount") { await h.screen.unmount(); unmounted = true; }
+    else if (action === "reset") h.viewport().reset();
+    else if (action === "details") h.viewport().setReadingDetails(true);
+    else window.dispatchEvent(new Event("resize"));
+    const before = h.list.scrollTop;
+    for (const callback of stale) callback(1300);
+    expect(h.list.scrollTop).toBe(before);
+    expect(h.list.style.paddingBottom).toBe("");
+  } finally { if (!unmounted) await h.screen.unmount(); }
+});
+
+test("Working after Latest completes starts at the actual bottom, not the old reading position", async () => {
+  const h = await harness({ working: true });
+  try {
+    await h.read();
+    const clock = layoutClock();
+    const nativeScroll = h.list.scrollTo.bind(h.list);
+    vi.spyOn(h.list, "scrollTo").mockImplementation((options?: ScrollToOptions | number) => {
+      if (typeof options !== "object") return;
+      if (options.behavior === "smooth") h.list.scrollTop = Math.min(options.top ?? 0, h.list.scrollHeight - h.list.clientHeight);
+      else nativeScroll(options);
+    });
+    // 精确交付 smooth 完成事件，避免额外原生 scroll 偶然刷新起点而掩盖缺陷。
+    flushSync(() => { h.viewport().showLatest(); h.viewport().handleScroll(true); });
+    clock.step(0);
+    const before = h.list.scrollTop;
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    h.work(false);
+    expect(Math.round(h.list.scrollTop)).toBe(Math.round(before));
+    clock.step(160); clock.step(200);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([false, true])("same-commit scope reset and Working change discard old geometry (working=%s)", async working => {
+  const h = await harness({ working });
+  try {
+    const clock = layoutClock();
+    h.viewport().reset();
+    h.work(!working, [{ ...history, event: { ...history.event, event_id: "other-scope", blocks: [{ type: "text", text: "Short history" }] } }]);
+    expect(h.list.scrollTop).toBe(0);
+    expect(h.list.style.paddingBottom).toBe("");
+    clock.step(200);
+    expect(gap(h.list)).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("Working after reset to a short conversation cannot borrow the previous scroll position", async () => {
+  const h = await harness();
+  try {
+    expect(h.list.scrollTop).toBeGreaterThan(0);
+    h.viewport().reset();
+    h.update([{ ...history, event: { ...history.event, event_id: "short", blocks: [{ type: "text", text: "Short history" }] } }]);
+    const clock = layoutClock();
+    h.work(true);
+    expect(h.list.scrollTop).toBe(0);
+    expect(h.list.style.paddingBottom).toBe("");
+    clock.step(200);
+    expect(gap(h.list)).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("late Working preserves a reading anchor and does not take over Latest", async () => {
+  const h = await harness();
+  try {
+    h.send();
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe(""));
+    await h.read();
+    const before = top(h.list.querySelector(".pwa-message.assistant")!);
+    h.work(true);
+    await frames(12);
+    expect(top(h.list.querySelector(".pwa-message.assistant")!)).toBe(before);
+    expect(h.viewport().followingOutput).toBe(false);
+    h.viewport().showLatest();
+    h.work(false);
+    await vi.waitFor(() => expect(gap(h.list)).toBeLessThanOrEqual(1));
+    expect(h.viewport().followingOutput).toBe(true);
   } finally { await h.screen.unmount(); }
 });
 

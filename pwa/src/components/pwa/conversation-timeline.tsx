@@ -17,6 +17,7 @@ import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
 import { LoaderCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 
 type ConversationTimelineProps = {
   items: readonly TimelineViewItem[];
@@ -66,7 +67,7 @@ function TurnMeta({ completion, interrupted }: { completion: RunCompletion; inte
 
 function WorkingStatus() {
   const { t } = useI18n();
-  return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.timeline.working}</p>;
+  return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span className="pwa-working-label">{t.timeline.working}</span></p>;
 }
 
 /** 压缩进行中沿用 Working 行的高度与字号，避免与终态切换时跳动。 */
@@ -209,6 +210,13 @@ export function ConversationTimeline({ items, live, completions, running = false
     );
     return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
   });
+  const workingVisible = !compacting && activity.working && !thinkingActive && !toolsActive;
+  const previousWorking = useRef(workingVisible);
+  useLayoutEffect(() => {
+    if (previousWorking.current === workingVisible) return;
+    previousWorking.current = workingVisible;
+    listRef.current?.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "activity" } }));
+  }, [workingVisible, listRef]);
   // 手动展开思考与工具组都暂停自动跟随，保持当前阅读位置。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
     const choice = segmentExpansion(segment.tools, tools);
@@ -355,7 +363,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   return <>
     {rows}
     {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
-    {compacting ? <CompactionStatus /> : activity.working && !thinkingActive && !toolsActive ? <WorkingStatus /> : null}
+    {compacting ? <CompactionStatus /> : workingVisible ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     <SummaryReader event={summaryEvent} opened={summaryOpen && summaryEvent !== null} onClose={() => setSummaryOpen(false)} onExitTransitionEnd={finishSummaryReader} />
     {scopedFileReader ? <PublishedFileReader key={scopedFileReader.file.publication_id} file={scopedFileReader.file} source={scopedFileReader.trigger} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}

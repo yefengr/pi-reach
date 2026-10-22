@@ -1,3 +1,5 @@
+import { FollowMotionClock } from "./timeline-follow-motion";
+
 type InputSize = { height: number; maximum: number; overflow: string };
 const inputOwners = new WeakMap<HTMLTextAreaElement, OwnSendTransition>();
 
@@ -14,11 +16,6 @@ export function ownSendFooterChrome(input: HTMLTextAreaElement): number | null {
   return inputOwners.get(input)?.naturalChrome ?? null;
 }
 
-function durationInMs(value: string): number {
-  const number = Number.parseFloat(value);
-  return Number.isFinite(number) ? number * (value.trim().endsWith("ms") ? 1 : 1000) : 0;
-}
-
 /** 不持有 RAF；生命周期、用户中断与滚动写入全部属于 useTimelineViewport。 */
 export class OwnSendTransition {
   readonly list: HTMLDivElement;
@@ -26,15 +23,12 @@ export class OwnSendTransition {
   private readonly input: HTMLTextAreaElement | null;
   private readonly footer: HTMLElement | null;
   private readonly composer: HTMLElement | null;
-  private readonly footerStyles: { height: string; display: string; flexDirection: string; justifyContent: string } | null;
+  private readonly footerStyle: string;
   private readonly inputHeight: number;
   private readonly footerHeight: number;
-  private readonly scrollTop: number;
-  private readonly paddingTop: number;
-  private startedAt: number | null = null;
-  private readonly timing: Animation;
-  private readonly duration: number;
-  private lastProgress = 0;
+  private scrollTop: number;
+  private paddingTop: number;
+  private readonly clock: FollowMotionClock;
 
   constructor(list: HTMLDivElement) {
     this.list = list;
@@ -45,23 +39,15 @@ export class OwnSendTransition {
     this.scrollTop = list.scrollTop;
     this.inputHeight = this.input?.getBoundingClientRect().height ?? 0;
     this.footerHeight = this.footer?.getBoundingClientRect().height ?? 0;
-    this.footerStyles = this.footer ? {
-      height: this.footer.style.height, display: this.footer.style.display,
-      flexDirection: this.footer.style.flexDirection, justifyContent: this.footer.style.justifyContent,
-    } : null;
+    this.footerStyle = this.footer?.style.height ?? "";
     if (this.input) inputOwners.set(this.input, this);
     if (this.footer && this.composer) {
       // 附件提交会移除卡片，短期保留真实 footer 尺寸并贴底收回；不留下固定占位。
-      Object.assign(this.footer.style, { height: `${this.footerHeight}px`, display: "flex", flexDirection: "column", justifyContent: "flex-end" });
+      this.footer.style.height = `${this.footerHeight}px`;
     }
     const style = getComputedStyle(list);
     this.paddingTop = Number.parseFloat(style.paddingTop) || 0;
-    this.duration = durationInMs(style.getPropertyValue("--pwa-duration-message-in"));
-    // 用浏览器解析现有曲线，避免另维护一套 easing；此时钟没有 DOM target，也不自行调度帧。
-    this.timing = new Animation(new KeyframeEffect(null, [], {
-      duration: this.duration, easing: style.getPropertyValue("--pwa-ease-standard").trim() || "linear", fill: "both",
-    }));
-    this.timing.currentTime = 0;
+    this.clock = new FollowMotionClock(list);
   }
 
   get naturalChrome(): number | null {
@@ -71,11 +57,7 @@ export class OwnSendTransition {
 
   /** 返回当前帧的滚动目标；后续布局只更新目标，时钟不会重启。 */
   advance(now: number): { top: number; finished: boolean } {
-    this.startedAt ??= now;
-    const elapsed = Math.max(0, now - this.startedAt);
-    this.timing.currentTime = Math.min(elapsed, this.duration);
-    const progress = Math.max(this.lastProgress, this.timing.effect!.getComputedTiming().progress ?? 1);
-    this.lastProgress = progress;
+    const { progress, fraction, finished } = this.clock.sample(now);
     const size = this.inputSize;
     if (this.input && size) {
       this.input.style.maxHeight = `${Math.max(this.inputHeight, size.maximum)}px`;
@@ -92,20 +74,22 @@ export class OwnSendTransition {
     }
     const bottom = Math.max(0, this.list.scrollHeight - this.list.clientHeight + remainingShrink);
     // 真实预算切换可能改变顶部 padding；先补偿锚点，不让密度切换在第一帧移动旧正文。
-    const paddingDelta = (Number.parseFloat(getComputedStyle(this.list).paddingTop) || 0) - this.paddingTop;
-    const origin = this.scrollTop + paddingDelta;
-    return { top: origin + (bottom - origin) * progress, finished: elapsed >= this.duration };
+    const padding = Number.parseFloat(getComputedStyle(this.list).paddingTop) || 0;
+    this.scrollTop += padding - this.paddingTop;
+    this.paddingTop = padding;
+    this.scrollTop += (bottom - this.scrollTop) * fraction;
+    return { top: this.scrollTop, finished };
   }
 
   /** 清理绑定及临时尺寸，取消后迟到帧不再拥有这些元素。 */
   finish(settleInput = true): void {
-    this.timing.cancel();
+    this.clock.cancel();
     if (this.input && inputOwners.get(this.input) === this) {
       inputOwners.delete(this.input);
       if (settleInput && this.inputSize) Object.assign(this.input.style, {
         height: `${this.inputSize.height}px`, maxHeight: `${this.inputSize.maximum}px`, overflowY: this.inputSize.overflow,
       });
     }
-    if (this.footer && this.footerStyles) Object.assign(this.footer.style, this.footerStyles);
+    if (this.footer) this.footer.style.height = this.footerStyle;
   }
 }

@@ -42,6 +42,8 @@ async function renderTimeline(initialItems: TimelineViewItem[]) {
     /** 切换会话：内容整体替换，不产生实时输出。 */
     replace: (items: TimelineViewItem[]) => flushSync(() => updateItems(items)),
     readAt: async (element: Element) => {
+      // 模拟用户回看须包含输入意图；单独写 scrollTop 也可能来自正在结束的程序滚动。
+      list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
       list.scrollTop += element.getBoundingClientRect().top - list.getBoundingClientRect().top - 2;
       flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
       await settleLayout();

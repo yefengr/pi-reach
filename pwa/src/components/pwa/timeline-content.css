@@ -37,6 +37,9 @@
 /* 与思考／工具组头保持相同的字号、字重、高度和外边距；运行色与左侧图标一致，保持正体，不与思考标题共用斜体。 */
 .pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: 44px; margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
+/* 图标即时反馈，文字只淡入；不移动状态行、不延迟真实运行状态。 */
+.pwa-working-label { animation: pwa-working-label-in var(--pwa-duration-fade) var(--pwa-ease-enter); }
+@keyframes pwa-working-label-in { from { opacity: 0; } to { opacity: 1; } }
 /* 压缩终态是本地提示，不是会话记录；固定 44px 行高，与进行中行切换时不跳动。 */
 .pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: 44px; margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-compaction-notice.is-error { color: var(--pwa-error); }

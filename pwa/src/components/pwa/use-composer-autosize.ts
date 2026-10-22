@@ -36,11 +36,8 @@ function availableInputHeight(input: HTMLTextAreaElement, sixLines: number, mini
   const compact = space - sixLines < normalReadingSpace;
   const available = space - (compact ? compactReadingSpace : normalReadingSpace);
   const budget = available < minimum - LAYOUT_EPSILON ? "conflict" : compact ? "constrained" : null;
-  const previousBudget = main.dataset.composerBudget ?? null;
   if (budget) main.dataset.composerBudget = budget;
   else delete main.dataset.composerBudget;
-  // 预算切换会改变消息区内边距（尺寸不变，ResizeObserver 不触发），需通知时间线重新贴底或恢复锚点。
-  if ((previousBudget === null) !== (budget === null)) list.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
   return Math.max(minimum, Math.min(sixLines, available));
 }
 
@@ -71,14 +68,21 @@ export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | nu
     const { border, lineHeight, padding } = inputMetrics(input);
     const minimum = Math.max(MIN_INPUT_HEIGHT, lineHeight + padding + border);
     const sixLines = MAX_VISUAL_LINES * lineHeight + padding + border;
+    const main = input.closest<HTMLElement>(".pwa-main");
+    const hadBudget = main?.hasAttribute("data-composer-budget") ?? false;
     const maximum = availableInputHeight(input, sixLines, minimum);
     const needed = contentHeight(input) + border;
     const height = Math.max(minimum, Math.min(needed, maximum));
     const overflow = needed > height + LAYOUT_EPSILON ? "auto" : "hidden";
-    if (stageOwnSendInputSize(input, { height, maximum, overflow })) return;
-    input.style.maxHeight = `${maximum}px`;
-    input.style.height = `${height}px`;
-    input.style.overflowY = overflow;
+    if (!stageOwnSendInputSize(input, { height, maximum, overflow })) {
+      input.style.maxHeight = `${maximum}px`;
+      input.style.height = `${height}px`;
+      input.style.overflowY = overflow;
+    }
+    // 先提交新尺寸再通知：同步几何回调可能完成过渡，不能让它消费上一轮测量。
+    if (hadBudget !== (main?.hasAttribute("data-composer-budget") ?? false)) {
+      main?.querySelector(".pwa-message-list")?.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
+    }
   }, [inputRef]);
 
   // 草稿和字号变化立即测量；附件、队列和外层空间变化由 ResizeObserver 合并处理。
