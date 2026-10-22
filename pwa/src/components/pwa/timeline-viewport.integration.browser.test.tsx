@@ -168,6 +168,35 @@ test.each([1280, 390])("Thinking pauses following without showing Latest until n
   } finally { await screen.unmount(); }
 });
 
+test.each([1280, 390])("paused anchor compensation accepts native scroll and resumes on close at %ipx", async width => {
+  await page.viewport(width, 844);
+  const above = answer("above", paragraphs("Above", 4));
+  const reading = answer("reading", paragraphs("Reading", 18));
+  const { screen, list, replace, viewport } = await renderTimeline([above, reading]);
+  try {
+    expect(viewport().followingOutput).toBe(true);
+    flushSync(() => viewport().setReadingDetails(true));
+    const anchor = [...list.querySelectorAll("p")].find(node => node.getBoundingClientRect().bottom > list.getBoundingClientRect().top)!;
+    const before = { top: Math.round(offset(anchor, list)), scroll: list.scrollTop };
+    let nativeScrolls = 0;
+    const onScroll = (event: Event) => { if (event.isTrusted) nativeScrolls += 1; };
+    list.addEventListener("scroll", onScroll);
+    try {
+      replace([answer("above", paragraphs("Above", 12)), reading, answer("tail", paragraphs("Tail", 18))]);
+      await expect.poll(() => nativeScrolls).toBeGreaterThan(0);
+      await settleLayout();
+      expect(list.scrollTop).toBeGreaterThan(before.scroll);
+      expect(Math.round(offset(anchor, list))).toBe(before.top);
+      expect(bottomGap(list)).toBeGreaterThan(100);
+      expect(viewport().followingOutput).toBe(true);
+      flushSync(() => viewport().setReadingDetails(false));
+      await settleLayout();
+      expect(bottomGap(list)).toBeLessThanOrEqual(1);
+      expect(viewport().followingOutput).toBe(true);
+    } finally { list.removeEventListener("scroll", onScroll); }
+  } finally { await screen.unmount(); }
+});
+
 test("manual scrolling while Thinking is open updates the reading position", async () => {
   const thinking = partial("thinking", paragraphs("Thoughts", 5), "thinking");
   const tail = answer("tail", paragraphs("Below", 24));
@@ -243,6 +272,34 @@ test("layout breakpoint changes preserve the visible paragraph instead of raw sc
       expect(Math.abs(offset(target, list) - top)).toBeLessThanOrEqual(1);
       expect(viewport().followingOutput).toBe(false);
     }
+  } finally { await screen.unmount(); }
+});
+
+test.each([1280, 390])("a lone tall user row preserves its paragraph when history is prepended at %ipx", async width => {
+  await page.viewport(width, 844);
+  const user: TimelineViewItem = { kind: "event", event: {
+    ...scope, event_id: "long-user", message_id: "long-user", group_id: "user", timestamp: 1,
+    kind: "user", origin: "pwa", sender_ref: "self", status: "committed", delivery: "normal",
+    blocks: Array.from({ length: 45 }, (_, index) => ({ type: "text", text: `User paragraph ${index}: keep this reading position.` })),
+  } };
+  const { screen, list, readAt, update, viewport } = await renderTimeline([user]);
+  try {
+    const target = screen.getByText("User paragraph 20: keep this reading position.").element();
+    await readAt(target);
+    const row = target.closest<HTMLElement>("[data-viewport-row]")!;
+    expect(row.parentElement).toBe(list);
+    expect(row.getBoundingClientRect().height).toBeGreaterThan(list.clientHeight);
+    expect(row.getBoundingClientRect().top).toBeLessThan(list.getBoundingClientRect().top);
+    expect(row.getBoundingClientRect().bottom).toBeGreaterThan(list.getBoundingClientRect().bottom);
+    const before = Math.round(offset(target, list));
+    const key = row.dataset.viewportRow;
+    flushSync(() => viewport().prepareHistoryPrepend());
+    update([answer("older-user-history", paragraphs("Earlier")), user]);
+    await settleLayout();
+    expect(Math.abs(Math.round(offset(target, list)) - before)).toBeLessThanOrEqual(1);
+    expect(target.closest("[data-viewport-row]")).toBe(row);
+    expect(row.dataset.viewportRow).toBe(key);
+    expect(viewport().followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });
 

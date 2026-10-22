@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { renderPwa } from "@/test/browser/render";
 import type { TimelineViewItem } from "./timeline-runtime";
 import { useTimelineViewport, type TimelineViewport } from "./use-timeline-viewport";
+import { captureOwnSendLayout, OwnSendTransition, stageOwnSendInputSize } from "./own-send-transition";
 
 type ViewportHarnessProps = {
   onViewport: (viewport: TimelineViewport) => void;
@@ -75,6 +76,35 @@ async function renderViewport(options: RenderViewportOptions = {}) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+test("send capture is readonly and activation after autosize preserves its natural target", () => {
+  const main = document.createElement("div");
+  main.className = "pwa-main";
+  main.innerHTML = '<div class="pwa-message-list"></div><div class="pwa-chat-footer"><div class="pwa-composer"><textarea class="pwa-composer-input" style="height:120px;max-height:160px"></textarea></div></div>';
+  document.body.append(main);
+  const list = main.querySelector<HTMLDivElement>(".pwa-message-list")!;
+  const input = main.querySelector<HTMLTextAreaElement>("textarea")!;
+  const footer = main.querySelector<HTMLElement>(".pwa-chat-footer")!;
+  list.style.setProperty("--pwa-duration-message-in", "160ms");
+  const capture = captureOwnSendLayout(list);
+  try {
+    expect(input.style.height).toBe("120px");
+    expect(footer.style.height).toBe("");
+    expect(stageOwnSendInputSize(input, { height: 44, maximum: 160, overflow: "hidden" })).toBe(false);
+    // 真实成功回调可晚于 React 子 layout 的 autosize，不能再拍新起点。
+    input.style.height = "44px";
+    const first = new OwnSendTransition(capture);
+    expect(input.style.height).toBe(`${capture.inputHeight}px`);
+    const nextCapture = captureOwnSendLayout(list);
+    first.finish(false);
+    const next = new OwnSendTransition(nextCapture);
+    expect(stageOwnSendInputSize(input, { height: 44, maximum: 160, overflow: "hidden" })).toBe(true);
+    next.finish();
+    expect(input.style.height).toBe("44px");
+    expect(footer.style.height).toBe("");
+    expect(stageOwnSendInputSize(input, { height: 44, maximum: 160, overflow: "hidden" })).toBe(false);
+  } finally { main.remove(); }
 });
 
 test("follows realtime output at the bottom without unread output", async () => {
@@ -185,6 +215,7 @@ test("a history prepend keeps the existing visible element at the same viewport 
   const { screen, list, viewport, setItems, scrollTo } = await renderViewport();
   try {
     const article = document.createElement("article");
+    article.dataset.viewportRow = "history-anchor";
     list.append(article);
     let position = 100;
     vi.spyOn(article, "getBoundingClientRect").mockImplementation(() => ({ top: position, bottom: position + 20 } as DOMRect));
@@ -249,10 +280,11 @@ test("restores a reading anchor after observed geometry changes without resuming
 
   const { screen, list, viewport, setItems } = await renderViewport();
   try {
-    Object.defineProperty(list, "scrollTop", { configurable: true, writable: true, value: 100 });
+    Object.defineProperty(list, "scrollTop", { configurable: true, writable: true, value: 80 });
     Object.defineProperty(list, "clientHeight", { configurable: true, value: 300 });
     const row = document.createElement("article");
     row.dataset.timelineKey = "answer-1";
+    row.dataset.viewportRow = "answer-1";
     const paragraph = document.createElement("p");
     row.append(paragraph);
     list.append(row);
@@ -261,6 +293,8 @@ test("restores a reading anchor after observed geometry changes without resuming
     vi.spyOn(paragraph, "getBoundingClientRect").mockImplementation(() => ({ top, bottom: top + 30 } as DOMRect));
 
     viewport().setReadingDetails(true);
+    // 实际移动位置才是用户回看；原地 scroll 仍可能是详情进入时的恢复回执。
+    list.scrollTop = 100;
     viewport().handleScroll(false);
     await vi.waitFor(() => expect(viewport().followingOutput).toBe(false));
     flushSync(() => setItems([renderedTimelineItem]));
@@ -364,9 +398,12 @@ test("scrolling upward cancels a pending follow frame and a Latest animation", a
     list.scrollTop = 300;
     flushSync(() => viewport().handleScroll(false));
     expect(viewport().followingOutput).toBe(false);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: "auto" });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
     viewport().receiveRealtimeOutput("after-interruption");
     await vi.waitFor(() => expect(viewport().unreadOutput).toBe(1));
-    expect(scrollTo).toHaveBeenCalledTimes(1);
+    frames.forEach((callback) => callback(200));
+    expect(scrollTo).toHaveBeenCalledTimes(2);
   } finally { await screen.unmount(); }
 });
 
@@ -418,6 +455,7 @@ function installTrackingResizeObserver() {
 function appendRow(list: HTMLDivElement, label: string, className = "pwa-timeline-row"): HTMLElement {
   const row = document.createElement("article");
   row.className = className;
+  row.dataset.viewportRow = label;
   row.textContent = label;
   list.append(row);
   return row;
@@ -531,6 +569,94 @@ test("abandons the child snapshot for a new, disabled or empty list", async () =
     bump();
     expect(observed).toEqual(new Set([emptyList]));
   } finally {
+    await screen.unmount();
+  }
+});
+
+test("replacing the list DOM with unchanged items rebinds observers and invalidates the old capture", async () => {
+  const { observed } = installTrackingResizeObserver();
+  const items = [renderedTimelineItem];
+  let replace!: () => void;
+  let viewport!: TimelineViewport;
+  function Harness() {
+    const [key, setKey] = useState(0);
+    const viewportApi = useTimelineViewport(items);
+    const { messageListRef } = viewportApi;
+    useEffect(() => { replace = () => setKey(value => value + 1); viewport = viewportApi; }, [viewportApi]);
+    return <div key={key} ref={messageListRef} />;
+  }
+  const screen = await renderPwa(<Harness />);
+  try {
+    const oldList = viewport.messageListRef.current!;
+    const capture = viewport.captureOwnSend();
+    expect(observed.has(oldList)).toBe(true);
+    flushSync(replace);
+    const newList = viewport.messageListRef.current!;
+    expect(newList).not.toBe(oldList);
+    expect(observed.has(oldList)).toBe(false);
+    expect(observed.has(newList)).toBe(true);
+    flushSync(() => { viewport.prepareHistoryPrepend(); viewport.followOwnSend(capture); });
+    expect(viewport.followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("diagnostics sample actual numeric geometry only when enabled and clear on unbind", async () => {
+  installTrackingResizeObserver();
+  const { screen, list, viewport, setItems, setEnabled } = await renderViewport();
+  const main = list.parentElement!;
+  const wasMain = main.classList.contains("pwa-main");
+  main.classList.add("pwa-main");
+  const footer = document.createElement("div");
+  footer.className = "pwa-chat-footer";
+  footer.style.height = "72px";
+  const input = document.createElement("textarea");
+  input.className = "pwa-composer-input";
+  input.style.height = "44px";
+  footer.append(input);
+  main.append(footer);
+  list.style.cssText = "height:300px;width:400px;overflow:auto";
+  try {
+    viewport().reset();
+    const control = window.__PI_REACH_VIEWPORT__!;
+    control.disable();
+    const inputMeasure = vi.spyOn(input, "getBoundingClientRect");
+    flushSync(() => setItems([renderedTimelineItem]));
+    expect(inputMeasure).not.toHaveBeenCalled();
+    expect(control.read()).toEqual([]);
+
+    control.enable();
+    flushSync(() => setItems([renderedTimelineItem]));
+    expect(inputMeasure).toHaveBeenCalled();
+    const entry = control.read().findLast((value) => value.reason === "commit")!;
+    expect(entry).toMatchObject({
+      listClientHeight: list.clientHeight, listClientWidth: list.clientWidth,
+      listScrollHeight: list.scrollHeight, listScrollWidth: list.scrollWidth,
+      listTop: list.getBoundingClientRect().top, listHeight: list.getBoundingClientRect().height,
+      inputTop: input.getBoundingClientRect().top, inputHeight: input.getBoundingClientRect().height,
+      footerTop: footer.getBoundingClientRect().top, footerHeight: footer.getBoundingClientRect().height,
+      visualViewportHeight: window.visualViewport?.height ?? null,
+      visualViewportWidth: window.visualViewport?.width ?? null,
+      visualViewportOffsetTop: window.visualViewport?.offsetTop ?? null,
+      visualViewportOffsetLeft: window.visualViewport?.offsetLeft ?? null,
+      visualViewportScale: window.visualViewport?.scale ?? null,
+    });
+    expect(entry.inputHeight).toBeGreaterThan(0);
+    expect(entry.footerHeight).toBeGreaterThan(0);
+    expect(Object.isFrozen(entry)).toBe(true);
+
+    // 程序回执仍指向原位置；明确改变实际位置后才能模拟一次用户回看。
+    Object.defineProperty(list, "scrollTop", { configurable: true, writable: true, value: 100 });
+    flushSync(() => viewport().handleScroll(false));
+    control.clear();
+    list.dispatchEvent(new Event("pwa:timeline-geometry"));
+    expect(control.read().at(-1)).toMatchObject({ reason: "geometry", following: false });
+    window.dispatchEvent(new Event("resize"));
+    expect(control.read().at(-1)?.reason).toBe("viewport-resize");
+    flushSync(() => setEnabled(false));
+    expect(control.read()).toEqual([]);
+  } finally {
+    footer.remove();
+    if (!wasMain) main.classList.remove("pwa-main");
     await screen.unmount();
   }
 });

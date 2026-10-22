@@ -175,6 +175,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     receiveRealtimeOutput,
     handleScroll,
     showLatest,
+    captureOwnSend,
     followOwnSend,
     reset: resetOutputFollowing,
     captureSessionPosition,
@@ -228,6 +229,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     const channel = channelRef.current;
     if (!scope || !channel || channel.closed || connectionRef.current !== "online" || selectedHistoryRef.current !== null || pendingActionRef.current?.action === "session_new" ||
         attachmentTargetKey(scope) !== message.target || draftKeyRef.current !== message.context.draftKey) return false;
+    // 最终提交前只读捕获；上传期间不持有输入高度或滚动控制权。
+    const sendCapture = captureOwnSend();
     try {
       const requestIds = { clientRequestId: message.clientRequestId, requestId: id() };
       const prepared = message.attachments.length
@@ -240,7 +243,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
         setError("Message could not be sent. Check the connection and try again.");
         return false;
       }
-      followOwnSend();
+      followOwnSend(sendCapture);
       if (draftVersionRef.current === message.context.draftVersion && draftKeyRef.current === message.context.draftKey) setDraftFor(message.context.draftKey, "");
       return true;
     } catch (sendError) {
@@ -858,6 +861,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       attachmentComposer.start(text, { draftKey, draftVersion: draftVersionRef.current });
       return;
     }
+    const sendCapture = captureOwnSend();
     let prepared;
     try { prepared = timelineRuntimeRef.current.sendUser(text, undefined, { clientRequestId: id(), requestId: id() }); }
     catch (sendError) {
@@ -866,9 +870,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     }
     if (!prepared) return;
     if (!channel.send(prepared.frame)) { applyTimelineChange(timelineRuntimeRef.current.markUnknownDelivery(prepared.frame.client_request_id)); setError("Message could not be sent. Check the connection and try again."); return; }
-    followOwnSend();
+    followOwnSend(sendCapture);
     applyTimelineChange(prepared.change); setDraftFor(draftKey, "");
-  }, [applyTimelineChange, attachmentComposer, draft, draftKey, followOwnSend, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
+  }, [applyTimelineChange, attachmentComposer, captureOwnSend, draft, draftKey, followOwnSend, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
   const loadEarlier = useCallback(() => {
     if (connection !== "online" || loadingEarlier) return;
     handleScroll(false);

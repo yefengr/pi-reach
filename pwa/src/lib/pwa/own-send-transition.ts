@@ -16,7 +16,33 @@ export function ownSendFooterChrome(input: HTMLTextAreaElement): number | null {
   return inputOwners.get(input)?.naturalChrome ?? null;
 }
 
-/** 不持有 RAF；生命周期、用户中断与滚动写入全部属于 useTimelineViewport。 */
+export type OwnSendLayoutCapture = Readonly<{
+  list: HTMLDivElement;
+  input: HTMLTextAreaElement | null;
+  footer: HTMLElement | null;
+  composer: HTMLElement | null;
+  top: number;
+  inputHeight: number;
+  footerHeight: number;
+  footerStyle: string;
+  paddingTop: number;
+}>;
+
+/** 最终提交前只读捕获；不注册 owner，不修改尺寸或阅读意图。 */
+export function captureOwnSendLayout(list: HTMLDivElement): OwnSendLayoutCapture {
+  const main = list.closest(".pwa-main");
+  const input = main?.querySelector<HTMLTextAreaElement>(".pwa-composer-input") ?? null;
+  const footer = main?.querySelector<HTMLElement>(".pwa-chat-footer") ?? null;
+  return Object.freeze({
+    list, input, footer, composer: footer?.querySelector<HTMLElement>(".pwa-composer") ?? null,
+    top: list.scrollTop, inputHeight: input?.getBoundingClientRect().height ?? 0,
+    footerHeight: footer?.getBoundingClientRect().height ?? 0,
+    footerStyle: (input ? inputOwners.get(input)?.naturalFooterStyle : undefined) ?? footer?.style.height ?? "",
+    paddingTop: Number.parseFloat(getComputedStyle(list).paddingTop) || 0,
+  });
+}
+
+/** 不持有 RAF；生命周期、用户中断与滚动写入全部属于协调器。 */
 export class OwnSendTransition {
   readonly list: HTMLDivElement;
   inputSize: InputSize | null = null;
@@ -30,25 +56,35 @@ export class OwnSendTransition {
   private paddingTop: number;
   private readonly clock: FollowMotionClock;
 
-  constructor(list: HTMLDivElement) {
-    this.list = list;
-    const main = list.closest(".pwa-main");
-    this.input = main?.querySelector<HTMLTextAreaElement>(".pwa-composer-input") ?? null;
-    this.footer = main?.querySelector<HTMLElement>(".pwa-chat-footer") ?? null;
-    this.composer = this.footer?.querySelector<HTMLElement>(".pwa-composer") ?? null;
-    this.scrollTop = list.scrollTop;
-    this.inputHeight = this.input?.getBoundingClientRect().height ?? 0;
-    this.footerHeight = this.footer?.getBoundingClientRect().height ?? 0;
-    this.footerStyle = this.footer?.style.height ?? "";
-    if (this.input) inputOwners.set(this.input, this);
+  constructor(capture: OwnSendLayoutCapture) {
+    this.list = capture.list;
+    this.input = capture.input;
+    this.footer = capture.footer;
+    this.composer = capture.composer;
+    this.scrollTop = capture.top;
+    this.inputHeight = capture.inputHeight;
+    this.footerHeight = capture.footerHeight;
+    this.footerStyle = capture.footerStyle;
+    if (this.input) {
+      // 成功回调可能晚于 autosize 的布局提交，先保存已提交的自然终点，再恢复预捕获的起点。
+      this.inputSize = {
+        height: Number.parseFloat(this.input.style.height) || this.input.getBoundingClientRect().height,
+        maximum: Number.parseFloat(this.input.style.maxHeight) || this.inputHeight,
+        overflow: this.input.style.overflowY,
+      };
+      inputOwners.set(this.input, this);
+      this.input.style.maxHeight = `${Math.max(this.inputHeight, this.inputSize.maximum)}px`;
+      this.input.style.height = `${this.inputHeight}px`;
+    }
     if (this.footer && this.composer) {
       // 附件提交会移除卡片，短期保留真实 footer 尺寸并贴底收回；不留下固定占位。
       this.footer.style.height = `${this.footerHeight}px`;
     }
-    const style = getComputedStyle(list);
-    this.paddingTop = Number.parseFloat(style.paddingTop) || 0;
-    this.clock = new FollowMotionClock(list);
+    this.paddingTop = capture.paddingTop;
+    this.clock = new FollowMotionClock(this.list);
   }
+
+  get naturalFooterStyle(): string { return this.footerStyle; }
 
   get naturalChrome(): number | null {
     if (!this.composer || !this.input) return null;

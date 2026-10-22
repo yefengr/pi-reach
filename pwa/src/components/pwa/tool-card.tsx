@@ -13,6 +13,7 @@ type ToolCardProps = {
   value: ToolValue;
   onRead: (trigger: HTMLButtonElement) => void;
   status?: ToolStatus;
+  timelineKey?: string;
 };
 
 function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: readonly string[] }) {
@@ -25,12 +26,12 @@ function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: re
 }
 
 /** 完成的工具只显示对勾，运行中、失败、中断与未知状态保留文字；各状态的可访问名称不变。 */
-export function ToolCard({ value, onRead, status: statusOverride }: ToolCardProps) {
+export function ToolCard({ value, onRead, status: statusOverride, timelineKey }: ToolCardProps) {
   const { t } = useI18n();
   const status = toolStatus(value, statusOverride);
   const summary = toolInlineText(toolHeaderSummary(value));
 
-  return <article className={`pwa-tool-card pwa-tool-card-${status} pwa-timeline-row`} data-tool-status={status} data-tool-key={toolIdentity(value)}>
+  return <article className={`pwa-tool-card pwa-tool-card-${status} pwa-timeline-row`} data-tool-status={status} data-tool-key={toolIdentity(value)} data-viewport-row={timelineKey}>
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
         <span className="pwa-tool-action-copy"><strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}</span>
@@ -120,7 +121,7 @@ export function ToolGroupCard({ values, live, appended = NO_APPENDED, batchClose
   const currentLabel = currentCommand === null || currentStatus === null ? null
     : busy ? currentCommand : t.tools.statusLabel(currentCommand, t.tools.status[currentStatus]);
   const detailsId = `pwa-tool-group-${id.replace(/:/g, "")}`;
-  return <ToolIndicatorContext value={register}><article ref={groupRef} className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length} data-timeline-key={timelineKey}>
+  return <ToolIndicatorContext value={register}><article ref={groupRef} className="pwa-tool-group pwa-timeline-row" data-tool-group-size={values.length} data-timeline-key={timelineKey} data-viewport-row={timelineKey}>
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.groupToggle(expanded, [currentLabel, busy ? t.tools.groupBusy(runningCount) : null, summary].filter(Boolean).join(" · "))} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpandedChange(!expanded)}>
         <span className="pwa-tool-action-copy">{current

@@ -17,10 +17,52 @@ function viewportList(): HTMLDivElement {
   return list;
 }
 
+test("uses semantic rows regardless of tag or visual classes and ignores unmarked content", () => {
+  const list = viewportList();
+  const decoration = document.createElement("article");
+  decoration.className = "pwa-message pwa-timeline-row";
+  const row = document.createElement("div");
+  row.dataset.viewportRow = "semantic";
+  list.append(decoration, row);
+  vi.spyOn(decoration, "getBoundingClientRect").mockReturnValue(rect(100, 130));
+  vi.spyOn(row, "getBoundingClientRect").mockReturnValue(rect(130, 280));
+  expect(captureTimelineViewportAnchor(list)?.rowElement).toBe(row);
+  list.remove();
+});
+
+test("does not reuse a DOM node whose semantic row identity changed", () => {
+  const list = viewportList();
+  const row = document.createElement("article");
+  row.dataset.viewportRow = "old";
+  list.append(row);
+  vi.spyOn(row, "getBoundingClientRect").mockReturnValue(rect(120, 180));
+  const anchor = captureTimelineViewportAnchor(list)!;
+  row.dataset.viewportRow = "new";
+  expect(restoreTimelineViewportAnchor(list, anchor)).toBe(false);
+  expect(list.scrollTop).toBe(100);
+  list.remove();
+});
+
+test("does not resolve a missing top-level row to a nested row with the same key", () => {
+  const list = viewportList();
+  const row = document.createElement("article");
+  row.dataset.viewportRow = "old";
+  list.append(row);
+  vi.spyOn(row, "getBoundingClientRect").mockReturnValue(rect(120, 180));
+  const anchor = captureTimelineViewportAnchor(list)!;
+  row.remove();
+  const group = document.createElement("article");
+  group.dataset.viewportRow = "group";
+  group.append(row.cloneNode());
+  list.append(group);
+  expect(restoreTimelineViewportAnchor(list, anchor)).toBe(false);
+  list.remove();
+});
+
 test("captures a visible readable block before its timeline row", () => {
   const list = viewportList();
   const row = document.createElement("article");
-  row.dataset.timelineKey = "answer-1";
+  row.dataset.viewportRow = "answer-1";
   const paragraph = document.createElement("p");
   row.append(paragraph);
   list.append(row);
@@ -40,9 +82,9 @@ test("captures a visible readable block before its timeline row", () => {
 test("anchors the first visible collapsed tool instead of a later paragraph", () => {
   const list = viewportList();
   const tool = document.createElement("article");
-  tool.dataset.toolKey = "tool";
+  tool.dataset.viewportRow = "tool";
   const later = document.createElement("article");
-  later.dataset.timelineKey = "later";
+  later.dataset.viewportRow = "later";
   const paragraph = document.createElement("p");
   later.append(paragraph);
   list.append(tool, later);
@@ -56,7 +98,7 @@ test("anchors the first visible collapsed tool instead of a later paragraph", ()
 test("recovers a replaced readable block from the stable timeline row key", () => {
   const list = viewportList();
   const originalRow = document.createElement("article");
-  originalRow.dataset.timelineKey = "scope:[answer-1]";
+  originalRow.dataset.viewportRow = "scope:[answer-1]";
   const originalParagraph = document.createElement("p");
   originalRow.append(originalParagraph);
   list.append(originalRow);
@@ -66,7 +108,7 @@ test("recovers a replaced readable block from the stable timeline row key", () =
 
   originalRow.remove();
   const replacementRow = document.createElement("article");
-  replacementRow.dataset.timelineKey = "scope:[answer-1]";
+  replacementRow.dataset.viewportRow = "scope:[answer-1]";
   const replacementParagraph = document.createElement("p");
   replacementRow.append(replacementParagraph);
   list.append(replacementRow);
@@ -81,14 +123,14 @@ test("recovers a replaced readable block from the stable timeline row key", () =
 test("does not jump to unrelated content when the anchored row disappears", () => {
   const list = viewportList();
   const row = document.createElement("article");
-  row.dataset.timelineKey = "old-session";
+  row.dataset.viewportRow = "old-session";
   list.append(row);
   vi.spyOn(row, "getBoundingClientRect").mockReturnValue(rect(120, 180));
   const anchor = captureTimelineViewportAnchor(list)!;
 
   row.remove();
   const unrelated = document.createElement("article");
-  unrelated.dataset.timelineKey = "new-session";
+  unrelated.dataset.viewportRow = "new-session";
   list.append(unrelated);
   vi.spyOn(unrelated, "getBoundingClientRect").mockReturnValue(rect(500, 560));
 

@@ -8,10 +8,10 @@ import { ReaderShell } from "./reader-shell";
 import { summaryPresentation, type SummaryEvent } from "./summary-presentation";
 import "./summary-reader.css";
 
-export function SummaryEntry({ event, onRead }: { event: SummaryEvent; onRead: (trigger: HTMLButtonElement) => void }) {
+export function SummaryEntry({ event, onRead, timelineKey }: { event: SummaryEvent; onRead: (trigger: HTMLButtonElement) => void; timelineKey: string }) {
   const { t } = useI18n();
   const { title, error } = summaryPresentation(event, t.summaryReader);
-  return <article className={`pwa-message pwa-summary-entry${error ? " provider_error" : ""}`}>
+  return <article className={`pwa-message pwa-summary-entry${error ? " provider_error" : ""}`} data-viewport-row={timelineKey}>
     <Button variant="transparent" className="pwa-summary-action" type="button" onClick={event => onRead(event.currentTarget)} aria-haspopup="dialog">
       {error ? <CircleAlert size={16} aria-hidden="true" /> : <CircleCheck size={16} aria-hidden="true" />}
       <span>{error ? title : `${event.kind === "compaction" ? t.summaryReader.compactionComplete : t.summaryReader.branchSummaryComplete} · ${t.summaryReader.viewSummary}`}</span><ChevronRight size={16} aria-hidden="true" />

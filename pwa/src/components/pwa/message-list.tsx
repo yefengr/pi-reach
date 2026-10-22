@@ -89,33 +89,33 @@ function visibleGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<
   return { before, atEnd: pending };
 }
 
-function EventCard({ event, metadata }: { event: Exclude<TimelineEvent, { kind: "tool" }>; metadata?: AttachmentMetadata }) {
+function EventCard({ event, metadata, timelineKey }: { event: Exclude<TimelineEvent, { kind: "tool" }>; metadata?: AttachmentMetadata; timelineKey: string }) {
   const { t } = useI18n();
-  if (event.kind === "user") return <UserMessage value={event} metadata={metadata} entering={false} />;
-  if (event.kind === "assistant") return <article className="pwa-message assistant"><span className="pwa-sr-only">{t.timeline.srPi}</span><AssistantBlocks blocks={event.blocks} /></article>;
+  if (event.kind === "user") return <UserMessage value={event} metadata={metadata} entering={false} timelineKey={timelineKey} />;
+  if (event.kind === "assistant") return <article className="pwa-message assistant" data-viewport-row={timelineKey}><span className="pwa-sr-only">{t.timeline.srPi}</span><AssistantBlocks blocks={event.blocks} /></article>;
   // 摘要和服务错误由 ConversationTimeline 提供安全阅读入口，不在会话中铺开正文。
   return null;
 }
 
-function PartialCard({ partial }: { partial: Exclude<TimelinePartial, { kind: "tool" }> }) {
+function PartialCard({ partial, timelineKey }: { partial: Exclude<TimelinePartial, { kind: "tool" }>; timelineKey: string }) {
   const { t } = useI18n();
   const text = blockText(partial);
-  if (partial.kind === "thinking") return <ThinkingContent text={text} streaming />;
-  return <article className="pwa-message assistant partial"><span className="pwa-sr-only">{t.timeline.srPi}</span>{partial.blocks ? <AssistantBlocks blocks={partial.blocks} streaming /> : text.trim() ? <div className="pwa-stream-text">{text}</div> : null}</article>;
+  if (partial.kind === "thinking") return <ThinkingContent text={text} streaming timelineKey={timelineKey} />;
+  return <article className="pwa-message assistant partial" data-viewport-row={timelineKey}><span className="pwa-sr-only">{t.timeline.srPi}</span>{partial.blocks ? <AssistantBlocks blocks={partial.blocks} streaming /> : text.trim() ? <div className="pwa-stream-text">{text}</div> : null}</article>;
 }
 
-function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["onRetryUnknown"], onCancelQueued: MessageListProps["onCancelQueued"], projection: TimelineAttachmentProjection, live: boolean, onRead: PublishedFileRead, userMessageIn: boolean) {
+function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["onRetryUnknown"], onCancelQueued: MessageListProps["onCancelQueued"], projection: TimelineAttachmentProjection, live: boolean, onRead: PublishedFileRead, userMessageIn: boolean, timelineKey: string) {
   if (item.kind === "event") {
     const file = publishedFileFromEvent(item.event);
-    if (file) return <PublishedFile key={item.event.event_id} file={file} live={live} onRead={onRead} />;
+    if (file) return <PublishedFile key={item.event.event_id} file={file} live={live} onRead={onRead} timelineKey={timelineKey} />;
   }
-  if (item.kind === "pending") return <UserMessage value={item} entering={userMessageIn} onRetryUnknown={onRetryUnknown} onCancelQueued={onCancelQueued} />;
-  if (item.kind === "event" && item.event.kind === "user") return <UserMessage value={item.event} entering={userMessageIn} metadata={projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id))} />;
+  if (item.kind === "pending") return <UserMessage value={item} timelineKey={timelineKey} entering={userMessageIn} onRetryUnknown={onRetryUnknown} onCancelQueued={onCancelQueued} />;
+  if (item.kind === "event" && item.event.kind === "user") return <UserMessage value={item.event} timelineKey={timelineKey} entering={userMessageIn} metadata={projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id))} />;
   const value = item.kind === "event" ? item.event : item.partial;
   // projectTimeline 将全部工具投影为 ToolEntry，由 ConversationTimeline 提供详情入口。
   if (value.kind === "tool") return null;
-  if (item.kind === "event" && item.event.kind !== "tool") return <EventCard event={item.event} key={item.event.event_id} />;
-  if (item.kind === "partial" && item.partial.kind !== "tool") return <PartialCard partial={item.partial} key={item.partial.partial_id} />;
+  if (item.kind === "event" && item.event.kind !== "tool") return <EventCard event={item.event} key={item.event.event_id} timelineKey={timelineKey} />;
+  if (item.kind === "partial" && item.partial.kind !== "tool") return <PartialCard partial={item.partial} key={item.partial.partial_id} timelineKey={timelineKey} />;
   return null;
 }
 
@@ -173,7 +173,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   }}>
     {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} enterInitialPending={enterInitialPending} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead, userMessageIn) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead, userMessageIn)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} enterInitialPending={enterInitialPending} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead, userMessageIn, timelineKey) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead, userMessageIn, timelineKey)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

@@ -29,7 +29,7 @@ function useFileVisibility() {
   return { root, near, visible };
 }
 
-export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescriptor; live: boolean; onRead: PublishedFileRead }) {
+export function PublishedFile({ file, live, onRead, timelineKey }: { file: PublishedFileDescriptor; live: boolean; onRead: PublishedFileRead; timelineKey?: string }) {
   const { t, format } = useI18n();
   const files = usePublishedFilesView();
   const scope = files?.scopeToken;
@@ -124,7 +124,7 @@ export function PublishedFile({ file, live, onRead }: { file: PublishedFileDescr
   const downloadRetry = failed && !image && !text;
   const slotError = failed && !(image && canFetch);
   const progress = size > 0 ? Math.min(100, Math.round((state?.receivedBytes ?? 0) / size * 100)) : 0;
-  return <article ref={root} className={`pwa-published-file${image ? " is-image" : ""}`} data-publication-id={file.publication_id}>
+  return <article ref={root} className={`pwa-published-file${image ? " is-image" : ""}`} data-publication-id={file.publication_id} data-viewport-row={timelineKey}>
     {ready && image && state?.url && !failed ? <button type="button" className="pwa-published-image" onClick={event => { if (!pending.current) onRead(file, event.currentTarget); }} aria-label={t.files.viewImage}>
       <img src={state.url} alt={name} onError={() => setDecodeFailure(state.url ?? null)} />
     </button> : image && canFetch && !fetching ? <div className="pwa-published-placeholder"><ImageIcon size={24} aria-hidden="true" /><span className={failed ? "pwa-published-error" : undefined}>{failed ? errorText : size > FILE_AUTO_IMAGE_BYTES ? t.files.largeImage : t.files.imagePending}</span></div> : null}
