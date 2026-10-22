@@ -106,6 +106,25 @@ test.each([1280, 390])("reading a later message survives Markdown height changes
   } finally { await screen.unmount(); }
 });
 
+test.each([1280, 390])("history prepend preserves reading when only a tall user bubble is visible at %ipx", async width => {
+  await page.viewport(width, 844);
+  const user: TimelineViewItem = { kind: "event", event: {
+    ...scope, event_id: "user-long", message_id: "user-long", group_id: "user-run", timestamp: 1,
+    kind: "user", status: "committed", origin: "extension", delivery: "normal",
+    blocks: Array.from({ length: 30 }, (_, index) => ({ type: "text", text: `User paragraph ${index}. ${"Readable content. ".repeat(8)}` })),
+  } };
+  const { screen, list, readAt, replace, viewport } = await renderTimeline([user]);
+  try {
+    const target = screen.getByText(/^User paragraph 10\./).element();
+    await readAt(target);
+    const before = Math.round(offset(target, list));
+    replace([answer("earlier", paragraphs("Prepended", 12)), user]);
+    await settleLayout();
+    expect(Math.abs(Math.round(offset(target, list)) - before)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
 test.each([1280, 390])("reading inside one long message preserves the visible paragraph at %ipx", async width => {
   await page.viewport(width, 844);
   const prefix = "Opening paragraph.";
