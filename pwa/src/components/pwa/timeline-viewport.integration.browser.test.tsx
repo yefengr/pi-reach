@@ -246,6 +246,34 @@ test("layout breakpoint changes preserve the visible paragraph instead of raw sc
   } finally { await screen.unmount(); }
 });
 
+test.each([1280, 390])("a lone tall user row preserves its paragraph when history is prepended at %ipx", async width => {
+  await page.viewport(width, 844);
+  const user: TimelineViewItem = { kind: "event", event: {
+    ...scope, event_id: "long-user", message_id: "long-user", group_id: "user", timestamp: 1,
+    kind: "user", origin: "pwa", sender_ref: "self", status: "committed", delivery: "normal",
+    blocks: Array.from({ length: 45 }, (_, index) => ({ type: "text", text: `User paragraph ${index}: keep this reading position.` })),
+  } };
+  const { screen, list, readAt, update, viewport } = await renderTimeline([user]);
+  try {
+    const target = screen.getByText("User paragraph 20: keep this reading position.").element();
+    await readAt(target);
+    const row = target.closest<HTMLElement>("[data-viewport-row]")!;
+    expect(row.parentElement).toBe(list);
+    expect(row.getBoundingClientRect().height).toBeGreaterThan(list.clientHeight);
+    expect(row.getBoundingClientRect().top).toBeLessThan(list.getBoundingClientRect().top);
+    expect(row.getBoundingClientRect().bottom).toBeGreaterThan(list.getBoundingClientRect().bottom);
+    const before = Math.round(offset(target, list));
+    const key = row.dataset.viewportRow;
+    flushSync(() => viewport().prepareHistoryPrepend());
+    update([answer("older-user-history", paragraphs("Earlier")), user]);
+    await settleLayout();
+    expect(Math.abs(Math.round(offset(target, list)) - before)).toBeLessThanOrEqual(1);
+    expect(target.closest("[data-viewport-row]")).toBe(row);
+    expect(row.dataset.viewportRow).toBe(key);
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
 test("prepending history while reading keeps the same real paragraph at the same offset", async () => {
   const reading = answer("reading", paragraphs("Reading", 12));
   const tail = answer("tail", paragraphs("Below"));

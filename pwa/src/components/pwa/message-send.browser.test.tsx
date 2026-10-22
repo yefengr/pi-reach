@@ -55,7 +55,7 @@ async function harness({ width = 390, compact = false, working = false, draft = 
     update = setItems;
     send = () => {
       sent = { ...pending(), text };
-      viewport.followOwnSend();
+      viewport.followOwnSend(viewport.captureOwnSend());
       setItems([...items, sent]);
       setText("");
       setFiles([]);
@@ -495,6 +495,28 @@ test("receipts and output arriving inside a send update its target without resta
   } finally { await h.screen.unmount(); }
 });
 
+test("send capture is read-only and a reset invalidates its later activation", async () => {
+  const h = await harness({ draft: "One\nTwo\nThree\nFour" });
+  try {
+    await h.read();
+    const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const before = { top: h.list.scrollTop, input: input.style.cssText, footer: footer.style.cssText };
+    const capture = h.viewport().captureOwnSend();
+    expect(capture).not.toBeNull();
+    expect({ top: h.list.scrollTop, input: input.style.cssText, footer: footer.style.cssText }).toEqual(before);
+    expect(h.viewport().followingOutput).toBe(false);
+    flushSync(() => { h.viewport().reset(); h.viewport().handleScroll(false); });
+    const afterReset = h.list.scrollTop;
+    flushSync(() => h.viewport().followOwnSend(capture));
+    await frames();
+    expect(h.viewport().followingOutput).toBe(false);
+    expect(h.list.scrollTop).toBe(afterReset);
+    expect(footer.style.height).toBe("");
+    expect(input.value).toBe("One\nTwo\nThree\nFour");
+  } finally { await h.screen.unmount(); }
+});
+
 test.each(["reset", "details", "history", "resize", "hidden", "unmount"])("%s releases the send clock and ignores its cancelled callbacks", async action => {
   const h = await harness({ draft: "One\nTwo\nThree\nFour" });
   let unmounted = false;
@@ -605,11 +627,16 @@ test("the first send from an empty session animates without replaying initial pe
   try {
     h.send();
     const bubble = h.list.querySelector(".pwa-message.user")!;
+    const row = bubble.closest<HTMLElement>("[data-viewport-row]")!;
+    const rowKey = row.dataset.viewportRow;
+    expect(rowKey).toBeTruthy();
     expect(bubble.getAnimations()).toHaveLength(1);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     const animation = bubble.getAnimations()[0];
     h.update([formal(h.sent())]);
     expect(h.list.querySelector(".pwa-message.user")).toBe(bubble);
+    expect(bubble.closest("[data-viewport-row]")).toBe(row);
+    expect(row.dataset.viewportRow).toBe(rowKey);
     expect(bubble.getAnimations()[0]).toBe(animation);
   } finally { await h.screen.unmount(); }
   const restored = await harness({ initial: [pending("restored")] });
@@ -654,7 +681,11 @@ async function runtimeHarness({ width = 390 } = {}) {
   await frames();
   const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
   return { screen, list,
-    send: (text: string) => { const sent = runtime.sendUser(text, undefined, { clientRequestId: "local", requestId: "send" }); viewport.followOwnSend(); if (sent) apply(sent.change); },
+    send: (text: string) => {
+      const capture = viewport.captureOwnSend();
+      const sent = runtime.sendUser(text, undefined, { clientRequestId: "local", requestId: "send" });
+      if (sent) { viewport.followOwnSend(capture); apply(sent.change); }
+    },
     receive: (frame: ServerFrame) => apply(runtime.receive(frame)),
     commit: (event: Parameters<TimelineRuntime["commit"]>[0]) => apply(runtime.commit(event)),
   };

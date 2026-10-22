@@ -11,12 +11,13 @@ type Props = {
   value: TimelinePending | UserEvent;
   metadata?: AttachmentMetadata;
   entering: boolean;
+  timelineKey: string;
   onRetryUnknown?: (id: string) => void;
   onCancelQueued?: (id: string) => void;
 };
 
 /** pending 与正式记录共用同一节点；确认只替换内容与状态，不重启动效。 */
-export function UserMessage({ value, metadata, entering, onRetryUnknown, onCancelQueued }: Props) {
+export function UserMessage({ value, metadata, entering, timelineKey, onRetryUnknown, onCancelQueued }: Props) {
   const { t, format } = useI18n();
   // 入场资格仅在气泡创建时确定，离线／重连不能撤下再添加动画 class。
   const [animateEntrance] = useState(entering);
@@ -28,7 +29,7 @@ export function UserMessage({ value, metadata, entering, onRetryUnknown, onCance
   const attachments = pending?.attachments ?? metadata?.attachments;
   const text = pending?.text ?? metadata?.text;
   const label = event?.origin === "extension" ? t.timeline.srRemote : t.timeline.srYou;
-  return <div className={`pwa-user-row${pending ? " pwa-pending" : ""}${pending && !unknown && !queued ? " pwa-pending-short" : ""}`}>
+  return <div className={`pwa-user-row${pending ? " pwa-pending" : ""}${pending && !unknown && !queued ? " pwa-pending-short" : ""}`} data-viewport-row={timelineKey}>
     <div className="pwa-user-bubble-frame">
     <article className={`pwa-message user${pending ? " pending" : ""}${animateEntrance ? " pwa-user-message-in" : ""}`}>
       <span className="pwa-sr-only">{label}</span>

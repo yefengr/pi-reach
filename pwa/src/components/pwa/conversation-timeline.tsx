@@ -32,7 +32,7 @@ type ConversationTimelineProps = {
   notices?: readonly CompactionNotice[];
   listRef: RefObject<HTMLDivElement | null>;
   onReadingChange?: (reading: boolean) => void;
-  renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead, userMessageIn: boolean) => ReactNode;
+  renderRecord: (item: TimelineViewItem, onRead: PublishedFileRead, userMessageIn: boolean, timelineKey: string) => ReactNode;
   /** 列表由空态进入首条本端 pending；初次加载已有内容不播放。 */
   enterInitialPending?: boolean;
   /** 这些正式事件之前缺少记录，在对应条目前显示一行说明。 */
@@ -52,7 +52,7 @@ type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string,
 /** Pi 回复靠左占满阅读列、无底色；不显示发送方，只为读屏保留「Pi：」。 */
 function TextRow({ entry }: { entry: TextEntry }) {
   const { t } = useI18n();
-  return <article className={`pwa-message assistant${entry.streaming ? " partial" : ""}`} data-timeline-key={entry.key}>
+  return <article className={`pwa-message assistant${entry.streaming ? " partial" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key}>
     <span className="pwa-sr-only">{t.timeline.srPi}</span>
     <MarkdownContent text={entry.text} />
   </article>;
@@ -323,9 +323,9 @@ export function ConversationTimeline({ items, live, completions, running = false
       if (entry.kind === "record") {
         if (entry.item.kind === "event" && isSummaryEvent(entry.item.event)) {
           const event = entry.item.event;
-          return <SummaryEntry key={entry.key} event={event} onRead={trigger => openSummaryReader(entry.key, event.session_id, trigger)} />;
+          return <SummaryEntry key={entry.key} timelineKey={entry.key} event={event} onRead={trigger => openSummaryReader(entry.key, event.session_id, trigger)} />;
         }
-        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true)}</Fragment>;
+        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true, entry.key)}</Fragment>;
       }
       if (entry.kind === "text") return <TextRow entry={entry} key={entry.key} />;
       if (entry.kind === "thinking") return <ThinkingContent
@@ -339,6 +339,7 @@ export function ConversationTimeline({ items, live, completions, running = false
       />;
       return <ToolCard
         key={entry.key}
+        timelineKey={entry.key}
         value={entry.value}
         status={"partial_id" in entry.value && !live ? "unknown" : undefined}
         onRead={trigger => openReader(entry.key, trigger)}

@@ -6,6 +6,7 @@ import { renderPwa } from "@/test/browser/render";
 import { MessageList } from "./message-list";
 import { toolHeaderSummary, toolInlineText } from "./tool-presentation";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
+import { PUBLISHED_FILE_TYPE } from "@pi-reach/protocol/session";
 import { TimelineRuntime, type TimelinePending, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
@@ -70,6 +71,32 @@ async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProp
 function renderMessageList(items: ListProps["items"], overrides: Partial<ListProps> = {}) {
   return renderPwa(<MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} onRetryUnknown={() => {}} onCancelQueued={() => {}} {...overrides} />);
 }
+
+test("all message row consumers declare distinct semantic viewport identities", async () => {
+  const user: TimelineEvent = {
+    event_id: "user", message_id: "user", session_id: "session-1", leaf_id: "history-1", group_id: "user", timestamp: 0,
+    kind: "user", origin: "pwa", sender_ref: "self", status: "committed", delivery: "normal", blocks: [{ type: "text", text: "User text" }],
+  };
+  const summary: TimelineEvent = { event_id: "summary", session_id: "session-1", leaf_id: "history-1", timestamp: 2, kind: "compaction", payload: "Summary", truncated: false };
+  const file: TimelineEvent = { event_id: "published", session_id: "session-1", leaf_id: "history-1", group_id: "file", timestamp: 3, kind: "custom", truncated: false,
+    payload: { custom_type: PUBLISHED_FILE_TYPE, data: { file_name: "report.txt", mime_type: "text/plain", byte_length: 10, tool_call_id: "publish" } },
+  };
+  const screen = await renderMessageList([eventItem(user), unknownPending, eventItem(assistantEvent), eventItem(toolEvent), eventItem(summary), eventItem(file)]);
+  try {
+    const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+    const rows = [...list.children].filter((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-viewport-row"));
+    expect(rows).toHaveLength(7);
+    expect(new Set(rows.map(row => row.dataset.viewportRow)).size).toBe(rows.length);
+    for (const selector of [".pwa-user-row", ".pwa-message.assistant", ".pwa-thinking", ".pwa-tool-group", ".pwa-summary-entry", ".pwa-published-file"]) {
+      for (const row of list.querySelectorAll<HTMLElement>(`:scope > ${selector}`)) expect(row.dataset.viewportRow).toBeTruthy();
+    }
+    expect(list.querySelector(".pwa-bottom-sentinel")?.hasAttribute("data-viewport-row")).toBe(false);
+    await expandToolGroups();
+    const tool = list.querySelector<HTMLElement>(".pwa-tool-card")!;
+    expect(tool.dataset.viewportRow).toBeTruthy();
+    expect(tool.closest(".pwa-tool-group")?.parentElement).toBe(list);
+  } finally { await screen.unmount(); }
+});
 
 test.each(["body", "tool"])("prepended gaps stay before retained %s and preserve the thinking trace node", async kind => {
   const empty: TimelineEvent = { ...assistantEvent, event_id: "later-empty", blocks: [{ type: "thinking", text: "" }] };

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { flushSync } from "react-dom";
 import { setLanguagePreference } from "@/lib/i18n";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -51,6 +52,7 @@ const channelHarness = vi.hoisted(() => ({
     closeCalls: number;
   }>,
   nextSendResults: [] as boolean[],
+  beforeUserSend: null as (() => void) | null,
   supportsAttachments: true,
   holdFinish: false,
   failNextChunk: false,
@@ -203,6 +205,7 @@ vi.mock("@/lib/pi-reach/peer-channel", () => ({
 
     send(frame: ClientFrame) {
       this.frames.push(frame);
+      if (frame.type === "user_message") channelHarness.beforeUserSend?.();
       const sendResult = channelHarness.nextSendResults.shift() ?? true;
       if (!sendResult) return false;
       if (frame.type === "attachment_capabilities_request") {
@@ -290,6 +293,7 @@ beforeEach(async () => {
   relayHarness.rejectConnect = null;
   channelHarness.channels.length = 0;
   channelHarness.nextSendResults.length = 0;
+  channelHarness.beforeUserSend = null;
   channelHarness.supportsAttachments = true;
   channelHarness.holdFinish = false;
   channelHarness.failNextChunk = false;
@@ -1611,6 +1615,40 @@ test.each([false, true])("successful own send releases actual workspace geometry
     await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Reply after final submission");
     await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
   } finally { await screen.unmount(); }
+});
+
+test.each([false, true])("attachment final submission preserves a restored draft across an unbatched commit (accepted=%s)", async accepted => {
+  const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    for (const key of ["scrollHeight", "clientHeight", "scrollTop", "scrollTo"]) Reflect.deleteProperty(list, key);
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Original attachment draft");
+    channel.emit(queuedStateFrame([{ id: "restore-during-send", text: "Next draft survives" }], "before-draft-handoff"));
+    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    // 撤回已请求但尚未收到权威快照，最终提交时再交付这条异步回执。
+    pasteAttachments(input.element(), new File(["Note"], "draft-handoff.txt", { type: "text/plain" }));
+    await expect.element(screen.getByText("draft-handoff.txt", { exact: true })).toBeVisible();
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    expect(footer.style.height).toBe("");
+    let committed = false;
+    channelHarness.beforeUserSend = () => {
+      // 实际队列撤回会回填草稿并推进版本；强制提交使测试不依赖 React 恰好批处理。
+      flushSync(() => channel.emit(queuedStateFrame([], "after-draft-handoff")));
+      committed = true;
+      expect(footer.style.height).toBe("");
+    };
+    channelHarness.nextSendResults.push(accepted);
+    channelHarness.finishReplies[0]!();
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message").length).toBe(1);
+    expect(committed).toBe(true);
+    await expect.element(input).toHaveValue("Original attachment draft\nNext draft survives");
+    await expect.poll(() => footer.style.height).toBe("");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(accepted ? 0 : 1);
+    expect(channel.frames.findLast(frame => frame.type === "user_message")).toMatchObject({ text: "Original attachment draft" });
+  } finally { channelHarness.beforeUserSend = null; await screen.unmount(); }
 });
 
 test("message send failure keeps draft and delivery feedback out of global notifications", async () => {

@@ -123,11 +123,11 @@ export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, ex
   const expanded = controlledExpanded ?? localExpanded;
   const id = useId();
   const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
-  if (!streaming && parsed.empty) return <section className="pwa-thinking pwa-thinking-trace pwa-timeline-row" data-timeline-key={timelineKey}>
+  if (!streaming && parsed.empty) return <section className="pwa-thinking pwa-thinking-trace pwa-timeline-row" data-timeline-key={timelineKey} data-viewport-row={timelineKey}>
     <div className="pwa-thinking-title pwa-timeline-heading">{t.timeline.thinkingTrace}</div>
   </section>;
   const title = heading ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
-  return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey}>
+  return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey} data-viewport-row={timelineKey}>
     <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
       <span className={`pwa-thinking-title pwa-thinking-heading${streaming ? " pwa-thinking-live" : ""}`} title={streaming ? undefined : title} aria-live={streaming ? "off" : undefined}>
         <i className="pwa-thinking-icon-slot" aria-hidden="true"><LoaderCircle className={streaming ? "pwa-spin" : undefined} size={16} aria-hidden="true" /></i>

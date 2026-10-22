@@ -138,6 +138,18 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 
 事件字段、分组、错误码、尺寸限制和合流不变量见[会话协议](reference/protocol/protocol-v2.md)，本文不复制 wire schema。
 
+## 时间线视口与发送布局
+
+[`useTimelineViewport`](../pwa/src/lib/pwa/use-timeline-viewport.ts) 负责 React 状态适配与浏览器监听；[`TimelineViewportCoordinator`](../pwa/src/lib/pwa/timeline-viewport-coordinator.ts) 不依赖 DOM，通过布局和调度端口统一管理阅读意图、详情暂停、发送／活动状态／Latest 过程、绑定代际及退出后的继续跟随。布局端口复用已有曲线时钟与短期尺寸过渡，滚动基线取浏览器实际接受的位置；同步布局提交与动画帧共用推进入口，不另设第二个滚动器。
+
+文字与附件在最终提交前只读捕获几何，transport 接受后才激活发送过程；上传开始或提交失败不取得布局控制权。Composer autosize 继续计算自然高度，发送期间只提交尺寸目标，由过渡写入真实高度；结束、下一草稿输入、用户中断及视图失效均归还控制权并释放临时尺寸。投递、重试和草稿版本保护仍由原业务模块负责。视觉与时长规则见 [DESIGN](DESIGN.md#组件规则)。
+
+阅读锚点只识别列表直接子元素上的 `data-viewport-row`，键来自现有 presentation 身份。正文、用户／pending、Thinking、工具、摘要与发布文件均显式标记；pending 转正式用户记录保留同一行身份，不根据视觉 class 或标签猜测。会话阅读位置仍按已有 scope 保存和恢复，普通 leaf 推进不重置视图。
+
+### 本地视口诊断
+
+工作区挂载后，生产构建也提供 `window.__PI_REACH_VIEWPORT__`。在浏览器调试控制台执行 `.enable()` 开始记录，复现后用 `.read()` 读取，用 `.clear()` 清空，结束时调用 `.disable()`。默认关闭；只在显式启用时测量额外几何，内存最多保留 256 条，关闭或列表解绑时清空。记录包含事件顺序、相对时间、阅读意图与过程、本地数字代际、列表／输入／footer／visual viewport 几何，以及请求和实际滚动位置；不包含正文、附件内容、业务身份、地址或凭据，不上传、不写入持久化，也不提供文件导出或执行命令接口。设备问题应在原设备启用并复现；桌面记录不能替代 iOS 键盘与合成层证据。
+
 ## 会话附件
 
 附件沿用既有 session route，不增加 HTTP 上传服务或 Relay 文件存储。浏览器只在用户发送时读取原 File、计算摘要并分片上传；具体限额、租约和回执见[会话协议](reference/protocol/protocol-v2.md#会话附件)。图片只生成有界展示预览，原件不转换；所有格式都以清单和路径提供给 Pi，不自动注入视觉 block、解析、解压或执行。

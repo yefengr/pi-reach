@@ -1,9 +1,10 @@
 const READABLE_BLOCK_SELECTOR = "p, li, pre, blockquote, h1, h2, h3, h4, h5, h6, table, figure, .pwa-stream-text";
-const CONTENT_ROW_SELECTOR = "[data-timeline-key], [data-tool-key], .pwa-timeline-row, .pwa-user-row, .pwa-message, article";
-const EXCLUDED_SELECTOR = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty, [hidden]";
+/** 只识别显式声明的顶层语义行，不让视觉 class 或包装标签决定阅读位置。 */
+const CONTENT_ROW_SELECTOR = "[data-viewport-row]";
+const EXCLUDED_SELECTOR = "[hidden], [aria-hidden='true']";
 
 type RowLocator = {
-  attribute: "data-timeline-key" | "data-tool-key";
+  attribute: "data-viewport-row";
   key: string;
   blockIndex: number | null;
 };
@@ -30,22 +31,17 @@ function isVisibleInList(list: HTMLDivElement, element: HTMLElement, listTop: nu
 }
 
 function rowLocator(row: HTMLElement, element: HTMLElement): RowLocator | null {
-  const attribute = row.hasAttribute("data-timeline-key")
-    ? "data-timeline-key"
-    : row.hasAttribute("data-tool-key")
-      ? "data-tool-key"
-      : null;
-  if (!attribute) return null;
+  const attribute = "data-viewport-row";
   const key = row.getAttribute(attribute);
-  if (key === null) return null;
+  if (!key) return null;
   const blocks = [...row.querySelectorAll<HTMLElement>(READABLE_BLOCK_SELECTOR)];
   const blockIndex = element === row ? -1 : blocks.indexOf(element);
   return { attribute, key, blockIndex: blockIndex < 0 ? null : blockIndex };
 }
 
 function findLocatedRow(list: HTMLDivElement, locator: RowLocator): HTMLElement | null {
-  return [...list.querySelectorAll<HTMLElement>(`[${locator.attribute}]`)]
-    .find((element) => element.getAttribute(locator.attribute) === locator.key) ?? null;
+  return [...list.children].find((element): element is HTMLElement => element instanceof HTMLElement
+    && element.getAttribute(locator.attribute) === locator.key && isUsableElement(list, element)) ?? null;
 }
 
 export function captureTimelineViewportAnchor(
@@ -74,10 +70,13 @@ export function captureTimelineViewportAnchor(
 export function restoreTimelineViewportAnchor(list: HTMLDivElement, anchor: TimelineViewportAnchor): boolean {
   if (anchor.list !== list) return false;
 
-  let target: HTMLElement | null = isUsableElement(list, anchor.element) ? anchor.element : null;
+  const sameRow = anchor.rowElement.parentElement === list && isUsableElement(list, anchor.rowElement)
+    && anchor.rowElement.getAttribute("data-viewport-row") === anchor.rowLocator?.key;
+  let target: HTMLElement | null = sameRow && anchor.rowElement.contains(anchor.element)
+    && isUsableElement(list, anchor.element) ? anchor.element : null;
   let targetOffset = anchor.offsetTop;
   if (!target) {
-    const row = isUsableElement(list, anchor.rowElement)
+    const row = sameRow
       ? anchor.rowElement
       : anchor.rowLocator
         ? findLocatedRow(list, anchor.rowLocator)
