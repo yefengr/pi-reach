@@ -520,6 +520,33 @@ test.each(["reset", "details", "history", "resize", "hidden", "unmount"])("%s re
   } finally { if (!unmounted) await h.screen.unmount(); }
 });
 
+test.each([390, 1280])("editing an equal-height next draft still reaches the bottom without new output at %ipx", async width => {
+  const h = await harness({ width, draft: "A single line" });
+  try {
+    await h.read();
+    const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const before = { input: Math.round(input.getBoundingClientRect().height), footer: Math.round(footer.getBoundingClientRect().height) };
+    const clock = layoutClock();
+    h.send(); clock.step(40);
+    expect(gap(h.list)).toBeGreaterThan(1);
+    const stale = clock.snapshot();
+    h.edit("Next draft");
+    expect(Math.round(input.getBoundingClientRect().height)).toBe(before.input);
+    expect(Math.round(footer.getBoundingClientRect().height)).toBe(before.footer);
+    clock.step(80);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(input.value).toBe("Next draft");
+    const settled = h.list.scrollTop;
+    for (const callback of stale) callback(1200);
+    expect(h.list.scrollTop).toBe(settled);
+    expect(input.value).toBe("Next draft");
+    expect(footer.style.height).toBe("");
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
 test("editing the next draft releases the old input-height owner before a second send", async () => {
   const h = await harness({ draft: "One\nTwo\nThree\nFour" });
   try {

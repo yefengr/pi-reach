@@ -259,6 +259,8 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
         // 下一条草稿重新交还 autosize，不让上一条发送动画继续覆盖它的尺寸。
         cancelPendingFollow();
         finishOwnSend(true);
+        // 等高输入不会触发 ResizeObserver，仍须完成已恢复的跟随。
+        scheduleFollow();
       };
       let touch: { id: number; y: number } | null = null;
       const onTouchStart = (event: TouchEvent) => {
