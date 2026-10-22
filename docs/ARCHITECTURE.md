@@ -140,7 +140,9 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 
 ## 时间线视口与发送布局
 
-[`useTimelineViewport`](../pwa/src/lib/pwa/use-timeline-viewport.ts) 负责 React 状态适配与浏览器监听；[`TimelineViewportCoordinator`](../pwa/src/lib/pwa/timeline-viewport-coordinator.ts) 不依赖 DOM，通过布局和调度端口统一管理阅读意图、详情暂停、发送／活动状态／Latest 过程、绑定代际及退出后的继续跟随。布局端口复用已有曲线时钟与短期尺寸过渡，滚动基线取浏览器实际接受的位置；同步布局提交与动画帧共用推进入口，不另设第二个滚动器。
+[`useTimelineViewport`](../pwa/src/lib/pwa/use-timeline-viewport.ts) 负责 React 状态适配与浏览器监听；[`TimelineViewportCoordinator`](../pwa/src/lib/pwa/timeline-viewport-coordinator.ts) 不依赖 DOM，通过布局和调度端口统一管理阅读意图、详情暂停、发送／活动状态／Latest 过程、绑定代际及退出后的继续跟随。布局端口复用已有曲线时钟与短期尺寸过渡，滚动基线取浏览器实际接受的位置；同步布局提交与动画帧共用布局处理入口，不另设第二个滚动器。
+
+每个发送或活动过渡的采样时间由协调器持有：第一次提交后布局处理初始化，无新提交时由首个 RAF 初始化；之后只有有效 RAF 推进时间。同步几何、活动和内容通知复用最近采样时间，继续更新目标、补偿 padding 或维持短期可达空间，不把同一帧内的执行耗时计入新的动画进度。过程退出时清理该时间状态，后继过程重新建立起点。
 
 文字与附件在最终提交前只读捕获几何，transport 接受后才激活发送过程；上传开始或提交失败不取得布局控制权。Composer autosize 继续计算自然高度，发送期间只提交尺寸目标，由过渡写入真实高度；结束、下一草稿输入、用户中断及视图失效均归还控制权并释放临时尺寸。投递、重试和草稿版本保护仍由原业务模块负责。视觉与时长规则见 [DESIGN](DESIGN.md#组件规则)。
 

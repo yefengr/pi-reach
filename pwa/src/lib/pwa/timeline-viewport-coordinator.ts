@@ -33,6 +33,7 @@ export class TimelineViewportCoordinator<C, A> {
   private paused = false;
   private mode: ViewportMode = "idle";
   private motion: ViewportMotion | null = null;
+  private motionTime: number | null = null;
   private frame: number | null = null;
   private frameEpoch = 0;
   private anchor: A | null = null;
@@ -253,6 +254,7 @@ export class TimelineViewportCoordinator<C, A> {
     const motion = this.motion;
     this.cancelFrame();
     this.motion = null;
+    this.motionTime = null;
     this.receipt = null;
     this.handoff = false;
     this.activityPending = false;
@@ -306,12 +308,19 @@ export class TimelineViewportCoordinator<C, A> {
     return restored;
   }
 
-  private process(reason: ViewportReason, now = this.scheduler.now()): void {
+  /** 同步布局只初始化或复用已采样时间；后续进度由唯一 RAF 提供。 */
+  private sampleMotionTime(frameTime?: number): number {
+    if (this.motionTime === null) this.motionTime = frameTime ?? this.scheduler.now();
+    else if (frameTime !== undefined) this.motionTime = Math.max(this.motionTime, frameTime);
+    return this.motionTime;
+  }
+
+  private process(reason: ViewportReason, frameTime?: number): void {
     if (this.processing || this.exiting) { this.pendingReasons.add(reason); return; }
     const layout = this.layout;
     if (!layout) return;
     this.processing = true;
-    try { this.advance(layout, reason, now); }
+    try { this.advance(layout, reason, frameTime); }
     finally {
       this.processing = false;
       // 同步 scroll/geometry 重入只合并后继帧，不递归采样同一时钟。
@@ -319,7 +328,7 @@ export class TimelineViewportCoordinator<C, A> {
     }
   }
 
-  private advance(layout: ViewportLayout<C, A>, reason: ViewportReason, now: number): void {
+  private advance(layout: ViewportLayout<C, A>, reason: ViewportReason, frameTime?: number): void {
     if (this.pendingAnchor) {
       if (this.restoreAnchor(layout, this.pendingAnchor, true)) {
         this.pendingAnchor = null;
@@ -356,7 +365,7 @@ export class TimelineViewportCoordinator<C, A> {
       if (!geometry.animate) { this.exit(false); geometry = layout.measure(); }
       else {
         const epoch = this.frameEpoch;
-        const step = this.motion.advance(now);
+        const step = this.motion.advance(this.sampleMotionTime(frameTime));
         if (epoch !== this.frameEpoch || this.layout !== layout) return;
         if (!step.finished) {
           requested = step.top;
