@@ -35,8 +35,11 @@ type MessageListProps = {
   listRef: RefObject<HTMLDivElement | null>;
   bottomSentinelRef: RefObject<HTMLDivElement | null>;
   onScroll: (nearBottom: boolean) => void;
-  onRetryUnknown?: (clientRequestId: string) => void;
+  onRetryFailed?: (clientRequestId: string) => void;
+  onCheckStatus?: (clientRequestId: string) => void;
   onCancelQueued?: (clientRequestId: string) => void;
+  /** 离线时保留未知提示但不提供无效核对入口。 */
+  canCheckStatus?: boolean;
   isLive?: boolean;
   /** 当前源会话断线仍可显示已获取内容；只读历史不借用远程缓存。 */
   fileSourceCurrent?: boolean;
@@ -104,12 +107,12 @@ function PartialCard({ partial, timelineKey }: { partial: Exclude<TimelinePartia
   return <article className="pwa-message assistant partial" data-viewport-row={timelineKey}><span className="pwa-sr-only">{t.timeline.srPi}</span>{partial.blocks ? <AssistantBlocks blocks={partial.blocks} streaming /> : text.trim() ? <div className="pwa-stream-text">{text}</div> : null}</article>;
 }
 
-function renderItem(item: TimelineViewItem, onRetryUnknown: MessageListProps["onRetryUnknown"], onCancelQueued: MessageListProps["onCancelQueued"], projection: TimelineAttachmentProjection, live: boolean, onRead: PublishedFileRead, userMessageIn: boolean, timelineKey: string) {
+function renderItem(item: TimelineViewItem, onRetryFailed: MessageListProps["onRetryFailed"], onCheckStatus: MessageListProps["onCheckStatus"], onCancelQueued: MessageListProps["onCancelQueued"], canCheckStatus: boolean, projection: TimelineAttachmentProjection, live: boolean, onRead: PublishedFileRead, userMessageIn: boolean, timelineKey: string) {
   if (item.kind === "event") {
     const file = publishedFileFromEvent(item.event);
     if (file) return <PublishedFile key={item.event.event_id} file={file} live={live} onRead={onRead} timelineKey={timelineKey} />;
   }
-  if (item.kind === "pending") return <UserMessage value={item} timelineKey={timelineKey} entering={userMessageIn} onRetryUnknown={onRetryUnknown} onCancelQueued={onCancelQueued} />;
+  if (item.kind === "pending") return <UserMessage value={item} timelineKey={timelineKey} entering={userMessageIn} onRetryFailed={onRetryFailed} onCheckStatus={onCheckStatus} onCancelQueued={onCancelQueued} canCheckStatus={canCheckStatus} />;
   if (item.kind === "event" && item.event.kind === "user") return <UserMessage value={item.event} timelineKey={timelineKey} entering={userMessageIn} metadata={projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id))} />;
   const value = item.kind === "event" ? item.event : item.partial;
   // projectTimeline 将全部工具投影为 ToolEntry，由 ConversationTimeline 提供详情入口。
@@ -133,7 +136,7 @@ function EarlierRecords({ loading, failed, offline, onLoad }: { loading: boolean
   return <div className="pwa-earlier"><Button variant="default" className="pwa-earlier-button" type="button" onClick={onLoad}>{t.timeline.loadMore}</Button></div>;
 }
 
-export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadEarlier, loadEarlierFailed = false, autoLoadEarlier = true, gapBefore, listRef, bottomSentinelRef, onScroll, onRetryUnknown, onCancelQueued, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, projectionItems = items, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false, compacting = false, notices = NO_NOTICES }: MessageListProps) {
+export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadEarlier, loadEarlierFailed = false, autoLoadEarlier = true, gapBefore, listRef, bottomSentinelRef, onScroll, onRetryFailed, onCheckStatus, onCancelQueued, canCheckStatus = true, isLive = true, fileSourceCurrent = isLive, emptyContext = null, earlierLocal = false, projectionItems = items, onReadingChange, reconnectPhase = null, topNotice = null, loading = false, skeletonVisible = false, running = false, compacting = false, notices = NO_NOTICES }: MessageListProps) {
   const { t } = useI18n();
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
   const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
@@ -173,7 +176,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   }}>
     {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} enterInitialPending={enterInitialPending} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead, userMessageIn, timelineKey) => renderItem(item, isLive ? onRetryUnknown : undefined, isLive ? onCancelQueued : undefined, attachmentProjection, fileSourceCurrent, onRead, userMessageIn, timelineKey)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline items={visibleItems} live={isLive} enterInitialPending={enterInitialPending} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead, userMessageIn, timelineKey) => renderItem(item, isLive ? onRetryFailed : undefined, isLive ? onCheckStatus : undefined, isLive ? onCancelQueued : undefined, canCheckStatus && isLive, attachmentProjection, fileSourceCurrent, onRead, userMessageIn, timelineKey)} />}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

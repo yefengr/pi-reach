@@ -100,7 +100,7 @@ let attachmentApi: ReturnType<typeof useAttachmentComposer>;
 let rerenderAttachments: () => void;
 function AttachmentHarness() {
   const [, setVersion] = useState(0);
-  const attachments = useAttachmentComposer(() => false, getMessages().attachments);
+  const attachments = useAttachmentComposer(() => "not-handled", getMessages().attachments);
   useLayoutEffect(() => {
     attachmentApi = attachments;
     rerenderAttachments = () => setVersion(version => version + 1);

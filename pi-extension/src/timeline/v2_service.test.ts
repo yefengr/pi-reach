@@ -348,6 +348,145 @@ describe("TimelineV2Service", () => {
     expect(replay[0]).toMatchObject({ type: "user_message_status", status: "accepted" });
   });
 
+  test("queries received/unknown across native leaves on the current channel without sending or renewing records", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(0);
+      const session = SessionManager.inMemory(process.cwd());
+      const send = vi.fn(() => true);
+      const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1", runtime: new TimelineRuntime(), onUserMessage: send });
+      service.handle(hello());
+      service.handle(user(service.leafId));
+      const query = (id = "query") => ({ protocol_version: 2 as const, type: "user_message_status_request" as const, id,
+        channel_id: "channel-2", session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "request-1" });
+      session.appendThinkingLevelChange("high");
+      service.handle(hello("channel-2"));
+      vi.setSystemTime(9 * 60 * 1000);
+      expect(service.handle(query())).toEqual([expect.objectContaining({ status: "received", in_reply_to: "query", target_channel_id: "channel-2" })]);
+      expect(service.handle({ ...query(), client_request_id: "missing" })[0]).toMatchObject({ status: "not_found" });
+      // 查询不能改写原请求的回复 channel。
+      expect(service.unknownDelivery("request-1")[0]).toMatchObject({ status: "unknown_delivery", in_reply_to: "wire-1", target_channel_id: "channel-1" });
+      vi.setSystemTime(18 * 60 * 1000);
+      expect(service.handle(query("unknown"))[0]).toMatchObject({ status: "unknown_delivery", in_reply_to: "unknown" });
+      vi.setSystemTime(19 * 60 * 1000);
+      expect(service.handle(query("expired"))[0]).toMatchObject({ status: "not_found" });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(service.handle(user(service.leafId, { client_request_id: "missing", id: "new" }))[0]).toMatchObject({ status: "received" });
+      expect(send).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
+
+  test("validates query scope before reading evidence and isolates Owner services", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const evidence = vi.fn(() => null);
+    const send = vi.fn(() => true);
+    const make = (senderRef: string) => new TimelineV2Service({ sessionManager: session, senderRef, extensionVersion: "1", runtime: new TimelineRuntime(), onUserMessage: send, onDeliveryStage: evidence });
+    const service = make("owner-1");
+    const query = { protocol_version: 2 as const, type: "user_message_status_request" as const, id: "query", channel_id: "channel-1",
+      session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "request-1" };
+    expect(service.handle(query)[0]).toMatchObject({ type: "protocol_error", code: "invalid_channel" });
+    service.handle(hello());
+    expect(service.handle({ ...query, channel_id: "other-channel" })[0]).toMatchObject({ code: "invalid_channel" });
+    expect(service.handle({ ...query, session_id: "other-session" })[0]).toMatchObject({ type: "reset", reason: "session_replaced" });
+    expect(service.handle({ ...query, leaf_id: "other-leaf" })[0]).toMatchObject({ type: "reset", reason: "branch_changed" });
+    expect(evidence).not.toHaveBeenCalled();
+    service.handle(user(service.leafId));
+    const other = make("owner-2");
+    other.handle(hello());
+    expect(other.handle(query)[0]).toMatchObject({ status: "not_found" });
+    expect(service.handle(query)[0]).toMatchObject({ status: "received" });
+    expect(send).toHaveBeenCalledTimes(1);
+    service.refreshScope();
+    expect(service.handle(query)[0]).toMatchObject({ type: "reset" });
+  });
+
+  test("prefers attachment protection, then idempotency, then read-only queue evidence", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const attachment = vi.fn<() => import("./attachment_delivery.js").AttachmentReplay>(() => null);
+    const stage = vi.fn<() => "queued" | "in_flight" | null>(() => null);
+    const send = vi.fn(() => "queued" as const);
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1", runtime: new TimelineRuntime(),
+      onUserMessage: send, onAttachmentStatus: attachment, onDeliveryStage: stage });
+    service.handle(hello());
+    const query = { protocol_version: 2 as const, type: "user_message_status_request" as const, id: "query", channel_id: "channel-1",
+      session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "request-1" };
+    expect(service.handle(query)[0]).toMatchObject({ status: "not_found" });
+    for (const deliveryStage of ["queued", "in_flight"] as const) {
+      stage.mockReturnValue(deliveryStage);
+      const [reply] = service.handle(query);
+      expect(reply).toMatchObject({ status: "accepted", in_reply_to: "query" });
+      expect(reply).not.toHaveProperty("message_id");
+    }
+    stage.mockClear();
+    service.handle(user(service.leafId));
+    expect(service.handle(query)[0]).toMatchObject({ status: "accepted" });
+    expect(stage).not.toHaveBeenCalled();
+    attachment.mockReturnValue({ status: "unknown_delivery" });
+    expect(service.handle(query)[0]).toMatchObject({ status: "unknown_delivery" });
+    attachment.mockReturnValue({ status: "committed", messageId: "m", groupId: "g" });
+    const replies = service.handle(query);
+    expect(replies).toEqual([expect.objectContaining({ status: "committed", message_id: "m", group_id: "g", in_reply_to: "query" })]);
+    for (const reply of replies) expect(() => encodeServerFrameV2(reply)).not.toThrow();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test("queries formal commitment conservatively without changing stored state", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const send = vi.fn(() => true);
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1", runtime: new TimelineRuntime(), onUserMessage: send });
+    service.handle(hello());
+    service.handle(user(service.leafId));
+    service.commit("request-1", "not-in-projection", "g");
+    const query = () => ({ protocol_version: 2 as const, type: "user_message_status_request" as const, id: "query", channel_id: "channel-1",
+      session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "request-1" });
+    expect(service.handle(query())[0]).toMatchObject({ status: "accepted", message_id: "not-in-projection" });
+    expect(service.handle(user(service.leafId))[0]).toMatchObject({ status: "committed", message_id: "not-in-projection" });
+    const messageId = session.appendMessage({ role: "user", content: "hello", timestamp: 1 });
+    expect(service.commit("request-1", messageId)[0]).toMatchObject({ in_reply_to: "wire-1" });
+    expect(service.handle(query())[0]).toMatchObject({ status: "committed", message_id: messageId, in_reply_to: "query" });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test("retains rejection, replays duplicate attempts, and admits a new attempt atomically", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const send = vi.fn<() => "rejected" | "queued">(() => "rejected");
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1", runtime: new TimelineRuntime(), onUserMessage: send });
+    service.handle(hello());
+    const frame = user(service.leafId);
+    const expected = { status: "rejected", code: "queue_full", retryable: true };
+    expect(service.handle(frame)[0]).toMatchObject({ ...expected, in_reply_to: "wire-1" });
+    expect(service.handle(frame)[0]).toMatchObject(expected);
+    const query = { protocol_version: 2 as const, type: "user_message_status_request" as const, id: "query", channel_id: "channel-1",
+      session_id: service.sessionId, leaf_id: service.leafId, client_request_id: frame.client_request_id };
+    expect(service.handle(query)[0]).toMatchObject({ ...expected, in_reply_to: "query" });
+    expect(service.canDrain(frame.client_request_id)).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(service.handle({ ...frame, id: "wire-2", text: "changed" })[0]).toMatchObject({ code: "invalid_message" });
+    send.mockImplementationOnce(() => {
+      expect(service.handle({ ...frame, id: "wire-2" })[0]).toMatchObject({ status: "received" });
+      return "queued";
+    });
+    expect(service.handle({ ...frame, id: "wire-2" })[0]).toMatchObject({ status: "accepted" });
+    expect(service.handle({ ...frame, id: "wire-3" })[0]).toMatchObject({ status: "accepted", in_reply_to: "wire-3" });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  test("each new attempt after a transient rejection is admitted once while duplicates only replay", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const send = vi.fn(() => "rejected" as const);
+    const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1", runtime: new TimelineRuntime(), onUserMessage: send });
+    service.handle(hello());
+    const replies = ["a", "a", "b", "b", "c", "c"].map((id) => service.handle(user(service.leafId, { id }))[0]);
+    for (const [index, id] of ["a", "a", "b", "b", "c", "c"].entries()) {
+      expect(replies[index]).toMatchObject({ status: "rejected", code: "queue_full", retryable: true, in_reply_to: id });
+    }
+    const query = service.handle({ protocol_version: 2, type: "user_message_status_request", id: "query", channel_id: "channel-1",
+      session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "request-1" })[0];
+    expect(query).toMatchObject({ status: "rejected", retryable: true, in_reply_to: "query" });
+    // 每个新尝试只准入一次；重复帧与查询都不调用投递。
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
   test("rejects same id with different payload and keeps unknown delivery idempotent", () => {
     const session = SessionManager.inMemory(process.cwd());
     const send = vi.fn(() => false);
@@ -359,13 +498,13 @@ describe("TimelineV2Service", () => {
     });
     expect(service.handle(frame)[0]).toMatchObject({
       type: "user_message_status",
-      in_reply_to: "request-1",
+      in_reply_to: "wire-1",
       client_request_id: "request-1",
       status: "unknown_delivery",
     });
     expect(service.handle({ ...frame, id: "wire-2" })[0]).toMatchObject({
       type: "user_message_status",
-      in_reply_to: "request-1",
+      in_reply_to: "wire-2",
       client_request_id: "request-1",
       status: "unknown_delivery",
     });

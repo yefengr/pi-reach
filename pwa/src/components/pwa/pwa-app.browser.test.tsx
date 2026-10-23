@@ -13,12 +13,13 @@ import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_IN_FLIGHT, ATTACHMENT_MAX_MESSAGE_BYTES, PUBLISHED_FILE_TYPE, fileChunkFrameSchema, fileOpenedFrameSchema, type AttachmentDescriptor } from "@pi-reach/protocol/session";
 import { toStoredKey } from "@/lib/pwa/runtime";
 import { listTimelineSessions, loadTimeline, mergeTimelineEvents, TimelineStoreConflictError } from "@/lib/pwa/timeline-store";
-import { PendingCapacityError, TimelineRuntime } from "@/lib/pwa/timeline-runtime";
+import { PendingCapacityError, TimelineRuntime, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS } from "@/lib/pwa/timeline-runtime";
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { PwaApp } from "./pwa-app";
 import { connectionBannerTiming } from "./pwa-app-actions";
 import { useComposerAutosize } from "./use-composer-autosize";
 import { RELAY_PROBE_TIMEOUT_MS } from "@/lib/pwa/use-relay-connection";
+import { safeProtocolFeedbackMessage } from "@/lib/pwa/feedback-messages";
 
 const relayHarness = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -54,6 +55,7 @@ const channelHarness = vi.hoisted(() => ({
   nextSendResults: [] as boolean[],
   beforeUserSend: null as (() => void) | null,
   supportsAttachments: true,
+  uploadScopePrefix: "uploads",
   holdFinish: false,
   failNextChunk: false,
   finishReplies: [] as Array<() => void>,
@@ -206,12 +208,13 @@ vi.mock("@/lib/pi-reach/peer-channel", () => ({
     send(frame: ClientFrame) {
       this.frames.push(frame);
       if (frame.type === "user_message") channelHarness.beforeUserSend?.();
-      const sendResult = channelHarness.nextSendResults.shift() ?? true;
+      // 只读查询不应消费为发送尝试准备的传输结果。
+      const sendResult = frame.type === "user_message_status_request" ? true : (channelHarness.nextSendResults.shift() ?? true);
       if (!sendResult) return false;
       if (frame.type === "attachment_capabilities_request") {
         queueMicrotask(() => this.onFrame?.(channelHarness.supportsAttachments ? {
           protocol_version: 2, type: "attachment_capabilities", target_channel_id: this.channelId, in_reply_to: frame.id,
-          session_id: frame.session_id, upload_scope: `uploads-${frame.session_id}`,
+          session_id: frame.session_id, upload_scope: `${channelHarness.uploadScopePrefix}-${frame.session_id}`,
           max_file_bytes: ATTACHMENT_MAX_FILE_BYTES, max_message_bytes: ATTACHMENT_MAX_MESSAGE_BYTES,
           max_attachments: ATTACHMENT_MAX_COUNT, chunk_bytes: ATTACHMENT_CHUNK_BYTES, max_in_flight: ATTACHMENT_MAX_IN_FLIGHT,
         } : { protocol_version: 2, type: "protocol_error", target_channel_id: this.channelId, in_reply_to: frame.id, code: "unsupported_type", message: "legacy" }));
@@ -295,6 +298,7 @@ beforeEach(async () => {
   channelHarness.nextSendResults.length = 0;
   channelHarness.beforeUserSend = null;
   channelHarness.supportsAttachments = true;
+  channelHarness.uploadScopePrefix = "uploads";
   channelHarness.holdFinish = false;
   channelHarness.failNextChunk = false;
   channelHarness.finishReplies.length = 0;
@@ -479,6 +483,7 @@ async function renderReadyTimeline(renderApp = () => renderPwa(<PwaApp />)) {
   const channel = channelHarness.channels[0];
   if (!channel) throw new Error("Expected a session channel.");
   channel.emit(readyFrame(channel, "session-1"));
+  channel.emit(queuedStateFrame([], "initial-handshake-queue"));
   await flushMicrotasks();
   await expect.poll(() => document.querySelector<HTMLButtonElement>('[aria-label="Add attachments"]')?.disabled).toBe(!channelHarness.supportsAttachments);
   const list = document.querySelector<HTMLDivElement>(".pwa-message-list");
@@ -1567,10 +1572,13 @@ test.each([
     }
     await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message").length).toBe(1);
     if (!accepted) {
-      await expect.element(input).toHaveValue("Follow my new message");
+      // 已接管后的 transport 失败不再保留草稿：失败由原气泡承担，可原地重试。
+      await expect.element(input).toHaveValue("");
+      await expect.element(screen.getByText("Not sent; check the connection and retry", { exact: true })).toBeVisible();
       await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
       expect(scrollTo).not.toHaveBeenCalled();
       expect(list.scrollTop).toBe(300);
+      expect(document.querySelector(".pwa-composer .pwa-attachment-card")).toBeNull();
       return;
     }
     await expect.element(input).toHaveValue("");
@@ -1633,10 +1641,15 @@ test.each([false, true])("attachment final submission preserves a restored draft
     await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
     const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
     expect(footer.style.height).toBe("");
+    const clear = channel.frames.findLast((frame) => frame.type === "queued_message_clear" && frame.target_id === "restore-during-send")!;
     let committed = false;
     channelHarness.beforeUserSend = () => {
-      // 实际队列撤回会回填草稿并推进版本；强制提交使测试不依赖 React 恰好批处理。
-      flushSync(() => channel.emit(queuedStateFrame([], "after-draft-handoff")));
+      // 与 Extension 一致：cancelled 回执先于快照，回填草稿并推进版本；强制提交使测试不依赖 React 恰好批处理。
+      flushSync(() => {
+        channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+          in_reply_to: clear.id, client_request_id: "restore-during-send", session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
+        channel.emit(queuedStateFrame([], "after-draft-handoff"));
+      });
       committed = true;
       expect(footer.style.height).toBe("");
     };
@@ -1644,26 +1657,290 @@ test.each([false, true])("attachment final submission preserves a restored draft
     channelHarness.finishReplies[0]!();
     await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message").length).toBe(1);
     expect(committed).toBe(true);
+    // 交接期间草稿版本已推进：提交不能清掉同步回填的排队内容。
     await expect.element(input).toHaveValue("Original attachment draft\nNext draft survives");
     await expect.poll(() => footer.style.height).toBe("");
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(accepted ? 0 : 1);
+    // 已交给消息生命周期（含发送失败转失败气泡），输入区不再保留附件。
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
+    expect(channel.frames.some((frame) => frame.type === "user_message_status_request" && frame.client_request_id === "restore-during-send")).toBe(false);
     expect(channel.frames.findLast(frame => frame.type === "user_message")).toMatchObject({ text: "Original attachment draft" });
   } finally { channelHarness.beforeUserSend = null; await screen.unmount(); }
 });
 
-test("message send failure keeps draft and delivery feedback out of global notifications", async () => {
-  const { screen } = await renderReadyTimeline(renderWorkspaceApp);
+test("message send failure moves the draft into a failed bubble without global notifications", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const input = screen.getByPlaceholder("Message your agent…");
     await input.fill("Keep my draft");
     channelHarness.nextSendResults.push(false);
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect.element(screen.getByText("Message could not be sent. Check the connection and try again.", { exact: true })).toBeVisible();
-    await expect.element(input).toHaveValue("Keep my draft");
-    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
-    await screen.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect.element(screen.getByText("Message could not be sent. Check the connection and try again.", { exact: true })).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Not sent; check the connection and retry", { exact: true })).toBeVisible();
     await expect.element(input).toHaveValue("");
+    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+    expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(1);
+    // 草稿已交给失败气泡，输入区为空时不再可发。
+    await expect.element(screen.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+    expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(1);
+    // 重试使用同一逻辑消息 ID，新的尝试 ID，且只新增一帧。
+    await screen.getByRole("button", { name: "Retry send" }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(2);
+    const attempts = channel.frames.filter((frame) => frame.type === "user_message");
+    expect(attempts[1]).toMatchObject({ client_request_id: attempts[0]!.client_request_id, text: "Keep my draft" });
+    expect(attempts[1]!.id).not.toBe(attempts[0]!.id);
+  } finally { await screen.unmount(); }
+});
+
+test("reconnect automatic queries wait for a complete current-scope snapshot even when it is empty", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    await screen.getByPlaceholder("Message your agent…").fill("Wait for queue evidence");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find(frame => frame.type === "user_message")!;
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.element(screen.getByText("Reconnect to check status", { exact: true })).toBeVisible();
+    relay.emitState("open");
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1"));
+    await expect.poll(() => resumed.frames.some(frame => frame.type === "attachment_capabilities_request")).toBe(true);
+    await expect.element(screen.getByText("Not confirmed", { exact: true })).toBeVisible();
+    // 确认已完成握手后的 effects；不能把查询尚未调度的瞬间误判为门禁生效。
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(resumed.frames.filter(frame => frame.type === "user_message_status_request")).toHaveLength(0);
+    resumed.emit({ ...queuedStateFrame([], "wrong-scope"), session_id: "other-session" });
+    resumed.emit({ ...queuedStateFrame([], "wrong-leaf"), leaf_id: "other-leaf" });
+    resumed.emit({ ...queuedStateFrame([], "missing-first"), chunk_index: 1 });
+    resumed.emit({ ...queuedStateFrame([], "missing-middle"), final: false });
+    resumed.emit({ ...queuedStateFrame([], "missing-middle"), chunk_index: 2 });
+    await flushMicrotasks();
+    expect(resumed.frames.filter(frame => frame.type === "user_message_status_request")).toHaveLength(0);
+    resumed.emit({ ...queuedStateFrame([], "complete-empty"), final: false });
+    await flushMicrotasks();
+    expect(resumed.frames.filter(frame => frame.type === "user_message_status_request")).toHaveLength(0);
+    resumed.emit({ ...queuedStateFrame([], "complete-empty"), chunk_index: 1 });
+    await expect.poll(() => resumed.frames.filter(frame => frame.type === "user_message_status_request").length).toBe(1);
+    expect(resumed.frames.find(frame => frame.type === "user_message_status_request")).toMatchObject({ client_request_id: sent.client_request_id });
+    expect(resumed.frames.some(frame => frame.type === "user_message")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("unknown delivery checks status without resending the message", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Check me");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find((frame) => frame.type === "user_message")!;
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
+    await expect.element(screen.getByText("Not confirmed", { exact: true })).toBeVisible();
+    // unknown 出现后自动核对一次；等待期间按钮禁用以防连点。
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message_status_request").length).toBe(1);
+    const firstQuery = channel.frames.find((frame) => frame.type === "user_message_status_request")!;
+    await expect.element(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: firstQuery.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
+    await expect.element(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+    await screen.getByRole("button", { name: "Check status" }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message_status_request").length).toBe(2);
+    expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(1);
+  } finally { await screen.unmount(); }
+});
+
+test("a recovered queued message gets a new automatic query for its later cancellation", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    channel.emit(queuedStateFrame([{ id: "recover-cancel", text: "Recover then cancel" }], "recover-queued"));
+    channel.emit(queuedStateFrame([], "recover-missing"));
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message_status_request").length).toBe(1);
+    const first = channel.frames.find(frame => frame.type === "user_message_status_request")!;
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: first.id, client_request_id: "recover-cancel", session_id: "session-1", leaf_id: "generation-session-1", status: "accepted" });
+    channel.emit(queuedStateFrame([{ id: "recover-cancel", text: "Recover then cancel" }], "recover-restored"));
+    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    channel.emit(queuedStateFrame([], "cancel-missing"));
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message_status_request").length).toBe(2);
+    const query = channel.frames.findLast(frame => frame.type === "user_message_status_request")!;
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: query.id, client_request_id: "recover-cancel", session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
+    await expect.element(screen.getByRole("textbox")).toHaveValue("Recover then cancel");
+    expect(channel.frames.some(frame => frame.type === "user_message")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test.each(["received", "accepted"] as const)("a query %s confirmation window is bounded but a new send attempt can query again", async (status) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    await screen.getByPlaceholder("Message your agent…").fill("New attempt query");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find(frame => frame.type === "user_message")!;
+    const reply = { protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1" };
+    channel.emit({ ...reply, in_reply_to: sent.id, status: "unknown_delivery" });
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message_status_request").length).toBe(1);
+    const query = channel.frames.find(frame => frame.type === "user_message_status_request")!;
+    vi.useFakeTimers();
+    channel.emit({ ...reply, in_reply_to: query.id, status });
+    for (let index = 0; index < 3; index += 1) await new Promise<void>(resolve => {
+      const port = new MessageChannel(); port.port1.onmessage = () => resolve(); port.port2.postMessage(null);
+    });
+    await vi.advanceTimersByTimeAsync(USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+    vi.useRealTimers();
+    await expect.element(screen.getByText("Not confirmed", { exact: true })).toBeVisible();
+    expect(channel.frames.filter(frame => frame.type === "user_message_status_request")).toHaveLength(1);
+    channel.emit({ ...reply, in_reply_to: sent.id, status: "rejected", code: "unavailable", retryable: true });
+    await screen.getByRole("button", { name: "Retry send" }).click();
+    const retry = channel.frames.findLast(frame => frame.type === "user_message")!;
+    channel.emit({ ...reply, in_reply_to: retry.id, status: "unknown_delivery" });
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message_status_request").length).toBe(2);
+    expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(2);
+  } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
+test("the delivery timer uses the local window for an in-flight message with a future host timestamp", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  vi.useFakeTimers();
+  try {
+    const future = Date.now() + 60 * 60 * 1000;
+    channel.emit({ ...queuedStateFrame([], "future-host"), items: [{ id: "future-flight", text: "Host clock ahead", sender_ref: "sender-session-1", editable: false, created_at: future }] });
+    // React 经真实 MessageChannel 提交并在 effect 中按 deadline 设置受控定时器。
+    for (let index = 0; index < 3; index += 1) await new Promise<void>((resolve) => { const port = new MessageChannel(); port.port1.onmessage = () => resolve(); port.port2.postMessage(null); });
+    await vi.advanceTimersByTimeAsync(USER_MESSAGE_CONFIRMATION_TIMEOUT_MS - 1);
+    expect(document.querySelector(".pwa-delivery-status[data-delivery='unknown_delivery']")).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    vi.useRealTimers();
+    await expect.element(screen.getByText("Not confirmed", { exact: true })).toBeVisible();
+    await expect.poll(() => channel.frames.some((frame) => frame.type === "user_message_status_request" && frame.client_request_id === "future-flight")).toBe(true);
+  } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
+test.each([false, true])("delivery query late upgrade error stays local after timeout (newQuery=%s)", async (newQuery) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    await screen.getByPlaceholder("Message your agent…").fill("Late query error");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find(frame => frame.type === "user_message")!;
+    // 必须在 unknown 自动查询和 effect 创建 timeout 之前安装受控时钟。
+    vi.useFakeTimers();
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
+    const commitEffects = async () => {
+      for (let index = 0; index < 3; index++) await new Promise<void>(resolve => {
+        const port = new MessageChannel(); port.port1.onmessage = () => { port.port1.close(); port.port2.close(); resolve(); }; port.port2.postMessage(null);
+      });
+    };
+    await commitEffects();
+    const query = channel.frames.find(frame => frame.type === "user_message_status_request")!;
+    expect(query).toBeDefined();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await commitEffects();
+    vi.useRealTimers();
+    await expect.element(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+    if (newQuery) {
+      await screen.getByRole("button", { name: "Check status" }).click();
+      await expect.element(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
+    }
+    const hellos = channel.frames.filter(frame => frame.type === "session_hello").length;
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId,
+      in_reply_to: query.id, code: "protocol_upgrade_required", message: "upgrade" });
+    await commitEffects();
+    if (newQuery) {
+      await expect.element(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
+      expect(document.body.textContent).not.toContain("Update the Pi extension to check status");
+    } else await expect.element(screen.getByText("Update the Pi extension to check status", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-operation-notification, .pwa-toast")).toBeNull();
+    expect(document.body.textContent).not.toContain(safeProtocolFeedbackMessage("protocol_upgrade_required"));
+    expect(channel.frames.filter(frame => frame.type === "session_hello")).toHaveLength(hellos);
+    expect(channelHarness.channels).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(1);
+  } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
+test.each([[true, "accepted"], [true, "committed"], [false, "accepted"], [false, "committed"]] as const)("delivery query late %s %s receipt merges formal history once", async (expired, status) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    await screen.getByPlaceholder("Message your agent…").fill("Late query receipt");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find(frame => frame.type === "user_message")!;
+    vi.useFakeTimers();
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
+    const commitEffects = async () => {
+      for (let index = 0; index < 3; index++) await new Promise<void>(resolve => {
+        const port = new MessageChannel(); port.port1.onmessage = () => { port.port1.close(); port.port2.close(); resolve(); }; port.port2.postMessage(null);
+      });
+    };
+    await commitEffects();
+    const query = channel.frames.find(frame => frame.type === "user_message_status_request")!;
+    expect(query).toBeDefined();
+    if (expired) await vi.advanceTimersByTimeAsync(10_000);
+    await commitEffects();
+    vi.useRealTimers();
+    if (expired) await expect.element(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+    else await expect.element(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
+    emitEvent(channel, { event_id: "late-query-formal", message_id: "late-query-formal", event_seq: 1,
+      session_id: "session-1", leaf_id: "advanced-leaf", group_id: "late-query-group", timestamp: 2, kind: "user",
+      blocks: [{ type: "text", text: "Late query receipt" }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal", status: "committed" });
+    await expect.poll(() => document.querySelectorAll(".pwa-message.user").length).toBe(2);
+    const receipt = { protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: query.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status, message_id: "late-query-formal" };
+    channel.emit(receipt);
+    await expect.poll(() => document.querySelectorAll(".pwa-message.user").length).toBe(1);
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message_observed").length).toBe(1);
+    channel.emit(receipt);
+    await commitEffects();
+    expect(channel.frames.filter(frame => frame.type === "user_message_observed")).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "user_message_status_request")).toHaveLength(1);
+    expect(document.querySelector(".pwa-delivery-status[data-delivery='unknown_delivery']")).toBeNull();
+  } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
+test("delivery query routing preserves feedback for unrelated protocol errors", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId,
+      in_reply_to: "unrelated-request", code: "internal_error", message: "private detail must not leak" });
+    await expect.element(screen.getByText(safeProtocolFeedbackMessage("internal_error"), { exact: true })).toBeVisible();
+    expect(document.body.textContent).not.toContain("private detail must not leak");
+    expect(channel.frames.some(frame => frame.type === "user_message")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("an old extension query error keeps the message unconfirmed without reset and checks again after reconnect", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Old extension");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find((frame) => frame.type === "user_message")!;
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message_status_request").length).toBe(1);
+    const query = channel.frames.find((frame) => frame.type === "user_message_status_request")!;
+    const hellos = channel.frames.filter((frame) => frame.type === "session_hello").length;
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: query.id, code: "protocol_upgrade_required", message: "upgrade" });
+    await expect.element(screen.getByText("Update the Pi extension to check status", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Old extension", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+    expect(channel.frames.filter((frame) => frame.type === "session_hello")).toHaveLength(hellos);
+    expect(channelHarness.channels).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Check status" }).query()).toBeNull();
+    // 重连可能已换到新版扩展：新连接重新核对一次，仍不重发消息。
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    // 断线清除旧端结论，离线时只说明恢复连接后可核对。
+    await expect.element(screen.getByText("Reconnect to check status", { exact: true })).toBeVisible();
+    relay.emitState("open");
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1"));
+    resumed.emit(queuedStateFrame([], "reconnected-handshake-queue"));
+    await expect.poll(() => resumed.frames.some((frame) => frame.type === "user_message_status_request" && frame.client_request_id === sent.client_request_id)).toBe(true);
+    expect(resumed.frames.some((frame) => frame.type === "user_message")).toBe(false);
   } finally { await screen.unmount(); }
 });
 
@@ -3756,7 +4033,30 @@ function queuedStateFrame(items: Array<{ id: string; text: string }>, snapshotId
   return { protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: snapshotId, chunk_index: 0, final: true, items: items.map((item) => ({ ...item, sender_ref: "sender-session-1", editable: true, created_at: 1 })) };
 }
 
-test("returns a cancelled queued message to the composer once the cancellation is confirmed", async () => {
+test("returns a withdrawn queued message from the direct cancellation receipt without an unconfirmed bubble", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    channel.emit(queuedStateFrame([{ id: "queued-1", text: "Check landscape mode next" }], "queue-1"));
+    await expect.element(screen.getByText("Check landscape mode next", { exact: true })).toBeVisible();
+    const input = screen.getByRole("textbox");
+    await input.fill("Draft in progress");
+    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    const clear = channel.frames.findLast((frame) => frame.type === "queued_message_clear")!;
+    // 与 Extension 一致：定向 cancelled 回执先于不含该项的快照。
+    flushSync(() => {
+      channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+        in_reply_to: clear.id, client_request_id: "queued-1", session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
+      channel.emit(queuedStateFrame([], "queue-2"));
+    });
+    await expect.element(input).toHaveValue("Draft in progress\nCheck landscape mode next");
+    expect(document.querySelector(".pwa-delivery-status")).toBeNull();
+    expect(channel.frames.some((frame) => frame.type === "user_message_status_request")).toBe(false);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("falls back to a status query when the cancellation receipt is lost", async () => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     channel.emit(queuedStateFrame([{ id: "queued-1", text: "Check landscape mode next" }], "queue-1"));
@@ -3768,6 +4068,10 @@ test("returns a cancelled queued message to the composer once the cancellation i
     // 取消尚未确认时不回填。
     await expect.element(input).toHaveValue("Draft in progress");
     channel.emit(queuedStateFrame([], "queue-2"));
+    await expect.poll(() => channel.frames.some((frame) => frame.type === "user_message_status_request")).toBe(true);
+    const query = channel.frames.findLast((frame) => frame.type === "user_message_status_request")!;
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: query.id, client_request_id: "queued-1", session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
     await expect.element(input).toHaveValue("Draft in progress\nCheck landscape mode next");
   } finally {
     await screen.unmount();
@@ -3857,7 +4161,7 @@ test("legacy capability failure disables attachments but keeps text and vision m
   } finally { await screen.unmount(); }
 });
 
-test.each([false, true])("uploads originals and retains readonly text until IDs handoff, including unknown delivery=%s", async (unknownDelivery) => {
+test.each([false, true])("uploads originals and retains readonly text until IDs handoff, including transport failure=%s", async (unknownDelivery) => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     const input = screen.getByPlaceholder("Message your agent…");
@@ -3883,14 +4187,17 @@ test.each([false, true])("uploads originals and retains readonly text until IDs 
     expect(message).not.toHaveProperty("images");
     expect(message).not.toHaveProperty("attachments");
     await expect.element(input).not.toHaveAttribute("readonly");
-    // transport=false 必须保留原草稿与附件，不能把最终提交失败当成已发送。
-    await expect.element(input).toHaveValue(unknownDelivery ? "Please review the original file" : "");
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(unknownDelivery ? 1 : 0);
+    // transport=false 代表已接管后的发送失败：消息由失败气泡承担，可原地重试，不重新上传。
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
     if (unknownDelivery) {
-      await expect.element(screen.getByText("Message could not be sent. Check the connection and try again.", { exact: true })).toBeVisible();
-      await screen.getByRole("button", { name: "Retry delivery" }).click();
+      await expect.element(screen.getByText("Not sent; check the connection and retry", { exact: true })).toBeVisible();
+      const beforeRetry = channel.frames.filter((frame) => frame.type === "user_message").length;
+      await screen.getByRole("button", { name: "Retry send" }).click();
+      await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(beforeRetry + 1);
       const retry = channel.frames.findLast((frame) => frame.type === "user_message");
       expect(retry).toMatchObject({ client_request_id: message?.type === "user_message" ? message.client_request_id : "", attachment_ids: message?.type === "user_message" ? message.attachment_ids : [] });
+      expect(retry?.id).not.toBe(message?.id);
       expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
     }
   } finally { await screen.unmount(); }
@@ -4016,6 +4323,10 @@ test("queued cancellation restores a released descriptor and removal discards th
     channel.emit(queuedStateFrame([{ id: message.client_request_id, text: message.text }], "queue-before-cancel"));
     await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
     channel.emit(queuedStateFrame([], "queue-after-cancel"));
+    await expect.poll(() => channel.frames.some((frame) => frame.type === "user_message_status_request")).toBe(true);
+    const query = channel.frames.findLast((frame) => frame.type === "user_message_status_request")!;
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: query.id, client_request_id: message.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
     await expect.element(input).toHaveValue("Restore then remove");
     await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(1);
     await screen.getByRole("button", { name: "Remove restored.txt", exact: true }).click();
@@ -4078,6 +4389,69 @@ test("short disconnect resumes the same attachment batch through a new capabilit
     await flushMicrotasks();
     expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
   } finally { await screen.unmount(); }
+});
+
+test("invalid attachment lease retry keeps content and asks to select files again without resending", async () => {
+  const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Keep failed attachment content");
+    pasteAttachments(input.element(), new File(["original"], "expired-lease.txt"));
+    channelHarness.beforeUserSend = () => { channelHarness.beforeUserSend = null; channelHarness.nextSendResults.unshift(false); };
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.element(screen.getByRole("button", { name: "Retry send" })).toBeVisible();
+    const bubble = list.querySelector(".pwa-message.user")!;
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.poll(() => channel.closeCalls).toBeGreaterThan(0);
+    channelHarness.uploadScopePrefix = "replacement-lease";
+    relay.emitState("open");
+    relay.emitControl(onlineEndpointsFrame());
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1"));
+    resumed.emit(queuedStateFrame([], "new-lease-queue"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
+    await screen.getByRole("button", { name: "Retry send" }).click();
+    await expect.element(screen.getByText("Select the files again before sending", { exact: true })).toBeVisible();
+    expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(1);
+    expect(resumed.frames.some(frame => frame.type === "user_message" || frame.type === "user_message_status_request")).toBe(false);
+    expect(list.textContent).toContain("Keep failed attachment content");
+    expect(list.textContent).toContain("expired-lease.txt");
+    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    expect(screen.getByRole("button", { name: "Retry send" }).query()).toBeNull();
+    expect(screen.getByRole("button", { name: "Check status" }).query()).toBeNull();
+  } finally { channelHarness.beforeUserSend = null; await screen.unmount(); }
+});
+
+test("a handoff triggered synchronously by capability recovery keeps its lease for an explicit retry", async () => {
+  const { screen } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Retry after resume");
+    pasteAttachments(input.element(), new File(["resume body"], "lease.txt"));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.element(screen.getByText("Connection lost. Uploads will resume after reconnecting.", { exact: true })).toBeVisible();
+    relay.emitState("open");
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
+    await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
+    const resumed = channelHarness.channels[1]!;
+    // 能力回执在帧处理中同步交接；让这一次发送失败，重试必须仍能比对交接时的租约。
+    channelHarness.beforeUserSend = () => { channelHarness.beforeUserSend = null; channelHarness.nextSendResults.unshift(false); };
+    resumed.emit(readyFrame(resumed, "session-1"));
+    await expect.element(screen.getByText("Not sent; check the connection and retry", { exact: true })).toBeVisible();
+    const first = resumed.frames.findLast((frame) => frame.type === "user_message")!;
+    await screen.getByRole("button", { name: "Retry send" }).click();
+    await expect.poll(() => resumed.frames.filter((frame) => frame.type === "user_message").length).toBe(2);
+    expect(resumed.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({
+      client_request_id: first.client_request_id, text: "Retry after resume", attachment_ids: first.attachment_ids });
+    await expect.element(screen.getByText("The original target is no longer available", { exact: true })).not.toBeInTheDocument();
+    channelHarness.finishReplies[0]?.();
+  } finally { channelHarness.beforeUserSend = null; await screen.unmount(); }
 });
 
 test("session replacement preserves old text and File without automatically sending to the new session", async () => {

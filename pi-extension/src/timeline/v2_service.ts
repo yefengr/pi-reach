@@ -15,6 +15,7 @@ import { userMessageIdempotencyPayload } from "./attachment_content.js";
 import { TimelineHistoryPager } from "./history.js";
 import { TimelineRequestScope } from "./request_scope.js";
 import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js";
+import type { UserDeliveryRejection } from "./user_delivery_binding.js";
 
 export type V2ActionFrame = Extract<
   ClientFrame,
@@ -29,13 +30,15 @@ export type V2ServiceOptions = {
   onUserMessage: (
     frame: Extract<ClientFrame, { type: "user_message" }>,
     correlation: Correlation,
-  ) => boolean | "queued" | "duplicate" | "conflict" | "rejected";
+  ) => boolean | "queued" | "duplicate" | "conflict" | "rejected" | UserDeliveryRejection;
   onAttachmentReplay?: (frame: Extract<ClientFrame, { type: "user_message" }>) => AttachmentReplay;
+  onAttachmentStatus?: (clientRequestId: string) => AttachmentReplay;
+  onDeliveryStage?: (clientRequestId: string) => "queued" | "in_flight" | null;
   onCancel?: () => boolean;
   onAction?: (frame: V2ActionFrame) => void;
   onQueueSnapshot?: () => ServerFrame[];
   onQueuedMessageClear?: (targetId?: string) => string[];
-  onQueuedMessageSteer?: (targetId: string) => "sent" | "failed" | "missing";
+  onQueuedMessageSteer?: (targetId: string) => "sent" | "unknown_delivery" | "missing";
   onListModels?: () => Pick<Extract<ServerFrame, { type: "models_list" }>, "models" | "current" | "thinking_level">;
 };
 
@@ -55,14 +58,7 @@ export class TimelineV2Service {
   private readonly senderRef: string;
   private readonly extensionVersion: string;
   private readonly runtime: TimelineRuntime;
-  private readonly onUserMessage: V2ServiceOptions["onUserMessage"];
-  private readonly onAttachmentReplay?: V2ServiceOptions["onAttachmentReplay"];
-  private readonly onCancel?: V2ServiceOptions["onCancel"];
-  private readonly onAction?: V2ServiceOptions["onAction"];
-  private readonly onQueueSnapshot?: V2ServiceOptions["onQueueSnapshot"];
-  private readonly onQueuedMessageClear?: V2ServiceOptions["onQueuedMessageClear"];
-  private readonly onQueuedMessageSteer?: V2ServiceOptions["onQueuedMessageSteer"];
-  private readonly onListModels?: V2ServiceOptions["onListModels"];
+  private readonly options: V2ServiceOptions;
   private readonly requestChannels = new Map<string, string>();
 
   constructor(options: V2ServiceOptions) {
@@ -72,14 +68,7 @@ export class TimelineV2Service {
     this.extensionVersion = options.extensionVersion;
     this.state = new V2SessionState({ sessionId: options.sessionManager.getSessionId(), leafId: options.sessionManager.getLeafId() ?? null });
     this.runtime = options.runtime;
-    this.onUserMessage = options.onUserMessage;
-    this.onCancel = options.onCancel;
-    this.onAttachmentReplay = options.onAttachmentReplay;
-    this.onAction = options.onAction;
-    this.onQueueSnapshot = options.onQueueSnapshot;
-    this.onQueuedMessageClear = options.onQueuedMessageClear;
-    this.onQueuedMessageSteer = options.onQueuedMessageSteer;
-    this.onListModels = options.onListModels;
+    this.options = options;
     this.pager = new TimelineHistoryPager(
       this.sessionManager,
       (manager) => this.runtime.recover(manager),
@@ -151,6 +140,8 @@ export class TimelineV2Service {
         return this.handleCancel(frame);
       case "user_message":
         return this.handleUserMessage(frame);
+      case "user_message_status_request":
+        return this.handleStatusRequest(frame);
       case "user_message_observed":
         return this.handleObserved(frame);
       case "session_new":
@@ -195,16 +186,9 @@ export class TimelineV2Service {
       delivery: started.correlation.delivery,
     };
     return [
-      ...this.direct(request.channelId, {
-        type: "user_message_status",
-        in_reply_to: started.correlation.requestId ?? clientRequestId,
-        session_id: this.sessionId,
-        leaf_id: this.leafId,
-        client_request_id: clientRequestId,
-        status: "accepted",
-        message_id: started.eventId,
-        group_id: started.groupId,
-      }),
+      this.statusReply({ id: started.correlation.requestId ?? request.attemptId ?? clientRequestId,
+        channel_id: request.channelId, client_request_id: clientRequestId }, "accepted",
+      { message_id: started.eventId, group_id: started.groupId }),
       ...this.direct(request.channelId, {
         type: "user_message_started",
         in_reply_to: started.correlation.requestId ?? clientRequestId,
@@ -220,16 +204,9 @@ export class TimelineV2Service {
     if (!request) return [];
     const record = this.state.update(request.key, "committed", { messageId, groupId });
     if (!record) return [];
-    return this.direct(request.channelId, {
-      type: "user_message_status",
-      in_reply_to: clientRequestId,
-      session_id: this.sessionId,
-      leaf_id: this.leafId,
-      client_request_id: clientRequestId,
-      status: "committed",
-      message_id: messageId,
-      ...(groupId ? { group_id: groupId } : {}),
-    });
+    return [this.statusReply({ id: request.attemptId ?? clientRequestId,
+      channel_id: request.channelId, client_request_id: clientRequestId }, "committed",
+    { message_id: messageId, ...(groupId ? { group_id: groupId } : {}) })];
   }
 
   canDrain(clientRequestId: string): boolean {
@@ -242,14 +219,10 @@ export class TimelineV2Service {
     if (!request) return [];
     const updated = this.state.rememberUnknownDelivery(request.key);
     if (!updated) return [];
-    return this.direct(request.channelId, {
-      type: "user_message_status",
-      in_reply_to: clientRequestId,
-      session_id: this.sessionId,
-      leaf_id: this.leafId,
-      client_request_id: clientRequestId,
-      status: "unknown_delivery",
-    });
+    return [this.statusReply({ id: request.attemptId ?? clientRequestId,
+      channel_id: request.channelId, client_request_id: clientRequestId }, updated.status === "committed" ? "committed"
+        : updated.status === "accepted" ? "accepted" : "unknown_delivery",
+    { ...(updated.messageId ? { message_id: updated.messageId } : {}), ...(updated.groupId ? { group_id: updated.groupId } : {}) })];
   }
 
   partial(partial: TimelinePartial): V2Broadcast | null {
@@ -342,16 +315,20 @@ export class TimelineV2Service {
   private handleQueuedMessageClear(frame: Extract<ClientFrame, { type: "queued_message_clear" }>): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
-    if (!this.onQueuedMessageClear) {
+    if (!this.options.onQueuedMessageClear) {
       return [this.error(frame.id, "unsupported_type", "Queued messages are unavailable.", frame.channel_id), ...this.currentQueueSnapshot()];
     }
     try {
-      const removed = this.onQueuedMessageClear(frame.target_id);
-      for (const clientRequestId of removed) this.terminateQueuedRequest(clientRequestId);
+      const removed = this.options.onQueuedMessageClear(frame.target_id);
+      // 取消回执先于快照：PWA 据此直接结清撤回，不必把快照缺席当作未知再查询。
+      const cancelled = removed.map((clientRequestId) => {
+        this.state.markCancelledByClientRequest(this.senderRef, clientRequestId);
+        return this.statusReply({ id: frame.id, channel_id: frame.channel_id, client_request_id: clientRequestId }, "cancelled");
+      });
       if (frame.target_id !== undefined && !removed.includes(frame.target_id)) {
-        return [this.error(frame.id, "invalid_message", "This message has already started sending or is no longer queued.", frame.channel_id), ...this.currentQueueSnapshot()];
+        return [this.error(frame.id, "invalid_message", "This message has already started sending or is no longer queued.", frame.channel_id), ...cancelled, ...this.currentQueueSnapshot()];
       }
-      return this.currentQueueSnapshot();
+      return [...cancelled, ...this.currentQueueSnapshot()];
     } catch {
       return [this.error(frame.id, "internal_error", "Could not clear queued messages.", frame.channel_id), ...this.currentQueueSnapshot()];
     }
@@ -360,19 +337,16 @@ export class TimelineV2Service {
   private handleQueuedMessageSteer(frame: Extract<ClientFrame, { type: "queued_message_steer" }>): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
-    if (!this.onQueuedMessageSteer) {
+    if (!this.options.onQueuedMessageSteer) {
       return [this.error(frame.id, "unsupported_type", "Queued messages are unavailable.", frame.channel_id), ...this.currentQueueSnapshot()];
     }
     try {
-      const result = this.onQueuedMessageSteer(frame.target_id);
-      if (result === "sent") {
+      const result = this.options.onQueuedMessageSteer(frame.target_id);
+      if (result === "sent" || result === "unknown_delivery") {
         this.terminateQueuedRequest(frame.target_id);
         return this.currentQueueSnapshot();
       }
-      const message = result === "failed"
-        ? "Could not steer this queued message; it remains queued."
-        : "This queued message is no longer available to steer.";
-      return [this.error(frame.id, "invalid_message", message, frame.channel_id), ...this.currentQueueSnapshot()];
+      return [this.error(frame.id, "invalid_message", "This queued message is no longer available to steer.", frame.channel_id), ...this.currentQueueSnapshot()];
     } catch {
       return [this.error(frame.id, "internal_error", "Could not steer this queued message.", frame.channel_id), ...this.currentQueueSnapshot()];
     }
@@ -385,7 +359,7 @@ export class TimelineV2Service {
       return [this.error(frame.id, "invalid_message", "The target run is no longer active.", frame.channel_id)];
     }
     try {
-      if (!(this.onCancel?.() ?? false)) {
+      if (!(this.options.onCancel?.() ?? false)) {
         return [this.error(frame.id, "internal_error", "no active request to cancel", frame.channel_id)];
       }
       return this.direct(frame.channel_id, {
@@ -412,11 +386,12 @@ export class TimelineV2Service {
   private handleUserMessage(frame: Extract<ClientFrame, { type: "user_message" }>): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
-    const attachmentReplay = attachmentReplayFrames(frame, this.onAttachmentReplay, this.sessionId, this.leafId);
+    const attachmentReplay = attachmentReplayFrames(frame, this.options.onAttachmentReplay, this.sessionId, this.leafId);
     if (attachmentReplay) return attachmentReplay;
     const result = this.state.begin({
       senderRef: this.senderRef,
       clientRequestId: frame.client_request_id,
+      attemptId: frame.id,
       payload: userMessageIdempotencyPayload(frame),
     });
     if (result.kind === "conflict") {
@@ -435,11 +410,14 @@ export class TimelineV2Service {
         clientRequestId: frame.client_request_id,
       };
     try {
-      const acceptedForDelivery = this.onUserMessage(frame, correlation);
-      if (acceptedForDelivery === "rejected") {
-        this.state.forget(result.record.key);
-        this.requestChannels.delete(frame.client_request_id);
-        return [this.error(frame.id, "too_large", "The message is too large or the queue is full; retry after queued work drains.", frame.channel_id), ...this.currentQueueSnapshot()];
+      const acceptedForDelivery = this.options.onUserMessage(frame, correlation);
+      if (acceptedForDelivery === "rejected" || typeof acceptedForDelivery === "object") {
+        const rejection: UserDeliveryRejection = acceptedForDelivery === "rejected"
+          ? { kind: "rejected", code: "queue_full", retryable: true } : acceptedForDelivery;
+        const rejected = this.state.reject(result.record.key, frame.id, rejection.code, rejection.retryable);
+        return [this.statusReply(frame, "rejected", {
+          code: rejected?.rejectCode ?? rejection.code, retryable: rejected?.retryable ?? false,
+        }), ...this.currentQueueSnapshot()];
       }
       if (acceptedForDelivery === "conflict") {
         this.state.forget(result.record.key);
@@ -462,7 +440,8 @@ export class TimelineV2Service {
     frame: Extract<ClientFrame, { type: "user_message" }>,
     record: ReturnType<V2SessionState["begin"]>["record"],
   ): ServerFrame[] {
-    if (record.status === "unknown_delivery") return this.unknownDelivery(frame.client_request_id);
+    if (record.status === "unknown_delivery" || record.status === "cancelled") return [this.statusReply(frame, record.status)];
+    if (record.status === "rejected") return [this.statusReply(frame, "rejected", { code: record.rejectCode, retryable: record.retryable })];
     if (record.status === "received") return [this.status(frame, "received")];
     if (record.status === "queued") return [this.status(frame, "accepted"), ...this.currentQueueSnapshot()];
     return [this.status(frame, record.status === "committed" ? "committed" : "accepted", record.messageId, record.groupId)];
@@ -474,24 +453,47 @@ export class TimelineV2Service {
     messageId?: string,
     groupId?: string,
   ): ServerFrame {
-    return this.direct(frame.channel_id, {
-      type: "user_message_status",
-      in_reply_to: frame.id,
-      session_id: this.sessionId,
-      leaf_id: this.leafId,
-      client_request_id: frame.client_request_id,
-      status,
-      ...(messageId ? { message_id: messageId } : {}),
-      ...(groupId ? { group_id: groupId } : {}),
-    })[0]!;
+    return this.statusReply(frame, status, {
+      ...(messageId ? { message_id: messageId } : {}), ...(groupId ? { group_id: groupId } : {}),
+    });
+  }
+
+  private handleStatusRequest(frame: Extract<ClientFrame, { type: "user_message_status_request" }>): ServerFrame[] {
+    const error = this.ensureReady(frame);
+    if (error) return [error];
+    const attachment = this.options.onAttachmentStatus?.(frame.client_request_id);
+    if (attachment && attachment !== "conflict") {
+      return [this.statusReply(frame, attachment.status, attachment.status === "committed"
+        ? { message_id: attachment.messageId, ...(attachment.groupId ? { group_id: attachment.groupId } : {}) } : {})];
+    }
+    const record = this.state.findByClientRequest(this.senderRef, frame.client_request_id);
+    if (!record) return [this.statusReply(frame, this.options.onDeliveryStage?.(frame.client_request_id) ? "accepted" : "not_found")];
+    if (record.status === "rejected") return [this.statusReply(frame, "rejected", { code: record.rejectCode, retryable: record.retryable })];
+    if (record.status === "committed") {
+      const committed = this.runtime.recover(this.sessionManager).some((event) => event.kind === "user" && event.event_id === record.messageId);
+      return [this.statusReply(frame, committed ? "committed" : "accepted",
+        { message_id: record.messageId, ...(record.groupId ? { group_id: record.groupId } : {}) })];
+    }
+    return [this.statusReply(frame, record.status === "queued" ? "accepted" : record.status,
+      record.status === "accepted" ? { ...(record.messageId ? { message_id: record.messageId } : {}),
+        ...(record.groupId ? { group_id: record.groupId } : {}) } : {})];
+  }
+
+  private statusReply(
+    frame: Pick<Extract<ClientFrame, { type: "user_message" }>, "id" | "channel_id" | "client_request_id">,
+    status: Extract<ServerFrame, { type: "user_message_status" }>["status"],
+    details: Record<string, unknown> = {},
+  ): ServerFrame {
+    return this.direct(frame.channel_id, { type: "user_message_status", in_reply_to: frame.id,
+      session_id: this.sessionId, leaf_id: this.leafId, client_request_id: frame.client_request_id, status, ...details })[0]!;
   }
 
   private handleListModels(frame: Extract<ClientFrame, { type: "list_models" }>): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
-    if (!this.onListModels) return [this.error(frame.id, "unsupported_type", "model listing is unavailable", frame.channel_id)];
+    if (!this.options.onListModels) return [this.error(frame.id, "unsupported_type", "model listing is unavailable", frame.channel_id)];
     try {
-      return this.direct(frame.channel_id, { type: "models_list", ...this.onListModels(), in_reply_to: frame.id });
+      return this.direct(frame.channel_id, { type: "models_list", ...this.options.onListModels(), in_reply_to: frame.id });
     } catch {
       return [this.error(frame.id, "internal_error", "Could not list available models.", frame.channel_id)];
     }
@@ -500,11 +502,11 @@ export class TimelineV2Service {
   private handleAction(frame: V2ActionFrame): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
-    if (!this.onAction) {
+    if (!this.options.onAction) {
       return [this.error(frame.id, "unsupported_type", "session action is unavailable", frame.channel_id)];
     }
     try {
-      this.onAction(frame);
+      this.options.onAction(frame);
       return [];
     } catch {
       return [this.error(frame.id, "internal_error", "Could not execute session action.", frame.channel_id)];
@@ -532,7 +534,7 @@ export class TimelineV2Service {
   }
 
   private currentQueueSnapshot(): ServerFrame[] {
-    return this.onQueueSnapshot?.() ?? this.queueSnapshot([]);
+    return this.options.onQueueSnapshot?.() ?? this.queueSnapshot([]);
   }
 
   private queueFrame(
@@ -558,8 +560,9 @@ export class TimelineV2Service {
   }
 
   private terminateQueuedRequest(clientRequestId: string): void {
-    const record = this.state.getRecord(this.recordKey(clientRequestId));
-    if (record?.senderRef === this.senderRef) this.state.rememberUnknownDelivery(record.key);
+    // 记录 key 使用建立时的 scope leaf；普通 leaf 前进后不能按当前 leaf 重新拼 key。
+    const record = this.state.findByClientRequest(this.senderRef, clientRequestId);
+    if (record) this.state.rememberUnknownDelivery(record.key);
   }
 
   private direct(channelId: string, frame: Record<string, unknown>): ServerFrame[] {
@@ -582,16 +585,10 @@ export class TimelineV2Service {
     };
   }
 
-  private recordKey(clientRequestId: string): string {
-    return `${this.sessionId}\u0000${this.leafId ?? ""}\u0000${this.senderRef}\u0000${clientRequestId}`;
-  }
-
   private findRecord(clientRequestId: string): RecordWithChannel | undefined {
     const channelId = this.requestChannels.get(clientRequestId);
     if (!channelId) return undefined;
-    const current = this.state.getRecord(this.recordKey(clientRequestId));
-    if (current) return { ...current, channelId };
-    const fallback = this.state.snapshot().records.find((record) => record.senderRef === this.senderRef && record.clientRequestId === clientRequestId);
-    return fallback ? { ...fallback, channelId } : undefined;
+    const record = this.state.findByClientRequest(this.senderRef, clientRequestId);
+    return record ? { ...record, channelId } : undefined;
   }
 }

@@ -1,5 +1,5 @@
-import { expect, test } from "vitest";
-import { PendingCapacityError, TimelineRuntime, type TimelineScope } from "./timeline-runtime";
+import { expect, test, vi } from "vitest";
+import { DELIVERY_STATUS_QUERY_TIMEOUT_MS, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS, PendingCapacityError, TimelineRuntime, type TimelineScope } from "./timeline-runtime";
 import type { ServerFrame } from "../pi-reach/protocol-v2/frames";
 import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_MESSAGE_BYTES, type AttachmentDescriptor, type TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { pendingPayloadBytes } from "./timeline-pending";
@@ -219,26 +219,39 @@ test("completing one tool keeps other tool partials in the same group", () => {
 test("resets transient live state when a runtime is taken over", () => {
   const runtime = new TimelineRuntime(); runtime.setScope(scope); runtime.sendUser("hello");
   const changed = runtime.setScope({ ...scope, runtimeInstanceId: "runtime-b" });
-  expect(changed.items.some((item) => item.kind === "pending" && item.delivery === "unknown_delivery")).toBe(false);
+  // 旧目标的未确认内容保留为只读，不能转投新 runtime。
+  expect(changed.items.find((item) => item.kind === "pending")).toMatchObject({ delivery: "unknown_delivery", scopeInvalid: true });
   expect(runtime.currentScope?.runtimeInstanceId).toBe("runtime-b");
 });
 
-test.each(["deviceId", "endpointId", "runtimeInstanceId", "sessionId", "selfSenderRef"] as const)("scopes unknown delivery when %s changes", (key) => {
+test.each(["deviceId", "endpointId", "runtimeInstanceId", "sessionId", "selfSenderRef"] as const)("retains unknown delivery read-only when %s changes", (key) => {
   const runtime = new TimelineRuntime();
   runtime.prepareLive(scope, 0);
   runtime.commitReplacement();
   const sent = runtime.sendUser("Only for the original conversation")!;
   runtime.markDisconnected();
-  const changed = runtime.prepareLive({ ...scope, [key]: "other" }, 0);
-  expect(changed.change.items.filter((item) => item.kind === "pending")).toEqual([]);
-  expect(runtime.retryUnknown(sent.frame.client_request_id)).toBeNull();
+  runtime.prepareLive({ ...scope, [key]: "other" }, 0);
+  if (key === "deviceId" || key === "endpointId") {
+    // 切换到另一个 Pi 只撤下投影；原目标内容保留，切回时仍可核对。
+    expect(runtime.pendingItems).toHaveLength(0);
+    expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)).toBeNull();
+    runtime.prepareLive({ ...scope, channelId: "new-channel" }, 0);
+    const returned = runtime.commitReplacement();
+    expect(returned.items.filter((item) => item.kind === "pending")).toHaveLength(1);
+    expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)?.frame.channel_id).toBe("new-channel");
+    return;
+  }
+  // runtime／session／Owner 变化代表原目标失效：内容只读保留，不能再次发送或核对。
+  expect(runtime.pendingItems.filter((item) => item.kind === "pending")).toHaveLength(1);
+  expect(runtime.pendingItems.find((item) => item.kind === "pending")).toMatchObject({ scopeInvalid: true });
+  expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)).toBeNull();
   runtime.invalidateScope();
-  expect(runtime.retryUnknown(sent.frame.client_request_id)).toBeNull();
+  expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)).toBeNull();
   runtime.prepareLive({ ...scope, channelId: "new-channel" }, 0);
   const returned = runtime.commitReplacement();
-  const retained = key === "deviceId" || key === "endpointId";
-  expect(returned.items.filter((item) => item.kind === "pending")).toHaveLength(retained ? 1 : 0);
-  expect(runtime.retryUnknown(sent.frame.client_request_id)?.frame.channel_id ?? null).toBe(retained ? "new-channel" : null);
+  expect(returned.items.filter((item) => item.kind === "pending")).toHaveLength(1);
+  expect(returned.items.find((item) => item.kind === "pending")).toMatchObject({ scopeInvalid: true });
+  expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)).toBeNull();
 });
 
 test("retains unknown delivery when the same session advances to another leaf", () => {
@@ -250,7 +263,7 @@ test("retains unknown delivery when the same session advances to another leaf", 
   const nextLeaf = { ...scope, leafId: "next-leaf", channelId: "next-channel" };
   const prepared = runtime.prepareLive(nextLeaf, 0);
   expect(prepared.change.items).toContainEqual(expect.objectContaining({ kind: "pending", clientRequestId: sent.frame.client_request_id }));
-  expect(runtime.retryUnknown(sent.frame.client_request_id)?.frame).toMatchObject({ leaf_id: nextLeaf.leafId, channel_id: nextLeaf.channelId });
+  expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)?.frame).toMatchObject({ type: "user_message_status_request", leaf_id: nextLeaf.leafId, channel_id: nextLeaf.channelId });
 });
 
 test("a successful reconnect starts an empty live view and retains unknown delivery", () => {
@@ -413,12 +426,12 @@ test("counts display previews against the pending payload budget", () => {
   expect(allowing.sendUserWithAttachments("", [withPreview])).toBeTruthy();
 });
 
-test("retries unknown image and attachment deliveries with their original request correlation", () => {
+test("retries explicitly failed image and attachment deliveries with their original request correlation", () => {
   const imageRuntime = new TimelineRuntime(); imageRuntime.setScope(scope);
   const images = [{ mime: "image/png" as const, data: "abc" }];
   expect(imageRuntime.sendUser("caption", images, { clientRequestId: "img", requestId: "img-send" })).toBeTruthy();
-  imageRuntime.markUnknownDelivery("img");
-  const imageRetried = imageRuntime.retryUnknown("img")!;
+  imageRuntime.markDeliveryFailed("img", "transport_unavailable", true);
+  const imageRetried = imageRuntime.retryFailed("img")!;
   expect(imageRetried.frame).toMatchObject({ client_request_id: "img", images });
   expect(imageRetried.frame.id).not.toBe("img-send");
   expect(imageRetried.frame).not.toHaveProperty("attachment_ids");
@@ -427,12 +440,315 @@ test("retries unknown image and attachment deliveries with their original reques
   const descriptor = attachment("attachment-1", { preview: imagePreview() });
   const attachmentSent = attachmentRuntime.sendUserWithAttachments("", [descriptor], { clientRequestId: "req-1", requestId: "send-1" })!;
   expect(attachmentSent.frame.attachment_ids).toEqual(["attachment-1"]);
-  attachmentRuntime.markUnknownDelivery("req-1");
-  const retried = attachmentRuntime.retryUnknown("req-1")!;
+  attachmentRuntime.markDeliveryFailed("req-1", "transport_unavailable", true);
+  const retried = attachmentRuntime.retryFailed("req-1")!;
   expect(retried.frame).toMatchObject({ client_request_id: "req-1", attachment_ids: ["attachment-1"] });
   expect(retried.frame.id).not.toBe("send-1");
   expect(retried.frame).not.toHaveProperty("images");
   expect(attachmentRuntime.pendingItems[0]).toMatchObject({ clientRequestId: "req-1", attachments: [descriptor] });
+});
+
+function deliveryReply(frame: { id: string; client_request_id: string }) {
+  return { protocol_version: 2 as const, type: "user_message_status" as const, target_channel_id: scope.channelId,
+    in_reply_to: frame.id, client_request_id: frame.client_request_id, session_id: scope.sessionId, leaf_id: scope.leafId };
+}
+
+test("normal sends have no failure and only explicit retryable failures can retry with the same identity", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("original")!;
+  const pending = runtime.pendingItems[0];
+  expect(pending.deliveryFailure).toBeUndefined();
+  expect(runtime.retryFailed(pending.clientRequestId)).toBeNull();
+  runtime.markDeliveryFailed(pending.clientRequestId, "transport_unavailable", true);
+  expect(runtime.pendingItems[0]).toBe(pending);
+  expect(pending).toMatchObject({ delivery: "failed", deliveryFailure: { code: "transport_unavailable", retryable: true } });
+  const retry = runtime.retryFailed(pending.clientRequestId)!;
+  expect(runtime.pendingItems).toEqual([pending]);
+  expect(retry.frame).toMatchObject({ client_request_id: sent.frame.client_request_id, text: "original" });
+  expect(retry.frame.id).not.toBe(sent.frame.id);
+  expect(pending.deliveryFailure).toBeUndefined();
+  expect(pending.delivery).toBe("pending");
+  expect(runtime.retryFailed(pending.clientRequestId)).toBeNull();
+  runtime.receive({ ...deliveryReply(sent.frame), status: "rejected", code: "queue_full", retryable: true });
+  expect(pending.delivery).toBe("pending");
+  runtime.markDeliveryFailed(pending.clientRequestId, "invalid_target", false);
+  expect(runtime.retryFailed(pending.clientRequestId)).toBeNull();
+});
+
+test("queries are read-only, synchronously deduplicate, and expire without enabling a resend", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("unsure")!;
+  runtime.markUnknownDelivery(sent.frame.client_request_id);
+  const pending = runtime.pendingItems[0];
+  const query = runtime.requestDeliveryStatus(pending.clientRequestId)!;
+  expect(query.frame).toMatchObject({ type: "user_message_status_request", client_request_id: pending.clientRequestId });
+  expect(query.frame).not.toHaveProperty("text");
+  expect(runtime.requestDeliveryStatus(pending.clientRequestId)).toBeNull();
+  const deadline = pending.statusQuery!.requestedAt + DELIVERY_STATUS_QUERY_TIMEOUT_MS;
+  runtime.expireDeliveryStatusQueries(deadline - 1);
+  expect(pending.statusQuery).toBeDefined();
+  runtime.expireDeliveryStatusQueries(deadline);
+  expect(pending.statusQuery).toBeUndefined();
+  expect(pending.delivery).toBe("unknown_delivery");
+  expect(runtime.retryFailed(pending.clientRequestId)).toBeNull();
+  expect(runtime.requestDeliveryStatus(pending.clientRequestId)).not.toBeNull();
+  expect(runtime.pendingItems).toEqual([pending]);
+});
+
+test("confirmation expires at 30 seconds and received starts a new bounded window", () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(1_000);
+  try {
+    const runtime = new TimelineRuntime(); runtime.setScope(scope);
+    const sent = runtime.sendUser("hello")!;
+    const pending = runtime.pendingItems[0];
+    runtime.expireDeliveryConfirmations(1_000 + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS - 1);
+    expect(pending.delivery).toBe("pending");
+    clock.mockReturnValue(20_000);
+    runtime.receive({ ...deliveryReply(sent.frame), status: "received" });
+    runtime.expireDeliveryConfirmations(1_000 + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+    expect(pending.delivery).toBe("received");
+    runtime.expireDeliveryConfirmations(20_000 + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+    expect(pending.delivery).toBe("unknown_delivery");
+    expect(runtime.pendingItems[0]).toBe(pending);
+    expect(pending.deliveryFailure).toBeUndefined();
+  } finally { clock.mockRestore(); }
+});
+
+test("active queries defer confirmation expiry without creating new pending", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("hello")!;
+  const pending = runtime.pendingItems[0];
+  runtime.requestDeliveryStatus(sent.frame.client_request_id);
+  runtime.expireDeliveryConfirmations(pending.createdAt + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+  expect(pending.delivery).toBe("pending");
+  runtime.clearDeliveryStatusQuery(pending.clientRequestId);
+  runtime.expireDeliveryConfirmations(pending.createdAt + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+  expect(pending.delivery).toBe("unknown_delivery");
+  expect(runtime.pendingItems).toEqual([pending]);
+});
+
+test("disconnect marks unconfirmed sends unknown but preserves started, committed and explicit failure evidence", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const unconfirmed = runtime.sendUser("unconfirmed")!;
+  const started = runtime.sendUser("started")!;
+  const committed = runtime.sendUser("committed")!;
+  const failed = runtime.sendUser("failed")!;
+  runtime.receive({ ...deliveryReply(started.frame), status: "accepted", message_id: "started-message" });
+  runtime.receive({ ...deliveryReply(committed.frame), status: "committed", message_id: "committed-message" });
+  runtime.markDeliveryFailed(failed.frame.client_request_id, "transport_unavailable", true);
+  runtime.requestDeliveryStatus(unconfirmed.frame.client_request_id);
+  runtime.markDisconnected();
+  expect(runtime.findPendingOrUnknown(unconfirmed.frame.client_request_id)).toMatchObject({ delivery: "unknown_delivery", text: "unconfirmed" });
+  expect(runtime.findPendingOrUnknown(unconfirmed.frame.client_request_id)?.statusQuery).toBeUndefined();
+  expect(runtime.findPendingOrUnknown(started.frame.client_request_id)).toMatchObject({ delivery: "accepted", messageId: "started-message" });
+  expect(runtime.findPendingOrUnknown(committed.frame.client_request_id)).toMatchObject({ delivery: "committed", messageId: "committed-message" });
+  expect(runtime.findPendingOrUnknown(failed.frame.client_request_id)?.delivery).toBe("failed");
+});
+
+test.each(["received", "accepted", "committed"] as const)("query %s replies recover the original unknown object", (status) => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("hello")!;
+  runtime.markUnknownDelivery(sent.frame.client_request_id);
+  const pending = runtime.pendingItems[0];
+  const query = runtime.requestDeliveryStatus(pending.clientRequestId)!;
+  runtime.receive(status === "committed"
+    ? { ...deliveryReply(query.frame), status, message_id: "committed-message" }
+    : { ...deliveryReply(query.frame), status });
+  expect(runtime.pendingItems).toEqual([pending]);
+  expect(pending.delivery).toBe(status);
+  expect(pending.statusQuery).toBeUndefined();
+  expect(runtime.clearDeliveryStatusQuery(pending.clientRequestId).unknown).toEqual([]);
+});
+
+test.each(["accepted", "committed", "started"] as const)("%s evidence cannot be downgraded by late receipts or queries", (evidence) => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("hello")!;
+  const query = runtime.requestDeliveryStatus(sent.frame.client_request_id)!;
+  if (evidence === "started") runtime.receive({ protocol_version: 2, type: "user_message_started", target_channel_id: scope.channelId,
+    in_reply_to: sent.frame.id, session_id: scope.sessionId, leaf_id: scope.leafId,
+    message: { id: "formal", group_id: "group", blocks: [{ type: "text", text: "hello" }], origin: "pwa", sender_ref: scope.selfSenderRef, delivery: "normal" } });
+  else runtime.receive({ ...deliveryReply(sent.frame), status: evidence, message_id: "formal" });
+  const expected = evidence === "committed" ? "committed" : "accepted";
+  for (const frame of [sent.frame, query.frame]) {
+    runtime.receive({ ...deliveryReply(frame), status: "received" });
+    runtime.receive({ ...deliveryReply(frame), status: "unknown_delivery" });
+    runtime.receive({ ...deliveryReply(frame), status: "not_found" });
+    runtime.receive({ ...deliveryReply(frame), status: "rejected", code: "queue_full", retryable: true });
+    runtime.receive({ ...deliveryReply(frame), status: "cancelled" });
+  }
+  expect(runtime.pendingItems[0]).toMatchObject({ messageId: "formal", delivery: expected });
+  expect(runtime.pendingItems[0].statusQuery).toBeUndefined();
+  runtime.commit(userEvent("formal"));
+  runtime.receive({ ...deliveryReply(query.frame), status: "received" });
+  runtime.receive({ ...deliveryReply(sent.frame), status: "not_found" });
+  expect(runtime.pendingItems).toEqual([]);
+});
+
+test("not_found never opens retries and stale query failures cannot undo newer acceptance", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("hello")!;
+  runtime.markUnknownDelivery(sent.frame.client_request_id);
+  const query = runtime.requestDeliveryStatus(sent.frame.client_request_id)!;
+  runtime.receive({ ...deliveryReply(query.frame), status: "not_found" });
+  expect(runtime.pendingItems[0].delivery).toBe("unknown_delivery");
+  expect(runtime.pendingItems[0].statusQuery).toBeUndefined();
+  expect(runtime.retryFailed(sent.frame.client_request_id)).toBeNull();
+  const nextQuery = runtime.requestDeliveryStatus(sent.frame.client_request_id)!;
+  runtime.receive({ ...deliveryReply(sent.frame), status: "accepted" });
+  runtime.receive({ ...deliveryReply(nextQuery.frame), status: "rejected", code: "queue_full", retryable: true });
+  expect(runtime.pendingItems[0].delivery).toBe("accepted");
+});
+
+test("rejected query results become explicit failures and cancelled only settles queued messages once", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("hello")!;
+  const query = runtime.requestDeliveryStatus(sent.frame.client_request_id)!;
+  runtime.receive({ ...deliveryReply(query.frame), status: "rejected", code: "queue_full", retryable: true });
+  expect(runtime.pendingItems[0]).toMatchObject({ delivery: "failed", deliveryFailure: { code: "queue_full", retryable: true } });
+  runtime.receive({ ...deliveryReply(sent.frame), status: "cancelled" });
+  expect(runtime.pendingItems).toHaveLength(1);
+  runtime.receive({ protocol_version: 2, type: "queued_message_state", session_id: scope.sessionId, leaf_id: scope.leafId,
+    snapshot_id: "queued", chunk_index: 0, final: true,
+    items: [{ id: sent.frame.client_request_id, sender_ref: scope.selfSenderRef, text: "hello", editable: true, created_at: 1 }] });
+  runtime.actOnQueued(sent.frame.client_request_id, "cancel");
+  const cancellation = runtime.receive({ ...deliveryReply(sent.frame), status: "cancelled" });
+  expect(cancellation.cancelledQueued).toEqual([expect.objectContaining({ clientRequestId: sent.frame.client_request_id, text: "hello" })]);
+  expect(runtime.receive({ ...deliveryReply(sent.frame), status: "cancelled" }).cancelledQueued).toBeUndefined();
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ delivery: "cancelled", clientRequestId: sent.frame.client_request_id })]);
+  expect(runtime.confirmCancelledRestore([sent.frame.client_request_id]).items.filter((item) => item.kind === "pending")).toEqual([]);
+});
+
+test("a reconnected target can check status again after an old extension reported unsupported", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("hello")!;
+  runtime.markUnknownDelivery(sent.frame.client_request_id);
+  const query = runtime.requestDeliveryStatus(sent.frame.client_request_id)!;
+  runtime.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: query.frame.id,
+    target_channel_id: scope.channelId, code: "protocol_upgrade_required", message: "Protocol v2 is required" });
+  expect(runtime.pendingItems[0].statusQueryUnsupported).toBe(true);
+  runtime.markDisconnected();
+  runtime.setScope({ ...scope, channelId: "reconnected" });
+  expect(runtime.pendingItems[0].statusQueryUnsupported).toBeUndefined();
+  expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)).not.toBeNull();
+});
+
+test("old-extension query errors retain unknown without clearing the current scope", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("hello")!;
+  runtime.markUnknownDelivery(sent.frame.client_request_id);
+  const query = runtime.requestDeliveryStatus(sent.frame.client_request_id)!;
+  runtime.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId,
+    in_reply_to: "unrelated", code: "protocol_upgrade_required", message: "Update required" });
+  expect(runtime.pendingItems[0].statusQuery).toBeDefined();
+  runtime.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId,
+    in_reply_to: query.frame.id, code: "protocol_upgrade_required", message: "Update required" });
+  expect(runtime.pendingItems[0]).toMatchObject({ delivery: "unknown_delivery", statusQueryUnsupported: true });
+  expect(runtime.pendingItems[0].statusQuery).toBeUndefined();
+  expect(runtime.currentScope).toEqual(scope);
+  expect(runtime.retryFailed(sent.frame.client_request_id)).toBeNull();
+});
+
+function queryError(requestId: string): Extract<ServerFrame, { type: "protocol_error" }> {
+  return { protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId,
+    in_reply_to: requestId, code: "protocol_upgrade_required", message: "Update required" };
+}
+
+function expiredQuery(runtime: TimelineRuntime) {
+  runtime.setScope(scope);
+  const sent = runtime.sendUser("keep this message")!;
+  runtime.markUnknownDelivery(sent.frame.client_request_id);
+  const query = runtime.requestDeliveryStatus(sent.frame.client_request_id)!;
+  runtime.expireDeliveryStatusQueries(runtime.pendingItems[0].statusQuery!.requestedAt + DELIVERY_STATUS_QUERY_TIMEOUT_MS);
+  return { sent, query, pending: runtime.pendingItems[0] };
+}
+
+test("delivery query late upgrade errors still update the current unknown after timeout", () => {
+  const runtime = new TimelineRuntime();
+  const { query, pending } = expiredQuery(runtime);
+  runtime.receive(queryError(query.frame.id));
+  expect(pending).toMatchObject({ delivery: "unknown_delivery", statusQueryUnsupported: true });
+  expect(runtime.currentScope).toEqual(scope);
+});
+
+test("delivery query old errors do not clear a newer query even in the same millisecond", () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(1_000);
+  try {
+    const runtime = new TimelineRuntime();
+    const { query, pending } = expiredQuery(runtime);
+    const next = runtime.requestDeliveryStatus(pending.clientRequestId)!;
+    expect(runtime.consumeDeliveryStatusError(queryError(query.frame.id))).not.toBeNull();
+    expect(pending.statusQuery?.requestId).toBe(next.frame.id);
+    expect(pending.statusQueryUnsupported).toBeUndefined();
+    runtime.receive(queryError(query.frame.id));
+    expect(pending.statusQuery?.requestId).toBe(next.frame.id);
+  } finally { clock.mockRestore(); }
+});
+
+test.each(["attempt", "accepted", "not_found", "queue", "cancelled", "started", "formal"] as const)("delivery query late errors cannot overwrite newer %s evidence in the same millisecond", (evidence) => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(1_000);
+  try {
+    const runtime = new TimelineRuntime();
+    const { sent, query, pending } = expiredQuery(runtime);
+    if (evidence === "attempt") {
+      runtime.markDeliveryFailed(pending.clientRequestId, "transport_unavailable", true);
+      runtime.retryFailed(pending.clientRequestId);
+      runtime.markUnknownDelivery(pending.clientRequestId);
+    } else if (evidence === "queue") {
+      runtime.receive(ownQueueSnapshot("new-evidence", [{ id: pending.clientRequestId, text: pending.text,
+        sender_ref: scope.selfSenderRef, editable: true, created_at: 1 }]));
+      runtime.markUnknownDelivery(pending.clientRequestId);
+    } else if (evidence === "started" || evidence === "formal") {
+      runtime.receive({ ...deliveryReply(sent.frame), type: "user_message_started", message: {
+        id: "formal", group_id: "group", blocks: [{ type: "text", text: pending.text }],
+        origin: "pwa", sender_ref: scope.selfSenderRef, delivery: "normal",
+      } });
+      if (evidence === "formal") runtime.commit(userEvent("formal"));
+    } else {
+      runtime.receive({ ...deliveryReply(sent.frame), status: evidence });
+      if (evidence === "accepted") runtime.markUnknownDelivery(pending.clientRequestId);
+    }
+    const before = JSON.stringify(pending);
+    expect(runtime.consumeDeliveryStatusError(queryError(query.frame.id))).not.toBeNull();
+    expect(JSON.stringify(pending)).toBe(before);
+  } finally { clock.mockRestore(); }
+});
+
+test.each(["disconnect", "clear", "handshake", "reset", "session", "owner"] as const)("delivery query associations clear on %s", (boundary) => {
+  const runtime = new TimelineRuntime();
+  const { query } = expiredQuery(runtime);
+  if (boundary === "disconnect") runtime.markDisconnected();
+  if (boundary === "clear") runtime.clear();
+  if (boundary === "handshake") runtime.setScope(scope);
+  if (boundary === "reset") runtime.invalidateScope();
+  if (boundary === "session") runtime.setScope({ ...scope, sessionId: "next" });
+  if (boundary === "owner") runtime.setScope({ ...scope, selfSenderRef: "next" });
+  expect(runtime.consumeDeliveryStatusError(queryError(query.frame.id))).toBeNull();
+});
+
+test("delivery query associations are bounded by capacity and TTL and ignore unrelated errors", () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(1_000);
+  try {
+    const runtime = new TimelineRuntime();
+    const { query, pending } = expiredQuery(runtime);
+    expect(runtime.consumeDeliveryStatusError(queryError("unrelated"))).toBeNull();
+    expect(runtime.consumeDeliveryStatusError({ ...queryError(query.frame.id), target_channel_id: "other" })).toBeNull();
+    for (let index = 0; index < 128; index++) {
+      runtime.requestDeliveryStatus(pending.clientRequestId);
+      runtime.expireDeliveryStatusQueries(1_000 + DELIVERY_STATUS_QUERY_TIMEOUT_MS);
+    }
+    expect(runtime.consumeDeliveryStatusError(queryError(query.frame.id))).toBeNull();
+    const latest = runtime.requestDeliveryStatus(pending.clientRequestId)!;
+    clock.mockReturnValue(61_000);
+    expect(runtime.consumeDeliveryStatusError(queryError(latest.frame.id))).toBeNull();
+  } finally { clock.mockRestore(); }
+});
+
+test("delivery query associations survive ordinary leaf advancement", () => {
+  const runtime = new TimelineRuntime();
+  const { query, pending } = expiredQuery(runtime);
+  runtime.commit({ ...userEvent("other"), event_seq: 1, leaf_id: "next-leaf" });
+  expect(runtime.consumeDeliveryStatusError(queryError(query.frame.id))).not.toBeNull();
+  expect(pending.statusQueryUnsupported).toBe(true);
 });
 
 const previewTarget = { deviceId: scope.deviceId, endpointId: scope.endpointId, sessionId: scope.sessionId };
@@ -450,7 +766,7 @@ test("switching Pi drops the previous projection at once and keeps its unknown d
   runtime.detachLive();
   runtime.prepareLive({ ...scope, channelId: "return-channel" }, 0);
   runtime.commitReplacement();
-  expect(runtime.retryUnknown(sent.frame.client_request_id)?.frame.channel_id).toBe("return-channel");
+  expect(runtime.requestDeliveryStatus(sent.frame.client_request_id)?.frame.channel_id).toBe("return-channel");
 });
 
 test("a local preview of the same session becomes the retained projection for an incremental handshake", () => {
@@ -487,4 +803,94 @@ test("ignores a late or empty preview and drops it when the timeline is cleared"
   cleared.showPreview(previewTarget, numberedUserEvents(1, 2));
   expect(cleared.clear().items).toEqual([]);
   expect(cleared.previewing).toBe(false);
+});
+
+function ownQueueSnapshot(snapshotId: string, items: Extract<ServerFrame, { type: "queued_message_state" }>["items"], channel = scope): Extract<ServerFrame, { type: "queued_message_state" }> {
+  return { protocol_version: 2, type: "queued_message_state", session_id: channel.sessionId, leaf_id: channel.leafId, snapshot_id: snapshotId, chunk_index: 0, final: true, items };
+}
+
+test("disconnecting during an unfinished replacement keeps restored queue content checkable on the same target", () => {
+  const runtime = new TimelineRuntime();
+  runtime.beginLive(scope, 0);
+  const image = [{ mime: "image/png", data: "abc" }];
+  runtime.sendUser("queued while offline", image, { clientRequestId: "own", requestId: "send" });
+  runtime.markDisconnected();
+  const reconnect = { ...scope, channelId: "second" };
+  expect(runtime.prepareLive(reconnect, 5).plan.mode).toBe("replace");
+  runtime.receive(ownQueueSnapshot("during-replacement", [{ id: "own", text: "queued while offline", images: image, sender_ref: scope.selfSenderRef, editable: true, created_at: 1 }], reconnect));
+  expect(runtime.replacing).toBe(true);
+  // 替换未完成就断线只是投影放弃，不能证明目标失效，更不能丢掉正文与图片。
+  runtime.markDisconnected();
+  const third = { ...scope, channelId: "third" };
+  runtime.prepareLive(third, 5);
+  const restored = runtime.commitReplacement().items.filter((item) => item.kind === "pending");
+  expect(restored).toEqual([expect.objectContaining({ clientRequestId: "own", text: "queued while offline", images: image, delivery: "unknown_delivery" })]);
+  expect(restored[0]).not.toHaveProperty("scopeInvalid");
+  expect(runtime.requestDeliveryStatus("own")?.frame).toMatchObject({ type: "user_message_status_request", channel_id: "third", client_request_id: "own" });
+});
+
+test("a reset during an unfinished replacement keeps unconfirmed content read-only instead of clearing it", () => {
+  const runtime = new TimelineRuntime();
+  runtime.beginLive(scope, 0);
+  runtime.sendUser("before reset", undefined, { clientRequestId: "own", requestId: "send" });
+  runtime.markDisconnected();
+  runtime.prepareLive({ ...scope, channelId: "second" }, 5);
+  runtime.receive({ protocol_version: 2, type: "reset", target_channel_id: "second", session_id: scope.sessionId, leaf_id: scope.leafId, reason: "branch_changed" });
+  runtime.prepareLive({ ...scope, channelId: "third" }, 5);
+  const items = runtime.commitReplacement().items.filter((item) => item.kind === "pending");
+  expect(items).toEqual([expect.objectContaining({ clientRequestId: "own", text: "before reset", scopeInvalid: true })]);
+  expect(runtime.requestDeliveryStatus("own")).toBeNull();
+});
+
+test("read-only content of an invalid target stays under its own Pi and never shows in another conversation", () => {
+  const runtime = new TimelineRuntime();
+  runtime.beginLive(scope, 0);
+  runtime.sendUser("for the old runtime", undefined, { clientRequestId: "old", requestId: "send" });
+  runtime.markDisconnected();
+  runtime.prepareLive({ ...scope, runtimeInstanceId: "runtime-b" }, 0);
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ clientRequestId: "old", scopeInvalid: true })]);
+  const otherPi = { ...scope, endpointId: "other-endpoint", runtimeInstanceId: "runtime-x", sessionId: "other-session" };
+  runtime.detachLive();
+  expect(runtime.pendingItems).toEqual([]);
+  expect(runtime.prepareLive(otherPi, 0).change.items.filter((item) => item.kind === "pending")).toEqual([]);
+  // 直接切换（不经 detach）同样不串台。
+  runtime.prepareLive({ ...otherPi, sessionId: "third-session" }, 0);
+  expect(runtime.pendingItems).toEqual([]);
+  runtime.detachLive();
+  runtime.prepareLive({ ...scope, runtimeInstanceId: "runtime-b", channelId: "back" }, 0);
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ clientRequestId: "old", scopeInvalid: true })]);
+});
+
+test("read-only content of an invalid target does not block a new queue snapshot", () => {
+  const runtime = new TimelineRuntime({ maxEntries: 1, maxPayloadBytes: 1024 });
+  runtime.beginLive(scope, 0);
+  runtime.sendUser("stale", undefined, { clientRequestId: "stale", requestId: "send" });
+  runtime.markDisconnected();
+  const next = { ...scope, runtimeInstanceId: "runtime-b" };
+  runtime.prepareLive(next, 0);
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ clientRequestId: "stale", scopeInvalid: true })]);
+  // 准入与快照共用活动容量口径：只读保留项不占用新会话的队列预算。
+  const change = runtime.receive(ownQueueSnapshot("fresh", [{ id: "queued", text: "fresh", sender_ref: "peer", editable: false, created_at: 1 }], next));
+  expect(change.pendingCapacityExceeded).toBeUndefined();
+  expect(runtime.pendingItems.map((pending) => pending.clientRequestId).sort()).toEqual(["queued", "stale"]);
+});
+
+test("the delivery timer deadline uses local evidence time, not a future host timestamp", () => {
+  const runtime = new TimelineRuntime();
+  runtime.beginLive(scope, 0);
+  const future = Date.now() + 60 * 60 * 1000;
+  runtime.receive(ownQueueSnapshot("future", [{ id: "flight", text: "x", sender_ref: "peer", editable: false, created_at: future }]));
+  const pending = runtime.pendingItems[0]!;
+  const local = Math.max(pending.confirmationStartedAt!, pending.lastEvidenceAt!);
+  expect(runtime.nextDeliveryDeadline()).toBe(local + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+  runtime.expireDeliveryConfirmations(runtime.nextDeliveryDeadline()!);
+  expect(pending.delivery).toBe("unknown_delivery");
+  expect(runtime.nextDeliveryDeadline()).toBeNull();
+  const query = runtime.requestDeliveryStatus("flight");
+  expect(query).toBeNull(); // 其他 Owner 的消息不能由本端核对
+  const own = runtime.sendUser("mine", undefined, { clientRequestId: "mine", requestId: "mine-send" })!;
+  runtime.expireDeliveryConfirmations(Number.MAX_SAFE_INTEGER);
+  const ownQuery = runtime.requestDeliveryStatus(own.frame.client_request_id)!;
+  expect(runtime.nextDeliveryDeadline()).toBe(runtime.pendingItems.find((item) => item.clientRequestId === "mine")!.statusQuery!.requestedAt + DELIVERY_STATUS_QUERY_TIMEOUT_MS);
+  expect(ownQuery.frame.type).toBe("user_message_status_request");
 });

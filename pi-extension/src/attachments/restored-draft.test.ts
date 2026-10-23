@@ -8,6 +8,7 @@ import {
   encodeClientFrameTextV2, encodeServerFrameTextV2, type AttachmentDescriptor, type ClientFrame,
 } from "@pi-reach/protocol/session";
 import { AttachmentComposer, type AttachmentReadyMessage } from "../../../pwa/src/lib/pwa/attachment-composer.js";
+import type { SubmitOutcome } from "../../../pwa/src/lib/pwa/message-submission.js";
 import { AttachmentUploadClient } from "../../../pwa/src/lib/pwa/attachment-upload.js";
 import { TimelineRuntime as PwaTimelineRuntime } from "../../../pwa/src/lib/pwa/timeline-runtime.js";
 import { handleAttachmentFrame, isAttachmentFrame } from "../runtime/attachment_binding.js";
@@ -29,7 +30,7 @@ async function setup() {
   const composers: AttachmentComposer[] = [];
   const routed = new Set<Promise<void>>();
   const failures: unknown[] = [];
-  function composer(ready: (message: AttachmentReadyMessage) => boolean) {
+  function composer(ready: (message: AttachmentReadyMessage) => SubmitOutcome) {
     const result = new AttachmentComposer({ onReady: ready, onChange: () => {}, createClient: (onCapabilityChange) => {
       const client = new AttachmentUploadClient({ onCapabilityChange, requestTimeoutMs: 10_000 });
       const send = (input: ClientFrame) => {
@@ -78,10 +79,10 @@ test("ten handed-off originals can be restored on a fresh page, removed, and fre
     const handoff = (message: AttachmentReadyMessage) => {
       const sent = timeline.sendUserWithAttachments(message.text, message.attachments,
         { clientRequestId: message.clientRequestId, requestId: crypto.randomUUID() });
-      if (!sent) return false;
+      if (!sent) return "not-handled";
       expect(decodeClientFrameV2(encodeClientFrameTextV2(sent.frame))).toEqual(sent.frame);
       handedOff.push([...timeline.pendingItems.find((item) => item.clientRequestId === message.clientRequestId)!.attachments!]);
-      return true;
+      return "handled";
     };
     const first = fixture.composer(handoff);
     await vi.waitFor(() => expect(first.snapshot().capability.status).toBe("supported"));
@@ -99,8 +100,17 @@ test("ten handed-off originals can be restored on a fresh page, removed, and fre
     expect(cancellation).not.toBeNull();
     expect(decodeClientFrameV2(encodeClientFrameTextV2(cancellation!.frame))).toMatchObject({ type: "queued_message_clear" });
     const cancelled = timeline.receive(decodeServerFrameV2(encodeServerFrameTextV2({ ...queue, snapshot_id: "after-cancel", items: [] })));
-    const descriptors = cancelled.cancelledQueued![0].attachments!;
-    expect(descriptors).toEqual(handedOff[0]);
+    // 快照缺席只转未知，不单独确认取消；附件描述仍保留在只读消息上。
+    expect(cancelled.cancelledQueued).toBeUndefined();
+    expect(timeline.pendingItems[0]).toMatchObject({ delivery: "unknown_delivery", attachments: handedOff[0] });
+    // 只有针对撤回请求的明确 cancelled 回执才交出可回填的描述符。
+    const confirmed = timeline.receive(decodeServerFrameV2(encodeServerFrameTextV2({ protocol_version: 2, type: "user_message_status",
+      target_channel_id: fixture.scope.channelId, in_reply_to: cancellation!.frame.id, client_request_id: pending.clientRequestId,
+      session_id: fixture.scope.sessionId, leaf_id: fixture.scope.leafId, status: "cancelled" })));
+    expect(confirmed.cancelledQueued).toEqual([expect.objectContaining({ clientRequestId: pending.clientRequestId, attachments: handedOff[0] })]);
+    const descriptors = confirmed.cancelledQueued![0]!.attachments!;
+    timeline.confirmCancelledRestore([pending.clientRequestId]);
+    expect(timeline.pendingItems).toEqual([]);
     const paths = fixture.store.resolve(fixture.attachmentScope, descriptors.map((item) => item.attachment_id)).map((item) => item.path);
     expect(fixture.store.debugCounts().resources).toBe(10);
     first.dispose();
@@ -126,21 +136,21 @@ test("cancel intent keeps restored originals resendable and retained originals s
   const fixture = await setup();
   try {
     let handedOff: readonly AttachmentDescriptor[] = [];
-    let accepted = true;
+    let accepted: SubmitOutcome = "handled";
     const composer = fixture.composer((message) => { handedOff = message.attachments; return accepted; });
     await vi.waitFor(() => expect(composer.snapshot().capability.status).toBe("supported"));
     composer.addFiles(files().slice(0, 1));
     composer.start("", context);
     await vi.waitFor(() => expect(handedOff).toHaveLength(1), { timeout: 10_000 });
     const descriptor = handedOff[0];
-    accepted = false;
+    accepted = "not-handled";
     expect(composer.restoreAttachments(handedOff)).toBe(true);
     composer.start("not handed off", context);
     composer.cancelIntent();
     await fixture.settle();
     expect(fixture.store.resolve(fixture.attachmentScope, [descriptor.attachment_id])).toHaveLength(1);
     expect(fixture.frames.some((frame) => frame.type === "attachment_discard")).toBe(false);
-    accepted = true;
+    accepted = "handled";
     composer.start("retry", context);
     expect(composer.snapshot().items).toHaveLength(0);
     expect(fixture.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);

@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { AttachmentDescriptor } from "@pi-reach/protocol/session";
 import { AttachmentComposer, attachmentTargetKey, type AttachmentUploadPort, type AttachmentReadyMessage } from "./attachment-composer";
 import type { TimelineScope } from "./timeline-runtime";
+import type { SubmitOutcome } from "./message-submission";
 import type { AttachmentCapability, AttachmentUploadProgress } from "./attachment-upload-types";
 
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session",
@@ -31,7 +32,7 @@ class UploadPort implements AttachmentUploadPort {
   async finish(name: string) { this.job(name).resolve(descriptor(name)); await Promise.resolve(); }
   async fail(name: string, code = "io_error") { this.job(name).reject({ code }); await Promise.resolve(); }
 }
-function setup(ready: (message: AttachmentReadyMessage) => boolean = () => true) {
+function setup(ready: (message: AttachmentReadyMessage) => SubmitOutcome = () => "handled") {
   const clients: UploadPort[] = [];
   const onReady = vi.fn(ready);
   const composer = new AttachmentComposer({ onReady, onChange: vi.fn(), createClient: (changed) => {
@@ -56,7 +57,7 @@ describe("session attachment message intent", () => {
     firstJob.resolve(descriptor("one"));
     await client.finish("two");
     expect(onReady).toHaveBeenCalledTimes(1);
-    expect(onReady.mock.calls[0][0]).toMatchObject({ text: "Task", attachments: [descriptor("two")] });
+    expect(onReady.mock.calls[0][0]).toMatchObject({ text: "Task", attachments: [descriptor("two")], uploadScope: "lease" });
     expect(composer.snapshot().items).toEqual([]);
     expect(client.release).toHaveBeenCalledTimes(1);
   });
@@ -190,7 +191,8 @@ describe("session attachment message intent", () => {
     expect(onReady).not.toHaveBeenCalled();
     client.changed({ status: "supported", uploadScope: "lease" });
     expect(onReady).toHaveBeenCalledTimes(1);
-    expect(onReady.mock.calls[0][0]).toMatchObject({ text: "resume", attachments: all ? [] : [descriptor("one")] });
+    // 能力恢复回调同步交接：租约随交接消息给出，调用方无需等待渲染后的快照。
+    expect(onReady.mock.calls[0][0]).toMatchObject({ text: "resume", attachments: all ? [] : [descriptor("one")], uploadScope: "lease" });
   });
 
   test.each([false, true])("a different lease after checking cancels intent without sending (all=%s)", async (all) => {
@@ -250,7 +252,7 @@ describe("session attachment message intent", () => {
     const { composer, client, onReady } = setup(() => {
       composer.remove(composer.snapshot().items[0].id);
       expect(composer.start("duplicate", context)).toBe(false);
-      return true;
+      return "handled";
     });
     composer.addFiles([file("one")]);
     composer.start("", context);
@@ -263,7 +265,7 @@ describe("session attachment message intent", () => {
     let accept = false;
     const { composer, client, onReady } = setup(() => {
       if (!accept && mode === "throw") throw new Error("handoff failed");
-      return accept;
+      return accept ? "handled" : "not-handled";
     });
     composer.addFiles([file("one")]);
     composer.start("", context);
@@ -295,7 +297,7 @@ describe("session attachment message intent", () => {
   });
 
   test("cancel intent preserves restored and newly completed originals for resend", async () => {
-    const { composer, client, onReady } = setup(() => false);
+    const { composer, client, onReady } = setup(() => "not-handled");
     composer.restoreAttachments([descriptor("queued")]);
     composer.addFiles([file("fresh"), file("waiting")]);
     composer.start("first", context);

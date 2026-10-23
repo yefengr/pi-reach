@@ -285,7 +285,7 @@ export type WireModel = z.infer<typeof wireModelSchema>;
 export const harnessSchema = strictObject({ name: idSchema, version: idSchema });
 
 export const CLIENT_FRAME_TYPES = [
-  "pair_request", "session_hello", "user_message", "user_message_observed", "session_sync", "ping", "cancel",
+  "pair_request", "session_hello", "user_message", "user_message_status_request", "user_message_observed", "session_sync", "ping", "cancel",
   "session_new", "session_compact", "model_set", "thinking_set", "list_models", "queued_message_set",
   "queued_message_clear", "queued_message_steer", "approve_tool", "extension_info_request",
   "attachment_capabilities_request", "attachment_begin", "attachment_chunk", "attachment_finish", "attachment_status_request", "attachment_cancel", "attachment_discard",

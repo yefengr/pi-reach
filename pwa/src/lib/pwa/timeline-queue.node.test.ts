@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, TimelineRuntime, type TimelinePending, type TimelineScope } from "./timeline-runtime";
+import { USER_MESSAGE_CONFIRMATION_TIMEOUT_MS, QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, TimelineRuntime, type TimelinePending, type TimelineScope } from "./timeline-runtime";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import { pendingPayloadBytes } from "./timeline-pending";
 import type { ServerFrame } from "../pi-reach/protocol-v2/frames";
@@ -23,6 +23,14 @@ function queuedPending(runtime: TimelineRuntime): TimelinePending {
   if (!pending) throw new Error("Expected queued message.");
   return pending;
 }
+function confirmCancellation(runtime: TimelineRuntime, clientRequestId = "q") {
+  runtime.clearDeliveryStatusQuery(clientRequestId);
+  const query = runtime.requestDeliveryStatus(clientRequestId);
+  if (!query) throw new Error("Expected a delivery status query.");
+  const scope = runtime.currentScope;
+  return runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: scope?.channelId ?? "c",
+    in_reply_to: query.frame.id, client_request_id: clientRequestId, session_id: scope?.sessionId ?? "s", leaf_id: scope?.leafId ?? "g", status: "cancelled" });
+}
 function requestInsertion(runtime: TimelineRuntime) {
   const action = runtime.actOnQueued("q", "insert");
   if (!action) throw new Error("Expected insertion request.");
@@ -41,6 +49,61 @@ test("queue snapshots preserve content, honor ownership/editability, and publish
   expect(runtime.pendingItems).toHaveLength(3);
 });
 
+test("queue snapshot evidence requires contiguous chunks and accepts a complete empty snapshot", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const ready = () => expect(runtime).toHaveProperty("queueSnapshotReady", true);
+  const waiting = () => expect(runtime).toHaveProperty("queueSnapshotReady", false);
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "orphan", chunk_index: 1 }));
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "gap", final: false }));
+  runtime.receive(snapshot([], { snapshot_id: "gap", chunk_index: 2 }));
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "out-of-order", final: false }));
+  runtime.receive(snapshot([], { snapshot_id: "out-of-order", chunk_index: 2, final: false }));
+  runtime.receive(snapshot([], { snapshot_id: "out-of-order", chunk_index: 1 }));
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "wrong-scope", session_id: "other" }));
+  runtime.receive(snapshot([], { snapshot_id: "wrong-leaf", leaf_id: "other" }));
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "complete", final: false }));
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "complete", chunk_index: 1 }));
+  ready();
+  expect(runtime.pendingItems).toEqual([]);
+  runtime.markDisconnected();
+  waiting();
+  // 手动只读查询不依赖自动恢复门禁。
+  runtime.setScope(scope);
+  runtime.sendUser("manual", undefined, { clientRequestId: "manual", requestId: "manual-send" });
+  runtime.markUnknownDelivery("manual");
+  expect(runtime.requestDeliveryStatus("manual")).not.toBeNull();
+  runtime.receive(snapshot([], { snapshot_id: "empty-final" }));
+  ready();
+  runtime.prepareLive(scope, 0);
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "new-handshake" }));
+  ready();
+  runtime.setScope({ ...scope, selfSenderRef: "other-owner" });
+  waiting();
+  runtime.receive(snapshot([], { snapshot_id: "other-owner" }));
+  ready();
+  runtime.invalidateScope();
+  waiting();
+});
+
+test("a capacity-rejected snapshot cannot establish queue snapshot evidence or mutate the queue", () => {
+  const runtime = new TimelineRuntime({ maxPayloadBytes: 1 }); runtime.setScope(scope);
+  runtime.receive(snapshot([], { snapshot_id: "too-large", final: false }));
+  expect(runtime.receive(snapshot([{ ...item, id: "extra" }], { snapshot_id: "too-large", chunk_index: 1 })).pendingCapacityExceeded).toBe(true);
+  expect(runtime).toHaveProperty("queueSnapshotReady", false);
+  runtime.receive(snapshot([], { snapshot_id: "too-large", chunk_index: 2 }));
+  expect(runtime).toHaveProperty("queueSnapshotReady", false);
+  expect(runtime.pendingItems).toEqual([]);
+  runtime.receive(snapshot([], { snapshot_id: "fits" }));
+  expect(runtime).toHaveProperty("queueSnapshotReady", true);
+});
+
 test.each(["insert", "cancel"] as const)("%s targets the original queue id and synchronously prevents duplicate actions", (action) => {
   const runtime = queuedRuntime();
   const result = runtime.actOnQueued("q", action)!;
@@ -56,7 +119,8 @@ test.each(["insert", "cancel"] as const)("%s targets the original queue id and s
   expect(runtime.actOnQueued("q", action)).not.toBeNull();
   const removed = runtime.receive(snapshot([]));
   if (action === "insert") expect(removed.items).toEqual([expect.objectContaining({ insertionStatus: "waiting", queued: false, cancelable: false })]);
-  else expect(removed.items).toEqual([]);
+  // 取消请求发出后，快照缺席只转未知，仍需明确 cancelled 才能回填。
+  else expect(removed.items).toEqual([expect.objectContaining({ delivery: "unknown_delivery", queuedAction: "cancel" })]);
 });
 
 test.each(["insert", "cancel"] as const)("a repeated queue snapshot keeps a pending %s action locked", (action) => {
@@ -71,7 +135,7 @@ test.each(["insert", "cancel"] as const)("a repeated queue snapshot keeps a pend
     expect(queuedPending(runtime)).toMatchObject({ insertionStatus: "waiting", insertionRequestedAt: requestedAt });
     expect(runtime.receive(snapshot([])).items).toEqual([expect.objectContaining({ insertionStatus: "waiting", insertionRequestedAt: requestedAt, queued: false })]);
   } else {
-    expect(runtime.receive(snapshot([])).items).toEqual([]);
+    expect(runtime.receive(snapshot([])).items).toEqual([expect.objectContaining({ delivery: "unknown_delivery", queuedAction: "cancel" })]);
   }
 });
 
@@ -97,7 +161,7 @@ test("a failed transport send releases the action while a disconnect never enabl
   runtime.markDisconnected();
   runtime.setScope({ ...scope, channelId: "reconnected" });
   expect(runtime.pendingItems[0]).toMatchObject({ queued: false, delivery: "unknown_delivery", insertionStatus: "unconfirmed" });
-  expect(runtime.retryUnknown("q")).toBeNull();
+  expect(runtime.retryFailed("q")).toBeNull();
   expect(runtime.actOnQueued("q", "insert")).toBeNull();
   runtime.receive(snapshot([]));
   expect(runtime.pendingItems).toEqual([expect.objectContaining({ insertionStatus: "unconfirmed", queued: false })]);
@@ -114,6 +178,32 @@ test("started receipt moves a queued message into the conversation and reconcile
   expect(result.observed).toHaveLength(1);
 });
 
+test("an accepted query before an editable snapshot restores queue actions on the original bubble", () => {
+  const runtime = queuedRuntime();
+  const original = queuedPending(runtime);
+  runtime.receive(snapshot([]));
+  const query = runtime.requestDeliveryStatus("q")!;
+  runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c", in_reply_to: query.frame.id,
+    client_request_id: "q", session_id: "s", leaf_id: "g", status: "accepted" });
+  runtime.receive(snapshot([item]));
+  expect(queuedPending(runtime)).toBe(original);
+  expect(original).toMatchObject({ queued: true, cancelable: true, delivery: "accepted" });
+  expect(runtime.actOnQueued("q", "cancel")).not.toBeNull();
+});
+
+test("an accepted query does not let an editable snapshot undo an insertion or a started message", () => {
+  const runtime = queuedRuntime();
+  requestInsertion(runtime);
+  runtime.receive(snapshot([]));
+  runtime.receive(snapshot([item]));
+  expect(queuedPending(runtime)).toMatchObject({ queued: false, insertionStatus: "waiting" });
+  runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c", in_reply_to: "send",
+    client_request_id: "q", session_id: "s", leaf_id: "g", status: "accepted", message_id: "started" });
+  runtime.receive(snapshot([item]));
+  expect(queuedPending(runtime)).toMatchObject({ queued: false, messageId: "started" });
+  expect(runtime.actOnQueued("q", "cancel")).toBeNull();
+});
+
 test("a delivery timeout remains visible after the server removes it from the queue", () => {
   const runtime = queuedRuntime();
   runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c", in_reply_to: "send", client_request_id: "q", session_id: "s", leaf_id: "g", status: "unknown_delivery" });
@@ -126,26 +216,33 @@ test("an explicit unknown-delivery receipt turns an insertion into an unconfirme
   requestInsertion(runtime);
   const changed = runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c", in_reply_to: "send", client_request_id: "q", session_id: "s", leaf_id: "g", status: "unknown_delivery" });
   expect(changed.items).toEqual([expect.objectContaining({ clientRequestId: "q", delivery: "unknown_delivery", insertionStatus: "unconfirmed", queued: false, cancelable: false })]);
-  expect(runtime.retryUnknown("q")).toBeNull();
+  expect(runtime.retryFailed("q")).toBeNull();
 });
 
-test.each(["endpointId", "runtimeInstanceId", "sessionId", "selfSenderRef"] as const)("disconnecting then changing %s scopes insertion state", (scopeKey) => {
+test.each(["endpointId", "runtimeInstanceId", "sessionId", "selfSenderRef"] as const)("disconnecting then changing %s keeps insertion content read-only", (scopeKey) => {
   const runtime = queuedRuntime();
   requestInsertion(runtime);
   const requestedAt = queuedPending(runtime).insertionRequestedAt;
   runtime.markDisconnected();
   runtime.setScope({ ...scope, [scopeKey]: `other-${scopeKey}` });
-  expect(runtime.expireQueuedInsertions((requestedAt ?? 0) + QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS).items).toEqual([]);
-  expect(runtime.dismissQueuedInsertionNotice("q").items).toEqual([]);
+  const expired = runtime.expireQueuedInsertions((requestedAt ?? 0) + QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS).items;
+  const dismissed = runtime.dismissQueuedInsertionNotice("q").items;
   runtime.setScope(scope);
-  if (scopeKey !== "endpointId") {
-    expect(runtime.pendingItems).toEqual([]);
+  if (scopeKey === "endpointId") {
+    expect(expired).toEqual([]);
+    expect(dismissed).toEqual([]);
+    // 切换到另一个 Pi 只撤下投影；切回原目标仍恢复原会话的插入状态。
+    const restored = queuedPending(runtime);
+    expect(restored).toMatchObject({ insertionStatus: "unconfirmed", insertionRequestedAt: requestedAt, queued: false });
+    expect(restored.insertionNoticeDismissed).toBeUndefined();
+    expect(runtime.retryFailed("q")).toBeNull();
     return;
   }
-  const restored = queuedPending(runtime);
-  expect(restored).toMatchObject({ insertionStatus: "unconfirmed", insertionRequestedAt: requestedAt, queued: false });
-  expect(restored.insertionNoticeDismissed).toBeUndefined();
-  expect(runtime.retryUnknown("q")).toBeNull();
+  expect(expired).toEqual([expect.objectContaining({ scopeInvalid: true })]);
+  expect(dismissed).toEqual([expect.objectContaining({ scopeInvalid: true })]);
+  expect(runtime.pendingItems).toHaveLength(1);
+  expect(runtime.pendingItems[0]).toMatchObject({ scopeInvalid: true, text: item.text, images: item.images });
+  expect(runtime.retryFailed("q")).toBeNull();
 });
 
 test("disconnecting then advancing the leaf retains insertion state", () => {
@@ -189,8 +286,20 @@ test("an inserted queued message survives repeated empty snapshots with its text
     insertionRequestedAt: requestedAt,
   });
   expect(runtime.actOnQueued("q", "insert")).toBeNull();
-  expect(runtime.retryUnknown("q")).toBeNull();
+  expect(runtime.retryFailed("q")).toBeNull();
   expect(action.frame.type).toBe("queued_message_steer");
+});
+
+test("insertion confirmation keeps its own deadline after an old queued item leaves the snapshot", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  runtime.receive(snapshot([item]));
+  requestInsertion(runtime);
+  runtime.receive(snapshot([]));
+  const requestedAt = queuedPending(runtime).insertionRequestedAt!;
+  runtime.expireDeliveryConfirmations(requestedAt);
+  expect(queuedPending(runtime)).toMatchObject({ delivery: "accepted", insertionStatus: "waiting" });
+  runtime.expireQueuedInsertions(requestedAt + QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS);
+  expect(queuedPending(runtime)).toMatchObject({ delivery: "accepted", insertionStatus: "unconfirmed" });
 });
 
 test("an insertion becomes unconfirmed at its fixed deadline and after disconnect", () => {
@@ -199,7 +308,7 @@ test("an insertion becomes unconfirmed at its fixed deadline and after disconnec
   const requestedAt = queuedPending(runtime).insertionRequestedAt!;
   expect(runtime.expireQueuedInsertions(requestedAt + QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS - 1).items[0]).toMatchObject({ insertionStatus: "waiting" });
   expect(runtime.expireQueuedInsertions(requestedAt + QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS).items[0]).toMatchObject({ insertionStatus: "unconfirmed", queued: false, cancelable: false });
-  expect(runtime.retryUnknown("q")).toBeNull();
+  expect(runtime.retryFailed("q")).toBeNull();
 
   const disconnected = queuedRuntime();
   requestInsertion(disconnected);
@@ -243,7 +352,7 @@ test("queue operation failures only restore editability while the original queue
   runtime.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: late.frame.id, target_channel_id: "c", code: "internal_error", message: "late operation error" });
   expect(queuedPending(runtime)).toMatchObject({ insertionStatus: "unconfirmed", queued: false, cancelable: false });
   expect(runtime.actOnQueued("q", "insert")).toBeNull();
-  expect(runtime.retryUnknown("q")).toBeNull();
+  expect(runtime.retryFailed("q")).toBeNull();
 });
 
 test.each(["empty", "editable", "in-flight"] as const)("an insertion error followed by a %s snapshot keeps content until the outcome is known", (outcome) => {
@@ -257,7 +366,7 @@ test.each(["empty", "editable", "in-flight"] as const)("an insertion error follo
   expect(queuedPending(runtime)).toMatchObject({ text: item.text, images: item.images });
   if (outcome === "empty") {
     expect(queuedPending(runtime)).toMatchObject({ insertionStatus: "unconfirmed", queued: false });
-    expect(runtime.retryUnknown("q")).toBeNull();
+    expect(runtime.retryFailed("q")).toBeNull();
     expect(runtime.receive(snapshot([])).items).toHaveLength(1);
   } else {
     expect(queuedPending(runtime)).toMatchObject({ queued: true, cancelable: outcome === "editable" });
@@ -276,10 +385,10 @@ test("a rejection after the insertion timeout still reconciles the following que
   expect(runtime.actOnQueued("q", "insert")).not.toBeNull();
 });
 
-test("cancelling a queued message retains its existing empty-snapshot behavior", () => {
+test("cancelling a queued message keeps it unknown until the host confirms", () => {
   const runtime = queuedRuntime();
   runtime.actOnQueued("q", "cancel");
-  expect(runtime.receive(snapshot([])).items).toEqual([]);
+  expect(runtime.receive(snapshot([])).items).toEqual([expect.objectContaining({ delivery: "unknown_delivery", text: item.text, images: item.images })]);
 });
 
 test("dismissing an unconfirmed insertion is local and keeps it out of retry delivery", () => {
@@ -290,15 +399,57 @@ test("dismissing an unconfirmed insertion is local and keeps it out of retry del
   const changed = runtime.dismissQueuedInsertionNotice("q");
   expect(changed.items[0]).toMatchObject({ insertionStatus: "unconfirmed", insertionNoticeDismissed: true });
   expect(changed.observed).toEqual([]);
-  expect(runtime.retryUnknown("q")).toBeNull();
+  expect(runtime.retryFailed("q")).toBeNull();
 });
 
-test("reports a confirmed cancellation with its text and image when the snapshot removes a queued cancel", () => {
+test("keeps a locally cancelled message unknown until the host confirms cancellation", () => {
   const runtime = queuedRuntime();
   runtime.actOnQueued("q", "cancel");
   const change = runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
-  expect(change.cancelledQueued).toEqual([{ clientRequestId: "q", text: "later", images: item.images }]);
-  expect(runtime.pendingItems.some((candidate) => candidate.clientRequestId === "q")).toBe(false);
+  // 快照缺席不能单独证明取消成功：保留内容与取消关联，等待明确回执。
+  expect(change.cancelledQueued).toBeUndefined();
+  expect(runtime.pendingItems[0]).toMatchObject({ delivery: "unknown_delivery", queued: false, queuedAction: "cancel" });
+  const query = runtime.requestDeliveryStatus("q")!;
+  const confirmed = runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: query.frame.id, client_request_id: "q", session_id: "s", leaf_id: "g", status: "cancelled" });
+  expect(confirmed.cancelledQueued).toEqual([{ clientRequestId: "q", text: "later", images: item.images }]);
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ delivery: "cancelled", text: "later", images: item.images })]);
+  expect(runtime.confirmCancelledRestore(["q"]).items.filter((item) => item.kind === "pending")).toEqual([]);
+});
+
+test("a direct cancellation receipt settles the withdrawal before the snapshot without passing through unknown", () => {
+  const runtime = queuedRuntime();
+  const action = runtime.actOnQueued("q", "cancel")!;
+  // Extension 先回撤回请求的 cancelled，再发不含该项的快照。
+  const confirmed = runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: action.frame.id, client_request_id: "q", session_id: "s", leaf_id: "g", status: "cancelled" });
+  expect(confirmed.cancelledQueued).toEqual([{ clientRequestId: "q", text: "later", images: item.images }]);
+  expect(confirmed.unknown).toEqual([]);
+  runtime.confirmCancelledRestore(["q"]);
+  const after = runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  expect(after.items.filter((entry) => entry.kind === "pending")).toEqual([]);
+  expect(after.unknown).toEqual([]);
+});
+
+test("a direct cancellation receipt whose restore failed stays cancelled after the snapshot", () => {
+  const runtime = queuedRuntime();
+  const action = runtime.actOnQueued("q", "cancel")!;
+  runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: action.frame.id, client_request_id: "q", session_id: "s", leaf_id: "g", status: "cancelled" });
+  runtime.keepCancelledRestore();
+  runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ delivery: "cancelled", queued: false, text: "later" })]);
+});
+
+test("keeps a cancelled message content when the host cannot confirm the cancellation", () => {
+  const runtime = queuedRuntime();
+  runtime.actOnQueued("q", "cancel");
+  runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  const query = runtime.requestDeliveryStatus("q")!;
+  runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: query.frame.id, client_request_id: "q", session_id: "s", leaf_id: "g", status: "not_found" });
+  expect(runtime.pendingItems[0]).toMatchObject({ delivery: "unknown_delivery", text: "later", images: item.images });
+  expect(runtime.retryFailed("q")).toBeNull();
 });
 
 test("does not report a cancellation that the host rejected before the snapshot", () => {
@@ -309,9 +460,68 @@ test("does not report a cancellation that the host rejected before the snapshot"
   expect(runtime.receive(snapshot([], { snapshot_id: "after-error" })).cancelledQueued).toBeUndefined();
 });
 
-test("does not report a queued message that leaves the queue without a local cancel", () => {
+test("a local queued message missing from the snapshot stays unknown, never cancelled or retried", () => {
   const runtime = queuedRuntime();
-  expect(runtime.receive(snapshot([], { snapshot_id: "consumed" })).cancelledQueued).toBeUndefined();
+  const pending = queuedPending(runtime);
+  const changed = runtime.receive(snapshot([], { snapshot_id: "consumed" }));
+  expect(changed.cancelledQueued).toBeUndefined();
+  expect(runtime.pendingItems).toEqual([pending]);
+  expect(pending).toMatchObject({ queued: false, cancelable: false, delivery: "unknown_delivery", text: item.text, images: item.images });
+  expect(runtime.retryFailed("q")).toBeNull();
+  expect(runtime.requestDeliveryStatus("q")?.frame.type).toBe("user_message_status_request");
+});
+
+test("a cancelled query result settles an unknown message instead of leaving it unconfirmed", () => {
+  const runtime = queuedRuntime();
+  queuedPending(runtime);
+  runtime.receive(snapshot([], { snapshot_id: "consumed" }));
+  expect(runtime.pendingItems[0]).toMatchObject({ delivery: "unknown_delivery", queued: false });
+  const query = runtime.requestDeliveryStatus("q")!;
+  const change = runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: query.frame.id, client_request_id: "q", session_id: "s", leaf_id: "g", status: "cancelled" });
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ delivery: "cancelled", clientRequestId: "q" })]);
+  expect(change.items.some((item) => item.kind === "pending" && item.clientRequestId === "q")).toBe(true);
+  expect(change.cancelledQueued).toBeUndefined();
+  expect(runtime.confirmCancelledRestore(["q"]).items.filter((item) => item.kind === "pending")).toEqual([]);
+});
+
+test("an in-flight item restored from a snapshot starts its window from local evidence time", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  runtime.receive(snapshot([{ ...item, id: "flight", editable: false, created_at: 1 }]));
+  const pending = runtime.pendingItems[0]!;
+  expect(pending).toMatchObject({ createdAt: 1, queueInFlight: true });
+  expect(pending.lastEvidenceAt).toBeGreaterThan(Date.now() - 5_000);
+  // 服务端 createdAt 远早于本地时钟也不能让重连后的在途消息立即进入未知。
+  runtime.expireDeliveryConfirmations(1 + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+  expect(pending.delivery).toBe("accepted");
+});
+
+test("an in-flight item restored from a snapshot ignores a future host timestamp", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const future = Date.now() + 60 * 60 * 1000;
+  runtime.receive(snapshot([{ ...item, id: "future", editable: false, created_at: future }]));
+  const pending = runtime.pendingItems[0]!;
+  expect(pending.createdAt).toBe(future);
+  const started = pending.confirmationStartedAt!;
+  runtime.expireDeliveryConfirmations(started + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS - 1);
+  expect(pending.delivery).toBe("accepted");
+  runtime.expireDeliveryConfirmations(started + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS);
+  expect(pending.delivery).toBe("unknown_delivery");
+});
+
+test("real queue waiting does not expire, but the in-flight stage has a bounded confirmation window", () => {
+  const runtime = queuedRuntime();
+  const pending = queuedPending(runtime);
+  runtime.expireDeliveryConfirmations(pending.createdAt + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS * 10);
+  expect(pending).toMatchObject({ queued: true, delivery: "accepted" });
+  runtime.receive(snapshot([{ ...item, editable: false }]));
+  const deadline = Math.max(pending.confirmationStartedAt ?? 0, pending.lastEvidenceAt ?? 0) + USER_MESSAGE_CONFIRMATION_TIMEOUT_MS;
+  runtime.expireDeliveryConfirmations(deadline - 1);
+  expect(pending.delivery).toBe("accepted");
+  runtime.expireDeliveryConfirmations(deadline);
+  expect(pending.delivery).toBe("unknown_delivery");
+  expect(runtime.pendingItems[0]).toBe(pending);
+  expect(runtime.retryFailed("q")).toBeNull();
 });
 
 function attachmentDescriptor(attachmentId: string): AttachmentDescriptor {
@@ -358,7 +568,8 @@ test.each(["conflict", "removed", "sender"] as const)("sidecar projection is wit
   expect(queuedPending(runtime)).toMatchObject({ text: item.text, images: item.images });
   expect(queuedPending(runtime).attachments).toBeUndefined();
   expect(runtime.actOnQueued("q", "cancel")).not.toBeNull();
-  expect(runtime.receive(snapshot([])).cancelledQueued).toEqual([{ clientRequestId: "q", text: item.text, images: item.images }]);
+  runtime.receive(snapshot([]));
+  expect(confirmCancellation(runtime).cancelledQueued).toEqual([{ clientRequestId: "q", text: item.text, images: item.images }]);
 });
 
 test.each(["explicit", "disconnect", "protocol-error"] as const)("local original attachment IDs and text survive %s unknown delivery and conflicting sidecars", (unknown) => {
@@ -371,19 +582,21 @@ test.each(["explicit", "disconnect", "protocol-error"] as const)("local original
   else runtime.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: sent.frame.id, target_channel_id: "c", code: "internal_error", message: "Failed" });
   expect(queuedPending(runtime)).toMatchObject({ text: "original text", attachments: [original], delivery: "unknown_delivery" });
   runtime.commit(metadataEvent("meta-b", "q", "owner", "remote B", [attachmentDescriptor("b")]));
-  expect(runtime.retryUnknown("q")?.frame).toMatchObject({ text: "original text", attachment_ids: ["local"], client_request_id: "q" });
+  expect(runtime.retryFailed("q")).toBeNull();
+  expect(runtime.requestDeliveryStatus("q")?.frame).toMatchObject({ type: "user_message_status_request", client_request_id: "q" });
   runtime.receive(snapshot([{ ...item, text: "server fallback", images: undefined }]));
   expect(queuedPending(runtime)).toMatchObject({ text: "original text", attachments: [original] });
-  runtime.actOnQueued("q", "cancel");
-  expect(runtime.receive(snapshot([])).cancelledQueued).toEqual([{ clientRequestId: "q", text: "original text", attachments: [original] }]);
+  expect(runtime.actOnQueued("q", "cancel")).not.toBeNull();
+  runtime.receive(snapshot([]));
+  expect(confirmCancellation(runtime).cancelledQueued).toEqual([{ clientRequestId: "q", text: "original text", attachments: [original] }]);
 });
 
 test("retry uses original legacy content, never attachment IDs borrowed from a sidecar", () => {
   const runtime = new TimelineRuntime(); runtime.setScope(scope);
   runtime.sendUser("original", item.images, { clientRequestId: "q", requestId: "send" });
   runtime.commit(metadataEvent("meta-a", "q", "owner", "derived", [attachmentDescriptor("a")]));
-  runtime.markUnknownDelivery("q");
-  const retry = runtime.retryUnknown("q")!.frame;
+  runtime.markDeliveryFailed("q", "transport_unavailable", true);
+  const retry = runtime.retryFailed("q")!.frame;
   expect(retry).toMatchObject({ text: "original", images: item.images });
   expect(retry).not.toHaveProperty("attachment_ids");
 });
@@ -440,7 +653,46 @@ test("a confirmed cancellation returns the queued message with its attachment pr
   const runtime = queuedRuntime();
   runtime.commit(metadataEvent("meta", "q", "owner", "later with files", [attachmentDescriptor("attachment-1")]));
   expect(runtime.actOnQueued("q", "cancel")).not.toBeNull();
-  const change = runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  const change = confirmCancellation(runtime);
   expect(change.cancelledQueued).toEqual([{ clientRequestId: "q", text: "later with files", images: item.images, attachments: [attachmentDescriptor("attachment-1")] }]);
-  expect(runtime.pendingItems).toEqual([]);
+  // 内容保留到调用方确认草稿回填；失败时继续只读展示。
+  expect(runtime.pendingItems[0]).toMatchObject({ delivery: "cancelled", attachments: [attachmentDescriptor("attachment-1")] });
+  expect(runtime.confirmCancelledRestore(["q"]).items.filter((item) => item.kind === "pending")).toEqual([]);
+});
+
+test("a confirmed cancellation whose draft restore failed survives reconnect without falling back to unknown", () => {
+  const runtime = new TimelineRuntime();
+  runtime.setScope(scope);
+  const descriptor = attachmentDescriptor("kept");
+  runtime.sendUserWithAttachments("later", [descriptor], { clientRequestId: "q", requestId: "send" });
+  runtime.receive(snapshot([{ ...item, images: undefined }]));
+  runtime.actOnQueued("q", "cancel");
+  runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  expect(confirmCancellation(runtime).cancelledQueued).toEqual([expect.objectContaining({ clientRequestId: "q", attachments: [descriptor] })]);
+  // 输入区已满等原因无法回填：保留取消结论与附件描述供复制。
+  runtime.keepCancelledRestore();
+  runtime.markDisconnected();
+  runtime.prepareLive({ ...scope, channelId: "reconnected" }, 0);
+  runtime.receive(snapshot([], { snapshot_id: "reconnected" }));
+  const pending = queuedPending(runtime);
+  expect(pending).toMatchObject({ delivery: "cancelled", text: "later", attachments: [descriptor] });
+  expect(runtime.expireDeliveryConfirmations(Number.MAX_SAFE_INTEGER).items).toContainEqual(expect.objectContaining({ clientRequestId: "q", delivery: "cancelled" }));
+  // 终态不自动或手动重新核对，迟到的未知回执也不能降级。
+  expect(runtime.requestDeliveryStatus("q")).toBeNull();
+  runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "reconnected", in_reply_to: "send", client_request_id: "q", session_id: "s", leaf_id: "g", status: "unknown_delivery" });
+  expect(pending.delivery).toBe("cancelled");
+  expect(runtime.retryFailed("q")).toBeNull();
+});
+
+test("an own queue item restored only from a snapshot is kept and checked when the next snapshot omits it", () => {
+  const runtime = new TimelineRuntime();
+  runtime.setScope(scope);
+  runtime.receive(snapshot([{ ...item, id: "mine" }, { ...item, id: "peer", sender_ref: "other-owner" }]));
+  expect(runtime.pendingItems.map((pending) => pending.clientRequestId).sort()).toEqual(["mine", "peer"]);
+  runtime.receive(snapshot([], { snapshot_id: "consumed" }));
+  // 本端消息缺席可能已启动或被取消：保留内容转未知并允许只读核对；其他 Owner 的消息交给正式记录。
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ clientRequestId: "mine", delivery: "unknown_delivery", queued: false, text: item.text, images: item.images })]);
+  expect(runtime.requestDeliveryStatus("mine")?.frame).toMatchObject({ type: "user_message_status_request", client_request_id: "mine" });
+  expect(runtime.retryFailed("mine")).toBeNull();
 });

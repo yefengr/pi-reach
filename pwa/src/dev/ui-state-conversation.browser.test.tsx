@@ -163,16 +163,19 @@ test("compaction, branch summary and provider error open the real SummaryReader 
   }
 });
 
-test("real pending delivery retry and cancellation update only their messages", async () => {
+test("real pending delivery check and retry update only their messages", async () => {
   await render(<UiStateGalleryPage />);
   await choose("delivery");
-  expect(document.querySelectorAll(".pwa-pending")).toHaveLength(3);
-  const unknown = [...document.querySelectorAll<HTMLElement>(".pwa-pending")].find(element => element.textContent?.includes("投递状态未知。"))!;
+  expect(document.querySelectorAll(".pwa-pending")).toHaveLength(4);
+  const unknown = [...document.querySelectorAll<HTMLElement>(".pwa-pending")].find(element => element.textContent?.includes("Not confirmed"))!;
   await userEvent.click(unknown.querySelector<HTMLButtonElement>("button")!);
   expect(unknown.querySelector("button")).toBeNull();
+  const failed = [...document.querySelectorAll<HTMLElement>(".pwa-pending")].find(element => element.textContent?.includes("Not sent; check the connection and retry"))!;
+  await userEvent.click(failed.querySelector<HTMLButtonElement>("button")!);
+  expect(failed.querySelector("button")).toBeNull();
   const queued = [...document.querySelectorAll<HTMLElement>(".pwa-pending")].find(element => element.textContent?.includes("这条排队消息"))!;
   await userEvent.click(queued.querySelector<HTMLButtonElement>("button")!);
-  expect(document.querySelectorAll(".pwa-pending")).toHaveLength(2);
+  expect(document.querySelectorAll(".pwa-pending")).toHaveLength(3);
   await page.getByRole("button", { name: "演示投递完成", exact: true }).click();
   expect(document.querySelectorAll(".pwa-pending")).toHaveLength(0);
 });

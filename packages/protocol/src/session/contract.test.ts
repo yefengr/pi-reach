@@ -113,6 +113,45 @@ describe("shared session protocol fixture contract", () => {
     expectCode(() => decodeClientFrameV2(missingLeaf), "schema");
   });
 
+  test("keeps delivery status queries read-only and strictly client-directed", () => {
+    const query = { ...version, ...channel, type: "user_message_status_request", id: "query", client_request_id: "original" };
+    expect(decodeClientFrameV2(query)).toEqual(query);
+    expect(decodeClientFrameV2({ ...query, leaf_id: null })).toMatchObject({ leaf_id: null });
+    expectCode(() => decodeServerFrameV2(query), "direction");
+    for (const extra of [{ text: "body" }, { images: [] }, { attachment_ids: [] }, { sender_ref: "owner" }, { request_id: "legacy" }, { extra: true }]) {
+      expectCode(() => decodeClientFrameV2({ ...query, ...extra }), "schema");
+    }
+    for (const field of ["id", "channel_id", "session_id", "leaf_id", "client_request_id"]) {
+      const missing: Record<string, unknown> = { ...query };
+      delete missing[field];
+      expectCode(() => decodeClientFrameV2(missing), "schema");
+    }
+    expectCode(() => decodeClientFrameV2({ ...query, client_request_id: "" }), "schema");
+    expectCode(() => decodeClientFrameV2({ ...query, protocol_version: 1 }), "version");
+  });
+
+  test("keeps each delivery status variant closed", () => {
+    const base = { ...version, ...direct, ...session, type: "user_message_status", in_reply_to: "query", client_request_id: "original" };
+    for (const details of [
+      { status: "received" }, { status: "accepted" }, { status: "accepted", message_id: "m", group_id: "g" },
+      { status: "committed", message_id: "m" }, { status: "unknown_delivery" },
+      { status: "cancelled" }, { status: "not_found" },
+      ...["queue_full", "invalid_target", "unavailable"].map((code) => ({ status: "rejected", code, retryable: code === "queue_full" })),
+    ]) {
+      const reply = { ...base, ...details };
+      expect(decodeServerFrameV2(reply)).toEqual(reply);
+      expectCode(() => decodeClientFrameV2(reply), "direction");
+      expectCode(() => decodeServerFrameV2({ ...reply, extra: true }), "schema");
+    }
+    for (const details of [
+      { status: "rejected", code: "queue_full" }, { status: "rejected", retryable: true },
+      { status: "rejected", code: "other", retryable: true },
+      { status: "rejected", code: "queue_full", retryable: true, message_id: "m" },
+      { status: "not_found", retryable: true }, { status: "cancelled", message_id: "m" },
+      { status: "received", code: "queue_full" }, { status: "committed" },
+    ]) expectCode(() => decodeServerFrameV2({ ...base, ...details }), "schema");
+  });
+
   test("defaults session_sync limit to 80 and rejects values outside 1..80", () => {
     const frameWithoutLimit: Extract<ClientFrame, { type: "session_sync" }> = {
       ...version,

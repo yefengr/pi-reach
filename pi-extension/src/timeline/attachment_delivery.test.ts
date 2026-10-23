@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { SessionManager, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, MAX_TEXT_CHARS } from "@pi-reach/protocol/session";
 import { describe, expect, test, vi } from "vitest";
-import { AttachmentStore } from "../attachments/store.js";
+import { AttachmentStore, AttachmentStoreError } from "../attachments/store.js";
 import { encodeServerFrameV2, type ClientFrame, type ServerFrame, type TimelineEvent } from "../protocol/v2/index.js";
 import { AttachmentDelivery, MAX_ATTACHMENT_DELIVERY_BYTES, MAX_ATTACHMENT_DELIVERY_RECORDS } from "./attachment_delivery.js";
 import { TimelineRuntime } from "./runtime.js";
@@ -15,6 +15,95 @@ import { TimelineV2Service } from "./v2_service.js";
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("attachment delivery integration", () => {
+  test.each(["missing", "expired_lease", "removed_file", "sdk_error"] as const)("classifies %s at the real preparation/SDK boundary", async (scenario) => {
+    const root = await mkdtemp(join(await realpath(tmpdir()), "reach-delivery-rejection-"));
+    const store = new AttachmentStore({ rootDir: root, runtimeId: "runtime", minFreeBytes: 0 });
+    const manager = SessionManager.inMemory(root);
+    const runtime = new TimelineRuntime();
+    const adapter = new AttachmentDelivery(store);
+    const sendUserMessage = vi.fn(() => { throw new Error("private SDK error"); });
+    let service!: TimelineV2Service;
+    const binding = new UserDeliveryBinding({ isIdle: () => true, canAcceptNormal: () => true,
+      getPi: () => ({ sendUserMessage } as unknown as ExtensionAPI), getTimeline: () => runtime,
+      getCurrentSessionId: () => manager.getSessionId(), getCurrentLeafId: () => manager.getLeafId(),
+      findTarget: () => ({ service, sessionId: manager.getSessionId(), leafId: manager.getLeafId() }), sendFrames: () => {},
+      prepareAttachment: (frame, owner) => adapter.prepare(frame, owner, manager, runtime),
+      beforeSend: (correlation) => adapter.beforeSend(correlation, manager) });
+    service = new TimelineV2Service({ sessionManager: manager, senderRef: "owner", extensionVersion: "1", runtime,
+      onAttachmentReplay: (frame) => adapter.replay(frame, "owner", manager, runtime),
+      onAttachmentStatus: (id) => adapter.status("owner", id, manager, runtime),
+      onQueueSnapshot: () => binding.snapshot("owner", service),
+      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, { ownerId: "owner", service,
+        sessionId: manager.getSessionId(), leafId: manager.getLeafId(), clientRequestId: frame.client_request_id }) });
+    try {
+      const scope = { ownerId: "owner", sessionId: manager.getSessionId(), uploadScope: store.scopeFor(manager.getSessionId()) };
+      let attachmentId = "missing";
+      let path: string | undefined;
+      if (scenario !== "missing") {
+        await store.begin(scope, { uploadId: "upload", fileName: "data.bin", mimeType: "application/octet-stream",
+          byteLength: 0, sha256: createHash("sha256").update("").digest("hex") });
+        attachmentId = (await store.finish(scope, "upload")).attachment!.attachment_id;
+        path = store.resolve(scope, [attachmentId])[0]!.path;
+        if (scenario === "expired_lease") store.resetScope(manager.getSessionId());
+        if (scenario === "removed_file") await rm(path);
+      }
+      service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+      const frame: Extract<ClientFrame, { type: "user_message" }> = { protocol_version: 2, type: "user_message",
+        id: "attempt-1", client_request_id: "request", channel_id: "channel", leaf_id: manager.getLeafId(),
+        text: "", attachment_ids: [attachmentId] };
+      const result = service.handle(frame);
+      await tick();
+      const expected = scenario === "sdk_error" ? { status: "unknown_delivery" }
+        : { status: "rejected", code: scenario === "removed_file" ? "unavailable" : "invalid_target", retryable: false };
+      if (scenario !== "sdk_error") expect(result[0]).toMatchObject(expected);
+      const query = () => service.handle({ protocol_version: 2, type: "user_message_status_request", id: "query",
+        channel_id: "channel", session_id: manager.getSessionId(), leaf_id: manager.getLeafId(), client_request_id: "request" });
+      expect(query()[0]).toMatchObject(expected);
+      expect(binding.snapshot("owner", service)[0]).toMatchObject({ items: [] });
+      expect(service.handle({ ...frame, id: "attempt-2", leaf_id: manager.getLeafId() })[0]).toMatchObject(expected);
+      await tick();
+      expect(sendUserMessage).toHaveBeenCalledTimes(scenario === "sdk_error" ? 1 : 0);
+      expect(JSON.stringify([result, query()])).not.toContain("private SDK error");
+      if (scenario === "sdk_error") {
+        expect(await store.discard(scope, attachmentId)).toBe("retained");
+        await store.dispose();
+        expect((await stat(path!)).isFile()).toBe(true);
+      }
+    } finally { binding.clearAll(); await store.dispose(); await rm(root, { recursive: true, force: true }); }
+  });
+
+  test("controlled transient preparation rejection permits only one fresh attempt", async () => {
+    const manager = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    const sendUserMessage = vi.fn();
+    const prepareAttachment = vi.fn(() => {
+      if (prepareAttachment.mock.calls.length === 1) throw new AttachmentStoreError("busy", true);
+      return { content: "prepared", payload: { text: "prepared", attachment_ids: ["attachment"] } };
+    });
+    let service!: TimelineV2Service;
+    const binding = new UserDeliveryBinding({ isIdle: () => true, canAcceptNormal: () => true,
+      getPi: () => ({ sendUserMessage } as unknown as ExtensionAPI), getTimeline: () => runtime,
+      getCurrentSessionId: () => manager.getSessionId(), getCurrentLeafId: () => manager.getLeafId(),
+      findTarget: () => ({ service, sessionId: manager.getSessionId(), leafId: manager.getLeafId() }),
+      sendFrames: () => {}, prepareAttachment });
+    service = new TimelineV2Service({ sessionManager: manager, runtime, senderRef: "owner", extensionVersion: "1",
+      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, { ownerId: "owner", service,
+        sessionId: manager.getSessionId(), leafId: manager.getLeafId(), clientRequestId: frame.client_request_id }) });
+    service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+    const frame: Extract<ClientFrame, { type: "user_message" }> = { protocol_version: 2, type: "user_message",
+      id: "attempt-1", client_request_id: "request", channel_id: "channel", leaf_id: manager.getLeafId(), text: "", attachment_ids: ["attachment"] };
+    try {
+      expect(service.handle(frame)[0]).toMatchObject({ status: "rejected", code: "unavailable", retryable: true });
+      expect(service.handle(frame)[0]).toMatchObject({ status: "rejected", retryable: true });
+      expect(prepareAttachment).toHaveBeenCalledTimes(1);
+      const retry = { ...frame, id: "attempt-2" };
+      expect(service.handle(retry)[0]).toMatchObject({ status: "accepted" });
+      expect(service.handle(retry)[0]).toMatchObject({ status: "accepted" });
+      await tick();
+      expect(prepareAttachment).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
+    } finally { binding.clearAll(); }
+  });
   test("queue, marker ancestors, dense history, safe started and committed reconnect replay", async () => {
     const root = await mkdtemp(join(await realpath(tmpdir()), "reach-attachment-delivery-"));
     const store = new AttachmentStore({ rootDir: root, runtimeId: "runtime", minFreeBytes: 0 });
@@ -101,7 +190,8 @@ describe("attachment delivery integration", () => {
       idle = false;
       service.handle(frame("clear-target"));
       expect(service.handle({ protocol_version: 2, type: "queued_message_clear", id: "clear", channel_id: "channel",
-        session_id: manager.getSessionId(), leaf_id: manager.getLeafId(), target_id: "clear-target" })).toMatchObject([{ items: [] }]);
+        session_id: manager.getSessionId(), leaf_id: manager.getLeafId(), target_id: "clear-target" })).toMatchObject([
+        { type: "user_message_status", status: "cancelled", in_reply_to: "clear", client_request_id: "clear-target" }, { items: [] }]);
       expect(sendUserMessage).toHaveBeenCalledTimes(1);
       service.handle(frame("steer-target"));
       expect(service.handle({ protocol_version: 2, type: "queued_message_steer", id: "steer-queue", channel_id: "channel",
@@ -209,7 +299,7 @@ describe("attachment delivery integration", () => {
       expect(memory.journal.size).toBe(MAX_ATTACHMENT_DELIVERY_RECORDS);
       expect(memory.journalBytes).toBeLessThanOrEqual(MAX_ATTACHMENT_DELIVERY_BYTES);
       expect([...memory.journal.values()].filter((record) => record.heavy)).toHaveLength(32);
-      expect(service.handle(frame("overflow"))[0]).toMatchObject({ type: "protocol_error", code: "too_large" });
+      expect(service.handle(frame("overflow"))[0]).toMatchObject({ type: "user_message_status", status: "rejected", code: "queue_full", retryable: true });
       expect(append).toHaveBeenCalledTimes(MAX_ATTACHMENT_DELIVERY_RECORDS);
       const repeat = adapter.prepare(frame("flood-40"), "owner", manager, runtime)!;
       expect(repeat).not.toBeNull();

@@ -146,7 +146,7 @@ describe("UserDeliveryBinding", () => {
       const retry = { ...user(service.leafId), attachment_ids: ["attachment-1"] };
       expect(service.handle(retry)[0]).toMatchObject({ status: "unknown_delivery" });
       await vi.advanceTimersByTimeAsync(USER_DELIVERY_START_TIMEOUT_MS);
-      expect(unknownDelivery).toHaveBeenCalledTimes(2); // 第二次是同 request 重试的状态重放。
+      expect(unknownDelivery).toHaveBeenCalledTimes(1); // 同 request 的重复帧只重放，不再迁移状态或续期。
       expect(outbound.filter((frame) => frame.type === "user_message_status" && frame.status === "unknown_delivery"))
         .toHaveLength(1);
 
@@ -218,12 +218,47 @@ describe("UserDeliveryBinding", () => {
       items: [{ id: "target-1", text: "alpha", sender_ref: "owner-a" }],
     });
     expect(binding.snapshot("owner-a", serviceB)[0]).toMatchObject({ items: [] });
-    expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("failed");
-    expect(binding.snapshot("owner-a", serviceA)[0]).toMatchObject({ items: [{ id: "target-1", editable: true }] });
-    expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("sent");
+    expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("unknown_delivery");
+    expect(binding.snapshot("owner-a", serviceA)[0]).toMatchObject({ items: [] });
+    expect(binding.clearQueued("owner-a", serviceA, "target-1")).toEqual([]);
     expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("missing");
     expect(binding.snapshot("owner-b", serviceB)[0]).toMatchObject({ items: [{ id: "target-1", text: "bravo" }] });
     expect(sendUserMessage).toHaveBeenNthCalledWith(1, "alpha", { deliverAs: "steer" });
-    expect(sendUserMessage).toHaveBeenNthCalledWith(2, "alpha", { deliverAs: "steer" });
+    expect(sendUserMessage).toHaveBeenCalledTimes(1);
+    binding.clearAll();
+  });
+
+  test("rejects as retryable without queueing or calling Pi when no delivery context exists yet", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    const sendUserMessage = vi.fn();
+    let service!: TimelineV2Service;
+    let ready = false;
+    const binding = new UserDeliveryBinding({
+      isIdle: () => true,
+      canAcceptNormal: () => ready,
+      getPi: () => ({ sendUserMessage }) as unknown as ExtensionAPI,
+      getTimeline: () => runtime,
+      getCurrentSessionId: () => session.getSessionId(),
+      getCurrentLeafId: () => service.leafId,
+      findTarget: () => ({ service, sessionId: session.getSessionId(), leafId: session.getLeafId() ?? null }),
+      sendFrames: () => undefined,
+    });
+    service = new TimelineV2Service({
+      sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime,
+      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
+        ownerId: "owner-1", sessionId: session.getSessionId(), leafId: service.leafId, service, clientRequestId: frame.client_request_id,
+      }),
+      onQueueSnapshot: () => binding.snapshot("owner-1", service),
+    });
+    service.handle(hello());
+    const frame = user(service.leafId);
+    expect(service.handle(frame)[0]).toMatchObject({ type: "user_message_status", status: "rejected", code: "unavailable", retryable: true, in_reply_to: "wire-1" });
+    expect(binding.snapshot("owner-1", service)[0]).toMatchObject({ items: [] });
+    expect(sendUserMessage).not.toHaveBeenCalled();
+    // 上下文就绪后，新的网络尝试可重新准入同一逻辑消息。
+    ready = true;
+    expect(service.handle({ ...frame, id: "wire-2" })[0]).toMatchObject({ status: expect.stringMatching(/^(received|accepted)$/), in_reply_to: "wire-2" });
+    binding.clearAll();
   });
 });

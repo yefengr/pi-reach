@@ -28,6 +28,8 @@ export function createOwnerBinding(options: CreateOwnerBindingOptions): OwnerBin
   service = new TimelineV2Service({ sessionManager: manager, senderRef: ownerId,
     extensionVersion: options.extensionVersion, runtime,
     onAttachmentReplay: (frame) => attachments.replay(frame, ownerId, manager, runtime),
+    onAttachmentStatus: (clientRequestId) => attachments.status(ownerId, clientRequestId, manager, runtime),
+    onDeliveryStage: (clientRequestId) => delivery.lookup(ownerId, service, clientRequestId),
     onUserMessage: (frame, correlation) => {
       options.onTurn(frame.client_request_id);
       return delivery.submit(frame, correlation, { ownerId, sessionId: manager.getSessionId(),

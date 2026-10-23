@@ -36,6 +36,10 @@ type NonStreamToken =
     images: TimelinePending["images"];
     createdAt: number;
     delivery: TimelinePending["delivery"];
+    deliveryFailure: TimelinePending["deliveryFailure"];
+    statusQuery: TimelinePending["statusQuery"];
+    statusQueryUnsupported: TimelinePending["statusQueryUnsupported"];
+    lastEvidenceAt: TimelinePending["lastEvidenceAt"];
     cancelable: boolean | undefined;
     queued: boolean | undefined;
     queueInFlight: boolean | undefined;
@@ -130,11 +134,22 @@ function itemId(item: TimelineViewItem): string {
   return item.clientRequestId;
 }
 
+type DeliveryMetadata = Pick<TimelinePending, "deliveryFailure" | "statusQuery" | "statusQueryUnsupported" | "lastEvidenceAt">;
+function sameDeliveryMetadata(a: DeliveryMetadata, b: DeliveryMetadata): boolean {
+  return a.deliveryFailure?.code === b.deliveryFailure?.code
+    && a.deliveryFailure?.retryable === b.deliveryFailure?.retryable
+    && a.statusQuery?.requestId === b.statusQuery?.requestId
+    && a.statusQuery?.requestedAt === b.statusQuery?.requestedAt
+    && a.statusQueryUnsupported === b.statusQueryUnsupported
+    && a.lastEvidenceAt === b.lastEvidenceAt;
+}
+
 function sameItem(a: TimelineViewItem, b: TimelineViewItem): boolean {
   if (a.kind !== b.kind || itemId(a) !== itemId(b)) return false;
   if (a.kind === "event" && b.kind === "event") return a.event === b.event;
   if (a.kind === "pending" && b.kind === "pending") {
     return a.delivery === b.delivery
+      && sameDeliveryMetadata(a, b)
       && a.text === b.text
       && a.createdAt === b.createdAt
       && a.messageId === b.messageId
@@ -172,6 +187,11 @@ function nonStreamTokens(items: readonly TimelineViewItem[]): NonStreamToken[] {
         images: item.images,
         createdAt: item.createdAt,
         delivery: item.delivery,
+        // runtime 原位修改 pending；嵌套字段须按值捕获，不能持有可变引用。
+        deliveryFailure: item.deliveryFailure ? { ...item.deliveryFailure } : undefined,
+        statusQuery: item.statusQuery ? { ...item.statusQuery } : undefined,
+        statusQueryUnsupported: item.statusQueryUnsupported,
+        lastEvidenceAt: item.lastEvidenceAt,
         cancelable: item.cancelable,
         queued: item.queued,
         queueInFlight: item.queueInFlight,
@@ -199,6 +219,7 @@ function sameNonStreamTokens(a: readonly NonStreamToken[], b: readonly NonStream
         && token.images === next.images
         && token.createdAt === next.createdAt
         && token.delivery === next.delivery
+        && sameDeliveryMetadata(token, next)
         && token.cancelable === next.cancelable
         && token.queued === next.queued
         && token.queueInFlight === next.queueInFlight

@@ -567,7 +567,9 @@ test("reset clears transient scope and partial fragments, rejects old generation
   expect(first.currentItems().some((item) => item.kind === "partial")).toBe(true);
   simulator.resetBranch("G2");
   expect(first.runtime.currentScope).toBe(null);
-  expect(first.currentItems().some((item) => item.kind === "partial" || (item.kind === "pending" && item.delivery === "pending"))).toBe(false);
+  expect(first.currentItems().some((item) => item.kind === "partial")).toBe(false);
+  // 旧 leaf 的未确认内容保留为只读，不随分支重置删除。
+  expect(first.currentItems().find((item) => item.kind === "pending")).toMatchObject({ scopeInvalid: true });
 
   simulator.emitEvent(assistantEvent("OLD-EVENT", "G1", 6));
   expect(first.eventIds()).toStrictEqual([]);

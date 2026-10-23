@@ -22,7 +22,7 @@ function GalleryTimeline({ state, conversation }: { state: GalleryState; convers
     <MessageList items={items} hasEarlier={false} running={conversation.running} isLive={conversation.online}
       loading={conversation.loading} skeletonVisible={conversation.skeletonVisible}
       emptyContext={state === "empty" ? "pi-reach · 内存演示模型 · medium" : null}
-      onRetryUnknown={conversation.retryDelivery} onCancelQueued={conversation.cancelQueued}
+      onRetryFailed={conversation.retryFailed} onCheckStatus={conversation.checkStatus} onCancelQueued={conversation.cancelQueued}
       listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef}
       onScroll={viewport.handleScroll} onReadingChange={viewport.setReadingDetails} />
   </>;

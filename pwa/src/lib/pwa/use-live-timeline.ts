@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { TimelineEventFragmentAssembler } from "@/lib/pwa/timeline-transfer";
 import { TimelineHistoryLoader } from "@/lib/pwa/timeline-history-loader";
@@ -71,7 +71,10 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   // 接在本地预览之后的补齐只追加最新记录，不在顶部显示「正在加载记录」，避免内容上下跳动。
   const [quietCatchup, setQuietCatchup] = useState(false);
 
-  const runtimeRef = useRef(new TimelineRuntime());
+  const [runtime] = useState(() => new TimelineRuntime());
+  const runtimeRef = useRef(runtime);
+  // 恢复门禁属于权威接收状态；空快照和后台接收也必须通知，不能等待显示列表发布。
+  const queueSnapshotReady = useSyncExternalStore(runtime.subscribeQueueSnapshot, runtime.getQueueSnapshotReady);
   const historyLoaderRef = useRef<TimelineHistoryLoader | null>(null);
   const fragmentAssemblerRef = useRef<TimelineEventFragmentAssembler | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -468,6 +471,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
 
   return {
     items,
+    queueSnapshotReady,
     lastSyncedAt,
     setLastSyncedAt,
     hasEarlier: hasEarlierState || catchupFailed || (catchingUp && !quietCatchup),

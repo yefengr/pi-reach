@@ -69,7 +69,7 @@ async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProp
   } };
 }
 function renderMessageList(items: ListProps["items"], overrides: Partial<ListProps> = {}) {
-  return renderPwa(<MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} onRetryUnknown={() => {}} onCancelQueued={() => {}} {...overrides} />);
+  return renderPwa(<MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} onRetryFailed={() => {}} onCheckStatus={() => {}} onCancelQueued={() => {}} {...overrides} />);
 }
 
 test("all message row consumers declare distinct semantic viewport identities", async () => {
@@ -1453,8 +1453,8 @@ test("reports whether scrolling is within 32px of the latest output", async () =
 });
 
 test("message list controls retain 44px touch targets", async () => {
-  const screen = await renderMessageList([eventItem(toolEvent), eventItem(assistantEvent), unknownPending, { ...unknownPending, id: "pending-2", delivery: "accepted", cancelable: true }]);
-  for (const name of ["Expand Used tools 1 time", "Expand thinking", "Retry delivery", "Cancel queued message"]) {
+  const screen = await renderMessageList([eventItem(toolEvent), eventItem(assistantEvent), unknownPending, { ...unknownPending, id: "pending-2", delivery: "failed", deliveryFailure: { code: "transport_unavailable", retryable: true } }, { ...unknownPending, id: "pending-3", delivery: "accepted", cancelable: true }]);
+  for (const name of ["Expand Used tools 1 time", "Expand thinking", "Check status", "Retry send", "Cancel queued message"]) {
     const rect = screen.getByRole("button", { name }).element().getBoundingClientRect();
     expect(Math.round(rect.width)).toBeGreaterThanOrEqual(44);
     expect(Math.round(rect.height)).toBeGreaterThanOrEqual(44);
