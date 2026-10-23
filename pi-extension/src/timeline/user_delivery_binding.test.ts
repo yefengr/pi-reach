@@ -146,7 +146,7 @@ describe("UserDeliveryBinding", () => {
       const retry = { ...user(service.leafId), attachment_ids: ["attachment-1"] };
       expect(service.handle(retry)[0]).toMatchObject({ status: "unknown_delivery" });
       await vi.advanceTimersByTimeAsync(USER_DELIVERY_START_TIMEOUT_MS);
-      expect(unknownDelivery).toHaveBeenCalledTimes(2); // 第二次是同 request 重试的状态重放。
+      expect(unknownDelivery).toHaveBeenCalledTimes(1); // 同 request 的重复帧只重放，不再迁移状态或续期。
       expect(outbound.filter((frame) => frame.type === "user_message_status" && frame.status === "unknown_delivery"))
         .toHaveLength(1);
 

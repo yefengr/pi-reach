@@ -22,7 +22,7 @@ export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[]
   { id: "pending", label: "命令待确认", note: "真实 pending 门禁；点击完成或取消恢复操作。" },
   { id: "history", label: "只读历史", note: "正式历史工作区与只读输入区，不借用实时文件缓存。" },
   { id: "summaries", label: "摘要与服务错误", note: "正式压缩、分支摘要和服务错误阅读入口。" },
-  { id: "delivery", label: "消息投递", note: "发送中、投递未知与可撤回排队消息由显式操作推进。" },
+  { id: "delivery", label: "消息投递", note: "普通待发送不占状态行；未知可核对、失败可重试、排队可撤回。" },
   { id: "flow", label: "连续运行流程", note: "逐步推进流式输出、正式结果与 leaf；最后切换会话关闭旧详情。" },
 ];
 const base = { session_id: "ui-states", leaf_id: "leaf", group_id: "demo", timestamp: 1 };
@@ -78,9 +78,10 @@ function conversationItems(state: GalleryState): TimelineViewItem[] {
     { kind: "event", event: { ...base, event_id: "provider", kind: "provider_error", message: "演示服务暂不可用，请稍后重试。" } },
   ];
   if (state === "delivery") return [
-    { kind: "pending", id: "sending", clientRequestId: "sending", requestId: "sending", createdAt: 1, text: "这条消息正在发送。", delivery: "pending" },
+    { kind: "pending", id: "sending", clientRequestId: "sending", requestId: "sending", createdAt: 1, text: "这条消息正在等接收回执，气泡下方不再显示发送状态。", delivery: "pending" },
     { kind: "pending", id: "unknown", clientRequestId: "unknown", requestId: "unknown", createdAt: 2, text: "这条消息的投递状态未知。", delivery: "unknown_delivery" },
-    { kind: "pending", id: "queued", clientRequestId: "queued", requestId: "queued", createdAt: 3, text: "这条排队消息可以取消。", delivery: "accepted", cancelable: true },
+    { kind: "pending", id: "failed", clientRequestId: "failed", requestId: "failed", createdAt: 3, text: "这条消息没有发送出去。", delivery: "failed", deliveryFailure: { code: "transport_unavailable", retryable: true } },
+    { kind: "pending", id: "queued", clientRequestId: "queued", requestId: "queued", createdAt: 4, text: "这条排队消息可以取消。", delivery: "accepted", cancelable: true },
   ];
   if (state === "history") return [
     ...Array.from({ length: 36 }, (_, index): TimelineViewItem => ({ kind: "event", event: { ...base, session_id: "gallery-history", event_id: `history-${index}`, event_seq: index + 1, kind: "assistant", status: "complete", blocks: [{ type: "text", text: `已保存的演示记录 ${index + 1}。只读内容不修改当前草稿。` }] } })),

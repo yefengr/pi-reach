@@ -74,6 +74,7 @@ export const userMessageFrameSchema = strictObject({ ...protocol, type: z.litera
     ctx.addIssue({ code: "custom", path: ["attachment_ids"], message: "attachment_ids and images are mutually exclusive" });
   }
 });
+export const userMessageStatusRequestFrameSchema = strictObject({ ...protocol, type: z.literal("user_message_status_request"), id: idSchema, ...channelRequest, client_request_id: idSchema });
 export const userMessageObservedFrameSchema = strictObject({ ...protocol, type: z.literal("user_message_observed"), id: idSchema, ...channelRequest, client_request_id: idSchema, message_id: idSchema, status: z.literal("committed") });
 export const sessionSyncFrameSchema = strictObject({ ...protocol, type: z.literal("session_sync"), id: idSchema, ...channelRequest, before: eventSequenceSchema.nullable(), limit: z.number().int().min(1).finite().max(80).default(80) });
 export const pingFrameSchema = strictObject({ ...protocol, type: z.literal("ping"), id: idSchema, ...channelRequest });
@@ -118,6 +119,9 @@ export const userMessageStatusFrameSchema = z.union([
   strictObject({ ...userMessageStatusBase, status: z.literal("accepted"), message_id: idSchema.optional(), group_id: idSchema.optional() }),
   strictObject({ ...userMessageStatusBase, status: z.literal("committed"), message_id: idSchema, group_id: idSchema.optional() }),
   strictObject({ ...userMessageStatusBase, status: z.literal("unknown_delivery") }),
+  strictObject({ ...userMessageStatusBase, status: z.literal("rejected"), code: z.enum(["queue_full", "invalid_target", "unavailable"]), retryable: z.boolean() }),
+  strictObject({ ...userMessageStatusBase, status: z.literal("cancelled") }),
+  strictObject({ ...userMessageStatusBase, status: z.literal("not_found") }),
 ]);
 
 export const timelineEventFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("timeline_event"), event: wireTimelineEventSchema });
@@ -227,7 +231,7 @@ export const fileChunkFrameSchema = z.union([
 export const fileClosedFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_closed"), transfer_id: idSchema });
 export const fileErrorFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_error"), transfer_id: idSchema.optional(), code: fileErrorCodeSchema });
 
-export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema]);
+export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageStatusRequestFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema]);
 export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, compactionActivityFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema, fileOpenedFrameSchema, fileChunkFrameSchema, fileClosedFrameSchema, fileErrorFrameSchema]);
 
 export const ClientFrameSchema = clientFrameSchema;

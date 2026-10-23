@@ -56,7 +56,12 @@ export class AttachmentDelivery {
     const record = this.journal.get(this.key(ownerId, frame.client_request_id, manager));
     if (!record) return null;
     if (record.fingerprint !== this.fingerprint(frame)) return "conflict";
-    if (!record.mayHaveDelivered) return null;
+    return this.status(ownerId, frame.client_request_id, manager, runtime);
+  }
+
+  status(ownerId: string, clientRequestId: string, manager: SessionManager, runtime: TimelineRuntime): AttachmentReplay {
+    const record = this.journal.get(this.key(ownerId, clientRequestId, manager));
+    if (!record?.mayHaveDelivered) return null;
     const event = record.messageId && runtime.recover(manager).find((event) =>
       event.kind === "user" && event.event_id === record.messageId && event.sender_ref === ownerId);
     return event ? { status: "committed", messageId: event.event_id, groupId: event.group_id }

@@ -64,7 +64,7 @@ async function harness({ width = 390, compact = false, working = false, draft = 
       setFiles([]);
     };
     return <div className="pwa-app-shell" data-compact-height={compact ? "short" : undefined}><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ display: "flex", flexDirection: "column", width: "100vw", height: height ?? (compact ? 280 : 650), flex: "none" }}>
-      <MessageList items={items} isLive={online} running={running} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryUnknown={noop} onCancelQueued={noop} />
+      <MessageList items={items} isLive={online} running={running} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryFailed={noop} onCheckStatus={noop} onCancelQueued={noop} />
       <div className="pwa-chat-footer"><PwaMessageActions show={!viewport.followingOutput} showLatest={!viewport.followingOutput} showRetry={false} unreadOutput={viewport.unreadOutput} onRetry={noop} onLatest={viewport.showLatest} /><MessageComposer {...composer} attachments={files} draft={text} onDraftChange={setText} onSend={send} /></div>
     </main></div>;
   }
@@ -718,7 +718,7 @@ test("enabling Reduced Motion mid-send settles and releases the old clock", asyn
   } finally { await h.screen.unmount(); }
 });
 
-test.each([false, true])("compact xlarge own send finishes without hiding status (Working=%s)", async working => {
+test.each([false, true])("compact xlarge own send finishes without a status row (Working=%s)", async working => {
   document.documentElement.dataset.pwaTextSize = "xlarge";
   const h = await harness({ compact: true, working, draft: "One\nTwo\nThree\nFour\nFive" });
   try {
@@ -728,8 +728,10 @@ test.each([false, true])("compact xlarge own send finishes without hiding status
     expect(h.list.scrollTop).toBe(before);
     clock.step(160);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
-    const status = h.list.querySelector(".pwa-delivery-status")!;
-    expect(Math.round(status.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom));
+    // 普通发送不再渲染“发送中”状态行，也不保留它的空白。
+    expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();
+    const bubble = h.list.querySelector<HTMLElement>(".pwa-message.user")!;
+    expect(Math.round(bubble.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) + 1);
     expect(document.querySelector<HTMLInputElement>(".pwa-composer-input")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   } finally { await h.screen.unmount(); }
 });
@@ -850,7 +852,7 @@ test("editing the next draft releases the old input-height owner before a second
   } finally { await h.screen.unmount(); }
 });
 
-test.each([false, true])("compact xlarge tail sending status remains visible with Working=%s", async working => {
+test.each([false, true])("compact xlarge tail pending has no status row with Working=%s", async working => {
   document.documentElement.dataset.pwaTextSize = "xlarge";
   const value = pending();
   const h = await harness({ compact: true, working });
@@ -863,19 +865,13 @@ test.each([false, true])("compact xlarge tail sending status remains visible wit
     animation.currentTime = 0;
     const frame = h.list.querySelector<HTMLElement>(".pwa-user-bubble-frame")!;
     expect(getComputedStyle(frame).overflowY).toBe("clip");
-    const status = h.list.querySelector<HTMLElement>(".pwa-delivery-status")!;
-    expect(getComputedStyle(status).position).toBe("absolute");
+    // 普通 pending 不渲染状态行，也不需要借用尾部留白。
+    expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();
     for (const time of [0, 80, 160]) {
       animation.currentTime = time;
-      expect(top(status)).toBeGreaterThanOrEqual(Math.round(frame.getBoundingClientRect().bottom));
+      expect(Math.round(bubble.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) + 1);
     }
     animation.finish();
-    expect(Math.round(status.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom));
-    const workingRow = h.list.querySelector(".pwa-thinking-status");
-    if (workingRow) {
-      const range = document.createRange(); range.selectNodeContents(workingRow);
-      expect(Math.round(range.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(status.getBoundingClientRect().left));
-    }
     const height = h.list.scrollHeight;
     h.update([history, formal(value)]);
     await frames();
@@ -934,7 +930,7 @@ async function runtimeHarness({ width = 390 } = {}) {
     apply = (change) => flushSync(() => setItems(change.items));
     viewport = useTimelineViewport(items);
     return <div className="pwa-app-shell"><main className="pwa-main" style={{ display: "flex", flexDirection: "column", width: "100vw", height: 650, flex: "none" }}>
-      <MessageList items={items.filter((item) => !isQueuedMessage(item))} isLive hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryUnknown={noop} />
+      <MessageList items={items.filter((item) => !isQueuedMessage(item))} isLive hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryFailed={noop} onCheckStatus={noop} />
       <div className="pwa-chat-footer"><MessageComposer {...composer} queuedMessages={<QueuedMessagesPanel items={items} isOnline runtimeRef={{ current: runtime }} channelRef={emptyChannel} applyChange={(change) => setItems(change.items)} onError={noop} />} /></div>
     </main></div>;
   }
@@ -968,8 +964,8 @@ test.each([[390, false], [1280, false], [390, true]] as const)("keeps one sent b
     expect(document.querySelector(".pwa-queued-messages")).toBeNull();
     const old = h.list.querySelector(".pwa-message.assistant")!;
     const composerCard = document.querySelector<HTMLElement>(".pwa-composer-card")!;
-    const statusText = h.list.querySelector<HTMLElement>(".pwa-delivery-status")!.textContent;
-    expect(statusText).toBeTruthy();
+    // 普通 pending 与在途都不显示状态行。
+    expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();
     const stable = { height: Math.round(h.list.scrollHeight), client: Math.round(h.list.clientHeight), oldTop: top(old), composerTop: Math.round(composerCard.getBoundingClientRect().top) };
     const assertStable = (label: string) => {
       expect(document.querySelector(".pwa-message.user"), label).toBe(bubble);
@@ -985,15 +981,15 @@ test.each([[390, false], [1280, false], [390, true]] as const)("keeps one sent b
     h.receive(queueSnapshot("local", "New message", false));
     await frames();
     assertStable("in flight");
-    // 在途阶段不出现可操作的排队条，发送中状态仍保持在上一个气泡里。
-    expect(h.list.querySelector<HTMLElement>(".pwa-delivery-status")!.textContent).toBe(statusText);
+    // 在途阶段不出现可操作的排队条，也不渲染“发送中”状态。
+    expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();
     h.receive(startedFrame("message-local", "New message"));
     await frames();
     assertStable("started");
     h.commit(formalEvent("message-local", "New message"));
     await frames();
     assertStable("formal");
-    // 正式消息接管后就地隐藏发送状态，旧正文位置和列表 extent 不变。
+    // 正式消息接管后仍无状态行，旧正文位置和列表 extent 不变。
     expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();
     animation.play();
     await animation.finished;
@@ -1012,26 +1008,25 @@ test("an editable queue item enters the conversation once it starts draining", a
     await frames();
     expect(document.querySelector(".pwa-queued-messages")).toBeNull();
     expect(h.list.textContent).toContain("Queued original");
-    // 在途时不再提供取消按钮，改显发送中状态。
-    const status = h.list.querySelector<HTMLElement>(".pwa-delivery-status")!;
-    expect(status.textContent).toBeTruthy();
-    expect(status.querySelector("button")).toBeNull();
+    // 在途时不再提供取消按钮，也不再显示发送中状态。
+    expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();
   } finally { await h.screen.unmount(); }
 });
 
-test("non-tail and unknown/queued statuses stay in flow without covering subsequent messages", async () => {
+test("only abnormal delivery states render an in-flow status row without covering subsequent messages", async () => {
   const a = pending("a"), b = pending("b");
   const h = await harness();
   try {
     h.update([history, a, b]);
-    const statuses = h.list.querySelectorAll<HTMLElement>(".pwa-delivery-status");
-    expect(getComputedStyle(statuses[0]).position).toBe("static");
-    expect(getComputedStyle(statuses[1]).position).toBe("absolute");
-    expect(Math.round(statuses[0].getBoundingClientRect().bottom)).toBeLessThanOrEqual(top(h.list.querySelectorAll(".pwa-message.user")[1]));
-    for (const value of [{ ...b, delivery: "unknown_delivery" as const }, { ...b, delivery: "accepted" as const, cancelable: true }]) {
-      h.update([history, value]);
+    // 普通 pending 不渲染状态行，也不占用留白。
+    expect(h.list.querySelectorAll(".pwa-delivery-status")).toHaveLength(0);
+    for (const value of [{ ...b, delivery: "unknown_delivery" as const, deliveryFailure: undefined }, { ...b, delivery: "accepted" as const, cancelable: true }]) {
+      h.update([history, value, a]);
       const status = h.list.querySelector<HTMLElement>(".pwa-delivery-status")!;
       expect(getComputedStyle(status).position).toBe("static");
+      const row = status.closest(".pwa-user-row")!;
+      const followingRow = row.nextElementSibling!;
+      expect(Math.round(row.getBoundingClientRect().bottom)).toBeLessThanOrEqual(top(followingRow));
       expect(status.querySelector("button")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     }
   } finally { await h.screen.unmount(); }

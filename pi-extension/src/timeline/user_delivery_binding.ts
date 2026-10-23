@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { AttachmentStoreError } from "../attachments/store.js";
 import type { ClientFrame, ServerFrame, TimelineEvent } from "../protocol/v2/index.js";
 import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js";
 import {
@@ -12,6 +13,23 @@ import {
 import type { TimelineV2Service } from "./v2_service.js";
 
 type UserMessageFrame = Extract<ClientFrame, { type: "user_message" }>;
+
+export type UserDeliveryRejection = {
+  kind: "rejected";
+  code: "invalid_target" | "unavailable" | "queue_full";
+  retryable: boolean;
+};
+
+function preparationRejection(error: unknown): UserDeliveryRejection {
+  if (error instanceof AttachmentStoreError) {
+    if (error.code === "busy" || error.code === "no_space") {
+      return { kind: "rejected", code: "unavailable", retryable: error.retryable };
+    }
+    // Store 的 io_error 也包含已丢失原件，缺少更强证据时不能把它当作可重试暂态。
+    return { kind: "rejected", code: error.code === "io_error" ? "unavailable" : "invalid_target", retryable: false };
+  }
+  return { kind: "rejected", code: "unavailable", retryable: false };
+}
 
 export type UserDeliveryTarget = {
   readonly service: TimelineV2Service;
@@ -48,13 +66,19 @@ export class UserDeliveryBinding {
     });
   }
 
-  submit(frame: UserMessageFrame, correlation: Correlation, scope: UserDeliveryScopeInput): UserDeliveryEnqueueResult | true {
+  submit(frame: UserMessageFrame, correlation: Correlation, scope: UserDeliveryScopeInput): UserDeliveryEnqueueResult | UserDeliveryRejection | true {
     if (frame.attachment_ids && frame.streaming_behavior === "steer") return "conflict";
     if (frame.streaming_behavior === "steer") return this.sendSteer(messageContent(frame), correlation);
     if (!this.options.canAcceptNormal()) return false;
     if (frame.attachment_ids) {
       if (!this.options.prepareAttachment) return "conflict";
-      const prepared = this.options.prepareAttachment(frame, scope.ownerId);
+      let prepared: ReturnType<NonNullable<UserDeliveryBindingOptions["prepareAttachment"]>>;
+      // 只有准备阶段可证明未入队/未调用 SDK；enqueue、beforeSend 和 SDK 不在此 catch 中。
+      try {
+        prepared = this.options.prepareAttachment(frame, scope.ownerId);
+      } catch (error) {
+        return preparationRejection(error);
+      }
       if (!prepared) return "rejected";
       const result = this.queue.enqueue(prepared.content, correlation, { ...scope, leafId: this.options.getCurrentLeafId() }, prepared.payload);
       if (result !== "queued" && result !== "duplicate") prepared.payload.on_release?.();
@@ -65,6 +89,10 @@ export class UserDeliveryBinding {
 
   snapshot(ownerId: string, service: TimelineV2Service): ServerFrame[] {
     return service.queueSnapshot(this.queue.snapshot(ownerId, service));
+  }
+
+  lookup(ownerId: string, service: TimelineV2Service, clientRequestId: string): "queued" | "in_flight" | null {
+    return this.queue.lookup(ownerId, service, clientRequestId);
   }
 
   clearQueued(ownerId: string, service: TimelineV2Service, targetId?: string): string[] {

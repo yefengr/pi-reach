@@ -35,6 +35,7 @@ import { useEndpointRegistry } from "@/lib/pwa/use-endpoint-registry";
 import { useDevicePairing, type DevicePairingResult } from "@/lib/pwa/use-device-pairing";
 import { ACTIVE_DEVICE_SETTING, activeEndpointSettingKey, useActiveEndpointSelection } from "@/lib/pwa/use-active-endpoint-selection";
 import { PendingCapacityError, type QueuedCancellation, type TimelineScope, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { attachmentRetryDecision, submitMessage, type AttachmentLease } from "@/lib/pwa/message-submission";
 import type { TimelineSessionPosition } from "@/lib/pwa/use-timeline-viewport";
 import { useLiveTimeline } from "@/lib/pwa/use-live-timeline";
 import { useHistorySessionList } from "@/lib/pwa/use-history-session-list";
@@ -158,9 +159,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const lastFocusedSessionRef = useRef<string | null>(null);
   const emptySessionFocusRef = useRef<string | null>(null);
   // 由运行时确认的排队消息撤回，交给当前输入区回填；帧处理回调经 ref 取最新的草稿与附件。
-  const restoreQueuedRef = useRef<(cancellations: readonly QueuedCancellation[]) => void>(() => undefined);
+  const restoreQueuedRef = useRef<(cancellations: readonly QueuedCancellation[]) => boolean>(() => false);
   const {
     items: timelineItems,
+    queueSnapshotReady,
     setLastSyncedAt,
     hasEarlier,
     loadingEarlier,
@@ -224,32 +226,26 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
 
   const switchOut = useSwitchOutFade(messageListRef);
 
+  const attachmentLeasesRef = useRef(new Map<string, AttachmentLease>());
   const attachments = useAttachmentComposer((message) => {
     const scope = timelineRuntimeRef.current.currentScope;
-    const channel = channelRef.current;
-    if (!scope || !channel || channel.closed || connectionRef.current !== "online" || selectedHistoryRef.current !== null || pendingActionRef.current?.action === "session_new" ||
-        attachmentTargetKey(scope) !== message.target || draftKeyRef.current !== message.context.draftKey) return false;
-    // 最终提交前只读捕获；上传期间不持有输入高度或滚动控制权。
-    const sendCapture = captureOwnSend();
-    try {
-      const requestIds = { clientRequestId: message.clientRequestId, requestId: id() };
-      const prepared = message.attachments.length
-        ? timelineRuntimeRef.current.sendUserWithAttachments(message.text, message.attachments, requestIds)
-        : timelineRuntimeRef.current.sendUser(message.text, undefined, requestIds);
-      if (!prepared) return false;
-      applyTimelineChange(prepared.change);
-      if (!channel.send(prepared.frame)) {
-        applyTimelineChange(timelineRuntimeRef.current.markUnknownDelivery(prepared.frame.client_request_id));
-        setError("Message could not be sent. Check the connection and try again.");
-        return false;
-      }
-      followOwnSend(sendCapture);
+    if (!scope || attachmentTargetKey(scope) !== message.target || draftKeyRef.current !== message.context.draftKey) return "not-handled";
+    const outcome = submitMessage({
+      text: message.text, attachments: message.attachments, scope, channel: channelRef.current,
+      online: connectionRef.current === "online", historyOpen: selectedHistoryRef.current !== null,
+      newSessionPending: pendingActionRef.current?.action === "session_new", runtime: timelineRuntimeRef.current,
+      capture: captureOwnSend, follow: followOwnSend, apply: applyTimelineChange,
+      onPrepareError: (error) => reportSessionFailure(error instanceof PendingCapacityError ? error.message
+        : error && typeof error === "object" && "invalidPayload" in error
+          ? "This message is too large or invalid to send. Shorten it and try again."
+          : "Could not send this message. Try again.", "message-send"),
+    });
+    if (outcome === "handled") {
+      // 能力恢复回调可能同步触发交接，早于 React 提交；租约以交接消息为准，供明确失败后的重试比对。
+      for (const attachment of message.attachments) attachmentLeasesRef.current.set(attachment.attachment_id, { target: message.target, uploadScope: message.uploadScope });
       if (draftVersionRef.current === message.context.draftVersion && draftKeyRef.current === message.context.draftKey) setDraftFor(message.context.draftKey, "");
-      return true;
-    } catch (sendError) {
-      reportSessionFailure(sendError instanceof PendingCapacityError ? sendError.message : "Could not send this message. Try again.", "message-send");
-      return false;
     }
+    return outcome;
   }, t.attachments);
   const attachmentComposer = attachments.composer;
   const addAttachmentFiles = attachments.addFiles;
@@ -598,6 +594,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     if (!current || current.generation !== context.generation || current.deviceId !== context.deviceId || current.endpointId !== context.endpointId || current.runtimeInstanceId !== context.runtimeInstanceId || channelRef.current !== context.channel || relayRef.current !== context.relay) return;
     if (fileController.receive(frame)) return;
     if (attachmentComposer.receive(frame)) return;
+    if (frame.type === "protocol_error") {
+      const consumed = timelineRuntimeRef.current.consumeDeliveryStatusError(frame);
+      if (consumed) { applyTimelineChange(consumed); return; }
+    }
     if (frame.type === "reset" || frame.type === "bye") {
       const scope = timelineRuntimeRef.current.currentScope;
       if (!scope || scope.sessionId !== frame.session_id) return;
@@ -731,12 +731,17 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     receiveTimelineFrame(frame, {
       runtime: timelineRuntimeRef.current, fragmentAssemblerRef, isCurrent: () => channelRef.current === context.channel,
       applyTimelineChange: (change, reset) => {
-        applyTimelineChange(change, reset);
+        let applied = change;
+        if (change.cancelledQueued?.length) {
+          const restored = restoreQueuedRef.current(change.cancelledQueued);
+          const ids = change.cancelledQueued.map((item) => item.clientRequestId);
+          applied = restored ? timelineRuntimeRef.current.confirmCancelledRestore(ids) : timelineRuntimeRef.current.keepCancelledRestore();
+        }
+        applyTimelineChange(applied, reset);
         const stop = stopRequestRef.current;
-        if (stop && stopHasEnded(stop, change.items)) { setStopRequest(null); operationNotifications.clearStop(); }
+        if (stop && stopHasEnded(stop, applied.items)) { setStopRequest(null); operationNotifications.clearStop(); }
         const scope = timelineRuntimeRef.current.currentScope;
         if (scope) attachmentComposer.connect(scope, (request) => context.channel.send(request));
-        if (change.cancelledQueued?.length) restoreQueuedRef.current(change.cancelledQueued);
       },
       receiveRealtimeOutput, setError: reportSessionFailure, setLastSyncedAt, onHistoryChanged: refreshHistory,
     });
@@ -861,18 +866,77 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       attachmentComposer.start(text, { draftKey, draftVersion: draftVersionRef.current });
       return;
     }
-    const sendCapture = captureOwnSend();
-    let prepared;
-    try { prepared = timelineRuntimeRef.current.sendUser(text, undefined, { clientRequestId: id(), requestId: id() }); }
-    catch (sendError) {
-      reportSessionFailure(sendError instanceof PendingCapacityError ? sendError.message : "Could not send this message. Try again.", "message-send");
-      return;
-    }
-    if (!prepared) return;
-    if (!channel.send(prepared.frame)) { applyTimelineChange(timelineRuntimeRef.current.markUnknownDelivery(prepared.frame.client_request_id)); setError("Message could not be sent. Check the connection and try again."); return; }
-    followOwnSend(sendCapture);
-    applyTimelineChange(prepared.change); setDraftFor(draftKey, "");
+    let prepareReported = false;
+    const outcome = submitMessage({ text, scope, channel, online: connectionRef.current === "online",
+      historyOpen: selectedHistoryRef.current !== null, newSessionPending: false,
+      runtime: timelineRuntimeRef.current, capture: captureOwnSend, follow: followOwnSend, apply: applyTimelineChange,
+      onPrepareError: (error) => { prepareReported = true; reportSessionFailure(error instanceof PendingCapacityError ? error.message
+        : error && typeof error === "object" && "invalidPayload" in error
+          ? "This message is too large or invalid to send. Shorten it and try again."
+          : "Could not send this message. Try again.", "message-send"); } });
+    if (outcome === "handled") setDraftFor(draftKey, "");
+    else if (!prepareReported) reportSessionFailure("Could not send this message. Try again.", "message-send");
   }, [applyTimelineChange, attachmentComposer, captureOwnSend, draft, draftKey, followOwnSend, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
+  const deliveryQueriesRef = useRef<{ channel: PeerChannel | null; sessionId: string | null; checked: Map<string, string> }>({ channel: null, sessionId: null, checked: new Map() });
+  const checkDeliveryStatus = useCallback((clientRequestId: string) => {
+    const channel = channelRef.current;
+    if (!channel || channel.closed || connectionRef.current !== "online" || selectedHistoryRef.current || pendingActionRef.current?.action === "session_new") return;
+    const query = timelineRuntimeRef.current.requestDeliveryStatus(clientRequestId);
+    if (!query) return;
+    const pending = timelineRuntimeRef.current.findPendingOrUnknown(clientRequestId);
+    if (pending) deliveryQueriesRef.current.checked.set(clientRequestId, JSON.stringify([pending.requestId, pending.queuedActionRequestId ?? null]));
+    applyTimelineChange(query.change);
+    if (!channel.send(query.frame)) applyTimelineChange(timelineRuntimeRef.current.clearDeliveryStatusQuery(clientRequestId));
+  }, [applyTimelineChange, pendingActionRef, timelineRuntimeRef]);
+  const retryFailed = useCallback((clientRequestId: string) => {
+    const runtime = timelineRuntimeRef.current;
+    const scope = runtime.currentScope;
+    const channel = channelRef.current;
+    if (!scope || !channel || channel.closed || connectionRef.current !== "online" || selectedHistoryRef.current || pendingActionRef.current?.action === "session_new") return;
+    const pending = runtime.findPendingOrUnknown(clientRequestId);
+    if (!pending || pending.delivery !== "failed" || !pending.deliveryFailure?.retryable) return;
+    if (pending.attachments?.length) {
+      const decision = attachmentRetryDecision({ attachments: pending.attachments, target: attachmentTargetKey(scope),
+        composer: attachmentComposer.snapshot(), leases: attachmentLeasesRef.current });
+      if (decision === "wait") return;
+      if (decision === "invalid") {
+        applyTimelineChange(runtime.markDeliveryFailed(clientRequestId, "invalid_target", false));
+        return;
+      }
+    }
+    const retry = runtime.retryFailed(clientRequestId);
+    if (!retry) return;
+    applyTimelineChange(retry.change);
+    if (!channel.send(retry.frame)) applyTimelineChange(runtime.markDeliveryFailed(clientRequestId, "transport_unavailable", true));
+  }, [applyTimelineChange, attachmentComposer, pendingActionRef, timelineRuntimeRef]);
+  useEffect(() => {
+    const channel = channelRef.current;
+    const runtime = timelineRuntimeRef.current;
+    const sessionId = runtime.currentScope?.sessionId ?? null;
+    if (connection !== "online") { deliveryQueriesRef.current = { channel: null, sessionId: null, checked: new Map() }; return; }
+    if (!channel || !queueSnapshotReady || selectedHistory || catchingUp || catchupFailed || reconnectPhase || pendingAction?.action === "session_new") return;
+    if (deliveryQueriesRef.current.channel !== channel || deliveryQueriesRef.current.sessionId !== sessionId) {
+      deliveryQueriesRef.current = { channel, sessionId, checked: new Map() };
+    }
+    const checked = deliveryQueriesRef.current.checked;
+    for (const pending of runtime.pendingItems) {
+      if (pending.scopeInvalid === true || pending.delivery !== "unknown_delivery" || pending.statusQuery || pending.statusQueryUnsupported
+        || pending.messageId || pending.senderRef !== runtime.currentScope?.selfSenderRef
+        || checked.get(pending.clientRequestId) === JSON.stringify([pending.requestId, pending.queuedActionRequestId ?? null])) continue;
+      checkDeliveryStatus(pending.clientRequestId);
+    }
+  }, [catchingUp, catchupFailed, checkDeliveryStatus, connection, pendingAction?.action, queueSnapshotReady, reconnectPhase, selectedHistory, timelineItems, timelineRuntimeRef]);
+  useEffect(() => {
+    if (connection !== "online") return;
+    const runtime = timelineRuntimeRef.current;
+    const deadline = runtime.nextDeliveryDeadline();
+    if (deadline === null) return;
+    const timer = window.setTimeout(() => {
+      runtime.expireDeliveryStatusQueries();
+      applyTimelineChange(runtime.expireDeliveryConfirmations());
+    }, Math.max(0, deadline - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [applyTimelineChange, connection, timelineItems, timelineRuntimeRef]);
   const loadEarlier = useCallback(() => {
     if (connection !== "online" || loadingEarlier) return;
     handleScroll(false);
@@ -967,8 +1031,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     operationNotifications.notify(getMessages().settings.saved);
   }, [defaultRelayUrl, devices, operationNotifications]);
   // 撤回的排队消息回到当前输入区：空草稿直接填入，已有草稿换行追加；图片只在输入区没有附件时回填。
-  const restoreQueuedMessages = useCallback((cancellations: readonly QueuedCancellation[]) => {
-    if (!draftKey) return;
+  const restoreQueuedMessages = useCallback((cancellations: readonly QueuedCancellation[]): boolean => {
+    if (!draftKey) return false;
     const restored = cancellations.map((item) => item.text).filter((text) => text.trim()).join("\n");
     if (restored) {
       draftVersionRef.current += 1;
@@ -977,12 +1041,14 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
         return { ...current, [draftKey]: existing.trim() ? `${existing}\n${restored}` : restored };
       });
     }
-    attachmentComposer.restoreAttachments(cancellations.flatMap((item) => item.attachments ?? []));
+    const attachments = cancellations.flatMap((item) => item.attachments ?? []);
+    if (attachments.length > 0 && !attachmentComposer.restoreAttachments(attachments)) return false;
     const image = cancellations.find((item) => item.images?.length)?.images?.[0];
-    if (!image || attachmentComposer.snapshot().items.length) return;
+    if (!image || attachmentComposer.snapshot().items.length) return true;
     try {
       addAttachmentFiles([new File([new Uint8Array(decodeBase64(image.data))], getMessages().composer.imageAttachment, { type: image.mime })]);
     } catch { /* 旧图片不能还原时仍保留文字。 */ }
+    return true;
   }, [addAttachmentFiles, attachmentComposer, draftKey]);
   useLayoutEffect(() => { restoreQueuedRef.current = restoreQueuedMessages; }, [restoreQueuedMessages]);
   const { requestConfirmation, closeBackgroundOverlay, finishConfirmationTransition } = useConfirmationOverlay(setConfirmAction, setConfirmError, confirmPendingRef);
@@ -1150,7 +1216,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const emptySessionContext = displayEndpoint
     ? [cwdName(displayEndpoint.cwd), currentModel?.name ?? displayEndpoint.model ?? null, displayEndpoint.thinking ? t.commands.thinkingLevelValue(activeThinking) : null].filter(Boolean).join(" · ") || null
     : null;
-  const liveTimeline = <MessageList items={visibleTimelineItems.filter((item) => !isQueuedMessage(item))} hasEarlier={!newSessionPending && hasEarlier} loadingEarlier={!newSessionPending && loadingEarlier} onLoadEarlier={loadEarlier} loadEarlierFailed={loadEarlierFailed} autoLoadEarlier={!followingOutput} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onScroll={handleScroll} isLive={connection === "online" && !newSessionPending} fileSourceCurrent={!newSessionPending} emptyContext={emptySessionContext} running={!newSessionPending && displayEndpoint?.working === true} compacting={compactingNow} notices={compactionNotices} onReadingChange={onToolReading} reconnectPhase={newSessionPending ? null : reconnectPhase} loading={!newSessionPending && (sessionLoading || sessionSkeletonVisible)} skeletonVisible={!newSessionPending && sessionSkeletonVisible} topNotice={!newSessionPending && sessionSwitched ? t.workspace.sessionSwitched : null} onRetryUnknown={(requestId) => { if (pendingActionRef.current?.action === "session_new") return; const retry = timelineRuntimeRef.current.retryUnknown(requestId); if (retry && channelRef.current?.send(retry.frame)) applyTimelineChange(retry.change); }} />;
+  const liveTimeline = <MessageList items={visibleTimelineItems.filter((item) => !isQueuedMessage(item))} hasEarlier={!newSessionPending && hasEarlier} loadingEarlier={!newSessionPending && loadingEarlier} onLoadEarlier={loadEarlier} loadEarlierFailed={loadEarlierFailed} autoLoadEarlier={!followingOutput} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} onScroll={handleScroll} isLive={connection === "online" && !newSessionPending} fileSourceCurrent={!newSessionPending} emptyContext={emptySessionContext} running={!newSessionPending && displayEndpoint?.working === true} compacting={compactingNow} notices={compactionNotices} onReadingChange={onToolReading} reconnectPhase={newSessionPending ? null : reconnectPhase} loading={!newSessionPending && (sessionLoading || sessionSkeletonVisible)} skeletonVisible={!newSessionPending && sessionSkeletonVisible} topNotice={!newSessionPending && sessionSwitched ? t.workspace.sessionSwitched : null} onRetryFailed={retryFailed} onCheckStatus={checkDeliveryStatus} />;
   const mainContent = selectedHistory
     ? <HistoryWorkspace key={selectedHistory.id} items={historyItems} loading={historyLoading} restore={historyRestore} visibleCountRef={historyVisibleCountRef} listRef={messageListRef} bottomSentinelRef={bottomSentinelRef} modelName={selectedHistory.model ?? null} thinking={safeThinkingLevel(selectedHistory.thinking)} />
     : activeDevice && displayEndpoint

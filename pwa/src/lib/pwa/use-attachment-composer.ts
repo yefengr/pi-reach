@@ -4,6 +4,7 @@ import type { ComposerAttachmentItem } from "@/components/pwa/attachment-cards";
 import type { Messages } from "@/lib/i18n";
 import { AttachmentComposer, type AttachmentReadyMessage } from "./attachment-composer";
 import { AttachmentUploadClient } from "./attachment-upload";
+import type { SubmitOutcome } from "./message-submission";
 
 // 草稿预览独立于上传准备，不读取原件完整 ArrayBuffer 或计算摘要。
 async function draftPreview(file: File): Promise<AttachmentPreview | undefined> {
@@ -55,9 +56,9 @@ export function pruneAttachmentPreviews(previews: ReadonlyMap<string, Attachment
 }
 
 class ComposerBridge {
-  private onReady: (message: AttachmentReadyMessage) => boolean = () => false;
+  private onReady: (message: AttachmentReadyMessage) => SubmitOutcome = () => "not-handled";
   private onChange: () => void = () => {};
-  callbacks(onReady: (message: AttachmentReadyMessage) => boolean, onChange: () => void) {
+  callbacks(onReady: (message: AttachmentReadyMessage) => SubmitOutcome, onChange: () => void) {
     this.onReady = onReady; this.onChange = onChange;
   }
   readonly composer = new AttachmentComposer({
@@ -66,7 +67,7 @@ class ComposerBridge {
   });
 }
 
-export function useAttachmentComposer(onReady: (message: AttachmentReadyMessage) => boolean, t: Messages["attachments"]) {
+export function useAttachmentComposer(onReady: (message: AttachmentReadyMessage) => SubmitOutcome, t: Messages["attachments"]) {
   const [revision, render] = useState(0);
   const [bridge] = useState(() => new ComposerBridge());
   const [previews, setPreviews] = useState<ReadonlyMap<string, AttachmentPreview>>(() => new Map());
@@ -81,7 +82,7 @@ export function useAttachmentComposer(onReady: (message: AttachmentReadyMessage)
   useEffect(() => {
     const pageHide = (event: PageTransitionEvent) => { if (!event.persisted) composer.dispose(); };
     window.addEventListener("pagehide", pageHide);
-    return () => { aliveRef.current = false; bridge.callbacks(() => false, () => {}); window.removeEventListener("pagehide", pageHide); composer.dispose(); };
+    return () => { aliveRef.current = false; bridge.callbacks(() => "not-handled", () => {}); window.removeEventListener("pagehide", pageHide); composer.dispose(); };
   }, [bridge, composer]);
   // 所有业务变更都经 bridge 通知；无关的时间线 render 不重新构造附件 props。
   const snapshot = useMemo(() => composer.snapshot(), [composer, revision]);

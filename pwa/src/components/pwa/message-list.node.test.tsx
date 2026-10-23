@@ -6,6 +6,7 @@ import type { TimelinePending } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { thinkingSummary, thinkingTitle } from "./timeline-content";
+import { setLanguagePreference } from "@/lib/i18n";
 
 function renderList(items: Parameters<typeof MessageList>[0]["items"], overrides: Partial<Parameters<typeof MessageList>[0]> = {}): string {
   return renderToStaticMarkup(
@@ -62,11 +63,11 @@ test("shows the earlier-records state that matches loading, failure and connecti
   expect(renderList(items, { isLive: false, earlierLocal: true })).toContain("Load more");
 });
 
-test("keeps earlier and retry actions alongside a collapsed tool group", () => {
-  const html = renderList([{ kind: "event", event: toolEvent }, unknownPending], { onRetryUnknown: () => {} });
+test("keeps earlier and check actions alongside a collapsed tool group", () => {
+  const html = renderList([{ kind: "event", event: toolEvent }, unknownPending], { onRetryFailed: () => {}, onCheckStatus: () => {} });
   const earlierButton = html.match(/<button[^>]*class="[^"]*pwa-earlier-button[^"]*"[^>]*>/)?.[0] ?? "";
   const groupToggle = html.match(/<button[^>]*aria-label="Expand Used tools 1 time"[^>]*>/)?.[0] ?? "";
-  const retryAction = html.match(/<button[^>]*aria-label="Retry delivery"[^>]*>/)?.[0] ?? "";
+  const checkAction = html.match(/<button[^>]*aria-label="Check status"[^>]*>/)?.[0] ?? "";
 
   expect(earlierButton).toMatch(/pwa-button/);
   expect(earlierButton).toMatch(/data-variant="default"/);
@@ -75,10 +76,50 @@ test("keeps earlier and retry actions alongside a collapsed tool group", () => {
   expect(groupToggle).toMatch(/aria-controls=/);
   expect(html).not.toContain("View read tool details");
   expect(html).not.toContain("pwa-activity");
-  // 投递状态行下方的文字按钮「重试」。
-  expect(retryAction).toMatch(/data-variant="transparent"/);
-  expect(retryAction).toMatch(/pwa-delivery-action/);
-  expect(html).toContain("Delivery status unknown");
+  // 未确认的投递只提供图标核对入口，不与重试共用文字按钮。
+  expect(checkAction).toMatch(/pwa-icon-button/);
+  expect(checkAction).toMatch(/pwa-delivery-action/);
+  expect(html).toContain("Not confirmed");
+});
+
+test("renders a delivery status row only for abnormal pending states", () => {
+  const normal = renderList([{ ...unknownPending, delivery: "pending" }]);
+  expect(normal).not.toContain("pwa-delivery-status");
+  const failed = renderList([{ ...unknownPending, delivery: "failed", deliveryFailure: { code: "queue_full", retryable: true } }], { onRetryFailed: () => {} });
+  expect(failed).toContain("pwa-delivery-status");
+  expect(failed).toContain("queue is full");
+  expect(failed.match(/<button[^>]*aria-label="Retry send"[^>]*>/)?.[0] ?? "").toMatch(/pwa-icon-button/);
+  const permanent = renderList([{ ...unknownPending, delivery: "failed", deliveryFailure: { code: "invalid_target", retryable: false } }], { onRetryFailed: () => {} });
+  expect(permanent).toContain("The original target is no longer available");
+  expect(permanent).not.toContain("Retry send");
+  const unsupported = renderList([{ ...unknownPending, statusQueryUnsupported: true }], { onCheckStatus: () => {} });
+  expect(unsupported).toContain("Update the Pi extension to check status");
+  expect(unsupported).not.toContain("Check status");
+});
+
+test.each(["en", "zh"] as const)("invalid attachment delivery asks to select files again in %s", (language) => {
+  setLanguagePreference(language);
+  try {
+    const failed: TimelinePending = { ...unknownPending, delivery: "failed", deliveryFailure: { code: "invalid_target", retryable: false },
+      attachments: [{ attachment_id: "old-file", file_name: "retained.txt", mime_type: "text/plain", byte_length: 4, sha256: "a".repeat(64) }] };
+    const html = renderList([failed], { onRetryFailed: () => {}, onCheckStatus: () => {} });
+    expect(html).toContain(language === "en" ? "Select the files again before sending" : "请重新选择文件后发送");
+    expect(html).toContain("Retry me");
+    expect(html).toContain("retained.txt");
+    expect(html).not.toMatch(/aria-label="(?:Retry send|Check status|重试发送|核对状态)"/);
+    const textOnly = renderList([{ ...failed, attachments: undefined }]);
+    expect(textOnly).toContain(language === "en" ? "The original target is no longer available" : "原目标已不可用");
+    expect(textOnly).not.toContain(language === "en" ? "Select the files again" : "重新选择文件");
+  } finally { setLanguagePreference("en"); }
+});
+
+test("disables status checks while querying and explains offline recovery", () => {
+  const querying = renderList([{ ...unknownPending, statusQuery: { requestId: "query", requestedAt: 1 } }], { onCheckStatus: () => {} });
+  const checkButton = [...querying.matchAll(/<button[^>]*>/g)].map((match) => match[0]).find((tag) => tag.includes('aria-label="Check status"'))!;
+  expect(checkButton).toContain("disabled");
+  const offline = renderList([unknownPending], { isLive: false, onCheckStatus: () => {} });
+  expect(offline).toContain("Reconnect to check status");
+  expect(offline).not.toContain('aria-label="Check status"');
 });
 
 test("keeps final answers visible while thinking is collapsed and skips empty assistant cards", () => {
@@ -227,7 +268,7 @@ describe("attachment history presentation", () => {
   test("renders attachment-only pending and preserves old image blocks", () => {
     const html = renderList([{ ...unknownPending, text: "", attachments: [attachment] }]);
     expect(html).toContain("notes.txt");
-    expect(html).toContain("Delivery status unknown");
+    expect(html).toContain("Not confirmed");
     const legacy = renderList(items({ ...user, blocks: [{ type: "image", mime_type: "image/png", data: "YQ==", byte_length: 1 }] }));
     expect(legacy).toContain("data:image/png;base64,YQ==");
     expect(legacy).not.toContain("pwa-attachment-cards");

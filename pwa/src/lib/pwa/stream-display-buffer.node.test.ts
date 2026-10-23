@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
-import type { TimelineViewItem } from "./timeline-runtime";
+import type { TimelinePending, TimelineViewItem } from "./timeline-runtime";
 import { projectTimeline } from "./timeline-presentation";
 import { ThinkingTextParser } from "./thinking-text-parser";
 
@@ -34,6 +34,48 @@ function toolEvent(id: string, group: string, toolCallId: string): TimelineViewI
 function text(item: TimelineViewItem | undefined): string | undefined {
   return item?.kind === "partial" ? item.partial.delta : undefined;
 }
+
+test("delivery query, failure and evidence metadata publish urgently without changing streaming progress", () => {
+  const buffer = new StreamDisplayBuffer();
+  const pending: TimelinePending = { kind: "pending", id: "pending:request", clientRequestId: "request", requestId: "attempt", text: "hello", createdAt: 1, delivery: "unknown_delivery" };
+  const stream = partial("p", "g", "a long streaming answer");
+  buffer.ingest([pending, stream]);
+  const visible = text(buffer.snapshot()[1]);
+  const update = () => {
+    const result = buffer.ingest([pending, stream]);
+    expect(result.shouldRender).toBe(true);
+    expect(result.urgent).toBe(true);
+    expect(result.items[0]).toBe(pending);
+    expect(text(result.items[1])).toBe(visible);
+    expect(result.hasPending).toBe(true);
+  };
+  pending.statusQuery = { requestId: "query", requestedAt: 2 };
+  update();
+  // 相同字段值的新对象不触发发布；嵌套对象原位变化仍须捕获。
+  pending.statusQuery = { requestId: "query", requestedAt: 2 };
+  expect(buffer.ingest([pending, stream]).shouldRender).toBe(false);
+  pending.statusQuery.requestedAt = 3;
+  update();
+  delete pending.statusQuery;
+  update();
+  pending.statusQueryUnsupported = true;
+  update();
+  delete pending.statusQueryUnsupported;
+  update();
+  pending.deliveryFailure = { code: "queue_full", retryable: true };
+  update();
+  pending.deliveryFailure.code = "transport_unavailable";
+  update();
+  pending.deliveryFailure.retryable = false;
+  update();
+  delete pending.deliveryFailure;
+  update();
+  pending.lastEvidenceAt = 4;
+  update();
+  pending.lastEvidenceAt = 5;
+  update();
+  expect(buffer.ingest([pending, stream]).shouldRender).toBe(false);
+});
 
 test("shows only a small burst initially and drains within eight ticks", () => {
   const buffer = new StreamDisplayBuffer();

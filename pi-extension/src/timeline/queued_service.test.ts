@@ -21,10 +21,11 @@ function harness(idle = false) {
     sessionManager: manager, runtime, senderRef: "owner", extensionVersion: "1.2.3",
     onUserMessage: (frame, correlation) => binding.submit(frame, correlation, { ownerId: "owner", sessionId: manager.getSessionId(), leafId: manager.getLeafId() ?? null, service, clientRequestId: frame.client_request_id }),
     onQueueSnapshot: () => binding.snapshot("owner", service),
+    onDeliveryStage: (id) => binding.lookup("owner", service, id),
     onQueuedMessageClear: (target) => binding.clearQueued("owner", service, target),
     onQueuedMessageSteer: (target) => binding.steerQueued("owner", service, target).kind,
   });
-  return { service, send, binding };
+  return { service, send, binding, manager };
 }
 const hello: ClientFrame = { protocol_version: 2, type: "session_hello", id: "hello", channel_id: "c" };
 const user: Extract<ClientFrame, { type: "user_message" }> = { protocol_version: 2, type: "user_message", id: "wire", client_request_id: "q", channel_id: "c", leaf_id: null, text: "later", images: [{ mime: "image/png", data: "abc" }] };
@@ -52,9 +53,40 @@ test("queue actions enforce the channel/generation gate and cancellation cannot 
   const cancel: ClientFrame = { ...steer, type: "queued_message_clear", id: "cancel" };
   expect(lastSnapshot(service.handle(cancel))).toMatchObject({ items: [] });
   expect(lastSnapshot(service.handle(cancel))).toMatchObject({ items: [] });
-  expect(service.handle(user)[0]).toMatchObject({ type: "user_message_status", status: "unknown_delivery" });
+  expect(service.handle(user)[0]).toMatchObject({ type: "user_message_status", status: "cancelled" });
+  expect(service.handle({ protocol_version: 2, type: "user_message_status_request", id: "query", channel_id: "c",
+    session_id: service.sessionId, leaf_id: service.leafId, client_request_id: user.client_request_id })[0])
+    .toMatchObject({ status: "cancelled", in_reply_to: "query" });
   expect(send).not.toHaveBeenCalled();
   expect(service.handle({ protocol_version: 2, type: "queued_message_set", id: "unused", channel_id: "c", leaf_id: null, text: "unused" })[0]).toMatchObject({ code: "unsupported_type" });
+});
+
+test.each(["expired", "evicted"] as const)("successful clear retains fresh cancellation after the original record is %s", (reason) => {
+  let now = 1;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  const { service, send, binding } = harness();
+  const query = () => service.handle({ protocol_version: 2, type: "user_message_status_request", id: "query",
+    channel_id: "c", session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "q" })[0];
+  try {
+    service.handle(hello); service.handle(user);
+    if (reason === "expired") now += 10 * 60 * 1000;
+    else for (let index = 0; index < 512; index++) {
+      service.handle({ ...user, id: `wire-${index}`, client_request_id: `other-${index}` });
+    }
+    expect(binding.lookup("owner", service, "q")).toBe("queued");
+    expect(query()).toMatchObject({ status: "accepted" });
+    expect(lastSnapshot(service.handle({ ...steer, type: "queued_message_clear", id: "clear" })))
+      .not.toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: "q" })]) });
+    expect(query()).toMatchObject({ status: "cancelled" });
+    now += 10 * 60 * 1000 - 1;
+    expect(query()).toMatchObject({ status: "cancelled" });
+    expect(service.handle({ ...user, id: "new-attempt", text: "arbitrary replacement" })[0])
+      .toMatchObject({ type: "user_message_status", status: "cancelled" });
+    expect(binding.lookup("owner", service, "q")).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+    now++;
+    expect(query()).toMatchObject({ status: "not_found" });
+  } finally { binding.clearAll(); clock.mockRestore(); }
 });
 
 test("a cancel racing normal delivery returns an error and the in-flight snapshot", async () => {
@@ -67,6 +99,27 @@ test("a cancel racing normal delivery returns an error and the in-flight snapsho
   expect(lastSnapshot(frames)).toMatchObject({ items: [{ id: "q", editable: false }] });
   expect(send).toHaveBeenCalledTimes(1);
   binding.clearAll();
+});
+
+test("binding lookup tracks queued/in-flight only and queries never drain the queue", async () => {
+  const { service, send, binding, manager } = harness(true);
+  try {
+    service.handle(hello); service.handle(user);
+    expect(binding.lookup("owner", service, "q")).toBe("queued");
+    expect(binding.lookup("other", service, "q")).toBeNull();
+    expect(binding.lookup("owner", {} as TimelineV2Service, "q")).toBeNull();
+    const query = () => ({ protocol_version: 2 as const, type: "user_message_status_request" as const, id: "query", channel_id: "c",
+      session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "q" });
+    expect(service.handle(query())[0]).toMatchObject({ status: "accepted" });
+    expect(send).not.toHaveBeenCalled();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    manager.appendThinkingLevelChange("high");
+    expect(binding.lookup("owner", service, "q")).toBe("in_flight");
+    expect(service.handle(query())[0]).toMatchObject({ status: "accepted" });
+    expect(send).toHaveBeenCalledTimes(1);
+    binding.clearAll();
+    expect(binding.lookup("owner", service, "q")).toBeNull();
+  } finally { binding.clearAll(); }
 });
 
 test("snapshot chunks fit the wire limit including image payloads and framing overhead", () => {

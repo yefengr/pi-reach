@@ -5,6 +5,7 @@ import {
 } from "@pi-reach/protocol/session";
 import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
 import type { TimelineScope } from "./timeline-runtime";
+import type { SubmitOutcome } from "./message-submission";
 import type { AttachmentCapability, AttachmentUploadProgress } from "./attachment-upload-types";
 
 export type AttachmentUploadPort = {
@@ -42,6 +43,8 @@ export type AttachmentReadyMessage = {
   clientRequestId: string;
   text: string;
   attachments: readonly AttachmentDescriptor[];
+  /** 交接时全部附件共同所属的上传租约；由交接点同步给出，不依赖渲染后的缓存。 */
+  uploadScope: string;
   context: AttachmentSendContext;
 };
 type DraftEntry = AttachmentDraftItem & {
@@ -64,8 +67,8 @@ type TargetDraft = {
 type ComposerOptions = {
   createClient(onCapability: (value: AttachmentCapability) => void): AttachmentUploadPort;
   onChange(): void;
-  /** true 表示所有权已交给普通消息生命周期，包含发送回执未知的情形。 */
-  onReady(message: AttachmentReadyMessage): boolean;
+  /** handled 表示所有权已交给普通消息生命周期，包含已接管后的发送失败。 */
+  onReady(message: AttachmentReadyMessage): SubmitOutcome;
 };
 
 export function attachmentTargetKey(scope: TimelineScope): string {
@@ -289,7 +292,7 @@ export class AttachmentComposer {
     let accepted = false;
     try {
       accepted = this.options.onReady({ target: draft.key, clientRequestId: batch.id, text: batch.text,
-        attachments: [...draft.items.values()].map((item) => item.attachment!), context: batch.context });
+        attachments: [...draft.items.values()].map((item) => item.attachment!), uploadScope: draft.capability.uploadScope, context: batch.context }) === "handled";
     } catch {
       accepted = false;
     } finally {

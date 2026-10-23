@@ -142,6 +142,11 @@ export class UserDeliveryQueue {
     return items;
   }
 
+  lookup(ownerId: string, service: TimelineV2Service, clientRequestId: string): "queued" | "in_flight" | null {
+    const job = this.findTarget(ownerId, service, clientRequestId);
+    return job?.state === "queued" || job?.state === "in_flight" ? job.state : null;
+  }
+
   clearQueued(ownerId: string, service: TimelineV2Service, targetId?: string): UserDeliveryScope[] {
     const removed: UserDeliveryScope[] = [];
     for (const job of [...this.jobs.values()]) {

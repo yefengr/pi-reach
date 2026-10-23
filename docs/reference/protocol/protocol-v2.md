@@ -234,6 +234,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `pair_request`
 - `session_hello`
 - `user_message`
+- `user_message_status_request`
 - `user_message_observed`
 - `session_sync`
 - `queued_message_set`
@@ -297,6 +298,12 @@ PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，�
 ## 操作反馈
 
 操作请求沿用 ready-only 的 channel、session 和 leaf 校验，定向回执以 `target_channel_id` 与 `in_reply_to` 关联原请求。发送成功和受理都不代表业务完成。
+
+## 消息投递确认
+
+`user_message` 的定向回执为 `user_message_status`。`in_reply_to` 指向触发本次回复的请求 `id`，`client_request_id` 关联逻辑消息。状态包括 `received`、`accepted`（可带 `message_id` / `group_id`）、`committed`、`rejected`（带受控 `code` 与 `retryable`）、`cancelled`、`unknown_delivery`，以及仅用于查询答复的 `not_found`。
+
+PWA 可在重新握手或确认超时后发送只读 `user_message_status_request`，携带 `id`、`channel_id`、`session_id`、`leaf_id` 与 `client_request_id`。Extension 按当前 Owner、channel、session 和 leaf 校验，读取会话投递记录、真实队列、附件投递保护和当前正式投影，返回定向 `user_message_status`；不创建幂等记录、不重新入队，也不调用 Pi 投递。查不到只表示当前证据不足，不能作为重发依据。旧扩展不识别查询时返回 `protocol_error` 和 `protocol_upgrade_required`。
 
 - `cancel` 必须携带目标 `group_id`；Extension 仅在其等于当前运行轮次时调用停止。`cancelled` 只确认受理，PWA 等待该轮正式 `run_end`；匹配的 `protocol_error` 解除等待。晚到请求不得停止下一轮。
 - `action_ok` 按 `action` 严格区分字段：`model_set` 返回实际 `model` 与 `thinking_level`；`thinking_set` 返回实际 `thinking_level`；`session_new` 返回新目标 `session_id`；`session_compact` 返回 `phase=accepted/completed/cancelled`。`action_error` 保留原关联字段。配置失败后可重新 `list_models` 核实实际值，不假定回滚。

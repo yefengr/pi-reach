@@ -51,6 +51,32 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
 afterEach(async () => { piRunning = false; vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
 
+test("complete empty queue snapshots notify React independently of stream display changes", async () => {
+  const screen = await render(<Harness />);
+  const snapshot = (extra: Partial<Extract<ServerFrame, { type: "queued_message_state" }>> = {}): ServerFrame => ({
+    protocol_version: 2, type: "queued_message_state", session_id: scope.sessionId, leaf_id: scope.leafId,
+    snapshot_id: "empty", chunk_index: 0, final: true, items: [], ...extra,
+  });
+  try {
+    flushSync(() => { start(0); });
+    await expect.poll(() => api.catchingUp).toBe(false);
+    const items = api.items;
+    expect(api).toHaveProperty("queueSnapshotReady", false);
+    // 不调用 applyTimelineChange：权威证据必须拥有独立于显示列表的订阅。
+    flushSync(() => { api.runtimeRef.current.receive(snapshot({ final: false })); });
+    expect(api).toHaveProperty("queueSnapshotReady", false);
+    flushSync(() => { api.runtimeRef.current.receive(snapshot({ chunk_index: 1 })); });
+    expect(api).toHaveProperty("queueSnapshotReady", true);
+    expect(api.items).toBe(items);
+    flushSync(() => { api.runtimeRef.current.markDisconnected(); });
+    expect(api).toHaveProperty("queueSnapshotReady", false);
+    flushSync(() => { api.runtimeRef.current.receive(snapshot({ snapshot_id: "after-disconnect" })); });
+    expect(api).toHaveProperty("queueSnapshotReady", true);
+    flushSync(() => { start(0); });
+    expect(api).toHaveProperty("queueSnapshotReady", false);
+  } finally { await screen.unmount(); }
+});
+
 test("moving-leaf model output renders before the formal message arrives", async () => {
   piRunning = true;
   const screen = await render(<Harness />);

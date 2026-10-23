@@ -12,7 +12,7 @@ function initialConversation(state: GalleryState, epoch = 0) {
   return {
     state, epoch, step: 0, recovered: false, loaded: false, modelsReady: false, modelsRequested: false,
     pending,
-    uploads: galleryUploadingAttachments(), deliveryRetried: false, queuedCancelled: false, delivered: false,
+    uploads: galleryUploadingAttachments(), unknownChecked: false, failedRetried: false, queuedCancelled: false, delivered: false,
   };
 }
 
@@ -31,9 +31,11 @@ export function useGalleryConversation(state: GalleryState) {
     return galleryItems("delivery", false).flatMap<TimelineViewItem>(item => {
       if (item.kind !== "pending") return [item];
       if (item.id === "queued" && local.queuedCancelled) return [];
-      return [{ ...item, delivery: item.id === "unknown" && local.deliveryRetried ? "pending" as const : item.delivery }];
+      if (item.id === "unknown" && local.unknownChecked) return [{ ...item, delivery: "pending" as const }];
+      if (item.id === "failed" && local.failedRetried) return [{ ...item, delivery: "pending" as const, deliveryFailure: undefined }];
+      return [item];
     });
-  }, [state, local.step, local.loaded, local.delivered, local.queuedCancelled, local.deliveryRetried]);
+  }, [state, local.step, local.loaded, local.delivered, local.queuedCancelled, local.unknownChecked, local.failedRetried]);
   const modelsStatus: ModelListStatus = local.modelsReady ? "success"
     : state === "models-loading" ? "loading" : state === "models-error" ? "error" : "success";
   return {
@@ -49,7 +51,8 @@ export function useGalleryConversation(state: GalleryState) {
     completePending: () => setLocal(value => ({ ...value, pending: null })),
     removeUpload: (id: string) => setLocal(value => ({ ...value, uploads: value.uploads.filter(item => item.id !== id) })),
     completeUploads: () => setLocal(value => ({ ...value, uploads: value.uploads.map(item => ({ ...item, status: "complete", receivedBytes: item.byteLength })) })),
-    retryDelivery: () => setLocal(value => ({ ...value, deliveryRetried: true })),
+    retryFailed: () => setLocal(value => ({ ...value, failedRetried: true })),
+    checkStatus: () => setLocal(value => ({ ...value, unknownChecked: true })),
     cancelQueued: () => setLocal(value => ({ ...value, queuedCancelled: true })),
     completeDelivery: () => setLocal(value => ({ ...value, delivered: true })),
     next: () => setLocal(value => ({ ...value, step: Math.min(value.step + 1, GALLERY_FLOW_STEPS.length - 1) })),
