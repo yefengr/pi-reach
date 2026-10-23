@@ -1,7 +1,7 @@
 import { captureOwnSendLayout, OwnSendTransition, type OwnSendLayoutCapture } from "./own-send-transition";
-import { ActivityFollowTransition } from "./timeline-follow-motion";
+import { ActivityFollowTransition, activityFollowSpace } from "./timeline-follow-motion";
 import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor, type TimelineViewportAnchor } from "./timeline-viewport-anchor";
-import type { ViewportLayout } from "./timeline-viewport-coordinator";
+import type { ViewportGeometry, ViewportLayout } from "./timeline-viewport-coordinator";
 import type { ViewportDiagnosticGeometry } from "./timeline-viewport-diagnostics";
 
 export function viewportMotionAllowed(): boolean {
@@ -12,9 +12,10 @@ export function viewportMotionAllowed(): boolean {
 export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCapture, TimelineViewportAnchor> {
   constructor(readonly list: HTMLDivElement) {}
   measure() {
+    const space = activityFollowSpace(this.list);
     const height = this.list.scrollHeight;
     return { top: this.list.scrollTop, bottom: Math.max(0, height - this.list.clientHeight), height,
-      animate: this.list.isConnected && viewportMotionAllowed() };
+      animate: this.list.isConnected && viewportMotionAllowed(), ...space };
   }
   /** 仅由已启用的诊断路径调用；不保留 DOM 引用或任意业务字段。 */
   diagnosticGeometry(): ViewportDiagnosticGeometry {
@@ -38,7 +39,9 @@ export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCaptu
   scroll(top: number, smooth: boolean) { this.list.scrollTo({ top, behavior: smooth ? "smooth" : "auto" }); }
   captureSend() { return this.list.isConnected ? captureOwnSendLayout(this.list) : null; }
   send(capture: OwnSendLayoutCapture) { return new OwnSendTransition(capture); }
-  activity(from: number) { return new ActivityFollowTransition(this.list, from); }
+  activity(from: number, target: (geometry: ViewportGeometry) => number) {
+    return new ActivityFollowTransition(this.list, from, () => target(this.measure()));
+  }
   captureAnchor(fallback = false) { return captureTimelineViewportAnchor(this.list, fallback); }
   restoreAnchor(anchor: TimelineViewportAnchor, migrate = false) {
     return restoreTimelineViewportAnchor(this.list, migrate ? { ...anchor, list: this.list, preserveScrollTopFallback: false } : anchor);

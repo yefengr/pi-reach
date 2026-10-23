@@ -2,7 +2,7 @@ export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "vi
 export type ViewportReason = typeof VIEWPORT_REASONS[number];
 export const VIEWPORT_MODES = ["idle", "follow", "send", "activity", "latest"] as const;
 export type ViewportMode = typeof VIEWPORT_MODES[number];
-export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean };
+export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean; tailSpace: number; compensation: number };
 export type ViewportMotion = { advance(now: number): { top: number; finished: boolean }; finish(settleInput?: boolean): void };
 export type ViewportCapture<C> = Readonly<{ generation: number; binding: object; value: C }>;
 export type ViewportPosition<A> = { following: true } | { following: false; anchor: A };
@@ -12,7 +12,7 @@ export interface ViewportLayout<C, A> {
   scroll(top: number, smooth: boolean): void;
   captureSend(): C | null;
   send(capture: C): ViewportMotion;
-  activity(from: number): ViewportMotion;
+  activity(from: number, target: (geometry: ViewportGeometry) => number): ViewportMotion;
   captureAnchor(fallback?: boolean): A | null;
   restoreAnchor(anchor: A, migrate?: boolean): boolean;
 }
@@ -42,6 +42,7 @@ export class TimelineViewportCoordinator<C, A> {
   private receipt: { target: number; last: number; smooth: boolean } | null = null;
   private lastTop = 0;
   private lastBottom = 0;
+  private tailCredit = 0;
   private ready = false;
   private handoff = false;
   private activityPending = false;
@@ -70,6 +71,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.ready = false;
     this.lastTop = layout?.top() ?? 0;
     this.lastBottom = 0;
+    this.tailCredit = 0;
     this.publish("bind");
   }
 
@@ -87,6 +89,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.anchor = null;
     this.unread.clear();
     this.ready = false;
+    this.tailCredit = 0;
     this.lastTop = this.layout?.top() ?? 0;
     this.publish(reason);
   }
@@ -106,6 +109,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.pendingAnchor = null;
     this.anchor = null;
     this.unread.clear();
+    this.tailCredit = 0;
     this.motion = this.layout.measure().animate ? this.layout.send(capture.value) : null;
     this.mode = this.motion ? "send" : "follow";
     this.publish("send");
@@ -121,6 +125,8 @@ export class TimelineViewportCoordinator<C, A> {
     const geometry = layout.measure();
     this.lastBottom = geometry.bottom;
     this.mode = geometry.animate ? "latest" : "follow";
+    // 即时 Latest 没有后继动画帧，完成后必须能直接处理下一次状态几何。
+    this.ready = !geometry.animate;
     this.write(geometry.height, geometry.animate, geometry);
     this.record("latest", geometry, geometry.height);
     if (geometry.animate) this.schedule();
@@ -196,6 +202,18 @@ export class TimelineViewportCoordinator<C, A> {
         return;
       }
       this.receipt = null;
+    }
+    // MessageList 的 nearBottom 只描述物理底部；借过留白的有效目标可能远于 32px。
+    if (this.tailCredit > 0 && this.following && !this.paused && !this.motion) {
+      const geometry = layout.measure();
+      const target = this.followTarget(geometry);
+      const bottom = this.naturalBottom(geometry);
+      if (current >= target - EPSILON && current <= bottom + EPSILON) {
+        // 向下使用剩余留白不是回看；把实际位置作为后续目标，不能拉回旧落点。
+        this.tailCredit = Math.min(this.tailCredit, Math.max(0, bottom - current));
+        this.lastTop = current;
+        return;
+      }
     }
     this.lastTop = current;
     if (this.paused) {
@@ -283,7 +301,7 @@ export class TimelineViewportCoordinator<C, A> {
   private write(top: number, smooth: boolean, geometry?: ViewportGeometry): void {
     const layout = this.layout;
     if (!layout) return;
-    this.receipt = { target: geometry?.bottom ?? top, last: layout.top(), smooth };
+    this.receipt = { target: geometry ? Math.min(top, geometry.bottom) : top, last: layout.top(), smooth };
     layout.scroll(top, smooth);
     const actual = layout.top();
     if (this.layout !== layout || (!this.following || this.paused)) return;
@@ -328,6 +346,16 @@ export class TimelineViewportCoordinator<C, A> {
     }
   }
 
+  private naturalBottom(geometry: ViewportGeometry): number {
+    return Math.max(0, geometry.bottom - geometry.compensation);
+  }
+
+  private followTarget(geometry: ViewportGeometry): number {
+    // Thinking/工具转正文不一定再发 Working 显隐通知。净收缩先归还借用量，不能把旧正文往下拉。
+    this.tailCredit = Math.min(this.tailCredit, geometry.tailSpace, Math.max(0, this.naturalBottom(geometry) - this.lastTop));
+    return this.naturalBottom(geometry) - this.tailCredit;
+  }
+
   private advance(layout: ViewportLayout<C, A>, reason: ViewportReason, frameTime?: number): void {
     if (this.pendingAnchor) {
       if (this.restoreAnchor(layout, this.pendingAnchor, true)) {
@@ -355,9 +383,14 @@ export class TimelineViewportCoordinator<C, A> {
     }
     if (this.activityPending) {
       this.activityPending = false;
-      if (this.ready && !this.motion && geometry.animate && Math.abs(geometry.bottom - this.lastTop) > EPSILON) {
-        this.motion = layout.activity(this.lastTop);
-        this.mode = "activity";
+      if (this.ready && this.mode !== "send" && this.mode !== "latest") {
+        const bottom = this.naturalBottom(geometry);
+        const target = Math.min(bottom, Math.max(0, this.lastTop, bottom - geometry.tailSpace));
+        this.tailCredit = bottom - target;
+        if (!this.motion && geometry.animate && Math.abs(target - this.lastTop) > EPSILON) {
+          this.motion = layout.activity(this.lastTop, (value) => this.followTarget(value));
+          this.mode = "activity";
+        }
       }
     }
     let requested: number | null = null;
@@ -377,18 +410,19 @@ export class TimelineViewportCoordinator<C, A> {
         this.exit(false);
         geometry = layout.measure();
         this.handoff = true;
-        requested = geometry.bottom;
-        this.write(geometry.bottom, false, geometry);
+        requested = this.followTarget(geometry);
+        this.write(requested, false, geometry);
         this.schedule();
         this.record(reason, geometry, requested);
         return;
       }
     }
     this.mode = "follow";
-    if (this.handoff || geometry.bottom - geometry.top > EPSILON) {
+    const target = this.followTarget(geometry);
+    if (this.handoff || Math.abs(target - geometry.top) > EPSILON) {
       this.handoff = false;
-      requested = geometry.height;
-      this.write(geometry.height, false, geometry);
+      requested = this.tailCredit === 0 ? geometry.height : target;
+      this.write(requested, false, geometry);
     } else this.lastTop = geometry.top;
     this.ready = true;
     this.record(reason, geometry, requested);

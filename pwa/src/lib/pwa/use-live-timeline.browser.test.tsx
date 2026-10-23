@@ -118,16 +118,50 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     await settle();
     const list = api.messageListRef.current!;
     const original = [...list.querySelectorAll("article")];
+    const minimumTailSpace = 8;
+    const tailOffset = () => list.querySelector(".pwa-bottom-sentinel")!.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    const expectVisibleWithClearance = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      const viewport = list.getBoundingClientRect();
+      expect(Math.round(box.top)).toBeGreaterThanOrEqual(Math.round(viewport.top));
+      expect(Math.round(viewport.bottom - box.bottom)).toBeGreaterThanOrEqual(minimumTailSpace);
+      expect(element.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
+    };
     commit(done("a-second", 2));
+    const beforeWorking = { top: list.scrollTop, height: list.scrollHeight, rows: original.map(row => row.getBoundingClientRect().top) };
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
     commit(done("z-first", 3));
+    const working = list.querySelector(".pwa-thinking-status")!;
+    expect(working).not.toBeNull();
+    // 最后一个工具完成后 Working 立即出现，使用已有留白，不再搬动已稳定的正文。
+    expect(list.scrollHeight).toBeGreaterThan(beforeWorking.height);
+    expect(list.scrollTop).toBe(beforeWorking.top);
+    expect(original.map(row => Math.round(row.getBoundingClientRect().top))).toEqual(beforeWorking.rows.map(Math.round));
+    expectVisibleWithClearance(working);
+    expect(list.style.paddingBottom).toBe("");
+    expect(api.followingOutput).toBe(true);
+    const activity = { top: list.scrollTop, height: list.scrollHeight, tail: tailOffset() };
+    expect(activity.height - list.clientHeight - activity.top).toBeGreaterThan(0);
     receive(text("B", "After tools. ".repeat(25)));
     // 两条工具从第一条起即在同一个折叠组内：正文、工具组、正文。
     await expect.poll(() => list.querySelectorAll("article").length).toBe(3);
     await expect.poll(() => list.querySelector("article.partial")?.textContent?.includes("After tools. ".repeat(25).trim())).toBe(true);
     await settle();
-    const reply = list.querySelector("article.partial")!;
+    const reply = list.querySelector<HTMLElement>("article.partial")!;
     expect([...list.querySelectorAll("article")].slice(0, 2)).toEqual(original);
-    expect(list.scrollHeight - list.clientHeight - list.scrollTop).toBeLessThanOrEqual(1);
+    await expect.element(reply).toBeVisible();
+    await expect.element(page.getByText("Working…", { exact: true })).toBeVisible();
+    expect(list.querySelector(".pwa-thinking-status")).toBe(working);
+    expectVisibleWithClearance(reply);
+    expectVisibleWithClearance(working);
+    expect(Math.round(reply.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(working.getBoundingClientRect().top));
+    // 正文接续有效目标：增长多少就跟进多少，不重新补齐先前借用的留白。
+    const contentGrowth = list.scrollHeight - activity.height;
+    expect(contentGrowth).toBeGreaterThan(0);
+    expect(list.scrollTop - activity.top).toBe(contentGrowth);
+    expect(Math.abs(Math.round(tailOffset()) - Math.round(activity.tail))).toBeLessThanOrEqual(1);
+    expect(api.followingOutput).toBe(true);
+    expect(list.style.paddingBottom).toBe("");
     const reading = original[0].querySelectorAll("p")[5];
     list.scrollTop += reading.getBoundingClientRect().top - list.getBoundingClientRect().top - 2;
     flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
