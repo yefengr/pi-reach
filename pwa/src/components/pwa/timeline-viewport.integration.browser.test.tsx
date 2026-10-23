@@ -442,9 +442,16 @@ test.each(activityCases)("expanding a live tool group preserves reading until La
     await expect.poll(() => bottomGap(list)).toBeLessThanOrEqual(1);
     expect(viewport().unreadOutput).toBe(0);
     expect(group.getAttribute("aria-expanded")).toBe("true");
+    const latestTop = list.scrollTop;
     update([history, tool("a", true), tool("b", true), ended, answer("next", "Next reply")]);
+    const bottom = list.scrollHeight - list.clientHeight;
+    const allowance = Math.max(0, Number.parseFloat(getComputedStyle(list).paddingBottom) - 8);
+    const expected = Math.min(bottom, Math.max(latestTop, bottom - allowance));
     await settleLayout();
-    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(Math.round(list.scrollTop)).toBe(Math.round(expected));
+    const nextBody = screen.getByText("Next reply").element();
+    expect(Math.round(nextBody.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(list.getBoundingClientRect().bottom) - 8);
+    expect(viewport().followingOutput).toBe(true);
     expect(viewport().unreadOutput).toBe(0);
 
     // 恢复跟随后再主动上滑，后续输出仍须保留用户的阅读锚点。

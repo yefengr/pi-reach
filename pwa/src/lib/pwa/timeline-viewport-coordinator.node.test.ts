@@ -5,6 +5,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   let top = 0;
   let bottom = 100;
   let animate = true;
+  let tailSpace = 0;
   let finishes = 0;
   let starts = 0;
   let advances = 0;
@@ -21,15 +22,17 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   const frames = new Map<number, (now: number) => void>();
   const late: ((now: number) => void)[] = [];
   let next = 0;
-  const motion = (): ViewportMotion => {
+  const motion = (target = () => bottom): ViewportMotion => {
     starts += 1;
     let start: number | null = null;
-    return { advance(now) { advances += 1; samples.push(now); start ??= now; return { top: (top + bottom) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
+    return { advance(now) { advances += 1; samples.push(now); start ??= now; return { top: (top + target()) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
   };
   const layout: ViewportLayout<number, number> = {
-    measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate }; }, top: () => top,
+    measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate, tailSpace, compensation: 0 }; }, top: () => top,
     scroll(value) { writes.push(value); top = Math.min(bottom, value); reenter?.(); },
-    captureSend: () => top, send: motion, activity: (from) => { activityOrigins.push(from); return motion(); },
+    captureSend: () => top, send: () => motion(), activity: (from, target) => {
+      activityOrigins.push(from); return motion(() => target(layout.measure()));
+    },
     captureAnchor: () => top - anchorShift, restoreAnchor: (anchor) => {
       if (!anchorAvailable) return false;
       restored.push(anchor); top = Math.min(bottom, anchor + anchorShift); reenter?.(); return true;
@@ -47,6 +50,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     shiftOnFinish(value: number) { finishShift = value; },
     step(value = now) { now = value; const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); },
     setBottom(value: number) { bottom = value; }, setTop(value: number) { top = value; },
+    setTailSpace(value: number) { tailSpace = value; },
     reduce() { animate = false; }, allowMotion() { animate = true; }, reenter(callback: () => void) { reenter = callback; },
     get finishes() { return finishes; }, get starts() { return starts; }, get advances() { return advances; },
     get measures() { return measures; },
@@ -54,6 +58,109 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
 }
 
 describe("TimelineViewportCoordinator", () => {
+  test("activity borrows tail space and native logical-target receipts never end following", () => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    f.setBottom(156); f.core.notify("activity");
+    expect(f.layout.top()).toBe(100);
+    expect(f.starts).toBe(0);
+    for (let i = 0; i < 3; i++) f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+    f.core.notify("commit"); f.core.notify("geometry");
+    f.core.output("reply"); f.step(200);
+    expect(f.layout.top()).toBe(100);
+    f.setBottom(196); f.core.notify("commit");
+    expect(f.layout.top()).toBe(140);
+    f.setTop(120); f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test.each([2, 8, 20])("scrolling down %ipx into borrowed space preserves follow without snapping back", (distance) => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    f.setBottom(156); f.core.notify("activity");
+    f.setTop(100 + distance); f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+    f.core.notify("commit");
+    expect(f.layout.top()).toBe(100 + distance);
+    f.setTop(96 + distance); f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test("Reduced Motion Latest is ready for activity before another content commit", () => {
+    const f = fixture();
+    f.setTailSpace(80); f.reduce(); f.core.latest();
+    expect(f.layout.top()).toBe(100);
+    f.core.scroll(true);
+    f.setBottom(156); f.core.notify("activity");
+    expect(f.layout.top()).toBe(100);
+    expect(f.core.state.following).toBe(true);
+    expect(f.starts).toBe(0);
+    f.core.notify("commit");
+    expect(f.layout.top()).toBe(100);
+  });
+
+  test("activity scrolls only the deficit and keeps its effective target through handoff", () => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    f.setBottom(300); f.core.notify("activity");
+    expect(f.starts).toBe(1);
+    expect(f.layout.top()).toBe(160);
+    f.step(160); f.step(200);
+    expect(f.layout.top()).toBe(220);
+    expect(f.finishes).toBe(1);
+    f.core.scroll(false); f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+    expect(f.frames.size).toBe(0);
+  });
+
+  test.each(["details", "hidden", "reduce", "viewport-resize"] as const)("%s preserves borrowed space and rejects stale work", (action) => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    f.setBottom(156); f.core.notify("activity");
+    if (action === "details") { f.core.details(true); f.core.details(false); }
+    else { if (action === "reduce") f.reduce(); f.core.settle(action); }
+    f.step(200); f.core.notify("commit");
+    expect(f.layout.top()).toBe(100);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test.each(["latest", "reset", "send", "rebind"] as const)("%s clears old tail credit", (action) => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    f.setBottom(156); f.core.notify("activity");
+    if (action === "latest") { f.reduce(); f.core.latest(); }
+    else if (action === "reset") f.core.reset();
+    else if (action === "send") f.core.followOwnSend(f.core.captureOwnSend());
+    else f.core.bind({ ...f.layout });
+    f.core.notify("commit"); f.step(200); f.step(400);
+    expect(f.layout.top()).toBe(156);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("net content shrink returns borrowed space before moving the existing body downward", () => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(144); f.core.notify("commit");
+    expect(f.layout.top()).toBe(100);
+    f.core.notify("geometry"); f.core.scroll(false);
+    expect(f.layout.top()).toBe(100);
+    expect(f.core.state.following).toBe(true);
+    f.setBottom(180); f.core.notify("commit");
+    expect(f.layout.top()).toBe(136);
+  });
+
+  test("a smaller current tail budget clamps credit permanently, without borrowing it again", () => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    f.setBottom(156); f.core.notify("activity");
+    f.setTailSpace(0); f.core.settle("viewport-resize");
+    expect(f.layout.top()).toBe(156);
+    f.setTailSpace(80); f.core.notify("geometry");
+    expect(f.layout.top()).toBe(156);
+  });
+
   test("capture is readonly; only successful activation starts motion", () => {
     const f = fixture();
     f.core.userRead();

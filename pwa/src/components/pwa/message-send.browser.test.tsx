@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { TIMELINE_GEOMETRY_EVENT, useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { TimelineViewportLayout } from "@/lib/pwa/timeline-viewport-layout";
 import { TimelineRuntime, type TimelinePending, type TimelineRuntimeChange, type TimelineScope, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
@@ -11,6 +12,7 @@ import { MessageList } from "./message-list";
 import { isQueuedMessage, QueuedMessagesPanel } from "./queued-messages-panel";
 import { MessageComposer } from "./message-composer";
 import { PwaMessageActions } from "./pwa-app-actions";
+import "@/app/workspace-viewport.css";
 
 const noop = () => {};
 const composer: ComponentProps<typeof MessageComposer> = {
@@ -61,7 +63,7 @@ async function harness({ width = 390, compact = false, working = false, draft = 
       setText("");
       setFiles([]);
     };
-    return <div className="pwa-app-shell"><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ display: "flex", flexDirection: "column", width: "100vw", height: height ?? (compact ? 280 : 650), flex: "none" }}>
+    return <div className="pwa-app-shell" data-compact-height={compact ? "short" : undefined}><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ display: "flex", flexDirection: "column", width: "100vw", height: height ?? (compact ? 280 : 650), flex: "none" }}>
       <MessageList items={items} isLive={online} running={running} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryUnknown={noop} onCancelQueued={noop} />
       <div className="pwa-chat-footer"><PwaMessageActions show={!viewport.followingOutput} showLatest={!viewport.followingOutput} showRetry={false} unreadOutput={viewport.unreadOutput} onRetry={noop} onLatest={viewport.showLatest} /><MessageComposer {...composer} attachments={files} draft={text} onDraftChange={setText} onSend={send} /></div>
     </main></div>;
@@ -161,7 +163,7 @@ function withGeometryWork(list: HTMLElement, run: () => void, work: () => void):
   return notices;
 }
 
-test.each([false, true].flatMap(receipt => [0, 16].map(commitCost => ({ receipt, commitCost }))))("late Working follows continuously regardless of simultaneous receipt (receipt=$receipt, commitCost=$commitCost)", async ({ receipt, commitCost }) => {
+test.each([false, true].flatMap(receipt => [0, 16].map(commitCost => ({ receipt, commitCost }))))("late Working borrows safe tail space without moving body or losing native follow (receipt=$receipt, commitCost=$commitCost)", async ({ receipt, commitCost }) => {
   const h = await harness();
   try {
     h.send();
@@ -173,13 +175,88 @@ test.each([false, true].flatMap(receipt => [0, 16].map(commitCost => ({ receipt,
     expect(notices).toBeGreaterThan(0);
     expect(h.list.scrollTop).toBe(before);
     expect(gap(h.list)).toBeGreaterThan(1);
+    const old = h.list.querySelector(".pwa-message.assistant")!;
+    const oldTop = top(old);
+    const borrowed = gap(h.list);
+    expect(borrowed).toBeGreaterThan(32);
+    for (const time of [40, 160, 200]) {
+      clock.step(time);
+      expect(h.list.scrollTop).toBe(before);
+      expect(top(old)).toBe(oldTop);
+      flushSync(() => h.list.dispatchEvent(new Event("scroll", { bubbles: true })));
+      expect(h.viewport().followingOutput).toBe(true);
+      expect(document.querySelector(".pwa-message-actions")).toBeNull();
+    }
+    h.update([history, h.sent()]);
+    clock.step(240);
+    expect(h.list.scrollTop).toBe(before);
+    expect(gap(h.list)).toBe(borrowed);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("native scroll at the borrowed target keeps following, but a real different landing interrupts", async () => {
+  const h = await harness();
+  const receipts: boolean[] = [];
+  const record = (event: Event) => { receipts.push(event.isTrusted); };
+  try {
+    h.work(true);
+    await frames();
+    const target = h.list.scrollTop;
+    const borrowed = gap(h.list);
+    expect(borrowed).toBeGreaterThan(32);
+    h.list.addEventListener("scroll", record);
+    // 同步往返只排队一次原生回执，实际落点仍是有效跟随目标。
+    h.list.scrollTop = target + 1;
+    h.list.scrollTop = target;
+    await vi.waitFor(() => expect(receipts).toContain(true));
+    await frames();
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(gap(h.list)).toBe(borrowed);
+    expect(document.querySelector(".pwa-message-actions")).toBeNull();
+    for (const distance of [2, 8]) {
+      receipts.length = 0;
+      h.list.scrollTop = target + distance;
+      await vi.waitFor(() => expect(receipts).toContain(true));
+      await frames();
+      expect(h.viewport().followingOutput).toBe(true);
+      expect(gap(h.list)).toBe(borrowed - distance);
+      h.update([history]);
+      await frames();
+      expect(h.list.scrollTop).toBe(target + distance);
+      expect(document.querySelector(".pwa-message-actions")).toBeNull();
+    }
+    receipts.length = 0;
+    h.list.scrollTop = target - 80;
+    await vi.waitFor(() => expect(receipts).toContain(true));
+    await vi.waitFor(() => expect(h.viewport().followingOutput).toBe(false));
+    const readTop = h.list.scrollTop;
+    h.work(false);
+    await frames();
+    expect(h.list.scrollTop).toBe(readTop);
+  } finally {
+    h.list.removeEventListener("scroll", record);
+    await h.screen.unmount();
+  }
+});
+
+test.each([false, true].flatMap(receipt => [0, 16].map(commitCost => ({ receipt, commitCost }))))("short-screen late Working keeps one frame clock (receipt=$receipt, commitCost=$commitCost)", async ({ receipt, commitCost }) => {
+  const h = await harness({ compact: true });
+  try {
+    h.send();
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe(""));
+    await frames();
+    const clock = layoutClock();
+    const before = h.list.scrollTop;
+    expect(getComputedStyle(h.list).paddingBottom).toBe("8px");
+    withGeometryWork(h.list, () => h.work(true, receipt ? [history, h.sent()] : undefined), () => clock.elapse(commitCost));
+    expect(h.list.scrollTop).toBe(before);
     clock.step(40);
     expect(h.list.scrollTop).toBeGreaterThan(before);
     expect(gap(h.list)).toBeGreaterThan(1);
-    clock.step(160);
+    clock.step(160); clock.step(200);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     expect(h.viewport().followingOutput).toBe(true);
-    clock.step(200);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
 });
@@ -196,25 +273,29 @@ test.each([false, true])("real frames remain monotonic through send release and 
     observer.observe(footer, { childList: true, subtree: true });
     try {
       h.send();
-      const sampleUntilSettled = async () => {
+      const sampleUntilSettled = async (expectedGap = 0) => {
         const deadline = performance.now() + 3000;
         let settledFrames = 0;
         while (settledFrames < 3 && performance.now() < deadline) {
           await frames(1);
           samples.push(top(old));
           expect(getComputedStyle(footer).display).toBe(context);
-          settledFrames = footer.style.height === "" && gap(h.list) <= 1 ? settledFrames + 1 : 0;
+          settledFrames = footer.style.height === "" && Math.abs(gap(h.list) - expectedGap) <= 1 ? settledFrames + 1 : 0;
         }
         expect(settledFrames).toBe(3);
       };
       await sampleUntilSettled();
       expect(footer.style.height).toBe("");
+      const settledTop = top(old);
       h.work(true);
-      await sampleUntilSettled();
+      const borrowed = gap(h.list);
+      expect(borrowed).toBeGreaterThan(32);
+      await sampleUntilSettled(borrowed);
+      expect(top(old)).toBe(settledTop);
       for (let i = 1; i < samples.length; i++) expect(samples[i]).toBeLessThanOrEqual(samples[i - 1] + 1);
       expect(latestFlashed).toBe(false);
       expect(h.viewport().followingOutput).toBe(true);
-      expect(gap(h.list)).toBeLessThanOrEqual(1);
+      expect(gap(h.list)).toBe(borrowed);
     } finally { observer.disconnect(); }
   } finally { await h.screen.unmount(); }
 });
@@ -239,8 +320,10 @@ test("Reduced Motion immediately settles Working geometry and keeps the status f
   const h = await harness();
   try {
     const clock = layoutClock();
+    const before = h.list.scrollTop;
     h.work(true);
-    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.list.scrollTop).toBe(before);
+    expect(gap(h.list)).toBeGreaterThan(32);
     const status = h.list.querySelector<HTMLElement>(".pwa-thinking-status")!;
     expect(status.textContent).toBe("Working…");
     expect(getComputedStyle(status.querySelector("svg")!).opacity).toBe("1");
@@ -306,12 +389,13 @@ test.each([false, true])("Working removal has no single-frame clamp and releases
 });
 
 test.each(["reset", "details", "resize", "unmount"])("%s cancels a Working transition and its stale callbacks", async action => {
-  const h = await harness();
+  const h = await harness({ compact: true });
   let unmounted = false;
   try {
     const clock = layoutClock();
     h.work(true); clock.step(40);
     const stale = clock.snapshot();
+    expect(stale.length).toBeGreaterThan(0);
     if (action === "unmount") { await h.screen.unmount(); unmounted = true; }
     else if (action === "reset") h.viewport().reset();
     else if (action === "details") h.viewport().setReadingDetails(true);
@@ -343,6 +427,156 @@ test("Working after Latest completes starts at the actual bottom, not the old re
     expect(Math.round(h.list.scrollTop)).toBe(Math.round(before));
     clock.step(160); clock.step(200);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
+  } finally { await h.screen.unmount(); }
+});
+
+test.each([false, true])("xlarge late Working uses only the current safe tail budget (compact=%s)", async compact => {
+  document.documentElement.dataset.pwaTextSize = "xlarge";
+  const h = await harness({ compact });
+  try {
+    const clock = layoutClock();
+    const before = h.list.scrollTop;
+    const padding = Number.parseFloat(getComputedStyle(h.list).paddingBottom);
+    h.work(true);
+    const bottom = h.list.scrollHeight - h.list.clientHeight;
+    const expected = Math.min(bottom, Math.max(before, bottom - Math.max(0, padding - 8)));
+    expect(h.list.scrollTop).toBe(before);
+    clock.step(160); clock.step(200);
+    expect(Math.round(h.list.scrollTop)).toBe(Math.round(expected));
+    const status = h.list.querySelector(".pwa-thinking-status")!;
+    expect(Math.round(status.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) - 8);
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(h.list.style.paddingBottom).toBe("");
+  } finally { await h.screen.unmount(); }
+});
+
+test.each(["details", "hidden", "reduce", "latest", "send", "reset"])("borrowed tail respects %s lifecycle without refilling old space", async action => {
+  const h = await harness();
+  try {
+    const clock = layoutClock();
+    const before = h.list.scrollTop;
+    h.work(true);
+    const borrowed = gap(h.list);
+    expect(borrowed).toBeGreaterThan(32);
+    if (action === "details") flushSync(() => { h.viewport().setReadingDetails(true); h.viewport().setReadingDetails(false); });
+    else if (action === "hidden") {
+      vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+      document.dispatchEvent(new Event("visibilitychange"));
+    } else if (action === "reduce") {
+      await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+    } else if (action === "send") h.send();
+    else if (action === "reset") { h.viewport().reset(); h.update([history]); }
+    else {
+      const scroll = h.list.scrollTo.bind(h.list);
+      vi.spyOn(h.list, "scrollTo").mockImplementation((options?: ScrollToOptions | number) => {
+        if (typeof options === "object") scroll({ ...options, behavior: "auto" });
+      });
+      flushSync(() => h.viewport().showLatest());
+      flushSync(() => h.list.dispatchEvent(new Event("scroll", { bubbles: true })));
+    }
+    clock.step(160); clock.step(200); clock.step(400);
+    if (["details", "hidden", "reduce"].includes(action)) {
+      expect(h.list.scrollTop).toBe(before);
+      expect(gap(h.list)).toBe(borrowed);
+    } else expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(document.querySelector(".pwa-message-actions")).toBeNull();
+    expect(h.list.style.paddingBottom).toBe("");
+  } finally { await h.screen.unmount(); }
+});
+
+test("borrowed tail survives equal Thinking/tool replacement and body takeover without delayed refill", async () => {
+  const h = await harness();
+  try {
+    const clock = layoutClock();
+    const before = h.list.scrollTop;
+    h.work(true);
+    clock.step(200);
+    const borrowed = gap(h.list);
+    const thinking: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
+      protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Checking results",
+    } };
+    const tool: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
+      protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "tool", kind: "tool", tool_call_id: "read", tool: "read", args: { path: "note.txt" }, status: "running",
+    } };
+    for (const item of [thinking, tool, thinking]) {
+      h.work(true, [history, item]);
+      expect(h.list.querySelector(".pwa-thinking-status")).toBeNull();
+      clock.step(400);
+      expect(Math.round(h.list.scrollTop)).toBe(Math.round(before));
+      expect(gap(h.list)).toBe(borrowed);
+      expect(h.viewport().followingOutput).toBe(true);
+    }
+    const reply = (text: string): TimelineViewItem => ({ ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text }] } });
+    h.work(false, [history, reply("First reply")]);
+    const bottom = h.list.scrollHeight - h.list.clientHeight;
+    const expected = Math.min(bottom, Math.max(before, bottom - 80));
+    clock.step(600); clock.step(800);
+    expect(Math.round(h.list.scrollTop)).toBe(Math.round(expected));
+    const credit = gap(h.list);
+    for (const text of ["First reply\n\nMore output", "First reply\n\nMore output\n\nA complete new paragraph"]) {
+      h.update([history, reply(text)]); clock.step(1000);
+      expect(gap(h.list)).toBe(credit);
+      const body = h.list.querySelectorAll(".pwa-message.assistant")[1];
+      expect(Math.round(body.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) - 8);
+      expect(h.viewport().followingOutput).toBe(true);
+    }
+    expect(h.list.style.paddingBottom).toBe("");
+  } finally { await h.screen.unmount(); }
+});
+
+test("natural tail padding matches scroll clearance in normal, compact and budget layouts", async () => {
+  const h = await harness();
+  try {
+    const shell = h.list.closest<HTMLElement>(".pwa-app-shell")!;
+    const main = h.list.closest<HTMLElement>(".pwa-main")!;
+    for (const mode of ["normal", "compact", "budget", "conflict"]) {
+      delete shell.dataset.compactHeight;
+      delete main.dataset.composerBudget;
+      if (mode === "compact") shell.dataset.compactHeight = "short";
+      else if (mode !== "normal") main.dataset.composerBudget = mode === "conflict" ? "conflict" : "constrained";
+      const style = getComputedStyle(h.list);
+      expect(style.paddingBottom).toBe(mode === "normal" ? "88px" : "8px");
+      expect(style.scrollPaddingBottom).toBe(style.paddingBottom);
+    }
+  } finally { await h.screen.unmount(); }
+});
+
+test("measuring compensated activity does not write styles or scroll position", async () => {
+  const h = await harness({ working: true });
+  const observer = new MutationObserver(() => {});
+  try {
+    const clock = layoutClock();
+    h.work(false); clock.step(40);
+    expect(Number.parseFloat(h.list.style.paddingBottom)).toBeGreaterThan(88);
+    const writeTop = vi.spyOn(h.list, "scrollTop", "set");
+    observer.observe(h.list, { attributes: true, attributeFilter: ["style"] });
+    const layout = new TimelineViewportLayout(h.list);
+    for (let i = 0; i < 3; i++) expect(layout.measure().compensation).toBeGreaterThan(0);
+    expect(observer.takeRecords()).toHaveLength(0);
+    expect(writeTop).not.toHaveBeenCalled();
+    writeTop.mockRestore();
+  } finally { observer.disconnect(); await h.screen.unmount(); }
+});
+
+test.each(["density", "budget"])("temporary activity padding never becomes a new budget during %s change", async change => {
+  const h = await harness({ working: true });
+  try {
+    const clock = layoutClock();
+    h.work(false); clock.step(40);
+    expect(Number.parseFloat(h.list.style.paddingBottom)).toBeGreaterThan(88);
+    if (change === "density") h.list.closest<HTMLElement>(".pwa-app-shell")!.dataset.compactHeight = "short";
+    else h.list.closest<HTMLElement>(".pwa-main")!.dataset.composerBudget = "constrained";
+    const geometry = new TimelineViewportLayout(h.list).measure();
+    expect(geometry.tailSpace).toBe(0);
+    expect(geometry.compensation).toBeGreaterThan(0);
+    h.work(true);
+    clock.step(160); clock.step(200);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.list.style.paddingBottom).toBe("");
+    expect(getComputedStyle(h.list).paddingBottom).toBe("8px");
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
 });
 
