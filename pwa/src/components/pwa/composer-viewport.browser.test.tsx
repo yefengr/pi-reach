@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
@@ -79,7 +79,13 @@ const sixLineHeight = (input: HTMLElement) => {
 const bottomGap = (list: HTMLElement) => list.scrollHeight - list.clientHeight - list.scrollTop;
 const offset = (node: Element, list: Element) => node.getBoundingClientRect().top - list.getBoundingClientRect().top;
 
+// 键盘跟随过渡单独覆盖；其余用例即时完成，几何断言不受动画中间帧影响。
+beforeEach(() => {
+  document.documentElement.style.setProperty("--pwa-duration-keyboard", "0ms");
+});
+
 afterEach(async () => {
+  document.documentElement.style.removeProperty("--pwa-duration-keyboard");
   vi.unstubAllGlobals();
   window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
   resetTextSizeStateForTest();
@@ -210,6 +216,38 @@ test("locks the document to the visible height under the keyboard so iOS has no 
     await view.screen.unmount();
   }
   expect(root.hasAttribute("data-pwa-keyboard")).toBe(false);
+});
+
+test("follows the keyboard with a shell height transition when it opens and closes", async () => {
+  document.documentElement.style.removeProperty("--pwa-duration-keyboard");
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const height = () => Math.round(view.shell.getBoundingClientRect().height);
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(view.shell.hasAttribute("data-keyboard-opening")).toBe(true);
+    expect(height()).toBeGreaterThan(470);
+    expect(height()).toBeLessThan(844);
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-opening")).toBe(false);
+    expect(height()).toBe(470);
+
+    view.input.blur();
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    // 失焦即开始收起，不等视口恢复；过渡期间仍保持 fixed 补偿。
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    viewport.change({ height: 844 });
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+    expect(height()).toBe(844);
+    expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
+  } finally {
+    await view.screen.unmount();
+  }
 });
 
 test("keeps a real timeline paragraph anchored through keyboard, draft and rotation changes", async () => {

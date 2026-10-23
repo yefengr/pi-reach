@@ -10,6 +10,7 @@ import type { OperationHint } from "@/lib/pwa/operation-feedback";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
+import { assistKeyboardFocus, readKeyboardTap, type KeyboardTap } from "@/lib/pwa/keyboard-focus-assist";
 
 type ComposerAttachmentMenuProps = {
   disabled: boolean;
@@ -163,6 +164,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
   const resetRef = useRef<(() => void) | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const keyboardTapRef = useRef<KeyboardTap | null>(null);
   const imageTriggerRef = useRef<HTMLButtonElement | null>(null);
   const commandTriggerRef = useRef<HTMLButtonElement | null>(null);
   const commandDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -407,7 +409,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
       </p> : null}
       <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
       <div className="pwa-composer-card">
-        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments || newSessionPending} rows={1} />
+        <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} onPaste={handlePaste} onTouchStart={(event) => { keyboardTapRef.current = readKeyboardTap(event.nativeEvent); }} onTouchEnd={(event) => { if (assistKeyboardFocus(event.currentTarget, keyboardTapRef.current, event.nativeEvent)) event.preventDefault(); keyboardTapRef.current = null; }} placeholder={t.composer.placeholder} readOnly={sendingAttachments || newSessionPending} rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">
             <div className="pwa-composer-menu">

@@ -30,6 +30,51 @@ function applyDensity(shell: HTMLElement) {
   shell.toggleAttribute("data-wide-compact", height <= SHORT_VIEWPORT_HEIGHT && width >= INLINE_NOTICE_MIN_WIDTH);
 }
 
+// transitionend 可能因元素卸载、标签页切走等原因丢失；超过动画时长这么久仍未结束就直接收尾。
+const KEYBOARD_MOTION_GRACE_MS = 150;
+type KeyboardMotion = "opening" | "closing";
+const KEYBOARD_MOTION_ATTRIBUTE: Record<KeyboardMotion, string> = {
+  opening: "data-keyboard-opening",
+  closing: "data-keyboard-closing",
+};
+
+/**
+ * iOS 弹出／收起键盘时立即报告最终视口，键盘本身却要滑动约 250ms，且不提供逐帧进度。
+ * 外壳高度用同等时长过渡，让输入区与键盘同步移动；同一时刻只有一个方向，以 height 的 transitionend 收尾，计时器兜底。
+ */
+class KeyboardMotionClock {
+  private kind: KeyboardMotion | null = null;
+  private timer = 0;
+  constructor(private readonly shell: HTMLElement, private readonly onEnd: (kind: KeyboardMotion) => void) {}
+  get current(): KeyboardMotion | null { return this.kind; }
+  /** 减少动态效果（时长为 0）时返回 false，调用方即时完成。 */
+  start(kind: KeyboardMotion): boolean {
+    this.stop();
+    const duration = Number.parseFloat(getComputedStyle(this.shell).getPropertyValue("--pwa-duration-keyboard"));
+    if (!(duration > 0)) return false;
+    this.kind = kind;
+    this.shell.setAttribute(KEYBOARD_MOTION_ATTRIBUTE[kind], "");
+    this.shell.addEventListener("transitionend", this.handleEnd);
+    this.timer = window.setTimeout(() => this.finish(), duration + KEYBOARD_MOTION_GRACE_MS);
+    return true;
+  }
+  stop() {
+    if (!this.kind) return;
+    window.clearTimeout(this.timer);
+    this.shell.removeEventListener("transitionend", this.handleEnd);
+    this.shell.removeAttribute(KEYBOARD_MOTION_ATTRIBUTE[this.kind]);
+    this.kind = null;
+  }
+  private readonly handleEnd = (event: TransitionEvent) => {
+    if (event.target === this.shell && event.propertyName === "height") this.finish();
+  };
+  private finish() {
+    const kind = this.kind;
+    this.stop();
+    if (kind) this.onEnd(kind);
+  }
+}
+
 /** 补偿只缩小 visual viewport 的软键盘；浏览器已缩小布局视口时不再扣一次高度。 */
 export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
   useLayoutEffect(() => {
@@ -41,7 +86,9 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
     let adjusted = false;
     let unfocusedOcclusion = viewport ? Math.max(0, document.documentElement.clientHeight - viewport.height) : 0;
     const root = document.documentElement;
+    const motion = new KeyboardMotionClock(shell, (kind) => { if (kind === "closing") reset(); });
     const reset = () => {
+      motion.stop();
       adjusted = false;
       delete shell.dataset.keyboardViewport;
       shell.style.removeProperty("--pwa-viewport-height");
@@ -57,6 +104,12 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
       root.style.setProperty("--pwa-keyboard-document-height", `${height}px`);
       if (window.scrollY !== 0) window.scrollTo({ top: 0, left: window.scrollX, behavior: "instant" });
     };
+    // 失焦即开始把高度过渡到整屏，与键盘同时起步；结束后才解除 fixed 补偿和文档锁定。
+    // 减少动态效果时不过渡，保留补偿直到视口恢复，避免输入区在键盘收起前跳到底部。
+    const startClosing = () => {
+      if (motion.current === "closing" || !motion.start("closing")) return;
+      shell.style.setProperty("--pwa-viewport-height", "var(--pwa-app-height)");
+    };
     const update = () => {
       frame = 0;
       if (!viewport) { updateDensity(shell); return; }
@@ -67,12 +120,26 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
         reset();
         return;
       }
-      if (!textFocus && !adjusted) unfocusedOcclusion = occlusion;
-      if ((!textFocus && !adjusted) || occlusion <= unfocusedOcclusion + VIEWPORT_EPSILON) {
+      if (motion.current === "closing") {
+        // 收起过渡期间视口读数已是终点，交给过渡收尾；中途重新聚焦则取消收起、按当前视口重新补偿。
+        if (!textFocus) return;
+        motion.stop();
+      }
+      if (!textFocus && !adjusted) {
+        unfocusedOcclusion = occlusion;
         reset();
         return;
       }
-      // blur 后保留补偿直到视口恢复，避免键盘关闭动画尚未结束时输入区跳回屏幕底部。
+      if (occlusion <= unfocusedOcclusion + VIEWPORT_EPSILON) {
+        reset();
+        return;
+      }
+      if (!textFocus) {
+        startClosing();
+        return;
+      }
+      // 首次进入补偿时从整屏过渡到键盘上方；之后的视口变化（联想栏增减、旋转）即时跟随。
+      if (!adjusted) motion.start("opening");
       adjusted = true;
       lockDocument(viewport.height);
       shell.dataset.keyboardViewport = "";
