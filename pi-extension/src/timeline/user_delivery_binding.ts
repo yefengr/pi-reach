@@ -69,7 +69,8 @@ export class UserDeliveryBinding {
   submit(frame: UserMessageFrame, correlation: Correlation, scope: UserDeliveryScopeInput): UserDeliveryEnqueueResult | UserDeliveryRejection | true {
     if (frame.attachment_ids && frame.streaming_behavior === "steer") return "conflict";
     if (frame.streaming_behavior === "steer") return this.sendSteer(messageContent(frame), correlation);
-    if (!this.options.canAcceptNormal()) return false;
+    // 尚无可投递的 Pi 上下文：未入队也未调用 SDK，属于可重试的确定拒绝而非未知。
+    if (!this.options.canAcceptNormal()) return { kind: "rejected", code: "unavailable", retryable: true };
     if (frame.attachment_ids) {
       if (!this.options.prepareAttachment) return "conflict";
       let prepared: ReturnType<NonNullable<UserDeliveryBindingOptions["prepareAttachment"]>>;

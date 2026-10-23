@@ -447,7 +447,7 @@ describe("TimelineV2Service", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
-  test("retains rejection, replays duplicate attempts, and admits one new attempt atomically", () => {
+  test("retains rejection, replays duplicate attempts, and admits a new attempt atomically", () => {
     const session = SessionManager.inMemory(process.cwd());
     const send = vi.fn<() => "rejected" | "queued">(() => "rejected");
     const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1", runtime: new TimelineRuntime(), onUserMessage: send });
@@ -471,20 +471,20 @@ describe("TimelineV2Service", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  test("a second rejection cannot cause a third admission and stops advertising retry", () => {
+  test("each new attempt after a transient rejection is admitted once while duplicates only replay", () => {
     const session = SessionManager.inMemory(process.cwd());
     const send = vi.fn(() => "rejected" as const);
     const service = new TimelineV2Service({ sessionManager: session, senderRef: "owner-1", extensionVersion: "1", runtime: new TimelineRuntime(), onUserMessage: send });
     service.handle(hello());
-    const replies = ["a", "a", "b", "b", "c", "d"].map((id) => service.handle(user(service.leafId, { id }))[0]);
-    expect(replies[0]).toMatchObject({ status: "rejected", retryable: true, in_reply_to: "a" });
-    expect(replies[1]).toMatchObject({ status: "rejected", retryable: true, in_reply_to: "a" });
-    expect(replies[2]).toMatchObject({ status: "rejected", retryable: false, in_reply_to: "b" });
-    for (const reply of replies.slice(3)) expect(reply).toMatchObject({ status: "rejected", retryable: false });
+    const replies = ["a", "a", "b", "b", "c", "c"].map((id) => service.handle(user(service.leafId, { id }))[0]);
+    for (const [index, id] of ["a", "a", "b", "b", "c", "c"].entries()) {
+      expect(replies[index]).toMatchObject({ status: "rejected", code: "queue_full", retryable: true, in_reply_to: id });
+    }
     const query = service.handle({ protocol_version: 2, type: "user_message_status_request", id: "query", channel_id: "channel-1",
       session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "request-1" })[0];
-    expect(query).toMatchObject({ status: "rejected", retryable: false });
-    expect(send).toHaveBeenCalledTimes(2);
+    expect(query).toMatchObject({ status: "rejected", retryable: true, in_reply_to: "query" });
+    // 每个新尝试只准入一次；重复帧与查询都不调用投递。
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
   test("rejects same id with different payload and keeps unknown delivery idempotent", () => {

@@ -391,7 +391,7 @@ export const zh: Messages = {
     deliveryOffline: "连接恢复后可核对",
     deliveryTargetUnavailable: "原目标已不可用，内容仅供复制",
     deliveryAttachmentUnavailable: "请重新选择文件后发送",
-    cancelledRestore: "已取消，附件未能放回输入区，可复制内容",
+    cancelledKept: "已取消，内容未放回输入区，可复制",
     deliveryFailed: {
       queue_full: "Pi 的队列已满，暂时无法接收",
       transport_unavailable: "没有发送出去，检查连接后重试",

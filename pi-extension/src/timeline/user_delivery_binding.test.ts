@@ -226,4 +226,38 @@ describe("UserDeliveryBinding", () => {
     expect(sendUserMessage).toHaveBeenNthCalledWith(1, "alpha", { deliverAs: "steer" });
     expect(sendUserMessage).toHaveBeenNthCalledWith(2, "alpha", { deliverAs: "steer" });
   });
+
+  test("rejects as retryable without queueing or calling Pi when no delivery context exists yet", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    const sendUserMessage = vi.fn();
+    let service!: TimelineV2Service;
+    let ready = false;
+    const binding = new UserDeliveryBinding({
+      isIdle: () => true,
+      canAcceptNormal: () => ready,
+      getPi: () => ({ sendUserMessage }) as unknown as ExtensionAPI,
+      getTimeline: () => runtime,
+      getCurrentSessionId: () => session.getSessionId(),
+      getCurrentLeafId: () => service.leafId,
+      findTarget: () => ({ service, sessionId: session.getSessionId(), leafId: session.getLeafId() ?? null }),
+      sendFrames: () => undefined,
+    });
+    service = new TimelineV2Service({
+      sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime,
+      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
+        ownerId: "owner-1", sessionId: session.getSessionId(), leafId: service.leafId, service, clientRequestId: frame.client_request_id,
+      }),
+      onQueueSnapshot: () => binding.snapshot("owner-1", service),
+    });
+    service.handle(hello());
+    const frame = user(service.leafId);
+    expect(service.handle(frame)[0]).toMatchObject({ type: "user_message_status", status: "rejected", code: "unavailable", retryable: true, in_reply_to: "wire-1" });
+    expect(binding.snapshot("owner-1", service)[0]).toMatchObject({ items: [] });
+    expect(sendUserMessage).not.toHaveBeenCalled();
+    // 上下文就绪后，新的网络尝试可重新准入同一逻辑消息。
+    ready = true;
+    expect(service.handle({ ...frame, id: "wire-2" })[0]).toMatchObject({ status: expect.stringMatching(/^(received|accepted)$/), in_reply_to: "wire-2" });
+    binding.clearAll();
+  });
 });

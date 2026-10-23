@@ -38,7 +38,7 @@ export function UserMessage({ value, metadata, entering, timelineKey, onRetryFai
   const queued = !scopeInvalid && pending?.delivery === "accepted" && pending.messageId === undefined && pending.cancelable === true;
   // 普通 pending／received／accepted 不占状态行，异常才在气泡下方按正常文档流排布。
   const status = scopeInvalid ? t.timeline.deliveryTargetUnavailable
-    : cancelled ? t.timeline.cancelledRestore
+    : cancelled ? t.timeline.cancelledKept
       : failure ? failure.code === "invalid_target" && pending?.attachments?.length
         ? t.timeline.deliveryAttachmentUnavailable : failureReason(t.timeline.deliveryFailed, failure.code)
         : unknown ? t.timeline.deliveryUnknown : queued ? t.timeline.queued : null;

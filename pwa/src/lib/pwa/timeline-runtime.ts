@@ -619,7 +619,6 @@ export class TimelineRuntime {
       if (!frame.final) return this.change();
       const nextItems = [...this.queuedSnapshotItems.values()];
       const nextIds = new Set(nextItems.map((item) => item.id));
-      const cancelled: QueuedCancellation[] = [];
       for (const pending of [...this.pending.values(), ...this.unknown]) {
         if (!this.isCurrentPending(pending) || !pending.queued || nextIds.has(pending.clientRequestId)) continue;
         if (!pending.messageId && pending.insertionStatus !== undefined) {
@@ -677,7 +676,7 @@ export class TimelineRuntime {
       this.clearQueuedSnapshot(true);
       const change = this.change();
       if (!change.pendingCapacityExceeded) this.setQueueSnapshotReady(true);
-      return cancelled.length ? { ...change, cancelledQueued: cancelled } : change;
+      return change;
     }
     if (frame.type === "protocol_error") {
       const consumed = this.consumeDeliveryStatusError(frame);

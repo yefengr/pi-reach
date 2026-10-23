@@ -44,6 +44,16 @@ test("hello synchronizes the queue and promotion preserves attachments without r
   expect(send).toHaveBeenCalledTimes(1);
 });
 
+test("a sent insertion leaves the request unknown even after an ordinary leaf advance", () => {
+  const { service, manager } = harness();
+  service.handle(hello); service.handle(user);
+  manager.appendMessage({ role: "assistant", content: [{ type: "text", text: "progress" }], timestamp: 1 } as never);
+  expect(lastSnapshot(service.handle(steer))).toMatchObject({ items: [] });
+  expect(service.handle({ protocol_version: 2, type: "user_message_status_request", id: "query", channel_id: "c",
+    session_id: service.sessionId, leaf_id: service.leafId, client_request_id: "q" })[0])
+    .toMatchObject({ status: "unknown_delivery", in_reply_to: "query" });
+});
+
 test("queue actions enforce the channel/generation gate and cancellation cannot revive a request", () => {
   const { service, send } = harness();
   expect(service.handle(steer)[0]).toMatchObject({ type: "protocol_error", code: "invalid_channel" });
@@ -51,8 +61,14 @@ test("queue actions enforce the channel/generation gate and cancellation cannot 
   expect(service.handle({ ...steer, leaf_id: "old" })[0]).toMatchObject({ type: "reset" });
   expect(lastSnapshot(service.handle({ ...hello, id: "verify" }))).toMatchObject({ items: [{ id: "q" }] });
   const cancel: ClientFrame = { ...steer, type: "queued_message_clear", id: "cancel" };
-  expect(lastSnapshot(service.handle(cancel))).toMatchObject({ items: [] });
-  expect(lastSnapshot(service.handle(cancel))).toMatchObject({ items: [] });
+  const cleared = service.handle(cancel);
+  // 定向取消回执先于快照，PWA 不必把快照缺席当作未知再查询。
+  expect(cleared.map((frame) => frame.type)).toEqual(["user_message_status", "queued_message_state"]);
+  expect(cleared[0]).toMatchObject({ status: "cancelled", in_reply_to: "cancel", client_request_id: "q", target_channel_id: "c" });
+  expect(lastSnapshot(cleared)).toMatchObject({ items: [] });
+  const repeated = service.handle(cancel);
+  expect(repeated.some((frame) => frame.type === "user_message_status")).toBe(false);
+  expect(lastSnapshot(repeated)).toMatchObject({ items: [] });
   expect(service.handle(user)[0]).toMatchObject({ type: "user_message_status", status: "cancelled" });
   expect(service.handle({ protocol_version: 2, type: "user_message_status_request", id: "query", channel_id: "c",
     session_id: service.sessionId, leaf_id: service.leafId, client_request_id: user.client_request_id })[0])

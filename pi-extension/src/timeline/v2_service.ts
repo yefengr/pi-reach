@@ -318,13 +318,15 @@ export class TimelineV2Service {
     }
     try {
       const removed = this.options.onQueuedMessageClear(frame.target_id);
-      for (const clientRequestId of removed) {
+      // 取消回执先于快照：PWA 据此直接结清撤回，不必把快照缺席当作未知再查询。
+      const cancelled = removed.map((clientRequestId) => {
         this.state.markCancelledByClientRequest(this.senderRef, clientRequestId);
-      }
+        return this.statusReply({ id: frame.id, channel_id: frame.channel_id, client_request_id: clientRequestId }, "cancelled");
+      });
       if (frame.target_id !== undefined && !removed.includes(frame.target_id)) {
-        return [this.error(frame.id, "invalid_message", "This message has already started sending or is no longer queued.", frame.channel_id), ...this.currentQueueSnapshot()];
+        return [this.error(frame.id, "invalid_message", "This message has already started sending or is no longer queued.", frame.channel_id), ...cancelled, ...this.currentQueueSnapshot()];
       }
-      return this.currentQueueSnapshot();
+      return [...cancelled, ...this.currentQueueSnapshot()];
     } catch {
       return [this.error(frame.id, "internal_error", "Could not clear queued messages.", frame.channel_id), ...this.currentQueueSnapshot()];
     }
@@ -559,8 +561,9 @@ export class TimelineV2Service {
   }
 
   private terminateQueuedRequest(clientRequestId: string): void {
-    const record = this.state.getRecord(this.recordKey(clientRequestId));
-    if (record?.senderRef === this.senderRef) this.state.rememberUnknownDelivery(record.key);
+    // 记录 key 使用建立时的 scope leaf；普通 leaf 前进后不能按当前 leaf 重新拼 key。
+    const record = this.state.findByClientRequest(this.senderRef, clientRequestId);
+    if (record) this.state.rememberUnknownDelivery(record.key);
   }
 
   private direct(channelId: string, frame: Record<string, unknown>): ServerFrame[] {
@@ -581,10 +584,6 @@ export class TimelineV2Service {
       code,
       message,
     };
-  }
-
-  private recordKey(clientRequestId: string): string {
-    return `${this.sessionId}\u0000${this.leafId ?? ""}\u0000${this.senderRef}\u0000${clientRequestId}`;
   }
 
   private findRecord(clientRequestId: string): RecordWithChannel | undefined {

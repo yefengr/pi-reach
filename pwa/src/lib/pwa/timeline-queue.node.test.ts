@@ -417,6 +417,30 @@ test("keeps a locally cancelled message unknown until the host confirms cancella
   expect(runtime.confirmCancelledRestore(["q"]).items.filter((item) => item.kind === "pending")).toEqual([]);
 });
 
+test("a direct cancellation receipt settles the withdrawal before the snapshot without passing through unknown", () => {
+  const runtime = queuedRuntime();
+  const action = runtime.actOnQueued("q", "cancel")!;
+  // Extension 先回撤回请求的 cancelled，再发不含该项的快照。
+  const confirmed = runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: action.frame.id, client_request_id: "q", session_id: "s", leaf_id: "g", status: "cancelled" });
+  expect(confirmed.cancelledQueued).toEqual([{ clientRequestId: "q", text: "later", images: item.images }]);
+  expect(confirmed.unknown).toEqual([]);
+  runtime.confirmCancelledRestore(["q"]);
+  const after = runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  expect(after.items.filter((entry) => entry.kind === "pending")).toEqual([]);
+  expect(after.unknown).toEqual([]);
+});
+
+test("a direct cancellation receipt whose restore failed stays cancelled after the snapshot", () => {
+  const runtime = queuedRuntime();
+  const action = runtime.actOnQueued("q", "cancel")!;
+  runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: action.frame.id, client_request_id: "q", session_id: "s", leaf_id: "g", status: "cancelled" });
+  runtime.keepCancelledRestore();
+  runtime.receive(snapshot([], { snapshot_id: "after-cancel" }));
+  expect(runtime.pendingItems).toEqual([expect.objectContaining({ delivery: "cancelled", queued: false, text: "later" })]);
+});
+
 test("keeps a cancelled message content when the host cannot confirm the cancellation", () => {
   const runtime = queuedRuntime();
   runtime.actOnQueued("q", "cancel");

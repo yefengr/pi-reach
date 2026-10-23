@@ -1644,11 +1644,11 @@ test.each([false, true])("attachment final submission preserves a restored draft
     const clear = channel.frames.findLast((frame) => frame.type === "queued_message_clear" && frame.target_id === "restore-during-send")!;
     let committed = false;
     channelHarness.beforeUserSend = () => {
-      // 快照缺席只转未知，明确的 cancelled 回执才回填草稿并推进版本；强制提交使测试不依赖 React 恰好批处理。
+      // 与 Extension 一致：cancelled 回执先于快照，回填草稿并推进版本；强制提交使测试不依赖 React 恰好批处理。
       flushSync(() => {
-        channel.emit(queuedStateFrame([], "after-draft-handoff"));
         channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
           in_reply_to: clear.id, client_request_id: "restore-during-send", session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
+        channel.emit(queuedStateFrame([], "after-draft-handoff"));
       });
       committed = true;
       expect(footer.style.height).toBe("");
@@ -3993,7 +3993,30 @@ function queuedStateFrame(items: Array<{ id: string; text: string }>, snapshotId
   return { protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: snapshotId, chunk_index: 0, final: true, items: items.map((item) => ({ ...item, sender_ref: "sender-session-1", editable: true, created_at: 1 })) };
 }
 
-test("returns a cancelled queued message to the composer once the cancellation is confirmed", async () => {
+test("returns a withdrawn queued message from the direct cancellation receipt without an unconfirmed bubble", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    channel.emit(queuedStateFrame([{ id: "queued-1", text: "Check landscape mode next" }], "queue-1"));
+    await expect.element(screen.getByText("Check landscape mode next", { exact: true })).toBeVisible();
+    const input = screen.getByRole("textbox");
+    await input.fill("Draft in progress");
+    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    const clear = channel.frames.findLast((frame) => frame.type === "queued_message_clear")!;
+    // 与 Extension 一致：定向 cancelled 回执先于不含该项的快照。
+    flushSync(() => {
+      channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+        in_reply_to: clear.id, client_request_id: "queued-1", session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
+      channel.emit(queuedStateFrame([], "queue-2"));
+    });
+    await expect.element(input).toHaveValue("Draft in progress\nCheck landscape mode next");
+    expect(document.querySelector(".pwa-delivery-status")).toBeNull();
+    expect(channel.frames.some((frame) => frame.type === "user_message_status_request")).toBe(false);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("falls back to a status query when the cancellation receipt is lost", async () => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     channel.emit(queuedStateFrame([{ id: "queued-1", text: "Check landscape mode next" }], "queue-1"));

@@ -28,7 +28,6 @@ export type V2IdempotencyRecord = {
   attemptId?: string;
   rejectCode?: string;
   retryable?: boolean;
-  retried?: boolean;
   messageId?: string;
   groupId?: string;
   touchedAt: number;
@@ -128,10 +127,10 @@ export class V2SessionState {
         this.records.set(key, existing);
       }
       if (existing.fingerprint !== fingerprint) return { kind: "conflict", record: { ...existing } };
-      if (existing.status === "rejected" && existing.retryable === true && request.attemptId !== existing.attemptId && existing.retried !== true) {
+      // 拒绝发生在入队和调用 SDK 之前，每个新尝试都可重新准入；同一尝试的重复帧只重放结果。
+      if (existing.status === "rejected" && existing.retryable === true && request.attemptId !== existing.attemptId) {
         existing.status = "received";
         existing.attemptId = request.attemptId;
-        existing.retried = true;
         delete existing.rejectCode;
         delete existing.retryable;
         return { kind: "retry", record: { ...existing } };
@@ -194,8 +193,7 @@ export class V2SessionState {
     const stored = this.records.get(key)!;
     stored.attemptId = attemptId;
     stored.rejectCode = code;
-    // 首次重新准入已用尽时，重试按钮必须收敛为不可重试，不能无限点击。
-    stored.retryable = retryable && stored.retried !== true;
+    stored.retryable = retryable;
     return { ...stored };
   }
 

@@ -190,7 +190,8 @@ describe("attachment delivery integration", () => {
       idle = false;
       service.handle(frame("clear-target"));
       expect(service.handle({ protocol_version: 2, type: "queued_message_clear", id: "clear", channel_id: "channel",
-        session_id: manager.getSessionId(), leaf_id: manager.getLeafId(), target_id: "clear-target" })).toMatchObject([{ items: [] }]);
+        session_id: manager.getSessionId(), leaf_id: manager.getLeafId(), target_id: "clear-target" })).toMatchObject([
+        { type: "user_message_status", status: "cancelled", in_reply_to: "clear", client_request_id: "clear-target" }, { items: [] }]);
       expect(sendUserMessage).toHaveBeenCalledTimes(1);
       service.handle(frame("steer-target"));
       expect(service.handle({ protocol_version: 2, type: "queued_message_steer", id: "steer-queue", channel_id: "channel",

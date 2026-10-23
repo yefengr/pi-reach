@@ -305,6 +305,8 @@ PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，�
 
 PWA 可在重新握手或确认超时后发送只读 `user_message_status_request`，携带 `id`、`channel_id`、`session_id`、`leaf_id` 与 `client_request_id`。Extension 按当前 Owner、channel、session 和 leaf 校验，读取会话投递记录、真实队列、附件投递保护和当前正式投影，返回定向 `user_message_status`；不创建幂等记录、不重新入队，也不调用 Pi 投递。查不到只表示当前证据不足，不能作为重发依据。旧扩展不识别查询时返回 `protocol_error` 和 `protocol_upgrade_required`。
 
+可重试的 `rejected` 允许同一 `client_request_id`、相同内容以新的请求 `id` 重新提交；相同请求 `id` 的重复帧只重放结果。`queued_message_clear` 移除本端排队消息时，先回复定向 `user_message_status`（`status: "cancelled"`，`in_reply_to` 为撤回请求），再发队列快照。
+
 - `cancel` 必须携带目标 `group_id`；Extension 仅在其等于当前运行轮次时调用停止。`cancelled` 只确认受理，PWA 等待该轮正式 `run_end`；匹配的 `protocol_error` 解除等待。晚到请求不得停止下一轮。
 - `action_ok` 按 `action` 严格区分字段：`model_set` 返回实际 `model` 与 `thinking_level`；`thinking_set` 返回实际 `thinking_level`；`session_new` 返回新目标 `session_id`；`session_compact` 返回 `phase=accepted/completed/cancelled`。`action_error` 保留原关联字段。配置失败后可重新 `list_models` 核实实际值，不假定回滚。
 - `models_list` 必须携带实际 `thinking_level`，可选 `current` 为实际当前模型。思考级别包括 `off/minimal/low/medium/high/xhigh/max`，实际值由 Pi 的模型能力限制决定。

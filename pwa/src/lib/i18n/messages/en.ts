@@ -389,7 +389,7 @@ export const en = {
     deliveryOffline: "Reconnect to check status",
     deliveryTargetUnavailable: "Original target is unavailable; content is kept for copying",
     deliveryAttachmentUnavailable: "Select the files again before sending",
-    cancelledRestore: "Cancelled; attachments could not be restored. Content is kept for copying",
+    cancelledKept: "Cancelled; content was not returned to the composer and is kept for copying",
     deliveryFailed: {
       queue_full: "Pi's queue is full; try again later",
       transport_unavailable: "Not sent; check the connection and retry",
