@@ -60,6 +60,10 @@ export function installViewportDiagnostics(): () => void {
   return () => { diagnostics.disable(); };
 }
 export function viewportDiagnosticsEnabled(): boolean { return diagnostics.isEnabled(); }
+/** 供设置页的视口调试浮层使用，与控制台入口共享同一份内存记录。 */
+export function enableViewportDiagnostics(): void { diagnostics.enable(); }
+export function disableViewportDiagnostics(): void { diagnostics.disable(); }
+export function readViewportDiagnostics(): readonly ViewportDiagnosticEntry[] { return diagnostics.read(); }
 export function recordViewportDiagnostic(entry: ViewportTrace, sample?: () => ViewportDiagnosticGeometry | null): void {
   diagnostics.record(entry, sample);
 }

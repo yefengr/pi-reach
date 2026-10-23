@@ -9,7 +9,7 @@ const VERY_SHORT_VIEWPORT_HEIGHT = 450;
 const INLINE_NOTICE_MIN_WIDTH = 600;
 const TEXT_INPUT_TYPES = new Set(["text", "search", "email", "url", "tel", "password", "number"]);
 
-function hasTextFocus() {
+export function hasTextFocus() {
   const active = document.activeElement;
   if (active instanceof HTMLTextAreaElement) return !active.disabled && !active.readOnly;
   if (active instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(active.type) && !active.disabled && !active.readOnly;

@@ -7,6 +7,7 @@ import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i
 import type { PwaTextSize } from "@/lib/ui/text-size";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
+import { useViewportDebug } from "@/lib/pwa/viewport-debug";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
 import { version as pwaVersion } from "../../../package.json";
 
@@ -17,6 +18,8 @@ export type SettingsPagePreferences = {
   setEnterSends: (value: boolean) => void;
   textSize: PwaTextSize;
   setTextSize: (value: PwaTextSize) => void;
+  viewportDebug: boolean;
+  setViewportDebug: (value: boolean) => void;
 };
 
 type SettingsPageProps = {
@@ -50,7 +53,8 @@ function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   const { preference } = useI18n();
   const [enterSends, setEnterSends] = useEnterSends();
   const { textSize, setTextSize } = usePwaTextSize();
-  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize }} />;
+  const [viewportDebug, setViewportDebug] = useViewportDebug();
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize, viewportDebug, setViewportDebug }} />;
 }
 
 function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
@@ -149,6 +153,11 @@ function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVers
           </div>
           <Button variant="outline" color="red" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
+      </section>
+      <section className="pwa-settings-section" aria-labelledby="pwa-diagnostics-heading">
+        <h2 id="pwa-diagnostics-heading" className="pwa-settings-section-title">{s.diagnostics}</h2>
+        <p className="pwa-settings-section-description">{s.diagnosticsHint}</p>
+        <Switch className="pwa-viewport-debug-setting" size="md" checked={preferences.viewportDebug} onChange={(event) => preferences.setViewportDebug(event.currentTarget.checked)} label={s.viewportDebug} description={s.viewportDebugHint} />
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-about-heading">
         <div className="pwa-settings-about-heading">

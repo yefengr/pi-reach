@@ -1,0 +1,36 @@
+/* 真机调试浮层：位于外壳之外，不随键盘补偿移动；容器不拦截点击，避免改变被观测的交互。 */
+.pwa-viewport-debug {
+  position: fixed;
+  top: calc(var(--pwa-safe-top) + 56px);
+  right: 8px;
+  z-index: 2147483000;
+  max-width: min(64vw, 260px);
+  padding: 6px 8px;
+  border-radius: var(--pwa-radius-md);
+  background: color-mix(in srgb, var(--pwa-code-bg) 82%, transparent);
+  box-shadow: var(--pwa-shadow-float);
+  color: var(--pwa-code-text);
+  font-family: var(--pwa-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  pointer-events: none;
+  contain: layout paint;
+}
+
+.pwa-viewport-debug-text {
+  margin: 0;
+  white-space: pre;
+  font: inherit;
+}
+
+.pwa-viewport-debug-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  pointer-events: auto;
+}
+
+.pwa-viewport-debug-status {
+  min-height: 1.35em;
+  margin: 4px 0 0;
+}

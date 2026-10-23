@@ -3,6 +3,8 @@ import { createContext, useCallback, useContext, useId, useMemo, useRef, useStat
 import { PwaOperationNotifications, PwaToastProvider } from "@/components/pwa/pwa-operation-notifications";
 import { createOperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { useKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
+import { useViewportDebug } from "@/lib/pwa/viewport-debug";
+import { ViewportDebugOverlay } from "@/components/pwa/viewport-debug-overlay";
 import "@/app/workspace-viewport.css";
 
 type PwaRuntimeNoticeContextValue = {
@@ -33,6 +35,7 @@ export function PwaRuntimeNoticePortal({ children }: { children: ReactNode }) {
 export function PwaAppShell({ children, runtimeNotice }: { children: ReactNode; runtimeNotice: ReactNode }) {
   const shellRef = useRef<HTMLDivElement>(null);
   useKeyboardViewport(shellRef);
+  const [viewportDebug] = useViewportDebug();
   const fallbackId = useId();
   const [fallbackTarget, setFallbackTarget] = useState<HTMLDivElement | null>(null);
   const [toastFallbackTarget, setToastFallbackTarget] = useState<HTMLDivElement | null>(null);
@@ -58,5 +61,6 @@ export function PwaAppShell({ children, runtimeNotice }: { children: ReactNode; 
       {children}{runtimeNotice}
       <PwaOperationNotifications controller={notifications} target={toastTarget} />
     </div>
+    {viewportDebug ? <ViewportDebugOverlay shellRef={shellRef} /> : null}
   </PwaRuntimeNoticeContext.Provider></PwaToastProvider>;
 }

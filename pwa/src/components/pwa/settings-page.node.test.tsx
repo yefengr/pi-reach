@@ -31,7 +31,8 @@ test("renders settings as a page with a focusable title, grouped sections and da
   expect(html).not.toMatch(/mantine-Drawer/);
   expect(html).toMatch(/<h1 id="pwa-settings-title" class="pwa-settings-title" tabindex="-1">Settings<\/h1>/);
   expect(html).toMatch(/aria-label="Back to workspace"/);
-  expect(html.match(/<h2 /g)).toHaveLength(7);
+  expect(html.match(/<h2 /g)).toHaveLength(8);
+  expect(html).toContain("Viewport debug overlay");
   expect(html).toContain("Text size");
   expect(html).toContain("Enter sends messages");
   expect(html).toContain("Keyboard shortcuts");
