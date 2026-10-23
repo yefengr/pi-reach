@@ -93,7 +93,7 @@ function focusKind(): ViewportFocusKind {
   return hasTextFocus() ? "text" : "control";
 }
 
-/** getBoundingClientRect 相对布局视口；屏幕上的位置需再减去 vvTop。 */
+/** iOS 真机记录显示 getBoundingClientRect 与屏幕坐标一致，位置字段直接取原值。 */
 export function measureViewportFrame(shell: HTMLElement): ViewportFrameMeasure {
   const viewport = window.visualViewport;
   const shellRect = shell.getBoundingClientRect();
@@ -114,10 +114,6 @@ function show(value: number | null): string {
   return value === null ? "-" : String(value);
 }
 
-function screenTop(top: number | null, viewportTop: number | null): string {
-  return top === null ? "-" : show(round(top - (viewportTop ?? 0)));
-}
-
 /** 浮层文本：帧号放第一行，录屏时可与导出的逐帧记录对齐。 */
 export function formatViewportDebugLines(sample: ViewportFrameSample): string[] {
   return [
@@ -126,8 +122,7 @@ export function formatViewportDebugLines(sample: ViewportFrameSample): string[] 
     `win sy ${sample.scrollY} ih ${sample.innerHeight} dh ${sample.docHeight}`,
     `kb ${sample.keyboard ? 1 : 0} css ${show(sample.cssTop)}/${show(sample.cssHeight)}`,
     `shell ${show(sample.shellTop)}/${show(sample.shellHeight)}`,
-    `title ${show(sample.titleTop)} scr ${screenTop(sample.titleTop, sample.vvTop)}`,
-    `comp ${show(sample.composerTop)} scr ${screenTop(sample.composerTop, sample.vvTop)}`,
+    `title ${show(sample.titleTop)} comp ${show(sample.composerTop)}`,
     `list ${show(sample.listScrollTop)}/${show(sample.listScrollHeight)} ch ${show(sample.listClientHeight)}`,
     `focus ${sample.focus}`,
   ];

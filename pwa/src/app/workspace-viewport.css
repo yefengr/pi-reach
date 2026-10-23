@@ -8,6 +8,13 @@
   --pwa-safe-bottom: 0px;
 }
 
+/* 键盘补偿期间文档只与可见区域等高，iOS 无需滚动文档露出输入框；选择器特异性需高于 globals.css 的 standalone 高度。 */
+html:has(.pwa-root)[data-pwa-keyboard],
+html[data-pwa-keyboard] body:has(.pwa-root) {
+  height: var(--pwa-keyboard-document-height);
+  min-height: 0;
+}
+
 /* iOS 26 的系统辅助栏上方另有约 10pt 透明边距，输入区底部只再留 8，避免与键盘之间显得空。 */
 .pwa-app-shell[data-keyboard-viewport] .pwa-composer { padding-bottom: var(--pwa-space-xs); }
 

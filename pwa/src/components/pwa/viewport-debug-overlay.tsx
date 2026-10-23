@@ -10,7 +10,8 @@ import "./viewport-debug-overlay.css";
 
 type DebugStatus = "idle" | "copied" | "copyFailed" | "shareFailed";
 
-function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: ViewportFrameRecorder, textRef: RefObject<HTMLPreElement | null>) {
+function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: ViewportFrameRecorder, overlayRef: RefObject<HTMLElement | null>,
+  textRef: RefObject<HTMLPreElement | null>) {
   useEffect(() => {
     let frame = 0;
     const tick = () => {
@@ -22,6 +23,8 @@ function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: View
       const sample = recorder.record(measureViewportFrame(shell));
       // 直接写文本节点，不触发 React 渲染，尽量不干扰被观测的帧。
       if (textRef.current) textRef.current.textContent = formatViewportDebugLines(sample).join("\n");
+      // fixed 盒相对布局视口定位；键盘展开时 iOS 把布局视口推到屏幕上方，按 vvTop 平移才能留在可见区域。
+      overlayRef.current?.style.setProperty("translate", `0 ${Math.max(0, sample.vvTop ?? 0)}px`);
     };
     frame = window.requestAnimationFrame(tick);
     const viewport = window.visualViewport;
@@ -40,16 +43,17 @@ function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: View
       for (const remove of handlers) remove();
       disableViewportDiagnostics();
     };
-  }, [recorder, shellRef, textRef]);
+  }, [overlayRef, recorder, shellRef, textRef]);
 }
 
 /** 设置页开启后显示的真机调试浮层；不拦截页面点击，只有按钮可操作。 */
 export function ViewportDebugOverlay({ shellRef }: { shellRef: RefObject<HTMLElement | null> }) {
   const { t } = useI18n();
+  const overlayRef = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLPreElement>(null);
   const [recorder] = useState(() => new ViewportFrameRecorder(() => performance.now()));
   const [status, setStatus] = useState<DebugStatus>("idle");
-  useFrameSampler(shellRef, recorder, textRef);
+  useFrameSampler(shellRef, recorder, overlayRef, textRef);
 
   const report = () => formatViewportDebugReport({ ...recorder.snapshot(), timeline: readViewportDiagnostics(),
     environment: collectViewportDebugEnvironment(pwaVersion) });
@@ -82,7 +86,7 @@ export function ViewportDebugOverlay({ shellRef }: { shellRef: RefObject<HTMLEle
 
   const d = t.viewportDebug;
   return <Portal>
-    <section className="pwa-viewport-debug" aria-label={d.label}>
+    <section ref={overlayRef} className="pwa-viewport-debug" aria-label={d.label}>
       <pre ref={textRef} className="pwa-viewport-debug-text" />
       <div className="pwa-viewport-debug-actions">
         <Button size="compact-xs" variant="default" type="button" onClick={() => void copy()}>{d.copy}</Button>

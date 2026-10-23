@@ -183,6 +183,35 @@ test("tightens the composer bottom under the keyboard and restores the safe area
   }
 });
 
+test("locks the document to the visible height under the keyboard so iOS has no scroll to animate back", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const root = document.documentElement;
+  // 无头 Chromium 不会为聚焦滚动文档；模拟 iOS 已把文档滚到底的读数，确认补偿时立即复位。
+  const scrollY = vi.spyOn(window, "scrollY", "get").mockReturnValue(404);
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    expect(root.hasAttribute("data-pwa-keyboard")).toBe(true);
+    expect(Math.round(root.getBoundingClientRect().height)).toBe(470);
+    expect(Math.round(document.body.getBoundingClientRect().height)).toBe(470);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: window.scrollX, behavior: "instant" });
+    scrollY.mockReturnValue(0);
+    view.input.blur();
+    viewport.change({ height: 844 });
+    await settle();
+    expect(root.hasAttribute("data-pwa-keyboard")).toBe(false);
+    expect(root.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("");
+  } finally {
+    await view.screen.unmount();
+  }
+  expect(root.hasAttribute("data-pwa-keyboard")).toBe(false);
+});
+
 test("keeps a real timeline paragraph anchored through keyboard, draft and rotation changes", async () => {
   await page.viewport(390, 844);
   const viewport = new ViewportMock();

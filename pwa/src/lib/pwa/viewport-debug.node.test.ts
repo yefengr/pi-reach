@@ -28,12 +28,11 @@ test("recorder keeps a bounded ring of numbered frames and marks relative to the
   expect(recorder.record(measure)).toMatchObject({ frame: 1, t: 10 });
 });
 
-test("overlay lines lead with the frame number and convert layout tops to screen positions", () => {
+test("overlay lines lead with the frame number and show raw element positions", () => {
   const lines = formatViewportDebugLines({ ...measure, frame: 42, t: 700, vvHeight: null });
   expect(lines[0]).toBe("#42  t 700");
   expect(lines[1]).toBe("vv top 120 h - pg 120");
-  expect(lines).toContain("title 100 scr -20");
-  expect(lines).toContain("comp 520 scr 400");
+  expect(lines).toContain("title 100 comp 520");
   expect(lines.at(-1)).toBe("focus text");
 });
 

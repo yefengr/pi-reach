@@ -40,12 +40,22 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
     let frame = 0;
     let adjusted = false;
     let unfocusedOcclusion = viewport ? Math.max(0, document.documentElement.clientHeight - viewport.height) : 0;
+    const root = document.documentElement;
     const reset = () => {
       adjusted = false;
       delete shell.dataset.keyboardViewport;
       shell.style.removeProperty("--pwa-viewport-height");
       shell.style.removeProperty("--pwa-viewport-top");
+      delete root.dataset.pwaKeyboard;
+      root.style.removeProperty("--pwa-keyboard-document-height");
       updateDensity(shell);
+    };
+    // iOS 为露出输入框会把整屏高的文档滚到底；键盘收起时 JS 读数一步归零，屏幕却播放原生回滚动画，
+    // 整页（含顶栏）先被推出屏幕再滑回。把文档高度锁到可见高度并立即复位滚动，收起时就没有可回滚的距离。
+    const lockDocument = (height: number) => {
+      root.dataset.pwaKeyboard = "";
+      root.style.setProperty("--pwa-keyboard-document-height", `${height}px`);
+      if (window.scrollY !== 0) window.scrollTo({ top: 0, left: window.scrollX, behavior: "instant" });
     };
     const update = () => {
       frame = 0;
@@ -64,6 +74,7 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
       }
       // blur 后保留补偿直到视口恢复，避免键盘关闭动画尚未结束时输入区跳回屏幕底部。
       adjusted = true;
+      lockDocument(viewport.height);
       shell.dataset.keyboardViewport = "";
       shell.style.setProperty("--pwa-viewport-height", `${viewport.height}px`);
       shell.style.setProperty("--pwa-viewport-top", `${Math.max(0, viewport.offsetTop)}px`);
