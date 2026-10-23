@@ -1858,6 +1858,46 @@ test.each([false, true])("delivery query late upgrade error stays local after ti
   } finally { vi.useRealTimers(); await screen.unmount(); }
 });
 
+test.each([[true, "accepted"], [true, "committed"], [false, "accepted"], [false, "committed"]] as const)("delivery query late %s %s receipt merges formal history once", async (expired, status) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    await screen.getByPlaceholder("Message your agent…").fill("Late query receipt");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find(frame => frame.type === "user_message")!;
+    vi.useFakeTimers();
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
+    const commitEffects = async () => {
+      for (let index = 0; index < 3; index++) await new Promise<void>(resolve => {
+        const port = new MessageChannel(); port.port1.onmessage = () => { port.port1.close(); port.port2.close(); resolve(); }; port.port2.postMessage(null);
+      });
+    };
+    await commitEffects();
+    const query = channel.frames.find(frame => frame.type === "user_message_status_request")!;
+    expect(query).toBeDefined();
+    if (expired) await vi.advanceTimersByTimeAsync(10_000);
+    await commitEffects();
+    vi.useRealTimers();
+    if (expired) await expect.element(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+    else await expect.element(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
+    emitEvent(channel, { event_id: "late-query-formal", message_id: "late-query-formal", event_seq: 1,
+      session_id: "session-1", leaf_id: "advanced-leaf", group_id: "late-query-group", timestamp: 2, kind: "user",
+      blocks: [{ type: "text", text: "Late query receipt" }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal", status: "committed" });
+    await expect.poll(() => document.querySelectorAll(".pwa-message.user").length).toBe(2);
+    const receipt = { protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: query.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status, message_id: "late-query-formal" };
+    channel.emit(receipt);
+    await expect.poll(() => document.querySelectorAll(".pwa-message.user").length).toBe(1);
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message_observed").length).toBe(1);
+    channel.emit(receipt);
+    await commitEffects();
+    expect(channel.frames.filter(frame => frame.type === "user_message_observed")).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "user_message_status_request")).toHaveLength(1);
+    expect(document.querySelector(".pwa-delivery-status[data-delivery='unknown_delivery']")).toBeNull();
+  } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
 test("delivery query routing preserves feedback for unrelated protocol errors", async () => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {

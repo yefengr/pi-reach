@@ -101,6 +101,9 @@ export type TimelineLivePreparation = { change: TimelineRuntimeChange; plan: Tim
 /** 本地缓存预览所属的会话；持久化历史不含 runtime，按电脑、Pi 与会话识别。 */
 export type TimelinePreviewTarget = { deviceId: string; endpointId: string; sessionId: string };
 type Pending = TimelinePending & { scope: TimelineScope; insertionRejected?: boolean };
+type DeliveryQueryAssociation = {
+  pending: Pending; attempt: string; operation: string | undefined; evidence: object; expiresAt: number;
+};
 type QueueItem = Extract<ServerFrame, { type: "queued_message_state" }>["items"][number];
 
 function randomId(): string {
@@ -184,12 +187,10 @@ export class TimelineRuntime {
   private readonly pending = new Map<string, Pending>();
   // 原始内容随 pending 对象回收；展示投影不能改变明确失败后的重试内容。
   private readonly pendingBases = new WeakMap<Pending, { payload: PendingPayload; local: boolean }>();
-  // 到期请求只保留短期错误路由关联；身份令牌不依赖时钟精度，也不保留第二套投递状态。
+  // 等待超时后仍短期关联状态与错误回执；身份令牌不依赖时钟精度，不保留第二套投递状态。
   private readonly deliveryEvidence = new WeakMap<Pending, object>();
   private readonly latestDeliveryQuery = new WeakMap<Pending, string>();
-  private readonly deliveryQueries = new Map<string, {
-    pending: Pending; attempt: string; operation: string | undefined; evidence: object; expiresAt: number;
-  }>();
+  private readonly deliveryQueries = new Map<string, DeliveryQueryAssociation>();
   private unknown: Pending[] = [];
   private queuedSnapshotId: string | null = null;
   private readonly queuedSnapshotItems = new Map<string, QueueItem>();
@@ -513,6 +514,12 @@ export class TimelineRuntime {
       if (query.expiresAt <= now) this.deliveryQueries.delete(requestId);
     }
   }
+  private isCurrentDeliveryQuery(requestId: string, query: DeliveryQueryAssociation): boolean {
+    const pending = query.pending;
+    return this.findPendingOrUnknown(pending.clientRequestId) === pending && !pending.scopeInvalid
+      && pending.requestId === query.attempt && pending.queuedActionRequestId === query.operation
+      && this.latestDeliveryQuery.get(pending) === requestId;
+  }
   /** null 表示非本连接的已知查询；非 null 即已消费，旧查询只吞错，不写回新证据。 */
   consumeDeliveryStatusError(frame: Extract<ServerFrame, { type: "protocol_error" }>): TimelineRuntimeChange | null {
     if (!this.scope || "target_channel_id" in frame && frame.target_channel_id !== this.scope.channelId || !frame.in_reply_to) return null;
@@ -520,9 +527,8 @@ export class TimelineRuntime {
     const query = this.deliveryQueries.get(frame.in_reply_to);
     if (!query) return null;
     const pending = query.pending;
-    if (this.findPendingOrUnknown(pending.clientRequestId) !== pending || pending.scopeInvalid || pending.messageId
-      || pending.requestId !== query.attempt || pending.queuedActionRequestId !== query.operation
-      || this.latestDeliveryQuery.get(pending) !== frame.in_reply_to || this.deliveryEvidence.get(pending) !== query.evidence) return this.change();
+    if (!this.isCurrentDeliveryQuery(frame.in_reply_to, query) || pending.messageId
+      || this.deliveryEvidence.get(pending) !== query.evidence) return this.change();
     if (pending.statusQuery?.requestId === frame.in_reply_to) delete pending.statusQuery;
     if (pending.delivery === "unknown_delivery" && frame.code === "protocol_upgrade_required") pending.statusQueryUnsupported = true;
     return this.change();
@@ -771,13 +777,18 @@ export class TimelineRuntime {
     if (!isSameSession(this.scope, frame)) return this.change();
     const pending = this.findPendingOrUnknown(frame.client_request_id);
     if (!pending) return this.change();
-    const query = pending.statusQuery?.requestId === frame.in_reply_to ? pending.statusQuery : undefined;
-    if (!query && pending.requestId !== frame.in_reply_to && pending.queuedActionRequestId !== frame.in_reply_to) return this.change();
-    if (query) delete pending.statusQuery;
+    this.pruneDeliveryQueries();
+    const query = this.deliveryQueries.get(frame.in_reply_to);
+    const hasMessage = (frame.status === "accepted" || frame.status === "committed") && Boolean(frame.message_id);
+    if (query) {
+      if (query.pending !== pending || !this.isCurrentDeliveryQuery(frame.in_reply_to, query)) return this.change();
+      // 同查询的新证据挡住弱／负状态；肯定 ID 仍可关联原消息，但不能跨新查询、尝试或操作。
+      if (!hasMessage && this.deliveryEvidence.get(pending) !== query.evidence) return this.change();
+      if (pending.statusQuery?.requestId === frame.in_reply_to) delete pending.statusQuery;
+    } else if (pending.requestId !== frame.in_reply_to && pending.queuedActionRequestId !== frame.in_reply_to) return this.change();
     // 正式关联优先，较早查询与迟到的接收/拒绝都不能使已启动消息回退。
-    const hasMessage = "message_id" in frame && Boolean(frame.message_id);
     if (pending.messageId || pending.delivery === "committed") {
-      if (frame.status === "committed" && hasMessage) pending.delivery = "committed";
+      if (frame.status === "committed" && hasMessage && pending.messageId === frame.message_id) pending.delivery = "committed";
       return this.change();
     }
     // 取消已由 Pi 确认，迟到的查询或投递回执不能把它改回未知或在途。
@@ -800,11 +811,9 @@ export class TimelineRuntime {
       return { ...this.change(), ...(cancellation ? { cancelledQueued: [cancellation] } : {}) };
     }
     if (frame.status === "rejected") {
-      if (query && pending.lastEvidenceAt !== undefined && pending.lastEvidenceAt >= query.requestedAt) return this.change();
       return this.markDeliveryFailed(pending.clientRequestId, frame.code, frame.retryable);
     }
     if (frame.status === "unknown_delivery") {
-      if (query && pending.lastEvidenceAt !== undefined && pending.lastEvidenceAt >= query.requestedAt) return this.change();
       if (!pending.insertionStatus) { pending.queued = false; pending.cancelable = false; }
       return this.markUnknownDelivery(pending.clientRequestId);
     }

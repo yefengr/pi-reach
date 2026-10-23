@@ -38,7 +38,7 @@ export type V2ServiceOptions = {
   onAction?: (frame: V2ActionFrame) => void;
   onQueueSnapshot?: () => ServerFrame[];
   onQueuedMessageClear?: (targetId?: string) => string[];
-  onQueuedMessageSteer?: (targetId: string) => "sent" | "failed" | "missing";
+  onQueuedMessageSteer?: (targetId: string) => "sent" | "unknown_delivery" | "missing";
   onListModels?: () => Pick<Extract<ServerFrame, { type: "models_list" }>, "models" | "current" | "thinking_level">;
 };
 
@@ -220,7 +220,9 @@ export class TimelineV2Service {
     const updated = this.state.rememberUnknownDelivery(request.key);
     if (!updated) return [];
     return [this.statusReply({ id: request.attemptId ?? clientRequestId,
-      channel_id: request.channelId, client_request_id: clientRequestId }, "unknown_delivery")];
+      channel_id: request.channelId, client_request_id: clientRequestId }, updated.status === "committed" ? "committed"
+        : updated.status === "accepted" ? "accepted" : "unknown_delivery",
+    { ...(updated.messageId ? { message_id: updated.messageId } : {}), ...(updated.groupId ? { group_id: updated.groupId } : {}) })];
   }
 
   partial(partial: TimelinePartial): V2Broadcast | null {
@@ -340,14 +342,11 @@ export class TimelineV2Service {
     }
     try {
       const result = this.options.onQueuedMessageSteer(frame.target_id);
-      if (result === "sent") {
+      if (result === "sent" || result === "unknown_delivery") {
         this.terminateQueuedRequest(frame.target_id);
         return this.currentQueueSnapshot();
       }
-      const message = result === "failed"
-        ? "Could not steer this queued message; it remains queued."
-        : "This queued message is no longer available to steer.";
-      return [this.error(frame.id, "invalid_message", message, frame.channel_id), ...this.currentQueueSnapshot()];
+      return [this.error(frame.id, "invalid_message", "This queued message is no longer available to steer.", frame.channel_id), ...this.currentQueueSnapshot()];
     } catch {
       return [this.error(frame.id, "internal_error", "Could not steer this queued message.", frame.channel_id), ...this.currentQueueSnapshot()];
     }

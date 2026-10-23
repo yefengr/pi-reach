@@ -41,7 +41,7 @@ export type UserDeliveryScopeInput = Omit<UserDeliveryScope, "deliveryToken">;
 export type UserDeliveryEnqueueResult = "queued" | "duplicate" | "conflict" | "rejected" | false;
 export type UserDeliverySteerResult =
   | { kind: "sent"; scope: UserDeliveryScope }
-  | { kind: "failed"; scope: UserDeliveryScope }
+  | { kind: "unknown_delivery"; scope: UserDeliveryScope }
   | { kind: "missing" };
 
 type DeliveryJob = {
@@ -163,23 +163,25 @@ export class UserDeliveryQueue {
     const job = this.findTarget(ownerId, service, targetId);
     if (!job || job.state !== "queued" || job.content === undefined) return { kind: "missing" };
 
-    const queueIndex = this.queue.indexOf(job);
     job.state = "steering";
     this.queue = this.queue.filter((candidate) => candidate !== job);
     if (this.queue.length === 0 && !this.active) this.cancelScheduledDrain();
     try {
       this.send(job.content, job.correlation, { deliverAs: "steer" });
     } catch {
-      job.state = "queued";
-      this.queue.splice(Math.max(0, queueIndex), 0, job);
-      this.scheduleDrain();
-      return { kind: "failed", scope: job.scope };
+      // SDK 抛错并不证明未投递；同步 start/commit 更不能被 catch 降级。
+      if (job.state !== "steering" || !this.jobs.has(job.scope.deliveryToken)) return { kind: "sent", scope: job.scope };
+      this.failBeforeStart(job);
+      return { kind: "unknown_delivery", scope: job.scope };
     }
 
-    const scope = job.scope;
-    this.remove(job);
+    if (job.state === "steering" && this.jobs.has(job.scope.deliveryToken)) {
+      this.releasePayload(job);
+      job.state = "timed_out";
+      this.retainLateRecord(job);
+    }
     this.scheduleDrain();
-    return { kind: "sent", scope };
+    return { kind: "sent", scope: job.scope };
   }
 
   scheduleDrain(): void {
@@ -199,10 +201,11 @@ export class UserDeliveryQueue {
       this.remove(job);
       return null;
     }
-    if (job.state !== "in_flight" && job.state !== "timed_out") return null;
+    if (job.state !== "in_flight" && job.state !== "steering" && job.state !== "timed_out") return null;
     this.clearTimer(job);
     this.releasePayload(job);
     job.state = "started";
+    this.retainLateRecord(job);
     if (this.active === job) this.active = undefined;
     this.scheduleDrain();
     return job.scope;
@@ -221,9 +224,10 @@ export class UserDeliveryQueue {
       this.remove(job);
       return null;
     }
-    if (job.state !== "started") return null;
+    if (job.state === "queued") return null;
     const scope = job.scope;
     this.remove(job);
+    this.scheduleDrain();
     return scope;
   }
 
@@ -259,7 +263,7 @@ export class UserDeliveryQueue {
       try {
         this.send(job.content, job.correlation);
       } catch {
-        this.failBeforeStart(job, false);
+        this.failBeforeStart(job);
         continue;
       }
       if (job.state === "in_flight") this.startTimer(job);
@@ -268,23 +272,18 @@ export class UserDeliveryQueue {
   }
 
   private startTimer(job: DeliveryJob): void {
-    job.timer = setTimeout(() => this.failBeforeStart(job, true), this.startTimeoutMs);
+    job.timer = setTimeout(() => this.failBeforeStart(job), this.startTimeoutMs);
     job.timer.unref?.();
   }
 
-  private failBeforeStart(job: DeliveryJob, retainLateRecord: boolean): void {
-    if (job.state !== "in_flight" || !this.jobs.has(job.scope.deliveryToken)) return;
+  private failBeforeStart(job: DeliveryJob): void {
+    if ((job.state !== "in_flight" && job.state !== "steering") || !this.jobs.has(job.scope.deliveryToken)) return;
     this.followCurrentTip(job);
     this.clearTimer(job);
     this.releasePayload(job);
     if (this.active === job) this.active = undefined;
-    if (retainLateRecord) {
-      job.state = "timed_out";
-      this.lateTokens.push(job.scope.deliveryToken);
-      this.trimLateRecords();
-    } else {
-      this.remove(job);
-    }
+    job.state = "timed_out";
+    this.retainLateRecord(job);
     if (this.isCurrentScope(job.scope)) {
       this.onUnknownDelivery(job.scope);
       this.notifyQueueChanged(job.scope);
@@ -292,12 +291,13 @@ export class UserDeliveryQueue {
     this.scheduleDrain();
   }
 
-  private trimLateRecords(): void {
+  private retainLateRecord(job: DeliveryJob): void {
+    if (!this.lateTokens.includes(job.scope.deliveryToken)) this.lateTokens.push(job.scope.deliveryToken);
     while (this.lateTokens.length > MAX_LATE_DELIVERY_RECORDS) {
       const token = this.lateTokens.shift();
       if (!token) return;
-      const job = this.jobs.get(token);
-      if (job?.state === "timed_out") this.remove(job);
+      const oldest = this.jobs.get(token);
+      if (oldest) this.remove(oldest);
     }
   }
 
@@ -334,7 +334,7 @@ export class UserDeliveryQueue {
 
   private followCurrentTip(job: DeliveryJob): void {
     // 普通 native append 会推进 leaf；显式 reset 必须先 clearAll，且跟随后仍检查 isCurrent。
-    if ((job.state === "queued" || job.state === "in_flight" || job.state === "timed_out")
+    if ((job.state === "queued" || job.state === "in_flight" || job.state === "steering" || job.state === "timed_out")
       && job.scope.sessionId === job.scope.service.sessionId
       && job.scope.leafId !== job.scope.service.leafId) {
       job.scope = { ...job.scope, leafId: job.scope.service.leafId };

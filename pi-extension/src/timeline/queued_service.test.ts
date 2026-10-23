@@ -44,6 +44,60 @@ test("hello synchronizes the queue and promotion preserves attachments without r
   expect(send).toHaveBeenCalledTimes(1);
 });
 
+test.each(["late", "start", "commit", "commit-only"] as const)("throwing insertion preserves %s evidence and never calls the SDK twice", async (evidence) => {
+  const { service, send, binding, manager } = harness();
+  const outbound: ServerFrame[] = [];
+  // 模拟 SDK 在同一次同步调用内发布事件后抛错。
+  service.handle(hello); service.handle(user);
+  send.mockImplementation(() => {
+    const request = { origin: "pwa" as const, delivery: "normal" as const, senderRef: "owner",
+      clientRequestId: "q", requestId: "wire", channelId: "c" };
+    if (evidence === "start" || evidence === "commit") outbound.push(...service.started({ eventId: "message", groupId: "group",
+      role: "user", correlation: request, blocks: [] }));
+    if (evidence === "commit" || evidence === "commit-only") outbound.push(...service.commit("q", "message", "group"));
+    throw new Error("delivery may already have happened");
+  });
+  try {
+    const response = service.handle(steer);
+    expect(response.some((frame) => frame.type === "protocol_error")).toBe(false);
+    expect(lastSnapshot(response)).toMatchObject({ items: [] });
+    expect(service.handle({ ...user, id: "retry" })[0]).toMatchObject({ status:
+      evidence === "late" ? "unknown_delivery" : evidence === "start" ? "accepted" : "committed" });
+    expect(service.handle({ ...steer, type: "queued_message_clear", id: "cancel" })
+      .some((frame) => frame.type === "user_message_status" && frame.status === "cancelled")).toBe(false);
+    manager.appendThinkingLevelChange("high");
+    binding.scheduleDrain();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    service.handle({ ...user, id: "again", leaf_id: service.leafId });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(outbound).toHaveLength(evidence === "late" ? 0 : evidence === "commit" ? 3 : evidence === "start" ? 2 : 1);
+  } finally { binding.clearAll(); }
+});
+
+test("rejection history replays A after B and fails closed at the attempt cap before SDK admission", async () => {
+  const { service, send, binding } = harness(true);
+  const submit = vi.spyOn(binding, "submit").mockReturnValue({ kind: "rejected", code: "unavailable", retryable: true });
+  try {
+    service.handle(hello);
+    expect(service.handle({ ...user, id: "a0" })[0]).toMatchObject({ status: "rejected" });
+    expect(service.handle({ ...user, id: "a1" })[0]).toMatchObject({ status: "rejected" });
+    expect(service.handle({ ...user, id: "a0" })[0]).toMatchObject({ status: "rejected" });
+    expect(submit).toHaveBeenCalledTimes(2);
+    for (let index = 2; index < 128; index++) {
+      service.handle({ ...user, id: `a${index}` });
+      service.handle({ ...user, id: `a${index}` });
+    }
+    expect(submit).toHaveBeenCalledTimes(128);
+    submit.mockRestore();
+    expect(service.handle({ ...user, id: "over", text: "changed" })[0]).toMatchObject({ type: "protocol_error" });
+    for (const id of ["over", "a0", "a127", "another"]) expect(service.handle({ ...user, id })[0])
+      .toMatchObject({ status: "rejected", code: "unavailable", retryable: false, in_reply_to: id });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(send).not.toHaveBeenCalled();
+    expect(binding.lookup("owner", service, "q")).toBeNull();
+  } finally { submit.mockRestore(); binding.clearAll(); }
+});
+
 test("a sent insertion leaves the request unknown even after an ordinary leaf advance", () => {
   const { service, manager } = harness();
   service.handle(hello); service.handle(user);

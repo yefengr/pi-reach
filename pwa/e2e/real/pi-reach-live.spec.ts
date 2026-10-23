@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type BrowserContext, type Page, type TestInfo } from "playwright/test";
 import { verifyPublishedFiles } from "./published-file-helpers";
 import { verifyReaderDrawerLive } from "./reader-helpers";
+import { installDeliveryRecoveryProbe, verifyMessageDeliveryRecovery } from "./delivery-recovery-helpers";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const COMPOSE_FILE = "docker/e2e/compose.yml";
@@ -339,6 +340,32 @@ async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: str
     expect(await owner.locator('.pwa-message.user').allTextContents()).not.toEqual(expect.arrayContaining([expect.stringContaining('/home/pi')]));
   }
 }
+
+test("recovers a lost delivery receipt after Owner reconnection without another Pi message", async ({ browser, baseURL }) => {
+  if (!baseURL) throw new Error("Remote Playwright baseURL is required.");
+  const ownerA = await browser.newContext({ baseURL, serviceWorkers: "block" });
+  const ownerB = await browser.newContext({ baseURL, serviceWorkers: "block" });
+  try {
+    const page = await ownerA.newPage();
+    const otherOwner = await ownerB.newPage();
+    const probe = await installDeliveryRecoveryProbe(page);
+    const otherProbe = await installDeliveryRecoveryProbe(otherOwner);
+    await waitForHostState("readiness", state => state.ready === true, 120_000);
+    await Promise.all([configureRelay(page), configureRelay(otherOwner)]);
+    const capability = await readControlCapability();
+    const firstCode = await generatePairingCode(capability, null);
+    await pairOwner(page, firstCode);
+    await pairOwner(otherOwner, await generatePairingCode(capability, firstCode));
+    const previous = await readHostState();
+    if (!previous.sessionId) throw new Error("Interactive session identity is unavailable.");
+    const session = await startFreshSession(page, previous.sessionId);
+    await Promise.all([expect(page.getByLabel("Connected", { exact: true })).toBeVisible(),
+      expect(otherOwner.getByLabel("Connected", { exact: true })).toBeVisible()]);
+    await verifyMessageDeliveryRecovery({ page, otherOwner, probe, otherProbe, sessionId: session.sessionId!, runCompose });
+  } finally {
+    await Promise.allSettled([ownerA.close(), ownerB.close()]);
+  }
+});
 
 test("pairs two browser Owners, verifies live work panels and exact originals, and preserves native Pi and Relay recovery", async ({ browser, baseURL }, testInfo) => {
   if (!baseURL) throw new Error("Remote Playwright baseURL is required.");

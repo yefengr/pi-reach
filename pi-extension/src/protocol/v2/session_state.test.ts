@@ -58,8 +58,45 @@ describe("V2SessionState", () => {
     expect(state.begin({ ...request, attemptId: "a2" }).kind).toBe("replay");
     state.reject(record.key, "a2", "queue_full", true);
     expect(state.begin({ ...request, attemptId: "a2" })).toMatchObject({ kind: "replay", record: { status: "rejected", attemptId: "a2", retryable: true } });
+    expect(state.begin(request)).toMatchObject({ kind: "replay", record: { status: "rejected", attemptId: "a2" } });
     expect(state.begin({ ...request, attemptId: "a3" })).toMatchObject({ kind: "retry", record: { status: "received", attemptId: "a3" } });
     expect(state.begin({ ...request, attemptId: "a3" }).kind).toBe("replay");
+  });
+
+  test("bounds all admitted attempts including the first without evicting replay protection", () => {
+    const state = new V2SessionState({ sessionId: "session", leafId: "g1" });
+    const request = { senderRef: "owner", clientRequestId: "r", attemptId: "a0", payload: "x" };
+    const first = state.begin(request);
+    state.reject(first.record.key, "a0", "queue_full", true);
+    for (let index = 1; index < 128; index++) {
+      const attemptId = `a${index}`;
+      expect(state.begin({ ...request, attemptId }).kind).toBe("retry");
+      expect(state.begin({ ...request, attemptId }).kind).toBe("replay");
+      state.reject(first.record.key, attemptId, "queue_full", true);
+    }
+    expect(state.begin({ ...request, attemptId: "over", payload: "changed" }).kind).toBe("conflict");
+    expect(state.begin(request).kind).toBe("replay");
+    for (const attemptId of ["over", "a0", "a127", "another"]) {
+      expect(state.begin({ ...request, attemptId })).toMatchObject({ kind: "replay", record: {
+        status: "rejected", rejectCode: "unavailable", retryable: false,
+      } });
+    }
+    expect(state.begin({ ...request, senderRef: "other" }).kind).toBe("new");
+    state.removeOwner("owner");
+    expect(state.begin(request).kind).toBe("new");
+  });
+
+  test("an attempt replayed while admission is in progress cannot be admitted after rejection", () => {
+    const state = new V2SessionState({ sessionId: "session", leafId: "g1" });
+    const request = { senderRef: "owner", clientRequestId: "r", attemptId: "a", payload: "x" };
+    const first = state.begin(request);
+    expect(state.begin({ ...request, attemptId: "b" }).kind).toBe("replay");
+    const copy = state.getRecord(first.record.key)!;
+    copy.status = "cancelled";
+    state.reject(first.record.key, "a", "queue_full", true);
+    expect(state.begin({ ...request, attemptId: "b" })).toMatchObject({ kind: "replay", record: { status: "rejected" } });
+    expect(state.begin(request).kind).toBe("replay");
+    expect(state.begin({ ...request, attemptId: "c" }).kind).toBe("retry");
   });
 
   test("a new attempt cannot bypass a non-retryable rejection", () => {

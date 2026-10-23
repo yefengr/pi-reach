@@ -236,21 +236,21 @@ describe("UserDeliveryQueue", () => {
     queue.clearAll();
   });
 
-  test("steers a queued attachment once and restores it after a synchronous SDK failure", () => {
+  test("a throwing steer cannot be retried, cancelled or drained and keeps its late correlation", async () => {
     const service = { sessionId: "session-1", leafId: null } as TimelineV2Service;
     const attempts: Array<{ content: unknown; options: unknown }> = [];
-    let fail = true;
+    const sent: Correlation[] = [];
+    const unknown = vi.fn();
+    let idle = false;
     const queue = new UserDeliveryQueue({
-      isIdle: () => false,
+      isIdle: () => idle,
       isCurrent: (value) => value.service === service,
-      send: (content, _correlation, options) => {
+      send: (content, correlation, options) => {
         attempts.push({ content, options });
-        if (fail) {
-          fail = false;
-          throw new Error("SDK rejected synchronously");
-        }
+        sent.push(correlation);
+        throw new Error("SDK delivery is uncertain");
       },
-      onUnknownDelivery: vi.fn(),
+      onUnknownDelivery: unknown,
       clock: () => 55,
     });
     const target = scope("owner-1", "request-1", service);
@@ -263,22 +263,75 @@ describe("UserDeliveryQueue", () => {
     expect(queue.enqueue(content, correlation, target)).toBe("duplicate");
     expect(queue.enqueue("different", correlation, target)).toBe("conflict");
 
-    expect(queue.steer("owner-1", service, "request-1").kind).toBe("failed");
-    expect(queue.snapshot("owner-1", service)[0]).toMatchObject({
-      id: "request-1",
-      text: "inspect",
-      images: [{ data: "QUJD", mime: "image/png" }],
-      editable: true,
-      created_at: 55,
-    });
-    expect(queue.steer("owner-1", service, "request-1").kind).toBe("sent");
+    expect(queue.steer("owner-1", service, "request-1").kind).toBe("unknown_delivery");
+    expect(queue.snapshot("owner-1", service)).toEqual([]);
+    expect(queue.clearQueued("owner-1", service, "request-1")).toEqual([]);
+    idle = true;
+    queue.scheduleDrain();
+    await nextMacrotask();
+    expect(unknown).toHaveBeenCalledTimes(1);
     expect(queue.steer("owner-1", service, "request-1").kind).toBe("missing");
     expect(queue.steer("owner-2", service, "request-1").kind).toBe("missing");
-    expect(attempts).toEqual([
-      { content, options: { deliverAs: "steer" } },
-      { content, options: { deliverAs: "steer" } },
-    ]);
+    expect(attempts).toEqual([{ content, options: { deliverAs: "steer" } }]);
+    expect(queue.onUserStarted(started(sent[0]!))).toMatchObject({ clientRequestId: "request-1" });
+    expect(queue.onUserPublished(event(sent[0]!), sent[0]!)).toMatchObject({ clientRequestId: "request-1" });
+    expect(queue.onUserStarted(started(sent[0]!))).toBeNull();
     expect(queue.snapshot("owner-1", service)).toEqual([]);
+  });
+
+  test.each(["normal", "steer"] as const)("%s keeps synchronous positive evidence and late callbacks after SDK exceptions", async (mode) => {
+    for (const evidence of ["late", "start", "commit", "commit-only"] as const) {
+      const service = { sessionId: "session-1", leafId: null } as TimelineV2Service;
+      const unknown = vi.fn();
+      const sent: Correlation[] = [];
+      const release = vi.fn();
+      const queue: UserDeliveryQueue = new UserDeliveryQueue({
+        isIdle: () => mode === "normal", isCurrent: (value) => value.service === service,
+        send: (_content, correlation) => {
+          sent.push(correlation);
+          if (evidence === "start" || evidence === "commit") expect(queue.onUserStarted(started(correlation))).not.toBeNull();
+          if (evidence === "commit" || evidence === "commit-only") expect(queue.onUserPublished(event(correlation), correlation)).not.toBeNull();
+          throw new Error("after possible delivery");
+        }, onUnknownDelivery: unknown,
+      });
+      const target = scope("owner-1", "request", service);
+      queue.enqueue("body", { origin: "pwa", delivery: "normal", clientRequestId: "request" }, target,
+        { text: "body", attachment_ids: ["file"], on_release: release });
+      if (mode === "steer") expect(queue.steer("owner-1", service, "request").kind)
+        .toBe(evidence === "late" ? "unknown_delivery" : "sent");
+      await nextMacrotask();
+      expect(unknown).toHaveBeenCalledTimes(evidence === "late" ? 1 : 0);
+      expect(queue.clearQueued("owner-1", service)).toEqual([]);
+      if (evidence === "late") expect(queue.onUserStarted(started(sent[0]!))).not.toBeNull();
+      if (evidence === "late" || evidence === "start") expect(queue.onUserPublished(event(sent[0]!), sent[0]!)).not.toBeNull();
+      expect(queue.onUserStarted(started(sent[0]!))).toBeNull();
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(sent).toHaveLength(1);
+      queue.clearAll();
+    }
+  });
+
+  test.each(["success", "throw", "started"] as const)("%s steer retains bounded late associations", (result) => {
+    const service = { sessionId: "session-1", leafId: null } as TimelineV2Service;
+    const sent: Correlation[] = [];
+    const queue: UserDeliveryQueue = new UserDeliveryQueue({ isIdle: () => false, isCurrent: () => true,
+      send: (_content, correlation) => {
+        sent.push(correlation);
+        if (result === "started") queue.onUserStarted(started(correlation));
+        if (result === "throw") throw new Error("uncertain");
+      }, onUnknownDelivery: vi.fn(), maxEntries: 1 });
+    for (let index = 0; index < 130; index++) {
+      const id = `request-${index}`;
+      expect(queue.enqueue("body", { origin: "pwa", delivery: "normal", clientRequestId: id }, scope("owner-1", id, service))).toBe("queued");
+      expect(queue.steer("owner-1", service, id).kind).toBe(result === "throw" ? "unknown_delivery" : "sent");
+    }
+    expect(queue.onUserStarted(started(sent[0]!))).toBeNull();
+    if (result !== "started") expect(queue.onUserStarted(started(sent[2]!))).not.toBeNull();
+    else expect(queue.onUserPublished(event(sent[0]!), sent[0]!)).toBeNull();
+    expect(queue.onUserPublished(event(sent[2]!), sent[2]!)).not.toBeNull();
+    queue.clearOwner("owner-1", service);
+    expect(queue.onUserStarted(started(sent[129]!))).toBeNull();
+    queue.clearAll();
   });
 
   test("follows native appends at timeout without a snapshot and correlates late start only once", async () => {

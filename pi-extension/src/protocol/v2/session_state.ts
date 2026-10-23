@@ -33,6 +33,7 @@ export type V2IdempotencyRecord = {
   touchedAt: number;
 };
 
+const MAX_ATTEMPTS_PER_RECORD = 128;
 type Clock = () => number;
 
 export type V2SessionStateOptions = {
@@ -56,6 +57,8 @@ export class V2SessionState {
   private readonly clock: Clock;
   private readonly channels = new Map<string, V2ChannelState>();
   private readonly records = new Map<string, V2IdempotencyRecord>();
+  // 弱引用让尝试历史随记录回收；不把可变 Set 暴露给任何快照消费者。
+  private readonly attempts = new WeakMap<V2IdempotencyRecord, Set<string>>();
 
   constructor(options: V2SessionStateOptions) {
     this.assertId(options.sessionId, "sessionId");
@@ -127,8 +130,18 @@ export class V2SessionState {
         this.records.set(key, existing);
       }
       if (existing.fingerprint !== fingerprint) return { kind: "conflict", record: { ...existing } };
-      // 拒绝发生在入队和调用 SDK 之前，每个新尝试都可重新准入；同一尝试的重复帧只重放结果。
-      if (existing.status === "rejected" && existing.retryable === true && request.attemptId !== existing.attemptId) {
+      // 只准入从未处理的新尝试；历史满额后不能淘汰旧 ID 来换取再准入。
+      const attempts = this.attempts.get(existing)!;
+      const seen = attempts.has(request.attemptId);
+      if (!seen && attempts.size >= MAX_ATTEMPTS_PER_RECORD) {
+        if (existing.status === "rejected" && existing.retryable === true) {
+          existing.rejectCode = "unavailable";
+          existing.retryable = false;
+        }
+        return { kind: "replay", record: { ...existing } };
+      }
+      if (!seen) attempts.add(request.attemptId);
+      if (existing.status === "rejected" && existing.retryable === true && !seen) {
         existing.status = "received";
         existing.attemptId = request.attemptId;
         delete existing.rejectCode;
@@ -148,6 +161,7 @@ export class V2SessionState {
       status: "received",
       touchedAt: this.clock(),
     };
+    this.attempts.set(record, new Set([request.attemptId]));
     this.records.set(key, record);
     this.pruneCapacity();
     return { kind: "new", record: { ...record } };
@@ -167,6 +181,8 @@ export class V2SessionState {
   }
 
   rememberUnknownDelivery(key: string): V2IdempotencyRecord | undefined {
+    const record = this.getRecord(key);
+    if (record?.status === "accepted" || record?.status === "committed") return record;
     return this.update(key, "unknown_delivery");
   }
 

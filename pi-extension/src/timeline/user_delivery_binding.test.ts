@@ -218,13 +218,14 @@ describe("UserDeliveryBinding", () => {
       items: [{ id: "target-1", text: "alpha", sender_ref: "owner-a" }],
     });
     expect(binding.snapshot("owner-a", serviceB)[0]).toMatchObject({ items: [] });
-    expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("failed");
-    expect(binding.snapshot("owner-a", serviceA)[0]).toMatchObject({ items: [{ id: "target-1", editable: true }] });
-    expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("sent");
+    expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("unknown_delivery");
+    expect(binding.snapshot("owner-a", serviceA)[0]).toMatchObject({ items: [] });
+    expect(binding.clearQueued("owner-a", serviceA, "target-1")).toEqual([]);
     expect(binding.steerQueued("owner-a", serviceA, "target-1").kind).toBe("missing");
     expect(binding.snapshot("owner-b", serviceB)[0]).toMatchObject({ items: [{ id: "target-1", text: "bravo" }] });
     expect(sendUserMessage).toHaveBeenNthCalledWith(1, "alpha", { deliverAs: "steer" });
-    expect(sendUserMessage).toHaveBeenNthCalledWith(2, "alpha", { deliverAs: "steer" });
+    expect(sendUserMessage).toHaveBeenCalledTimes(1);
+    binding.clearAll();
   });
 
   test("rejects as retryable without queueing or calling Pi when no delivery context exists yet", () => {
