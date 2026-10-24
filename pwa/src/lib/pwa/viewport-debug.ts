@@ -1,6 +1,6 @@
 import { useLocalStorage } from "@mantine/hooks";
 import type { ViewportDiagnosticEntry } from "./timeline-viewport-diagnostics";
-import { hasTextFocus } from "./use-keyboard-viewport";
+import { hasTextFocus, KEYBOARD_VIEWPORT_REASONS, type KeyboardViewportDiagnostic } from "./use-keyboard-viewport";
 
 export const VIEWPORT_DEBUG_STORAGE_KEY = "pi-reach-viewport-debug";
 export const VIEWPORT_DEBUG_REPORT_FORMAT = "pi-reach-viewport-debug/1";
@@ -20,7 +20,7 @@ export function useViewportDebug() {
 
 export type ViewportFocusKind = "text" | "control" | "none";
 export type ViewportKeyboardMotion = "opening" | "closing" | "none";
-export const VIEWPORT_MARK_KINDS = ["focusin", "focusout", "vv-resize", "vv-scroll", "scroll", "resize"] as const;
+export const VIEWPORT_MARK_KINDS = ["focusin", "focusout", "vv-resize", "vv-scroll", "scroll", "resize", "keyboard-update"] as const;
 export type ViewportMarkKind = typeof VIEWPORT_MARK_KINDS[number];
 
 /** 每帧只记录数字、布尔值和焦点类别，不读取正文、属性值或业务身份。 */
@@ -37,7 +37,16 @@ export type ViewportFrameMeasure = Readonly<{
   focus: ViewportFocusKind;
 }>;
 export type ViewportFrameSample = Readonly<ViewportFrameMeasure & { frame: number; t: number }>;
-export type ViewportMark = Readonly<{ frame: number; t: number; kind: ViewportMarkKind }>;
+export type ViewportEventSnapshot = Readonly<{
+  vvHeight: number | null; vvTop: number | null; vvScale: number | null; innerHeight: number | null; docHeight: number | null;
+  rootBoxHeight: number | null; bodyBoxHeight: number | null; shellHeight: number | null; scrollY: number | null;
+  documentLocked: boolean; documentLockHeight: number | null; compact: "short" | "very-short" | null;
+  composerBudget: "constrained" | "conflict" | null; paddingTop: number | null; paddingBottom: number | null;
+  composerPaddingBottom: number | null; focus: ViewportFocusKind;
+}>;
+/** frame 是上一采样帧编号；snapshot 才是当前事件处理时的几何，不依赖 frames 尚未被淘汰。 */
+export type ViewportMark = Readonly<{ frame: number; t: number; kind: ViewportMarkKind;
+  snapshot?: ViewportEventSnapshot; controller?: KeyboardViewportDiagnostic }>;
 
 function round(value: number): number {
   return Math.round(value * 10) / 10;
@@ -45,6 +54,24 @@ function round(value: number): number {
 
 function finite(value: number | undefined | null): number | null {
   return typeof value === "number" && Number.isFinite(value) ? round(value) : null;
+}
+
+function copyEventSnapshot(value: ViewportEventSnapshot): ViewportEventSnapshot {
+  return Object.freeze({ vvHeight: finite(value.vvHeight), vvTop: finite(value.vvTop), vvScale: finite(value.vvScale),
+    innerHeight: finite(value.innerHeight), docHeight: finite(value.docHeight), rootBoxHeight: finite(value.rootBoxHeight),
+    bodyBoxHeight: finite(value.bodyBoxHeight), shellHeight: finite(value.shellHeight), scrollY: finite(value.scrollY),
+    documentLocked: value.documentLocked === true, documentLockHeight: finite(value.documentLockHeight),
+    compact: value.compact === "short" || value.compact === "very-short" ? value.compact : null,
+    composerBudget: value.composerBudget === "constrained" || value.composerBudget === "conflict" ? value.composerBudget : null,
+    paddingTop: finite(value.paddingTop), paddingBottom: finite(value.paddingBottom), composerPaddingBottom: finite(value.composerPaddingBottom),
+    focus: value.focus === "text" || value.focus === "control" ? value.focus : "none" });
+}
+
+function copyController(value: KeyboardViewportDiagnostic): KeyboardViewportDiagnostic {
+  return Object.freeze({ reason: value.reason, appHeight: value.appHeight, unfocusedInset: value.unfocusedInset,
+    unfocusedOcclusion: value.unfocusedOcclusion, previousHeight: value.previousHeight, lastHeight: value.lastHeight,
+    viewportHeight: value.viewportHeight, adjusted: value.adjusted, restored: value.restored,
+    restoreThreshold: value.restoreThreshold, closing: value.closing, closingTarget: value.closingTarget });
 }
 
 /** 环形缓冲：超出容量时丢弃最早的帧，内存占用固定。 */
@@ -64,8 +91,10 @@ export class ViewportFrameRecorder {
     if (this.frames.length > this.capacity) this.frames.splice(0, this.frames.length - this.capacity);
     return sample;
   }
-  mark(kind: ViewportMarkKind) {
-    this.marks.push(Object.freeze({ frame: this.count, t: this.elapsed(), kind }));
+  mark(kind: ViewportMarkKind, snapshot?: ViewportEventSnapshot, controller?: KeyboardViewportDiagnostic) {
+    this.marks.push(Object.freeze({ frame: this.count, t: this.elapsed(), kind,
+      ...(snapshot ? { snapshot: copyEventSnapshot(snapshot) } : {}),
+      ...(controller && KEYBOARD_VIEWPORT_REASONS.includes(controller.reason) ? { controller: copyController(controller) } : {}) }));
     if (this.marks.length > MARK_CAPACITY) this.marks.splice(0, this.marks.length - MARK_CAPACITY);
   }
   clear() {
@@ -116,6 +145,29 @@ export function measureViewportFrame(shell: HTMLElement): ViewportFrameMeasure {
   };
 }
 
+/** 仅事件发生时额外测量盒高与留白；不把 clientHeight 或调试标记当成物理键盘状态。 */
+export function measureViewportEvent(shell: HTMLElement): ViewportEventSnapshot {
+  const viewport = window.visualViewport;
+  const root = document.documentElement;
+  const list = shell.querySelector<HTMLElement>(".pwa-message-list");
+  const composer = shell.querySelector<HTMLElement>(".pwa-composer");
+  const listStyle = list ? getComputedStyle(list) : null;
+  const compact = shell.dataset.compactHeight;
+  const budget = shell.querySelector<HTMLElement>(".pwa-main")?.dataset.composerBudget;
+  return {
+    vvHeight: finite(viewport?.height), vvTop: finite(viewport?.offsetTop), vvScale: finite(viewport?.scale),
+    innerHeight: window.innerHeight, docHeight: root.clientHeight, rootBoxHeight: finite(root.getBoundingClientRect().height),
+    bodyBoxHeight: finite(document.body?.getBoundingClientRect().height), shellHeight: finite(shell.getBoundingClientRect().height),
+    scrollY: finite(window.scrollY), documentLocked: root.hasAttribute("data-pwa-keyboard"),
+    documentLockHeight: cssPixels(root, "--pwa-keyboard-document-height"),
+    compact: compact === "short" || compact === "very-short" ? compact : null,
+    composerBudget: budget === "constrained" || budget === "conflict" ? budget : null,
+    paddingTop: finite(listStyle ? parseFloat(listStyle.paddingTop) : null),
+    paddingBottom: finite(listStyle ? parseFloat(listStyle.paddingBottom) : null),
+    composerPaddingBottom: finite(composer ? parseFloat(getComputedStyle(composer).paddingBottom) : null), focus: focusKind(),
+  };
+}
+
 function show(value: number | null): string {
   return value === null ? "-" : String(value);
 }
@@ -140,6 +192,8 @@ export function collectViewportDebugEnvironment(version: string): ViewportDebugE
   const standalone = window.matchMedia?.("(display-mode: standalone)").matches
     || (navigator as Navigator & { standalone?: boolean }).standalone === true;
   return {
+    // 生产资源名含内容hash；它标识实际加载的JS，不冒充Git SHA，也不导出来源URL或query。
+    buildAsset: new URL(import.meta.url).pathname.split("/").pop() ?? null,
     pwaVersion: version, userAgent: navigator.userAgent, devicePixelRatio: window.devicePixelRatio,
     screenWidth: window.screen.width, screenHeight: window.screen.height, standalone,
   };

@@ -3,8 +3,9 @@ import { Button, Portal } from "@mantine/core";
 import { useI18n } from "@/lib/i18n";
 import { clearViewportDiagnostics, disableViewportDiagnostics, enableViewportDiagnostics, readViewportDiagnostics,
   viewportDiagnosticsEnabled } from "@/lib/pwa/timeline-viewport-diagnostics";
-import { collectViewportDebugEnvironment, formatViewportDebugLines, formatViewportDebugReport, measureViewportFrame,
+import { collectViewportDebugEnvironment, formatViewportDebugLines, formatViewportDebugReport, measureViewportEvent, measureViewportFrame,
   ViewportFrameRecorder, type ViewportMarkKind } from "@/lib/pwa/viewport-debug";
+import { observeKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
 import { version as pwaVersion } from "../../../package.json";
 import "./viewport-debug-overlay.css";
 
@@ -33,13 +34,21 @@ function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: View
       [viewport, "resize", "vv-resize"], [viewport, "scroll", "vv-scroll"],
       [window, "scroll", "scroll"], [window, "resize", "resize"],
     ];
+    const observedShell = shellRef.current;
+    const stopDiagnostics = observedShell ? observeKeyboardViewport(observedShell, state => {
+      recorder.mark("keyboard-update", measureViewportEvent(observedShell), state);
+    }) : () => {};
     const handlers = listeners.map(([target, type, kind]) => {
-      const handler = () => recorder.mark(kind);
+      const handler = () => {
+        const shell = shellRef.current;
+        recorder.mark(kind, shell ? measureViewportEvent(shell) : undefined);
+      };
       target?.addEventListener(type, handler, { passive: true });
       return () => target?.removeEventListener(type, handler);
     });
     return () => {
       window.cancelAnimationFrame(frame);
+      stopDiagnostics();
       for (const remove of handlers) remove();
       disableViewportDiagnostics();
     };
