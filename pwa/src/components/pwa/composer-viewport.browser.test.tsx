@@ -219,7 +219,8 @@ test("locks the document to the visible height under the keyboard so iOS has no 
 });
 
 test("follows the keyboard with a shell height transition when it opens and closes", async () => {
-  document.documentElement.style.removeProperty("--pwa-duration-keyboard");
+  // Safari 以秒返回计算后的时长；按秒书写覆盖单位换算，避免 250ms 被当成 0.25ms 提前收尾。
+  document.documentElement.style.setProperty("--pwa-duration-keyboard", "0.25s");
   await page.viewport(390, 844);
   const viewport = new ViewportMock();
   vi.stubGlobal("visualViewport", viewport);
@@ -237,6 +238,8 @@ test("follows the keyboard with a shell height transition when it opens and clos
     // 过渡从原高度起步（WebKit 同一帧切换定位不会起过渡，先以原高度切入 fixed），不从 0 或终点跳变。
     expect(samples[0]).toBeGreaterThan(700);
     expect(samples.some(value => value > 470 && value < 844)).toBe(true);
+    // 约 250ms 的过渡跨越十余帧，不会在几帧内提前结束。
+    expect(samples.length).toBeGreaterThanOrEqual(10);
     await expect.poll(() => view.shell.hasAttribute("data-keyboard-opening")).toBe(false);
     expect(height()).toBe(470);
 

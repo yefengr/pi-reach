@@ -54,7 +54,10 @@ class KeyboardMotionClock {
   /** 减少动态效果（时长为 0）时返回 false，调用方即时完成。 */
   start(kind: KeyboardMotion): boolean {
     this.stop();
-    const duration = Number.parseFloat(getComputedStyle(this.shell).getPropertyValue("--pwa-duration-keyboard"));
+    // Safari 把计算后的时长按秒返回（如 0.25s），须按单位换算，否则会把 250ms 当成 0.25ms 提前收尾。
+    const value = getComputedStyle(this.shell).getPropertyValue("--pwa-duration-keyboard").trim();
+    const number = Number.parseFloat(value);
+    const duration = Number.isFinite(number) ? number * (value.endsWith("ms") ? 1 : 1000) : 0;
     if (!(duration > 0)) return false;
     this.kind = kind;
     this.shell.setAttribute(KEYBOARD_MOTION_ATTRIBUTE[kind], "");
@@ -149,15 +152,15 @@ class KeyboardViewportController {
     updateDensity(this.shell);
   }
 
-  /** 以当前高度切入 fixed：画面不变，后续高度变化才能从此处起过渡。 */
+  /** 以平时的整屏高度切入 fixed：画面不变，后续高度变化才能从此处起过渡。不读布局：真机 resize 事件内读到过 0 高度。 */
   private prepare() {
     if (this.prepared) return;
     this.prepared = true;
     this.shell.dataset.keyboardPrepared = "";
-    this.shell.style.setProperty("--pwa-viewport-height", `${this.shell.getBoundingClientRect().height}px`);
+    this.shell.style.setProperty("--pwa-viewport-height", "var(--pwa-app-height)");
     this.shell.style.setProperty("--pwa-viewport-top", "0px");
-    // 立即计算一次样式，把 fixed 下的当前高度记为过渡起点；否则同一帧内紧接着改高度时没有起点可过渡。
-    this.shell.getBoundingClientRect();
+    // 立即计算一次样式，把 fixed 下的整屏高度记为过渡起点；否则同一帧内紧接着改高度时没有起点可过渡。
+    void getComputedStyle(this.shell).height;
   }
 
   // iOS 为露出输入框会把整屏高的文档滚到底；键盘收起时 JS 读数一步归零，屏幕却播放原生回滚动画，
