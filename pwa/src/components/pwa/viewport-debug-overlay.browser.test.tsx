@@ -127,7 +127,7 @@ test("captures the actual controller decision and document boxes without changin
     expect(held?.controller).toMatchObject({ appHeight: 874, unfocusedInset: 0, restoreThreshold: 873, adjusted: true,
       viewportHeight: 812, restored: false, closing: false, closingTarget: null });
     expect(held?.snapshot).toMatchObject({ vvHeight: 812, innerHeight: 874, docHeight: 812,
-      rootBoxHeight: 812, bodyBoxHeight: 812, documentLocked: true, documentLockHeight: 812 });
+      rootBoxHeight: 874, bodyBoxHeight: 874, documentLocked: true, documentLockHeight: 874 });
     expect(report.marks.find(mark => mark.kind === "vv-resize" && mark.snapshot?.vvHeight === 470)?.snapshot)
       .toMatchObject({ documentLocked: true, documentLockHeight: 470 });
 
@@ -188,7 +188,7 @@ test("document lock experiment changes only the height constraint and restores t
     expect(document.querySelector("[data-document-lock-bypass]")).toBeNull();
     expect(document.activeElement).toBe(input);
     input.blur();
-    viewport.change(812);
+    viewport.change(814);
     // 同任务内尚未提交closing CSS时也必须拒绝切换。
     (button.element() as HTMLButtonElement).click();
     expect(document.querySelector("[data-document-lock-bypass]")).toBeNull();
@@ -196,6 +196,9 @@ test("document lock experiment changes only the height constraint and restores t
     await expect.poll(() => shell.hasAttribute("data-keyboard-closing")).toBe(false);
     await expect.element(button).toBeEnabled();
     const rect = () => Math.round(root.getBoundingClientRect().height);
+    expect(rect()).toBe(874);
+    // 回升已交还自然文档；再次缩小才恢复紧约束，继续验证开关确实改变盒高。
+    viewport.change(812);
     expect(rect()).toBe(812);
     const before = shell.outerHTML;
     const focusBeforeToggle = document.activeElement;

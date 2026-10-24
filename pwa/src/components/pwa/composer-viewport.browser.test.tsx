@@ -276,7 +276,7 @@ test("keeps the actual occluded viewport after blur and a long task until the vi
     expect.soft(height()).toBe(470);
     await expect.poll(height).toBe(620);
     expect.soft(Math.round(view.shell.getBoundingClientRect().top)).toBe(8);
-    expect.soft(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("620px");
+    expect.soft(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("844px");
     viewport.change({ height: 844, offsetTop: 0 });
     await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(height()).toBe(844);
@@ -313,6 +313,172 @@ test("does not release at the layout height while the unobscured app viewport is
     layoutHeight.mockRestore();
     await view.screen.unmount();
   }
+});
+
+test("hands document height back on real growth without releasing a partial shell or re-locking on settle", async () => {
+  await page.viewport(402, 874);
+  document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const root = document.documentElement;
+  const box = (element: Element) => Math.round(element.getBoundingClientRect().height);
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    // 仍聚焦时隐藏键盘也须交接；不依赖blur或clientHeight等于VV。
+    viewport.change({ height: 812 });
+    expect.soft(box(root)).toBe(874);
+    expect.soft(box(document.body)).toBe(874);
+    expect.soft(box(view.shell)).toBe(470);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    viewport.change({}, "scroll");
+    await settle();
+    expect.soft(box(root)).toBe(874);
+    expect.soft(root.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("874px");
+    expect.soft(box(view.shell)).toBe(812);
+    expect.soft(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect.soft(view.shell.hasAttribute("data-keyboard-restored")).toBe(false);
+    expect.soft(parseFloat(getComputedStyle(document.querySelector(".pwa-composer")!).paddingBottom)).toBe(8);
+    viewport.change({ height: 500 });
+    expect.soft(box(root)).toBe(500);
+    expect.soft(box(view.shell)).toBe(500);
+    viewport.change({ height: 874 });
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(root.hasAttribute("data-pwa-keyboard")).toBe(false);
+  } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-bottom");
+    await view.screen.unmount();
+  }
+});
+
+test.each([[false, 812], [true, 812], [false, 601]] as const)("closes padding within the size handoff without an endpoint content step: reading=%s target=%s", async (reading, target) => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const paragraph = view.screen.getByText(/^Answer 2, paragraph 3:/).element();
+  try {
+    if (reading) {
+      view.list.scrollTop += offset(paragraph, view.list) - 2;
+      view.list.dispatchEvent(new Event("scroll", { bubbles: true }));
+      await settle();
+    }
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    const initialAnchor = Math.round(offset(paragraph, view.list));
+    view.input.blur();
+    viewport.change({ height: target });
+    const frames = [];
+    const start = performance.now();
+    do {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const style = getComputedStyle(view.list);
+      frames.push({ height: Math.round(view.shell.getBoundingClientRect().height),
+        padding: Math.round(parseFloat(style.paddingBottom)), scrollHeight: view.list.scrollHeight,
+        paragraph: Math.round(offset(paragraph, view.list)), gap: Math.round(bottomGap(view.list)) });
+    } while (performance.now() - start < 400);
+    expect.soft(frames.some(frame => frame.height < target && frame.padding > 8 && frame.padding < 88)).toBe(true);
+    const endpoints = frames.filter(frame => frame.height === target);
+    expect.soft(endpoints.length).toBeGreaterThan(1);
+    // 固定消息：shell已到终点后不得再增加96px内容或把正文向上搬80px。
+    expect.soft(Math.max(...endpoints.map(frame => frame.scrollHeight)) - Math.min(...endpoints.map(frame => frame.scrollHeight))).toBeLessThanOrEqual(1);
+    expect.soft(Math.max(...endpoints.map(frame => frame.paragraph)) - Math.min(...endpoints.map(frame => frame.paragraph))).toBeLessThanOrEqual(1);
+    if (reading) expect.soft(Math.max(...frames.map(frame => Math.abs(frame.paragraph - initialAnchor)))).toBeLessThanOrEqual(1);
+    else expect.soft(Math.max(...frames.map(frame => Math.abs(frame.gap)))).toBeLessThanOrEqual(1);
+    expect(getComputedStyle(view.list).paddingBottom).toBe("88px");
+    expect(view.timeline().followingOutput).toBe(!reading);
+  } finally { await view.screen.unmount(); }
+});
+
+test("keeps constrained input budgets while closing and hands layout padding to the existing activity owner", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace("Draft line\n".repeat(8));
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 310 });
+    await settle();
+    expect(document.querySelector("[data-composer-budget]")).not.toBeNull();
+    viewport.change({ height: 812 });
+    await settle();
+    // 临时补偿inline padding不能被CSS再次动画；自然scroll避让与自然padding共用插值。
+    view.list.style.paddingBottom = "120px";
+    expect(getComputedStyle(view.list).paddingBottom).toBe("120px");
+    view.list.style.paddingBottom = "";
+    const start = performance.now();
+    while (performance.now() - start < 350) {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const style = getComputedStyle(view.list);
+      expect.soft(Math.round(parseFloat(style.scrollPaddingBottom))).toBe(Math.round(parseFloat(style.paddingBottom)));
+      expect.soft(Math.round(view.input.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+      expect.soft(view.list.clientHeight).toBeGreaterThanOrEqual(40);
+    }
+    expect(getComputedStyle(view.list).paddingBottom).toBe("88px");
+    expect(Math.abs(view.input.getBoundingClientRect().height - sixLineHeight(view.input))).toBeLessThan(1);
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+  } finally { await view.screen.unmount(); }
+});
+
+test("records blur intent without moving early and discards stale intent before a delayed recovery", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const height = () => Math.round(view.shell.getBoundingClientRect().height);
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    view.input.blur();
+    await settle();
+    expect(height()).toBe(470);
+    expect(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("470px");
+    viewport.change({ height: 812 });
+    const taskEnd = performance.now() + 50;
+    while (performance.now() < taskEnd) { void getComputedStyle(view.shell).height; }
+    expect(height()).toBe(470);
+    await settle();
+    const duration = parseFloat(getComputedStyle(view.shell).transitionDuration) * 1000;
+    expect(duration).toBeGreaterThanOrEqual(125);
+    expect(duration).toBeLessThan(250);
+    await expect.poll(height).toBe(812);
+    // 新焦点清理上一轮意图；长时间失焦不能让首次真实增长直接耗尽预算。
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    view.input.blur();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    viewport.change({ height: 874 });
+    expect(height()).toBe(470);
+    await settle();
+    expect(parseFloat(getComputedStyle(view.shell).transitionDuration) * 1000).toBe(250);
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+  } finally { await view.screen.unmount(); }
+});
+
+test("redirects closing from its displayed height with a bounded remaining duration", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    viewport.change({ height: 812 });
+    await settle();
+    const before = view.shell.getBoundingClientRect().height;
+    viewport.change({ height: 874 });
+    expect(Math.abs(view.shell.getBoundingClientRect().height - before)).toBeLessThanOrEqual(1);
+    const duration = parseFloat(getComputedStyle(view.shell).transitionDuration) * 1000;
+    expect.soft(duration).toBeLessThan(250);
+    expect.soft(duration).toBeGreaterThanOrEqual(125);
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+  } finally { await view.screen.unmount(); }
 });
 
 test("keeps the rendered starting height when the viewport reports the closing endpoint early", async () => {
@@ -489,6 +655,7 @@ test("zero-duration closing still waits for the full unobscured viewport", async
     expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(812);
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
     expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+    expect(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("874px");
     viewport.change({ height: 874 });
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
@@ -510,6 +677,7 @@ test("uses the production reduced-motion rules without a closing size transition
     expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(620);
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
     expect(view.shell.getAnimations()).toHaveLength(0);
+    expect(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("844px");
     viewport.change({ height: 844 });
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(view.shell.getAnimations()).toHaveLength(0);

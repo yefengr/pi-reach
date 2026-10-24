@@ -9,7 +9,7 @@
 /* 实际可视区恢复前，底部安全区仍由键盘覆盖，不因失焦或部分回升提前恢复。 */
 .pwa-app-shell[data-keyboard-viewport]:not([data-keyboard-restored]) { --pwa-safe-bottom: 0px; }
 
-/* 键盘补偿期间文档只与可见区域等高，iOS 无需滚动文档露出输入框；选择器特异性需高于 globals.css 的 standalone 高度。 */
+/* 压缩时锁可见高度，实际回升后先交还自然文档高度；独立于shell补偿，避免锁与VV恢复互等。 */
 /* 调试实验仅跳过这组约束；标记随浮层卸载消失，控制器锁值与滚动复位仍照常运行。 */
 html:has(.pwa-root)[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass])),
 html[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass])) body:has(.pwa-root) {
@@ -20,20 +20,43 @@ html[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass])
 /* 补偿期间输入区底边保留8px；仅恢复终点已到时随收起过渡交还安全区。 */
 .pwa-app-shell[data-keyboard-viewport]:not([data-keyboard-restored]) .pwa-composer { padding-bottom: var(--pwa-space-xs); }
 
+/* 只动画自然留白；时间线临时inline padding仍由它自己的时钟掌管，不能叠加CSS过渡。 */
+@property --pwa-timeline-layout-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --pwa-timeline-layout-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.pwa-app-shell .pwa-message-list {
+  --pwa-timeline-layout-top: var(--pwa-timeline-pad-top);
+  --pwa-timeline-layout-bottom: var(--pwa-timeline-pad-bottom);
+  padding-top: var(--pwa-timeline-layout-top);
+  padding-bottom: var(--pwa-timeline-layout-bottom);
+  scroll-padding-bottom: var(--pwa-timeline-layout-bottom);
+}
+
+/* 留白目标在收起开始时确定，不能等可见高度跨阈值后才启动；通知密度仍跟随实际高度。 */
+.pwa-app-shell[data-keyboard-closing][data-keyboard-normal-padding] .pwa-message-list {
+  --pwa-timeline-layout-top: var(--pwa-timeline-normal-pad-top);
+  --pwa-timeline-layout-bottom: var(--pwa-timeline-normal-pad-bottom);
+  scroll-padding-bottom: var(--pwa-timeline-layout-bottom);
+}
+
 /* 回到默认 all 不会取消目标未变的在途过渡；中断必须显式撤掉尺寸属性。 */
 .pwa-app-shell,
-.pwa-app-shell .pwa-composer { transition-property: none; }
+.pwa-app-shell .pwa-composer,
+.pwa-app-shell .pwa-message-list { transition-property: none; }
 
 /* 仅收起保留视觉保护；展开仍即时生效，不承诺与系统键盘逐帧同步。 */
 .pwa-app-shell[data-keyboard-closing] {
-  transition: height var(--pwa-duration-keyboard) var(--pwa-ease-keyboard-close);
+  transition: height var(--pwa-keyboard-motion-duration) var(--pwa-ease-keyboard-close);
 }
 .pwa-app-shell[data-keyboard-closing] .pwa-composer {
-  transition: padding-bottom var(--pwa-duration-keyboard) var(--pwa-ease-keyboard-close);
+  transition: padding-bottom var(--pwa-keyboard-motion-duration) var(--pwa-ease-keyboard-close);
+}
+.pwa-app-shell[data-keyboard-closing] .pwa-message-list {
+  transition: --pwa-timeline-layout-top var(--pwa-keyboard-layout-duration) var(--pwa-ease-keyboard-close),
+    --pwa-timeline-layout-bottom var(--pwa-keyboard-layout-duration) var(--pwa-ease-keyboard-close);
 }
 
 /* 由实际可用空间决定阅读留白，不依赖布局断点或物理屏幕高度。 */
 .pwa-app-shell .pwa-main[data-composer-budget] .pwa-message-list {
-  padding-block: 8px;
-  scroll-padding-bottom: 8px;
+  --pwa-timeline-layout-top: 8px;
+  --pwa-timeline-layout-bottom: 8px;
 }
