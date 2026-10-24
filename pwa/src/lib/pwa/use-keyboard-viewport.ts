@@ -36,28 +36,22 @@ export function hasTextFocus() {
   return isTextEditable(document.activeElement);
 }
 
+function notifyGeometry(shell: HTMLElement) {
+  shell.querySelector(".pwa-message-list")?.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
+}
+
 function updateDensity(shell: HTMLElement) {
-  const previous = shell.dataset.compactHeight;
-  applyDensity(shell);
   // 短窗口密度会改变消息区内边距（尺寸不变，ResizeObserver 不触发），通知时间线重新贴底或恢复锚点。
-  if (shell.dataset.compactHeight !== previous) shell.querySelector(".pwa-message-list")?.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
+  if (applyDensity(shell)) notifyGeometry(shell);
 }
 
 function applyDensity(shell: HTMLElement) {
+  const previous = shell.dataset.compactHeight;
   const { width, height } = shell.getBoundingClientRect();
   if (height <= SHORT_VIEWPORT_HEIGHT) shell.dataset.compactHeight = height <= VERY_SHORT_VIEWPORT_HEIGHT ? "very-short" : "short";
   else delete shell.dataset.compactHeight;
   shell.toggleAttribute("data-wide-compact", height <= SHORT_VIEWPORT_HEIGHT && width >= INLINE_NOTICE_MIN_WIDTH);
-}
-
-/** 在固定补偿之外解析既有 app-height；不临时撤掉真实外壳，避免触发阅读锚点或输入预算。 */
-function measureAppHeight(shell: HTMLElement) {
-  const probe = document.createElement("div");
-  probe.style.cssText = "position:absolute;height:var(--pwa-app-height);width:0;visibility:hidden;pointer-events:none";
-  shell.append(probe);
-  const height = probe.getBoundingClientRect().height;
-  probe.remove();
-  return height;
+  return shell.dataset.compactHeight !== previous;
 }
 
 /** 展开即时补偿；只有实际高度回升才启动收起交接，视口恢复和页面交接均完成才能释放。 */
@@ -70,9 +64,11 @@ class KeyboardViewportController {
   private unfocusedInset: number;
   private appHeight: number;
   private lastHeight = 0;
+  private heightProbe: HTMLDivElement | null = null;
 
   constructor(private readonly shell: HTMLElement, private readonly viewport: VisualViewport | undefined) {
-    this.motion = new KeyboardClosingMotion(shell, () => updateDensity(shell), () => this.update(),
+    // motion.sample在密度提交后统一通知，跨阈值时不再发送第二次同步几何事件。
+    this.motion = new KeyboardClosingMotion(shell, () => { applyDensity(shell); }, () => this.update(),
       height => shell.toggleAttribute("data-keyboard-normal-padding", height > SHORT_VIEWPORT_HEIGHT));
     this.appHeight = shell.getBoundingClientRect().height;
     this.unfocusedInset = viewport ? this.appHeight - viewport.height : 0;
@@ -100,7 +96,10 @@ class KeyboardViewportController {
     this.motion.stop();
     this.documentHandedBack = false;
     this.lastHeight = this.viewport?.height ?? 0;
-    if (this.adjusted && this.lastHeight > 0) this.lockDocument(this.lastHeight);
+    if (this.adjusted && this.lastHeight > 0) {
+      this.lockDocument(this.lastHeight);
+      this.resetWindowScroll();
+    }
     this.report("focus", previousHeight);
   }
 
@@ -121,7 +120,7 @@ class KeyboardViewportController {
     // 仅入口比较 layout viewport；已进入后不能以较短的初始包含块当成恢复终点。
     if (!this.adjusted && occlusion <= this.unfocusedOcclusion + VIEWPORT_EPSILON) return this.reset("native-layout");
     const previousHeight = this.lastHeight;
-    const appHeight = measureAppHeight(this.shell) || this.appHeight;
+    const appHeight = this.measureAppHeight() || this.appHeight;
     if (Math.abs(appHeight - this.appHeight) > VIEWPORT_EPSILON) {
       // 旋转或窗口高度变化不是键盘回升；取消旧尺寸的过渡并使用当前 CSS 基准。
       this.motion.stop();
@@ -148,8 +147,30 @@ class KeyboardViewportController {
       delete this.shell.dataset.keyboardRestored;
       this.shell.style.setProperty("--pwa-viewport-height", `${viewport.height}px`);
     }
-    updateDensity(this.shell);
+    const densityChanged = applyDensity(this.shell);
+    // 读取scrollY也可能提交浏览器布局；先完成文档、shell与密度，避免暴露半成品几何。
+    this.resetWindowScroll();
+    if (densityChanged) notifyGeometry(this.shell);
     this.report(closing ? "closing" : "compensated", previousHeight, restored);
+  }
+
+  cleanup() {
+    this.reset();
+    this.heightProbe?.remove();
+    this.heightProbe = null;
+  }
+
+  /** 在固定补偿之外实时解析自然高度；探针跨周期复用，不撤真实shell或缓存高度值。 */
+  private measureAppHeight() {
+    if (!this.heightProbe) {
+      const probe = document.createElement("div");
+      probe.style.cssText = "position:absolute;top:0;height:var(--pwa-app-height);width:0;visibility:hidden;pointer-events:none";
+      probe.setAttribute("aria-hidden", "true");
+      probe.inert = true;
+      this.shell.append(probe);
+      this.heightProbe = probe;
+    }
+    return this.heightProbe.getBoundingClientRect().height;
   }
 
   private report(reason: KeyboardViewportDiagnostic["reason"], previousHeight: number, restored: boolean | null = null) {
@@ -169,6 +190,9 @@ class KeyboardViewportController {
   private lockDocument(height: number) {
     this.root.dataset.pwaKeyboard = "";
     this.root.style.setProperty("--pwa-keyboard-document-height", `${height}px`);
+  }
+
+  private resetWindowScroll() {
     if (window.scrollY !== 0) window.scrollTo({ top: 0, left: window.scrollX, behavior: "instant" });
   }
 }
@@ -210,7 +234,7 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
       window.removeEventListener("resize", schedule);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
-      controller.reset();
+      controller.cleanup();
       delete shell.dataset.compactHeight;
       shell.removeAttribute("data-wide-compact");
     };

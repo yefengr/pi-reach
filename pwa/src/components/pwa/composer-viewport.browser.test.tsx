@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { TIMELINE_GEOMETRY_EVENT, useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageComposer } from "./message-composer";
@@ -216,6 +216,160 @@ test("locks the document to the visible height under the keyboard so iOS has no 
     await view.screen.unmount();
   }
   expect(root.hasAttribute("data-pwa-keyboard")).toBe(false);
+});
+
+test("opening commits complete layout before reading or resetting window scroll", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  // 本用例只查同步提交顺序；真实收起动效由下方逐帧用例覆盖。
+  view.shell.style.setProperty("--pwa-duration-keyboard", "0ms");
+  const other = document.createElement("textarea");
+  other.style.position = "fixed";
+  document.body.append(other);
+  const snapshot = () => {
+    const shell = getComputedStyle(view.shell);
+    const list = getComputedStyle(view.list);
+    return [Math.round(document.documentElement.getBoundingClientRect().height),
+      Math.round(document.body.getBoundingClientRect().height), shell.position,
+      Math.round(view.shell.getBoundingClientRect().top), Math.round(view.shell.getBoundingClientRect().height),
+      view.shell.dataset.compactHeight ?? null, parseFloat(list.paddingTop), parseFloat(list.paddingBottom)];
+  };
+  const reads: ReturnType<typeof snapshot>[] = [];
+  const resets: ReturnType<typeof snapshot>[] = [];
+  const notifications: ReturnType<typeof snapshot>[] = [];
+  const scrollY = vi.spyOn(window, "scrollY", "get").mockImplementation(() => { reads.push(snapshot()); return 404; });
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => { resets.push(snapshot()); });
+  const geometry = () => { notifications.push(snapshot()); expect(resets.length).toBeGreaterThan(0); };
+  view.list.addEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
+  const check = (expected: ReturnType<typeof snapshot>) => {
+    expect.soft(reads.length).toBeGreaterThan(0);
+    expect.soft(resets.length).toBe(reads.length);
+    for (const value of [...reads, ...resets, ...notifications]) expect.soft(value).toEqual(expected);
+    expect.soft(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: window.scrollX, behavior: "instant" });
+    reads.length = resets.length = notifications.length = 0;
+  };
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470, offsetTop: 12 });
+    check([470, 470, "fixed", 12, 470, "short", 8, 8]);
+    await settle();
+    reads.length = resets.length = notifications.length = 0;
+    viewport.change({ height: 430, offsetTop: 24 });
+    check([430, 430, "fixed", 24, 430, "very-short", 8, 8]);
+    viewport.change({ height: 620, offsetTop: 8 });
+    check([844, 844, "fixed", 8, 620, null, 24, 88]);
+    // 已补偿时的新焦点仍写最新VV锁值；不等下一帧，也不消费旧文档交还标记。
+    viewport.height = 610;
+    other.focus({ preventScroll: true });
+    check([610, 610, "fixed", 8, 620, null, 24, 88]);
+  } finally {
+    view.list.removeEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
+    other.remove();
+    await view.screen.unmount();
+  }
+});
+
+test("opening reuses one connected natural-height probe across events cycles and rotation", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  view.shell.style.setProperty("--pwa-duration-keyboard", "0ms");
+  const create = vi.spyOn(document, "createElement");
+  const mutations = new MutationObserver(() => {});
+  mutations.observe(view.shell, { childList: true });
+  const probes = () => create.mock.results.flatMap(result => {
+    const node = result.type === "return" ? result.value : null;
+    return node instanceof HTMLElement && node.style.height === "var(--pwa-app-height)" ? [node] : [];
+  });
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    for (let index = 0; index < 5; index += 1) viewport.change({ height: 470 });
+    const first = probes()[0];
+    expect.soft(probes()).toHaveLength(1);
+    expect.soft(first?.isConnected).toBe(true);
+    expect.soft(first?.getAttribute("aria-hidden")).toBe("true");
+    expect.soft(first?.inert).toBe(true);
+    expect.soft(first?.style.top).toBe("0px");
+    const records = mutations.takeRecords();
+    expect.soft(records.flatMap(record => [...record.addedNodes]).filter(node => node === first)).toHaveLength(1);
+    expect.soft(records.flatMap(record => [...record.removedNodes]).filter(node => node === first)).toHaveLength(0);
+    view.input.blur();
+    viewport.change({ height: 844 });
+    await settle();
+    expect.soft(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await page.viewport(844, 390);
+    viewport.change({ height: 270 });
+    await settle();
+    expect.soft(Math.round(first?.getBoundingClientRect().height ?? 0)).toBe(390);
+    viewport.change({ height: 390 });
+    expect.soft(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect.soft(probes()).toHaveLength(1);
+    expect.soft(first?.isConnected).toBe(true);
+    expect.soft(Math.round(view.shell.getBoundingClientRect().height)).toBe(390);
+    await view.screen.unmount();
+    expect.soft(first?.parentElement).toBeNull();
+  } finally {
+    create.mockRestore();
+    mutations.disconnect();
+    if (view.shell.isConnected) await view.screen.unmount();
+  }
+});
+
+test.each([false, true])("opening emits one geometry per synchronous motion sample across density thresholds: reading=%s", async reading => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const paragraph = view.screen.getByText(/^Answer 2, paragraph 3:/).element();
+  if (reading) {
+    view.list.scrollTop += offset(paragraph, view.list) - 2;
+    view.list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await settle();
+  }
+  view.input.focus({ preventScroll: true });
+  viewport.change({ height: 470 });
+  await settle();
+  const anchor = Math.round(offset(paragraph, view.list));
+  const batches: { count: number; compact: string | undefined; height: number }[] = [];
+  let batch: typeof batches[number] | null = null;
+  const geometry = () => {
+    if (!batch) {
+      batch = { count: 0, compact: view.shell.dataset.compactHeight, height: Math.round(view.shell.getBoundingClientRect().height) };
+      batches.push(batch);
+      queueMicrotask(() => { batch = null; });
+    }
+    batch.count += 1;
+  };
+  view.list.addEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
+  const frames: { height: number; gap: number; anchor: number }[] = [];
+  try {
+    viewport.change({ height: 812 });
+    const start = performance.now();
+    do {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      frames.push({ height: Math.round(view.shell.getBoundingClientRect().height), gap: Math.round(bottomGap(view.list)),
+        anchor: Math.round(offset(paragraph, view.list)) });
+    } while (performance.now() - start < 400);
+    expect.soft(batches.length).toBeGreaterThan(2);
+    expect.soft(batches.some(value => value.height <= 600 && value.compact === "short")).toBe(true);
+    expect.soft(batches.some(value => value.height > 600 && value.compact === undefined)).toBe(true);
+    expect.soft(Math.max(...batches.map(value => value.count))).toBe(1);
+    expect.soft(frames.some(value => value.height > 470 && value.height < 812)).toBe(true);
+    if (reading) expect.soft(Math.max(...frames.map(value => Math.abs(value.anchor - anchor)))).toBeLessThanOrEqual(1);
+    else expect.soft(Math.max(...frames.map(value => Math.abs(value.gap)))).toBeLessThanOrEqual(1);
+    expect(view.timeline().followingOutput).toBe(!reading);
+  } finally {
+    view.list.removeEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
+    await view.screen.unmount();
+  }
 });
 
 test("applies the actual viewport and compact padding together without a delayed 96px content change", async () => {
