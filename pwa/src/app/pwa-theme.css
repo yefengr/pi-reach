@@ -197,6 +197,9 @@
   --pwa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --pwa-ease-enter: cubic-bezier(0, 0, 0, 1);
   --pwa-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  /* 仅复用既有收起保护参数，不用于展开或拟合系统键盘。 */
+  --pwa-ease-keyboard-close: cubic-bezier(0.4, 0, 0.25, 1);
+  --pwa-duration-keyboard: 250ms;
   --pwa-duration-sidebar: 220ms;
   --pwa-duration-page: 200ms;
   --pwa-duration-drawer: 200ms;
@@ -274,6 +277,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --pwa-motion-shift: 0;
+    --pwa-duration-keyboard: 0ms;
     --pwa-duration-sidebar: var(--pwa-duration-fade);
     --pwa-duration-page: var(--pwa-duration-fade);
     --pwa-duration-drawer: var(--pwa-duration-fade);

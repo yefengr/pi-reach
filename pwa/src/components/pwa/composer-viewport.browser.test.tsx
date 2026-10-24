@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
-import { page } from "vitest/browser";
+import { cdp, page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
@@ -34,7 +34,7 @@ async function settle() {
   for (let frame = 0; frame < 6; frame += 1) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 }
 
-async function renderWorkspace(initialDraft = "") {
+async function renderWorkspace(initialDraft = "", sendAccepted = false) {
   let changeDraft!: (text: string) => void;
   let changeAttachment!: (value: ComposerAttachmentItem | null) => void;
   let timeline!: TimelineViewport;
@@ -52,7 +52,12 @@ async function renderWorkspace(initialDraft = "") {
           <MessageList items={items} hasEarlier={false} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} />
           <div className="pwa-chat-footer"><MessageComposer
             attachments={attachment ? [attachment] : []} canAttach sendingAttachments={false} isOnline isWorking={false} stopping={false}
-            draft={draft} onDraftChange={setDraft} onSend={() => {}} onStop={() => {}} onAddFiles={() => {}} onRemoveAttachment={() => setAttachment(null)} onRetryAttachment={() => {}}
+            draft={draft} onDraftChange={setDraft} onSend={() => {
+              if (!sendAccepted) return;
+              const capture = timeline.captureOwnSend();
+              timeline.followOwnSend(capture);
+              setDraft("");
+            }} onStop={() => {}} onAddFiles={() => {}} onRemoveAttachment={() => setAttachment(null)} onRetryAttachment={() => {}}
             commandModels={[]} commandCurrentModel={null} commandCurrentModelFallback={null} commandThinking="off" commandPendingAction={null}
             onNewSession={() => {}} onCompactSession={() => {}} onSetModel={() => {}} onSetThinking={() => {}} onCommandsOpen={() => {}}
           /></div>
@@ -81,6 +86,7 @@ const offset = (node: Element, list: Element) => node.getBoundingClientRect().to
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
   resetTextSizeStateForTest();
   await page.viewport(1280, 900);
@@ -149,8 +155,8 @@ test.each([[390, 844, 310], [844, 390, 260], [768, 1024, 440]])("keeps the keybo
   await settle();
   expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
   viewport.change({ height, offsetTop: 0 });
+  await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
   await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
   expect(view.shell.getBoundingClientRect().height).toBe(height);
   expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
   await view.screen.unmount();
@@ -174,8 +180,7 @@ test("tightens the composer bottom under the keyboard and restores the safe area
     expect(paddingBottom()).toBe(8);
     view.input.blur();
     viewport.change({ height: 844 });
-    await settle();
-    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(paddingBottom()).toBe(34);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-bottom");
@@ -203,8 +208,7 @@ test("locks the document to the visible height under the keyboard so iOS has no 
     scrollY.mockReturnValue(0);
     view.input.blur();
     viewport.change({ height: 844 });
-    await settle();
-    expect(root.hasAttribute("data-pwa-keyboard")).toBe(false);
+    await expect.poll(() => root.hasAttribute("data-pwa-keyboard")).toBe(false);
     expect(root.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("");
   } finally {
     scrollY.mockRestore();
@@ -269,16 +273,70 @@ test("keeps the actual occluded viewport after blur and a long task until the vi
     expect.soft(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(true);
     expect.soft(parseFloat(getComputedStyle(composer).paddingBottom)).toBe(8);
     viewport.change({ height: 620, offsetTop: 8 });
-    expect.soft(height()).toBe(620);
+    expect.soft(height()).toBe(470);
+    await expect.poll(height).toBe(620);
     expect.soft(Math.round(view.shell.getBoundingClientRect().top)).toBe(8);
     expect.soft(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("620px");
     viewport.change({ height: 844, offsetTop: 0 });
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(height()).toBe(844);
-    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
     expect(parseFloat(getComputedStyle(composer).paddingBottom)).toBe(34);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-bottom");
+    await view.screen.unmount();
+  }
+});
+
+test("does not release at the layout height while the unobscured app viewport is taller", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  // standalone 初始包含块比 100lvh 短；退出不能把 clientHeight 当成完整可视高度。
+  const layoutHeight = vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(812);
+  const view = await renderWorkspace();
+  const height = () => Math.round(view.shell.getBoundingClientRect().height);
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    view.input.blur();
+    viewport.change({ height: 812 });
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect.soft(height()).toBe(812);
+    expect.soft(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect.soft(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(true);
+    viewport.change({ height: 874 });
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(height()).toBe(874);
+  } finally {
+    layoutHeight.mockRestore();
+    await view.screen.unmount();
+  }
+});
+
+test("keeps the rendered starting height when the viewport reports the closing endpoint early", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const height = () => Math.round(view.shell.getBoundingClientRect().height);
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    view.input.blur();
+    viewport.change({ height: 874 });
+    // 事件当前任务不得从470瞬跳到874；真实键盘退场仍须录屏验收，不能由这个mock证明。
+    expect.soft(height()).toBe(470);
+    expect.soft(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect.soft(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(true);
+    await settle();
+    expect.soft(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(height()).toBe(874);
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+  } finally {
     await view.screen.unmount();
   }
 });
@@ -313,7 +371,7 @@ test("retains compensation across text focus transfers, rapid reopening and repe
     expect(geometry()).toEqual([430, 12]);
     view.input.blur();
     viewport.change({ height: 844, offsetTop: 0 });
-    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
     other.focus({ preventScroll: true });
     viewport.change({ height: 470 });
     await settle();
@@ -326,6 +384,185 @@ test("retains compensation across text focus transfers, rapid reopening and repe
   }
 });
 
+test.each([false, true])("cancels pending or active closing on refocus without a stale release: active=%s", async active => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    view.input.blur();
+    viewport.change({ height: 844 });
+    if (active) await settle();
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 430 });
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(430);
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+    expect(view.shell.hasAttribute("data-keyboard-restored")).toBe(false);
+    expect(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("430px");
+  } finally { await view.screen.unmount(); }
+});
+
+test("finishes closing despite duplicate events and non-text focus, including a seconds duration", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace("Send");
+  view.shell.style.setProperty("--pwa-duration-keyboard", "0.25s");
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    // 隐藏系统键盘不一定使文本框失焦，仍须走收起保护。
+    viewport.change({ height: 844 });
+    await settle();
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
+    (view.screen.getByRole("button", { name: "Send message", exact: true }).element() as HTMLElement).focus();
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
+    const start = performance.now();
+    while (performance.now() - start < 400) {
+      viewport.change({ height: 844 });
+      viewport.change({}, "scroll");
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
+  } finally { await view.screen.unmount(); }
+});
+
+test("cancels closing when the keyboard grows again without a new focus event", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    viewport.change({ height: 844 });
+    await settle();
+    viewport.change({ height: 430 });
+    expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(430);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+  } finally { await view.screen.unmount(); }
+});
+
+test("uses the rotated app height rather than the old portrait endpoint", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    viewport.change({ height: 844 });
+    await settle();
+    await page.viewport(844, 390);
+    viewport.change({ height: 270 });
+    await settle();
+    expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(270);
+    viewport.change({ height: 390 });
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(390);
+  } finally { await view.screen.unmount(); }
+});
+
+test("zero-duration closing still waits for the full unobscured viewport", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const layoutHeight = vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(812);
+  const view = await renderWorkspace();
+  // 模拟 reduced-motion 的时长token；普通用例仍运行真实250ms过渡。
+  view.shell.style.setProperty("--pwa-duration-keyboard", "0ms");
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    view.input.blur();
+    viewport.change({ height: 812 });
+    expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(812);
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+    viewport.change({ height: 874 });
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
+  } finally { layoutHeight.mockRestore(); await view.screen.unmount(); }
+});
+
+test("uses the production reduced-motion rules without a closing size transition", async () => {
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  try {
+    expect(getComputedStyle(view.shell).getPropertyValue("--pwa-duration-keyboard").trim()).toBe("0ms");
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    view.input.blur();
+    viewport.change({ height: 620 });
+    expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(620);
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect(view.shell.getAnimations()).toHaveLength(0);
+    viewport.change({ height: 844 });
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    expect(view.shell.getAnimations()).toHaveLength(0);
+  } finally { await view.screen.unmount(); }
+});
+
+test("keeps accepted-send input contraction independent from closing and releases both layout owners", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace("Draft line\n".repeat(8), true);
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    view.input.blur();
+    view.input.form!.requestSubmit();
+    viewport.change({ height: 844 });
+    // 强制样式计算并阻塞当前任务，收起保护仍须从下一绘制帧开始。
+    const taskEnd = performance.now() + 50;
+    while (performance.now() < taskEnd) { void getComputedStyle(view.shell).height; }
+    expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(470);
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+    await settle();
+    expect(view.input.value).toBe("");
+    expect(Math.round(view.input.getBoundingClientRect().height)).toBe(44);
+    expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+    expect(view.timeline().followingOutput).toBe(true);
+  } finally { await view.screen.unmount(); }
+});
+
+test.each([false, true])("cleans a pending or active closing and its callbacks on unmount: active=%s", async active => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  view.input.focus({ preventScroll: true });
+  viewport.change({ height: 470 });
+  await settle();
+  view.input.blur();
+  viewport.change({ height: 844 });
+  if (active) await settle();
+  await view.screen.unmount();
+  await new Promise(resolve => setTimeout(resolve, 350));
+  expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+  expect(view.shell.hasAttribute("data-keyboard-restored")).toBe(false);
+  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
+  expect(view.shell.hasAttribute("data-compact-height")).toBe(false);
+  expect(view.shell.style.getPropertyValue("--pwa-viewport-height")).toBe("");
+  expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
+});
+
 test.each([{ scale: 2 }, { height: 0 }])("releases active compensation for zoom or an unusable viewport: %j", async values => {
   await page.viewport(390, 844);
   const viewport = new ViewportMock();
@@ -335,11 +572,16 @@ test.each([{ scale: 2 }, { height: 0 }])("releases active compensation for zoom 
     view.input.focus({ preventScroll: true });
     viewport.change({ height: 470 });
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    viewport.change({ height: 844 });
+    await settle();
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
     viewport.change(values);
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
     expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(844);
+    expect(view.shell.getAnimations()).toHaveLength(0);
     viewport.change({ scale: 1, height: 470 });
+    await new Promise(resolve => setTimeout(resolve, 350));
     expect(Math.round(view.shell.getBoundingClientRect().height)).toBe(470);
   } finally {
     await view.screen.unmount();
@@ -384,6 +626,12 @@ test("keeps a real timeline paragraph anchored through keyboard, draft and rotat
   expect(Math.abs(offset(paragraph, view.list) - initial)).toBeLessThanOrEqual(1);
   await page.viewport(844, 390);
   viewport.change({ height: 270 });
+  await settle();
+  expect(Math.abs(offset(paragraph, view.list) - initial)).toBeLessThanOrEqual(1);
+  expect(view.timeline().followingOutput).toBe(false);
+  view.input.blur();
+  viewport.change({ height: 390 });
+  await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
   await settle();
   expect(Math.abs(offset(paragraph, view.list) - initial)).toBeLessThanOrEqual(1);
   expect(view.timeline().followingOutput).toBe(false);

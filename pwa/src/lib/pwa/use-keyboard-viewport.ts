@@ -3,6 +3,8 @@ import { TIMELINE_GEOMETRY_EVENT } from "./use-timeline-viewport";
 
 const VIEWPORT_EPSILON = 1;
 const SCALE_EPSILON = 0.01;
+// 沿用收起过渡的两帧收尾余量；它只结束页面过渡，不判定系统键盘是否已退场。
+const KEYBOARD_MOTION_SETTLE_MS = 32;
 // 复用原有短窗口通知密度，不改变布局断点或 textarea 的动态空间预算。
 const SHORT_VIEWPORT_HEIGHT = 600;
 const VERY_SHORT_VIEWPORT_HEIGHT = 450;
@@ -33,22 +35,84 @@ function applyDensity(shell: HTMLElement) {
   shell.toggleAttribute("data-wide-compact", height <= SHORT_VIEWPORT_HEIGHT && width >= INLINE_NOTICE_MIN_WIDTH);
 }
 
-/**
- * 只补偿布局视口未缩小的软键盘遮挡，不拟合系统动画；尺寸与密度在同次更新中生效。
- * 聚焦是进入补偿的条件，失焦却不代表遮挡已恢复；已启用时继续跟随实际视口直到恢复。
- */
+/** 复用既有收起参数避免一步扩回整屏，不用页面过渡冒充原生键盘进度。 */
+class KeyboardClosingMotion {
+  private frame = 0;
+  private timer = 0;
+  private height = 0;
+  private restoreSafeArea = false;
+
+  constructor(private readonly shell: HTMLElement, private readonly onEnd: () => void) {}
+  get active() { return this.frame !== 0 || this.timer !== 0; }
+
+  move(height: number, restoreSafeArea: boolean): boolean {
+    // 重复 resize/scroll 不能延长同一目标的交接。
+    if (this.active && height === this.height && restoreSafeArea === this.restoreSafeArea) return true;
+    const value = getComputedStyle(this.shell).getPropertyValue("--pwa-duration-keyboard").trim();
+    const number = Number.parseFloat(value);
+    const duration = Number.isFinite(number) ? number * (value.endsWith("ms") ? 1 : 1000) : 0;
+    if (!(duration > 0)) { this.stop(); return false; }
+    this.height = height;
+    this.restoreSafeArea = restoreSafeArea;
+    if (this.frame) return true;
+    if (this.timer) this.commit(duration);
+    else this.frame = window.requestAnimationFrame(() => { this.frame = 0; this.commit(duration); });
+    return true;
+  }
+
+  private commit(duration: number) {
+    // 起点必须已计算；首个提交放在下一帧，不让当前任务提前消耗 CSS 过渡时间。
+    void getComputedStyle(this.shell).height;
+    this.shell.dataset.keyboardClosing = "";
+    this.shell.toggleAttribute("data-keyboard-restored", this.restoreSafeArea);
+    this.shell.style.setProperty("--pwa-viewport-height", `${this.height}px`);
+    void getComputedStyle(this.shell).height;
+    window.clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => { this.stop(); this.onEnd(); }, duration + KEYBOARD_MOTION_SETTLE_MS);
+  }
+
+  stop() {
+    window.cancelAnimationFrame(this.frame);
+    window.clearTimeout(this.timer);
+    this.frame = this.timer = 0;
+    delete this.shell.dataset.keyboardClosing;
+    // 安全区由控制器与最终高度一起交接；此处先撤掉会在随后测量中短暂扩大列表、钳制 scrollTop。
+  }
+}
+
+/** 在固定补偿之外解析既有 app-height；不临时撤掉真实外壳，避免触发阅读锚点或输入预算。 */
+function measureAppHeight(shell: HTMLElement) {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;height:var(--pwa-app-height);width:0;visibility:hidden;pointer-events:none";
+  shell.append(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return height;
+}
+
+/** 展开即时补偿；只有实际高度回升才启动收起交接，视口恢复和页面交接均完成才能释放。 */
 class KeyboardViewportController {
   private adjusted = false;
   private readonly root = document.documentElement;
+  private readonly motion: KeyboardClosingMotion;
   private unfocusedOcclusion: number;
+  private unfocusedInset: number;
+  private appHeight: number;
+  private lastHeight = 0;
 
   constructor(private readonly shell: HTMLElement, private readonly viewport: VisualViewport | undefined) {
+    this.motion = new KeyboardClosingMotion(shell, () => this.update());
+    this.appHeight = shell.getBoundingClientRect().height;
+    this.unfocusedInset = viewport ? this.appHeight - viewport.height : 0;
     this.unfocusedOcclusion = viewport ? Math.max(0, this.root.clientHeight - viewport.height) : 0;
   }
 
   reset() {
+    this.motion.stop();
     this.adjusted = false;
+    this.lastHeight = 0;
     delete this.shell.dataset.keyboardViewport;
+    delete this.shell.dataset.keyboardRestored;
     this.shell.style.removeProperty("--pwa-viewport-height");
     this.shell.style.removeProperty("--pwa-viewport-top");
     delete this.root.dataset.pwaKeyboard;
@@ -56,23 +120,47 @@ class KeyboardViewportController {
     updateDensity(this.shell);
   }
 
+  focus() {
+    // 新焦点使旧交接失效，即使旧计时器恰好即将结束也不能回写新一轮键盘状态。
+    this.motion.stop();
+    this.lastHeight = this.viewport?.height ?? 0;
+  }
+
   update() {
     const viewport = this.viewport;
     if (!viewport) { updateDensity(this.shell); return; }
     const occlusion = Math.max(0, this.root.clientHeight - viewport.height);
-    const textFocus = hasTextFocus();
     // 缩放不是键盘：保留原生 pinch zoom，不把放大后的视口套进应用布局。
     if (Math.abs(viewport.scale - 1) > SCALE_EPSILON || viewport.height <= 0) return this.reset();
-    if (!textFocus && !this.adjusted) {
+    if (!hasTextFocus() && !this.adjusted) {
       this.unfocusedOcclusion = occlusion;
+      this.appHeight = this.shell.getBoundingClientRect().height;
+      this.unfocusedInset = this.appHeight - viewport.height;
       return this.reset();
     }
-    if (occlusion <= this.unfocusedOcclusion + VIEWPORT_EPSILON) return this.reset();
+    // 仅入口比较 layout viewport；已进入后不能以较短的初始包含块当成恢复终点。
+    if (!this.adjusted && occlusion <= this.unfocusedOcclusion + VIEWPORT_EPSILON) return this.reset();
+    const appHeight = measureAppHeight(this.shell) || this.appHeight;
+    if (Math.abs(appHeight - this.appHeight) > VIEWPORT_EPSILON) {
+      // 旋转或窗口高度变化不是键盘回升；取消旧尺寸的过渡并使用当前 CSS 基准。
+      this.motion.stop();
+      this.lastHeight = viewport.height;
+    }
+    this.appHeight = appHeight;
+    const restored = viewport.height >= appHeight - this.unfocusedInset - VIEWPORT_EPSILON;
+    const growing = this.adjusted && viewport.height > this.lastHeight + VIEWPORT_EPSILON;
+    if (viewport.height < this.lastHeight - VIEWPORT_EPSILON) this.motion.stop();
+    this.lastHeight = viewport.height;
+    const closing = (growing || this.motion.active) && this.motion.move(viewport.height, restored);
+    if (restored && !closing) return this.reset();
     this.adjusted = true;
     this.lockDocument(viewport.height);
     this.shell.dataset.keyboardViewport = "";
-    this.shell.style.setProperty("--pwa-viewport-height", `${viewport.height}px`);
     this.shell.style.setProperty("--pwa-viewport-top", `${Math.max(0, viewport.offsetTop)}px`);
+    if (!closing) {
+      delete this.shell.dataset.keyboardRestored;
+      this.shell.style.setProperty("--pwa-viewport-height", `${viewport.height}px`);
+    }
     updateDensity(this.shell);
   }
 
@@ -101,20 +189,24 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
       if (!frame) frame = window.requestAnimationFrame(update);
     };
     const controller = new KeyboardViewportController(shell, viewport ?? undefined);
+    const onFocusIn = (event: FocusEvent) => {
+      if (isTextEditable(event.target)) controller.focus();
+      schedule();
+    };
 
     update();
     // 视口尺寸变化是键盘起落的最早信号，在事件内立即处理；滚动等其余信号合并到下一帧。
     viewport?.addEventListener("resize", update);
     viewport?.addEventListener("scroll", schedule);
     window.addEventListener("resize", schedule);
-    document.addEventListener("focusin", schedule);
+    document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", schedule);
     return () => {
       window.cancelAnimationFrame(frame);
       viewport?.removeEventListener("resize", update);
       viewport?.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
-      document.removeEventListener("focusin", schedule);
+      document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", schedule);
       controller.reset();
       delete shell.dataset.compactHeight;

@@ -6,8 +6,8 @@
   height: var(--pwa-viewport-height);
 }
 
-/* 只要遮挡尚未恢复，底部安全区仍由键盘覆盖，不因输入框失焦提前恢复。 */
-.pwa-app-shell[data-keyboard-viewport] { --pwa-safe-bottom: 0px; }
+/* 实际可视区恢复前，底部安全区仍由键盘覆盖，不因失焦或部分回升提前恢复。 */
+.pwa-app-shell[data-keyboard-viewport]:not([data-keyboard-restored]) { --pwa-safe-bottom: 0px; }
 
 /* 键盘补偿期间文档只与可见区域等高，iOS 无需滚动文档露出输入框；选择器特异性需高于 globals.css 的 standalone 高度。 */
 html:has(.pwa-root)[data-pwa-keyboard],
@@ -16,8 +16,20 @@ html[data-pwa-keyboard] body:has(.pwa-root) {
   min-height: 0;
 }
 
-/* 补偿期间输入区底边保留8px；尺寸直接跟随实际视口，不叠加键盘拟合过渡。 */
-.pwa-app-shell[data-keyboard-viewport] .pwa-composer { padding-bottom: var(--pwa-space-xs); }
+/* 补偿期间输入区底边保留8px；仅恢复终点已到时随收起过渡交还安全区。 */
+.pwa-app-shell[data-keyboard-viewport]:not([data-keyboard-restored]) .pwa-composer { padding-bottom: var(--pwa-space-xs); }
+
+/* 回到默认 all 不会取消目标未变的在途过渡；中断必须显式撤掉尺寸属性。 */
+.pwa-app-shell,
+.pwa-app-shell .pwa-composer { transition-property: none; }
+
+/* 仅收起保留视觉保护；展开仍即时生效，不承诺与系统键盘逐帧同步。 */
+.pwa-app-shell[data-keyboard-closing] {
+  transition: height var(--pwa-duration-keyboard) var(--pwa-ease-keyboard-close);
+}
+.pwa-app-shell[data-keyboard-closing] .pwa-composer {
+  transition: padding-bottom var(--pwa-duration-keyboard) var(--pwa-ease-keyboard-close);
+}
 
 /* 由实际可用空间决定阅读留白，不依赖布局断点或物理屏幕高度。 */
 .pwa-app-shell .pwa-main[data-composer-budget] .pwa-message-list {
