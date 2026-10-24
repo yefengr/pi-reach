@@ -22,13 +22,17 @@ html[data-pwa-keyboard] body:has(.pwa-root) {
 .pwa-app-shell[data-keyboard-viewport]:not([data-keyboard-closing]) .pwa-composer { padding-bottom: var(--pwa-space-xs); }
 
 /* 弹出／收起键盘：外壳高度与输入区底部间距随键盘同步过渡，不先一步到位后被键盘遮住或留出空档。 */
-.pwa-app-shell[data-keyboard-opening],
-.pwa-app-shell[data-keyboard-closing] {
+.pwa-app-shell[data-keyboard-opening] {
   transition: height var(--pwa-duration-keyboard) var(--pwa-ease-standard);
 }
-.pwa-app-shell[data-keyboard-opening] .pwa-composer,
-.pwa-app-shell[data-keyboard-closing] .pwa-composer {
+.pwa-app-shell[data-keyboard-opening] .pwa-composer {
   transition: padding-bottom var(--pwa-duration-keyboard) var(--pwa-ease-standard);
+}
+.pwa-app-shell[data-keyboard-closing] {
+  transition: height var(--pwa-duration-keyboard) var(--pwa-ease-keyboard-close);
+}
+.pwa-app-shell[data-keyboard-closing] .pwa-composer {
+  transition: padding-bottom var(--pwa-duration-keyboard) var(--pwa-ease-keyboard-close);
 }
 
 /* 由实际可用空间决定阅读留白，不依赖布局断点或物理屏幕高度。 */

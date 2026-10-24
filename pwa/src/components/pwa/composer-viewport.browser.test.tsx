@@ -231,12 +231,15 @@ test("follows the keyboard with a shell height transition when it opens and clos
     view.input.focus({ preventScroll: true });
     viewport.change({ height: 470 });
     const samples: number[] = [];
+    let openingEase = "";
     while (samples.length < 60 && (samples.length === 0 || view.shell.hasAttribute("data-keyboard-opening"))) {
       await nextFrame();
       samples.push(height());
+      if (view.shell.hasAttribute("data-keyboard-opening")) openingEase = getComputedStyle(view.shell).transitionTimingFunction;
     }
     // 过渡从原高度起步（WebKit 同一帧切换定位不会起过渡，先以原高度切入 fixed），不从 0 或终点跳变。
     expect(samples[0]).toBeGreaterThan(700);
+    expect(openingEase).toBe("cubic-bezier(0.2, 0, 0, 1)");
     expect(samples.some(value => value > 470 && value < 844)).toBe(true);
     // 约 250ms 的过渡跨越十余帧，不会在几帧内提前结束。
     expect(samples.length).toBeGreaterThanOrEqual(10);
@@ -248,6 +251,8 @@ test("follows the keyboard with a shell height transition when it opens and clos
     // 失焦即开始收起，不等视口恢复；过渡期间仍保持 fixed 补偿。
     expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    // 收起用按真机键盘拟合的曲线，标准曲线前段过快会让输入区先沉到键盘后面。
+    expect(getComputedStyle(view.shell).transitionTimingFunction).toBe("cubic-bezier(0.4, 0, 0.25, 1)");
     viewport.change({ height: 844 });
     await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
