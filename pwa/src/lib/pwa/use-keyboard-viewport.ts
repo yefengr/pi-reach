@@ -1,5 +1,4 @@
 import { useLayoutEffect, type RefObject } from "react";
-import { isIosTouchWebKit } from "./keyboard-focus-assist";
 import { TIMELINE_GEOMETRY_EVENT } from "./use-timeline-viewport";
 
 const VIEWPORT_EPSILON = 1;
@@ -75,8 +74,8 @@ class KeyboardMotionClock {
 
 /**
  * 补偿只缩小 visual viewport 的软键盘；浏览器已缩小布局视口时不再扣一次高度。
- * WebKit 在 position 由 static 改为 fixed 的同一帧不会从旧高度起过渡，所以先以当前高度切入 fixed（prepared），再起过渡：
- * iOS 上聚焦即预备（键盘约 90ms 后才升起），视口事件内立即起过渡；失焦在 focusout 内立即收起，尽量与系统键盘同一帧起步。
+ * WebKit 在 position 由 static 改为 fixed 的同一帧不会从旧高度起过渡，所以先以当前高度切入 fixed（prepared），下一帧再起过渡；
+ * 视口 resize 在事件内立即处理，失焦在 focusout 内立即收起，尽量与系统键盘同步起步。只按能力判断，不区分设备。
  */
 class KeyboardViewportController {
   private adjusted = false;
@@ -86,7 +85,7 @@ class KeyboardViewportController {
   private unfocusedOcclusion: number;
 
   constructor(private readonly shell: HTMLElement, private readonly viewport: VisualViewport | undefined,
-    private readonly requestUpdate: () => void, private readonly prepareOnFocus = isIosTouchWebKit()) {
+    private readonly requestUpdate: () => void) {
     this.motion = new KeyboardMotionClock(shell, (kind) => { if (kind === "closing") this.reset(); });
     this.unfocusedOcclusion = viewport ? Math.max(0, this.root.clientHeight - viewport.height) : 0;
   }
@@ -102,10 +101,6 @@ class KeyboardViewportController {
     delete this.root.dataset.pwaKeyboard;
     this.root.style.removeProperty("--pwa-keyboard-document-height");
     updateDensity(this.shell);
-  }
-
-  focus() {
-    if (this.prepareOnFocus && !this.adjusted && hasTextFocus()) this.prepare();
   }
 
   /** focusout 内同步判断：焦点移到另一个文本输入时键盘不收起。 */
@@ -132,8 +127,6 @@ class KeyboardViewportController {
       return this.reset();
     }
     if (occlusion <= this.unfocusedOcclusion + VIEWPORT_EPSILON) {
-      // 已预备但键盘尚未升起（或使用硬件键盘）：保持当前高度等待，画面不变。
-      if (this.prepared && textFocus && !this.adjusted) return;
       return this.reset();
     }
     if (!textFocus) return this.startClosing();
@@ -198,10 +191,6 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
       if (!frame) frame = window.requestAnimationFrame(update);
     };
     const controller = new KeyboardViewportController(shell, viewport ?? undefined, schedule);
-    const onFocusIn = () => {
-      controller.focus();
-      schedule();
-    };
     const onFocusOut = (event: FocusEvent) => {
       controller.blur(event.relatedTarget);
       schedule();
@@ -212,14 +201,14 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
     viewport?.addEventListener("resize", update);
     viewport?.addEventListener("scroll", schedule);
     window.addEventListener("resize", schedule);
-    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusin", schedule);
     document.addEventListener("focusout", onFocusOut);
     return () => {
       window.cancelAnimationFrame(frame);
       viewport?.removeEventListener("resize", update);
       viewport?.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
-      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusin", schedule);
       document.removeEventListener("focusout", onFocusOut);
       controller.reset();
       delete shell.dataset.compactHeight;
