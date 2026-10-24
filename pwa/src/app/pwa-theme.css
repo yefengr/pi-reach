@@ -226,10 +226,6 @@
   --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容的淡入；标准曲线前段很快，需要比通用淡化长才看得出渐入过程。 */
   --pwa-duration-content: 240ms;
-  /* 收起软键盘时外壳高度跟随键盘下滑；iOS 键盘动画约 250ms，系统不提供逐帧进度。 */
-  --pwa-duration-keyboard: 250ms;
-  /* iOS 键盘收起先慢后快再减速；按真机录屏逐帧拟合，标准曲线前段过快会让输入区先沉到键盘后面。 */
-  --pwa-ease-keyboard-close: cubic-bezier(0.4, 0, 0.25, 1);
   /* 位移类动效乘以该系数；减少动态效果时为 0，只保留透明度淡化。 */
   --pwa-motion-shift: 1;
 
@@ -278,8 +274,6 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --pwa-motion-shift: 0;
-    /* 尺寸跟随即时完成，不改为淡化。 */
-    --pwa-duration-keyboard: 0ms;
     --pwa-duration-sidebar: var(--pwa-duration-fade);
     --pwa-duration-page: var(--pwa-duration-fade);
     --pwa-duration-drawer: var(--pwa-duration-fade);
