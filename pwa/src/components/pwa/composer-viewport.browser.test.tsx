@@ -248,7 +248,7 @@ test("follows the keyboard with a shell height transition when it opens and clos
 
     view.input.blur();
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    // 失焦即开始收起，不等视口恢复；过渡期间仍保持 fixed 补偿。
+    // 失焦后的下一帧开始收起，不等视口恢复；过渡期间仍保持 fixed 补偿。
     expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
     expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
     // 收起用按真机键盘拟合的曲线，标准曲线前段过快会让输入区先沉到键盘后面。
@@ -256,6 +256,40 @@ test("follows the keyboard with a shell height transition when it opens and clos
     viewport.change({ height: 844 });
     await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+    expect(height()).toBe(844);
+    expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
+  } finally {
+    await view.screen.unmount();
+  }
+});
+
+test("starts closing on the next frame after blur without advancing through the focusout task", async () => {
+  await page.viewport(390, 844);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const height = () => Math.round(view.shell.getBoundingClientRect().height);
+  try {
+    view.input.focus({ preventScroll: true });
+    viewport.change({ height: 470 });
+    await settle();
+    expect(height()).toBe(470);
+    document.documentElement.style.setProperty("--pwa-duration-keyboard", "0.25s");
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+    view.input.blur();
+    expect.soft(view.shell.hasAttribute("data-keyboard-closing")).toBe(false);
+    // 模拟发送任务中的同步样式计算与阻塞：系统键盘尚未起步，外壳也不能提前消耗过渡时间。
+    void getComputedStyle(view.shell).height;
+    const taskEnd = performance.now() + 50;
+    while (performance.now() < taskEnd) { /* 有意阻塞当前任务，复现发送处理的长任务。 */ }
+    const firstFrameHeight = await new Promise<number>(resolve => requestAnimationFrame(() => resolve(height())));
+    expect(view.shell.hasAttribute("data-keyboard-closing")).toBe(true);
+    expect(Math.abs(firstFrameHeight - 470)).toBeLessThanOrEqual(1);
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+
+    viewport.change({ height: 844 });
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
     expect(height()).toBe(844);
     expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
   } finally {

@@ -78,7 +78,7 @@ class KeyboardMotionClock {
 /**
  * 补偿只缩小 visual viewport 的软键盘；浏览器已缩小布局视口时不再扣一次高度。
  * WebKit 在 position 由 static 改为 fixed 的同一帧不会从旧高度起过渡，所以先以当前高度切入 fixed（prepared），下一帧再起过渡；
- * 视口 resize 在事件内立即处理，失焦在 focusout 内立即收起，尽量与系统键盘同步起步。只按能力判断，不区分设备。
+ * 视口 resize 在事件内立即处理；失焦后的下一帧再开始收起，避免当前长任务提前消耗过渡时间。只按能力判断，不区分设备。
  */
 class KeyboardViewportController {
   private adjusted = false;
@@ -109,8 +109,7 @@ class KeyboardViewportController {
   /** focusout 内同步判断：焦点移到另一个文本输入时键盘不收起。 */
   blur(next: EventTarget | null) {
     if (isTextEditable(next)) return;
-    if (this.adjusted) this.startClosing();
-    else if (this.prepared) this.reset();
+    if (this.prepared) this.reset();
   }
 
   update() {
