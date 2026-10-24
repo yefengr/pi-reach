@@ -84,12 +84,14 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
 
     let frame = 0;
     let adjusted = false;
+    let openingPending = false;
     let unfocusedOcclusion = viewport ? Math.max(0, document.documentElement.clientHeight - viewport.height) : 0;
     const root = document.documentElement;
     const motion = new KeyboardMotionClock(shell, (kind) => { if (kind === "closing") reset(); });
     const reset = () => {
       motion.stop();
       adjusted = false;
+      openingPending = false;
       delete shell.dataset.keyboardViewport;
       shell.style.removeProperty("--pwa-viewport-height");
       shell.style.removeProperty("--pwa-viewport-top");
@@ -139,8 +141,22 @@ export function useKeyboardViewport(shellRef: RefObject<HTMLElement | null>) {
         return;
       }
       // 首次进入补偿时从整屏过渡到键盘上方；之后的视口变化（联想栏增减、旋转）即时跟随。
-      if (!adjusted) motion.start("opening");
-      adjusted = true;
+      // WebKit 在 position 由 static 改为 fixed 的同一帧不会从旧高度起过渡，先以当前高度切入 fixed，下一帧再过渡。
+      if (!adjusted) {
+        adjusted = true;
+        openingPending = true;
+        const current = shell.getBoundingClientRect().height;
+        lockDocument(viewport.height);
+        shell.dataset.keyboardViewport = "";
+        shell.style.setProperty("--pwa-viewport-height", `${current}px`);
+        shell.style.setProperty("--pwa-viewport-top", `${Math.max(0, viewport.offsetTop)}px`);
+        schedule();
+        return;
+      }
+      if (openingPending) {
+        openingPending = false;
+        motion.start("opening");
+      }
       lockDocument(viewport.height);
       shell.dataset.keyboardViewport = "";
       shell.style.setProperty("--pwa-viewport-height", `${viewport.height}px`);

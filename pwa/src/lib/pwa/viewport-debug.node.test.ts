@@ -3,7 +3,7 @@ import { formatViewportDebugLines, formatViewportDebugReport, VIEWPORT_DEBUG_REP
   ViewportFrameRecorder, type ViewportFrameMeasure } from "./viewport-debug";
 
 const measure: ViewportFrameMeasure = {
-  vvTop: 120, vvHeight: 480.5, vvPageTop: 120, vvScale: 1, scrollY: 0, innerHeight: 844, docHeight: 844, keyboard: true,
+  vvTop: 120, vvHeight: 480.5, vvPageTop: 120, vvScale: 1, scrollY: 0, innerHeight: 844, docHeight: 844, keyboard: true, motion: "opening",
   cssTop: 120, cssHeight: 480.5, shellTop: 120, shellHeight: 480.5, titleTop: 100, composerTop: 520, listTop: 160,
   listScrollTop: 900, listScrollHeight: 1400, listClientHeight: 300, focus: "text",
 };
@@ -33,6 +33,7 @@ test("overlay lines lead with the frame number and show raw element positions", 
   expect(lines[0]).toBe("#42  t 700");
   expect(lines[1]).toBe("vv top 120 h - pg 120");
   expect(lines).toContain("title 100 comp 520");
+  expect(lines).toContain("kb 1 opening css 120/480.5");
   expect(lines.at(-1)).toBe("focus text");
 });
 

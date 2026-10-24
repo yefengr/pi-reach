@@ -226,13 +226,20 @@ test("follows the keyboard with a shell height transition when it opens and clos
   const view = await renderWorkspace();
   const height = () => Math.round(view.shell.getBoundingClientRect().height);
   try {
+    const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     view.input.focus({ preventScroll: true });
     viewport.change({ height: 470 });
-    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    expect(view.shell.hasAttribute("data-keyboard-opening")).toBe(true);
-    expect(height()).toBeGreaterThan(470);
-    expect(height()).toBeLessThan(844);
-    await expect.poll(() => view.shell.hasAttribute("data-keyboard-opening")).toBe(false);
+    await nextFrame();
+    // 先以原高度切入 fixed（WebKit 同一帧切换定位不会起过渡），下一帧才开始过渡。
+    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
+    expect(height()).toBe(844);
+    await expect.poll(() => view.shell.hasAttribute("data-keyboard-opening")).toBe(true);
+    const samples: number[] = [];
+    while (view.shell.hasAttribute("data-keyboard-opening") && samples.length < 60) {
+      await nextFrame();
+      samples.push(height());
+    }
+    expect(samples.some(value => value > 470 && value < 844)).toBe(true);
     expect(height()).toBe(470);
 
     view.input.blur();

@@ -19,17 +19,18 @@ export function useViewportDebug() {
 }
 
 export type ViewportFocusKind = "text" | "control" | "none";
+export type ViewportKeyboardMotion = "opening" | "closing" | "none";
 export const VIEWPORT_MARK_KINDS = ["focusin", "focusout", "vv-resize", "vv-scroll", "scroll", "resize"] as const;
 export type ViewportMarkKind = typeof VIEWPORT_MARK_KINDS[number];
 
 /** 每帧只记录数字、布尔值和焦点类别，不读取正文、属性值或业务身份。 */
 export const VIEWPORT_FRAME_FIELDS = ["frame", "t", "vvTop", "vvHeight", "vvPageTop", "vvScale", "scrollY", "innerHeight",
-  "docHeight", "keyboard", "cssTop", "cssHeight", "shellTop", "shellHeight", "titleTop", "composerTop", "listTop",
+  "docHeight", "keyboard", "motion", "cssTop", "cssHeight", "shellTop", "shellHeight", "titleTop", "composerTop", "listTop",
   "listScrollTop", "listScrollHeight", "listClientHeight", "focus"] as const;
-type FrameValue = number | boolean | ViewportFocusKind | null;
+type FrameValue = number | boolean | ViewportFocusKind | ViewportKeyboardMotion | null;
 export type ViewportFrameMeasure = Readonly<{
   vvTop: number | null; vvHeight: number | null; vvPageTop: number | null; vvScale: number | null;
-  scrollY: number; innerHeight: number; docHeight: number; keyboard: boolean;
+  scrollY: number; innerHeight: number; docHeight: number; keyboard: boolean; motion: ViewportKeyboardMotion;
   cssTop: number | null; cssHeight: number | null; shellTop: number | null; shellHeight: number | null;
   titleTop: number | null; composerTop: number | null; listTop: number | null;
   listScrollTop: number | null; listScrollHeight: number | null; listClientHeight: number | null;
@@ -87,6 +88,11 @@ function rectTop(element: Element | null): number | null {
   return element ? finite(element.getBoundingClientRect().top) : null;
 }
 
+function keyboardMotion(shell: HTMLElement): ViewportKeyboardMotion {
+  if (shell.hasAttribute("data-keyboard-opening")) return "opening";
+  return shell.hasAttribute("data-keyboard-closing") ? "closing" : "none";
+}
+
 function focusKind(): ViewportFocusKind {
   const active = document.activeElement;
   if (!active || active === document.body || active === document.documentElement) return "none";
@@ -101,7 +107,7 @@ export function measureViewportFrame(shell: HTMLElement): ViewportFrameMeasure {
   return {
     vvTop: finite(viewport?.offsetTop), vvHeight: finite(viewport?.height), vvPageTop: finite(viewport?.pageTop),
     vvScale: finite(viewport?.scale), scrollY: round(window.scrollY), innerHeight: window.innerHeight,
-    docHeight: document.documentElement.clientHeight, keyboard: shell.hasAttribute("data-keyboard-viewport"),
+    docHeight: document.documentElement.clientHeight, keyboard: shell.hasAttribute("data-keyboard-viewport"), motion: keyboardMotion(shell),
     cssTop: cssPixels(shell, "--pwa-viewport-top"), cssHeight: cssPixels(shell, "--pwa-viewport-height"),
     shellTop: finite(shellRect.top), shellHeight: finite(shellRect.height),
     titleTop: rectTop(shell.querySelector(".pwa-title-bar")), composerTop: rectTop(shell.querySelector(".pwa-composer")),
@@ -120,7 +126,7 @@ export function formatViewportDebugLines(sample: ViewportFrameSample): string[] 
     `#${sample.frame}  t ${sample.t}`,
     `vv top ${show(sample.vvTop)} h ${show(sample.vvHeight)} pg ${show(sample.vvPageTop)}`,
     `win sy ${sample.scrollY} ih ${sample.innerHeight} dh ${sample.docHeight}`,
-    `kb ${sample.keyboard ? 1 : 0} css ${show(sample.cssTop)}/${show(sample.cssHeight)}`,
+    `kb ${sample.keyboard ? 1 : 0} ${sample.motion} css ${show(sample.cssTop)}/${show(sample.cssHeight)}`,
     `shell ${show(sample.shellTop)}/${show(sample.shellHeight)}`,
     `title ${show(sample.titleTop)} comp ${show(sample.composerTop)}`,
     `list ${show(sample.listScrollTop)}/${show(sample.listScrollHeight)} ch ${show(sample.listClientHeight)}`,
