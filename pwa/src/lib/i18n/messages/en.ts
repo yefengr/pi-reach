@@ -212,6 +212,10 @@ export const en = {
     copied: "Copied",
     copyFailed: "Copy failed",
     shareFailed: "Share failed",
+    documentLockExperiment: "Pause document height lock",
+    documentLockNormal: "Experiment: off (default rules)",
+    documentLockPaused: "Experiment: on (lock paused)",
+    documentLockHint: "Toggle after dismissing the keyboard. Resets when debug closes; not saved.",
   },
   shortcuts: {
     title: "Keyboard shortcuts",

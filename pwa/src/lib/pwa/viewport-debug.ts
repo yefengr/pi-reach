@@ -7,6 +7,12 @@ export const VIEWPORT_DEBUG_REPORT_FORMAT = "pi-reach-viewport-debug/1";
 // 60fps 下约 30 秒：复现一次键盘展开、发送、收起后仍有时间点复制。
 export const VIEWPORT_DEBUG_FRAME_CAPACITY = 1800;
 const MARK_CAPACITY = 512;
+export const DOCUMENT_LOCK_BYPASS_ATTRIBUTE = "data-document-lock-bypass";
+
+/** 实验只由已挂载的调试浮层持有；卸载后CSS门控和诊断同时恢复默认。 */
+export function documentLockBypassed(): boolean {
+  return document.querySelector(`.pwa-viewport-debug[${DOCUMENT_LOCK_BYPASS_ATTRIBUTE}]`) !== null;
+}
 
 /** 默认关闭；只有字符串 "true" 才开启，旧数据或手工修改不会意外显示浮层。 */
 export function useViewportDebug() {
@@ -20,7 +26,8 @@ export function useViewportDebug() {
 
 export type ViewportFocusKind = "text" | "control" | "none";
 export type ViewportKeyboardMotion = "opening" | "closing" | "none";
-export const VIEWPORT_MARK_KINDS = ["focusin", "focusout", "vv-resize", "vv-scroll", "scroll", "resize", "keyboard-update"] as const;
+export const VIEWPORT_MARK_KINDS = ["focusin", "focusout", "vv-resize", "vv-scroll", "scroll", "resize", "keyboard-update",
+  "document-lock-before", "document-lock-after", "document-lock-state"] as const;
 export type ViewportMarkKind = typeof VIEWPORT_MARK_KINDS[number];
 
 /** 每帧只记录数字、布尔值和焦点类别，不读取正文、属性值或业务身份。 */
@@ -40,7 +47,8 @@ export type ViewportFrameSample = Readonly<ViewportFrameMeasure & { frame: numbe
 export type ViewportEventSnapshot = Readonly<{
   vvHeight: number | null; vvTop: number | null; vvScale: number | null; innerHeight: number | null; docHeight: number | null;
   rootBoxHeight: number | null; bodyBoxHeight: number | null; shellHeight: number | null; scrollY: number | null;
-  documentLocked: boolean; documentLockHeight: number | null; compact: "short" | "very-short" | null;
+  // documentLocked保留原义：控制器请求锁的标记；实验是否跳过CSS需结合bypassed及盒高判断。
+  documentLocked: boolean; documentLockHeight: number | null; documentLockBypassed?: boolean; compact: "short" | "very-short" | null;
   composerBudget: "constrained" | "conflict" | null; paddingTop: number | null; paddingBottom: number | null;
   composerPaddingBottom: number | null; focus: ViewportFocusKind;
 }>;
@@ -61,6 +69,7 @@ function copyEventSnapshot(value: ViewportEventSnapshot): ViewportEventSnapshot 
     innerHeight: finite(value.innerHeight), docHeight: finite(value.docHeight), rootBoxHeight: finite(value.rootBoxHeight),
     bodyBoxHeight: finite(value.bodyBoxHeight), shellHeight: finite(value.shellHeight), scrollY: finite(value.scrollY),
     documentLocked: value.documentLocked === true, documentLockHeight: finite(value.documentLockHeight),
+    documentLockBypassed: value.documentLockBypassed === true,
     compact: value.compact === "short" || value.compact === "very-short" ? value.compact : null,
     composerBudget: value.composerBudget === "constrained" || value.composerBudget === "conflict" ? value.composerBudget : null,
     paddingTop: finite(value.paddingTop), paddingBottom: finite(value.paddingBottom), composerPaddingBottom: finite(value.composerPaddingBottom),
@@ -159,7 +168,7 @@ export function measureViewportEvent(shell: HTMLElement): ViewportEventSnapshot 
     innerHeight: window.innerHeight, docHeight: root.clientHeight, rootBoxHeight: finite(root.getBoundingClientRect().height),
     bodyBoxHeight: finite(document.body?.getBoundingClientRect().height), shellHeight: finite(shell.getBoundingClientRect().height),
     scrollY: finite(window.scrollY), documentLocked: root.hasAttribute("data-pwa-keyboard"),
-    documentLockHeight: cssPixels(root, "--pwa-keyboard-document-height"),
+    documentLockHeight: cssPixels(root, "--pwa-keyboard-document-height"), documentLockBypassed: documentLockBypassed(),
     compact: compact === "short" || compact === "very-short" ? compact : null,
     composerBudget: budget === "constrained" || budget === "conflict" ? budget : null,
     paddingTop: finite(listStyle ? parseFloat(listStyle.paddingTop) : null),
@@ -194,6 +203,7 @@ export function collectViewportDebugEnvironment(version: string): ViewportDebugE
   return {
     // 生产资源名含内容hash；它标识实际加载的JS，不冒充Git SHA，也不导出来源URL或query。
     buildAsset: new URL(import.meta.url).pathname.split("/").pop() ?? null,
+    documentLockBypassed: documentLockBypassed(),
     pwaVersion: version, userAgent: navigator.userAgent, devicePixelRatio: window.devicePixelRatio,
     screenWidth: window.screen.width, screenHeight: window.screen.height, standalone,
   };

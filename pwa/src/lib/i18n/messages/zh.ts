@@ -214,6 +214,10 @@ export const zh: Messages = {
     copied: "已复制",
     copyFailed: "复制失败",
     shareFailed: "分享失败",
+    documentLockExperiment: "暂停文档高度锁",
+    documentLockNormal: "对照：关闭（默认规则）",
+    documentLockPaused: "对照：开启（高度锁暂停）",
+    documentLockHint: "仅在收起键盘后切换；关闭调试即恢复，不保存。",
   },
   shortcuts: {
     title: "键盘快捷键",

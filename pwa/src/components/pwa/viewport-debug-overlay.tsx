@@ -1,18 +1,18 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { Button, Portal } from "@mantine/core";
 import { useI18n } from "@/lib/i18n";
 import { clearViewportDiagnostics, disableViewportDiagnostics, enableViewportDiagnostics, readViewportDiagnostics,
   viewportDiagnosticsEnabled } from "@/lib/pwa/timeline-viewport-diagnostics";
 import { collectViewportDebugEnvironment, formatViewportDebugLines, formatViewportDebugReport, measureViewportEvent, measureViewportFrame,
-  ViewportFrameRecorder, type ViewportMarkKind } from "@/lib/pwa/viewport-debug";
-import { observeKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
+  DOCUMENT_LOCK_BYPASS_ATTRIBUTE, ViewportFrameRecorder, type ViewportMarkKind } from "@/lib/pwa/viewport-debug";
+import { hasTextFocus, observeKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
 import { version as pwaVersion } from "../../../package.json";
 import "./viewport-debug-overlay.css";
 
 type DebugStatus = "idle" | "copied" | "copyFailed" | "shareFailed";
 
 function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: ViewportFrameRecorder, overlayRef: RefObject<HTMLElement | null>,
-  textRef: RefObject<HTMLPreElement | null>) {
+  textRef: RefObject<HTMLPreElement | null>, experimentButtonRef: RefObject<HTMLButtonElement | null>, closingRef: RefObject<boolean>) {
   useEffect(() => {
     let frame = 0;
     const tick = () => {
@@ -22,6 +22,8 @@ function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: View
       const shell = shellRef.current;
       if (!shell) return;
       const sample = recorder.record(measureViewportFrame(shell));
+      // 复用采样时钟更新门禁，不为实验新增调度器或逐帧React渲染。
+      if (experimentButtonRef.current) experimentButtonRef.current.disabled = hasTextFocus() || closingRef.current || sample.motion === "closing";
       // 直接写文本节点，不触发 React 渲染，尽量不干扰被观测的帧。
       if (textRef.current) textRef.current.textContent = formatViewportDebugLines(sample).join("\n");
       // fixed 盒相对布局视口定位；键盘展开时 iOS 把布局视口推到屏幕上方，按 vvTop 平移才能留在可见区域。
@@ -36,6 +38,7 @@ function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: View
     ];
     const observedShell = shellRef.current;
     const stopDiagnostics = observedShell ? observeKeyboardViewport(observedShell, state => {
+      closingRef.current = state.closing;
       recorder.mark("keyboard-update", measureViewportEvent(observedShell), state);
     }) : () => {};
     const handlers = listeners.map(([target, type, kind]) => {
@@ -52,7 +55,7 @@ function useFrameSampler(shellRef: RefObject<HTMLElement | null>, recorder: View
       for (const remove of handlers) remove();
       disableViewportDiagnostics();
     };
-  }, [overlayRef, recorder, shellRef, textRef]);
+  }, [overlayRef, recorder, shellRef, textRef, experimentButtonRef, closingRef]);
 }
 
 /** 设置页开启后显示的真机调试浮层；不拦截页面点击，只有按钮可操作。 */
@@ -60,10 +63,30 @@ export function ViewportDebugOverlay({ shellRef }: { shellRef: RefObject<HTMLEle
   const { t } = useI18n();
   const overlayRef = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLPreElement>(null);
+  const experimentButtonRef = useRef<HTMLButtonElement>(null);
+  const closingRef = useRef(false);
+  const experimentHintId = useId();
+  const [bypassed, setBypassed] = useState(false);
   const [recorder] = useState(() => new ViewportFrameRecorder(() => performance.now()));
   const [status, setStatus] = useState<DebugStatus>("idle");
-  useFrameSampler(shellRef, recorder, overlayRef, textRef);
+  useFrameSampler(shellRef, recorder, overlayRef, textRef, experimentButtonRef, closingRef);
 
+  const markExperiment = (kind: ViewportMarkKind) => {
+    const shell = shellRef.current;
+    // 测量失败也不能把按钮状态和实际CSS门控留在不同状态。
+    try { recorder.mark(kind, shell ? measureViewportEvent(shell) : undefined); }
+    catch { recorder.mark(kind); }
+  };
+  const toggleDocumentLock = () => {
+    const overlay = overlayRef.current;
+    if (!overlay || hasTextFocus() || closingRef.current || shellRef.current?.hasAttribute("data-keyboard-closing")) return;
+    markExperiment("document-lock-before");
+    // 同步改变唯一实验变量，after不能采到尚未提交的React旧DOM。
+    const next = !overlay.hasAttribute(DOCUMENT_LOCK_BYPASS_ATTRIBUTE);
+    overlay.toggleAttribute(DOCUMENT_LOCK_BYPASS_ATTRIBUTE, next);
+    setBypassed(next);
+    markExperiment("document-lock-after");
+  };
   const report = () => formatViewportDebugReport({ ...recorder.snapshot(), timeline: readViewportDiagnostics(),
     environment: collectViewportDebugEnvironment(pwaVersion) });
   const copy = async () => {
@@ -90,6 +113,7 @@ export function ViewportDebugOverlay({ shellRef }: { shellRef: RefObject<HTMLEle
   const clear = () => {
     recorder.clear();
     clearViewportDiagnostics();
+    markExperiment("document-lock-state");
     setStatus("idle");
   };
 
@@ -102,6 +126,13 @@ export function ViewportDebugOverlay({ shellRef }: { shellRef: RefObject<HTMLEle
         {canShareFiles ? <Button size="compact-xs" variant="default" type="button" onClick={() => void share()}>{d.share}</Button> : null}
         <Button size="compact-xs" variant="default" type="button" onClick={clear}>{d.clear}</Button>
       </div>
+      <div className="pwa-viewport-debug-actions">
+        {/* 实验按钮不通过pointer焦点转移收键盘；Enter/Space仍走原生button激活。 */}
+        <Button ref={experimentButtonRef} className="pwa-viewport-debug-experiment" size="compact-xs" variant="default" type="button" fullWidth
+          aria-pressed={bypassed} aria-describedby={experimentHintId}
+          onPointerDown={event => event.preventDefault()} onClick={toggleDocumentLock}>{d.documentLockExperiment}</Button>
+      </div>
+      <p id={experimentHintId} className="pwa-viewport-debug-status">{bypassed ? d.documentLockPaused : d.documentLockNormal}<br />{d.documentLockHint}</p>
       <p className="pwa-viewport-debug-status" role="status">{status === "idle" ? "" : d[status]}</p>
     </section>
   </Portal>;

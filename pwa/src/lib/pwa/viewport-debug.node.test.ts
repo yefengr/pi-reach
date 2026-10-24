@@ -84,7 +84,7 @@ test("event records whitelist nested fields and remain bounded independently of 
     rootBoxHeight: 812, bodyBoxHeight: 812, shellHeight: 812, scrollY: 0,
     documentLocked: true, documentLockHeight: 812, compact: null, composerBudget: null,
     paddingTop: 24, paddingBottom: 88, composerPaddingBottom: 8, focus: "none" as const,
-    messageBody: "unrelated-private-field",
+    documentLockBypassed: true, messageBody: "unrelated-private-field",
   };
   const controller = {
     reason: "compensated" as const, appHeight: 874, unfocusedInset: 0, unfocusedOcclusion: 0,
@@ -98,5 +98,5 @@ test("event records whitelist nested fields and remain bounded independently of 
   expect(data.frames).toHaveLength(0);
   const raw = formatViewportDebugReport({ ...data, timeline: [], environment: {} });
   expect(raw).not.toContain("unrelated-private-field");
-  expect(JSON.parse(raw).marks[0].snapshot).toMatchObject({ documentLockHeight: 812 });
+  expect(JSON.parse(raw).marks[0].snapshot).toMatchObject({ documentLockHeight: 812, documentLockBypassed: true });
 });

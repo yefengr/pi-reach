@@ -10,8 +10,9 @@
 .pwa-app-shell[data-keyboard-viewport]:not([data-keyboard-restored]) { --pwa-safe-bottom: 0px; }
 
 /* 键盘补偿期间文档只与可见区域等高，iOS 无需滚动文档露出输入框；选择器特异性需高于 globals.css 的 standalone 高度。 */
-html:has(.pwa-root)[data-pwa-keyboard],
-html[data-pwa-keyboard] body:has(.pwa-root) {
+/* 调试实验仅跳过这组约束；标记随浮层卸载消失，控制器锁值与滚动复位仍照常运行。 */
+html:has(.pwa-root)[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass])),
+html[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass])) body:has(.pwa-root) {
   height: var(--pwa-keyboard-document-height);
   min-height: 0;
 }

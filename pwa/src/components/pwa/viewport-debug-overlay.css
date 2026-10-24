@@ -30,6 +30,17 @@
   pointer-events: auto;
 }
 
+.pwa-viewport-debug-experiment {
+  height: auto;
+  min-height: 44px;
+  padding: 6px 8px;
+}
+
+.pwa-viewport-debug-experiment .mantine-Button-label {
+  white-space: normal;
+  line-height: 1.35;
+}
+
 .pwa-viewport-debug-status {
   min-height: 1.35em;
   margin: 4px 0 0;
