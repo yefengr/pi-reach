@@ -217,6 +217,17 @@ export const en = {
     documentLockPaused: "Experiment: on (lock paused)",
     documentLockHint: "Toggle after dismissing the keyboard. Resets when debug closes; not saved.",
   },
+  keyboardDiagnostics: {
+    title: "Keyboard diagnostics", modes: "Experiment mode",
+    current: "A current", prefixed: "B pre-fixed", native: "C native",
+    ready: "Ready to switch.", focus: "Dismiss the keyboard first.", controller: "Wait for compensation to finish.",
+    viewport: "Waiting for the original closed viewport. If unavailable, restart with the keyboard closed.",
+    restart: "Window size changed. Restart this experiment.",
+    nativeWarning: "Native mode may leave the input behind the keyboard.",
+    instructions: "Instructions", steps: "Focus, dismiss, compare. Do not send, rotate, resize or change the sample. Switch only after full recovery.",
+    isolation: "Local memory only; no business connection, identity, history or camera. An existing controlling Service Worker may remain. Numbers and sampling can disturb layout; desktop simulation does not prove native keyboard behavior.",
+    back: "Return to app", restartLink: "Restart", numbers: "Viewport numbers", entry: "Open isolated keyboard diagnostics",
+  },
   shortcuts: {
     title: "Keyboard shortcuts",
     hint: "Available in desktop layouts. Page shortcuts pause while typing or while a menu or dialog is open.",

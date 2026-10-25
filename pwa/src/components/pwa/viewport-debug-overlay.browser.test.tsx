@@ -73,6 +73,11 @@ test("overlay samples each frame without blocking the page and copies a numbers-
   expect(text()).toMatch(/title \d/);
   expect(getComputedStyle(overlay).pointerEvents).toBe("none");
   expect(overlay.closest(".pwa-app-shell")).toBeNull();
+  const diagnostics = screen.getByRole("link", { name: getMessages().keyboardDiagnostics.entry });
+  await expect.element(diagnostics).toHaveAttribute("href", "/app/keyboard-diagnostics");
+  await expect.element(diagnostics).toBeVisible();
+  expect(diagnostics.element().getBoundingClientRect().width).toBeLessThanOrEqual(overlay.getBoundingClientRect().width);
+  expect(diagnostics.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 
   await screen.getByRole("button", { name: getMessages().viewportDebug.copy }).click();
   await expect.element(screen.getByRole("status").filter({ hasText: getMessages().viewportDebug.copied })).toBeVisible();

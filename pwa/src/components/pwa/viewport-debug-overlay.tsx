@@ -127,6 +127,9 @@ export function ViewportDebugOverlay({ shellRef }: { shellRef: RefObject<HTMLEle
         <Button size="compact-xs" variant="default" type="button" onClick={clear}>{d.clear}</Button>
       </div>
       <div className="pwa-viewport-debug-actions">
+        <Button component="a" href="/app/keyboard-diagnostics" className="pwa-viewport-debug-experiment" fullWidth size="compact-xs" variant="default">{t.keyboardDiagnostics.entry}</Button>
+      </div>
+      <div className="pwa-viewport-debug-actions">
         {/* 实验按钮不通过pointer焦点转移收键盘；Enter/Space仍走原生button激活。 */}
         <Button ref={experimentButtonRef} className="pwa-viewport-debug-experiment" size="compact-xs" variant="default" type="button" fullWidth
           aria-pressed={bypassed} aria-describedby={experimentHintId}
