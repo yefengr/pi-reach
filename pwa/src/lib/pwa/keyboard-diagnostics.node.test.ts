@@ -28,6 +28,63 @@ test("innerHeight compression is temporary and both viewport heights must fully 
   expect(gate.check(closed)).toBe("ready");
 });
 
+test("pending calibration retains natural height and waits for either recovery order", () => {
+  for (const partial of [{ ...closed, height: 812 }, { ...closed, viewportHeight: 812 }]) {
+    const gate = new KeyboardDiagnosticsGate({ ...closed, height: 812, viewportHeight: 812 }, 874);
+    expect(gate.baseline).toBeNull();
+    expect(gate.check(partial)).toBe("viewport");
+    expect(gate.baseline).toBeNull();
+    expect(gate.check(closed)).toBe("ready");
+    const baseline = gate.baseline;
+    expect(baseline?.height).toBe(874);
+    expect(gate.check({ ...closed, height: 470, viewportHeight: 470, focused: true }, 470)).toBe("focus");
+    for (let index = 0; index < 100; index += 1) {
+      expect(gate.check({ ...closed, height: 812, viewportHeight: 812 }, 812)).toBe("viewport");
+    }
+    expect(gate.baseline).toBe(baseline);
+    expect(gate.check(closed)).toBe("ready");
+  }
+});
+test.each([
+  { focused: true }, { compensated: true }, { closing: true },
+  { scale: 1.1 }, { scale: Number.NaN }, { height: 0 }, { viewportHeight: 0 },
+  { width: 0 }, { width: Number.NaN }, { orientation: Number.NaN },
+  { viewportHeight: null, viewportTop: null, scale: null },
+])("initial unsafe input %j cannot establish a baseline until fully safe", unsafe => {
+  const initial = { ...closed, ...unsafe };
+  const gate = new KeyboardDiagnosticsGate(initial, 874);
+  expect(gate.baseline).toBeNull();
+  expect(gate.check(initial)).not.toBe("ready");
+  expect(gate.baseline).toBeNull();
+  expect(gate.check({ ...closed, height: 812 })).not.toBe("ready");
+  expect(gate.baseline).toBeNull();
+  expect(gate.check(closed)).toBe("ready");
+});
+test("pending shell compression cannot lower the initial natural height floor", () => {
+  const gate = new KeyboardDiagnosticsGate({ ...closed, height: 470, viewportHeight: 470, focused: true }, 874);
+  expect(gate.check({ ...closed, height: 470, viewportHeight: 470 }, 470)).toBe("viewport");
+  expect(gate.baseline).toBeNull();
+  expect(gate.check(closed, 874)).toBe("ready");
+  const baseline = gate.baseline;
+  expect(gate.check({ ...closed, height: 900, viewportHeight: 900 }, 900)).toBe("viewport");
+  expect(gate.check({ ...closed, viewportTop: 12 })).toBe("viewport");
+  expect(gate.check({ ...closed, closing: true })).toBe("controller");
+  expect(gate.baseline).toBe(baseline);
+  expect(gate.check(closed)).toBe("ready");
+});
+test.each([{ width: 874 }, { orientation: 90 }])("width/orientation change %j invalidates pending and established calibration", changed => {
+  for (const pending of [false, true]) {
+    const gate = new KeyboardDiagnosticsGate({ ...closed, viewportHeight: pending ? 812 : 874 }, 874);
+    expect(gate.check({ ...closed, ...changed })).toBe("restart");
+    expect(gate.check(closed)).toBe("restart");
+  }
+  expect(new KeyboardDiagnosticsGate(closed).check(closed)).toBe("ready");
+  const taller = { ...closed, height: 900, viewportHeight: 900 };
+  const fresh = new KeyboardDiagnosticsGate(taller);
+  expect(fresh.check(taller)).toBe("ready");
+  expect(fresh.check(closed)).toBe("viewport");
+});
+
 test("report replaces revisits and keeps existing per-round frame/mark caps and columns", () => {
   const reports = new KeyboardDiagnosticsReports();
   const measure: ViewportFrameMeasure = { vvTop: 0, vvHeight: 874, vvPageTop: 0, vvScale: 1,

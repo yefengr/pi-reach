@@ -199,23 +199,114 @@ test.each(["current", "prefixed", "native"])("%s restores mode switching after l
   await view.unmount();
 });
 
-test("compressed initial innerHeight cannot lower a known natural shell baseline", async () => {
+test.each(["together", "viewport-first", "innerHeight-first"])("initial 812→874 calibration waits for both natural heights: %s", async order => {
   await page.viewport(402, 874);
   const viewport = new ViewportMock();
-  viewport.change(470);
-  vi.stubGlobal("innerHeight", 470);
+  viewport.change(812);
+  vi.stubGlobal("innerHeight", 812);
   vi.stubGlobal("visualViewport", viewport);
-  const view = await render(<KeyboardDiagnosticsPage />);
+  const view = await render(<StrictMode><KeyboardDiagnosticsPage /></StrictMode>);
   await frames();
   expect(Math.round(shell().getBoundingClientRect().height)).toBe(874);
   expect(button("native").disabled).toBe(true);
+  expect(button("prefixed").disabled).toBe(true);
+  if (order === "viewport-first") viewport.change(874);
+  if (order === "innerHeight-first") {
+    vi.stubGlobal("innerHeight", 874);
+    window.dispatchEvent(new Event("resize"));
+  }
+  if (order !== "together") {
+    await frames();
+    expect(button("native").disabled).toBe(true);
+  }
   vi.stubGlobal("innerHeight", 874);
   viewport.change(874);
   window.dispatchEvent(new Event("resize"));
+  await ready();
+  await select("prefixed");
+  await select("native");
+  await select("current");
+  await view.unmount();
+});
+
+test("pending calibration blocks focus and real controller closing until complete recovery", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  // 只压短 innerHeight，让诊断待标定；正式控制器仍以 VV874 建立闭合基准。
+  vi.stubGlobal("innerHeight", 812);
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await render(<StrictMode><KeyboardDiagnosticsPage /></StrictMode>);
+  shell().style.setProperty("--pwa-duration-keyboard", "250ms");
   await frames();
-  // 初始基准无效时只允许通过原生链接重建，不能在收起阶段重学。
+  input().focus();
+  vi.stubGlobal("innerHeight", 874);
+  viewport.change(874);
+  await frames();
+  expect(button("native").disabled).toBe(true);
+  expect(document.activeElement).toBe(input());
+  viewport.change(470);
+  expect(shell().hasAttribute("data-keyboard-viewport")).toBe(true);
+  input().blur();
+  viewport.change(812);
+  await expect.poll(() => Math.round(shell().getBoundingClientRect().height), { timeout: 5000 }).toBe(812);
+  await expect.poll(() => shell().hasAttribute("data-keyboard-closing"), { timeout: 5000 }).toBe(false);
+  expect(button("native").disabled).toBe(true);
+  expect(shell().hasAttribute("data-keyboard-viewport")).toBe(true);
+  viewport.change(874);
+  // 首次标定也必须等真实控制器交接，不因两个高度已恢复而绕过 pending/active closing。
+  button("native").click();
+  expect(mode()).toBe("current");
+  expect(shell().hasAttribute("data-keyboard-viewport")).toBe(true);
+  await ready();
+  expect(shell().hasAttribute("data-keyboard-closing")).toBe(false);
+  expect(shell().hasAttribute("data-keyboard-viewport")).toBe(false);
+  await select("native");
+  input().focus();
+  viewport.change(470);
+  input().blur();
+  viewport.change(812);
+  await frames();
+  expect(button("current").disabled).toBe(true);
+  viewport.change(874);
+  await ready();
+  await view.unmount();
+});
+
+test.each(["missing-viewport", "invalid-scale", "zero-height"])("pending %s can first calibrate when capability and safe geometry recover", async initial => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  if (initial === "invalid-scale") viewport.change(874, 1.1);
+  if (initial === "zero-height") viewport.change(0);
+  vi.stubGlobal("visualViewport", initial === "missing-viewport" ? undefined : viewport);
+  const view = await render(<StrictMode><KeyboardDiagnosticsPage /></StrictMode>);
+  await frames();
+  expect(button("native").disabled).toBe(true);
+  expect(shell().querySelectorAll("a")).toHaveLength(2);
+  vi.stubGlobal("visualViewport", viewport);
+  viewport.change(874);
+  await ready();
+  await select("native");
+  await view.unmount();
+});
+
+test("pending width change requires restart, while remount does not inherit its invalidation", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  viewport.change(812);
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await render(<StrictMode><KeyboardDiagnosticsPage /></StrictMode>);
+  await frames();
+  await page.viewport(874, 402);
+  await frames();
+  await page.viewport(402, 874);
+  viewport.change(874);
+  await frames();
   expect(button("native").disabled).toBe(true);
   await view.unmount();
+  const next = await render(<StrictMode><KeyboardDiagnosticsPage /></StrictMode>);
+  await ready();
+  await select("native");
+  await next.unmount();
 });
 
 test("mode and draft are memory only; export is three bounded latest rounds and never contains draft or sample body", async () => {
@@ -282,8 +373,7 @@ test("no viewport, invalid scale, rotated window and compressed initial entry fa
   await frames();
   expect(button("native").disabled).toBe(true);
   viewport.change(874);
-  await frames();
-  expect(button("native").disabled).toBe(true);
+  await ready();
   await compressed.unmount();
 });
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { hasTextFocus, observeKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
 import { collectViewportDebugEnvironment, formatViewportDebugLines, measureViewportEvent, measureViewportFrame, ViewportFrameRecorder, type ViewportMarkKind } from "@/lib/pwa/viewport-debug";
 import { disableViewportDiagnostics, enableViewportDiagnostics, readViewportDiagnostics } from "@/lib/pwa/timeline-viewport-diagnostics";
-import { KeyboardDiagnosticsGate, validGeometry, type DiagnosticsGateInput, type DiagnosticsGateReason, type KeyboardDiagnosticsMode, type KeyboardDiagnosticsReports } from "@/lib/pwa/keyboard-diagnostics";
+import { KeyboardDiagnosticsGate, type DiagnosticsGateInput, type DiagnosticsGateReason, type KeyboardDiagnosticsMode, type KeyboardDiagnosticsReports } from "@/lib/pwa/keyboard-diagnostics";
 import { version } from "../../package.json";
 
 function geometry(): DiagnosticsGateInput {
@@ -19,20 +19,19 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
   const [reason, setReason] = useState<DiagnosticsGateReason>("viewport");
   const check = useCallback((): DiagnosticsGateReason => {
     const shell = shellRef.current;
-    return gateRef.current?.check({ ...geometry(), compensated: Boolean(shell?.hasAttribute("data-keyboard-viewport")),
-      closing: closingRef.current || Boolean(shell?.hasAttribute("data-keyboard-closing")) }) ?? "viewport";
+    const gate = gateRef.current;
+    return gate?.check({ ...geometry(), compensated: Boolean(shell?.hasAttribute("data-keyboard-viewport")),
+      closing: closingRef.current || Boolean(shell?.hasAttribute("data-keyboard-closing")) },
+    gate.baseline ? undefined : shell?.getBoundingClientRect().height) ?? "viewport";
   }, [shellRef]);
 
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
-    const initial = geometry();
-    // 压缩态或文本已聚焦时不建立闭合基准；本轮永不重学，必须通过原生链接重新开始。
-    const naturalHeight = Math.max(initial.height, shell.getBoundingClientRect().height);
-    const baseline = validGeometry(initial) && !initial.focused && !shell.hasAttribute("data-keyboard-viewport")
-      && initial.viewportHeight! >= naturalHeight - 1 ? initial : null;
-    gateRef.current = new KeyboardDiagnosticsGate(baseline);
     closingRef.current = false;
+    // 初始压缩只进入等待；由现有 refresh 在完整安全恢复后首次标定，不重学已建立基准。
+    gateRef.current = new KeyboardDiagnosticsGate({ ...geometry(), compensated: shell.hasAttribute("data-keyboard-viewport"),
+      closing: shell.hasAttribute("data-keyboard-closing") }, shell.getBoundingClientRect().height);
     const recorder = new ViewportFrameRecorder(() => performance.now());
     let timeline = readViewportDiagnostics();
     enableViewportDiagnostics();
