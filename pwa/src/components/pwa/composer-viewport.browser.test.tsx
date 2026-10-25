@@ -5,6 +5,7 @@ import { cdp, page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { TIMELINE_GEOMETRY_EVENT, useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
+import { observeKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageComposer } from "./message-composer";
 import type { ComposerAttachmentItem } from "./attachment-cards";
@@ -266,6 +267,102 @@ test("opening commits complete layout before reading or resetting window scroll"
     check([610, 610, "fixed", 8, 620, null, 24, 88]);
   } finally {
     view.list.removeEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
+    other.remove();
+    await view.screen.unmount();
+  }
+});
+
+test.each([
+  { bypass: false, reset: true }, { bypass: true, reset: true },
+  { bypass: false, reset: false }, { bypass: true, reset: false },
+])("offset handoff resamples after window processing: bypass=$bypass reset=$reset", async ({ bypass, reset }) => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const root = document.documentElement;
+  // 只模拟standalone自然文档高度与CSS实验门控，不模拟WebKit原生反馈。
+  const style = document.createElement("style");
+  style.textContent = "html:has(.pwa-root), body:has(.pwa-root) { height: 874px; }";
+  const experiment = document.createElement("div");
+  if (bypass) {
+    experiment.className = "pwa-viewport-debug";
+    experiment.setAttribute("data-document-lock-bypass", "");
+  }
+  document.head.append(style);
+  document.body.append(experiment);
+  view.input.focus({ preventScroll: true });
+  const snapshot = () => [Math.round(root.getBoundingClientRect().height),
+    Math.round(document.body.getBoundingClientRect().height), getComputedStyle(view.shell).position,
+    Math.round(view.shell.getBoundingClientRect().top), Math.round(view.shell.getBoundingClientRect().height),
+    view.shell.dataset.compactHeight, parseFloat(getComputedStyle(view.list).paddingBottom)];
+  const reads: ReturnType<typeof snapshot>[] = [];
+  const notifications: number[] = [];
+  const reports: number[] = [];
+  const scrollY = vi.spyOn(window, "scrollY", "get").mockImplementation(() => {
+    reads.push(snapshot());
+    // scrollY为零时也可能在提交布局后改变原生offset；不发送后续事件。
+    if (!reset) viewport.offsetTop = 0;
+    return reset ? 404 : 0;
+  });
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => { viewport.offsetTop = 0; });
+  const geometry = () => { notifications.push(Math.round(view.shell.getBoundingClientRect().top)); };
+  view.list.addEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
+  const unobserve = observeKeyboardViewport(view.shell, () => { reports.push(Math.round(view.shell.getBoundingClientRect().top)); });
+  try {
+    viewport.change({ height: 470, offsetTop: 342 });
+    expect.soft(reads).toEqual([[bypass ? 874 : 470, bypass ? 874 : 470, "fixed", 342, 470, "short", 8]]);
+    expect.soft(scrollTo).toHaveBeenCalledTimes(reset ? 1 : 0);
+    if (reset) expect.soft(scrollTo).toHaveBeenCalledWith({ top: 0, left: window.scrollX, behavior: "instant" });
+    expect.soft(root.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("470px");
+    expect.soft(viewport.offsetTop).toBe(0);
+    expect.soft(view.shell.style.getPropertyValue("--pwa-viewport-top")).toBe("0px");
+    expect.soft(Math.round(view.shell.getBoundingClientRect().top)).toBe(0);
+    expect.soft(notifications).toEqual([0]);
+    expect.soft(reports).toEqual([0]);
+  } finally {
+    unobserve();
+    view.list.removeEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
+    experiment.remove();
+    style.remove();
+    await view.screen.unmount();
+  }
+});
+
+test.each([false, true])("offset handoff synchronously corrects compensated refocus: reset=%s", async reset => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  view.input.focus({ preventScroll: true });
+  viewport.change({ height: 470, offsetTop: 12 });
+  await settle();
+  const other = document.createElement("textarea");
+  other.style.position = "fixed";
+  document.body.append(other);
+  const scrollY = vi.spyOn(window, "scrollY", "get").mockImplementation(() => {
+    if (!reset) viewport.offsetTop = 24;
+    return reset ? 404 : 0;
+  });
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => { viewport.offsetTop = 24; });
+  try {
+    viewport.height = 430;
+    viewport.offsetTop = 342;
+    other.focus({ preventScroll: true });
+    expect.soft(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("430px");
+    expect.soft(view.shell.style.getPropertyValue("--pwa-viewport-top")).toBe("24px");
+    expect.soft(Math.round(view.shell.getBoundingClientRect().top)).toBe(24);
+    expect.soft(Math.round(view.shell.getBoundingClientRect().height)).toBe(470);
+    expect.soft(scrollTo).toHaveBeenCalledTimes(reset ? 1 : 0);
+    scrollY.mockReturnValue(0);
+    viewport.change({ height: 420, offsetTop: -12 });
+    expect(view.shell.style.getPropertyValue("--pwa-viewport-top")).toBe("0px");
+    expect(Math.round(view.shell.getBoundingClientRect().top)).toBe(0);
+  } finally {
     scrollY.mockRestore();
     scrollTo.mockRestore();
     other.remove();

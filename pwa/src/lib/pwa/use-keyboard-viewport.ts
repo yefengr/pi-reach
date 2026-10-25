@@ -142,7 +142,7 @@ class KeyboardViewportController {
     this.adjusted = true;
     this.lockDocument(this.documentHandedBack ? appHeight : viewport.height);
     this.shell.dataset.keyboardViewport = "";
-    this.shell.style.setProperty("--pwa-viewport-top", `${Math.max(0, viewport.offsetTop)}px`);
+    this.syncViewportTop();
     if (!closing) {
       delete this.shell.dataset.keyboardRestored;
       this.shell.style.setProperty("--pwa-viewport-height", `${viewport.height}px`);
@@ -192,8 +192,18 @@ class KeyboardViewportController {
     this.root.style.setProperty("--pwa-keyboard-document-height", `${height}px`);
   }
 
+  private syncViewportTop() {
+    if (!this.viewport) return;
+    const top = `${Math.max(0, this.viewport.offsetTop)}px`;
+    if (this.shell.style.getPropertyValue("--pwa-viewport-top") !== top) {
+      this.shell.style.setProperty("--pwa-viewport-top", top);
+    }
+  }
+
   private resetWindowScroll() {
     if (window.scrollY !== 0) window.scrollTo({ top: 0, left: window.scrollX, behavior: "instant" });
+    // 布局读取或滚动复位都可能改变原生offset；同任务交接最终值，不依赖后续scroll事件。
+    this.syncViewportTop();
   }
 }
 
