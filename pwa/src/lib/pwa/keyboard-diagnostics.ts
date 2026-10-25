@@ -1,6 +1,6 @@
 import { formatViewportDebugReport } from "./viewport-debug";
 
-export const KEYBOARD_DIAGNOSTICS_MODES = ["current", "prefixed", "native"] as const;
+export const KEYBOARD_DIAGNOSTICS_MODES = ["current", "prefixed", "native", "content"] as const;
 export type KeyboardDiagnosticsMode = typeof KEYBOARD_DIAGNOSTICS_MODES[number];
 export type DiagnosticsGeometry = { width: number; height: number; viewportHeight: number | null; viewportTop: number | null; scale: number | null; orientation: number };
 export type DiagnosticsGateInput = DiagnosticsGeometry & { focused: boolean; compensated: boolean; closing: boolean };

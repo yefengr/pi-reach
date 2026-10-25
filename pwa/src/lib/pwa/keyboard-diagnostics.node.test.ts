@@ -94,14 +94,15 @@ test("report replaces revisits and keeps existing per-round frame/mark caps and 
   let finish = () => {};
   for (let visit = 0; visit < 12; visit += 1) {
     finish();
-    const mode = KEYBOARD_DIAGNOSTICS_MODES[visit % 3]!;
+    const mode = KEYBOARD_DIAGNOSTICS_MODES[visit % KEYBOARD_DIAGNOSTICS_MODES.length]!;
     const recorder = new ViewportFrameRecorder(() => visit);
     for (let index = 0; index < 1900; index += 1) { recorder.record(measure); recorder.mark("focusout"); }
     finish = reports.start(mode, () => ({ ...recorder.snapshot(), timeline: [], environment: { mode, visit } }));
   }
   const data = JSON.parse(reports.report());
-  expect(data.rounds).toHaveLength(3);
-  expect(data.rounds.map((round: { report: { environment: { visit: number } } }) => round.report.environment.visit)).toEqual([9, 10, 11]);
+  expect(data.rounds).toHaveLength(4);
+  expect(data.rounds.map((round: { mode: string }) => round.mode)).toEqual(["current", "prefixed", "native", "content"]);
+  expect(data.rounds.map((round: { report: { environment: { visit: number } } }) => round.report.environment.visit)).toEqual([8, 9, 10, 11]);
   for (const round of data.rounds) {
     expect(round.report.frames.columns).toEqual([...VIEWPORT_FRAME_FIELDS]);
     expect(round.report.frames.rows).toHaveLength(1800);

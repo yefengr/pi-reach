@@ -2,18 +2,26 @@ import { StrictMode } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { getMessages } from "@/lib/i18n";
+import { getMessages, setLanguagePreference } from "@/lib/i18n";
 import { viewportDiagnosticsEnabled } from "@/lib/pwa/timeline-viewport-diagnostics";
-import { VIEWPORT_DEBUG_STORAGE_KEY, ViewportFrameRecorder } from "@/lib/pwa/viewport-debug";
+import { VIEWPORT_DEBUG_STORAGE_KEY, VIEWPORT_FRAME_FIELDS, ViewportFrameRecorder } from "@/lib/pwa/viewport-debug";
 import { KeyboardDiagnosticsPage } from "./keyboard-diagnostics-page";
+import { KeyboardDiagnosticsStage } from "./keyboard-diagnostics-stage";
+import { KeyboardDiagnosticsReports } from "@/lib/pwa/keyboard-diagnostics";
+import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 
 class ViewportMock extends EventTarget {
   height = window.innerHeight;
+  get width() { return window.innerWidth; }
+  get pageTop() { return this.offsetTop; }
+  offsetLeft = 0;
+  pageLeft = 0;
   offsetTop = 0;
   scale = 1;
   change(height: number, scale = 1) { this.height = height; this.scale = scale; this.dispatchEvent(new Event("resize")); }
 }
 const shell = () => document.querySelector<HTMLElement>(".pwa-keyboard-diagnostics")!;
+const controller = () => shell().querySelector<HTMLElement>(".pwa-keyboard-diagnostics-content") ?? shell();
 const input = () => shell().querySelector<HTMLTextAreaElement>("textarea")!;
 const button = (mode: string) => shell().querySelector<HTMLButtonElement>(`[data-mode="${mode}"]`)!;
 const mode = () => shell().dataset.diagnosticsMode;
@@ -52,40 +60,59 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.localStorage.removeItem(VIEWPORT_DEBUG_STORAGE_KEY);
+  setLanguagePreference("system");
   for (const { rule, media } of standaloneRules.splice(0)) rule.media.mediaText = media;
   await page.viewport(1280, 900);
 });
 
-test.each([[320, 568, false], [402, 874, false], [874, 402, false], [402, 874, true]] as const)("same initial geometry and usable controls at %ix%i standalone-CSS-fixture=%s", async (width, height, standalone) => {
+test.each([
+  [320, 568, false, "en"], [402, 874, false, "en"], [874, 402, false, "en"], [402, 874, true, "en"],
+  [320, 568, false, "zh"], [402, 874, false, "zh"], [874, 402, false, "zh"], [402, 874, true, "zh"],
+] as const)("same initial geometry and usable controls at %ix%i standalone-CSS-fixture=%s language=%s", async (width, height, standalone, language) => {
+  setLanguagePreference(language);
   await page.viewport(width, height);
   if (standalone) enableStandaloneCssFixture();
   const { view } = await mount();
   const initial = geometry();
   const initialDensity = { compact: shell().dataset.compactHeight, wide: shell().hasAttribute("data-wide-compact") };
   expect(getComputedStyle(shell()).position).not.toBe("fixed");
-  for (const value of ["prefixed", "native", "current"]) {
+  for (const value of ["prefixed", "native", "content", "current"]) {
     await select(value);
     await frames();
     const next = geometry();
-    expect({ compact: shell().dataset.compactHeight, wide: shell().hasAttribute("data-wide-compact") }).toEqual(initialDensity);
-    next.forEach((box, index) => box.forEach((coordinate, axis) => expect(Math.abs(coordinate - initial[index]![axis]!)).toBeLessThanOrEqual(1)));
-    expect(getComputedStyle(shell()).position === "fixed").toBe(value === "prefixed");
+    expect({ compact: controller().dataset.compactHeight, wide: controller().hasAttribute("data-wide-compact") }).toEqual(initialDensity);
+    next.forEach((box, index) => box.forEach((coordinate, axis) => expect(Math.abs(coordinate - initial[index]![axis]!), `${value} box=${index} axis=${axis} actual=${JSON.stringify(next)} initial=${JSON.stringify(initial)}`).toBeLessThanOrEqual(1)));
+    expect(getComputedStyle(shell()).position === "fixed").toBe(value === "prefixed" || value === "content");
     for (const control of shell().querySelectorAll("[data-mode], a")) {
       const box = control.getBoundingClientRect();
       expect(box.height).toBeGreaterThanOrEqual(44);
       expect(box.right).toBeLessThanOrEqual(width + 1);
     }
+    expect(Math.abs(input().closest(".pwa-main")!.getBoundingClientRect().bottom - height)).toBeLessThanOrEqual(1);
+    expect(shell().querySelectorAll("main")).toHaveLength(1);
+    if (width === 402) expect(new Set(Array.from(shell().querySelectorAll("[data-mode]")).map(control => Math.round(control.getBoundingClientRect().top))).size).toBe(1);
+    for (const label of shell().querySelectorAll(".mantine-Button-label")) {
+      const range = document.createRange();
+      range.selectNodeContents(label);
+      const content = range.getBoundingClientRect();
+      const control = label.closest("button")!.getBoundingClientRect();
+      expect(Math.round(content.left)).toBeGreaterThanOrEqual(Math.round(control.left));
+      expect(Math.round(content.right)).toBeLessThanOrEqual(Math.round(control.right));
+      expect(Math.round(content.top)).toBeGreaterThanOrEqual(Math.round(control.top));
+      expect(Math.round(content.bottom)).toBeLessThanOrEqual(Math.round(control.bottom));
+    }
+    if (value === "content") expect(getComputedStyle(controller()).position).toBe("fixed");
     expect(input().getBoundingClientRect().bottom).toBeLessThanOrEqual(height + 1);
     expect(input().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }
   await view.unmount();
 });
 
-test.each(["current", "prefixed"])("%s compensates, blocks partial/pending/closing/refocus, resets without changing its position experiment", async value => {
+test.each(["current", "prefixed", "content"])("%s compensates, blocks partial/pending/closing/refocus, resets without changing its position experiment", async value => {
   await page.viewport(402, 874);
   const { view, viewport } = await mount();
   if (value !== "current") await select(value);
-  const before = shell();
+  const before = controller();
   input().focus({ preventScroll: true });
   // 点击必须同步复核，不依赖下一帧disabled。
   button("native").click();
@@ -114,13 +141,228 @@ test.each(["current", "prefixed"])("%s compensates, blocks partial/pending/closi
   expect(mode()).toBe(value);
   input().blur();
   await ready();
-  expect(getComputedStyle(before).position === "fixed").toBe(value === "prefixed");
+  expect(getComputedStyle(before).position === "fixed").toBe(value === "prefixed" || value === "content");
   expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
   expect(before.style.getPropertyValue("--pwa-viewport-height")).toBe("");
   await select("native");
   expect(before.isConnected).toBe(false);
   expect(before.hasAttribute("data-keyboard-viewport")).toBe(false);
   expect(before.hasAttribute("data-compact-height")).toBe(false);
+  await view.unmount();
+});
+
+test("content keeps the real outer shell and title stable while its full-height controller follows VV", async () => {
+  await page.viewport(402, 874);
+  const { view, viewport } = await mount();
+  await select("content");
+  const before = rect(shell());
+  const title = rect(shell().querySelector(".pwa-title-bar")!);
+  await userEvent.click(input());
+  expect(document.activeElement).toBe(input());
+  viewport.change(470);
+  await frames();
+  expect(getComputedStyle(controller()).position).toBe("fixed");
+  expect(Math.round(shell().getBoundingClientRect().height)).toBe(874);
+  expect(rect(shell())).toEqual(before);
+  expect(rect(shell().querySelector(".pwa-title-bar")!)).toEqual(title);
+  const content = controller();
+  expect(Math.round(content.getBoundingClientRect().height)).toBe(470);
+  expect(content.dataset.compactHeight).toBe("short");
+  expect(shell().hasAttribute("data-keyboard-viewport")).toBe(false);
+  expect(input().getBoundingClientRect().bottom).toBeLessThanOrEqual(471);
+  expect(Math.round(input().closest(".pwa-main")!.getBoundingClientRect().bottom)).toBe(470);
+  input().blur();
+  viewport.change(874);
+  await ready();
+  await view.unmount();
+});
+
+test("content offset uses one Chrome slot, real main budget and outer-shell report geometry", async () => {
+  await page.viewport(402, 874);
+  const { view, viewport } = await mount();
+  await select("content");
+  const writeText = vi.fn<(text: string) => Promise<void>>(async () => {});
+  vi.spyOn(navigator, "clipboard", "get").mockReturnValue({ writeText } as unknown as Clipboard);
+  const titleBefore = rect(shell().querySelector(".pwa-title-bar")!);
+  const chrome = shell().querySelector<HTMLElement>(".pwa-keyboard-diagnostics-chrome")!;
+  const list = controller().querySelector<HTMLElement>(".pwa-message-list")!;
+  await userEvent.click(input());
+  viewport.offsetTop = 24;
+  viewport.change(470);
+  await frames(5);
+  const main = input().closest<HTMLElement>(".pwa-main")!;
+  expect(Math.round(controller().getBoundingClientRect().top)).toBe(24);
+  expect(Math.round(controller().getBoundingClientRect().height)).toBe(470);
+  expect(rect(shell().querySelector(".pwa-title-bar")!)).toEqual(titleBefore);
+  expect(Math.abs(list.getBoundingClientRect().top - chrome.getBoundingClientRect().bottom)).toBeLessThanOrEqual(1);
+  expect(Math.abs(main.getBoundingClientRect().bottom - 494)).toBeLessThanOrEqual(1);
+  const slot = controller().querySelector<HTMLElement>(".pwa-keyboard-diagnostics-slot")!;
+  expect(slot.getAttribute("aria-hidden")).toBe("true");
+  expect(slot.children).toHaveLength(0);
+  expect(Math.abs(slot.getBoundingClientRect().height - (chrome.getBoundingClientRect().height - 24))).toBeLessThanOrEqual(1);
+  await userEvent.fill(input(), Array.from({ length: 9 }, (_, index) => `local budget line ${index}`).join("\n"));
+  await frames(5);
+  const style = getComputedStyle(input());
+  const listStyle = getComputedStyle(list);
+  const pixels = (value: string) => Number.parseFloat(value) || 0;
+  const minimum = Math.max(44, pixels(style.lineHeight) + pixels(style.paddingTop) + pixels(style.paddingBottom) + pixels(style.borderTopWidth) + pixels(style.borderBottomWidth));
+  const sixLines = 6 * pixels(style.lineHeight) + pixels(style.paddingTop) + pixels(style.paddingBottom) + pixels(style.borderTopWidth) + pixels(style.borderBottomWidth);
+  const bodyLine = pixels(listStyle.getPropertyValue("--pwa-text-body")) * pixels(listStyle.getPropertyValue("--pwa-leading-body"));
+  const footer = input().closest(".pwa-chat-footer")!;
+  const footerChrome = footer.getBoundingClientRect().height - input().getBoundingClientRect().height;
+  const space = main.getBoundingClientRect().bottom - list.getBoundingClientRect().top - footerChrome;
+  const expected = Math.max(minimum, Math.min(sixLines, space - Math.ceil(bodyLine + 16)));
+  expect(main.hasAttribute("data-composer-budget")).toBe(true);
+  expect(Math.abs(pixels(input().style.maxHeight) - expected)).toBeLessThanOrEqual(1);
+  expect(input().getBoundingClientRect().bottom).toBeLessThanOrEqual(495);
+  await view.getByRole("button", { name: getMessages().viewportDebug.copy, exact: true }).click();
+  const report = JSON.parse(writeText.mock.calls[0]![0]);
+  const round = report.rounds.find((entry: { mode: string }) => entry.mode === "content").report;
+  const columns: string[] = round.frames.columns;
+  const row: unknown[] = round.frames.rows.at(-1);
+  const field = (name: string) => row[columns.indexOf(name)];
+  expect(field("shellHeight")).toBe(874);
+  expect(field("shellTop")).toBe(0);
+  expect(field("titleTop")).toBe(titleBefore[0]);
+  expect(field("cssHeight")).toBe(470);
+  expect(field("cssTop")).toBe(24);
+  expect(field("keyboard")).toBe(true);
+  expect(field("motion")).toBe("none");
+  expect(field("listClientHeight")).toBe(list.clientHeight);
+  expect(field("composerTop")).toBeCloseTo(Math.round(shell().querySelector(".pwa-composer")!.getBoundingClientRect().top * 10) / 10, 1);
+  const mark = round.marks.findLast((entry: { controller?: { reason: string } }) => entry.controller?.reason === "compensated");
+  expect(mark.snapshot.shellHeight).toBe(874);
+  expect(mark.snapshot.compact).toBe("short");
+  expect(mark.controller.appHeight).toBe(874);
+  expect(mark.controller.unfocusedInset).toBe(0);
+  expect(round.environment.controllerScope).toBe("content-viewport");
+  input().blur();
+  viewport.offsetTop = 0;
+  viewport.change(874);
+  await ready();
+  await view.unmount();
+});
+
+test.each(["follow", "reading"])("content preserves %s geometry through real controller closing within one pixel", async intent => {
+  await page.viewport(402, 874);
+  const { view, viewport } = await mount();
+  await select("content");
+  const list = controller().querySelector<HTMLElement>(".pwa-message-list")!;
+  await frames(5);
+  if (intent === "reading") {
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -120, bubbles: true }));
+    list.scrollTop = 220;
+    list.dispatchEvent(new Event("scroll"));
+    await frames(4);
+  }
+  const anchor = Array.from(list.children).find(child => {
+    const box = child.getBoundingClientRect();
+    return box.bottom > list.getBoundingClientRect().top + 1 && box.height > 1;
+  })!;
+  const top = Math.round(anchor.getBoundingClientRect().top);
+  input().focus({ preventScroll: true });
+  viewport.change(470);
+  await frames(5);
+  const assertPosition = () => {
+    if (intent === "follow") expect(Math.abs(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
+    else expect(Math.abs(Math.round(anchor.getBoundingClientRect().top) - top)).toBeLessThanOrEqual(1);
+  };
+  assertPosition();
+  input().blur();
+  viewport.change(812);
+  await expect.poll(() => controller().hasAttribute("data-keyboard-closing")).toBe(true);
+  assertPosition();
+  await expect.poll(() => controller().hasAttribute("data-keyboard-closing"), { timeout: 5000 }).toBe(false);
+  assertPosition();
+  viewport.change(874);
+  await ready();
+  assertPosition();
+  await view.unmount();
+});
+
+test("content Chrome remains clickable through its empty slot; real menu Escape restores its trigger", async () => {
+  await page.viewport(402, 874);
+  const { view } = await mount();
+  await select("content");
+  const details = shell().querySelector("details")!;
+  const chrome = shell().querySelector(".pwa-keyboard-diagnostics-chrome")!;
+  await userEvent.click(details.querySelector("summary")!);
+  expect(details.open).toBe(true);
+  await expect.poll(() => Math.round(controller().querySelector(".pwa-message-list")!.getBoundingClientRect().top - chrome.getBoundingClientRect().bottom)).toBe(0);
+  await userEvent.click(details.querySelector("summary")!);
+  expect(details.open).toBe(false);
+  const trigger = controller().querySelector<HTMLButtonElement>(".pwa-composer-command button")!;
+  trigger.focus();
+  await userEvent.click(trigger);
+  await expect.element(view.getByRole("menu")).toBeVisible();
+  expect(shell().querySelector(".pwa-root")!.contains(view.getByRole("menu").element())).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await expect.element(view.getByRole("menu")).not.toBeInTheDocument();
+  await expect.poll(() => document.activeElement).toBe(trigger);
+  await userEvent.click(button("native"));
+  await expect.poll(mode).toBe("native");
+  await view.unmount();
+});
+
+test("content Reduced Motion recovers without a closing animation or stale state", async () => {
+  await page.viewport(402, 874);
+  for (const sheet of document.styleSheets) for (const rule of sheet.cssRules) {
+    if (!(rule instanceof CSSMediaRule) || !rule.conditionText.includes("prefers-reduced-motion: reduce")) continue;
+    standaloneRules.push({ rule, media: rule.media.mediaText });
+    rule.media.mediaText = "all";
+  }
+  const { view, viewport } = await mount();
+  await select("content");
+  expect(getComputedStyle(controller()).getPropertyValue("--pwa-duration-keyboard").trim()).toBe("0ms");
+  input().focus();
+  viewport.change(470);
+  expect(Math.round(controller().getBoundingClientRect().height)).toBe(470);
+  input().blur();
+  viewport.change(812);
+  expect(controller().hasAttribute("data-keyboard-closing")).toBe(false);
+  expect(Math.round(controller().getBoundingClientRect().height)).toBe(812);
+  button("native").click();
+  expect(mode()).toBe("content");
+  await expect.poll(() => button("native").disabled).toBe(true);
+  viewport.change(874);
+  await ready();
+  expect(controller().hasAttribute("data-keyboard-viewport")).toBe(false);
+  expect(controller().style.getPropertyValue("--pwa-viewport-height")).toBe("");
+  expect(Math.round(shell().getBoundingClientRect().height)).toBe(874);
+  await view.unmount();
+});
+
+test("content initial pending calibration keeps the natural outer baseline through focus and real closing", async () => {
+  await page.viewport(402, 874);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("innerHeight", 812);
+  vi.stubGlobal("visualViewport", viewport);
+  const onMode = vi.fn();
+  const view = await render(<StrictMode><PwaUiProvider colorSchemeManager={{ get: () => "light", set() {}, subscribe() {}, unsubscribe() {}, clear() {} }}>
+    <KeyboardDiagnosticsStage mode="content" initialDensity={null} onMode={onMode} reports={new KeyboardDiagnosticsReports()} />
+  </PwaUiProvider></StrictMode>);
+  await frames();
+  expect(button("native").disabled).toBe(true);
+  expect(Math.round(shell().getBoundingClientRect().height)).toBe(874);
+  input().focus();
+  vi.stubGlobal("innerHeight", 874);
+  viewport.change(470);
+  input().blur();
+  viewport.change(812);
+  button("native").click();
+  expect(onMode).not.toHaveBeenCalled();
+  await expect.poll(() => controller().hasAttribute("data-keyboard-closing")).toBe(true);
+  button("native").click();
+  expect(onMode).not.toHaveBeenCalled();
+  expect(Math.round(shell().getBoundingClientRect().height)).toBe(874);
+  await expect.poll(() => controller().hasAttribute("data-keyboard-closing"), { timeout: 5000 }).toBe(false);
+  expect(button("native").disabled).toBe(true);
+  viewport.change(874);
+  button("native").click();
+  expect(onMode).not.toHaveBeenCalled();
+  await ready();
+  button("native").click();
+  expect(onMode).toHaveBeenCalledWith("native", { compactHeight: undefined, wideCompact: false });
   await view.unmount();
 });
 
@@ -154,9 +396,11 @@ test("native has only common sampler subscriptions, never compensates or scrolls
   await view.unmount();
 });
 
-test("native keeps only the measured closed-state density through focus, compression and recovery", async () => {
+test.each(["current", "content"])("%s hands its measured short-window density to native through focus, compression and recovery", async value => {
   await page.viewport(320, 568);
   const { view, viewport } = await mount();
+  if (value === "content") await select(value);
+  expect(controller().dataset.compactHeight).toBe("short");
   await select("native");
   expect(shell().dataset.compactHeight).toBe("short");
   input().focus();
@@ -175,7 +419,7 @@ test("native keeps only the measured closed-state density through focus, compres
   await view.unmount();
 });
 
-test.each(["current", "prefixed", "native"])("%s restores mode switching after layout viewport height and VV recover together", async value => {
+test.each(["current", "prefixed", "native", "content"])("%s restores mode switching after layout viewport height and VV recover together", async value => {
   await page.viewport(402, 874);
   const { view, viewport } = await mount();
   if (value !== "current") await select(value);
@@ -309,7 +553,7 @@ test("pending width change requires restart, while remount does not inherit its 
   await next.unmount();
 });
 
-test("mode and draft are memory only; export is three bounded latest rounds and never contains draft or sample body", async () => {
+test("mode and draft are memory only; export is four bounded latest rounds and never contains draft or sample body", async () => {
   await page.viewport(402, 874);
   const storage = vi.spyOn(Storage.prototype, "setItem");
   const { view } = await mount();
@@ -321,6 +565,7 @@ test("mode and draft are memory only; export is three bounded latest rounds and 
   await select("prefixed");
   expect(input().value).toBe("");
   await select("native");
+  await select("content");
   await select("current");
   await frames();
   await view.getByRole("button", { name: getMessages().viewportDebug.copy, exact: true }).click();
@@ -329,10 +574,15 @@ test("mode and draft are memory only; export is three bounded latest rounds and 
   expect(raw).not.toContain("Fixed local sample");
   const report = JSON.parse(raw);
   expect(report.format).toBe("pi-reach-keyboard-diagnostics/1");
-  expect(report.rounds.map((round: { mode: string }) => round.mode)).toEqual(["current", "prefixed", "native"]);
+  expect(report.rounds.map((round: { mode: string }) => round.mode)).toEqual(["current", "prefixed", "native", "content"]);
   for (const round of report.rounds) {
     expect(round.report.format).toBe("pi-reach-viewport-debug/1");
     expect(round.report.environment.mode).toBe(round.mode);
+    expect(round.report.environment.shellScope).toBe("outer-shell");
+    expect(round.report.environment.titleScope).toBe("outer-shell");
+    expect(round.report.environment.controllerScope).toBe(round.mode === "content" ? "content-viewport" : "outer-shell");
+    expect(round.report.frames.columns).toEqual([...VIEWPORT_FRAME_FIELDS]);
+    expect(Object.keys(round.report.environment).sort()).toEqual(["buildAsset", "documentLockBypassed", "pwaVersion", "userAgent", "devicePixelRatio", "screenWidth", "screenHeight", "standalone", "mode", "shellScope", "controllerScope", "titleScope"].sort());
     expect(round.report.frames.rows.length).toBeGreaterThan(0);
     expect(round.report.frames.rows.length).toBeLessThanOrEqual(1800);
     expect(round.report.marks.length).toBeLessThanOrEqual(512);
@@ -388,6 +638,7 @@ test("diagnostics mounting and all mode changes never open business DB, WebSocke
   await select("prefixed");
   await select("native");
   await select("current");
+  await select("content");
   await view.unmount();
   expect(open).not.toHaveBeenCalled();
   expect(websocket).not.toHaveBeenCalled();
@@ -408,17 +659,18 @@ test("mode controls remain native keyboard reachable without pointer stealing fo
   await view.unmount();
 });
 
-test("unmount cancels frame, focus/VV listeners, active closing and document state without touching debug preference", async () => {
+test.each(["current", "content"])("%s unmount cancels frame, focus/VV listeners, active closing and document state without touching debug preference", async value => {
   await page.viewport(402, 874);
   window.localStorage.setItem(VIEWPORT_DEBUG_STORAGE_KEY, "true");
   const record = vi.spyOn(ViewportFrameRecorder.prototype, "record");
   const { view, viewport } = await mount();
+  if (value === "content") await select(value);
   input().focus();
   viewport.change(470);
   input().blur();
   viewport.change(812);
   await frames();
-  const previous = shell();
+  const previous = controller();
   await view.unmount();
   const count = record.mock.calls.length;
   viewport.change(874);

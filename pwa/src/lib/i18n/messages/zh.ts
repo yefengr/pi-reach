@@ -221,7 +221,7 @@ export const zh: Messages = {
   },
   keyboardDiagnostics: {
     title: "键盘隔离诊断", modes: "实验模式",
-    current: "A 当前", prefixed: "B 预固定", native: "C 原生",
+    current: "A 当前", prefixed: "B 预固定", native: "C 原生", content: "D 内容区",
     ready: "可切换模式。", focus: "请先收起键盘。", controller: "等待补偿与收起交接结束。",
     viewport: "等待原始闭合视口恢复；无有效基准时请收起键盘后重新开始。",
     restart: "窗口尺寸已变化，请重新开始实验。", nativeWarning: "原生模式的输入区可能被键盘遮挡。",

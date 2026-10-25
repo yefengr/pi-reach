@@ -13,30 +13,46 @@ function geometry(): DiagnosticsGateInput {
 }
 
 export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: RefObject<HTMLDivElement | null>,
-  textRef: RefObject<HTMLPreElement | null>, reports: KeyboardDiagnosticsReports) {
+  controllerRef: RefObject<HTMLDivElement | null>, textRef: RefObject<HTMLPreElement | null>, reports: KeyboardDiagnosticsReports) {
   const gateRef = useRef<KeyboardDiagnosticsGate | null>(null);
   const closingRef = useRef(false);
   const [reason, setReason] = useState<DiagnosticsGateReason>("viewport");
   const check = useCallback((): DiagnosticsGateReason => {
-    const shell = shellRef.current;
+    const controller = controllerRef.current;
     const gate = gateRef.current;
-    return gate?.check({ ...geometry(), compensated: Boolean(shell?.hasAttribute("data-keyboard-viewport")),
-      closing: closingRef.current || Boolean(shell?.hasAttribute("data-keyboard-closing")) },
-    gate.baseline ? undefined : shell?.getBoundingClientRect().height) ?? "viewport";
-  }, [shellRef]);
+    return gate?.check({ ...geometry(), compensated: Boolean(controller?.hasAttribute("data-keyboard-viewport")),
+      closing: closingRef.current || Boolean(controller?.hasAttribute("data-keyboard-closing")) },
+    gate.baseline ? undefined : shellRef.current?.getBoundingClientRect().height) ?? "viewport";
+  }, [controllerRef, shellRef]);
 
   useEffect(() => {
     const shell = shellRef.current;
-    if (!shell) return;
+    const controller = controllerRef.current;
+    if (!shell || !controller) return;
+    // 几何按真实所有权组合；不改变 report/1 的列或共享测量器。
+    const pixels = (value: number) => Math.round(value * 10) / 10;
+    const eventSnapshot = () => {
+      const sample = measureViewportEvent(controller);
+      return shell === controller ? sample : { ...sample, shellHeight: pixels(shell.getBoundingClientRect().height) };
+    };
+    const frameSnapshot = () => {
+      const sample = measureViewportFrame(controller);
+      if (shell === controller) return sample;
+      const outer = shell.getBoundingClientRect();
+      const title = shell.querySelector(".pwa-title-bar");
+      return { ...sample, shellTop: pixels(outer.top), shellHeight: pixels(outer.height),
+        titleTop: title ? pixels(title.getBoundingClientRect().top) : null };
+    };
     closingRef.current = false;
     // 初始压缩只进入等待；由现有 refresh 在完整安全恢复后首次标定，不重学已建立基准。
-    gateRef.current = new KeyboardDiagnosticsGate({ ...geometry(), compensated: shell.hasAttribute("data-keyboard-viewport"),
-      closing: shell.hasAttribute("data-keyboard-closing") }, shell.getBoundingClientRect().height);
+    gateRef.current = new KeyboardDiagnosticsGate({ ...geometry(), compensated: controller.hasAttribute("data-keyboard-viewport"),
+      closing: controller.hasAttribute("data-keyboard-closing") }, shell.getBoundingClientRect().height);
     const recorder = new ViewportFrameRecorder(() => performance.now());
     let timeline = readViewportDiagnostics();
     enableViewportDiagnostics();
     const finish = reports.start(mode, () => ({ ...recorder.snapshot(), timeline,
-      environment: { ...collectViewportDebugEnvironment(version), mode } }));
+      environment: { ...collectViewportDebugEnvironment(version), mode,
+        shellScope: "outer-shell", controllerScope: mode === "content" ? "content-viewport" : "outer-shell", titleScope: "outer-shell" } }));
     let previousReason: DiagnosticsGateReason | null = null;
     const refresh = () => {
       const next = check();
@@ -44,10 +60,10 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
       previousReason = next;
       setReason(next);
     };
-    const mark = (kind: ViewportMarkKind) => { recorder.mark(kind, measureViewportEvent(shell)); refresh(); };
-    const stop = mode === "native" ? () => {} : observeKeyboardViewport(shell, state => {
+    const mark = (kind: ViewportMarkKind) => { recorder.mark(kind, eventSnapshot()); refresh(); };
+    const stop = mode === "native" ? () => {} : observeKeyboardViewport(controller, state => {
       closingRef.current = state.closing;
-      recorder.mark("keyboard-update", measureViewportEvent(shell), state);
+      recorder.mark("keyboard-update", eventSnapshot(), state);
       refresh();
     });
     const listeners: [EventTarget | null, string, ViewportMarkKind][] = [
@@ -62,7 +78,7 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
     });
     let frame = 0;
     const tick = () => {
-      const sample = recorder.record(measureViewportFrame(shell));
+      const sample = recorder.record(frameSnapshot());
       timeline = readViewportDiagnostics();
       if (textRef.current) textRef.current.textContent = `${mode} ${formatViewportDebugLines(sample).join(" | ")}`;
       refresh();
@@ -77,6 +93,6 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
       disableViewportDiagnostics();
       gateRef.current = null;
     };
-  }, [check, mode, reports, shellRef, textRef]);
+  }, [check, controllerRef, mode, reports, shellRef, textRef]);
   return { reason, check };
 }

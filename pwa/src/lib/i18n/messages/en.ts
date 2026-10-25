@@ -219,7 +219,7 @@ export const en = {
   },
   keyboardDiagnostics: {
     title: "Keyboard diagnostics", modes: "Experiment mode",
-    current: "A current", prefixed: "B pre-fixed", native: "C native",
+    current: "A current", prefixed: "B pre-fixed", native: "C native", content: "D content",
     ready: "Ready to switch.", focus: "Dismiss the keyboard first.", controller: "Wait for compensation to finish.",
     viewport: "Waiting for the original closed viewport. If unavailable, restart with the keyboard closed.",
     restart: "Window size changed. Restart this experiment.",
