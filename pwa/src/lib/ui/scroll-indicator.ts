@@ -4,8 +4,8 @@ import { useEffect } from "react";
 export const SCROLLING_ATTRIBUTE = "data-scrolling";
 /** 根元素上的开关：脚本就绪后才隐藏静止滚动条，脚本失败时滚动条保持可见。 */
 export const SCROLL_HINTS_ATTRIBUTE = "data-scroll-hints";
-/** 停止滚动到隐藏的延迟；需覆盖惯性滚动与连续滚动之间的间隔。 */
-export const SCROLL_HIDE_DELAY_MS = 800;
+/** 停止滚动到隐藏的延迟；覆盖惯性滚动与连续滚动，并按用户要求延长到 2 秒。 */
+export const SCROLL_HIDE_DELAY_MS = 2000;
 
 /**
  * 统一滚动条显隐：`scroll` 不冒泡，但捕获阶段能拿到任意滚动容器的事件，

@@ -1616,6 +1616,19 @@ test("running compaction row follows the last record", async () => {
   } finally { await screen.unmount(); }
 });
 
+test("holds the scrollbar while earlier records load and releases it afterwards", async () => {
+  const loading = await renderMessageList([eventItem(assistantEvent)], { hasEarlier: true, loadingEarlier: true, onLoadEarlier: () => {} });
+  try {
+    // 加载更早记录会改变内容高度，滚动条长度瞬变；期间抑制显示，避免看到滑块突然变短。
+    expect(document.querySelector(".pwa-message-list")!.hasAttribute("data-scroll-hold")).toBe(true);
+  } finally { await loading.unmount(); }
+
+  const idle = await renderMessageList([eventItem(assistantEvent)], { hasEarlier: true, loadingEarlier: false, onLoadEarlier: () => {} });
+  try {
+    expect(document.querySelector(".pwa-message-list")!.hasAttribute("data-scroll-hold")).toBe(false);
+  } finally { await idle.unmount(); }
+});
+
 test("shows the delayed earlier-records loader with the small status spinner beside 13px text", async () => {
   const screen = await renderMessageList([eventItem(assistantEvent)], { hasEarlier: true, loadingEarlier: true, onLoadEarlier: () => {} });
   try {

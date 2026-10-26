@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "vitest";
+import { useState } from "react";
 import { renderPwa } from "@/test/browser/render";
 import { SCROLL_HIDE_DELAY_MS, SCROLL_HINTS_ATTRIBUTE, SCROLLING_ATTRIBUTE, useScrollIndicator } from "./scroll-indicator";
 
@@ -37,6 +38,7 @@ const containerSelectors = [
 const hiddenColor = "rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)";
 const scroller = (name: string) => document.querySelector<HTMLElement>(`[data-scroller="${name}"]`)!;
 const scrollbarColor = (name: string) => getComputedStyle(scroller(name)).scrollbarColor;
+const visibleColor = () => `${controlLineColor()} rgba(0, 0, 0, 0)`;
 
 /** 从主题 token 取期望值，避免在测试里重复维护浅/深色值。 */
 function controlLineColor() {
@@ -50,12 +52,19 @@ function controlLineColor() {
 
 afterEach(() => document.documentElement.removeAttribute("data-mantine-color-scheme"));
 
+test("scroll areas stay visible when the indicator is not mounted", async () => {
+  await renderPwa(<div className="pwa-markdown-table" data-scroller="plain" />);
+  await expect.poll(() => document.documentElement.hasAttribute(SCROLL_HINTS_ATTRIBUTE)).toBe(false);
+  expect(getComputedStyle(scroller("plain")).scrollbarWidth).toBe("thin");
+  await expect.poll(() => scrollbarColor("plain")).toBe(visibleColor());
+});
+
 test.each(["light", "dark"])("idle scroll areas keep thin, hidden bars in %s", async theme => {
   document.documentElement.setAttribute("data-mantine-color-scheme", theme);
   await renderPwa(<Scrollers />);
   for (const name of ["table", "other"]) {
     expect(getComputedStyle(scroller(name)).scrollbarWidth).toBe("thin");
-    expect(scrollbarColor(name)).toBe(hiddenColor);
+    await expect.poll(() => scrollbarColor(name)).toBe(hiddenColor);
   }
 });
 
@@ -73,8 +82,8 @@ test.each(["light", "dark"])("every real scroll container inherits the unified r
     const target = selector === ".pwa-code-block pre"
       ? document.querySelector<HTMLElement>(".pwa-code-block pre")!
       : document.querySelector<HTMLElement>(`[data-container="${selector}"] > *`)!;
-    expect(getComputedStyle(target).scrollbarWidth, selector).toBe("thin");
-    expect(getComputedStyle(target).scrollbarColor, selector).toBe(hiddenColor);
+    expect(`${selector}:${getComputedStyle(target).scrollbarWidth}`).toBe(`${selector}:thin`);
+    await expect.poll(() => `${selector}:${getComputedStyle(target).scrollbarColor}`).toBe(`${selector}:${hiddenColor}`);
   }
 });
 
@@ -84,11 +93,11 @@ test("scrolling one container reveals only its bar, then hides it", async () => 
   table.scrollLeft = 40;
 
   await expect.poll(() => table.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
-  expect(scrollbarColor("table")).toBe(`${controlLineColor()} rgba(0, 0, 0, 0)`);
+  await expect.poll(() => scrollbarColor("table")).toBe(visibleColor());
   expect(scrollbarColor("other")).toBe(hiddenColor);
 
   await expect.poll(() => table.hasAttribute(SCROLLING_ATTRIBUTE), { timeout: SCROLL_HIDE_DELAY_MS + 1200 }).toBe(false);
-  expect(scrollbarColor("table")).toBe(hiddenColor);
+  await expect.poll(() => scrollbarColor("table")).toBe(hiddenColor);
 });
 
 test("continuous scrolling keeps the bar visible past the hide delay", async () => {
@@ -102,15 +111,34 @@ test("continuous scrolling keeps the bar visible past the hide delay", async () 
   expect(table.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
 });
 
+/** 加载更早记录期间（data-scroll-hold）即使滚动也不显示，加载结束后再显示新长度。 */
+function HeldScroller() {
+  useScrollIndicator();
+  const [hold, setHold] = useState(true);
+  return <>
+    <button type="button" onClick={() => setHold(false)}>release</button>
+    <div className="pwa-markdown-table" data-scroller="table" data-scroll-hold={hold ? "true" : undefined} style={{ width: 160, overflowX: "auto" }}>
+      <div style={{ width: 800, height: 24 }} />
+    </div>
+  </>;
+}
+
+test("loading earlier records holds the bar hidden until released", async () => {
+  await renderPwa(<HeldScroller />);
+  const table = scroller("table");
+  table.scrollLeft = 40;
+
+  await expect.poll(() => table.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+  expect(scrollbarColor("table")).toBe(hiddenColor);
+
+  document.querySelector<HTMLButtonElement>("button")!.click();
+  await expect.poll(() => table.hasAttribute("data-scroll-hold")).toBe(false);
+  await expect.poll(() => scrollbarColor("table")).toBe(visibleColor());
+});
+
 test("hiding is gated by the mount flag and cleaned up on unmount", async () => {
   const screen = await renderPwa(<Scrollers />);
   expect(document.documentElement.hasAttribute(SCROLL_HINTS_ATTRIBUTE)).toBe(true);
   await screen.unmount();
   expect(document.documentElement.hasAttribute(SCROLL_HINTS_ATTRIBUTE)).toBe(false);
-});
-
-test("scroll areas stay visible when the indicator is not mounted", async () => {
-  await renderPwa(<div className="pwa-markdown-table" data-scroller="plain" />);
-  expect(getComputedStyle(scroller("plain")).scrollbarWidth).toBe("thin");
-  expect(scrollbarColor("plain")).toBe(`${controlLineColor()} rgba(0, 0, 0, 0)`);
 });
