@@ -87,7 +87,34 @@ describe("pair command", () => {
   });
 });
 
+const UNSAFE_DEVICE_NAME = "\u001b]0;title\u0007pho\u200bne";
+const SAFE_DEVICE_NAME = "]0;titlephone";
+
+describe("devices command", () => {
+  test("strips control characters from paired device names", async () => {
+    const ownerId = Buffer.alloc(32, 7).toString("base64");
+    peers.push({ name: UNSAFE_DEVICE_NAME, remote_epk: ownerId, paired_at: "now" });
+    const { commands } = registerPair(dependencies());
+    const ctx = commandContext();
+
+    await commands.get("pi-reach devices")!("", ctx as unknown as ExtensionCommandContext);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(`[pi-reach] Paired devices:\n* ${ownerId.slice(0, 8)} - ${SAFE_DEVICE_NAME}`, "info");
+  });
+});
+
 describe("revoke command", () => {
+  test("strips control characters from the revoked device name", async () => {
+    const ownerId = Buffer.alloc(32, 7).toString("base64");
+    peers.push({ name: UNSAFE_DEVICE_NAME, remote_epk: ownerId, paired_at: "now" });
+    const { revokeHandler } = registerPair(dependencies());
+    const ctx = commandContext();
+
+    await revokeHandler(ownerId.slice(0, 8), ctx as unknown as ExtensionCommandContext);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(`[pi-reach] Revoked: ${SAFE_DEVICE_NAME}`, "info");
+  });
+
   test("closes the target before updating Relay ACL", async () => {
     const ownerId = Buffer.alloc(32, 7).toString("base64");
     peers.push({ name: "Owner B", remote_epk: ownerId, paired_at: "now" });

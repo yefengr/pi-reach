@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { PAIRING_INVITE_TTL_MS, PAIR_TTL_MAX_MS, PAIR_TTL_MIN_MS } from "@pi-reach/protocol/outer";
-import qrTerminal from "qrcode-terminal";
+import QRCode from "qrcode-terminal/vendor/QRCode/index.js";
+import QRErrorCorrectLevel from "qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js";
 
 export { PAIRING_INVITE_TTL_MS, PAIR_TTL_MAX_MS, PAIR_TTL_MIN_MS };
 export const PAIRING_CODE_LENGTH = 8;
@@ -135,12 +136,35 @@ export class QRSession {
 
 export const qrSession = new QRSession();
 
-export function renderQRAscii(code: string): string {
-  let out = "";
-  qrTerminal.generate(code, { small: true }, (qrcode) => { out = qrcode; });
-  return out;
-}
+// 二维码规范要求四周至少 4 个模块的浅色静区。
+export const QR_QUIET_ZONE_MODULES = 4;
+const QR_AUTO_VERSION = -1;
+// 显式使用 256 色立方体的纯黑前景与纯白背景，不随终端主题调色板反色。
+const QR_COLORS = "\x1b[38;5;16;48;5;231m";
+const ANSI_RESET = "\x1b[0m";
+// 每个字符格的上下两半各表示一个模块，按「上深 ×2 + 下深」取字符。
+const HALF_BLOCKS = [" ", "\u2584", "\u2580", "\u2588"] as const;
 
-export function displayQR(code: string): void {
-  process.stderr.write(`\nScan to pair:\n\n${renderQRAscii(code)}\n`);
+/**
+ * 渲染可在任意终端主题下扫描的二维码。8 位配对码在 Q 级纠错下仍是 21×21，
+ * 尺寸与 L 级相同，但能容忍更多拍摄损失。
+ */
+export function renderQRAscii(code: string): string {
+  const qr = new QRCode(QR_AUTO_VERSION, QRErrorCorrectLevel.Q);
+  qr.addData(code);
+  qr.make();
+  const size = qr.getModuleCount();
+  const span = size + QR_QUIET_ZONE_MODULES * 2;
+  const isDark = (row: number, col: number): boolean => {
+    const r = row - QR_QUIET_ZONE_MODULES;
+    const c = col - QR_QUIET_ZONE_MODULES;
+    return r >= 0 && c >= 0 && r < size && c < size && qr.isDark(r, c);
+  };
+  const lines: string[] = [];
+  for (let row = 0; row < span; row += 2) {
+    let line = "";
+    for (let col = 0; col < span; col++) line += HALF_BLOCKS[(isDark(row, col) ? 2 : 0) + (isDark(row + 1, col) ? 1 : 0)];
+    lines.push(`${QR_COLORS}${line}${ANSI_RESET}`);
+  }
+  return lines.join("\n");
 }

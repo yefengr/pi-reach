@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Loader, Modal, TextInput } from "@mantine/core";
 import { CircleAlert, Keyboard, ScanLine } from "lucide-react";
-import { cameraSupported, QrCamera, QrImageButton } from "@/components/pwa/qr-scanner";
+import { cameraSupported, QrCamera } from "@/components/pwa/qr-scanner";
 import { isPairingCameraDevice } from "@/lib/pwa/pairing-device";
 import { normalizePairCode } from "@/lib/pi-reach/pairing";
 import type { PairingErrorCode } from "@/lib/pwa/use-device-pairing";
 import { useI18n } from "@/lib/i18n";
 
 type PairingMode = "scan" | "code";
-type LocalNotice = "cameraUnavailable" | "noQrFound";
+type LocalNotice = "cameraUnavailable";
 
 type PairingDialogProps = {
   opened: boolean;
@@ -20,7 +20,7 @@ type PairingDialogProps = {
   focusOrigin?: HTMLElement | null;
   focusFallbackSelectors?: readonly string[];
   withinPortal?: boolean;
-  /** 展厅等隔离场景只允许输入码，不挂载摄像头或文件入口。 */
+  /** 展厅等隔离场景只允许输入码，不挂载摄像头。 */
   codeOnly?: boolean;
 };
 
@@ -42,7 +42,7 @@ function formatCodeInput(value: string): string {
 }
 
 /**
- * 配对弹窗（表单类 Modal，宽 480）：移动端默认扫码，桌面默认输入配对码，其余方式以文字按钮置于下方。
+ * 配对弹窗（表单类 Modal，宽 480）：移动端默认扫码，桌面默认输入配对码，两种方式通过下方文字按钮切换。
  * 输满 8 位有效字符自动提交；连接中输入与按钮暂不可用；失败原因显示在输入框下方并保留已输入内容。
  */
 export function PairingDialog({ opened, connecting, error, onSubmit, onClearError, onClose, focusOrigin = null, focusFallbackSelectors = [], withinPortal = true, codeOnly = false }: PairingDialogProps) {
@@ -81,7 +81,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
     onSubmit(raw);
   };
   const receiveScan = (raw: string) => {
-    // 扫描或上传得到的配对码回填到输入框，失败原因同样显示在输入框下方。
+    // 扫描得到的配对码回填到输入框，失败原因同样显示在输入框下方。
     setValue(formatCodeInput(raw).trim());
     setMode("code");
     submit(raw);
@@ -113,8 +113,12 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
     window.setTimeout(() => requestAnimationFrame(restore), FOCUS_RESTORE_DELAY_MS);
   };
 
-  const errorText = error ? p.errors[error] : notice === "noQrFound" ? p.noQrFound : null;
+  const errorText = error ? p.errors[error] : null;
   const scanning = !codeOnly && opened && mode === "scan" && !connecting;
+  // 摄像头不可用时输入码模式没有可切换的方式，整组不渲染以免留下空白间距。
+  const methodButton = codeOnly ? null : mode === "code"
+    ? cameraSupported() ? <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<ScanLine size={16} aria-hidden="true" />} disabled={connecting} onClick={() => { onClearError(); setNotice(null); setMode("scan"); }}>{p.scanQr}</Button> : null
+    : <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<Keyboard size={16} aria-hidden="true" />} disabled={connecting} onClick={() => setMode("code")}>{p.enterCode}</Button>;
 
   return <Modal
     ref={dialogRef}
@@ -145,7 +149,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
         error={errorText ? <span className="pwa-field-error"><CircleAlert size={16} aria-hidden="true" />{errorText}</span> : undefined}
         value={value}
         onChange={(event) => changeValue(event.target.value)}
-        placeholder="K7MP-4Q2D"
+        placeholder="K7MP4Q2D"
         autoCapitalize="characters"
         autoCorrect="off"
         autoComplete="one-time-code"
@@ -156,11 +160,6 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
       <Button type="submit" disabled={connecting || !value.trim()}>{p.submit}</Button>
     </form>}
     {connecting ? <p className="pwa-pairing-status" role="status"><Loader size={16} type="oval" color="var(--pwa-running)" aria-hidden="true" />{p.connecting}</p> : null}
-    {!codeOnly ? <div className="pwa-pairing-methods">
-      {mode === "code"
-        ? cameraSupported() ? <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<ScanLine size={16} aria-hidden="true" />} disabled={connecting} onClick={() => { onClearError(); setNotice(null); setMode("scan"); }}>{p.scanQr}</Button> : null
-        : <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<Keyboard size={16} aria-hidden="true" />} disabled={connecting} onClick={() => setMode("code")}>{p.enterCode}</Button>}
-      <QrImageButton disabled={connecting} onScan={receiveScan} onNotFound={() => { onClearError(); setMode("code"); setNotice("noQrFound"); }} />
-    </div> : null}
+    {methodButton ? <div className="pwa-pairing-methods">{methodButton}</div> : null}
   </Modal>;
 }

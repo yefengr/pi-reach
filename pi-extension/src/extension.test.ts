@@ -903,6 +903,35 @@ describe("Pi Reach endpoint extension", () => {
     });
   });
 
+  test("hides the pairing QR once its code is paired", async () => {
+    const pi = makePi();
+    (extension as ExtensionFactory)(pi);
+    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: SessionManager.inMemory(process.cwd()) });
+    await _connectForTest(ctx());
+    const relay = relays.at(-1)!;
+    const pairContext = ctx();
+    await pi.commands.get("pi-reach pair")!("", pairContext);
+
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "pair_request", id: "P-hide", code: "ABCD2345", device_name: "phone" }));
+
+    await vi.waitFor(() => expect(pairContext.ui.setWidget).toHaveBeenLastCalledWith("pi-reach-pair-code", undefined));
+    expect(pairContext.ui.notify).toHaveBeenCalledWith("[pi-reach] Paired: phone", "info");
+  });
+
+  test("stopping the endpoint hides a pending pairing QR", async () => {
+    const pi = makePi();
+    (extension as ExtensionFactory)(pi);
+    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: SessionManager.inMemory(process.cwd()) });
+    await _connectForTest(ctx());
+    const pairContext = ctx();
+    await pi.commands.get("pi-reach pair")!("", pairContext);
+
+    await pi.commands.get("pi-reach stop")!("", pairContext);
+
+    expect(pairContext.ui.setWidget).toHaveBeenLastCalledWith("pi-reach-pair-code", undefined);
+    expect(pairContext.ui.notify).not.toHaveBeenCalledWith(expect.stringContaining("Pairing code expired"), "info");
+  });
+
   test("rolls back and leaves the request retryable when Relay rejects the ACL update", async () => {
     const pi = makePi();
     (extension as ExtensionFactory)(pi);

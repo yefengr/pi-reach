@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, FileButton } from "@mantine/core";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
-import { ImageUp } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 function stopControls(controls: IScannerControls | null, stoppedControls: WeakSet<IScannerControls>) {
@@ -84,37 +82,4 @@ export function QrCamera({ onScan, onUnavailable }: QrCameraProps) {
     <p className="pwa-pairing-hint">{t.pairing.scanHint}</p>
     {unreadable ? <p className="pwa-pairing-error" role="alert">{t.pairing.unreadableQr}</p> : null}
   </section>;
-}
-
-type QrImageButtonProps = {
-  onScan: (value: string) => void;
-  onNotFound: () => void;
-  disabled?: boolean;
-};
-
-/** 上传二维码图片：解码成功交给 onScan，失败时 onNotFound；卸载后到达的结果忽略。 */
-export function QrImageButton({ onScan, onNotFound, disabled = false }: QrImageButtonProps) {
-  const { t } = useI18n();
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-  const scanImage = async (file: File | null) => {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    let text: string;
-    try {
-      text = (await new BrowserQRCodeReader().decodeFromImageUrl(url)).getText();
-    } catch {
-      if (mountedRef.current) onNotFound();
-      return;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-    if (mountedRef.current) onScan(text);
-  };
-  return <FileButton accept="image/*" inputProps={{ className: "pwa-file-input", hidden: true }} onChange={(file) => void scanImage(file)} disabled={disabled}>
-    {({ onClick }) => <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<ImageUp size={16} aria-hidden="true" />} onClick={onClick} disabled={disabled}>{t.pairing.uploadQr}</Button>}
-  </FileButton>;
 }

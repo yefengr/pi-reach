@@ -7,9 +7,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext, ExtensionFactory, SessionManager } from "@earendil-works/pi-coding-agent";
 import { canonicalizeEd25519PublicKey } from "./pairing/crypto.js";
+import { pairingDisplay } from "./pairing/display.js";
 import { qrSession } from "./pairing/qr.js";
 import { addPeer, conditionalRollbackPeer, getOrCreateEd25519Keypair, KeyringUnavailableError, PairedIdentityMissingError, listPeers, type PeerRecord } from "./pairing/storage.js";
-import { idSchema, type ClientFrame, type ServerFrame } from "./protocol/v2/index.js";
+import { idSchema, type ServerFrame } from "./protocol/v2/index.js";
 import { RelayClient, type HostConnectOptions } from "./transport/relay_client.js";
 import { type HostRouteIdentity } from "./transport/peer_channel.js";
 import { AttachmentRuntime } from "./runtime/attachment_binding.js";
@@ -379,7 +380,7 @@ function installRouteListener(relayClient: RelayClient): () => void {
     findKnownOwner: async (ownerId) => !!await findKnownOwner(ownerId),
     attachOwner,
     routeClientFrame,
-    handlePairRequest,
+    handlePairRequest: (relay, ownerId, frame) => pairingCoordinator.handle(relay, ownerId, frame),
   });
 }
 
@@ -415,11 +416,8 @@ const pairingCoordinator = new PairingCoordinator({
     harness: { name: "Pi coding agent", version: EXTENSION_VERSION },
     hostname: hostname(),
   }),
+  onPaired: (code, deviceName) => pairingDisplay.paired(code, deviceName),
 });
-
-function handlePairRequest(relayClient: RelayClient, ownerId: string, frame: Extract<ClientFrame, { type: "pair_request" }>): Promise<void> {
-  return pairingCoordinator.handle(relayClient, ownerId, frame);
-}
 
 function closeRelay(reason?: "peer_stop" | "session_replaced" | "shutdown"): void {
   files.invalidate();
@@ -427,6 +425,7 @@ function closeRelay(reason?: "peer_stop" | "session_replaced" | "shutdown"): voi
   attachmentRuntime.close();
   sessionNewBridge.clear("session replacement cancelled because the endpoint closed");
   qrSession.clear();
+  pairingDisplay.hide();
   replacedSessionId = null;
   if (reason) {
     for (const { channel, service } of activeOwners.values()) {

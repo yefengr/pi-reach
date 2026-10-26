@@ -6,7 +6,8 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { canonicalizeEd25519PublicKey, type Ed25519Keypair } from "./pairing/crypto.js";
-import { clampPairTtlMs, qrSession, renderQRAscii, PAIRING_INVITE_TTL_MS } from "./pairing/qr.js";
+import { displayDeviceName, pairingDisplay } from "./pairing/display.js";
+import { clampPairTtlMs, qrSession, PAIRING_INVITE_TTL_MS } from "./pairing/qr.js";
 import { listPeers, removePeer } from "./pairing/storage.js";
 import { isValidRelayUrl, isWebSocketScheme, resolveRelayUrl, saveConfig } from "./config.js";
 import type { InitialRelayResult } from "./runtime/relay_lifecycle.js";
@@ -15,7 +16,6 @@ export type { InitialRelayResult } from "./runtime/relay_lifecycle.js";
 
 type CommandUiContext = Pick<ExtensionContext, "ui">;
 type CommandStartContext = Pick<ExtensionContext, "ui" | "cwd">;
-const PAIR_WIDGET_KEY = "pi-reach-pair-code";
 
 export interface RemoteCommandDependencies {
   start(ctx: CommandStartContext): Promise<InitialRelayResult>;
@@ -64,16 +64,7 @@ async function pair(ctx: CommandStartContext, args: string, deps: RemoteCommandD
     notify(ctx, `[pi-reach] Pair requires a Relay connection; current state: ${deps.relayStatus()}.`, "warning");
     return;
   }
-  try {
-    ctx.ui.setWidget(PAIR_WIDGET_KEY, [
-      "Scan to pair:",
-      "",
-      renderQRAscii(invite.code),
-      "",
-      `Pairing code: ${invite.code}`,
-      `Expires at: ${new Date(invite.expiresAt).toLocaleTimeString()}`,
-    ]);
-  } catch { /* headless pairing still has a status message */ }
+  pairingDisplay.show(ctx.ui, invite);
   notify(ctx, `[pi-reach] Pairing code ready until ${new Date(invite.expiresAt).toLocaleTimeString()}.`);
 }
 
@@ -83,7 +74,7 @@ async function listDevices(ctx: CommandUiContext, deps: RemoteCommandDependencie
     notify(ctx, "[pi-reach] No paired devices.");
     return;
   }
-  notify(ctx, `[pi-reach] Paired devices:\n${peers.map((peer) => `* ${peer.remote_epk.slice(0, 8)} - ${peer.name}${deps.isOwnerActive(peer.remote_epk) ? " online" : ""}`).join("\n")}`);
+  notify(ctx, `[pi-reach] Paired devices:\n${peers.map((peer) => `* ${peer.remote_epk.slice(0, 8)} - ${displayDeviceName(peer.name)}${deps.isOwnerActive(peer.remote_epk) ? " online" : ""}`).join("\n")}`);
 }
 
 async function revoke(args: string, ctx: CommandUiContext, deps: RemoteCommandDependencies): Promise<void> {
@@ -103,7 +94,7 @@ async function revoke(args: string, ctx: CommandUiContext, deps: RemoteCommandDe
   try { ownerId = canonicalizeEd25519PublicKey(peer.remote_epk, "Owner public key"); } catch { /* retain cleanup for corrupt legacy records */ }
   deps.closeOwner(ownerId, "peer_stop");
   await deps.updateEndpoint();
-  notify(ctx, `[pi-reach] Revoked: ${peer.name}`);
+  notify(ctx, `[pi-reach] Revoked: ${displayDeviceName(peer.name)}`);
 }
 
 function status(ctx: CommandUiContext, deps: RemoteCommandDependencies): void {

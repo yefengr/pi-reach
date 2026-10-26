@@ -2,18 +2,6 @@ import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PairingDialog } from "./pairing-dialog";
-import { QrImageButton } from "./qr-scanner";
-
-test("renders the QR image upload as a text button with a hidden image-only file input", () => {
-  const html = renderToStaticMarkup(<PwaUiProvider><QrImageButton onScan={() => {}} onNotFound={() => {}} /></PwaUiProvider>);
-  expect(html).toMatch(/Upload QR image/);
-  expect(html).toMatch(/data-variant="transparent"/);
-  expect(html).toMatch(/type="file"/);
-  expect(html).toMatch(/hidden=""/);
-  expect(html).toMatch(/accept="image\/\*"/);
-  expect(html).not.toMatch(/capture=/);
-  expect(html).not.toMatch(/<video/);
-});
 
 test("renders the pairing dialog with the code form by default on desktop", () => {
   const html = renderToStaticMarkup(
@@ -25,7 +13,10 @@ test("renders the pairing dialog with the code form by default on desktop", () =
   expect(html).toMatch(/>Pair a computer</);
   expect(html).toMatch(/Pairing code/);
   expect(html).toMatch(/autoCapitalize="characters"/);
-  expect(html).toMatch(/placeholder="K7MP-4Q2D"/);
+  expect(html).toMatch(/placeholder="K7MP4Q2D"/);
   expect(html).toMatch(/\/pi-reach pair/);
   expect(html).not.toMatch(/<video/);
+  expect(html).not.toMatch(/type="file"/);
+  // 没有摄像头时只剩输入码，不渲染空的方式切换区。
+  expect(html).not.toMatch(/pwa-pairing-methods/);
 });
