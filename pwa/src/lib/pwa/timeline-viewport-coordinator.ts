@@ -24,6 +24,10 @@ export interface ViewportScheduler {
 export type ViewportState = Readonly<{ following: boolean; unread: number; paused: boolean; mode: ViewportMode; generation: number }>;
 export type ViewportTrace = ViewportState & { reason: ViewportReason; top: number; bottom: number; requested: number | null; actual: number };
 const EPSILON = 1;
+/** iOS 回弹或惯性收尾期间，前插后恢复的位置会被系统滚动线程覆盖回顶部；此窗口内无新输入的偏移按覆盖处理。 */
+const PREPEND_GUARD_MS = 1000;
+/** Latest 距离超过该屏数时先瞬时靠近，只平滑最后一屏，避免长距离平滑滚动连续多帧来不及绘制。 */
+const LATEST_SMOOTH_SCREENS = 2;
 
 /** 不引用 DOM：所有过程的退出、布局释放和后继推进都在这里决定。 */
 export class TimelineViewportCoordinator<C, A> {
@@ -49,6 +53,9 @@ export class TimelineViewportCoordinator<C, A> {
   private processing = false;
   private exiting = false;
   private pendingReasons = new Set<ViewportReason>();
+  /** 已请求更早记录、等待前插实际移动阅读位置。 */
+  private prependPending = false;
+  private prependGuard: { anchor: A; until: number } | null = null;
 
   constructor(private readonly scheduler: ViewportScheduler, private readonly changed: (state: ViewportState) => void,
     private trace?: (entry: ViewportTrace) => void, private tracing: () => boolean = () => true) {}
@@ -72,6 +79,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.lastTop = layout?.top() ?? 0;
     this.lastBottom = 0;
     this.tailCredit = 0;
+    this.clearPrepend();
     this.publish("bind");
   }
 
@@ -90,6 +98,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.unread.clear();
     this.ready = false;
     this.tailCredit = 0;
+    this.clearPrepend();
     this.lastTop = this.layout?.top() ?? 0;
     this.publish(reason);
   }
@@ -127,9 +136,32 @@ export class TimelineViewportCoordinator<C, A> {
     this.mode = geometry.animate ? "latest" : "follow";
     // 即时 Latest 没有后继动画帧，完成后必须能直接处理下一次状态几何。
     this.ready = !geometry.animate;
+    if (geometry.animate) this.approachLatest(layout, geometry);
     this.write(geometry.height, geometry.animate, geometry);
     this.record("latest", geometry, geometry.height);
     if (geometry.animate) this.schedule();
+  }
+
+  /** 视口高度由已测量的滚动范围推得，不额外读取布局；瞬时写入期间的同步 scroll 不能被当作用户回看。 */
+  private approachLatest(layout: ViewportLayout<C, A>, geometry: ViewportGeometry): void {
+    const viewport = geometry.height - geometry.bottom;
+    if (viewport <= 0 || geometry.bottom - geometry.top <= viewport * LATEST_SMOOTH_SCREENS) return;
+    const exiting = this.exiting;
+    this.exiting = true;
+    try { layout.scroll(geometry.bottom - viewport, false); }
+    finally { this.exiting = exiting; }
+  }
+
+  /** 请求更早记录：先按回看保存锚点，前插真正移动位置后再开启短期保护。 */
+  historyPrepend(): void {
+    this.userRead(true);
+    this.prependGuard = null;
+    this.prependPending = true;
+  }
+
+  /** 新的触摸、滚轮、按键或指针输入表示用户接管位置，前插保护随即失效。 */
+  engage(): void {
+    this.prependGuard = null;
   }
 
   details(reading: boolean): void {
@@ -203,6 +235,7 @@ export class TimelineViewportCoordinator<C, A> {
       }
       this.receipt = null;
     }
+    if (this.reassertPrepend(layout, current)) return;
     // MessageList 的 nearBottom 只描述物理底部；借过留白的有效目标可能远于 32px。
     if (this.tailCredit > 0 && this.following && !this.paused && !this.motion) {
       const geometry = layout.measure();
@@ -224,6 +257,24 @@ export class TimelineViewportCoordinator<C, A> {
     if (!nearBottom) { this.userRead(); return; }
     this.resumeFollowing("scroll");
     this.ready = true;
+  }
+
+  /** 保护期内无新输入却偏离前插锚点，视为系统覆盖了恢复结果：同步恢复，后续顶部判断读取的是恢复后的位置。 */
+  private reassertPrepend(layout: ViewportLayout<C, A>, current: number): boolean {
+    const guard = this.prependGuard;
+    if (!guard) return false;
+    if ((this.following && !this.paused) || this.scheduler.now() > guard.until || !this.restoreAnchor(layout, guard.anchor)) {
+      this.prependGuard = null;
+      return false;
+    }
+    if (Math.abs(layout.top() - current) <= EPSILON) return false;
+    this.anchor = guard.anchor;
+    return true;
+  }
+
+  private clearPrepend(): void {
+    this.prependPending = false;
+    this.prependGuard = null;
   }
 
   capturePosition(): ViewportPosition<A> | null {
@@ -367,7 +418,12 @@ export class TimelineViewportCoordinator<C, A> {
       }
     }
     if (!this.following || this.paused) {
+      const before = layout.top();
       if (this.anchor && !this.restoreAnchor(layout, this.anchor)) this.anchor = null;
+      else if (this.anchor && this.prependPending && Math.abs(layout.top() - before) > EPSILON) {
+        this.prependPending = false;
+        this.prependGuard = { anchor: this.anchor, until: this.scheduler.now() + PREPEND_GUARD_MS };
+      }
       this.anchor ??= layout.captureAnchor();
       this.lastTop = layout.top();
       if (this.trace && this.tracing()) this.record(reason, layout.measure(), null);

@@ -2,6 +2,8 @@ import { afterEach, expect, test } from "vitest";
 import { useState } from "react";
 import { renderPwa } from "@/test/browser/render";
 import { SCROLL_HIDE_DELAY_MS, SCROLL_HINTS_ATTRIBUTE, SCROLL_HOST_ATTRIBUTE, SCROLLING_ATTRIBUTE, useScrollIndicator } from "./scroll-indicator";
+// 与生产一致：时间线样式加载在全局样式之后，列表自身的 transition 声明会覆盖 [data-scroll-host]。
+import "@/components/pwa/timeline-reconnect.css";
 
 /** 两个可横滚容器：验证显隐只作用于被滚动的那一个。 */
 function Scrollers() {
@@ -172,4 +174,58 @@ test("hiding is gated by the mount flag and cleaned up on unmount", async () => 
   expect(document.documentElement.hasAttribute(SCROLL_HINTS_ATTRIBUTE)).toBe(true);
   await screen.unmount();
   expect(document.documentElement.hasAttribute(SCROLL_HINTS_ATTRIBUTE)).toBe(false);
+});
+
+/** 收集所有同源样式规则的选择器；嵌套的 @media 等分组规则一并展开。 */
+function styleSelectors(): string[] {
+  const selectors: string[] = [];
+  const visit = (rules: CSSRuleList) => {
+    for (const rule of rules) {
+      if (rule instanceof CSSStyleRule) selectors.push(rule.selectorText);
+      if ("cssRules" in rule && rule.cssRules) visit(rule.cssRules as CSSRuleList);
+    }
+  };
+  for (const sheet of document.styleSheets) visit(sheet.cssRules);
+  return selectors;
+}
+
+test("no style rule depends on a scrolling ancestor, so toggling only restyles the scrolled container", async () => {
+  await renderPwa(<IndicatorOnly />);
+  const selectors = styleSelectors().flatMap((selector) => selector.split(",")).map((part) => part.trim());
+  expect(selectors.some((part) => part.includes("[data-scrolling]"))).toBe(true);
+  // [data-scrolling] 之后再出现组合符即为后代依赖：长会话里滚动开始、停止都会让整棵消息子树重新匹配样式。
+  expect(selectors.filter((part) => /\[data-scrolling\][^\s>+~]*[\s>+~]/.test(part))).toEqual([]);
+});
+
+test("the message list keeps its fade transition and still fades its own bar", async () => {
+  await renderPwa(<>
+    <IndicatorOnly />
+    <div className="pwa-message-list" data-scroller="messages" style={{ flex: "none", height: 120, overflowY: "auto" }}>
+      <div style={{ height: 600 }} />
+    </div>
+  </>);
+  const list = scroller("messages");
+  list.scrollTop = 40;
+  await expect.poll(() => list.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+  expect(getComputedStyle(list).transitionProperty.split(", ").sort()).toEqual(["opacity", "scrollbar-color"]);
+  await expect.poll(() => scrollbarColor("messages")).toBe(visibleColor());
+});
+
+test("continuous scrolling writes the scrolling flag once", async () => {
+  await renderPwa(<Scrollers />);
+  const table = scroller("table");
+  const writes: string[] = [];
+  const observer = new MutationObserver((records) => {
+    for (const record of records) if (record.attributeName === SCROLLING_ATTRIBUTE) writes.push(record.attributeName);
+  });
+  observer.observe(table, { attributes: true });
+  try {
+    for (const left of [20, 40, 60]) {
+      table.scrollLeft = left;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+    await expect.poll(() => table.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+    observer.takeRecords().forEach((record) => { if (record.attributeName === SCROLLING_ATTRIBUTE) writes.push(record.attributeName); });
+    expect(writes).toHaveLength(1);
+  } finally { observer.disconnect(); }
 });

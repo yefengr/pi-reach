@@ -555,6 +555,8 @@ test("auto-loads earlier history near the top only after the reader leaves the l
     reply(frames, events(91, 170));
     await expect.poll(() => sequences().length).toBe(110);
 
+    // 用户主动滚回顶部伴随输入事件；没有输入的跳顶会被当作系统覆盖前插位置而恢复。
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
     list.scrollTop = 0;
     await expect.poll(() => syncs(frames).length).toBe(3);
     const failed = syncs(frames)[2]!;

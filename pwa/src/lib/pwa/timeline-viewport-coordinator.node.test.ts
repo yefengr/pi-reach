@@ -549,4 +549,89 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.starts).toBe(0);
     expect(f.writes.at(-1)).toBe(270);
   });
+
+  /** 读到第 50px 时请求更早记录，前插 400px 后锚点恢复到 450。 */
+  function prependedReader() {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(50);
+    f.core.historyPrepend();
+    f.shiftAnchor(400); f.setBottom(1400);
+    f.core.notify("commit");
+    return f;
+  }
+
+  test("a history prepend overridden back to the top without new input is restored again", () => {
+    const f = prependedReader();
+    expect(f.layout.top()).toBe(450);
+    f.setTop(0); f.core.scroll(false);
+    expect(f.layout.top()).toBe(450);
+    expect(f.core.state.following).toBe(false);
+    // 再次恢复产生的原生回执照常吸收，不被当作回看。
+    f.core.scroll(false);
+    f.setTop(0); f.core.scroll(false);
+    expect(f.layout.top()).toBe(450);
+  });
+
+  test("new input or an expired window hands the position back to the user", () => {
+    const engaged = prependedReader();
+    engaged.core.scroll(false);
+    engaged.core.engage();
+    engaged.setTop(0); engaged.core.scroll(false);
+    expect(engaged.layout.top()).toBe(0);
+
+    const expired = prependedReader();
+    expired.setNow(1001);
+    expired.setTop(0); expired.core.scroll(false);
+    expect(expired.layout.top()).toBe(0);
+  });
+
+  test("only a history prepend that actually moved the reader arms the guard", () => {
+    const unmoved = fixture();
+    unmoved.setBottom(1000); unmoved.setTop(50);
+    unmoved.core.historyPrepend();
+    unmoved.core.notify("commit");
+    unmoved.setTop(0); unmoved.core.scroll(false);
+    expect(unmoved.layout.top()).toBe(0);
+
+    const ordinary = fixture();
+    ordinary.setBottom(1000); ordinary.setTop(50);
+    ordinary.core.userRead();
+    ordinary.shiftAnchor(400); ordinary.setBottom(1400);
+    ordinary.core.notify("commit");
+    ordinary.setTop(0); ordinary.core.scroll(false);
+    expect(ordinary.layout.top()).toBe(0);
+  });
+
+  test("Latest resets the prepend guard and follows", () => {
+    const f = prependedReader();
+    f.core.latest();
+    expect(f.core.state.following).toBe(true);
+    f.setTop(0); f.core.scroll(false);
+    expect(f.layout.top()).toBe(0);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test("a long Latest jumps to one screen above the bottom before smoothing the rest", () => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(0);
+    f.core.userRead();
+    f.reenter(() => f.core.scroll(false));
+    f.core.latest();
+    // 假布局视口高 50：先瞬时到 950，再平滑到内容高度 1050；中途同步回执不能退出跟随。
+    expect(f.writes.slice(-2)).toEqual([950, 1050]);
+    expect(f.core.state).toMatchObject({ following: true, mode: "follow" });
+  });
+
+  test.each([
+    ["short distance", 920, true],
+    ["reduced motion", 0, false],
+  ] as const)("Latest over a %s scrolls in a single write", (_name, top, animate) => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(top);
+    if (!animate) f.reduce();
+    f.core.userRead();
+    const before = f.writes.length;
+    f.core.latest();
+    expect(f.writes.slice(before)).toEqual([1050]);
+  });
 });

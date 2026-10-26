@@ -6,6 +6,8 @@ type Events = {
   resize(): void;
   interrupt(): void;
   input(): void;
+  /** 任何新的触摸、滚轮、按键或指针输入；只表示用户可能接管位置，不判断方向。 */
+  engage(): void;
 };
 
 /** 只报告事件与差分观察目标；不作任何意图或过程交接决策。 */
@@ -19,11 +21,12 @@ export class TimelineViewportObservers {
     this.observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => events.resize());
     const geometry = (event: Event) => events.geometry(event instanceof CustomEvent && event.detail?.reason === "activity");
     const input = (event: Event) => { if (event.target instanceof HTMLTextAreaElement) events.input(); };
-    const wheel = (event: WheelEvent) => { if (event.deltaY < 0) events.interrupt(); };
-    const key = (event: KeyboardEvent) => { if (["ArrowUp", "PageUp", "Home"].includes(event.key)) events.interrupt(); };
-    const pointer = (event: PointerEvent) => { if (event.pointerType === "mouse" && event.target === list) events.interrupt(); };
+    const wheel = (event: WheelEvent) => { events.engage(); if (event.deltaY < 0) events.interrupt(); };
+    const key = (event: KeyboardEvent) => { events.engage(); if (["ArrowUp", "PageUp", "Home"].includes(event.key)) events.interrupt(); };
+    const pointer = (event: PointerEvent) => { events.engage(); if (event.pointerType === "mouse" && event.target === list) events.interrupt(); };
     let touch: { id: number; y: number } | null = null;
     const start = (event: TouchEvent) => {
+      events.engage();
       const first = event.touches[0];
       touch = event.touches.length === 1 ? { id: first.identifier, y: first.clientY } : null;
     };

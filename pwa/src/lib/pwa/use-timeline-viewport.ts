@@ -63,6 +63,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       resize: () => { if (valid()) core.notify("resize"); },
       interrupt: () => { if (valid()) core.interrupt(); },
       input: () => { if (valid()) core.input(); },
+      engage: () => { if (valid()) core.engage(); },
     });
   }, [core]);
 
@@ -107,7 +108,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   const followOwnSend = useCallback((capture: OwnSendCapture | null) => { bind(); core.followOwnSend(capture); }, [bind, core]);
   const reset = useCallback(() => { bind(); core.reset(); }, [bind, core]);
   const setReadingDetails = useCallback((reading: boolean) => { bind(); core.details(reading); }, [bind, core]);
-  const prepareHistoryPrepend = useCallback(() => { bind(); core.userRead(true); }, [bind, core]);
+  const prepareHistoryPrepend = useCallback(() => { bind(); core.historyPrepend(); }, [bind, core]);
   const captureSessionPosition = useCallback(() => { bind(); return core.capturePosition(); }, [bind, core]);
   const restoreSessionPosition = useCallback((position: TimelineSessionPosition | null) => { bind(); core.restorePosition(position); }, [bind, core]);
 
