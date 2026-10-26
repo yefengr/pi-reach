@@ -338,9 +338,6 @@
 @media (max-width: 767.98px) {
   .pwa-root .pwa-navigation-drawer,
   .pwa-root .pwa-navigation-drawer .pwa-navigation-scroll { touch-action: pan-y; }
-  .pwa-root .pwa-peer-menu-trigger {
-    opacity: 1;
-  }
 
   .pwa-root .pwa-peer-presence {
     gap: 4px;

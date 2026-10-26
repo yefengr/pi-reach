@@ -87,7 +87,7 @@ export function LongText({ text, label, variant = "code", toggleLabels }: LongTe
       // 思考正文与回复共用同一 Markdown 渲染；容器仍是 14px 次级文字，块级元素不放大。
       ? <div id={id} className={`pwa-text-plain${expanded ? " expanded" : ""}`}><MarkdownContent text={shown} /></div>
       : <pre id={id} className={`pwa-tool-code${expanded ? " expanded" : ""}`}>{shown}</pre>}
-    {long ? <Button variant="transparent" color="piReach" className="pwa-output-toggle" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded((value) => !value)}>{expanded ? toggleLabels?.showLess ?? t.timeline.showLess(label) : toggleLabels?.showFull ?? t.timeline.showFull(label)}</Button> : null}
+    {long ? <Button variant="transparent" className="pwa-output-toggle" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded((value) => !value)}>{expanded ? toggleLabels?.showLess ?? t.timeline.showLess(label) : toggleLabels?.showFull ?? t.timeline.showFull(label)}</Button> : null}
   </div>;
 }
 

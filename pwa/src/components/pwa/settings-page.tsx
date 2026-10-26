@@ -85,7 +85,7 @@ function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVers
     <div className="pwa-status-bar-shield" aria-hidden="true" />
     <div className="pwa-settings-inner">
       <header className="pwa-settings-header">
-        <Button className="pwa-settings-back" variant="transparent" color="piReach" type="button" onClick={onBack} aria-label={backLabel} title={backLabel} leftSection={<ArrowLeft size={20} aria-hidden="true" />}>
+        <Button className="pwa-settings-back" variant="transparent" type="button" onClick={onBack} aria-label={backLabel} title={backLabel} leftSection={<ArrowLeft size={20} aria-hidden="true" />}>
           <span className="pwa-settings-back-label">{backLabel}</span>
         </Button>
         <h1 id="pwa-settings-title" className="pwa-settings-title" ref={titleRef} tabIndex={-1}>{s.title}</h1>
@@ -147,7 +147,7 @@ function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVers
             <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
             <p className="pwa-layout-reset-note">{s.resetLayoutNote}</p>
           </div>
-          <Button variant="outline" color="red" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
+          <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-about-heading">

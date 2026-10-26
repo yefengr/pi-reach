@@ -176,7 +176,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | Toast 文字操作 | 高 36、圆角 8 | 高 44 | 左右 8 | 上下 4 |
 | 菜单行 | 细指针单行高 40，触控 44 | 高 44 | 左右 10 | 上下 `--pwa-menu-visual-inset`（细指针 2，触控 0） |
 
-按钮变体与语义一一对应：`filled` 是主操作，`default` 是次级，`transparent` 是文字按钮，`outline` 只用于危险入口（会弹出确认的操作），不作普通次级按钮。危险确认使用 `filled` 加 `pwa-danger-confirm`。颜色一律由 CSS token 决定，组件的 `color` prop 不参与取色。图标按钮只用默认的 `subtle` 与发送／停止的 `filled`。
+按钮变体与语义一一对应：`filled` 是主操作，`default` 是次级，`transparent` 是文字按钮，`outline` 只用于危险入口（会弹出确认的操作），不作普通次级按钮。危险确认使用 `filled` 加 `pwa-danger-confirm`。`Button` 与 `ActionIcon` 的颜色只由 CSS token 决定，不传 `color` prop（由 [`pwa-button-guard`](../pwa/src/app/pwa-button-guard.node.test.ts) 校验）；菜单项的危险色仍通过 `Menu.Item` 的 `color` 引用 `--pwa-error`。图标按钮只用默认的 `subtle` 与发送／停止的 `filled`。
 
 ### 品牌资产
 

@@ -155,8 +155,8 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
     {connecting ? <p className="pwa-pairing-status" role="status"><Loader size={16} type="oval" color="var(--pwa-running)" aria-hidden="true" />{p.connecting}</p> : null}
     {!codeOnly ? <div className="pwa-pairing-methods">
       {mode === "code"
-        ? cameraSupported() ? <Button className="pwa-pairing-method" variant="transparent" color="piReach" type="button" leftSection={<ScanLine size={16} aria-hidden="true" />} disabled={connecting} onClick={() => { onClearError(); setNotice(null); setMode("scan"); }}>{p.scanQr}</Button> : null
-        : <Button className="pwa-pairing-method" variant="transparent" color="piReach" type="button" leftSection={<Keyboard size={16} aria-hidden="true" />} disabled={connecting} onClick={() => setMode("code")}>{p.enterCode}</Button>}
+        ? cameraSupported() ? <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<ScanLine size={16} aria-hidden="true" />} disabled={connecting} onClick={() => { onClearError(); setNotice(null); setMode("scan"); }}>{p.scanQr}</Button> : null
+        : <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<Keyboard size={16} aria-hidden="true" />} disabled={connecting} onClick={() => setMode("code")}>{p.enterCode}</Button>}
       <QrImageButton disabled={connecting} onScan={receiveScan} onNotFound={() => { onClearError(); setMode("code"); setNotice("noQrFound"); }} />
     </div> : null}
   </Modal>;

@@ -56,6 +56,6 @@ export function ToolPreview({ value, onRead }: ToolPreviewProps) {
       </div>
     </div>
     {toolWasTruncated(value) ? <p className="pwa-tool-notice">{t.tools.truncatedByHost}</p> : null}
-    {onRead && showDetails ? <div className="pwa-tool-read-actions"><Button className="pwa-tool-details-button" variant="transparent" color="piReach" type="button" onClick={(event) => onRead(event.currentTarget)}>{t.tools.viewAll(lineCount > TOOL_INLINE_MAX_LINES ? lineCount : null)}</Button></div> : null}
+    {onRead && showDetails ? <div className="pwa-tool-read-actions"><Button className="pwa-tool-details-button" variant="transparent" type="button" onClick={(event) => onRead(event.currentTarget)}>{t.tools.viewAll(lineCount > TOOL_INLINE_MAX_LINES ? lineCount : null)}</Button></div> : null}
   </>;
 }

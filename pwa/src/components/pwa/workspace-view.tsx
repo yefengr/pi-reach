@@ -184,8 +184,8 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
 export function WorkspaceNavigationFooter({ onPair, onSettings, className = "pwa-sidebar-foot", autoFocusSettings = false }: WorkspaceNavigationFooterProps) {
   const { t } = useI18n();
   return <div className={className}>
-    <Button className="pwa-nav-pair" variant="transparent" color="piReach" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
-    <Button className="pwa-nav-settings" variant="transparent" color="piReach" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} leftSection={<Settings size={16} />}>{t.navigation.settings}</Button>
+    <Button className="pwa-nav-pair" variant="transparent" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
+    <Button className="pwa-nav-settings" variant="transparent" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} leftSection={<Settings size={16} />}>{t.navigation.settings}</Button>
   </div>;
 }
 

@@ -489,7 +489,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
                 />
               </Menu.Dropdown>
             </Menu>
-            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" color="piReach" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="submit" disabled={!isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
+            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" disabled={!isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
           </div>
         </div>
       </div>
@@ -524,7 +524,7 @@ export function ReadOnlyComposer({ notice, modelName, thinking }: ReadOnlyCompos
               <span className="pwa-composer-model-thinking" aria-hidden="true"> · {thinking}</span>
               <ChevronDown size={16} aria-hidden="true" />
             </UnstyledButton> : null}
-            <ActionIcon className="pwa-composer-send" variant="filled" color="piReach" type="button" disabled aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>
+            <ActionIcon className="pwa-composer-send" variant="filled" type="button" disabled aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>
           </div>
         </div>
       </div>

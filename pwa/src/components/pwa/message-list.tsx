@@ -128,7 +128,7 @@ function EarlierRecords({ loading, failed, offline, onLoad }: { loading: boolean
   const loaderVisible = useDelayedVisibility(loading);
   // 离线时重试无法生效，连接说明优先于失败状态。
   if (offline) return <p className="pwa-earlier">{t.timeline.earlierOffline}</p>;
-  if (failed && !loading) return <div className="pwa-earlier" role="status"><span>{t.timeline.loadEarlierFailed}</span><Button className="pwa-earlier-button" variant="transparent" color="piReach" size="compact-sm" type="button" onClick={onLoad} aria-label={t.timeline.retryEarlier}>{t.common.retry}</Button></div>;
+  if (failed && !loading) return <div className="pwa-earlier" role="status"><span>{t.timeline.loadEarlierFailed}</span><Button className="pwa-earlier-button" variant="transparent" size="compact-sm" type="button" onClick={onLoad} aria-label={t.timeline.retryEarlier}>{t.common.retry}</Button></div>;
   if (loading || loaderVisible) return <div className="pwa-earlier" aria-busy="true">
     <span className="pwa-sr-only" role="status">{t.timeline.loadingRecords}</span>
     {loaderVisible ? <span className="pwa-earlier-loading" aria-hidden="true"><LoaderCircle className="pwa-spin" size={16} />{t.timeline.loadingRecords}</span> : null}

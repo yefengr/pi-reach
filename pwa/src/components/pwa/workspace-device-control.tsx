@@ -172,7 +172,6 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     ref={triggerRef}
     className="pwa-manage-computers"
     variant="transparent"
-    color="piReach"
     type="button"
     onClick={() => setPanelOpened(true)}
     leftSection={<Computer size={16} />}

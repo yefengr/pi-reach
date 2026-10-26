@@ -46,11 +46,11 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
   const imageRadius = `calc(var(--pwa-radius-md) / ${transform.scale})`;
   return <>
     <div className="pwa-file-image-stage" data-swipe-ignore onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
-      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" color="piReach" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ borderRadius: imageRadius, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
+      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ borderRadius: imageRadius, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
     </div>
     <div className="pwa-file-zoom">
       <ActionIcon variant="subtle" aria-label={t.files.zoomOut} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale / 1.5))}><Minus size={20} /></ActionIcon>
-      <Button variant="transparent" color="piReach" leftSection={<RotateCcw size={16} />} onClick={() => updateTransform({ ...IMAGE_RESET })} aria-label={t.files.resetZoom}>{Math.round(transform.scale * 100)}%</Button>
+      <Button variant="transparent" leftSection={<RotateCcw size={16} />} onClick={() => updateTransform({ ...IMAGE_RESET })} aria-label={t.files.resetZoom}>{Math.round(transform.scale * 100)}%</Button>
       <ActionIcon variant="subtle" aria-label={t.files.zoomIn} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale * 1.5))}><Plus size={20} /></ActionIcon>
     </div>
   </>;
