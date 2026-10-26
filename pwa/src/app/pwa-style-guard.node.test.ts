@@ -40,6 +40,13 @@ const SPACING_PROPERTY = /^(?:(?:scroll-)?(?:margin|padding)(?:-(?:top|right|bot
 const SPACING_CUSTOM_PROPERTY = /^--pwa-(?!space-)[a-z0-9-]*(?:pad|gap|margin|inset)[a-z0-9-]*$/;
 const BORDER_WIDTH_PROPERTY = /^(?:border|outline)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-width)?$/;
 const HEX_COLOR = /#[0-9a-f]{3,8}\b/i;
+/** 派生色只在主题文件定义成 token（如 --pwa-running-line）。 */
+const COLOR_MIX = /color-mix\(/i;
+const MOTION_PROPERTY = /^(?:transition|animation)(?:-(?:duration|delay|timing-function))?$/;
+/** 非零时长字面量；时长只引用 --pwa-duration-*（DESIGN「动效时长」）。 */
+const DURATION_LITERAL = /(?<![\w.-])(\d*\.?\d+)m?s\b/g;
+/** 曲线只引用 --pwa-ease-*；linear 只允许用于无限循环。 */
+const EASING_LITERAL = /cubic-bezier\(|steps\(|\bease(?:-in|-out|-in-out)?\b/;
 
 type Declaration = { file: string; selector: string; property: string; value: string };
 type Exception = { file: string; selector: string; property: string; values: number[]; reason: string };
@@ -57,7 +64,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-field-error svg", property: "margin-top", values: [1], reason: OPTICAL },
   { file: "app/globals.css", selector: ".pwa-pairing-methods", property: "margin", values: [-8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-runtime-notice .pwa-runtime-notice-dismiss", property: "margin", values: [-4], reason: ALIGN },
-  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-toast-dismiss", property: "margin", values: [-6, -8], reason: ALIGN },
+  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-status-error-dismiss", property: "margin", values: [-6, -8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-app-shell[data-compact-height] .pwa-runtime-notice-description", property: "margin", values: [-1], reason: OPTICAL },
   { file: "app/workspace-shell.css", selector: ".pwa-root[data-sidebar-collapsed] .pwa-title-bar", property: "padding-left", values: [56], reason: "收起侧栏后标题区避让展开入口（8＋44＋4），另加左安全区" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-workspace-state", property: "padding", values: [260], reason: "主区空状态顶部 clamp(48px, 24dvh, 260px) 的上限" },
@@ -144,6 +151,23 @@ describe("CSS static guard", () => {
 
   test("hex colors appear only in the theme tokens", () => {
     const offenders = all.filter((entry) => entry.file !== THEME_FILE && HEX_COLOR.test(entry.value)).map(keyOf);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production derived colors are defined once as theme tokens", () => {
+    // 历史开发评审样式保留当时的对照取色，与圆角守卫同样不受限制。
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && COLOR_MIX.test(entry.value)).map(keyOf);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production motion references duration and easing tokens, with linear only for infinite loops", () => {
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && MOTION_PROPERTY.test(entry.property))
+      .filter((entry) => {
+        const bare = entry.value.replace(/var\([^)]*\)/g, "");
+        const literal = [...bare.matchAll(DURATION_LITERAL)].some((match) => Number(match[1]) !== 0);
+        const easing = EASING_LITERAL.test(bare) || (/\blinear\b/.test(bare) && !/\binfinite\b/.test(bare));
+        return literal || easing;
+      }).map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });
 

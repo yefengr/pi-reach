@@ -100,11 +100,11 @@
 .pwa-thinking-heading { display: flex; align-items: center; }
 /* 思考标题保持中性文字，运行状态只由左侧旋转图标表达。 */
 /* 槽位含 16px 图标和 8px 间隔；仅状态切换改变宽度，正文增量不会重播。 */
-.pwa-thinking-icon-slot { position: relative; flex: 0 0 auto; width: 0; height: 16px; opacity: 0; visibility: hidden; transition: width var(--pwa-duration-expand-in) var(--pwa-ease-standard), opacity var(--pwa-duration-expand-in) var(--pwa-ease-standard), visibility 0s var(--pwa-duration-expand-in); }
+.pwa-thinking-icon-slot { position: relative; flex: 0 0 auto; width: 0; height: 16px; opacity: 0; visibility: hidden; transition: width var(--pwa-duration-status-slot) var(--pwa-ease-standard), opacity var(--pwa-duration-status-slot) var(--pwa-ease-standard), visibility 0s var(--pwa-duration-status-slot); }
 .pwa-thinking-icon-slot > svg { position: absolute; top: 0; left: 0; color: var(--pwa-running); }
 /* 运行图标立即可见，不因标题位移制造 Working 的反馈空档。结束后停止旋转，再淡出静态图形。 */
-.pwa-thinking-live > .pwa-thinking-icon-slot { width: 24px; opacity: 1; visibility: visible; transition-duration: var(--pwa-duration-expand-in), 0s, 0s; transition-delay: 0s; }
-.pwa-thinking-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; transition: opacity var(--pwa-duration-expand-in) var(--pwa-ease-standard); }
+.pwa-thinking-live > .pwa-thinking-icon-slot { width: 24px; opacity: 1; visibility: visible; transition-duration: var(--pwa-duration-status-slot), 0s, 0s; transition-delay: 0s; }
+.pwa-thinking-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; transition: opacity var(--pwa-duration-status-slot) var(--pwa-ease-standard); }
 /* 新挂载的运行行也从左缘进入；不支持 starting-style 时保持直接显示的安全降级。 */
 @starting-style {
   .pwa-thinking-live > .pwa-thinking-icon-slot { width: 0; }

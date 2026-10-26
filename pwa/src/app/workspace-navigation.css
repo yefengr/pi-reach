@@ -213,7 +213,7 @@
 
 .pwa-root .pwa-presence-label.partial {
   color: var(--pwa-running);
-  border-color: color-mix(in srgb, var(--pwa-running) 42%, var(--pwa-line));
+  border-color: var(--pwa-running-line);
   background: var(--pwa-running-wash);
 }
 

@@ -1138,7 +1138,7 @@ test.each([
     expect(operationFeedback().classList.contains(configuration ? "pwa-toast-info" : "pwa-toast-error")).toBe(true);
     expect(operationFeedback().querySelector(configuration ? ".lucide-info" : ".lucide-circle-alert")).not.toBeNull();
     expect(operationFeedback().textContent).not.toMatch(/WebSocket|Relay|endpoint_id|550e8400/);
-    expect(document.querySelector(".pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-status-error")).toBeNull();
     expect(document.querySelectorAll(".pwa-operation-notification")).toHaveLength(1);
     if (action === "model_set") await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
     await screen.getByRole("button", { name: "Dismiss operation notification" }).click();
@@ -1237,7 +1237,7 @@ test.each(["session_compact", "model_set", "thinking_set"] as const)("shows the 
     expect(operationFeedback().textContent).not.toMatch(/Relay|WebSocket/);
     expect(operationFeedback().classList.contains("pwa-toast-error")).toBe(true);
     expect(operationFeedback().querySelector(".lucide-circle-alert")).not.toBeNull();
-    expect(document.querySelector(".pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-status-error")).toBeNull();
     const retry = await issueOperation(context, action);
     expect(operationFeedback()).toBeTruthy();
     replyOperation(context.channel, retry, true);
@@ -1254,7 +1254,7 @@ test("keeps a rejected new-session send only in its still-open confirmation", as
     await expect.element(context.screen.getByRole("dialog", { name: "Start a fresh session?" })).toBeVisible();
     await expect.element(context.screen.getByText("Could not start a fresh session. Check the connection and try again.")).toBeVisible();
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();
-    expect(document.querySelector(".pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-status-error")).toBeNull();
   } finally { await context.screen.unmount(); }
 });
 
@@ -1297,7 +1297,7 @@ test("registry failure replaces an action error and survives an unrelated succes
     await flushMicrotasks();
     await expect.element(message).toBeVisible();
     expect(document.querySelectorAll(".pwa-operation-notification")).toHaveLength(1);
-    expect(document.querySelector(".pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-status-error")).toBeNull();
     expect(operationFeedback().textContent).not.toContain(rawOperationError);
   } finally { put.mockRestore(); await context.screen.unmount(); }
 });
@@ -1850,7 +1850,7 @@ test.each([false, true])("delivery query late upgrade error stays local after ti
       await expect.element(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
       expect(document.body.textContent).not.toContain("Update the Pi extension to check status");
     } else await expect.element(screen.getByText("Update the Pi extension to check status", { exact: true })).toBeVisible();
-    expect(document.querySelector(".pwa-operation-notification, .pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-operation-notification, .pwa-status-error")).toBeNull();
     expect(document.body.textContent).not.toContain(safeProtocolFeedbackMessage("protocol_upgrade_required"));
     expect(channel.frames.filter(frame => frame.type === "session_hello")).toHaveLength(hellos);
     expect(channelHarness.channels).toHaveLength(1);
@@ -2811,7 +2811,7 @@ test("keeps Relay feedback aligned until the recovered live session is ready", a
     await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).toBeVisible();
     await expect.element(screen.getByLabelText("Reconnecting…")).toBeVisible();
     await expect.element(screen.getByLabelText("Connected")).not.toBeInTheDocument();
-    expect(document.querySelector(".pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-status-error")).toBeNull();
 
     relay.emitState("closed");
     vi.advanceTimersByTime(1_000);
@@ -3795,7 +3795,7 @@ test("keeps an invalid manual pairing code visible with its error inside the dia
     await expect.element(screen.getByText("Enter the 8-character pairing code from Pi.", { exact: true })).toBeVisible();
     // 失败说明留在弹窗内输入框下方，不使用 Toast。
     expect(document.querySelector(".pwa-operation-notification")).toBeNull();
-    expect(document.querySelector(".pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-status-error")).toBeNull();
     await expect.element(input).toHaveValue("K7MP");
     await expect.element(input).toHaveAttribute("aria-invalid", "true");
     await expect.element(screen.getByRole("dialog", { name: "Pair a computer" })).toBeVisible();
@@ -4157,7 +4157,7 @@ test("legacy capability failure disables attachments but keeps text and vision m
     await screen.getByPlaceholder("Message your agent…").fill("Legacy text works");
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     expect(channel.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ text: "Legacy text works" });
-    expect(document.querySelector(".pwa-toast")).toBeNull();
+    expect(document.querySelector(".pwa-status-error")).toBeNull();
   } finally { await screen.unmount(); }
 });
 

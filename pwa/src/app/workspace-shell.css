@@ -159,7 +159,7 @@
 .pwa-root .pwa-main-notices { flex: 0 0 auto; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
 /* 连接提示条、Toast 与操作通知与阅读列同宽，位于会话标题区下方。 */
 .pwa-root .pwa-main-notices > .pwa-connection-banner,
-.pwa-root .pwa-main-notices > .pwa-toast { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); max-width: none; }
+.pwa-root .pwa-main-notices > .pwa-status-error { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); max-width: none; }
 /* 工作区内的运行时提示条 Portal 到提示区槽位，提示区已避让安全区，这里只留 gutter；
    启动与故障态挂在应用壳顶层的备用槽位，仍按 globals.css 自行扣除左右安全区。 */
 .pwa-root .pwa-main-notices .pwa-runtime-notice { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); }
@@ -196,7 +196,7 @@
 
 /* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }
-.pwa-skeleton { display: block; height: 14px; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); animation: pwa-breathe 2s linear infinite; }
+.pwa-skeleton { display: block; height: 14px; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); animation: pwa-breathe var(--pwa-duration-breathe) linear infinite; }
 .pwa-root .pwa-skeleton-user { justify-self: end; width: 45%; height: 40px; border-radius: var(--pwa-radius-md); }
 .pwa-root .pwa-skeleton-short { width: 60%; }
 .pwa-root .pwa-nav-skeleton { display: grid; gap: 10px; padding: 8px; }

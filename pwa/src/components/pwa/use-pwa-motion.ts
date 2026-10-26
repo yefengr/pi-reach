@@ -1,21 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "@mantine/hooks";
 import type { MantineTransition } from "@mantine/core";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 
 /** Mantine 的过渡需要数字时长；订阅偏好变化，取全局媒体查询计算出的时长 token。 */
 export function usePwaMotionDuration(variable: `--pwa-duration-${string}`, fallback: number): number {
   useReducedMotion(); // 触发 React 重渲染，数值仍以 CSS 中的规则为准。
-  if (typeof document === "undefined") return fallback;
-  const style = getComputedStyle(document.documentElement);
-  let value = style.getPropertyValue(variable).trim();
-  // getPropertyValue(custom-property) 返回原始 var(...)，须沿 token 引用解析到最终时长。
-  for (let depth = 0; depth < 4; depth += 1) {
-    const reference = /^var\((--pwa-duration-[\w-]+)\)$/.exec(value);
-    if (!reference) break;
-    value = style.getPropertyValue(reference[1]).trim();
-  }
-  const duration = Number.parseFloat(value);
-  return value.endsWith("ms") && Number.isFinite(duration) ? duration : fallback;
+  return readPwaMotionDuration(variable, fallback);
 }
 
 /** WAAPI 的 easing 不接受 var()，读取标准曲线的计算值；读取失败回退到同值常量。 */

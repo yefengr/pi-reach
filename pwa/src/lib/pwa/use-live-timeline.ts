@@ -11,8 +11,10 @@ import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 
-const RECONNECT_TRANSITION_MS = 160;
+/** 消息区重连淡入沿用 --pwa-duration-fade（见 timeline-reconnect.css），读取失败时取同值回退。 */
+const RECONNECT_FADE_FALLBACK_MS = 120;
 
 export type TimelineReconnectPhase = "fade-out" | "hidden" | "fade-in" | null;
 
@@ -183,7 +185,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
         transitionTimerRef.current = setTimeout(() => {
           if (generation === contextGenerationRef.current) setReconnectPhase(null);
           transitionTimerRef.current = null;
-        }, RECONNECT_TRANSITION_MS);
+        }, readPwaMotionDuration("--pwa-duration-fade", RECONNECT_FADE_FALLBACK_MS));
       }, 0);
       return true;
     }

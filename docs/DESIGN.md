@@ -23,12 +23,13 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | `control-line` | `#878787` | `#848484` | 需靠轮廓识别的输入控件边界、内部滚动条 |
 | `accent` / `accent-hover` / `accent-active` | `#446396` / `#395687` / `#2E4A78` | `#98B8E6` / `#A6C3ED` / `#B4CEF4` | 主操作、文字按钮、链接、焦点与在线圆点 |
 | `on-accent` | `#FFFFFF` | `#142237` | 强调色上的文字和图标 |
-| `code-bg` / `code-ink` / `code-muted` | `#272727` / `#F2F2F2` / `#C2C2C2` | `#191919` / `#F2F2F2` / `#BEBEBE` | 深色代码底；其上的强调色与状态色固定用深色版本（`--pwa-code-accent` 等） |
+| `code-bg` / `code-ink` / `code-muted` | `#272727` / `#F2F2F2` / `#C2C2C2` | `#191919` / `#F2F2F2` / `#BEBEBE` | 深色代码底；其上的强调色固定用深色版本 `--pwa-code-accent`（扫码取景框） |
 | `code-surface` / `code-text` / `code-dim` | `panel` / `ink` / `secondary` | `code-bg` / `code-ink` / `code-muted` | Markdown 代码块与会话内工具预览共用的底色；文字和行号色也用于工具详情阅读器正文 |
 | `syntax-*` | 关键字 `#446396`、字符串 `#347953`、数字 `#90611F`、错误 `#AE463E`、注释 `#606060`、标点 `#4A4A4A`、函数 `#6A5590`、类型 `#2C6E75` | 关键字 `#98B8E6`、字符串 `#95CBA8`、数字 `#DFBA77`、错误 `#EFA39B`、注释 `#C2C2C2`、标点 `#D4D4D4`、函数 `#D2C3EE`、类型 `#8FD0D6` | Markdown 代码块语法高亮；每色在 `code-surface` 上 ≥ 4.5:1（测试校验） |
 | `scrim` / `shadow-color` | `#00000047` / `#0000001A` | `#0000008C` / `#0000004D` | 单层遮罩；层级辅助，不单独承担边界识别 |
+| `running-line` / `error-line` | `running`／`error` 与 `line` 按 40% 混合 | 同左，随主题取值 | 带状态色的装饰边框：连接提示条、局部错误条及其关闭按钮悬停、部分在线标签、启动与空会话状态图标块；只辅助识别，状态仍由文字或图标表达 |
 
-状态色按语义使用，不随组件各自取色：在线与新回复为 `accent` 圆点、文字用中性色；正在执行（运行、连接、重连）用琥珀色加动态图形；思考与工具调用的过程文字保持中性色，运行状态只由动态图标表达；成功结果（工具完成、附件就绪、成功通知图标）用绿色；需要关注的情形（附件暂停、插入未确认、主机截断输出、部分在线）用琥珀色加文字或图标；失败与危险用红色；空闲、离线、排队、已中断、预览缩短与一般说明用 `secondary`。已中断是用户主动停止，不用错误色。例外：标题栏的离线与无网络用中性色，持续断线的提示条可用红色；Toast 保持中性底色与正文，只给图标着色；正常完成时间用 `secondary`；diff 的增删行用完成色与错误色，与执行状态无关。每种状态另有轻底（`*-wash`），实心按钮上的文字用 `--pwa-on-status`（浅色白字、深色 `#1E1E1E`）。状态必须同时有文字或图标，不能只靠颜色。
+状态色按语义使用，不随组件各自取色：在线与新回复为 `accent` 圆点、文字用中性色；正在执行（运行、连接、重连）用琥珀色加动态图形；思考与工具调用的过程文字保持中性色，运行状态只由动态图标表达；成功结果（工具完成、附件就绪、成功通知图标）用绿色；需要关注的情形（附件暂停、插入未确认、主机截断输出、部分在线）用琥珀色加文字或图标；失败与危险用红色；空闲、离线、排队、已中断、预览缩短与一般说明用 `secondary`。已中断是用户主动停止，不用错误色。例外：标题栏的离线与无网络用中性色，持续断线的提示条可用红色；Toast 保持中性底色与正文，只给图标着色；会话内局部错误条用 `error-wash` 底、`error-line` 边框与错误色文字（见「反馈呈现」）；正常完成时间用 `secondary`；diff 的增删行用完成色与错误色，与执行状态无关。每种状态另有轻底（`*-wash`），实心按钮上的文字用 `--pwa-on-status`（浅色白字、深色 `#1E1E1E`）。状态必须同时有文字或图标，不能只靠颜色。
 
 | 状态 | 浅色文字／轻底 | 深色文字／轻底 |
 | --- | --- | --- |
@@ -56,7 +57,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | 焦点 | 所有控件 2px `accent` 轮廓，默认贴边绘制（偏移 0）；细指针菜单行的视觉底内缩时，轮廓同步内缩 2px，完整命中区不变。Mantine 自带焦点环关闭，由全局 `:focus-visible` 统一 |
 | 滚动条 | 会话消息区等主滚动区保持系统原生；侧栏、代码块、工具输出、宽表格、命令菜单等内部滚动区为 `scrollbar-width: thin`、`control-line` 颜色，不隐藏滚动条 |
 | 断点 | 主布局仍以 768px 区分桌面与移动（CSS 写作 `max-width: 767.98px`，Mantine `sm` = 48em）。组件另按自身容器和输入能力适配：窄桌面面板不等于宽布局，大视口也不代表只有鼠标 |
-| 动效 | 曲线只用标准 `cubic-bezier(0.2, 0, 0, 1)`、进入 `cubic-bezier(0, 0, 0, 1)`、退出 `cubic-bezier(0.3, 0, 1, 1)`：标准曲线用于按压、局部图标反馈及屏幕内移动或改变尺寸（侧栏收展、折叠展开、设置页滑入／滑出、Drawer 进出），进入／退出曲线用于 Modal、Popover、Menu、Toast 的出现与离开；时长以 `--pwa-duration-*` 定义（侧栏 220ms、设置页与 Drawer 200ms、新发送气泡进入 160ms、会话内容切换后的淡入 240ms 等）。Drawer（移动导航、移动电脑选择、工具与文本文件阅读器）与设置页转场统一为覆盖模型：200ms 标准曲线纯位移、进出同长，只有上层面板移动，下层视图保持原位，面板全程不透明、不叠加淡化，遮罩以同一时长与曲线同步淡化；图片阅读器使用下述局部图片几何与原位淡化。减少动态效果只跟随系统 `prefers-reduced-motion`，由全局规则把位移、缩放与尺寸过渡改为约 120ms 的颜色与透明度淡化，并将 `--pwa-motion-shift` 置 0；加载、运行中和骨架等循环只在页面前台且元素位于可见区域时运行；离屏、页面隐藏或系统减少动态效果时暂停，状态图标、文字与业务时钟保留，重入不重播历史状态 |
+| 动效 | 曲线只用标准 `cubic-bezier(0.2, 0, 0, 1)`、进入 `cubic-bezier(0, 0, 0, 1)`、退出 `cubic-bezier(0.3, 0, 1, 1)`：标准曲线用于按压、局部图标反馈及屏幕内移动或改变尺寸（侧栏收展、折叠展开、设置页滑入／滑出、Drawer 进出），进入／退出曲线用于 Modal、Popover、Menu、Toast 的出现与离开；时长以 `--pwa-duration-*` 定义，取值与用途见[「动效时长」](#动效时长)。无限循环动画（旋转、骨架呼吸）是唯一使用 `linear` 的例外。Drawer（移动导航、移动电脑选择、工具与文本文件阅读器）与设置页转场统一为覆盖模型：200ms 标准曲线纯位移、进出同长，只有上层面板移动，下层视图保持原位，面板全程不透明、不叠加淡化，遮罩以同一时长与曲线同步淡化；图片阅读器使用下述局部图片几何与原位淡化。减少动态效果只跟随系统 `prefers-reduced-motion`，由全局规则把位移、缩放与尺寸过渡改为约 120ms 的颜色与透明度淡化，并将 `--pwa-motion-shift` 置 0；加载、运行中和骨架等循环只在页面前台且元素位于可见区域时运行；离屏、页面隐藏或系统减少动态效果时暂停，状态图标、文字与业务时钟保留，重入不重播历史状态 |
 | 悬停与触屏 | `:hover` 反馈（`hover` 浅底、颜色变化）只写在 `@media (hover: hover)` 内，避免触屏点击后残留悬停态；需要按下反馈的行（如折叠头）另用 `:active`，松手即消失。取消 Mantine 默认悬停样式或保持选中态的覆盖规则不受此限，由 [`pwa-style-guard`](../pwa/src/app/pwa-style-guard.node.test.ts) 逐条登记。只在悬停时显示的入口，在 `(any-pointer: coarse), (hover: none)` 下常显，不按视口宽度判断。键盘 `:focus-visible` 不受影响 |
 | 图标 | Lucide，经 `LucideProvider` 统一线宽 1.8；尺寸只用 16（按钮内、元数据、状态行）、20（图标按钮与导航）、24（空状态等大尺寸）。例外：与 13px 状态文字同行的运行中旋转图标为 12（连接状态、导航行、输入区提示行），线宽 2.4，使实际线宽与 16 图标一致。同一含义只用一个图标：重试与刷新为 `RefreshCw`，恢复默认（重置布局、还原缩放）为 `RotateCcw`，操作菜单为 `Ellipsis`，只读信息为 `Info` |
 | Mantine | [`piReachTheme`](../pwa/src/lib/ui/pi-reach-theme.ts) 的字号、间距（2xs–2xl 依次为 4／8／12／16／24／32／48）、圆角与阴影引用上述 token；Mantine 圆角 `xs` 对应 4，`sm/md` 同为 8，`lg/xl` 同为 12，不额外增加档位。断点以 em 字面量对应 768px；`piReachCssVariablesResolver` 把 Mantine 语义颜色变量（body、text、dimmed、default、primary、disabled、overlay 等）映射到同名角色，不维护平行色值 |
@@ -178,9 +179,34 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 
 按钮变体与语义一一对应：`filled` 是主操作，`default` 是次级，`transparent` 是文字按钮，`outline` 只用于危险入口（会弹出确认的操作），不作普通次级按钮。危险确认使用 `filled` 加 `pwa-danger-confirm`。`Button` 与 `ActionIcon` 的颜色只由 CSS token 决定，不传 `color` prop（由 [`pwa-button-guard`](../pwa/src/app/pwa-button-guard.node.test.ts) 校验）；菜单项的危险色仍通过 `Menu.Item` 的 `color` 引用 `--pwa-error`。图标按钮只用默认的 `subtle` 与发送／停止的 `filled`。
 
+### 动效时长
+
+时长只在 [`pwa-theme.css`](../pwa/src/app/pwa-theme.css) 定义；正式 CSS 的 `transition` 与 `animation` 只引用 `--pwa-duration-*` 与 `--pwa-ease-*`，不写时长字面量与其他曲线，由 [`pwa-style-guard`](../pwa/src/app/pwa-style-guard.node.test.ts) 校验。脚本需要数字时长时读取同名 token，写死的数值只作读取失败的回退。
+
+| token | 时长 | 用途 |
+| --- | --- | --- |
+| `sidebar` | 220ms | 桌面侧栏收展，主区外边距、圆角与收展入口同步 |
+| `page` | 200ms | 设置页滑入／滑出与跟手拖动收尾 |
+| `drawer` | 200ms | 移动导航、电脑选择、工具与文件阅读器 Drawer 进出及其遮罩 |
+| `modal-in` / `modal-out` | 180 / 140ms | 居中 Modal 进出 |
+| `menu-in` / `menu-out` | 160 / 120ms | 附件、命令、模型与电脑动作菜单进出 |
+| `toast` | 180ms | Toast 进出 |
+| `collapse-in` / `collapse-out` | 180 / 140ms | 思考与工具组折叠展开、折叠箭头旋转 |
+| `status-slot` | 160ms | 思考行左侧旋转图标槽展开与收回，标题同步位移 |
+| `message-in` | 160ms | 新发送气泡进入、提交后输入区回缩与贴底 |
+| `content` | 240ms | 会话内容切换后的淡入、工具组轮播文字进入 |
+| `image-in` / `image-out` | 260 / 220ms | 图片阅读器的局部几何过渡 |
+| `press-in` / `press-out` | 90 / 120ms | `Button` 与 `ActionIcon` 内部绘制层按压缩放 |
+| `feedback` | 120ms | 复制成功等原位图标交叉淡化 |
+| `fade` | 120ms | 通用淡化（Popover、会话操作菜单、重连后消息区）；减少动态效果时其余过渡时长统一取此值 |
+| `spin` | 1.3s | 运行中、连接中等旋转图标转一圈，`linear` 无限循环 |
+| `breathe` | 2s | 骨架屏明暗呼吸一个周期，`linear` 无限循环 |
+
+`spin` 与 `breathe` 不参与减少动态效果的时长替换：循环在减少动态效果、页面隐藏或离屏时直接暂停。
+
 ### 品牌资产
 
-标识为「桥」：单色几何 π，一体化横梁、柔和外侧端点与延伸右腿，无角标。界面内以 [`BrandMark`](../pwa/src/components/pwa/brand-mark.tsx)（`currentColor`）绘制。favicon（`icon.svg`）为雾蓝 `#446396` 圆角底加白色标识；安装图标（`app-icon-192/512.png`，同时用于 `any` 与 `maskable`）和 `apple-touch-icon.png` 为满版雾蓝底，标识位于中央 80% 安全区内；`logo.svg` 为透明底雾蓝单色标识；界面内侧栏与启动页的 `BrandMark` 用 `ink`。这些文件由 `pwa/scripts/render-brand-icons.mjs` 生成。独立「Pi Reach」字标见 [`branding/wordmark.svg`](../branding/wordmark.svg)，复用相同的「桥」几何与系统字体；根 README 使用当前 `pwa/public/logo.svg`，历史黑底蓝点 Logo 不再作为现行入口。浏览器主题色跟随 `bg`（浅色 `#FFFFFF`、深色 `#1E1E1E`）。
+标识为「桥」：单色几何 π，一体化横梁、柔和外侧端点与延伸右腿，无角标。界面内以 [`BrandMark`](../pwa/src/components/pwa/brand-mark.tsx)（`currentColor`）绘制。favicon（`icon.svg`）为雾蓝 `#446396` 圆角底加白色标识；安装图标（`app-icon-192/512.png`，同时用于 `any` 与 `maskable`）和 `apple-touch-icon.png` 为满版雾蓝底，标识位于中央 80% 安全区内；`logo.svg` 为透明底雾蓝单色标识；界面内侧栏与启动页的 `BrandMark` 用 `ink`。这些文件由 `pwa/scripts/render-brand-icons.mjs` 生成。独立「Pi Reach」字标见 [`branding/wordmark.svg`](../branding/wordmark.svg)，复用相同的「桥」几何与系统字体；根 README 使用当前 `pwa/public/logo.svg`，历史黑底蓝点 Logo 不再作为现行入口。浏览器主题色跟随 `bg`（浅色 `#FFFFFF`、深色 `#1E1E1E`）；`index.html`、`manifest.webmanifest` 与 [`pwa-appearance`](../pwa/src/components/pwa/pwa-appearance.tsx) 中的同值字面量由 [`pwa-theme-contrast`](../pwa/src/app/pwa-theme-contrast.node.test.ts) 校验与 token 一致。
 
 ## 界面语言
 
@@ -311,7 +337,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | 一次性全局反馈（Toast） | 用于设置已保存、连接已恢复（仅在提示条出现过之后）、配对成功、有新版本，以及命令／设置等操作失败。`Notifications` 使用独立 store 与固定 ID：`PwaAppShell` 为入口级 `ServiceWorkerRegister` 和工作区共享单槽控制器，单独挂载组件时各自持有实例。新普通提示替换旧普通提示，当前为错误时普通提示排队；有新版本时显示带「刷新」按钮的高优先级 Toast，普通提示不会挤掉它，错误关闭后可恢复。桌面与移动均为顶部居中、会话标题区下方的最顶层浮层：`surface` 底、浮层阴影＋`line` 边框、圆角 8、最大宽 400，状态图标＋单行文字，可选一个文字操作（点击区高 44，悬停底色高 36）与关闭按钮。不带操作的成功／普通提示 4 秒后自动消失，悬停或聚焦时暂停计时；带操作、更新与错误提示不自动消失，可手动关闭。点击「刷新」执行现有 Service Worker 更新流程。不抢焦点、不拦截其他区域操作，以 `aria-live` 播报；进出为 8px 轻微位移加淡化，不拖拽/滚动关闭。 |
 | 附件发送 | 逐件进度与错误留在卡片，发送级失败、断线或租约变更留在附件区上方，不使用 Toast，不暴露本地路径、异常正文或内部 ID。 |
 | 文件获取 | 进度、取消、受控错误与重试留在对应文件行；不使用 Toast，不暴露源路径、异常正文或内部 ID。保存原件须另一次用户手势。 |
-| 配对、重命名、确认、历史加载和消息投递错误 | 保留在对应表单、会话或消息上下文说明影响与下一步，不用 Toast；现有局部 `PwaStatusToast` 继续承担会话内的局部错误。 |
+| 配对、重命名、确认、历史加载和消息投递错误 | 保留在对应表单、会话或消息上下文说明影响与下一步，不用 Toast；会话内的局部错误由 `PwaStatusError` 承担：位于主区提示区、与阅读列同宽，`error-wash` 底、`error-line` 边框、错误色文字，可关闭，不带图标，也不进入 Toast 队列。 |
 | PWA 安装与浏览器能力提示 | 使用工作区上方的持久 `Alert`，保留安装操作按钮和按需回焦，不进入全局通知队列，也不占据 Composer 下方；更新提示已由 Toast 承担。 |
 
 反馈状态所有权见[当前架构](ARCHITECTURE.md#pwa-反馈状态所有权)。用户文案说明影响和可执行下一步，不直接展示浏览器异常、协议 payload、内部字段或 UUID。
