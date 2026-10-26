@@ -12,7 +12,7 @@ catalog:
   typescript: 6.0.3
   vite: 8.2.4
   vitest: 4.1.11
-  zod: 4.4.3
+  zod: 4.6.6
 
 # 保留 PWA 已验证的编译器与 Node 类型基线，不在构建迁移中强升大版本。
 catalogs:
