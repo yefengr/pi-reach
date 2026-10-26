@@ -10,7 +10,7 @@ import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { BrandMark } from "@/components/pwa/brand-mark";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
-import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/small-spinner";
+import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 
 export { displayDevice } from "@/components/pwa/workspace-device-control";
 export { displayPi } from "@/components/pwa/session-title";

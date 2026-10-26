@@ -3,7 +3,7 @@
 .pwa-root .pwa-button.pwa-device-trigger { width: 100%; min-width: 0; min-height: 52px; height: auto; justify-content: stretch; padding: 6px 8px; border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
 
 /* 只配对一台电脑时收成无框的一行，悬停浅底；多台时保持卡片样式。 */
-.pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: 44px; padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
+.pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: var(--pwa-hit-target); padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
 @media (hover: hover) { .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact:hover:not(:disabled) { background: var(--pwa-hover); } }
 .pwa-root .pwa-device-trigger-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-secondary); }
 .pwa-root .pwa-device-trigger-dot.online { background: var(--pwa-accent); }
@@ -222,7 +222,7 @@
 }
 
 .pwa-root .pwa-peer-menu-trigger {
-  flex: 0 0 44px;
+  flex: 0 0 var(--pwa-hit-target);
   align-self: center;
   border: 0;
   background: transparent;
@@ -259,7 +259,7 @@
 }
 
 .pwa-root .pwa-peer-menu-panel button {
-  min-height: 44px;
+  min-height: var(--pwa-hit-target);
   padding-inline: var(--pwa-space-menu-pad);
   border-radius: var(--pwa-radius-md);
   font-size: var(--pwa-text-meta);

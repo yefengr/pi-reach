@@ -18,7 +18,7 @@ import { useAutoLoadEarlier } from "./use-auto-load-earlier";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
-import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/small-spinner";
+import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 
 const NO_NOTICES: readonly CompactionNotice[] = [];
 

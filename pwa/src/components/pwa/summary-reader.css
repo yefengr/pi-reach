@@ -1,5 +1,5 @@
 .pwa-root .pwa-summary-entry { padding: 0; }
-.pwa-ui-scope .pwa-button.pwa-summary-action { min-height: 44px; height: auto; max-width: 100%; padding: var(--pwa-space-xs); color: var(--pwa-secondary); font-size: var(--pwa-text-body); }
+.pwa-ui-scope .pwa-button.pwa-summary-action { min-height: var(--pwa-hit-target); height: auto; max-width: 100%; padding: var(--pwa-space-xs); color: var(--pwa-secondary); font-size: var(--pwa-text-body); }
 .pwa-root .pwa-summary-action .mantine-Button-label { min-width: 0; gap: var(--pwa-space-xs); }
 .pwa-root .pwa-summary-action svg { flex: none; }
 .pwa-root .pwa-summary-action .mantine-Button-label > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; }

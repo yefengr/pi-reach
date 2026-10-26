@@ -27,7 +27,7 @@ type DrawerSwipeCloseOptions = {
  * 松手后收尾到终点再调用关闭入口一次，并在该次更新提交后根据 opened 判断接受或被门禁拒绝（拒绝则回弹）。
  */
 export function useDrawerSwipeClose({ surface, opened, direction, requestClose, skipExit, resetSkipExit }: DrawerSwipeCloseOptions): { drag: SwipeDragHandlers; canSwipe: () => boolean } {
-  const duration = usePwaMotionDuration("--pwa-duration-drawer", 200);
+  const duration = usePwaMotionDuration("--pwa-duration-drawer");
   const latest = useRef({ surface, opened, requestClose, skipExit, resetSkipExit, duration });
   const dragRef = useRef<SwipeDrag | null>(null);
   const draggedSurfaceRef = useRef<HTMLElement | null>(null);

@@ -57,11 +57,11 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | 阴影 | 阅读背景和普通消息保持平静：侧栏、桌面主区卡片、消息与设置分区不用阴影。Composer 是主要操作表面，浅色用 `--pwa-shadow-composer`（`0 2px 12px var(--pwa-shadow-color)`）轻抬升；深色为 `none`，靠明度与边框区分。浮层（Popover、Menu、Toast）用 `--pwa-shadow-float` 加 1px `line` 边框；模态（Modal、Drawer）用 `--pwa-shadow-modal` 加 `scrim`，不再额外描边，由遮罩与明度提供分离；设置页仅在转场与跟手拖动期间同样使用，静止时不带阴影 |
 | 焦点 | 所有控件 2px `accent` 轮廓，默认贴边绘制（偏移 0）；细指针菜单行的视觉底内缩时，轮廓同步内缩 2px，完整命中区不变。Mantine 自带焦点环关闭，由全局 `:focus-visible` 统一 |
 | 滚动条 | 会话消息区等主滚动区保持系统原生；侧栏、代码块、工具输出、宽表格、命令菜单等内部滚动区为 `scrollbar-width: thin`、`control-line` 颜色，不隐藏滚动条 |
-| 断点 | 主布局仍以 768px 区分桌面与移动（CSS 写作 `max-width: 767.98px`，Mantine `sm` = 48em）。组件另按自身容器和输入能力适配：窄桌面面板不等于宽布局，大视口也不代表只有鼠标 |
+| 断点 | 主布局仍以 768px 区分桌面与移动：正式 CSS 写作 `max-width: 767.98px`，脚本只用 [`viewport-queries.ts`](../pwa/src/lib/ui/viewport-queries.ts) 的 `MOBILE_LAYOUT_QUERY`／`DESKTOP_LAYOUT_QUERY`，Mantine `sm` = 48em，三处由守卫对齐，不另设宽度断点。组件另按自身容器和输入能力适配：窄桌面面板不等于宽布局，大视口也不代表只有鼠标 |
 | 动效 | 曲线只用标准 `cubic-bezier(0.2, 0, 0, 1)`、进入 `cubic-bezier(0, 0, 0, 1)`、退出 `cubic-bezier(0.3, 0, 1, 1)`：标准曲线用于按压、局部图标反馈及屏幕内移动或改变尺寸（侧栏收展、折叠展开、设置页滑入／滑出、Drawer 进出），进入／退出曲线用于 Modal、Popover、Menu、Toast 的出现与离开；时长以 `--pwa-duration-*` 定义，取值与用途见[「动效时长」](#动效时长)。无限循环动画（旋转、骨架呼吸）是唯一使用 `linear` 的例外。Drawer（移动导航、移动电脑选择、工具与文本文件阅读器）与设置页转场统一为覆盖模型：200ms 标准曲线纯位移、进出同长，只有上层面板移动，下层视图保持原位，面板全程不透明、不叠加淡化，遮罩以同一时长与曲线同步淡化；图片阅读器使用下述局部图片几何与原位淡化。减少动态效果只跟随系统 `prefers-reduced-motion`，由全局规则把位移、缩放与尺寸过渡改为约 120ms 的颜色与透明度淡化，并将 `--pwa-motion-shift` 置 0；加载、运行中和骨架等循环只在页面前台且元素位于可见区域时运行；离屏、页面隐藏或系统减少动态效果时暂停，状态图标、文字与业务时钟保留，重入不重播历史状态 |
 | 悬停与触屏 | `:hover` 反馈（`hover` 浅底、颜色变化）只写在 `@media (hover: hover)` 内，避免触屏点击后残留悬停态；需要按下反馈的行（如折叠头）另用 `:active`，松手即消失。取消 Mantine 默认悬停样式或保持选中态的覆盖规则不受此限，由 [`pwa-style-guard`](../pwa/src/app/pwa-style-guard.node.test.ts) 逐条登记。只在悬停时显示的入口，在 `(any-pointer: coarse), (hover: none)` 下常显，不按视口宽度判断。键盘 `:focus-visible` 不受影响 |
-| 图标 | Lucide，经 `LucideProvider` 统一线宽 1.8；尺寸只用 16（按钮内、元数据、状态行）、20（图标按钮与导航）、24（空状态等大尺寸）。例外：与 13px 状态文字同行的运行中旋转图标为 12（连接状态、导航行、输入区提示行、更早记录加载提示），线宽 2.4，使实际线宽与 16 图标一致。同一含义只用一个图标：重试与刷新为 `RefreshCw`，恢复默认（重置布局、还原缩放）为 `RotateCcw`，操作菜单为 `Ellipsis`，只读信息为 `Info` |
-| Mantine | [`piReachTheme`](../pwa/src/lib/ui/pi-reach-theme.ts) 的字号、间距（2xs–2xl 依次为 4／8／12／16／24／32／48）、圆角与阴影引用上述 token；Mantine 圆角 `xs` 对应 4，`sm/md` 同为 8，`lg/xl` 同为 12，不额外增加档位。断点以 em 字面量对应 768px；`piReachCssVariablesResolver` 把 Mantine 语义颜色变量（body、text、dimmed、default、primary、disabled、overlay 等）映射到同名角色，不维护平行色值 |
+| 图标 | Lucide，经 `LucideProvider` 统一线宽 1.8；尺寸只用 16（按钮内、元数据、状态行）、20（图标按钮与导航）、24（空状态等大尺寸）。例外：与 13px 状态文字同行的运行中旋转图标为 12（连接状态、导航行、输入区提示行、更早记录加载提示），线宽 2.4，使实际线宽与 16 图标一致，全局线宽与 12 档取值为 [`icon-metrics.ts`](../pwa/src/lib/ui/icon-metrics.ts) 的具名常量；TSX 中 Lucide 图标的 `size` 只写 16／20／24 或该常量，`strokeWidth` 只引用这些常量，由守卫校验。同一含义只用一个图标：重试与刷新为 `RefreshCw`，恢复默认（重置布局、还原缩放）为 `RotateCcw`，操作菜单为 `Ellipsis`，只读信息为 `Info` |
+| Mantine | [`piReachTheme`](../pwa/src/lib/ui/pi-reach-theme.ts) 的字号、标题字重、间距（2xs–2xl 依次为 4／8／12／16／24／32／48）、圆角与阴影引用上述 token，`ActionIcon` 默认尺寸引用 `--pwa-hit-target`；Mantine 圆角 `xs` 对应 4，`sm/md` 同为 8，`lg/xl` 同为 12，不额外增加档位。断点以 em 字面量对应 768px；`piReachCssVariablesResolver` 把 Mantine 语义颜色变量（body、text、dimmed、default、primary、disabled、overlay 等）映射到同名角色，不维护平行色值。Mantine 必须写实际色值的 `white`／`black`（浅色 `bg`／`ink`）与雾蓝色阶（浅色主色第 6–8 档为 `accent`／`accent-hover`／`accent-active`，深色主色第 3 档为深色 `accent`）由守卫与 token 对齐 |
 
 ### 图片圆角
 
@@ -161,12 +161,13 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 - 守卫扫描间距属性、名称含 `pad`／`gap`／`margin`／`inset` 的自定义属性、十六进制色值与边框宽度，并拒绝不再需要的登记：登记值必须至少有一个超出通用档位与领域细档。
 - 圆角守卫固定通用 token 为 4／8／12px、Composer 为 16px；正式 CSS 的圆角只允许引用这些 token、使用贴边 `0`、圆形 `50%` 或 `inherit`，Composer token 仅用于输入卡片。历史开发评审样式不受该圆角用法限制。
 - 守卫另检查正式 CSS 的字号与字重（含 `font` 简写）只引用 `--pwa-text-*`、`--pwa-weight-*` 或 `inherit`，见「基础层」的字重规则。
-- 守卫只防止 CSS 字面量回退，不覆盖 TSX 中的 Mantine props 与内联样式，也不替代盒模型与行为测试。
+- 正式 CSS 不写 `44px`：点击区及与之同高的行、输入框引用 `--pwa-hit-target`（见[「按钮尺寸」](#按钮尺寸)）。
+- 脚本侧由 [`pwa-script-token-guard`](../pwa/src/app/pwa-script-token-guard.node.test.ts) 校验断点查询、Lucide 图标尺寸、动效回退时长与 Mantine 色值副本；其余 TSX 内联样式与 Mantine props 仍靠评审。守卫都只防止字面量回退，不替代盒模型与行为测试。
 - `top`／`right`／`bottom`／`left`／`inset` 等定位偏移属于几何对齐（如圆点角标、收展入口定位），不受间距档位约束，守卫也不扫描；定位偏移用来表达元素之间的距离时（如 Composer 菜单与输入卡片相距 8），仍按档位取值。
 
 ### 按钮尺寸
 
-点击区不低于 44×44；视觉底可以比点击区小，此时由 `::before` 按下表内缩绘制视觉底，焦点轮廓以同样的负偏移贴合视觉底，点击区本身不变：
+点击区不低于 44×44（`--pwa-hit-target`）；视觉底可以比点击区小，此时由 `::before` 按下表内缩绘制视觉底，焦点轮廓以同样的负偏移贴合视觉底，点击区本身不变：
 
 | 类型 | 视觉底 | 点击区 | 内边距 | 视觉底内缩 |
 | --- | --- | --- | --- | --- |
@@ -183,7 +184,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 
 ### 动效时长
 
-时长只在 [`pwa-theme.css`](../pwa/src/app/pwa-theme.css) 定义；正式 CSS 的 `transition` 与 `animation` 只引用 `--pwa-duration-*` 与 `--pwa-ease-*`，不写时长字面量与其他曲线，由 [`pwa-style-guard`](../pwa/src/app/pwa-style-guard.node.test.ts) 校验。脚本需要数字时长时读取同名 token，写死的数值只作读取失败的回退。
+时长只在 [`pwa-theme.css`](../pwa/src/app/pwa-theme.css) 定义；正式 CSS 的 `transition` 与 `animation` 只引用 `--pwa-duration-*` 与 `--pwa-ease-*`，不写时长字面量与其他曲线，由 [`pwa-style-guard`](../pwa/src/app/pwa-style-guard.node.test.ts) 校验。脚本需要数字时长时经 `usePwaMotionDuration`／`readPwaMotionDuration` 读取同名 token；读取失败（无 DOM、样式未加载）时的回退值只在 [`motion-duration.ts`](../pwa/src/lib/ui/motion-duration.ts) 的 `PWA_MOTION_FALLBACK_MS` 维护一份，由守卫与本表对齐，调用点不写数值。
 
 | token | 时长 | 用途 |
 | --- | --- | --- |
@@ -338,7 +339,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 - **按钮与输入**：主操作为实心 `accent`＋`on-accent`（每个视图最多一个），次级为 `surface`＋1px `line`（Mantine `default` 变体，不用 `light`），文字按钮为 `accent` 文字、悬停 `hover` 浅底，危险入口（会弹出确认的操作）为错误色轮廓，危险确认为实心错误色＋`on-status`，仅用于确认弹窗的最后一步；禁用为 `disabled-bg`＋`secondary`，不靠透明度。无框图标按钮透明底、44px 点击区域，悬停显示直径 36 的圆形 `hover` 浅底，聚焦为圆形轮廓；实心发送与停止按钮常显 36px 强调色圆。`Button` 与 `ActionIcon` 按下时仅缩放内部绘制层（`--pwa-press-button-scale` 为 0.98、`--pwa-press-icon-scale` 为 0.97），进入 90ms、松开 120ms，引用 `--pwa-duration-press-in/out` 与标准曲线；外层命中区、布局和焦点轮廓不动，移出、取消、禁用或卸载撤销按压，减少动态效果不保留缩放。表单输入单行高 44、`surface` 底、1px `control-line` 边框，标签在上（与输入框间隔 8）、说明在下，聚焦加贴边强调色轮廓且边框不变。各类按钮的视觉底、点击区与变体约定见[「按钮尺寸」](#按钮尺寸)。
 - **主区空状态与加载**：位于阅读列中部偏上，自上而下为 24px Lucide 图标（`secondary`）、标题（18px／600）、一行说明，最多一个操作，不用插画。间距只由各元素的上外边距负责：图标到标题 16、标题到说明 8，说明到命令块、操作或列表 16。启动失败页为最大宽 520 的卡片（`surface`、1px `line`、圆角 12），内边距桌面 32、移动上下 24 左右 16，状态图标块 48×48 内含 24 图标。未配对显示「还没有配对的电脑」、一句说明「在电脑上的 Pi 中运行下面的命令。」、单独一行的 `/pi-reach pair` 命令块（`panel` 底、高 44px、右侧复制按钮）与主操作「开始配对」；已配对无在线 Pi 显示「没有在线的 Pi」，有本地历史时附文字按钮「查看本地历史」；多个在线 Pi 且没有可沿用的选择时，主区标题为「有 N 个在线的 Pi」，下方以有边框的可点行列出（`surface` 底、1px `line`、圆角 8、最小高 56，运行中的排在前面，右侧箭头）；新会话无消息时显示「向 Pi 发送消息开始。」，下方一行 13px 小字为「目录 · 模型 · 思考级别」（缺项省略），桌面首次进入空会话时聚焦输入框，移动端不自动弹出键盘。等待快照或打开会话时使用 `hover` 色骨架屏：300ms 内完成不显示，出现后至少 500ms，约 2 秒的轻微明暗呼吸，减少动态效果时静止；打开会话时骨架行显示在消息列表内，列表保持挂载。
 - **反馈与错误**：按来源与生命周期选择连接 banner、Toast、局部错误或持久提示，具体规则见下文。低频状态使用 live region，提示不能遮挡 Composer 或主动夺取焦点。
-- **表单与叠层**：配对、重命名、清除数据等操作保留明确取消路径。叠层的上下顺序与取值见[「叠层」](#叠层)。遮罩始终只有一层：Modal 叠在带遮罩的 Drawer 上时下层遮罩隐去。居中 Modal 统一轻量进出：遮罩淡入、弹窗上移 8px 并淡入，进入 180ms（进入曲线）、退出 140ms（退出曲线），退出期间不接收指针，关闭开始时焦点即回到来源控件；减少动态效果时只淡化。宽度确认类 400、表单类（配对、重命名）480，移动端两侧各留 `max(16px, 左右安全区)`。底部操作区按钮间隔 8；对齐的操作组使用最小宽：确认弹窗 120、重命名弹窗 88，单独出现的页面按钮不加最小宽。移动端确认弹窗按钮纵向全宽，重命名弹窗两按钮等分。关闭顺序、焦点和 Escape 竞争按组件测试契约验证。
+- **表单与叠层**：配对、重命名、清除数据等操作保留明确取消路径。叠层的上下顺序与取值见[「叠层」](#叠层)。遮罩始终只有一层：Modal 叠在带遮罩的 Drawer 上时下层遮罩隐去。居中 Modal 统一轻量进出：遮罩淡入、弹窗上移 `--pwa-overlay-shift`（8px）并淡入，进入 180ms（进入曲线）、退出 140ms（退出曲线），退出期间不接收指针，关闭开始时焦点即回到来源控件；减少动态效果时只淡化。宽度确认类 400、表单类（配对、重命名）与快捷键 480，只由 Mantine `size` 决定：主题默认 480，确认弹窗单独指定 400，CSS 不写弹窗宽度；移动端两侧各留 `max(16px, 左右安全区)`。底部操作区按钮间隔 8；对齐的操作组使用最小宽：确认弹窗 120、重命名弹窗 88，单独出现的页面按钮不加最小宽。移动端确认弹窗按钮纵向全宽，重命名弹窗两按钮等分。关闭顺序、焦点和 Escape 竞争按组件测试契约验证。
 - **配对弹窗**：说明「在电脑上的 Pi 中运行 `/pi-reach pair`」，提供扫码、上传二维码图片、输入配对码三种方式：可扫码的移动设备默认扫码，其余默认显示配对码输入框，其他方式以文字按钮置于下方。摄像头只在切换到扫码时请求，不可用时说明原因并切回输入。配对码自动转大写，允许 `-` 与空格，输满 8 位有效字符自动提交；扫描或上传得到的码回填到输入框。连接中在弹窗内显示运行色「正在连接电脑…」，输入与按钮暂不可用。成功后关闭弹窗、进入生成配对码的 Pi 会话并以 Toast 提示「已与〈主机名〉配对」；失败原因按协议错误码映射，显示在输入框下方（错误图标＋说明、`aria-invalid`），保留已输入内容，焦点回到输入框，不使用 Toast。
 
 ### Mantine 复用边界

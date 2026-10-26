@@ -74,7 +74,7 @@ function useNavigationSettingsFocus(opened: boolean, requested: boolean, content
 }
 
 export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true, opened = true, onExitTransitionEnd, instant = false, restoreScrollTop, focusSettings = false, preview = false, gesture = null, portalTarget = ".pwa-root", ...navigation }: SessionSheetProps) {
-  const navigationDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
+  const navigationDuration = usePwaMotionDuration("--pwa-duration-drawer");
   const { t } = useI18n();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);

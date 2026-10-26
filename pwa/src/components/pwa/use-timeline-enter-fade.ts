@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { pwaStandardEasing, usePwaMotionDuration } from "./use-pwa-motion";
 
-const CONTENT_DURATION_MS = 240;
 /** 内容接管骨架时的起始可见度：骨架在同一帧卸载，从 0 起步会出现完全空白的一帧。 */
 const CONTENT_ENTER_OPACITY = 0.35;
 
@@ -11,7 +10,7 @@ const CONTENT_ENTER_OPACITY = 0.35;
  * 已有内容的增量更新、空会话里发出首条消息都不重播。时长取 --pwa-duration-content，减少动态效果时缩短为通用淡化。
  */
 export function useTimelineEnterFade(listRef: RefObject<HTMLElement | null>, empty: boolean, loading: boolean) {
-  const duration = usePwaMotionDuration("--pwa-duration-content", CONTENT_DURATION_MS);
+  const duration = usePwaMotionDuration("--pwa-duration-content");
   const awaitingRef = useRef(false);
   useLayoutEffect(() => {
     if (empty) {

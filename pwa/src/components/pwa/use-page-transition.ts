@@ -4,8 +4,6 @@ import { pwaMotionShiftDisabled, pwaStandardEasing, usePwaMotionDuration } from 
 
 export { usePwaMotionDuration } from "./use-pwa-motion";
 
-const PAGE_DURATION_MS = 200;
-
 type PageTransitionOptions = {
   /** 设置页是否为当前视图。 */
   open: boolean;
@@ -28,7 +26,7 @@ type PageTransitionOptions = {
  * 中途再次切换从设置层与遮罩的当前状态继续，不从头重播。减少动态效果时改为交叉淡化。
  */
 export function usePageTransition({ open, change, animate, rootRef, workspaceRef, settingsRef, scrimRef, onSettled }: PageTransitionOptions) {
-  const duration = usePwaMotionDuration("--pwa-duration-page", PAGE_DURATION_MS);
+  const duration = usePwaMotionDuration("--pwa-duration-page");
   const animationsRef = useRef<Animation[]>([]);
   // 跟手拖动中的暂停动画：路由变化时与 animationsRef 同样被接管，从当前位置续播。
   const dragRef = useRef<SwipeDrag | null>(null);

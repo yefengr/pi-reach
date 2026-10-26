@@ -15,9 +15,8 @@ import { useSwipe } from "@/components/pwa/use-swipe";
 import type { SettingsOrigin, SettingsRoute } from "@/lib/pwa/settings-route";
 import { useI18n } from "@/lib/i18n";
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
-import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, isKeyboardInput, shortcutLabel, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
-
-const MOBILE_QUERY = "(max-width: 767.98px)";
+import { hasKeyboardOverlay, isKeyboardInput, shortcutLabel, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
+import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 function focusable(element: HTMLElement | null): element is HTMLElement {
   return Boolean(element?.isConnected && !element.matches(":disabled") && !element.closest('[aria-hidden="true"], [inert]') && element.getClientRects().length > 0);
@@ -112,7 +111,7 @@ export function PwaWorkspaceLayout({
     presentFrameRef.current = requestAnimationFrame(() => {
       presentFrameRef.current = null;
       // 等待的一帧内已切到桌面布局则放弃；收起态实例保留，下次打开直接过渡。
-      if (window.matchMedia(MOBILE_QUERY).matches) setSheetOpen(true);
+      if (window.matchMedia(MOBILE_LAYOUT_QUERY).matches) setSheetOpen(true);
     });
   }, [openNavigation]);
   const navigationDrag = useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation });
@@ -143,7 +142,7 @@ export function PwaWorkspaceLayout({
     }
     setTransitioning(settingsRoute.animate);
     const origin = settingsRoute.origin;
-    if (!settingsRoute.open && origin?.kind === "navigation" && typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches) {
+    if (!settingsRoute.open && origin?.kind === "navigation" && typeof window !== "undefined" && window.matchMedia(MOBILE_LAYOUT_QUERY).matches) {
       // 返回导航：以展开态直接呈现（不播放打开动画），恢复滚动位置，焦点落在设置入口。
       setSheetInstant(true);
       setSheetRestore({ scrollTop: origin.scrollTop });
@@ -152,7 +151,7 @@ export function PwaWorkspaceLayout({
     }
   }
   useEffect(() => {
-    const viewport = window.matchMedia("(max-width: 767.98px)");
+    const viewport = window.matchMedia(MOBILE_LAYOUT_QUERY);
     const closeOnDesktop = (event: MediaQueryListEvent) => {
       if (!event.matches) setSheetOpen(false);
     };
@@ -225,7 +224,7 @@ export function PwaWorkspaceLayout({
   // 返回导航时焦点由导航内设置入口的 data-autofocus 接管。
   useLayoutEffect(() => {
     if (settingsRoute.change === 0 || settingsRoute.open || settingsMounted) return;
-    if (settingsRoute.origin?.kind === "navigation" && window.matchMedia(MOBILE_QUERY).matches) return;
+    if (settingsRoute.origin?.kind === "navigation" && window.matchMedia(MOBILE_LAYOUT_QUERY).matches) return;
     const active = document.activeElement;
     const lost = !active || active === document.body || !active.isConnected
       || Boolean(active.closest?.(".pwa-settings-view, .pwa-keyboard-dialog"));
@@ -280,7 +279,7 @@ export function PwaWorkspaceLayout({
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       const root = rootRef.current;
-      if (!root || transitioning || workspaceDrag.dragging || !window.matchMedia(DESKTOP_KEYBOARD_QUERY).matches
+      if (!root || transitioning || workspaceDrag.dragging || !window.matchMedia(DESKTOP_LAYOUT_QUERY).matches
         || isKeyboardInput(event.target) || hasKeyboardOverlay(root)) return;
       if (event.target instanceof Element && event.target !== document.body && !root.contains(event.target)) return;
       const action = workspaceShortcut(event);

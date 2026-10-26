@@ -61,6 +61,7 @@ import {
   removePwaDeviceData,
   type PwaDeviceRecord,
 } from "@/lib/pwa/db";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 const LEGACY_DEFAULT_RELAYS = ["https://relay-pi.yefengr.cn"];
 
@@ -1108,7 +1109,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     const sessionKey = scope ? `${scope.deviceId}\u0000${scope.endpointId}\u0000${scope.sessionId}` : null;
     if (!sessionKey || sessionKey === lastFocusedSessionRef.current || connection !== "online" || selectedHistory !== null || pendingAction?.action === "session_new") return;
     // 弹窗退出后才聚焦新会话；连接／会话变化时仍须重新核对身份和空态。
-    if (emptySessionFocusRef.current !== sessionKey || timelineItems.length !== 0 || window.matchMedia("(max-width: 767.98px)").matches) return;
+    if (emptySessionFocusRef.current !== sessionKey || timelineItems.length !== 0 || window.matchMedia(MOBILE_LAYOUT_QUERY).matches) return;
     if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
     const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input:not(:disabled)");
     if (!input) return;

@@ -235,6 +235,8 @@
   --pwa-press-icon-scale: 0.97;
   --pwa-press-button-scale: 0.98;
   --pwa-menu-offset: 4px;
+  /* 居中 Modal 与 Toast 出现时的位移距离，乘以 --pwa-motion-shift。 */
+  --pwa-overlay-shift: 8px;
   /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;
@@ -250,6 +252,8 @@
   --pwa-safe-top: env(safe-area-inset-top, 0px);
   /* 顶栏首行高度，不含安全区；会话标题区、导航、阅读器与移动设置页共用。 */
   --pwa-topbar-height: 48px;
+  /* 最小点击区（DESIGN「按钮尺寸」）；同高的行、输入框与操作槽共用，不随字号档位缩放。 */
+  --pwa-hit-target: 44px;
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
   /* 横屏刘海与圆角的左右安全区；只由实际贴住该屏幕边缘的布局层使用，同一边不重复叠加（见 DESIGN「安全区」）。 */
   --pwa-safe-left: env(safe-area-inset-left, 0px);

@@ -27,7 +27,6 @@ function KeyboardShortcutsDialogContent({ opened, onClose, returnFocus, enterSen
     opened={opened}
     onClose={onClose}
     title={t.shortcuts.title}
-    size={480}
     portalProps={{ target: ".pwa-root" }}
     zIndex="var(--pwa-z-modal-top)"
     returnFocus={returnFocus}

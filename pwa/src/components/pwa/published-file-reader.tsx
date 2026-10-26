@@ -15,6 +15,7 @@ import { publishedImageBounds, usePublishedImageMotion } from "./published-image
 import { useReaderHistory } from "./use-reader-history";
 import { ReaderShell } from "./reader-shell";
 import "./published-files.css";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened, instant, allowEnter, enterDuration, exitDuration }: {
   url: string; name: string; onRetry: () => void; canRetry: boolean; source?: HTMLButtonElement;
@@ -109,11 +110,11 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
   const state = files?.getState(file.publication_id);
   const name = state?.fileName ?? file.file_name;
   const headingId = useId();
-  const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
-  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
-  const fadeDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
-  const imageIn = usePwaMotionDuration("--pwa-duration-image-in", 260);
-  const imageOut = usePwaMotionDuration("--pwa-duration-image-out", 220);
+  const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
+  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer");
+  const fadeDuration = usePwaMotionDuration("--pwa-duration-fade");
+  const imageIn = usePwaMotionDuration("--pwa-duration-image-in");
+  const imageOut = usePwaMotionDuration("--pwa-duration-image-out");
   const [imageReader] = useState(() => state?.preview?.kind === "image");
   // 仅点击时已解码的来源可参与开场；迟到解码不补播放大。
   const [allowImageEnter] = useState(() => !!source && publishedImageBounds(source.querySelector("img")) !== null);

@@ -1,8 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, trackedDistance, type SwipeDirection, type SwipePoint, type SwipeState } from "./swipe-gesture";
 import { swipeBlocked, swipeEdgeExcluded, swipeStartExcluded } from "./swipe-guards";
-
-export const SWIPE_MOBILE_QUERY = "(max-width: 767.98px)";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 /**
  * 手势无法继续的原因：
@@ -43,7 +42,7 @@ export function useSwipe(element: HTMLElement | null, options: SwipeOptions): vo
   });
   useLayoutEffect(() => {
     if (!element) return;
-    const media = window.matchMedia(SWIPE_MOBILE_QUERY);
+    const media = window.matchMedia(MOBILE_LAYOUT_QUERY);
     let state: SwipeState = IDLE_SWIPE;
     let dragging = false;
     const unavailable = (): SwipeCancelReason | null => {

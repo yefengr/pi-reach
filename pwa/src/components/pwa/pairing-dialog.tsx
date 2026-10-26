@@ -24,6 +24,10 @@ type PairingDialogProps = {
   codeOnly?: boolean;
 };
 
+/** 排在 Mantine useFocusReturn 的 10ms 交还之后；焦点仍未落到弹窗外的可聚焦元素时，改用来源控件或回退目标，目标未挂载时逐帧重试。 */
+const FOCUS_RESTORE_DELAY_MS = 20;
+const FOCUS_RESTORE_FRAMES = 4;
+
 function canFocus(element: HTMLElement): boolean {
   return element !== document.body && element !== document.documentElement && element.isConnected && !element.matches(":disabled") && element.getClientRects().length > 0 && !element.closest('[aria-hidden="true"], [inert]');
 }
@@ -91,7 +95,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
   };
   const restoreFocusAfterExit = () => {
     const dialog = dialogRef.current;
-    let remainingFrames = 4;
+    let remainingFrames = FOCUS_RESTORE_FRAMES;
     const restore = () => {
       const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       if (activeElement && canFocus(activeElement) && !dialog?.contains(activeElement)) return;
@@ -106,7 +110,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
         requestAnimationFrame(restore);
       }
     };
-    window.setTimeout(() => requestAnimationFrame(restore), 20);
+    window.setTimeout(() => requestAnimationFrame(restore), FOCUS_RESTORE_DELAY_MS);
   };
 
   const errorText = error ? p.errors[error] : notice === "noQrFound" ? p.noQrFound : null;
@@ -118,7 +122,6 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
     onClose={onClose}
     title={<span id="pwa-pairing-title" className="pwa-pairing-title">{p.dialogTitle}</span>}
     aria-labelledby="pwa-pairing-title"
-    size={480}
     withinPortal={withinPortal}
     portalProps={{ target: ".pwa-root" }}
     zIndex="var(--pwa-z-modal)"

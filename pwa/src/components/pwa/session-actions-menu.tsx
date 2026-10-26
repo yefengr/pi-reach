@@ -41,7 +41,7 @@ function scheduleFocusReturn(
 export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
   const floatingMiddlewares = useFloatingSafeMiddlewares();
   const { t } = useI18n();
-  const menuDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
+  const menuDuration = usePwaMotionDuration("--pwa-duration-fade");
   const [opened, setOpened] = useState(false);
   const openedRef = useRef(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);

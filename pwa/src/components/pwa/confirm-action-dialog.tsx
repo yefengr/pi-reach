@@ -1,6 +1,7 @@
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { localizeFeedback } from "@/lib/pwa/feedback-messages";
 import { useI18n, type Messages } from "@/lib/i18n";
+import { PWA_CONFIRM_DIALOG_SIZE } from "@/lib/ui/pi-reach-theme";
 
 export type ConfirmActionDialogAction =
   | { kind: "new-session" }
@@ -79,7 +80,7 @@ export function ConfirmActionDialog({ action, pending, error, onConfirm, onClose
     aria-labelledby={titleId}
     aria-describedby={descriptionId}
     centered
-    size={400}
+    size={PWA_CONFIRM_DIALOG_SIZE}
     withinPortal={withinPortal}
     portalProps={{ target: ".pwa-root" }}
     zIndex="var(--pwa-z-modal-top)"

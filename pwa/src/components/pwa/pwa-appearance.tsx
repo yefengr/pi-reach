@@ -18,10 +18,12 @@ function toAppearance(colorScheme: MantineColorScheme): PwaAppearance {
 const LIGHT_THEME_COLOR = "#FFFFFF";
 const DARK_THEME_COLOR = "#1E1E1E";
 
+const DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
+
 function themeColorFor(appearance: PwaAppearance): string {
   if (appearance === "light") return LIGHT_THEME_COLOR;
   if (appearance === "dark") return DARK_THEME_COLOR;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? DARK_THEME_COLOR : LIGHT_THEME_COLOR;
+  return window.matchMedia(DARK_SCHEME_QUERY).matches ? DARK_THEME_COLOR : LIGHT_THEME_COLOR;
 }
 
 function syncDocumentAppearance(appearance: PwaAppearance) {
@@ -39,7 +41,7 @@ export function PwaAppearanceProvider({ children }: { children: ReactNode }) {
     syncDocumentAppearance(appearance);
     if (appearance !== "system") return;
 
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const media = window.matchMedia(DARK_SCHEME_QUERY);
     const onChange = () => syncDocumentAppearance("system");
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);

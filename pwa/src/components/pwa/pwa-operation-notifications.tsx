@@ -26,7 +26,7 @@ function withinToast(target: EventTarget | null): boolean {
  * 悬停或聚焦时暂停自动关闭计时。
  */
 export function PwaOperationNotifications({ controller, target }: PwaOperationNotificationsProps) {
-  const transitionDuration = usePwaMotionDuration("--pwa-duration-toast", 180);
+  const transitionDuration = usePwaMotionDuration("--pwa-duration-toast");
   useEffect(() => {
     controller.activate();
     return () => controller.dispose();

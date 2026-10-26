@@ -1,6 +1,5 @@
 import { useLocalStorage } from "@mantine/hooks";
 
-export const DESKTOP_KEYBOARD_QUERY = "(min-width: 768px)";
 export const ENTER_SENDS_STORAGE_KEY = "pi-reach-enter-sends";
 
 export function useEnterSends() {

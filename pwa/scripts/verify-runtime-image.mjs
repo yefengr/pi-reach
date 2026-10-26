@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 
+/** 镜像内置的默认 Relay（与 index.html、docker-entrypoint.d/40-runtime-config.sh 一致），未注入运行时配置时生效。 */
+const IMAGE_DEFAULT_RELAY = "https://pi-reach-relay.yefengr.cn";
 const args = process.argv.slice(2);
 assert(args.length >= 1 && args.length <= 3, "Expected image and optional production/staging Relay URLs");
-const [image, production = "https://pi-reach-relay.yefengr.cn", staging = "https://staging.relay.example.test/self-hosted/ws?tenant=public&region=test"] = args;
+const [image, production = IMAGE_DEFAULT_RELAY, staging = "https://staging.relay.example.test/self-hosted/ws?tenant=public&region=test"] = args;
 assert.notEqual(production, staging, "Dual configuration must use distinct Relay URLs");
 const containers = new Set();
 const evidence = [];
@@ -56,7 +58,7 @@ async function verifyServing(label, relay) {
     await sleep(300);
   }
   assert(base && Date.now() < deadline, `${label} container did not become ready`);
-  const expected = relay ?? "https://pi-reach-relay.yefengr.cn";
+  const expected = relay ?? IMAGE_DEFAULT_RELAY;
   for (const path of ["/app", "/app/settings"]) {
     const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5_000) });
     assert.equal(response.status, 200);

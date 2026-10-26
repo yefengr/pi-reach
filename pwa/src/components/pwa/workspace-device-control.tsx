@@ -120,9 +120,9 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
 }
 
 export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresence = {}, onPair, onSelectDevice, onRename, onRemove, variant = "desktop", purpose = "choose", onOverlayChange }: WorkspaceDeviceControlProps) {
-  const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
+  const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer");
   const floatingMiddlewares = useFloatingSafeMiddlewares();
-  const popoverDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
+  const popoverDuration = usePwaMotionDuration("--pwa-duration-fade");
   const { t } = useI18n();
   const [opened, setOpened] = useState(false);
   const openedRef = useRef(false);

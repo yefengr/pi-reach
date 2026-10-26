@@ -52,7 +52,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--pwa-hit-target);
   padding: 0 0 0 12px;
   border: 1px solid var(--pwa-line);
   border-radius: var(--pwa-radius-md);

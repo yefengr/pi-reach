@@ -9,8 +9,9 @@ import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import type { OperationHint } from "@/lib/pwa/operation-feedback";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
-import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/small-spinner";
-import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
+import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
+import { hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
+import { DESKTOP_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 type ComposerAttachmentMenuProps = {
   disabled: boolean;
@@ -329,7 +330,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
       return;
     }
     const nativeEvent = event.nativeEvent;
-    if (event.key !== "Enter" || !window.matchMedia(DESKTOP_KEYBOARD_QUERY).matches
+    if (event.key !== "Enter" || !window.matchMedia(DESKTOP_LAYOUT_QUERY).matches
       || composingRef.current || ignoreShortcutEvent(nativeEvent) || event.altKey || event.shiftKey
       || isWorking || commandMenuOpenRef.current || imageMenuOpenRef.current || modelMenuOpenRef.current
       || hasKeyboardOverlay()) return;

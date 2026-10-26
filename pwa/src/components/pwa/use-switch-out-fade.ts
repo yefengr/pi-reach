@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { pwaStandardEasing, usePwaMotionDuration } from "./use-pwa-motion";
 
-const DRAWER_DURATION_MS = 200;
-const FADE_DURATION_MS = 120;
 /** 切换在导航退出动画结束后执行；超过这段余量仍未切换，视为关闭被拒绝或手势回弹。 */
 const SWITCH_FALLBACK_MS = 1000;
 
@@ -12,8 +10,8 @@ const SWITCH_FALLBACK_MS = 1000;
  * 目标真正切换时由调用方在同一次提交中撤销淡出；没有切换（拒绝关闭、回弹、待确认）时恢复原状。
  */
 export function useSwitchOutFade(listRef: RefObject<HTMLElement | null>) {
-  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", DRAWER_DURATION_MS);
-  const fadeDuration = usePwaMotionDuration("--pwa-duration-fade", FADE_DURATION_MS);
+  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer");
+  const fadeDuration = usePwaMotionDuration("--pwa-duration-fade");
   const animationRef = useRef<Animation | null>(null);
   const timerRef = useRef<number | null>(null);
   const settle = useCallback(() => {

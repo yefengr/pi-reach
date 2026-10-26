@@ -28,19 +28,19 @@
 .pwa-delivery-status { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0 4px; margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 /* 明确失败沿用状态色语义；文字本身已说明原因，不靠颜色单独传递状态。 */
 .pwa-delivery-status[data-delivery="failed"] { color: var(--pwa-error); }
-.pwa-ui-scope .pwa-button.pwa-delivery-action { min-height: 44px; padding-inline: 8px; font-size: var(--pwa-text-meta); }
+.pwa-ui-scope .pwa-button.pwa-delivery-action { min-height: var(--pwa-hit-target); padding-inline: 8px; font-size: var(--pwa-text-meta); }
 
 /* 一轮结束后的完成时间，与运行期间的即时兜底提示。 */
 .pwa-turn-meta { margin: 4px 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-turn-status-error { color: var(--pwa-error); }
 /* 与思考／工具组头保持相同的字号、字重、高度和外边距；运行色与左侧图标一致，保持正体，不与思考标题共用斜体。 */
-.pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: 44px; margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
 /* 图标即时反馈，文字只淡入；不移动状态行、不延迟真实运行状态。 */
 .pwa-working-label { animation: pwa-working-label-in var(--pwa-duration-fade) var(--pwa-ease-enter); }
 @keyframes pwa-working-label-in { from { opacity: 0; } to { opacity: 1; } }
 /* 压缩终态是本地提示，不是会话记录；固定 44px 行高，与进行中行切换时不跳动。 */
-.pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: 44px; margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
+.pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-compaction-notice.is-error { color: var(--pwa-error); }
 
 /* Markdown：标题只分两级且不大于会话标题；链接常显下划线；代码块与工具输出同底。 */

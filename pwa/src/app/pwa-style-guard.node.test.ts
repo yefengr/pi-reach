@@ -52,6 +52,8 @@ const FONT_SIZE_VALUE = /^(?:inherit|var\(--pwa-text-[a-z]+\)|max\(16px, var\(--
 const FONT_WEIGHT_VALUE = /^(?:inherit|var\(--pwa-weight-(?:regular|strong)\))(?:\s*!important)?$/;
 /** font 简写去掉字重、字号、行高与字体族 token 后，只应剩下分隔用的空白与 `/`。 */
 const FONT_SHORTHAND_TOKEN = /var\(--pwa-(?:weight|text|leading|font)-[a-z]+\)/g;
+/** 44px 点击区只由 --pwa-hit-target 定义（DESIGN「按钮尺寸」）。 */
+const HIT_TARGET_LITERAL = /(?<![\d.])44px/;
 
 type Declaration = { file: string; selector: string; property: string; value: string };
 type Exception = { file: string; selector: string; property: string; values: number[]; reason: string };
@@ -183,6 +185,12 @@ describe("CSS static guard", () => {
       if (property !== "font" || value === "inherit") return false;
       return !value.includes("var(--pwa-text-") || /[^\s/]/.test(value.replace(FONT_SHORTHAND_TOKEN, ""));
     }).map((entry) => `${keyOf(entry)}: ${entry.value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production hit areas reference the hit target token instead of 44px", () => {
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && HIT_TARGET_LITERAL.test(entry.value))
+      .map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });
 

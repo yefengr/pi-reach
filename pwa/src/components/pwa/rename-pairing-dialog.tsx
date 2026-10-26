@@ -90,7 +90,6 @@ export function RenamePairingDialog({ device, onSave, onClose, focusOrigin = nul
     aria-labelledby="pwa-rename-title"
     aria-describedby="pwa-rename-description"
     centered
-    size={480}
     withinPortal={false}
     trapFocus
     returnFocus
