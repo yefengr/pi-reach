@@ -9,9 +9,9 @@ export const VIEWPORT_DEBUG_FRAME_CAPACITY = 1800;
 const MARK_CAPACITY = 512;
 export const DOCUMENT_LOCK_BYPASS_ATTRIBUTE = "data-document-lock-bypass";
 
-/** 实验只由已挂载的调试浮层持有；卸载后CSS门控和诊断同时恢复默认。 */
+/** 实验只由已挂载的调试浮层或诊断外壳持有，与 CSS 门控同一组选择器；卸载后两者同时恢复默认。 */
 export function documentLockBypassed(): boolean {
-  return document.querySelector(`.pwa-viewport-debug[${DOCUMENT_LOCK_BYPASS_ATTRIBUTE}]`) !== null;
+  return document.querySelector(`.pwa-viewport-debug[${DOCUMENT_LOCK_BYPASS_ATTRIBUTE}], .pwa-keyboard-diagnostics[${DOCUMENT_LOCK_BYPASS_ATTRIBUTE}]`) !== null;
 }
 
 /** 默认关闭；只有字符串 "true" 才开启，旧数据或手工修改不会意外显示浮层。 */
@@ -48,7 +48,9 @@ export type ViewportEventSnapshot = Readonly<{
   vvHeight: number | null; vvTop: number | null; vvScale: number | null; innerHeight: number | null; docHeight: number | null;
   rootBoxHeight: number | null; bodyBoxHeight: number | null; shellHeight: number | null; scrollY: number | null;
   // documentLocked保留原义：控制器请求锁的标记；实验是否跳过CSS需结合bypassed及盒高判断。
-  documentLocked: boolean; documentLockHeight: number | null; documentLockBypassed?: boolean; compact: "short" | "very-short" | null;
+  documentLocked: boolean; documentLockHeight: number | null; documentLockBypassed?: boolean;
+  // 仅诊断页内外层分离时提供：控制器容器的实际盒高；shellHeight 仍是真实外层。
+  contentHeight?: number | null; compact: "short" | "very-short" | null;
   composerBudget: "constrained" | "conflict" | null; paddingTop: number | null; paddingBottom: number | null;
   composerPaddingBottom: number | null; focus: ViewportFocusKind;
 }>;
@@ -70,6 +72,7 @@ function copyEventSnapshot(value: ViewportEventSnapshot): ViewportEventSnapshot 
     bodyBoxHeight: finite(value.bodyBoxHeight), shellHeight: finite(value.shellHeight), scrollY: finite(value.scrollY),
     documentLocked: value.documentLocked === true, documentLockHeight: finite(value.documentLockHeight),
     documentLockBypassed: value.documentLockBypassed === true,
+    ...(value.contentHeight === undefined ? {} : { contentHeight: finite(value.contentHeight) }),
     compact: value.compact === "short" || value.compact === "very-short" ? value.compact : null,
     composerBudget: value.composerBudget === "constrained" || value.composerBudget === "conflict" ? value.composerBudget : null,
     paddingTop: finite(value.paddingTop), paddingBottom: finite(value.paddingBottom), composerPaddingBottom: finite(value.composerPaddingBottom),

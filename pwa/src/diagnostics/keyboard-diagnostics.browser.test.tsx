@@ -104,6 +104,14 @@ test.each([
     if (value === "content") expect(getComputedStyle(controller()).position).toBe("fixed");
     expect(input().getBoundingClientRect().bottom).toBeLessThanOrEqual(height + 1);
     expect(input().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    // 折叠说明在极矮窗口隐藏，旁路开关只在可达尺寸复核配对组的初始几何。
+    if (value !== "content" || height <= 450) continue;
+    shell().querySelector<HTMLButtonElement>("[data-document-lock-toggle]")!.click();
+    await expect.poll(() => shell().hasAttribute("data-document-lock-bypass")).toBe(true);
+    await ready();
+    await frames();
+    const paired = geometry();
+    paired.forEach((box, index) => box.forEach((coordinate, axis) => expect(Math.abs(coordinate - initial[index]![axis]!), `bypass box=${index} axis=${axis} actual=${JSON.stringify(paired)}`).toBeLessThanOrEqual(1)));
   }
   await view.unmount();
 });
@@ -280,6 +288,75 @@ test.each(["follow", "reading"])("content preserves %s geometry through real con
   await view.unmount();
 });
 
+test.each([false, true])("content document-lock bypass keeps html/body natural while the controller still requests 470 (standalone-CSS-fixture=%s)", async standalone => {
+  await page.viewport(402, 874);
+  if (standalone) enableStandaloneCssFixture();
+  const { view, viewport } = await mount();
+  const writeText = vi.fn<(text: string) => Promise<void>>(async () => {});
+  vi.spyOn(navigator, "clipboard", "get").mockReturnValue({ writeText } as unknown as Clipboard);
+  const toggle = () => shell().querySelector<HTMLButtonElement>("[data-document-lock-toggle]")!;
+  const title = () => shell().querySelector(".pwa-title-bar")!;
+  const box = (node: Element) => Math.round(node.getBoundingClientRect().height);
+  const boxes = () => ({ root: box(document.documentElement), body: box(document.body), outer: box(shell()), content: box(controller()) });
+  const open = async () => { input().focus({ preventScroll: true }); viewport.change(470); await frames(); };
+  const close = async () => { input().blur(); viewport.change(874); await ready(); };
+  expect(toggle().disabled).toBe(true);
+  await select("content");
+  const initial = geometry();
+  const titleBefore = rect(title());
+  // 同构建默认组：控制器请求的锁实际把文档盒压到 470。
+  await open();
+  expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(true);
+  expect(boxes()).toEqual({ root: 470, body: 470, outer: 874, content: 470 });
+  // 聚焦期间同步复核，不能在展开中途切组。
+  toggle().click();
+  expect(shell().hasAttribute("data-document-lock-bypass")).toBe(false);
+  await close();
+  await userEvent.click(shell().querySelector("details summary")!);
+  expect(box(toggle())).toBeGreaterThanOrEqual(44);
+  expect(toggle().getBoundingClientRect().right).toBeLessThanOrEqual(403);
+  await userEvent.click(toggle());
+  await expect.poll(() => shell().hasAttribute("data-document-lock-bypass")).toBe(true);
+  expect(mode()).toBe("content");
+  expect(toggle().getAttribute("aria-pressed")).toBe("true");
+  await ready();
+  expect(shell().querySelector("details")!.open).toBe(false);
+  await frames();
+  const paired = geometry();
+  paired.forEach((value, index) => value.forEach((coordinate, axis) => expect(Math.abs(coordinate - initial[index]![axis]!), `box=${index} axis=${axis}`).toBeLessThanOrEqual(1)));
+  await open();
+  // 锁请求与目标值照旧，只是 CSS 门控跳过 html/body 约束。
+  expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(true);
+  expect(document.documentElement.style.getPropertyValue("--pwa-keyboard-document-height")).toBe("470px");
+  expect(boxes()).toEqual({ root: 874, body: 874, outer: 874, content: 470 });
+  expect(rect(title())).toEqual(titleBefore);
+  expect(window.scrollY).toBe(0);
+  expect(input().getBoundingClientRect().bottom).toBeLessThanOrEqual(471);
+  await view.getByRole("button", { name: getMessages().viewportDebug.copy, exact: true }).click();
+  const report = JSON.parse(writeText.mock.calls[0]![0]);
+  type Round = { mode: string; documentLock: string; report: { environment: Record<string, unknown>; marks: { controller?: { reason: string }; snapshot: Record<string, unknown> }[] } };
+  const rounds: Round[] = report.rounds.filter((round: Round) => round.mode === "content");
+  expect(rounds.map(round => round.documentLock)).toEqual(["default", "bypassed"]);
+  const compensated = (round: Round) => {
+    const snapshot = round.report.marks.findLast(entry => entry.controller?.reason === "compensated")!.snapshot;
+    return Object.fromEntries(["rootBoxHeight", "bodyBoxHeight", "shellHeight", "contentHeight", "documentLocked", "documentLockHeight", "documentLockBypassed"].map(key => [key, snapshot[key]]));
+  };
+  expect(compensated(rounds[0]!)).toEqual({ rootBoxHeight: 470, bodyBoxHeight: 470, shellHeight: 874, contentHeight: 470, documentLocked: true, documentLockHeight: 470, documentLockBypassed: false });
+  expect(compensated(rounds[1]!)).toEqual({ rootBoxHeight: 874, bodyBoxHeight: 874, shellHeight: 874, contentHeight: 470, documentLocked: true, documentLockHeight: 470, documentLockBypassed: true });
+  expect(rounds.map(round => round.report.environment.documentLockBypassed)).toEqual([false, true]);
+  await close();
+  expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
+  expect(boxes()).toEqual({ root: 874, body: 874, outer: 874, content: 874 });
+  // 切离 D 即撤销旁路，正式锁重新生效。
+  await select("current");
+  expect(shell().hasAttribute("data-document-lock-bypass")).toBe(false);
+  expect(toggle().disabled).toBe(true);
+  await open();
+  expect(box(document.documentElement)).toBe(470);
+  await close();
+  await view.unmount();
+});
+
 test("content Chrome remains clickable through its empty slot; real menu Escape restores its trigger", async () => {
   await page.viewport(402, 874);
   const { view } = await mount();
@@ -337,9 +414,9 @@ test("content initial pending calibration keeps the natural outer baseline throu
   const viewport = new ViewportMock();
   vi.stubGlobal("innerHeight", 812);
   vi.stubGlobal("visualViewport", viewport);
-  const onMode = vi.fn();
+  const onExperiment = vi.fn();
   const view = await render(<StrictMode><PwaUiProvider colorSchemeManager={{ get: () => "light", set() {}, subscribe() {}, unsubscribe() {}, clear() {} }}>
-    <KeyboardDiagnosticsStage mode="content" initialDensity={null} onMode={onMode} reports={new KeyboardDiagnosticsReports()} />
+    <KeyboardDiagnosticsStage mode="content" documentLockBypass={false} initialDensity={null} onExperiment={onExperiment} reports={new KeyboardDiagnosticsReports()} />
   </PwaUiProvider></StrictMode>);
   await frames();
   expect(button("native").disabled).toBe(true);
@@ -350,19 +427,19 @@ test("content initial pending calibration keeps the natural outer baseline throu
   input().blur();
   viewport.change(812);
   button("native").click();
-  expect(onMode).not.toHaveBeenCalled();
+  expect(onExperiment).not.toHaveBeenCalled();
   await expect.poll(() => controller().hasAttribute("data-keyboard-closing")).toBe(true);
   button("native").click();
-  expect(onMode).not.toHaveBeenCalled();
+  expect(onExperiment).not.toHaveBeenCalled();
   expect(Math.round(shell().getBoundingClientRect().height)).toBe(874);
   await expect.poll(() => controller().hasAttribute("data-keyboard-closing"), { timeout: 5000 }).toBe(false);
   expect(button("native").disabled).toBe(true);
   viewport.change(874);
   button("native").click();
-  expect(onMode).not.toHaveBeenCalled();
+  expect(onExperiment).not.toHaveBeenCalled();
   await ready();
   button("native").click();
-  expect(onMode).toHaveBeenCalledWith("native", { compactHeight: undefined, wideCompact: false });
+  expect(onExperiment).toHaveBeenCalledWith({ mode: "native", documentLockBypass: false }, { compactHeight: undefined, wideCompact: false });
   await view.unmount();
 });
 
@@ -573,8 +650,9 @@ test("mode and draft are memory only; export is four bounded latest rounds and n
   expect(raw).not.toContain(secret);
   expect(raw).not.toContain("Fixed local sample");
   const report = JSON.parse(raw);
-  expect(report.format).toBe("pi-reach-keyboard-diagnostics/1");
+  expect(report.format).toBe("pi-reach-keyboard-diagnostics/2");
   expect(report.rounds.map((round: { mode: string }) => round.mode)).toEqual(["current", "prefixed", "native", "content"]);
+  expect(report.rounds.every((round: { documentLock: string }) => round.documentLock === "default")).toBe(true);
   for (const round of report.rounds) {
     expect(round.report.format).toBe("pi-reach-viewport-debug/1");
     expect(round.report.environment.mode).toBe(round.mode);

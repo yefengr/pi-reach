@@ -1,6 +1,9 @@
-/* fixed 实验移出文档流；四模式共用自然盒高，仅未锁定时生效，不与控制器争夺文档高度。 */
+/* fixed 实验移出文档流；四模式共用自然盒高，仅未锁定时生效，不与控制器争夺文档高度。
+   D 文档锁旁路组的正式锁 CSS 已被门控跳过，此时同一自然盒高继续生效，控制器锁请求照常记录。 */
 html:has(.pwa-keyboard-diagnostics):not([data-pwa-keyboard]),
-html:not([data-pwa-keyboard]) body:has(.pwa-keyboard-diagnostics) { height: var(--pwa-app-height); min-height: 0; }
+html:not([data-pwa-keyboard]) body:has(.pwa-keyboard-diagnostics),
+html:has(.pwa-keyboard-diagnostics[data-document-lock-bypass]),
+html:has(.pwa-keyboard-diagnostics[data-document-lock-bypass]) body { height: var(--pwa-app-height); min-height: 0; }
 
 .pwa-keyboard-diagnostics[data-diagnostics-mode="prefixed"] {
   position: fixed;
@@ -19,6 +22,7 @@ html:not([data-pwa-keyboard]) body:has(.pwa-keyboard-diagnostics) { height: var(
 .pwa-keyboard-diagnostics-controls summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--pwa-accent); cursor: pointer; }
 .pwa-keyboard-diagnostics-controls pre { margin: 0; height: 2.8em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--pwa-font-mono); }
 .pwa-keyboard-diagnostics-controls details[open] { max-height: 96px; overflow: auto; }
+.pwa-keyboard-diagnostics-controls [data-document-lock-toggle] { min-height: 44px; }
 /* D 的完整应用容器不扣标题高度；只在内部 main 预留真实 Chrome 的空槽。
    top 与空槽使用同一坐标系，合法 VV offset 不会重复增加内容起点。 */
 .pwa-keyboard-diagnostics[data-diagnostics-mode="content"] { position: fixed; inset-inline: 0; top: 0; height: var(--pwa-app-height); }

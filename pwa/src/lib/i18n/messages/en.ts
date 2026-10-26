@@ -226,6 +226,8 @@ export const en = {
     nativeWarning: "Native mode may leave the input behind the keyboard.",
     instructions: "Instructions", steps: "Focus, dismiss, compare. Do not send, rotate, resize or change the sample. Switch only after full recovery.",
     isolation: "Local memory only; no business connection, identity, history or camera. An existing controlling Service Worker may remain. Numbers and sampling can disturb layout; desktop simulation does not prove native keyboard behavior.",
+    documentLockBypass: "D: bypass document height lock",
+    documentLockHint: "D only. Switch with the keyboard closed, collapse these instructions, then compare with default D. Only html/body height is skipped; the controller still requests the lock and keeps scroll reset.",
     back: "Return to app", restartLink: "Restart", numbers: "Viewport numbers", entry: "Open isolated keyboard diagnostics",
   },
   shortcuts: {

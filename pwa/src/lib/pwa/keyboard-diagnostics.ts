@@ -53,23 +53,33 @@ export function validGeometry(value: DiagnosticsGeometry): boolean {
 }
 
 type ReportInput = Parameters<typeof formatViewportDebugReport>[0];
-/** 每个模式只保留最近一轮；内部表格继续使用原格式和原容量。 */
+// 文档锁旁路是同模式下的配对变量；两组各自保留最近一轮，不互相覆盖。
+export const KEYBOARD_DIAGNOSTICS_DOCUMENT_LOCKS = ["default", "bypassed"] as const;
+export type KeyboardDiagnosticsDocumentLock = typeof KEYBOARD_DIAGNOSTICS_DOCUMENT_LOCKS[number];
+/** 标题与数值行共用的旁路组短标记，窄屏不换行。 */
+export const DOCUMENT_LOCK_BYPASS_SUFFIX = "+doc";
+export const KEYBOARD_DIAGNOSTICS_REPORT_FORMAT = "pi-reach-keyboard-diagnostics/2";
+type RoundKey = `${KeyboardDiagnosticsMode}:${KeyboardDiagnosticsDocumentLock}`;
+/** 每个模式与文档锁组合只保留最近一轮；内部表格继续使用原格式和原容量。 */
 export class KeyboardDiagnosticsReports {
-  private rounds = new Map<KeyboardDiagnosticsMode, string>();
-  private active: { mode: KeyboardDiagnosticsMode; read: () => ReportInput } | null = null;
-  start(mode: KeyboardDiagnosticsMode, read: () => ReportInput): () => void {
-    const active = { mode, read };
+  private rounds = new Map<RoundKey, string>();
+  private active: { key: RoundKey; read: () => ReportInput } | null = null;
+  start(mode: KeyboardDiagnosticsMode, read: () => ReportInput, documentLock: KeyboardDiagnosticsDocumentLock = "default"): () => void {
+    const key: RoundKey = `${mode}:${documentLock}`;
+    const active = { key, read };
     this.active = active;
-    this.rounds.delete(mode);
+    this.rounds.delete(key);
     return () => {
-      this.rounds.set(mode, formatViewportDebugReport(read()));
+      this.rounds.set(key, formatViewportDebugReport(read()));
       if (this.active === active) this.active = null;
     };
   }
   report(): string {
     const rounds = new Map(this.rounds);
-    if (this.active) rounds.set(this.active.mode, formatViewportDebugReport(this.active.read()));
-    return JSON.stringify({ format: "pi-reach-keyboard-diagnostics/1", rounds: KEYBOARD_DIAGNOSTICS_MODES
-      .filter(mode => rounds.has(mode)).map(mode => ({ mode, report: JSON.parse(rounds.get(mode)!) as unknown })) });
+    if (this.active) rounds.set(this.active.key, formatViewportDebugReport(this.active.read()));
+    const ordered = KEYBOARD_DIAGNOSTICS_MODES.flatMap(mode => KEYBOARD_DIAGNOSTICS_DOCUMENT_LOCKS
+      .map(documentLock => ({ mode, documentLock, text: rounds.get(`${mode}:${documentLock}`) })));
+    return JSON.stringify({ format: KEYBOARD_DIAGNOSTICS_REPORT_FORMAT, rounds: ordered.filter(round => round.text !== undefined)
+      .map(({ mode, documentLock, text }) => ({ mode, documentLock, report: JSON.parse(text!) as unknown })) });
   }
 }

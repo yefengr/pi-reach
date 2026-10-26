@@ -10,9 +10,9 @@
 .pwa-app-shell[data-keyboard-viewport]:not([data-keyboard-restored]) { --pwa-safe-bottom: 0px; }
 
 /* 压缩时锁可见高度，实际回升后先交还自然文档高度；独立于shell补偿，避免锁与VV恢复互等。 */
-/* 调试实验仅跳过这组约束；标记随浮层卸载消失，控制器锁值与滚动复位仍照常运行。 */
-html:has(.pwa-root)[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass])),
-html[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass])) body:has(.pwa-root) {
+/* 调试实验仅跳过这组约束；标记随浮层或诊断外壳卸载消失，控制器锁值与滚动复位仍照常运行。 */
+html:has(.pwa-root)[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass], .pwa-keyboard-diagnostics[data-document-lock-bypass])),
+html[data-pwa-keyboard]:not(:has(.pwa-viewport-debug[data-document-lock-bypass], .pwa-keyboard-diagnostics[data-document-lock-bypass])) body:has(.pwa-root) {
   height: var(--pwa-keyboard-document-height);
   min-height: 0;
 }

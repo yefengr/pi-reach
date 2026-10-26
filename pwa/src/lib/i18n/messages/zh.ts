@@ -227,6 +227,8 @@ export const zh: Messages = {
     restart: "窗口尺寸已变化，请重新开始实验。", nativeWarning: "原生模式的输入区可能被键盘遮挡。",
     instructions: "操作说明", steps: "仅聚焦、收起、比较；不要发送、旋转、改变窗口或示例内容。完全恢复后再切换。",
     isolation: "仅内存示例；不连接业务、不读取身份和历史、不请求相机。已控制页面的 Service Worker 可能仍在。数值采集会扰动布局；桌面模拟不证明原生键盘行为。",
+    documentLockBypass: "D：旁路文档高度锁",
+    documentLockHint: "仅 D 可用；收起键盘后切换并收起说明再测，与 D 默认组配对比较。只跳过 html/body 高度约束，控制器仍请求锁并保留滚动复位。",
     back: "返回应用", restartLink: "重新开始", numbers: "视口数值", entry: "进入键盘隔离诊断",
   },
   shortcuts: {

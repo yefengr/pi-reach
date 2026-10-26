@@ -112,3 +112,18 @@ test("report replaces revisits and keeps existing per-round frame/mark caps and 
   finish();
   expect(JSON.parse(reports.report())).toEqual(data);
 });
+
+test("document-lock variants keep separate latest rounds in mode order", () => {
+  const reports = new KeyboardDiagnosticsReports();
+  const read = (visit: number) => () => ({ frames: [], marks: [], timeline: [], environment: { visit } });
+  reports.start("content", read(1), "bypassed")();
+  reports.start("content", read(2))();
+  reports.start("current", read(3))();
+  const active = reports.start("content", read(4), "bypassed");
+  const data = JSON.parse(reports.report());
+  expect(data.format).toBe("pi-reach-keyboard-diagnostics/2");
+  expect(data.rounds.map((round: { mode: string; documentLock: string; report: { environment: { visit: number } } }) =>
+    [round.mode, round.documentLock, round.report.environment.visit])).toEqual([["current", "default", 3], ["content", "default", 2], ["content", "bypassed", 4]]);
+  active();
+  expect(JSON.parse(reports.report())).toEqual(data);
+});

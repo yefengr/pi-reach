@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { hasTextFocus, observeKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
 import { collectViewportDebugEnvironment, formatViewportDebugLines, measureViewportEvent, measureViewportFrame, ViewportFrameRecorder, type ViewportMarkKind } from "@/lib/pwa/viewport-debug";
 import { disableViewportDiagnostics, enableViewportDiagnostics, readViewportDiagnostics } from "@/lib/pwa/timeline-viewport-diagnostics";
-import { KeyboardDiagnosticsGate, type DiagnosticsGateInput, type DiagnosticsGateReason, type KeyboardDiagnosticsMode, type KeyboardDiagnosticsReports } from "@/lib/pwa/keyboard-diagnostics";
+import { DOCUMENT_LOCK_BYPASS_SUFFIX, KeyboardDiagnosticsGate, type DiagnosticsGateInput, type DiagnosticsGateReason, type KeyboardDiagnosticsMode, type KeyboardDiagnosticsReports } from "@/lib/pwa/keyboard-diagnostics";
 import { version } from "../../package.json";
 
 function geometry(): DiagnosticsGateInput {
@@ -12,7 +12,7 @@ function geometry(): DiagnosticsGateInput {
     focused: hasTextFocus(), compensated: false, closing: false };
 }
 
-export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: RefObject<HTMLDivElement | null>,
+export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, documentLockBypass: boolean, shellRef: RefObject<HTMLDivElement | null>,
   controllerRef: RefObject<HTMLDivElement | null>, textRef: RefObject<HTMLPreElement | null>, reports: KeyboardDiagnosticsReports) {
   const gateRef = useRef<KeyboardDiagnosticsGate | null>(null);
   const closingRef = useRef(false);
@@ -33,7 +33,9 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
     const pixels = (value: number) => Math.round(value * 10) / 10;
     const eventSnapshot = () => {
       const sample = measureViewportEvent(controller);
-      return shell === controller ? sample : { ...sample, shellHeight: pixels(shell.getBoundingClientRect().height) };
+      // 内层实际盒高单列；锁请求值与 CSS 目标都不能代替实测高度。
+      return shell === controller ? sample
+        : { ...sample, shellHeight: pixels(shell.getBoundingClientRect().height), contentHeight: sample.shellHeight };
     };
     const frameSnapshot = () => {
       const sample = measureViewportFrame(controller);
@@ -50,9 +52,11 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
     const recorder = new ViewportFrameRecorder(() => performance.now());
     let timeline = readViewportDiagnostics();
     enableViewportDiagnostics();
+    // 结束时外壳已卸载，DOM 查询会把旁路组误报为 false；环境字段以本轮实验变量为准。
     const finish = reports.start(mode, () => ({ ...recorder.snapshot(), timeline,
-      environment: { ...collectViewportDebugEnvironment(version), mode,
-        shellScope: "outer-shell", controllerScope: mode === "content" ? "content-viewport" : "outer-shell", titleScope: "outer-shell" } }));
+      environment: { ...collectViewportDebugEnvironment(version), documentLockBypassed: documentLockBypass, mode,
+        shellScope: "outer-shell", controllerScope: mode === "content" ? "content-viewport" : "outer-shell", titleScope: "outer-shell" } }),
+    documentLockBypass ? "bypassed" : "default");
     let previousReason: DiagnosticsGateReason | null = null;
     const refresh = () => {
       const next = check();
@@ -80,7 +84,7 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
     const tick = () => {
       const sample = recorder.record(frameSnapshot());
       timeline = readViewportDiagnostics();
-      if (textRef.current) textRef.current.textContent = `${mode} ${formatViewportDebugLines(sample).join(" | ")}`;
+      if (textRef.current) textRef.current.textContent = `${mode}${documentLockBypass ? DOCUMENT_LOCK_BYPASS_SUFFIX : ""} ${formatViewportDebugLines(sample).join(" | ")}`;
       refresh();
       frame = requestAnimationFrame(tick);
     };
@@ -93,6 +97,6 @@ export function useKeyboardDiagnostics(mode: KeyboardDiagnosticsMode, shellRef: 
       disableViewportDiagnostics();
       gateRef.current = null;
     };
-  }, [check, controllerRef, mode, reports, shellRef, textRef]);
+  }, [check, controllerRef, documentLockBypass, mode, reports, shellRef, textRef]);
   return { reason, check };
 }
