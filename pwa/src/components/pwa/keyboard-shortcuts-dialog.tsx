@@ -29,7 +29,7 @@ function KeyboardShortcutsDialogContent({ opened, onClose, returnFocus, enterSen
     title={t.shortcuts.title}
     size={480}
     portalProps={{ target: ".pwa-root" }}
-    zIndex={310}
+    zIndex="var(--pwa-z-modal-top)"
     returnFocus={returnFocus}
     inert={!opened}
     closeButtonProps={{ "aria-label": t.common.close, title: t.common.close }}

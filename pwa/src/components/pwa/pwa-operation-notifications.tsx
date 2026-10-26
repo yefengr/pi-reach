@@ -61,7 +61,7 @@ export function PwaOperationNotifications({ controller, target }: PwaOperationNo
     allowScrollDismiss={false}
     transitionDuration={transitionDuration}
     limit={1}
-    zIndex={400}
+    zIndex="var(--pwa-z-feedback)"
     containerWidth={400}
     portalProps={{ target: target ?? ".pwa-root" }}
   />;

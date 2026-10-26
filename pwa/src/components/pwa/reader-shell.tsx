@@ -42,7 +42,7 @@ export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTrans
   </>;
   return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={enter} onExitTransitionEnd={onExitTransitionEnd}
       position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"}
-      withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false}
+      withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-reader)" trapFocus returnFocus={false}
       transitionProps={{ transition: pwaDrawerTransitions.right, duration, exitDuration: instant ? 0 : duration, timingFunction: PWA_DRAWER_EASE }}>
       <Drawer.Overlay className="pwa-scrim" />
       <Drawer.Content ref={setSurface} classNames={{ content: `pwa-tool-reader ${className}`.trim() }} data-pwa-moving={motion.moving || undefined} aria-describedby={describedBy}>

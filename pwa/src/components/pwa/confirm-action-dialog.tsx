@@ -82,7 +82,7 @@ export function ConfirmActionDialog({ action, pending, error, onConfirm, onClose
     size={400}
     withinPortal={withinPortal}
     portalProps={{ target: ".pwa-root" }}
-    zIndex={310}
+    zIndex="var(--pwa-z-modal-top)"
     trapFocus
     returnFocus
     onExitTransitionEnd={onExitTransitionEnd}

@@ -121,7 +121,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
     size={480}
     withinPortal={withinPortal}
     portalProps={{ target: ".pwa-root" }}
-    zIndex={300}
+    zIndex="var(--pwa-z-modal)"
     trapFocus
     returnFocus
     lockScroll

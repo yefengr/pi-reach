@@ -170,6 +170,20 @@
   --pwa-weight-regular: 400;
   --pwa-weight-strong: 600;
 
+  /* 叠层自下而上（DESIGN「叠层」）：全部叠层 Portal 到 .pwa-root，与工作区固定元素共用同一层叠上下文。 */
+  --pwa-z-composer: 3;
+  --pwa-z-sidebar-toggle: 7;
+  --pwa-z-workspace-float: 8;
+  --pwa-z-page: 20;
+  --pwa-z-reader: 30;
+  --pwa-z-image-transition: 31;
+  --pwa-z-navigation: 200;
+  --pwa-z-device-panel: 220;
+  --pwa-z-device-menu: 230;
+  --pwa-z-modal: 300;
+  --pwa-z-modal-top: 310;
+  --pwa-z-feedback: 400;
+
   --pwa-radius-xs: 4px;
   --pwa-radius-md: 8px;
   --pwa-radius-lg: 12px;

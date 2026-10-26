@@ -37,8 +37,8 @@
    转场与右侧 Drawer 同一模型：工作区不动，设置层带模态阴影滑入，遮罩只在转场中由脚本淡入淡出。 */
 .pwa-root { position: relative; }
 .pwa-root .pwa-workspace-view { position: relative; isolation: isolate; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.pwa-root .pwa-page-scrim { position: absolute; z-index: 20; inset: 0; background: var(--pwa-scrim); opacity: 0; pointer-events: none; }
-.pwa-root .pwa-settings-view { position: absolute; z-index: 20; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--pwa-surface); }
+.pwa-root .pwa-page-scrim { position: absolute; z-index: var(--pwa-z-page); inset: 0; background: var(--pwa-scrim); opacity: 0; pointer-events: none; }
+.pwa-root .pwa-settings-view { position: absolute; z-index: var(--pwa-z-page); inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--pwa-surface); }
 /* 转场与跟手拖动期间设置层的左缘朝向工作区，两角为 12；静止铺满时为直角。 */
 .pwa-root[data-view-transition] .pwa-settings-view { border-radius: var(--pwa-radius-lg) 0 0 var(--pwa-radius-lg); box-shadow: var(--pwa-shadow-modal); }
 .pwa-root[data-view="settings"]:not([data-view-transition]) .pwa-workspace-view { visibility: hidden; }
@@ -71,7 +71,7 @@
 /* 收展入口：展开时位于侧栏品牌行右端，收起后停在贴边主区标题区左端，两处同高，收展时只水平移动；与导航列表不重叠。 */
 .pwa-ui-scope .pwa-root .pwa-icon-button.pwa-sidebar-toggle {
   position: absolute;
-  z-index: 7;
+  z-index: var(--pwa-z-sidebar-toggle);
   top: calc((var(--pwa-topbar-height) - 44px) / 2 + var(--pwa-safe-top));
   left: calc(var(--pwa-sidebar-span) - 52px);
   transition: left var(--pwa-sidebar-motion) var(--pwa-ease-standard), top var(--pwa-sidebar-motion) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard);

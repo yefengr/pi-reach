@@ -9,6 +9,7 @@ import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import type { OperationHint } from "@/lib/pwa/operation-feedback";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
+import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/small-spinner";
 import { DESKTOP_KEYBOARD_QUERY, hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 
 type ComposerAttachmentMenuProps = {
@@ -40,7 +41,7 @@ export function ComposerAttachmentMenu({ disabled, opened, onChange, onChooseFil
     transitionProps={menuTransition}
     onExitTransitionEnd={onExitTransitionEnd}
     withinPortal={withinPortal}
-    zIndex={21}
+    zIndex="var(--pwa-z-workspace-float)"
   >
     <Menu.Target>
       <ActionIcon ref={triggerRef} className="pwa-composer-icon" type="button" disabled={disabled} aria-label={t.attachments.add} title={t.attachments.add}><Plus size={20} /></ActionIcon>
@@ -402,7 +403,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
       <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/*" capture="environment" disabled={addDisabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file && !addDisabled) onAddFiles([file]); event.currentTarget.value = ""; }} />
       <ComposerQueuedMessages />
       {hint ? <p className="pwa-composer-hint" role="status" data-tone={hint.tone}>
-        {hint.busy ? <LoaderCircle className="pwa-spin" size={12} strokeWidth={2.4} aria-hidden="true" /> : null}
+        {hint.busy ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : null}
         <span>{hint.text}</span>
       </p> : null}
       <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
@@ -448,7 +449,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
               </FileButton>
             </div>
             <div className="pwa-composer-command">
-              <Menu width="var(--pwa-command-menu-width)" middlewares={floatingMiddlewares} opened={commandMenuOpen} onChange={(opened) => { if (opened) commandFocusOriginRef.current = "trigger"; setCommandMenuOpened(opened); }} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-start" preventPositionChangeWhenVisible={false} offset={{ mainAxis: 8, crossAxis: -52 }} transitionProps={{ ...menuTransition, onEnter: consumeCommandFocusIntent }} onExitTransitionEnd={finishCommandExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex={8}>
+              <Menu width="var(--pwa-command-menu-width)" middlewares={floatingMiddlewares} opened={commandMenuOpen} onChange={(opened) => { if (opened) commandFocusOriginRef.current = "trigger"; setCommandMenuOpened(opened); }} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-start" preventPositionChangeWhenVisible={false} offset={{ mainAxis: 8, crossAxis: -52 }} transitionProps={{ ...menuTransition, onEnter: consumeCommandFocusIntent }} onExitTransitionEnd={finishCommandExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-workspace-float)">
                 <Menu.Target>
                   <ActionIcon ref={commandTriggerRef} className="pwa-composer-icon" type="button" onKeyDown={handleCommandTriggerKeyDown} disabled={!isOnline || newSessionPending} aria-label={t.commands.piCommands} title={t.commands.piCommands}><Slash size={20} /></ActionIcon>
                 </Menu.Target>
@@ -465,7 +466,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
             </div>
           </div>
           <div className="pwa-composer-actions">
-            <Menu width="var(--pwa-command-menu-width)" middlewares={floatingMiddlewares} opened={modelMenuOpen} onChange={setModelMenuOpened} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-end" preventPositionChangeWhenVisible={false} offset={8} transitionProps={{ ...menuTransition, onEnter: consumeModelFocusIntent }} onExitTransitionEnd={finishModelExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex={8}>
+            <Menu width="var(--pwa-command-menu-width)" middlewares={floatingMiddlewares} opened={modelMenuOpen} onChange={setModelMenuOpened} trapFocus={false} withInitialFocusPlaceholder={false} menuItemTabIndex={0} returnFocus={false} closeOnItemClick={false} clickOutsideEvents={["mousedown", "touchstart"]} closeOnClickOutside closeOnEscape position="top-end" preventPositionChangeWhenVisible={false} offset={8} transitionProps={{ ...menuTransition, onEnter: consumeModelFocusIntent }} onExitTransitionEnd={finishModelExit} floatingStrategy="fixed" withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-workspace-float)">
               <Menu.Target>
                 <UnstyledButton ref={modelTriggerRef} className="pwa-composer-model" onKeyDown={handleModelTriggerKeyDown} disabled={!isOnline || newSessionPending} aria-busy={modelPending || undefined} aria-label={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)} title={t.commands.modelChipLabel(modelName ?? t.commands.currentModelUnavailable, commandThinking)}>
                   <span className="pwa-composer-model-name">{modelName ?? t.commands.modelSettings}</span>

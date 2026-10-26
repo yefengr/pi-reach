@@ -114,7 +114,7 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
       floatingStrategy="fixed"
       withinPortal
       portalProps={{ target: ".pwa-root" }}
-      zIndex={21}
+      zIndex="var(--pwa-z-workspace-float)"
     >
       <Popover.Target>
         <ActionIcon ref={triggerRef} className="pwa-session-actions-trigger" type="button" aria-label={t.actions.sessionInfo} title={t.actions.sessionInfo} onClick={() => setMenuOpened(!openedRef.current)} onKeyDown={handleTriggerKeyDown}><Info size={20} /></ActionIcon>

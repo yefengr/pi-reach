@@ -145,7 +145,7 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps themed infor
       expect(dropdown.scrollWidth).toBeLessThanOrEqual(dropdown.clientWidth);
       expect(path.scrollHeight).toBeLessThanOrEqual(path.clientHeight + 1);
       expect(getComputedStyle(path).fontSize).toBe("16px");
-      expect(getComputedStyle(dropdown).zIndex).toBe("21");
+      expect(getComputedStyle(dropdown).zIndex).toBe("8");
       expect(dropdown.querySelector("button,[role=menuitem]")).toBeNull();
       await page.screenshot({ path: `../../../.vitest/screenshots/session-info-${width}x${height}-${scheme}.png` });
     }

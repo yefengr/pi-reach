@@ -47,6 +47,11 @@ const MOTION_PROPERTY = /^(?:transition|animation)(?:-(?:duration|delay|timing-f
 const DURATION_LITERAL = /(?<![\w.-])(\d*\.?\d+)m?s\b/g;
 /** 曲线只引用 --pwa-ease-*；linear 只允许用于无限循环。 */
 const EASING_LITERAL = /cubic-bezier\(|steps\(|\bease(?:-in|-out|-in-out)?\b/;
+/** 字号只引用档位 token；输入框以 max(16px, …) 保证移动浏览器不缩放（DESIGN「基础层」）。 */
+const FONT_SIZE_VALUE = /^(?:inherit|var\(--pwa-text-[a-z]+\)|max\(16px, var\(--pwa-text-[a-z]+\)\))(?:\s*!important)?$/;
+const FONT_WEIGHT_VALUE = /^(?:inherit|var\(--pwa-weight-(?:regular|strong)\))(?:\s*!important)?$/;
+/** font 简写去掉字重、字号、行高与字体族 token 后，只应剩下分隔用的空白与 `/`。 */
+const FONT_SHORTHAND_TOKEN = /var\(--pwa-(?:weight|text|leading|font)-[a-z]+\)/g;
 
 type Declaration = { file: string; selector: string; property: string; value: string };
 type Exception = { file: string; selector: string; property: string; values: number[]; reason: string };
@@ -168,6 +173,16 @@ describe("CSS static guard", () => {
         const easing = EASING_LITERAL.test(bare) || (/\blinear\b/.test(bare) && !/\binfinite\b/.test(bare));
         return literal || easing;
       }).map((entry) => `${keyOf(entry)}: ${entry.value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production font sizes and weights reference typography tokens", () => {
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/")).filter(({ property, value }) => {
+      if (property === "font-size") return !FONT_SIZE_VALUE.test(value);
+      if (property === "font-weight") return !FONT_WEIGHT_VALUE.test(value);
+      if (property !== "font" || value === "inherit") return false;
+      return !value.includes("var(--pwa-text-") || /[^\s/]/.test(value.replace(FONT_SHORTHAND_TOKEN, ""));
+    }).map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });
 

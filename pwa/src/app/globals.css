@@ -183,11 +183,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-session-actions-secondary { display: grid; }
 .pwa-session-actions-secondary-item { min-height: 44px; }
 .pwa-session-title { min-width: 0; max-width: 100%; display: inline-flex; align-items: baseline; vertical-align: bottom; white-space: nowrap; }
-.pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; }
+.pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; }
 .pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-timeline-pad-bottom) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: 88px; -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
 .pwa-bottom-sentinel { width: 1px; height: 1px; }
 /* 发送过渡只改变高度，不在结束时切换格式化上下文，避免滚动合成层重新定位。 */
-.pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; position: relative; z-index: 3; }
+.pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; position: relative; z-index: var(--pwa-z-composer); }
 .pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-main-inset-end) 12px var(--pwa-main-inset-start); pointer-events: none; }
 
 /* 按钮层级：主操作实心强调色；次级为表面＋边线；文字按钮无底无框；危险入口为错误色轮廓。 */
@@ -222,7 +222,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-composer .pwa-composer-input,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:hover,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:focus,
-.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: 44px; min-height: 44px; max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: var(--pwa-space-composer) 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: 400 var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: 44px; min-height: 44px; max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: var(--pwa-space-composer) 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-ui-scope .pwa-composer .pwa-composer-input:disabled { background: transparent; }
 .pwa-composer .pwa-composer-input::placeholder { color: var(--pwa-secondary); }
 .pwa-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -297,7 +297,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-choice[data-selected]:hover:not(:disabled),
 .pwa-command-choice[data-selected]:focus-visible:not(:disabled) { color: var(--pwa-ink); background: var(--pwa-selected); }
 .pwa-command-choice[data-selected] .pwa-command-copy > span { color: var(--pwa-ink); }
-.pwa-command-menu-heading { padding: 8px var(--pwa-space-menu-pad) 6px; font-weight: 600; text-transform: uppercase; }
+.pwa-command-menu-heading { padding: 8px var(--pwa-space-menu-pad) 6px; font-weight: var(--pwa-weight-strong); text-transform: uppercase; }
 .pwa-command-back { color: var(--pwa-secondary); }
 .pwa-command-empty { margin: 0; padding: 12px var(--pwa-space-menu-pad); line-height: var(--pwa-leading-ui); }
 
@@ -338,7 +338,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-appearance-copy { display: flex; align-items: center; gap: 10px; }
 .pwa-appearance-copy > svg { flex: 0 0 auto; color: var(--pwa-secondary); }
 .pwa-appearance-copy > span { min-width: 0; display: grid; gap: var(--pwa-space-pair); }
-.pwa-appearance-copy strong { font-size: var(--pwa-text-list); font-weight: 600; }
+.pwa-appearance-copy strong { font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
 .pwa-appearance-copy small { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 /* 表单输入：单行高 44，surface 底、1px control-line 边框；聚焦为贴边强调色轮廓，边框不变。 */
 .pwa-ui-scope .pwa-input input,
@@ -365,11 +365,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-rename-head,
 .pwa-confirm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .pwa-rename-head h2,
-.pwa-confirm-title { margin: 8px 0 0; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-title); font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-confirm-title { margin: 8px 0 0; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-rename-description,
 .pwa-confirm-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-rename-description { margin-bottom: 16px; }
-.pwa-rename-description strong { color: var(--pwa-ink); font-weight: 600; }
+.pwa-rename-description strong { color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); }
 .pwa-rename-actions,
 .pwa-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .pwa-rename-actions .pwa-button { min-width: 88px; }
@@ -418,7 +418,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-startup-icon,
 .pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid var(--pwa-running-line); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
 .pwa-startup-icon { width: 48px; height: 48px; margin-bottom: 16px; }
-.pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: var(--pwa-text-meta) !important; }
 .pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
@@ -475,7 +475,7 @@ body:has(.pwa-root) { overflow: hidden; }
 }
 .pwa-runtime-notice .pwa-runtime-notice-wrapper { align-items: center; min-width: 0; }
 .pwa-runtime-notice .pwa-runtime-notice-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pwa-space-pair) 12px; }
-.pwa-runtime-notice .pwa-runtime-notice-title { grid-column: 1; margin: 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-runtime-notice .pwa-runtime-notice-title { grid-column: 1; margin: 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-runtime-notice .pwa-runtime-notice-message,
 .pwa-runtime-notice-content { display: contents; }
 .pwa-runtime-notice-description { grid-column: 1; min-width: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }

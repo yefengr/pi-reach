@@ -265,7 +265,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     size="min(calc(320px + var(--pwa-safe-left)), 85vw)"
     withinPortal={withinPortal}
     portalProps={{ target: portalTarget }}
-    zIndex={200}
+    zIndex="var(--pwa-z-navigation)"
     padding={0}
     returnFocus={false}
     trapFocus={!preview && !gestureActive}

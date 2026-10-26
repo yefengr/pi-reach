@@ -35,13 +35,13 @@
 
 .pwa-root .pwa-device-trigger-copy strong {
   font-size: var(--pwa-text-list);
-  font-weight: 600;
+  font-weight: var(--pwa-weight-strong);
 }
 
 .pwa-root .pwa-device-trigger-copy small {
   color: var(--pwa-secondary);
   font-size: var(--pwa-text-meta);
-  font-weight: 400;
+  font-weight: var(--pwa-weight-regular);
 }
 
 .pwa-root .pwa-device-popover {
@@ -162,7 +162,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--pwa-text-list);
-  font-weight: 600;
+  font-weight: var(--pwa-weight-strong);
 }
 
 .pwa-root .pwa-computer-select .pwa-peer-description,
@@ -204,7 +204,7 @@
   /* 状态标签只用描边与文字，不继承 Mantine 浅色变体的底色；运行中另用状态轻底。 */
   background: transparent;
   font-size: var(--pwa-text-meta);
-  font-weight: 600;
+  font-weight: var(--pwa-weight-strong);
 }
 
 .pwa-root .pwa-presence-label.online {
