@@ -4,7 +4,7 @@
 
 ## PWA UI、UX 与动效后续演进
 
-设计候选的细化范围、优先顺序和评审门槛见[视觉精修与阅读体验设计方案](plans/completed/20261018-pwa-design-refinement.md)：三批静态评审与一轮动效复核已完成，采纳的骨架呼吸与内容淡入已同步 DESIGN，其余候选保留现状并归档方案。本条只保留事项入口，不重复维护详细清单。独立草稿恢复、结构化 Diff 等非本轮设计范围仍按[前一轮方案](plans/active/20261017-pwa-ui-ux-motion-evolution.md)边界另行评估；已有 HTML 原型与[评审记录](plans/active/20261017-pwa-ui-ux-motion-evolution.md#10-评审记录与待定边界)不代表这些后续范围已获实施授权。
+设计候选的细化范围、优先顺序和评审门槛见[视觉精修与阅读体验设计方案](plans/completed/20261018-pwa-design-refinement.md)：三批静态评审与一轮动效复核已完成，采纳的骨架呼吸与内容淡入已同步 DESIGN，其余候选保留现状并归档方案。本条只保留事项入口，不重复维护详细清单。独立草稿恢复、结构化 Diff 等非本轮设计范围仍按[前一轮方案](plans/completed/20261017-pwa-ui-ux-motion-evolution.md)边界另行评估；已有 HTML 原型与[评审记录](plans/completed/20261017-pwa-ui-ux-motion-evolution.md#10-评审记录与待定边界)不代表这些后续范围已获实施授权。
 
 已确认的阶段 B、阶段 C 时间线／产物连续性、阶段 D 宽屏工作面板和阶段 E 规范／状态展厅已移入 [ROADMAP](ROADMAP.md)，只以对应事项维护项目级状态。本条不重复维护这些阶段的状态，也不覆盖已有品牌刷新、移动设备验收或已接受 ADR；后续每批先确认真实组件范围、依赖和验收，再取得实施授权。
 
