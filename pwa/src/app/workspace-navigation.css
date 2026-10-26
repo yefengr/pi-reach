@@ -301,8 +301,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--pwa-line);
-  border-bottom: 0;
   border-radius: var(--pwa-radius-lg) var(--pwa-radius-lg) 0 0;
   color: var(--pwa-ink);
   background: var(--pwa-surface);
