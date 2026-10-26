@@ -170,7 +170,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
     contentVersion: items,
     onLoad: () => onLoadEarlier?.(),
   });
-  return <div className="pwa-message-list" data-reconnect-phase={reconnectPhase ?? undefined} ref={listRef} tabIndex={-1} onScroll={(event) => {
+  return <div className="pwa-message-list" data-reconnect-phase={reconnectPhase ?? undefined} data-scroll-hold={loadingEarlier ? "true" : undefined} ref={listRef} tabIndex={-1} onScroll={(event) => {
     const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
     onScroll(scrollHeight - scrollTop - clientHeight <= 32);
     checkAutoLoad();
