@@ -1,5 +1,6 @@
 import { PAIR_TTL_MAX_MS, type RouteFrame } from "@pi-reach/protocol/outer";
 
+import { DEFAULT_RELAY_LIMITS } from "./config.js";
 import { DiscoveryBudget } from "./discovery-budget.js";
 import {
   compareExactInteger,
@@ -51,10 +52,7 @@ export class PeerRegistry {
 
   constructor(
     private readonly now: () => number = Date.now,
-    limits: { maxDiscoveryBytes: number; maxSubscriptions: number } = {
-      maxDiscoveryBytes: 4 * 1024 * 1024,
-      maxSubscriptions: 1024,
-    },
+    limits: { maxDiscoveryBytes: number; maxSubscriptions: number } = DEFAULT_RELAY_LIMITS,
   ) {
     this.discoveryBudget = new DiscoveryBudget(limits.maxDiscoveryBytes, limits.maxSubscriptions);
   }

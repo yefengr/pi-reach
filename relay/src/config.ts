@@ -16,6 +16,9 @@ export type RelayLimits = {
   shutdownTimeoutMs: number;
 };
 
+/** 未设置 PI_REACH_RELAY_PORT 或未传 port 时的监听端口。 */
+export const DEFAULT_RELAY_PORT = 3000;
+
 export const DEFAULT_RELAY_LIMITS: Readonly<RelayLimits> = Object.freeze({
   maxFrameBytes: 4 * 1024 * 1024,
   maxBufferedBytes: 8 * 1024 * 1024,
@@ -91,7 +94,7 @@ export type CliConfig = { host: string; port: number; limits: RelayLimits };
 
 export function loadCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig {
   const rawPort = env.PI_REACH_RELAY_PORT;
-  let port = 3000;
+  let port = DEFAULT_RELAY_PORT;
   if (rawPort !== undefined) {
     if (!/^(0|[1-9][0-9]*)$/.test(rawPort)) throw new Error("PI_REACH_RELAY_PORT must be an integer from 0 to 65535");
     port = Number(rawPort);
