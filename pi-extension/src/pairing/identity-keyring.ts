@@ -29,10 +29,12 @@ export class KeyringMutationTimeoutError extends Error implements IdentityLockDe
   }
 }
 
-let keyringOperationTimeoutMs = 3_000;
+/** 单次钥匙串操作的超时；超时后底层调用仍在进行，由调用方等待其结束再释放身份锁。 */
+const KEYRING_OPERATION_TIMEOUT_MS = 3_000;
+let keyringOperationTimeoutMs = KEYRING_OPERATION_TIMEOUT_MS;
 
 export function _setKeyringOperationTimeoutForTest(timeoutMs: number | null): void {
-  keyringOperationTimeoutMs = timeoutMs ?? 3_000;
+  keyringOperationTimeoutMs = timeoutMs ?? KEYRING_OPERATION_TIMEOUT_MS;
 }
 
 export function _runKeyringOperationWithTimeoutForTest<T>(

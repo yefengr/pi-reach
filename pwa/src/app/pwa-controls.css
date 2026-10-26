@@ -48,7 +48,7 @@
 .pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item] {
   position: relative;
   isolation: isolate;
-  min-height: 44px;
+  min-height: var(--pwa-hit-target);
   background: transparent;
   outline-offset: calc(-1 * var(--pwa-menu-visual-inset));
 }

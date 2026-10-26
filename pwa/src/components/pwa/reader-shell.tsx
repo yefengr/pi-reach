@@ -8,6 +8,7 @@ import { PWA_DRAWER_EASE, pwaDrawerTransitions, useDrawerMoving, usePwaMotionDur
 import { useReaderHistory } from "./use-reader-history";
 import { readerHasOverlay } from "./reader-shared";
 import "./tool-reader.css";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 type ReaderShellProps = {
   opened: boolean;
@@ -28,8 +29,8 @@ type ReaderShellProps = {
  * 打开时压入一条不改变 URL 的历史记录，系统返回或浏览器后退只关闭阅读器。
  */
 export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTransitionEnd, title, closeLabel, historyKey, className = "", describedBy, actions, children }: ReaderShellProps) {
-  const duration = usePwaMotionDuration("--pwa-duration-drawer", 200);
-  const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
+  const duration = usePwaMotionDuration("--pwa-duration-drawer");
+  const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   const requestClose = () => { if (!readerHasOverlay(surface)) onClose(); };
   const motion = useDrawerMoving(opened);
@@ -42,7 +43,7 @@ export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTrans
   </>;
   return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={enter} onExitTransitionEnd={onExitTransitionEnd}
       position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"}
-      withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false}
+      withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-reader)" trapFocus returnFocus={false}
       transitionProps={{ transition: pwaDrawerTransitions.right, duration, exitDuration: instant ? 0 : duration, timingFunction: PWA_DRAWER_EASE }}>
       <Drawer.Overlay className="pwa-scrim" />
       <Drawer.Content ref={setSurface} classNames={{ content: `pwa-tool-reader ${className}`.trim() }} data-pwa-moving={motion.moving || undefined} aria-describedby={describedBy}>

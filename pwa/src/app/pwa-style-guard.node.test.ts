@@ -40,6 +40,20 @@ const SPACING_PROPERTY = /^(?:(?:scroll-)?(?:margin|padding)(?:-(?:top|right|bot
 const SPACING_CUSTOM_PROPERTY = /^--pwa-(?!space-)[a-z0-9-]*(?:pad|gap|margin|inset)[a-z0-9-]*$/;
 const BORDER_WIDTH_PROPERTY = /^(?:border|outline)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-width)?$/;
 const HEX_COLOR = /#[0-9a-f]{3,8}\b/i;
+/** 派生色只在主题文件定义成 token（如 --pwa-running-line）。 */
+const COLOR_MIX = /color-mix\(/i;
+const MOTION_PROPERTY = /^(?:transition|animation)(?:-(?:duration|delay|timing-function))?$/;
+/** 非零时长字面量；时长只引用 --pwa-duration-*（DESIGN「动效时长」）。 */
+const DURATION_LITERAL = /(?<![\w.-])(\d*\.?\d+)m?s\b/g;
+/** 曲线只引用 --pwa-ease-*；linear 只允许用于无限循环。 */
+const EASING_LITERAL = /cubic-bezier\(|steps\(|\bease(?:-in|-out|-in-out)?\b/;
+/** 字号只引用档位 token；输入框以 max(16px, …) 保证移动浏览器不缩放（DESIGN「基础层」）。 */
+const FONT_SIZE_VALUE = /^(?:inherit|var\(--pwa-text-[a-z]+\)|max\(16px, var\(--pwa-text-[a-z]+\)\))(?:\s*!important)?$/;
+const FONT_WEIGHT_VALUE = /^(?:inherit|var\(--pwa-weight-(?:regular|strong)\))(?:\s*!important)?$/;
+/** font 简写去掉字重、字号、行高与字体族 token 后，只应剩下分隔用的空白与 `/`。 */
+const FONT_SHORTHAND_TOKEN = /var\(--pwa-(?:weight|text|leading|font)-[a-z]+\)/g;
+/** 44px 点击区只由 --pwa-hit-target 定义（DESIGN「按钮尺寸」）。 */
+const HIT_TARGET_LITERAL = /(?<![\d.])44px/;
 
 type Declaration = { file: string; selector: string; property: string; value: string };
 type Exception = { file: string; selector: string; property: string; values: number[]; reason: string };
@@ -57,7 +71,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-field-error svg", property: "margin-top", values: [1], reason: OPTICAL },
   { file: "app/globals.css", selector: ".pwa-pairing-methods", property: "margin", values: [-8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-runtime-notice .pwa-runtime-notice-dismiss", property: "margin", values: [-4], reason: ALIGN },
-  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-toast-dismiss", property: "margin", values: [-6, -8], reason: ALIGN },
+  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-status-error-dismiss", property: "margin", values: [-6, -8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-app-shell[data-compact-height] .pwa-runtime-notice-description", property: "margin", values: [-1], reason: OPTICAL },
   { file: "app/workspace-shell.css", selector: ".pwa-root[data-sidebar-collapsed] .pwa-title-bar", property: "padding-left", values: [56], reason: "收起侧栏后标题区避让展开入口（8＋44＋4），另加左安全区" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-workspace-state", property: "padding", values: [260], reason: "主区空状态顶部 clamp(48px, 24dvh, 260px) 的上限" },
@@ -69,6 +83,14 @@ const EXCEPTIONS: Exception[] = [
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown code", property: "padding", values: [1], reason: OPTICAL },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-code-copy", property: "margin-block", values: [-4], reason: ALIGN },
   { file: "components/pwa/tool-reader.css", selector: ".pwa-ui-scope .pwa-button.pwa-tool-details-button", property: "margin-left", values: [-8], reason: ALIGN },
+];
+
+type HoverRule = { file: string; selector: string };
+/** 不在 @media (hover: hover) 内的 :hover 规则只允许取消 Mantine 默认悬停或保持选中态；登记失效会失败。 */
+const HOVER_OVERRIDES: (HoverRule & { reason: string })[] = [
+  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-composer .pwa-composer-input, .pwa-ui-scope .pwa-composer .pwa-composer-input:hover, .pwa-ui-scope .pwa-composer .pwa-composer-input:focus, .pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within", reason: "取消 Mantine 输入框的悬停与聚焦样式" },
+  { file: "app/globals.css", selector: ".pwa-command-choice[data-selected]:hover:not(:disabled), .pwa-command-choice[data-selected]:focus-visible:not(:disabled)", reason: "当前项悬停时保持 selected 底色" },
+  { file: "app/workspace-navigation.css", selector: ".pwa-root .pwa-computer-select:hover, .pwa-root .pwa-computer-select:active, .pwa-root .pwa-computer-select[data-active], .pwa-root .pwa-computer-select[data-active]:hover, .pwa-root .pwa-computer-select[data-active]:active", reason: "取消 Mantine NavLink 悬停底色，由外层卡片负责" },
 ];
 
 function cssFiles(directory: string): string[] {
@@ -95,6 +117,33 @@ function declarations(): Declaration[] {
   });
 }
 
+/** 逐字符跟踪花括号栈，找出外层没有 @media (hover: hover) 的 :hover 规则。 */
+function hoverRulesOutsideHoverMedia(): HoverRule[] {
+  return cssFiles(SOURCE_ROOT).sort().flatMap((path) => {
+    const file = relative(SOURCE_ROOT, path);
+    const text = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const stack: string[] = [];
+    const found: HoverRule[] = [];
+    let head = "";
+    for (const char of text) {
+      if (char === "{") {
+        const selector = head.trim().replace(/\s+/g, " ");
+        if (!selector.startsWith("@") && selector.includes(":hover") && !stack.some((outer) => /\(hover:\s*hover\)/.test(outer))) found.push({ file, selector });
+        stack.push(selector);
+        head = "";
+      } else if (char === "}") {
+        stack.pop();
+        head = "";
+      } else if (char === ";") {
+        head = "";
+      } else {
+        head += char;
+      }
+    }
+    return found;
+  });
+}
+
 const pxValues = (value: string) => [...value.matchAll(/(-?\d*\.?\d+)px/g)].map((match) => Number(match[1]));
 const keyOf = (entry: { file: string; selector: string; property: string }) => `${entry.file} | ${entry.selector} | ${entry.property}`;
 const isApprovedSpacing = (value: number) => value >= 0 && (SPACING_SCALE.has(value) || SPACING_DENSITY.has(value));
@@ -109,6 +158,39 @@ describe("CSS static guard", () => {
 
   test("hex colors appear only in the theme tokens", () => {
     const offenders = all.filter((entry) => entry.file !== THEME_FILE && HEX_COLOR.test(entry.value)).map(keyOf);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production derived colors are defined once as theme tokens", () => {
+    // 历史开发评审样式保留当时的对照取色，与圆角守卫同样不受限制。
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && COLOR_MIX.test(entry.value)).map(keyOf);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production motion references duration and easing tokens, with linear only for infinite loops", () => {
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && MOTION_PROPERTY.test(entry.property))
+      .filter((entry) => {
+        const bare = entry.value.replace(/var\([^)]*\)/g, "");
+        const literal = [...bare.matchAll(DURATION_LITERAL)].some((match) => Number(match[1]) !== 0);
+        const easing = EASING_LITERAL.test(bare) || (/\blinear\b/.test(bare) && !/\binfinite\b/.test(bare));
+        return literal || easing;
+      }).map((entry) => `${keyOf(entry)}: ${entry.value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production font sizes and weights reference typography tokens", () => {
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/")).filter(({ property, value }) => {
+      if (property === "font-size") return !FONT_SIZE_VALUE.test(value);
+      if (property === "font-weight") return !FONT_WEIGHT_VALUE.test(value);
+      if (property !== "font" || value === "inherit") return false;
+      return !value.includes("var(--pwa-text-") || /[^\s/]/.test(value.replace(FONT_SHORTHAND_TOKEN, ""));
+    }).map((entry) => `${keyOf(entry)}: ${entry.value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production hit areas reference the hit target token instead of 44px", () => {
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && HIT_TARGET_LITERAL.test(entry.value))
+      .map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });
 
@@ -186,6 +268,15 @@ describe("CSS static guard", () => {
       expect(matches, `${file}: ${selector}`).toHaveLength(1);
       expect(matches[0].value).toBe(`var(--pwa-radius-${size})`);
     }
+  });
+
+  test("hover feedback stays inside @media (hover: hover) except registered overrides", () => {
+    const key = (rule: HoverRule) => `${rule.file} | ${rule.selector}`;
+    const allowed = new Set(HOVER_OVERRIDES.map(key));
+    const found = hoverRulesOutsideHoverMedia();
+    expect(found.map(key).filter((rule) => !allowed.has(rule))).toEqual([]);
+    const present = new Set(found.map(key));
+    expect(HOVER_OVERRIDES.map(key).filter((rule) => !present.has(rule))).toEqual([]);
   });
 
   test("border and outline widths stay hairline", () => {

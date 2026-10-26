@@ -3,7 +3,7 @@
 .pwa-root .pwa-button.pwa-device-trigger { width: 100%; min-width: 0; min-height: 52px; height: auto; justify-content: stretch; padding: 6px 8px; border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
 
 /* 只配对一台电脑时收成无框的一行，悬停浅底；多台时保持卡片样式。 */
-.pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: 44px; padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
+.pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: var(--pwa-hit-target); padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
 @media (hover: hover) { .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact:hover:not(:disabled) { background: var(--pwa-hover); } }
 .pwa-root .pwa-device-trigger-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-secondary); }
 .pwa-root .pwa-device-trigger-dot.online { background: var(--pwa-accent); }
@@ -35,13 +35,13 @@
 
 .pwa-root .pwa-device-trigger-copy strong {
   font-size: var(--pwa-text-list);
-  font-weight: 600;
+  font-weight: var(--pwa-weight-strong);
 }
 
 .pwa-root .pwa-device-trigger-copy small {
   color: var(--pwa-secondary);
   font-size: var(--pwa-text-meta);
-  font-weight: 400;
+  font-weight: var(--pwa-weight-regular);
 }
 
 .pwa-root .pwa-device-popover {
@@ -112,7 +112,7 @@
   min-height: 62px;
   flex: 1;
   gap: 10px;
-  padding: 8px 6px;
+  padding: 6px 8px;
   color: inherit;
   background: transparent;
   text-align: left;
@@ -162,7 +162,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--pwa-text-list);
-  font-weight: 600;
+  font-weight: var(--pwa-weight-strong);
 }
 
 .pwa-root .pwa-computer-select .pwa-peer-description,
@@ -204,7 +204,7 @@
   /* 状态标签只用描边与文字，不继承 Mantine 浅色变体的底色；运行中另用状态轻底。 */
   background: transparent;
   font-size: var(--pwa-text-meta);
-  font-weight: 600;
+  font-weight: var(--pwa-weight-strong);
 }
 
 .pwa-root .pwa-presence-label.online {
@@ -213,7 +213,7 @@
 
 .pwa-root .pwa-presence-label.partial {
   color: var(--pwa-running);
-  border-color: color-mix(in srgb, var(--pwa-running) 42%, var(--pwa-line));
+  border-color: var(--pwa-running-line);
   background: var(--pwa-running-wash);
 }
 
@@ -222,17 +222,25 @@
 }
 
 .pwa-root .pwa-peer-menu-trigger {
-  flex: 0 0 44px;
+  flex: 0 0 var(--pwa-hit-target);
   align-self: center;
   border: 0;
   background: transparent;
   opacity: 0;
 }
 
-.pwa-root .pwa-peer-card:hover .pwa-peer-menu-trigger,
 .pwa-root .pwa-peer-menu-trigger:focus-visible,
 .pwa-root .pwa-peer-menu-trigger[aria-expanded="true"] {
   opacity: 1;
+}
+
+@media (hover: hover) { .pwa-root .pwa-peer-card:hover .pwa-peer-menu-trigger {
+  opacity: 1;
+} }
+
+/* 触屏或混合输入没有可靠的悬停，宽视口（如平板）也常显操作入口。 */
+@media (any-pointer: coarse), (hover: none) {
+  .pwa-root .pwa-peer-menu-trigger { opacity: 1; }
 }
 
 @media (hover: hover) { .pwa-root .pwa-peer-menu-trigger:hover:not(:disabled) {
@@ -251,7 +259,7 @@
 }
 
 .pwa-root .pwa-peer-menu-panel button {
-  min-height: 44px;
+  min-height: var(--pwa-hit-target);
   padding-inline: var(--pwa-space-menu-pad);
   border-radius: var(--pwa-radius-md);
   font-size: var(--pwa-text-meta);
@@ -293,8 +301,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--pwa-line);
-  border-bottom: 0;
   border-radius: var(--pwa-radius-lg) var(--pwa-radius-lg) 0 0;
   color: var(--pwa-ink);
   background: var(--pwa-surface);
@@ -330,9 +336,6 @@
 @media (max-width: 767.98px) {
   .pwa-root .pwa-navigation-drawer,
   .pwa-root .pwa-navigation-drawer .pwa-navigation-scroll { touch-action: pan-y; }
-  .pwa-root .pwa-peer-menu-trigger {
-    opacity: 1;
-  }
 
   .pwa-root .pwa-peer-presence {
     gap: 4px;

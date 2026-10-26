@@ -5,7 +5,7 @@ import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { MessageComposer } from "./message-composer";
 import { PwaAppShell, PwaRuntimeNoticeSlot } from "./pwa-app-shell";
-import { PwaConnectionBanner, PwaStatusToast } from "./pwa-app-actions";
+import { PwaConnectionBanner, PwaStatusError } from "./pwa-app-actions";
 import { ServiceWorkerNotice } from "./service-worker-register";
 
 function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; initialDraft: string }) {
@@ -18,7 +18,7 @@ function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; ini
         <header className="pwa-title-bar">Pi Reach</header>
         <div className="pwa-main-notices">
           <PwaConnectionBanner kind="relay" connection="retrying" onRetry={() => {}} />
-          <PwaStatusToast message={error} onDismiss={() => setError(null)} />
+          <PwaStatusError message={error} onDismiss={() => setError(null)} />
           <PwaRuntimeNoticeSlot />
         </div>
         <div className="pwa-message-list">Current session output</div>
@@ -72,7 +72,7 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   expect(retryBox.width).toBeGreaterThanOrEqual(44);
   expect(retry.contains(document.elementFromPoint(retryBox.x + retryBox.width / 2, retryBox.y + retryBox.height / 2))).toBe(true);
   const runtimeBox = runtimeNotice.getBoundingClientRect();
-  expect(runtimeBox.top).toBeGreaterThanOrEqual(document.querySelector(".pwa-toast")!.getBoundingClientRect().bottom);
+  expect(runtimeBox.top).toBeGreaterThanOrEqual(document.querySelector(".pwa-status-error")!.getBoundingClientRect().bottom);
   expect(runtimeBox.bottom).toBeLessThanOrEqual(document.querySelector(".pwa-message-list")!.getBoundingClientRect().top);
   for (const name of ["Install app", "Dismiss PWA notice"]) {
     const button = screen.getByRole("button", { name, exact: true }).element();
@@ -94,7 +94,7 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   const contentBox = contentRange.getBoundingClientRect();
   expect(contentBox.bottom).toBeLessThanOrEqual(listBox.bottom);
   expect(list.contains(document.elementFromPoint(contentBox.x + contentBox.width / 2, contentBox.y + contentBox.height / 2))).toBe(true);
-  for (const notice of document.querySelectorAll(".pwa-runtime-notice,.pwa-connection-banner,.pwa-toast")) {
+  for (const notice of document.querySelectorAll(".pwa-runtime-notice,.pwa-connection-banner,.pwa-status-error")) {
     const box = notice.getBoundingClientRect();
     expect(box.bottom <= composerBox.top || box.top >= composerBox.bottom, JSON.stringify({ notice: notice.className, noticeBox: box.toJSON(), composerBox: composerBox.toJSON() })).toBe(true);
   }

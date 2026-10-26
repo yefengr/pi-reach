@@ -268,6 +268,10 @@ test("startup and compact notices keep icons on the 16/20/24 scale and the mobil
   const icon = document.querySelector(".pwa-startup-icon")!.getBoundingClientRect();
   expect([Math.round(icon.width), Math.round(icon.height)]).toEqual([48, 48]);
   expect(getComputedStyle(document.querySelector(".pwa-startup-card")!).paddingLeft).toBe("16px");
+  // 大号标题引出的独立说明与主区空状态同为 8。
+  const title = document.querySelector(".pwa-startup-card h1")!.getBoundingClientRect();
+  const description = document.querySelector(".pwa-startup-card h1 + p")!.getBoundingClientRect();
+  expect(Math.round(description.top - title.bottom)).toBe(8);
   await screen.unmount();
   screen = await renderPwa(<div className="pwa-app-shell" data-compact-height="short"><PwaConnectionBanner kind="relay" connection="retrying" onRetry={() => {}} /></div>);
   const svg = document.querySelector(".pwa-connection-banner-icon svg")!.getBoundingClientRect();

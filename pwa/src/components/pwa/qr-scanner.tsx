@@ -115,6 +115,6 @@ export function QrImageButton({ onScan, onNotFound, disabled = false }: QrImageB
     if (mountedRef.current) onScan(text);
   };
   return <FileButton accept="image/*" inputProps={{ className: "pwa-file-input", hidden: true }} onChange={(file) => void scanImage(file)} disabled={disabled}>
-    {({ onClick }) => <Button className="pwa-pairing-method" variant="transparent" color="piReach" type="button" leftSection={<ImageUp size={16} aria-hidden="true" />} onClick={onClick} disabled={disabled}>{t.pairing.uploadQr}</Button>}
+    {({ onClick }) => <Button className="pwa-pairing-method" variant="transparent" type="button" leftSection={<ImageUp size={16} aria-hidden="true" />} onClick={onClick} disabled={disabled}>{t.pairing.uploadQr}</Button>}
   </FileButton>;
 }

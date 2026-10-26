@@ -62,7 +62,7 @@ function ComputerActionsMenu({ device, onRename, onRemove, onMenuChange }: { dev
     portalProps={{ target: ".pwa-root" }}
     position="bottom-end"
     preventPositionChangeWhenVisible={false}
-    zIndex={230}
+    zIndex="var(--pwa-z-device-menu)"
     returnFocus
     onChange={setMenuOpened}
     onExitTransitionEnd={() => { onMenuChange?.(false); menuAction.finish(); }}
@@ -120,9 +120,9 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
 }
 
 export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresence = {}, onPair, onSelectDevice, onRename, onRemove, variant = "desktop", purpose = "choose", onOverlayChange }: WorkspaceDeviceControlProps) {
-  const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
+  const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer");
   const floatingMiddlewares = useFloatingSafeMiddlewares();
-  const popoverDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
+  const popoverDuration = usePwaMotionDuration("--pwa-duration-fade");
   const { t } = useI18n();
   const [opened, setOpened] = useState(false);
   const openedRef = useRef(false);
@@ -172,7 +172,6 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     ref={triggerRef}
     className="pwa-manage-computers"
     variant="transparent"
-    color="piReach"
     type="button"
     onClick={() => setPanelOpened(true)}
     leftSection={<Computer size={16} />}
@@ -199,7 +198,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
       size="auto"
       withinPortal
       portalProps={{ target: ".pwa-root" }}
-      zIndex={220}
+      zIndex="var(--pwa-z-device-panel)"
       padding={0}
       title={title}
       closeButtonProps={{ "aria-label": t.devices.closeChooser, title: t.devices.closeChooser }}
@@ -226,7 +225,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     offset={8}
     withinPortal
     portalProps={{ target: ".pwa-root" }}
-    zIndex={220}
+    zIndex="var(--pwa-z-device-panel)"
     transitionProps={{ transition: pwaFadeTransition, duration: popoverDuration }}
     returnFocus={false}
   >

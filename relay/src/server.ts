@@ -5,7 +5,7 @@ import type { Duplex } from "node:stream";
 import WebSocket, { WebSocketServer, type RawData } from "ws";
 
 import { createChallenge, verifyAuth } from "./auth.js";
-import { resolveRelayLimits, type RelayLimits } from "./config.js";
+import { DEFAULT_RELAY_PORT, resolveRelayLimits, type RelayLimits } from "./config.js";
 import { DiscoveryCapacityError } from "./discovery-budget.js";
 import { PeerRegistry, type Outbound } from "./registry.js";
 import { BoundedTransport, TransportPool } from "./transport.js";
@@ -22,6 +22,10 @@ import {
   type ParsedHello,
   WireError,
 } from "./wire.js";
+
+/** WebSocket 关闭码（RFC 6455）：服务端停机为 1001，违反协议或超出限额为 1008。 */
+const CLOSE_GOING_AWAY = 1001;
+const CLOSE_POLICY_VIOLATION = 1008;
 
 export type RelayLogEvent = {
   event: "connection_rejected" | "connection_closed" | "authenticated" | "frame_dropped" | "route_dropped" | "pairing_result" | "transport_overflow";
@@ -44,7 +48,7 @@ type BudgetReservation = { pending: boolean; released: boolean };
 
 export async function startRelay(options: StartRelayOptions = {}): Promise<RelayHandle> {
   const host = options.host ?? "127.0.0.1";
-  const port = validatePort(options.port ?? 3000);
+  const port = validatePort(options.port ?? DEFAULT_RELAY_PORT);
   const limits = resolveRelayLimits(options.limits);
   const logger = safeLogger(options.logger);
   const registry = new PeerRegistry(Date.now, limits);
@@ -175,7 +179,7 @@ class PeerSession {
   }
 
   close(): void {
-    this.beginClose(1001, "server shutdown");
+    this.beginClose(CLOSE_GOING_AWAY, "server shutdown");
   }
 
   terminate(): void {
@@ -290,12 +294,12 @@ class PeerSession {
   }
 
   private closePolicyViolation(): void {
-    this.beginClose(1008, "policy violation");
+    this.beginClose(CLOSE_POLICY_VIOLATION, "policy violation");
   }
 
   private rejectHandshake(outcome: string): void {
     this.logger({ event: "connection_rejected", outcome });
-    this.beginClose(1008, "policy violation");
+    this.beginClose(CLOSE_POLICY_VIOLATION, "policy violation");
   }
 
   private beginClose(code: number, reason: string): void {

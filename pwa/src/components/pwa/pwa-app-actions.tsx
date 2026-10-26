@@ -13,7 +13,7 @@ type MessageActionsProps = {
   onLatest: () => void;
 };
 
-type StatusToastProps = {
+type StatusErrorProps = {
   message: string | null;
   onDismiss: () => void;
 };
@@ -75,15 +75,15 @@ export function PwaConnectionBanner({ kind, connection, onRetry, retryDisabled =
   );
 }
 
-export function PwaStatusToast({ message, onDismiss }: StatusToastProps) {
+export function PwaStatusError({ message, onDismiss }: StatusErrorProps) {
   const { t, locale } = useI18n();
   const safeMessage = safeFeedbackMessage(message);
   if (!safeMessage) return null;
 
   return (
-    <div className="pwa-toast" role="status">
+    <div className="pwa-status-error" role="status">
       <span>{localizeFeedback(safeMessage, locale)}</span>
-      <ActionIcon className="pwa-toast-dismiss" type="button" onClick={onDismiss} aria-label={t.common.dismiss}>
+      <ActionIcon className="pwa-status-error-dismiss" type="button" onClick={onDismiss} aria-label={t.common.dismiss}>
         <X size={16} />
       </ActionIcon>
     </div>

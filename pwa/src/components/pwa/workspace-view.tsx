@@ -10,14 +10,12 @@ import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { BrandMark } from "@/components/pwa/brand-mark";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
+import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 
 export { displayDevice } from "@/components/pwa/workspace-device-control";
 export { displayPi } from "@/components/pwa/session-title";
 export type { PairingPresence, PairingStatus } from "@/lib/pwa/pwa-view-model";
 export type ConnectionViewState = "offline" | "connecting" | "online" | "retrying" | "no_network";
-
-// 全局线宽 1.8 按 24 画布缩放，12px 时只剩约 0.9px；2.4 让实际线宽与 16px 图标（约 1.2px）一致。
-const SMALL_SPINNER_STROKE = 2.4;
 
 const navigationNavLinkClassNames = {
   body: "pwa-nav-link-body",
@@ -30,7 +28,7 @@ export function ConnectionStatus({ state, retryAttempt = 0 }: { state: Connectio
   const { t } = useI18n();
   const label = state === "online" ? t.connection.connected : state === "connecting" ? t.connection.connecting : state === "retrying" ? t.connection.reconnecting : state === "no_network" ? t.connection.noNetwork : t.connection.offline;
   const busy = state === "connecting" || state === "retrying";
-  return <span className={`pwa-connection ${state}`} title={label} aria-label={label} data-retry-attempt={state === "retrying" ? retryAttempt : undefined}>{busy ? <LoaderCircle className="pwa-spin" size={12} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : <span className="pwa-status-dot" aria-hidden="true" />}<span className="pwa-connection-label">{label}</span></span>;
+  return <span className={`pwa-connection ${state}`} title={label} aria-label={label} data-retry-attempt={state === "retrying" ? retryAttempt : undefined}>{busy ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : <span className="pwa-status-dot" aria-hidden="true" />}<span className="pwa-connection-label">{label}</span></span>;
 }
 
 /** 移动导航中选中、待导航退出后执行的切换目标。 */
@@ -113,7 +111,7 @@ export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = 
   const { t } = useI18n();
   const directory = cwdName(endpoint.cwd);
   const status = endpoint.working
-    ? <span className="pwa-pi-status pwa-pi-status-running"><LoaderCircle className="pwa-spin" size={12} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" />{t.actions.running}</span>
+    ? <span className="pwa-pi-status pwa-pi-status-running"><LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" />{t.actions.running}</span>
     : <span className="pwa-pi-status">{t.actions.idle}</span>;
   return <NavLink
     className={`pwa-nav-session${variant === "sheet" ? " pwa-sheet-room" : ""}`}
@@ -184,8 +182,8 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
 export function WorkspaceNavigationFooter({ onPair, onSettings, className = "pwa-sidebar-foot", autoFocusSettings = false }: WorkspaceNavigationFooterProps) {
   const { t } = useI18n();
   return <div className={className}>
-    <Button className="pwa-nav-pair" variant="transparent" color="piReach" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
-    <Button className="pwa-nav-settings" variant="transparent" color="piReach" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} leftSection={<Settings size={16} />}>{t.navigation.settings}</Button>
+    <Button className="pwa-nav-pair" variant="transparent" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
+    <Button className="pwa-nav-settings" variant="transparent" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} leftSection={<Settings size={16} />}>{t.navigation.settings}</Button>
   </div>;
 }
 

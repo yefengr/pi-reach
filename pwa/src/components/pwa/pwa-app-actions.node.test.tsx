@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PwaConnectionBanner, PwaMessageActions, PwaStatusToast } from "./pwa-app-actions";
+import { PwaConnectionBanner, PwaMessageActions, PwaStatusError } from "./pwa-app-actions";
 import { PwaUiProvider } from "./pwa-ui-provider";
 
 function renderActions(unreadOutput = 3): string {
@@ -8,7 +8,7 @@ function renderActions(unreadOutput = 3): string {
     <PwaUiProvider>
       <div className="pwa-root">
         <PwaMessageActions show showRetry showLatest unreadOutput={unreadOutput} onRetry={() => {}} onLatest={() => {}} />
-        <PwaStatusToast message="Relay is not connected." onDismiss={() => {}} />
+        <PwaStatusError message="Relay is not connected." onDismiss={() => {}} />
       </div>
     </PwaUiProvider>,
   );
@@ -66,15 +66,15 @@ test("renders Latest when output is unread-free", () => {
 });
 
 test("does not expose arbitrary raw errors in the remaining toast", () => {
-  const html = renderToStaticMarkup(<PwaUiProvider><PwaStatusToast message="WebSocket endpoint_id=550e8400-e29b-41d4-a716-446655440000" onDismiss={() => {}} /></PwaUiProvider>);
+  const html = renderToStaticMarkup(<PwaUiProvider><PwaStatusError message="WebSocket endpoint_id=550e8400-e29b-41d4-a716-446655440000" onDismiss={() => {}} /></PwaUiProvider>);
   expect(html).toMatch(/Something went wrong\. Try again\./);
   expect(html).not.toMatch(/WebSocket|endpoint_id|550e8400/);
 });
 
 test("does not render the toast without a message", () => {
-  const html = renderToStaticMarkup(<PwaUiProvider><PwaStatusToast message={null} onDismiss={() => {}} /></PwaUiProvider>);
+  const html = renderToStaticMarkup(<PwaUiProvider><PwaStatusError message={null} onDismiss={() => {}} /></PwaUiProvider>);
 
-  expect(html).not.toMatch(/pwa-toast/);
+  expect(html).not.toMatch(/pwa-status-error/);
   expect(html).not.toMatch(/Dismiss/);
 });
 

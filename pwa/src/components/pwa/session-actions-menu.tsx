@@ -41,7 +41,7 @@ function scheduleFocusReturn(
 export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
   const floatingMiddlewares = useFloatingSafeMiddlewares();
   const { t } = useI18n();
-  const menuDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
+  const menuDuration = usePwaMotionDuration("--pwa-duration-fade");
   const [opened, setOpened] = useState(false);
   const openedRef = useRef(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -114,7 +114,7 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
       floatingStrategy="fixed"
       withinPortal
       portalProps={{ target: ".pwa-root" }}
-      zIndex={21}
+      zIndex="var(--pwa-z-workspace-float)"
     >
       <Popover.Target>
         <ActionIcon ref={triggerRef} className="pwa-session-actions-trigger" type="button" aria-label={t.actions.sessionInfo} title={t.actions.sessionInfo} onClick={() => setMenuOpened(!openedRef.current)} onKeyDown={handleTriggerKeyDown}><Info size={20} /></ActionIcon>

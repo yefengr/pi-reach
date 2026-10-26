@@ -86,7 +86,7 @@ export function CopyButton({ text, label, className, feedback = "inline" }: { te
       </span>}
     </ActionIcon>
     {/* 使用 target 而非包装控件，保留直接子级布局，也不重复添加读屏描述。 */}
-    {feedback === "inline" ? <Tooltip target={buttonRef} opened={failed} label={t.workspace.copyFailed}
+    {feedback === "inline" ? <Tooltip target={buttonRef} opened={failed} zIndex="var(--pwa-z-feedback)" label={t.workspace.copyFailed}
       classNames={{ tooltip: "pwa-copy-error" }} aria-hidden="true" multiline
       portalProps={{ target: ".pwa-root" }} floatingStrategy="fixed" middlewares={floatingMiddlewares}
       events={{ hover: false, focus: false, touch: false }} transitionProps={{ duration: 0 }} /> : null}

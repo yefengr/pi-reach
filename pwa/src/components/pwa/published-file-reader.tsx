@@ -15,6 +15,7 @@ import { publishedImageBounds, usePublishedImageMotion } from "./published-image
 import { useReaderHistory } from "./use-reader-history";
 import { ReaderShell } from "./reader-shell";
 import "./published-files.css";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened, instant, allowEnter, enterDuration, exitDuration }: {
   url: string; name: string; onRetry: () => void; canRetry: boolean; source?: HTMLButtonElement;
@@ -46,11 +47,11 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
   const imageRadius = `calc(var(--pwa-radius-md) / ${transform.scale})`;
   return <>
     <div className="pwa-file-image-stage" data-swipe-ignore onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
-      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" color="piReach" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ borderRadius: imageRadius, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
+      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ borderRadius: imageRadius, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }} />}
     </div>
     <div className="pwa-file-zoom">
       <ActionIcon variant="subtle" aria-label={t.files.zoomOut} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale / 1.5))}><Minus size={20} /></ActionIcon>
-      <Button variant="transparent" color="piReach" leftSection={<RotateCcw size={16} />} onClick={() => updateTransform({ ...IMAGE_RESET })} aria-label={t.files.resetZoom}>{Math.round(transform.scale * 100)}%</Button>
+      <Button variant="transparent" leftSection={<RotateCcw size={16} />} onClick={() => updateTransform({ ...IMAGE_RESET })} aria-label={t.files.resetZoom}>{Math.round(transform.scale * 100)}%</Button>
       <ActionIcon variant="subtle" aria-label={t.files.zoomIn} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale * 1.5))}><Plus size={20} /></ActionIcon>
     </div>
   </>;
@@ -109,11 +110,11 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
   const state = files?.getState(file.publication_id);
   const name = state?.fileName ?? file.file_name;
   const headingId = useId();
-  const mobile = useMediaQuery("(max-width: 767.98px)") ?? false;
-  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer", 200);
-  const fadeDuration = usePwaMotionDuration("--pwa-duration-fade", 120);
-  const imageIn = usePwaMotionDuration("--pwa-duration-image-in", 260);
-  const imageOut = usePwaMotionDuration("--pwa-duration-image-out", 220);
+  const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
+  const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer");
+  const fadeDuration = usePwaMotionDuration("--pwa-duration-fade");
+  const imageIn = usePwaMotionDuration("--pwa-duration-image-in");
+  const imageOut = usePwaMotionDuration("--pwa-duration-image-out");
   const [imageReader] = useState(() => state?.preview?.kind === "image");
   // 仅点击时已解码的来源可参与开场；迟到解码不补播放大。
   const [allowImageEnter] = useState(() => !!source && publishedImageBounds(source.querySelector("img")) !== null);
@@ -158,7 +159,7 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
     if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
     return () => observer.disconnect();
   }, [scroll, preview, mobile]);
-  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => { setEntered(true); motion.onEnterTransitionEnd(); }} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex={30} trapFocus returnFocus={false} transitionProps={{ transition: imageReader ? pwaFadeTransition : pwaDrawerTransitions.right, duration: imageReader ? allowImageEnter ? imageIn : fadeDuration : drawerDuration, exitDuration: instant ? 0 : imageReader ? imageOut : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
+  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => { setEntered(true); motion.onEnterTransitionEnd(); }} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-reader)" trapFocus returnFocus={false} transitionProps={{ transition: imageReader ? pwaFadeTransition : pwaDrawerTransitions.right, duration: imageReader ? allowImageEnter ? imageIn : fadeDuration : drawerDuration, exitDuration: instant ? 0 : imageReader ? imageOut : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim pwa-file-reader-overlay" data-image-reader={imageReader || undefined} />
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }} data-pwa-moving={motion.moving || undefined} data-image-reader={imageReader || undefined} data-publication-id={file.publication_id}>
       <Drawer.Header className="pwa-topbar pwa-file-reader-header">

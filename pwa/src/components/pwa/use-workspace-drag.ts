@@ -5,10 +5,10 @@ import { pwaMotionShiftDisabled, usePwaMotionDuration } from "./use-pwa-motion";
 import type { usePageTransition } from "./use-page-transition";
 import type { SwipeDragHandlers } from "./use-swipe";
 import type { SettingsRoute } from "@/lib/pwa/settings-route";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 /** 提交后路由迟迟不变（popstate 丢失等）时撤销拖动并恢复设置页，避免卡死。 */
 const COMMIT_GUARD_MS = 1000;
-const PAGE_DURATION_FALLBACK_MS = 200;
 
 type Phase = "idle" | "dragging" | "committed" | "rollback";
 
@@ -31,7 +31,7 @@ type WorkspaceDragOptions = {
  * 回弹与保险超时才由本 hook 撤销动画。
  */
 export function useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settingsRef, scrimRef, pageTransition, onSettingsBack, beginNavigationPreview, endNavigationPreview }: WorkspaceDragOptions) {
-  const pageDuration = usePwaMotionDuration("--pwa-duration-page", PAGE_DURATION_FALLBACK_MS);
+  const pageDuration = usePwaMotionDuration("--pwa-duration-page");
   const [dragging, setDragging] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [seenChange, setSeenChange] = useState(settingsRoute.change);
@@ -97,7 +97,7 @@ export function useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settin
       const width = () => root.clientWidth;
       const full = latest.current.pageDuration;
       // 拖动开始就揭示工作区层，暂停动画在同一任务内创建，首帧遮罩仍完全覆盖工作区。
-      const navigationScrollTop = origin?.kind === "navigation" && window.matchMedia("(max-width: 767.98px)").matches ? origin.scrollTop : null;
+      const navigationScrollTop = origin?.kind === "navigation" && window.matchMedia(MOBILE_LAYOUT_QUERY).matches ? origin.scrollTop : null;
       flushSync(() => {
         setDragging(true);
         if (navigationScrollTop === null) return;

@@ -159,7 +159,7 @@ export function NoPiWorkspace({ onViewHistory }: { onViewHistory?: () => void })
   return <WorkspaceEmptyState
     icon={<Radio size={24} />}
     title={t.workspace.noPiTitle}
-    action={onViewHistory ? <Button variant="transparent" color="piReach" type="button" leftSection={<History size={16} />} onClick={onViewHistory}>{t.workspace.viewHistory}</Button> : undefined}
+    action={onViewHistory ? <Button variant="transparent" type="button" leftSection={<History size={16} />} onClick={onViewHistory}>{t.workspace.viewHistory}</Button> : undefined}
   >{t.workspace.noPiBody}</WorkspaceEmptyState>;
 }
 

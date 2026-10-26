@@ -647,6 +647,10 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         const panel = screen.getByRole("dialog", { name: "Choose computer" });
         await expect.element(panel).toBeVisible();
         await expect.poll(() => Math.round(panel.element().getBoundingClientRect().bottom)).toBe(height);
+        // 模态 Drawer 靠遮罩与模态阴影分离，不额外描边。
+        const drawer = getComputedStyle(document.querySelector<HTMLElement>(".pwa-device-drawer")!);
+        expect([drawer.borderTopWidth, drawer.borderLeftWidth, drawer.borderRightWidth]).toEqual(["0px", "0px", "0px"]);
+        expect(drawer.boxShadow).not.toBe("none");
       } else {
         await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
       }
@@ -669,6 +673,8 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(button.type).toBe("button");
         expect(button.disabled).toBe(false);
         expect(button.classList.contains("mantine-NavLink-root")).toBe(true);
+        // 电脑行属于紧凑卡片：上下 6、左右 8。
+        expect([getComputedStyle(button).paddingTop, getComputedStyle(button).paddingLeft]).toEqual(["6px", "8px"]);
         expect(button.hasAttribute("data-active")).toBe(index === 0);
         expect(button.hasAttribute("data-disabled")).toBe(false);
         expect(button.querySelector("button")).toBeNull();

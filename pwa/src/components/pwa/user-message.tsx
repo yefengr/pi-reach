@@ -71,7 +71,7 @@ export function UserMessage({ value, metadata, entering, timelineKey, onRetryFai
       {checkable ? <ActionIcon className="pwa-delivery-action" type="button" onClick={() => onCheckStatus(pending.clientRequestId)} aria-label={t.timeline.deliveryCheck} title={t.timeline.deliveryCheck}><RefreshCw size={16} aria-hidden="true" /></ActionIcon> : null}
       {unknown && querying && !unsupported && canCheckStatus ? <ActionIcon className="pwa-delivery-action" type="button" disabled aria-label={t.timeline.deliveryCheck} title={t.timeline.deliveryCheck}><RefreshCw size={16} aria-hidden="true" /></ActionIcon> : null}
       {retryable ? <ActionIcon className="pwa-delivery-action" type="button" onClick={() => onRetryFailed(pending.clientRequestId)} aria-label={t.timeline.deliveryRetry} title={t.timeline.deliveryRetry}><RefreshCw size={16} aria-hidden="true" /></ActionIcon> : null}
-      {queued && onCancelQueued ? <Button className="pwa-delivery-action" variant="transparent" color="piReach" size="compact-sm" type="button" onClick={() => onCancelQueued(pending.clientRequestId)} aria-label={t.timeline.cancelQueued}>{t.common.cancel}</Button> : null}
+      {queued && onCancelQueued ? <Button className="pwa-delivery-action" variant="transparent" size="compact-sm" type="button" onClick={() => onCancelQueued(pending.clientRequestId)} aria-label={t.timeline.cancelQueued}>{t.common.cancel}</Button> : null}
     </p> : null}
   </div>;
 }

@@ -20,7 +20,7 @@ type CollapseProps = {
  * 减少动态效果由全局规则处理：高度与位移不过渡，只保留透明度淡化。
  */
 export function Collapse({ open, id, className, onPresentationChange, children }: CollapseProps) {
-  const exitDuration = usePwaMotionDuration("--pwa-duration-collapse-out", 140);
+  const exitDuration = usePwaMotionDuration("--pwa-duration-collapse-out");
   const [previousOpen, setPreviousOpen] = useState(open);
   const [entered, setEntered] = useState(open);
   const [exiting, setExiting] = useState(false);

@@ -20,7 +20,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 44px;
+  min-height: var(--pwa-hit-target);
   padding: 4px 6px 4px 0;
   border: 0;
   border-radius: var(--pwa-radius-md);

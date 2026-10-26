@@ -39,7 +39,7 @@
 .pwa-keyboard-setting .mantine-Switch-label {
   display: flex;
   align-items: center;
-  min-height: 44px;
+  min-height: var(--pwa-hit-target);
   color: var(--pwa-ink);
   font-size: var(--pwa-text-body);
 }

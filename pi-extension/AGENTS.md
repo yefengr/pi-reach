@@ -8,7 +8,7 @@ Pi Reach 的 Pi package：注册 `/pi-reach`，把当前 Pi 进程作为独立 e
 
 ## Stack
 
-- Node 20+ / TypeScript 6
+- Node 22.19+（以本包 `engines` 为准）/ TypeScript 6
 - ESM only（NodeNext）；TypeScript import 也必须带 `.js`
 - 根 pnpm workspace；catalog、构建许可与安全 overrides 由 [`../pnpm-workspace.yaml`](../pnpm-workspace.yaml) 管理，不创建子项目锁文件，不使用 npm/yarn 安装
 - Pi SDK types/test contract：`@earendil-works/pi-coding-agent`（peer + dev；生产包不私有安装 SDK）

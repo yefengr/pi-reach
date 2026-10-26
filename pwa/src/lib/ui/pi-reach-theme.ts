@@ -1,4 +1,9 @@
 import { ActionIcon, Badge, Button, createTheme, Modal, type CSSVariablesResolver, type MantineTransition } from "@mantine/core";
+import { PWA_MOTION_FALLBACK_MS } from "./motion-duration";
+
+/** 居中 Modal 宽度只由 Mantine size 决定（DESIGN「表单与叠层」）：表单类与快捷键取主题默认，确认类单独指定。 */
+export const PWA_DIALOG_SIZE = 480;
+export const PWA_CONFIRM_DIALOG_SIZE = 400;
 
 /**
  * 居中 Modal 统一轻量进出：单层遮罩淡入，弹窗轻微位移并淡入；进入 180ms（进入曲线），退出 140ms（退出曲线）。
@@ -6,7 +11,7 @@ import { ActionIcon, Badge, Button, createTheme, Modal, type CSSVariablesResolve
  */
 export const pwaModalTransition = {
   in: { opacity: 1, transform: "translateY(0)", "--pwa-modal-ease": "var(--pwa-ease-enter)" },
-  out: { opacity: 0, transform: "translateY(calc(8px * var(--pwa-motion-shift, 1)))", pointerEvents: "none", "--pwa-modal-ease": "var(--pwa-ease-exit)" },
+  out: { opacity: 0, transform: "translateY(calc(var(--pwa-overlay-shift) * var(--pwa-motion-shift, 1)))", pointerEvents: "none", "--pwa-modal-ease": "var(--pwa-ease-exit)" },
   transitionProperty: "opacity, transform",
 } as MantineTransition;
 
@@ -39,7 +44,7 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
   fontFamilyMonospace: "var(--pwa-font-mono)",
   headings: {
     fontFamily: "var(--pwa-font-ui)",
-    fontWeight: "600",
+    fontWeight: "var(--pwa-weight-strong)",
     sizes: {
       h1: { fontSize: "var(--pwa-text-page)", lineHeight: "var(--pwa-leading-ui)" },
       h2: { fontSize: "var(--pwa-text-title)", lineHeight: "var(--pwa-leading-ui)" },
@@ -69,7 +74,7 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
   cursorType: "pointer",
   components: {
     Button: Button.extend({ classNames: { root: "pwa-button" }, defaultProps: { size: "md", variant: "filled" } }),
-    ActionIcon: ActionIcon.extend({ classNames: { root: "pwa-icon-button" }, defaultProps: { size: 44, variant: "subtle" } }),
+    ActionIcon: ActionIcon.extend({ classNames: { root: "pwa-icon-button" }, defaultProps: { size: "var(--pwa-hit-target)", variant: "subtle" } }),
     // 标签在上、说明与错误在输入框下方。
     TextInput: { defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
     Textarea: { defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
@@ -77,6 +82,7 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
     Modal: Modal.extend({
       defaultProps: {
         centered: true,
+        size: PWA_DIALOG_SIZE,
         overlayProps: { className: "pwa-scrim" },
         transitionProps: { transition: pwaModalTransition, duration: modalInDuration, exitDuration: modalOutDuration, timingFunction: "var(--pwa-modal-ease, var(--pwa-ease-enter))" },
       },
@@ -87,7 +93,7 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
 }
 
 // 保留已有主题入口供非浏览器消费者使用；运行时 Provider 按 CSS token 注入时长。
-export const piReachTheme = createPiReachTheme(180, 140);
+export const piReachTheme = createPiReachTheme(PWA_MOTION_FALLBACK_MS["--pwa-duration-modal-in"], PWA_MOTION_FALLBACK_MS["--pwa-duration-modal-out"]);
 
 const sharedVariables = {
   "--mantine-color-body": "var(--pwa-bg)",

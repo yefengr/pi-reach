@@ -62,7 +62,7 @@ function ReviewModelMenu({ variant, model, thinking, onModel, onThinking, pinOpe
 }) {
   const [opened, setOpened] = useState(false);
   const [view, setView] = useState<ComposerModelSettingsView>("settings");
-  const duration = usePwaMotionDuration("--pwa-duration-fade", 120);
+  const duration = usePwaMotionDuration("--pwa-duration-fade");
   const middlewares = useFloatingSafeMiddlewares();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);

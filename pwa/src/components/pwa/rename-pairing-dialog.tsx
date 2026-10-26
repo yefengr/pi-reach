@@ -84,12 +84,12 @@ export function RenamePairingDialog({ device, onSave, onClose, focusOrigin = nul
 
   return <Modal
     opened
+    zIndex="var(--pwa-z-modal)"
     onClose={restoreFocusAndClose}
     title={<div><span className="pwa-kicker">{t.rename.kicker}</span><Text component="h2" id="pwa-rename-title">{t.rename.title}</Text></div>}
     aria-labelledby="pwa-rename-title"
     aria-describedby="pwa-rename-description"
     centered
-    size={480}
     withinPortal={false}
     trapFocus
     returnFocus

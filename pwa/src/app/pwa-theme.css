@@ -148,12 +148,13 @@
 }
 
 :root {
-  /* 深色代码底在两种主题下都是深色；其上的强调色与状态色固定使用深色版本。 */
+  /* 深色代码底在两种主题下都是深色；其上的强调色固定使用深色版本。 */
   --pwa-code-ink: #F2F2F2;
   --pwa-code-accent: #98B8E6;
-  --pwa-code-complete: #95CBA8;
-  --pwa-code-running: #DFBA77;
-  --pwa-code-error: #EFA39B;
+
+  /* 带状态色的装饰边框：在 :root 上按当前主题的状态色与 line 计算，只辅助识别。 */
+  --pwa-running-line: color-mix(in srgb, var(--pwa-running) 40%, var(--pwa-line));
+  --pwa-error-line: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line));
 
   --pwa-font-ui: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
   --pwa-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Noto Sans Mono", "DejaVu Sans Mono", monospace;
@@ -168,6 +169,20 @@
   --pwa-leading-code: 1.55;
   --pwa-weight-regular: 400;
   --pwa-weight-strong: 600;
+
+  /* 叠层自下而上（DESIGN「叠层」）：全部叠层 Portal 到 .pwa-root，与工作区固定元素共用同一层叠上下文。 */
+  --pwa-z-composer: 3;
+  --pwa-z-sidebar-toggle: 7;
+  --pwa-z-workspace-float: 8;
+  --pwa-z-page: 20;
+  --pwa-z-reader: 30;
+  --pwa-z-image-transition: 31;
+  --pwa-z-navigation: 200;
+  --pwa-z-device-panel: 220;
+  --pwa-z-device-menu: 230;
+  --pwa-z-modal: 300;
+  --pwa-z-modal-top: 310;
+  --pwa-z-feedback: 400;
 
   --pwa-radius-xs: 4px;
   --pwa-radius-md: 8px;
@@ -185,7 +200,7 @@
   --pwa-space-xl: 32px;
   --pwa-space-2xl: 48px;
 
-  /* 领域细档：2／6／10，只在对应语义内使用（见 DESIGN「间距」）。 */
+  /* 领域细档：2／6／10，只用于 DESIGN「间距」细档表列出的语义，不作为通用档位；新语义先补表再使用。 */
   --pwa-space-pair: 2px;
   --pwa-space-status: 6px;
   --pwa-space-menu-pad: 10px;
@@ -202,8 +217,8 @@
   --pwa-duration-drawer: 200ms;
   --pwa-duration-modal-in: 180ms;
   --pwa-duration-modal-out: 140ms;
-  --pwa-duration-expand-in: 160ms;
-  --pwa-duration-expand-out: 120ms;
+  /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
+  --pwa-duration-status-slot: 160ms;
   --pwa-duration-collapse-in: 180ms;
   --pwa-duration-collapse-out: 140ms;
   --pwa-duration-image-in: 260ms;
@@ -220,18 +235,25 @@
   --pwa-press-icon-scale: 0.97;
   --pwa-press-button-scale: 0.98;
   --pwa-menu-offset: 4px;
+  /* 居中 Modal 与 Toast 出现时的位移距离，乘以 --pwa-motion-shift。 */
+  --pwa-overlay-shift: 8px;
   /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;
   --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容的淡入；标准曲线前段很快，需要比通用淡化长才看得出渐入过程。 */
   --pwa-duration-content: 240ms;
+  /* 无限循环：旋转一圈与骨架呼吸一个周期，配 linear；减少动态效果时循环直接暂停，不替换时长。 */
+  --pwa-duration-spin: 1.3s;
+  --pwa-duration-breathe: 2s;
   /* 位移类动效乘以该系数；减少动态效果时为 0，只保留透明度淡化。 */
   --pwa-motion-shift: 1;
 
   --pwa-safe-top: env(safe-area-inset-top, 0px);
   /* 顶栏首行高度，不含安全区；会话标题区、导航、阅读器与移动设置页共用。 */
   --pwa-topbar-height: 48px;
+  /* 最小点击区（DESIGN「按钮尺寸」）；同高的行、输入框与操作槽共用，不随字号档位缩放。 */
+  --pwa-hit-target: 44px;
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
   /* 横屏刘海与圆角的左右安全区；只由实际贴住该屏幕边缘的布局层使用，同一边不重复叠加（见 DESIGN「安全区」）。 */
   --pwa-safe-left: env(safe-area-inset-left, 0px);
@@ -279,8 +301,7 @@
     --pwa-duration-drawer: var(--pwa-duration-fade);
     --pwa-duration-modal-in: var(--pwa-duration-fade);
     --pwa-duration-modal-out: var(--pwa-duration-fade);
-    --pwa-duration-expand-in: var(--pwa-duration-fade);
-    --pwa-duration-expand-out: var(--pwa-duration-fade);
+    --pwa-duration-status-slot: var(--pwa-duration-fade);
     --pwa-duration-collapse-in: var(--pwa-duration-fade);
     --pwa-duration-collapse-out: var(--pwa-duration-fade);
     --pwa-duration-image-in: var(--pwa-duration-fade);

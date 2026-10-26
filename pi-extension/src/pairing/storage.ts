@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { generateEd25519Keypair, type Ed25519Keypair } from "./crypto.js";
 import {
   ensurePrivateIdentityDirectory,
+  IDENTITY_LOCK_POLL_INTERVAL_MS,
+  IDENTITY_LOCK_WAIT_TIMEOUT_MS,
   IdentityLockTimeoutError,
   withIdentityLock,
 } from "./identity-lock.js";
@@ -47,10 +49,14 @@ const PI_DIR = join(homedir(), ".pi", "pi-reach");
 const IDENTITY_FILE = join(PI_DIR, "identity.json");
 const IDENTITY_LOCK_FILE = join(PI_DIR, "identity.lock");
 
-let keyringReadAttempts = 3;
-let keyringRetryDelayMs = 300;
-let identityLockWaitTimeoutMs = 15_000;
-let identityLockPollIntervalMs = 50;
+/** 钥匙串读取失败时的重试次数与基础退避，第 n 次重试等待 n 倍基础值。 */
+const KEYRING_READ_ATTEMPTS = 3;
+const KEYRING_RETRY_DELAY_MS = 300;
+
+let keyringReadAttempts = KEYRING_READ_ATTEMPTS;
+let keyringRetryDelayMs = KEYRING_RETRY_DELAY_MS;
+let identityLockWaitTimeoutMs = IDENTITY_LOCK_WAIT_TIMEOUT_MS;
+let identityLockPollIntervalMs = IDENTITY_LOCK_POLL_INTERVAL_MS;
 
 export class KeyringUnavailableError extends Error {
   constructor(cause: unknown) {
@@ -125,13 +131,13 @@ export function _setKeyringExpectedForTest(value: boolean | null): void {
 }
 
 export function _setKeyringRetryForTest(attempts: number | null, delayMs?: number): void {
-  keyringReadAttempts = attempts ?? 3;
-  keyringRetryDelayMs = delayMs ?? 300;
+  keyringReadAttempts = attempts ?? KEYRING_READ_ATTEMPTS;
+  keyringRetryDelayMs = delayMs ?? KEYRING_RETRY_DELAY_MS;
 }
 
 export function _setIdentityLockTimingForTest(waitTimeoutMs: number | null, pollIntervalMs?: number): void {
-  identityLockWaitTimeoutMs = waitTimeoutMs ?? 15_000;
-  identityLockPollIntervalMs = pollIntervalMs ?? 50;
+  identityLockWaitTimeoutMs = waitTimeoutMs ?? IDENTITY_LOCK_WAIT_TIMEOUT_MS;
+  identityLockPollIntervalMs = pollIntervalMs ?? IDENTITY_LOCK_POLL_INTERVAL_MS;
 }
 
 function sleep(ms: number): Promise<void> {

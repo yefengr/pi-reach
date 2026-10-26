@@ -113,7 +113,7 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
   });
 
   test("uses dark-theme accents on the always-dark code background", () => {
-    for (const foreground of ["code-ink", "code-muted", "code-accent", "code-complete", "code-running", "code-error"]) {
+    for (const foreground of ["code-ink", "code-muted", "code-accent"]) {
       expect(ratio(theme, foreground, "code-bg"), `${foreground} on code-bg`).toBeGreaterThanOrEqual(4.5);
     }
   });
@@ -121,4 +121,22 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
 
 test("the pre-hydration system dark fallback matches the dark theme", () => {
   expect(systemDark).toEqual(declarations(':root[data-mantine-color-scheme="dark"] {'));
+});
+
+test("status edges mix each status color with line at one shared ratio", () => {
+  expect(shared["--pwa-running-line"]).toBe("color-mix(in srgb, var(--pwa-running) 40%, var(--pwa-line))");
+  expect(shared["--pwa-error-line"]).toBe("color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line))");
+});
+
+test("browser theme color literals match the bg token", () => {
+  // 首屏 meta、安装清单与运行时切换都无法引用 CSS 变量，只能写同值字面量。
+  const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+  const hex = (text: string, pattern: RegExp) => pattern.exec(text)?.[1]?.toUpperCase();
+  const [lightBg, darkBg] = [light["--pwa-bg"]!.toUpperCase(), dark["--pwa-bg"]!.toUpperCase()];
+  expect(hex(source("../../index.html"), /<meta name="theme-color" content="(#[0-9a-f]{6})"/i)).toBe(lightBg);
+  const manifest = JSON.parse(source("../../public/manifest.webmanifest")) as { theme_color: string; background_color: string };
+  expect([manifest.theme_color.toUpperCase(), manifest.background_color.toUpperCase()]).toEqual([lightBg, lightBg]);
+  const appearance = source("../components/pwa/pwa-appearance.tsx");
+  expect(hex(appearance, /LIGHT_THEME_COLOR = "(#[0-9a-f]{6})"/i)).toBe(lightBg);
+  expect(hex(appearance, /DARK_THEME_COLOR = "(#[0-9a-f]{6})"/i)).toBe(darkBg);
 });

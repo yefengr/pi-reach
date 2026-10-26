@@ -11,7 +11,7 @@
 ## 提交改动
 
 1. 较大的改动先开 issue 讨论方向。涉及架构、协议、配对、UI 或安全方向时，先阅读[已关闭决策](docs/adr/20260518-closed-decisions.md)。
-2. 从 `main` 创建分支，按 [AGENTS.md](AGENTS.md) 的工作规则修改；行为变更需要附带自动化测试。
+2. 从 `main` 创建分支，按 [AGENTS.md](AGENTS.md) 的工作规则修改；行为变更需要附带自动化测试。提交信息与 PR 标题使用 `<type>(<scope>): <摘要>`，如 `fix(pwa): 修正设置页返回焦点`，类型与范围见 AGENTS.md。
 3. 提交前运行受影响的验证命令和 `git diff --check`；改动文档时运行 `pnpm check:docs`。
 4. 提交 Pull Request，按模板填写摘要与验证结果。PR 可以用中文或英文，Codex 会用同一语言自动评审。
 5. CI 检查 `verify` 通过、评审意见处理完毕后，由维护者以变基或压缩方式合并。
@@ -33,7 +33,7 @@ Thanks for your interest in Pi Reach. This guide covers reporting issues and sub
 ## Submitting changes
 
 1. Open an issue to discuss larger changes first. For changes to architecture, protocol, pairing, UI, or security direction, read the [closed decisions](docs/adr/20260518-closed-decisions.md) first.
-2. Branch from `main` and follow the working rules in [AGENTS.md](AGENTS.md). Behavior changes need automated tests.
+2. Branch from `main` and follow the working rules in [AGENTS.md](AGENTS.md). Behavior changes need automated tests. Write commit messages and pull request titles as `<type>(<scope>): <summary>`, for example `fix(pwa): restore focus after leaving settings`; the allowed types and scopes are listed in AGENTS.md.
 3. Before submitting, run the affected verification commands and `git diff --check`; run `pnpm check:docs` when you change documentation.
 4. Open a pull request and fill in the template's summary and verification sections. Pull requests may be written in Chinese or English; Codex reviews them automatically in the same language.
 5. Once the CI check `verify` passes and review comments are resolved, a maintainer merges the pull request by rebase or squash.

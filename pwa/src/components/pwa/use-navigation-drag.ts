@@ -31,7 +31,7 @@ type NavigationDragOptions = {
  * 随手指移动；松手后提交（走到打开终点再启用焦点陷阱与滚动锁）或回弹（回到起点后即时关闭，不动焦点）。
  */
 export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation }: NavigationDragOptions) {
-  const duration = usePwaMotionDuration("--pwa-duration-drawer", 200);
+  const duration = usePwaMotionDuration("--pwa-duration-drawer");
   const [gesture, setGesture] = useState<NavigationGesture | null>(null);
   const latest = useRef({ sheetOpen, setSheetOpen, openNavigation, mainElement, duration });
   useLayoutEffect(() => {

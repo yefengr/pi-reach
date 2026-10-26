@@ -1615,3 +1615,15 @@ test("running compaction row follows the last record", async () => {
     expect(message.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   } finally { await screen.unmount(); }
 });
+
+test("shows the delayed earlier-records loader with the small status spinner beside 13px text", async () => {
+  const screen = await renderMessageList([eventItem(assistantEvent)], { hasEarlier: true, loadingEarlier: true, onLoadEarlier: () => {} });
+  try {
+    // 300ms 内完成不显示，之后与 13px 状态文字同行的旋转图标为 12、线宽 2.4（DESIGN「基础层」图标）。
+    await expect.poll(() => document.querySelector(".pwa-earlier-loading svg"), { timeout: 3000 }).not.toBeNull();
+    const icon = document.querySelector(".pwa-earlier-loading svg")!;
+    expect(icon.getAttribute("width")).toBe("12");
+    expect(icon.getAttribute("stroke-width")).toBe("2.4");
+    expect(getComputedStyle(document.querySelector(".pwa-earlier")!).fontSize).toBe("13px");
+  } finally { await screen.unmount(); }
+});
