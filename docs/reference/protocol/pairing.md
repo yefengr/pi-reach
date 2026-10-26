@@ -10,7 +10,7 @@
 /pi-reach pair
 ```
 
-Extension 生成八位 Crockford Base32 配对码，显示为 ASCII QR 和文字。默认有效期为 5 分钟；`--ttl` 可在 10 至 300 秒间指定，低于或高于范围的数值分别 clamp 到 10 或 300 秒。PWA 可扫描二维码、上传二维码图片或手工输入。手工输入允许显示分隔符和空白，例如 `K7MP-4Q2D` 会规范化为 `K7MP4Q2D`。
+Extension 生成八位 Crockford Base32 配对码，显示为 ASCII QR 和文字。QR 固定黑白配色并保留 4 模块静区，不随终端主题反色；配对成功、配对码过期或 Relay 连接关闭后自动收起。默认有效期为 5 分钟；`--ttl` 可在 10 至 300 秒间指定，低于或高于范围的数值分别 clamp 到 10 或 300 秒。PWA 可扫描二维码或手工输入。手工输入允许显示分隔符和空白，例如 `K7MP-4Q2D` 会规范化为 `K7MP4Q2D`。
 
 配对码只存在于当前 Extension 进程与 Relay 的内存 pairing offer 中。新码替换该 endpoint 的旧 offer；Pi 退出、endpoint/runtime 被替换、Relay 重启或 TTL 到期都会使该码失效。它不是 URL、长期 token、device identity 或 ACL。
 

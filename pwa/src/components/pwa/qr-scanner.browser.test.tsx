@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { PairingDialog } from "./pairing-dialog";
-import { QrCamera, QrImageButton } from "./qr-scanner";
+import { QrCamera } from "./qr-scanner";
 import type { PairingErrorCode } from "@/lib/pwa/use-device-pairing";
 import type { IScannerControls } from "@zxing/browser";
 
@@ -24,13 +24,8 @@ type CameraMock = {
   deferred: Deferred<IScannerControls>;
   calls: CameraCall[];
 };
-type ImageMock = {
-  deferred: Deferred<ScannerResult>;
-  urls: string[];
-};
 type MockReader = {
   decodeFromConstraints: ReturnType<typeof vi.fn>;
-  decodeFromImageUrl: ReturnType<typeof vi.fn>;
 };
 
 const desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/134.0.0.0 Safari/537.36";
@@ -39,17 +34,12 @@ const mobileUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3 like Mac OS X) 
 const zxing = vi.hoisted(() => {
   const state: {
     camera: CameraMock | null;
-    image: ImageMock | null;
     instances: MockReader[];
-  } = { camera: null, image: null, instances: [] };
+  } = { camera: null, instances: [] };
   const BrowserQRCodeReader = vi.fn(function MockBrowserQRCodeReader(this: MockReader) {
     this.decodeFromConstraints = vi.fn((constraints: MediaStreamConstraints, video: HTMLVideoElement | undefined, callback: ScannerCallback) => {
       state.camera?.calls.push({ constraints, video, callback });
       return state.camera?.deferred.promise ?? new Promise<IScannerControls>(() => {});
-    });
-    this.decodeFromImageUrl = vi.fn((url: string) => {
-      state.image?.urls.push(url);
-      return state.image?.deferred.promise ?? Promise.resolve({ getText: () => "unused" });
     });
     state.instances.push(this);
   });
@@ -82,12 +72,6 @@ function prepareCamera() {
   const camera: CameraMock = { deferred: createDeferred<IScannerControls>(), calls: [] };
   zxing.state.camera = camera;
   return camera;
-}
-
-function prepareImage() {
-  const image: ImageMock = { deferred: createDeferred<ScannerResult>(), urls: [] };
-  zxing.state.image = image;
-  return image;
 }
 
 function createControls() {
@@ -123,38 +107,15 @@ function UnmountableCamera({ onScan = vi.fn(), onUnavailable = vi.fn() }: { onSc
   </>;
 }
 
-function UnmountableImageButton({ onScan = vi.fn(), onNotFound = vi.fn() }: { onScan?: (value: string) => void; onNotFound?: () => void }) {
-  const [open, setOpen] = useState(true);
-  return <>
-    <button type="button" onClick={() => setOpen(false)}>Unmount upload</button>
-    {open ? <QrImageButton onScan={onScan} onNotFound={onNotFound} /> : null}
-  </>;
-}
-
 async function settle() {
   await Promise.resolve();
   await Promise.resolve();
-}
-
-function selectImage(input: HTMLInputElement, fileName = "qr.png") {
-  Object.defineProperty(input, "files", {
-    configurable: true,
-    value: [new File(["image"], fileName, { type: "image/png" })],
-  });
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-function fileInput(): HTMLInputElement {
-  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
-  expect(input).not.toBeNull();
-  return input!;
 }
 
 beforeEach(async () => {
   zxing.BrowserQRCodeReader.mockClear();
   zxing.state.instances.length = 0;
   zxing.state.camera = null;
-  zxing.state.image = null;
   mockNavigator(desktopUserAgent);
   await page.viewport(1280, 900);
 });
@@ -226,68 +187,6 @@ test("stops camera controls that resolve after the scanner unmounts", async () =
   await expect.poll(() => controls.stop).toHaveBeenCalledTimes(1);
 });
 
-test("scans a chosen image through the keyboard-operable upload button and never starts a camera", async () => {
-  const camera = prepareCamera();
-  const image = prepareImage();
-  const onScan = vi.fn();
-  const screen = await renderPwa(<QrImageButton onScan={onScan} onNotFound={vi.fn()} />);
-  const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:chosen-qr");
-  const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
-  const input = fileInput();
-
-  expect(input.hidden).toBe(true);
-  expect(input.accept).toBe("image/*");
-  expect(input.hasAttribute("capture")).toBe(false);
-  let chooserOpens = 0;
-  input.addEventListener("click", (event) => {
-    event.preventDefault();
-    chooserOpens += 1;
-  });
-  const upload = screen.getByRole("button", { name: "Upload QR image" });
-  upload.element().focus();
-  await userEvent.keyboard("{Enter}");
-  expect(chooserOpens).toBe(1);
-  input.dispatchEvent(new Event("cancel", { bubbles: true }));
-  input.files = new DataTransfer().files;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-  await settle();
-  expect(createObjectURL).not.toHaveBeenCalled();
-  expect(onScan).not.toHaveBeenCalled();
-  await expect.element(upload).toHaveFocus();
-
-  selectImage(input);
-  await expect.poll(() => image.urls).toEqual(["blob:chosen-qr"]);
-  image.deferred.resolve(createResult("image-first"));
-  await expect.poll(() => onScan).toHaveBeenCalledWith("image-first");
-  expect(camera.calls).toHaveLength(0);
-  expect(revokeObjectURL).toHaveBeenCalledWith("blob:chosen-qr");
-});
-
-test("reports image decode failures and ignores results that arrive after unmount", async () => {
-  const image = prepareImage();
-  const onNotFound = vi.fn();
-  await renderPwa(<QrImageButton onScan={vi.fn()} onNotFound={onNotFound} />);
-  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:bad-qr");
-  const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
-  selectImage(fileInput(), "bad.png");
-  await expect.poll(() => image.urls).toEqual(["blob:bad-qr"]);
-  image.deferred.reject(new Error("invalid image"));
-  await expect.poll(() => onNotFound).toHaveBeenCalledTimes(1);
-  expect(revokeObjectURL).toHaveBeenCalledWith("blob:bad-qr");
-
-  const lateImage = prepareImage();
-  const onScan = vi.fn();
-  document.body.replaceChildren();
-  const screen = await renderPwa(<UnmountableImageButton onScan={onScan} />);
-  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:late-qr");
-  selectImage(fileInput());
-  await expect.poll(() => lateImage.urls).toEqual(["blob:late-qr"]);
-  await screen.getByRole("button", { name: "Unmount upload" }).click();
-  lateImage.deferred.resolve(createResult("late-image"));
-  await expect.poll(() => revokeObjectURL).toHaveBeenCalledWith("blob:late-qr");
-  expect(onScan).not.toHaveBeenCalled();
-});
-
 test("desktop opens with the pairing code, auto-submits eight characters and starts the camera only on request", async () => {
   const camera = prepareCamera();
   const onSubmit = vi.fn();
@@ -350,7 +249,7 @@ test("shows the failure under the input, keeps the value and disables the form w
   await expect.element(screen.getByText("Connecting to your computer…")).toBeVisible();
   await expect.element(input).toBeDisabled();
   await expect.element(screen.getByRole("button", { name: "Pair", exact: true })).toBeDisabled();
-  await expect.element(screen.getByRole("button", { name: "Upload QR image" })).toBeDisabled();
+  await expect.element(screen.getByRole("button", { name: "Scan QR code" })).toBeDisabled();
 
   (screen.getByRole("button", { name: "Fail" }).element() as HTMLButtonElement).click();
   await expect.element(screen.getByText("This pairing code has expired. Run /pi-reach pair in Pi again.")).toBeVisible();
@@ -375,7 +274,7 @@ test("keeps pairing controls reachable at 390 by 844 and releases the camera whe
   const rect = dialog.getBoundingClientRect();
   expect(rect.left).toBeGreaterThanOrEqual(16);
   expect(rect.right).toBeLessThanOrEqual(window.innerWidth - 16);
-  for (const name of ["Close pairing", "Enter pairing code", "Upload QR image"]) {
+  for (const name of ["Close pairing", "Enter pairing code"]) {
     const button = screen.getByRole("button", { name }).element();
     expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }

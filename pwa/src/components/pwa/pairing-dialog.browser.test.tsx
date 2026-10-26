@@ -6,17 +6,14 @@ import { PairingDialog } from "./pairing-dialog";
 
 type MockReader = {
   decodeFromConstraints: ReturnType<typeof vi.fn>;
-  decodeFromImageUrl: ReturnType<typeof vi.fn>;
 };
 
 const desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/134.0.0.0 Safari/537.36";
 
 const zxing = vi.hoisted(() => {
   const decodeFromConstraints = vi.fn();
-  const decodeFromImageUrl = vi.fn();
   const BrowserQRCodeReader = vi.fn(function MockBrowserQRCodeReader(this: MockReader) {
     this.decodeFromConstraints = decodeFromConstraints;
-    this.decodeFromImageUrl = decodeFromImageUrl;
   });
 
   return { BrowserQRCodeReader, decodeFromConstraints };
@@ -53,7 +50,7 @@ test("desktop pairing submits the code from a standard form dialog without start
   await expect.element(dialog).toBeVisible();
   expect(dialog.element().getBoundingClientRect().width).toBeLessThanOrEqual(480);
   expect(getComputedStyle(dialog.element()).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
-  expect(document.querySelector<HTMLInputElement>(".pwa-file-input")?.hidden).toBe(true);
+  expect(document.querySelector('.pwa-pairing-dialog input[type="file"]')).toBeNull();
   await expect.element(screen.getByRole("button", { name: "Pair", exact: true })).toBeDisabled();
   await expect.element(input).toHaveFocus();
   expect(zxing.decodeFromConstraints).not.toHaveBeenCalled();

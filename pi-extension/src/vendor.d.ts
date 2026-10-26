@@ -1,13 +1,15 @@
-declare module "qrcode-terminal" {
-  interface QROptions {
-    small?: boolean;
+declare module "qrcode-terminal/vendor/QRCode/index.js" {
+  class QRCode {
+    constructor(typeNumber: number, errorCorrectLevel: number);
+    addData(data: string): void;
+    make(): void;
+    getModuleCount(): number;
+    isDark(row: number, col: number): boolean;
   }
-  function generate(
-    input: string,
-    opts: QROptions,
-    callback?: (qrcode: string) => void,
-  ): void;
-  function generate(input: string, callback?: (qrcode: string) => void): void;
-  function setErrorLevel(level: "L" | "M" | "Q" | "H"): void;
-  export = { generate, setErrorLevel };
+  export = QRCode;
+}
+
+declare module "qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js" {
+  const QRErrorCorrectLevel: Readonly<{ L: number; M: number; Q: number; H: number }>;
+  export = QRErrorCorrectLevel;
 }

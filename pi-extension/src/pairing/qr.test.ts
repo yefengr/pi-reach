@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import QRCode from "qrcode-terminal/vendor/QRCode/index.js";
+import QRErrorCorrectLevel from "qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js";
 import {
   PAIRING_CODE_LENGTH,
   PAIRING_CODE_PATTERN,
@@ -6,9 +8,78 @@ import {
   PAIR_TTL_MAX_MS,
   PAIR_TTL_MIN_MS,
   QRSession,
+  QR_QUIET_ZONE_MODULES,
   type CodeReservation,
   clampPairTtlMs,
+  renderQRAscii,
 } from "./qr.js";
+
+const QR_COLORS = "\x1b[38;5;16;48;5;231m";
+const ANSI_RESET = "\x1b[0m";
+const FINDER_SIZE = 7;
+
+/** 把半块字符还原为模块矩阵，true 表示深色模块（前景色）。 */
+function renderedModules(rendered: string): boolean[][] {
+  const grid: boolean[][] = [];
+  for (const line of rendered.split("\n")) {
+    const cells = [...line.slice(QR_COLORS.length, -ANSI_RESET.length)];
+    grid.push(cells.map((cell) => cell === "\u2580" || cell === "\u2588"));
+    grid.push(cells.map((cell) => cell === "\u2584" || cell === "\u2588"));
+  }
+  return grid;
+}
+
+function expectFinderAt(grid: boolean[][], top: number, left: number): void {
+  for (let row = 0; row < FINDER_SIZE; row++) {
+    for (let col = 0; col < FINDER_SIZE; col++) {
+      const ring = Math.max(Math.abs(row - 3), Math.abs(col - 3));
+      expect(grid[top + row]![left + col], `finder (${top + row},${left + col})`).toBe(ring !== 2);
+    }
+  }
+}
+
+describe("renderQRAscii", () => {
+  const code = "K7MP4Q2D";
+  const rendered = renderQRAscii(code);
+  const reference = new QRCode(-1, QRErrorCorrectLevel.Q);
+  reference.addData(code);
+  reference.make();
+  const size = reference.getModuleCount();
+  const span = size + QR_QUIET_ZONE_MODULES * 2;
+  const grid = renderedModules(rendered);
+
+  test("pins black-on-white colors on every line instead of following the terminal theme", () => {
+    for (const line of rendered.split("\n")) {
+      expect(line.startsWith(QR_COLORS)).toBe(true);
+      expect(line.endsWith(ANSI_RESET)).toBe(true);
+    }
+  });
+
+  test("keeps the smallest version at Q error correction", () => {
+    expect(size).toBe(21);
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        expect(grid[row + QR_QUIET_ZONE_MODULES]![col + QR_QUIET_ZONE_MODULES]).toBe(reference.isDark(row, col));
+      }
+    }
+  });
+
+  test("surrounds the symbol with a four-module light quiet zone", () => {
+    expect(grid[0]).toHaveLength(span);
+    for (const [index, row] of grid.entries()) {
+      const inSymbol = index >= QR_QUIET_ZONE_MODULES && index < QR_QUIET_ZONE_MODULES + size;
+      const margins = inSymbol ? [...row.slice(0, QR_QUIET_ZONE_MODULES), ...row.slice(-QR_QUIET_ZONE_MODULES)] : row;
+      expect(margins.every((dark) => !dark), `row ${index}`).toBe(true);
+    }
+  });
+
+  test("draws finder patterns as dark modules in the three corners", () => {
+    const far = QR_QUIET_ZONE_MODULES + size - FINDER_SIZE;
+    expectFinderAt(grid, QR_QUIET_ZONE_MODULES, QR_QUIET_ZONE_MODULES);
+    expectFinderAt(grid, QR_QUIET_ZONE_MODULES, far);
+    expectFinderAt(grid, far, QR_QUIET_ZONE_MODULES);
+  });
+});
 
 describe("clampPairTtlMs", () => {
   test("passes a value inside the range unchanged", () => {

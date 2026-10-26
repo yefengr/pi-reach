@@ -22,6 +22,7 @@ export interface PairingCoordinatorDependencies {
   readonly updateEndpoint: (relay: RelayClient) => Promise<boolean>;
   readonly refreshCurrentEndpoint: () => Promise<boolean>;
   readonly buildPairOk: (frame: PairRequest) => PairOk;
+  readonly onPaired: (code: string, deviceName: string) => void;
 }
 
 type PairingAttempt = {
@@ -124,6 +125,7 @@ export class PairingCoordinator {
       }
       completion = pairOk;
       attempt.binding.channel.sendV2(pairOk);
+      try { this.deps.onPaired(attempt.reservation.code, frame.device_name); } catch { /* UI must not undo a committed pairing */ }
     } catch {
       if (receipt) await this.rollback(receipt);
       if (this.lifecycleIsCurrent(attempt)) {
