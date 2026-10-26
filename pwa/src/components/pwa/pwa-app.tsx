@@ -62,6 +62,7 @@ import {
   type PwaDeviceRecord,
 } from "@/lib/pwa/db";
 import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
+import { useScrollIndicator } from "@/lib/ui/scroll-indicator";
 
 const LEGACY_DEFAULT_RELAYS = ["https://relay-pi.yefengr.cn"];
 
@@ -93,6 +94,8 @@ function StandalonePwaApp() {
 
 function PwaAppContent({ operationNotifications, standalone = false }: { operationNotifications: ReturnType<typeof createOperationNotificationController>; standalone?: boolean }) {
   const { t } = useI18n();
+  // 全应用滚动条只在滚动时出现；标记写在各滚动容器上，由 CSS 决定显隐。
+  useScrollIndicator();
   const [identity, setIdentity] = useState<OwnerKeyPair | null>(null); const [devices, setDevices] = useState<PwaDeviceRecord[]>([]);
   const [connection, setConnection] = useState<ConnectionViewState>("offline");
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);

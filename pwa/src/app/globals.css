@@ -56,19 +56,17 @@ textarea:focus-visible,
 time,
 .pwa-tabular { font-variant-numeric: tabular-nums; }
 
-/* 内部滚动区使用细滚动条；会话消息区与设置页等主滚动区保持系统原生样式。 */
-.pwa-navigation-scroll,
-.pwa-device-panel-list,
-.pwa-device-drawer-body,
-.pwa-queued-message-list,
-.pwa-command-menu-dropdown,
-.pwa-tool-reader-scroll,
-.pwa-markdown pre,
-.pwa-markdown table,
-.pwa-tool-code {
+/* 滚动条统一：细滑块 + 透明轨道，滚动时显示、静止隐藏。
+   宽度不继承（Chrome 实测子元素仍为 auto），只能逐元素设置；颜色继承，写在 :root 即可覆盖含 body 浮层的全部容器。
+   data-scroll-hints 由 useScrollIndicator 在脚本就绪后添加，脚本失败时滚动条保持可见。 */
+:root,
+:root * {
   scrollbar-width: thin;
-  scrollbar-color: var(--pwa-control-line) transparent;
 }
+
+:root { scrollbar-color: var(--pwa-control-line) transparent; }
+:root[data-scroll-hints] { scrollbar-color: transparent transparent; }
+:root[data-scroll-hints] [data-scrolling] { scrollbar-color: var(--pwa-control-line) transparent; }
 
 a { color: var(--pwa-accent); }
 
