@@ -95,7 +95,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   expect(inner.getBoundingClientRect().width).toBeLessThanOrEqual(640);
   expect(view.scrollWidth).toBeLessThanOrEqual(view.clientWidth);
   const sections = [...document.querySelectorAll<HTMLElement>(".pwa-settings-section")];
-  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Text size", "Language", "Keyboard", "Connection", "Browser data", "Diagnostics", "About"]);
+  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Text size", "Language", "Keyboard", "Connection", "Browser data", "About"]);
   expect(sections[1]!.getBoundingClientRect().top - sections[0]!.getBoundingClientRect().bottom).toBeCloseTo(32, 0);
   // 相邻独立按钮 8，横排与纵向同值（DESIGN「间距」）。
   expect(getComputedStyle(document.querySelector<HTMLElement>(".pwa-settings-actions")!).gap).toBe("8px");

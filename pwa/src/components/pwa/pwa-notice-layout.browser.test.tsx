@@ -36,27 +36,19 @@ function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; ini
 
 afterEach(async () => { vi.unstubAllGlobals(); await page.viewport(1280, 900); });
 
+// 软键盘交给浏览器：只有布局视口真实缩小（resizes-content、横屏、矮窗口）时，应用才需容纳在更矮的高度内。
 const viewports = [
-  { width: 1440, height: 900, visibleHeight: 900 }, { width: 390, height: 844, visibleHeight: 844 },
-  { width: 390, height: 500, visibleHeight: 500 }, { width: 756, height: 413, visibleHeight: 413 },
-  { width: 390, height: 844, visibleHeight: 500 }, { width: 844, height: 844, visibleHeight: 390 },
-  { width: 768, height: 1024, visibleHeight: 440 },
+  { width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 390, height: 500 },
+  { width: 756, height: 413 }, { width: 844, height: 390 }, { width: 768, height: 440 },
 ];
 
-test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport, lines }))))("keeps a $lines-line draft clickable with all notices at $width × $height (visible $visibleHeight)", async ({ width, height, visibleHeight, lines }) => {
+test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport, lines }))))("keeps a $lines-line draft clickable with all notices at $width × $height", async ({ width, height, lines }) => {
   await page.viewport(width, height);
-  const viewport = Object.assign(new EventTarget(), { height, offsetTop: 0, scale: 1 });
-  vi.stubGlobal("visualViewport", viewport);
   const onSend = vi.fn();
   const screen = await render(<PwaUiProvider><NoticeLayoutHarness onSend={onSend} initialDraft={"A draft line\n".repeat(lines).trim()} /></PwaUiProvider>);
   // Toast 是标题区下方的浮层，不参与这里的文档流通知布局，另见 pwa-operation-notifications 测试。
   expect(document.querySelectorAll(".pwa-root")).toHaveLength(1);
   await expect.element(screen.getByRole("status", { name: "Install Pi Reach" })).toBeVisible();
-  if (visibleHeight < height) {
-    (screen.getByPlaceholder("Message your agent…").element() as HTMLElement).focus({ preventScroll: true });
-    viewport.height = visibleHeight;
-    viewport.dispatchEvent(new Event("resize"));
-  }
   // Portal 挂载通知后，再等布局观察器完成输入区预算与阅读区同步。
   for (let frame = 0; frame < 6; frame += 1) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   const runtimeNotice = document.querySelector<HTMLElement>(".pwa-runtime-notice")!;
@@ -69,7 +61,7 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   for (const target of [input.element(), send.element()]) {
     const box = target.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(0);
-    expect(box.bottom).toBeLessThanOrEqual(visibleHeight);
+    expect(box.bottom).toBeLessThanOrEqual(height);
     expect(target.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))).toBe(true);
   }
   const composerBox = composer.getBoundingClientRect();
@@ -112,7 +104,7 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
     expect(input.element().scrollHeight).toBeGreaterThan(input.element().clientHeight);
     expect(getComputedStyle(input.element()).overflowY).toMatch(/auto|scroll/);
   }
-  if (lines === 10) await page.screenshot({ path: `../../../.vitest/screenshots/brand-gap-notices-${width}x${height}-visible-${visibleHeight}.png` });
+  if (lines === 10) await page.screenshot({ path: `../../../.vitest/screenshots/brand-gap-notices-${width}x${height}.png` });
   await send.click();
   expect(onSend).toHaveBeenCalledOnce();
   await screen.getByRole("button", { name: "Dismiss", exact: true }).click();

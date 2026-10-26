@@ -2,9 +2,7 @@ import { Portal } from "@mantine/core";
 import { createContext, useCallback, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { PwaOperationNotifications, PwaToastProvider } from "@/components/pwa/pwa-operation-notifications";
 import { createOperationNotificationController } from "@/lib/pwa/operation-notifications";
-import { useKeyboardViewport } from "@/lib/pwa/use-keyboard-viewport";
-import { useViewportDebug } from "@/lib/pwa/viewport-debug";
-import { ViewportDebugOverlay } from "@/components/pwa/viewport-debug-overlay";
+import { useViewportDensity } from "@/lib/pwa/use-viewport-density";
 import "@/app/workspace-viewport.css";
 
 type PwaRuntimeNoticeContextValue = {
@@ -34,8 +32,7 @@ export function PwaRuntimeNoticePortal({ children }: { children: ReactNode }) {
 /** 通知占用独立布局空间，不能覆盖会话输入区。 */
 export function PwaAppShell({ children, runtimeNotice }: { children: ReactNode; runtimeNotice: ReactNode }) {
   const shellRef = useRef<HTMLDivElement>(null);
-  useKeyboardViewport(shellRef);
-  const [viewportDebug] = useViewportDebug();
+  useViewportDensity(shellRef);
   const fallbackId = useId();
   const [fallbackTarget, setFallbackTarget] = useState<HTMLDivElement | null>(null);
   const [toastFallbackTarget, setToastFallbackTarget] = useState<HTMLDivElement | null>(null);
@@ -61,6 +58,5 @@ export function PwaAppShell({ children, runtimeNotice }: { children: ReactNode; 
       {children}{runtimeNotice}
       <PwaOperationNotifications controller={notifications} target={toastTarget} />
     </div>
-    {viewportDebug ? <ViewportDebugOverlay shellRef={shellRef} /> : null}
   </PwaRuntimeNoticeContext.Provider></PwaToastProvider>;
 }

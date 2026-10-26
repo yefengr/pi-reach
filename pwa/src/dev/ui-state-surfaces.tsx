@@ -75,7 +75,6 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
   const [language, setLanguage] = useState<LanguagePreference>("system");
   const [enterSends, setEnterSends] = useState(true);
   const [textSize, setTextSize] = useState<PwaTextSize>("standard");
-  const [viewportDebug, setViewportDebug] = useState(false);
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [previousSurface, setPreviousSurface] = useState(surface);
   const [settingsVisible, setSettingsVisible] = useState(surface === "settings");
@@ -152,7 +151,7 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
     {refreshPreview ? <p className="pwa-ui-states-note" role="status">已演示刷新操作；当前页面保持原样。</p> : null}
     <div className="pwa-ui-states-settings" hidden={!settingsVisible}>
       <SettingsPage
-        preferences={{ language, setLanguage, enterSends, setEnterSends, textSize, setTextSize, viewportDebug, setViewportDebug }}
+        preferences={{ language, setLanguage, enterSends, setEnterSends, textSize, setTextSize }}
         relayUrl="https://relay.invalid"
         defaultRelayUrl="https://relay.invalid"
         relayVersion={null}
