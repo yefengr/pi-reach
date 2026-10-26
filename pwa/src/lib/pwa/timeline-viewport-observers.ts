@@ -6,8 +6,10 @@ type Events = {
   resize(): void;
   interrupt(): void;
   input(): void;
-  /** 任何新的触摸、滚轮、按键或指针输入；只表示用户可能接管位置，不判断方向。 */
+  /** 任何触摸（含拖动）、滚轮、按键或指针输入；只表示用户正在接管位置，不判断方向。 */
   engage(): void;
+  /** 列表上是否仍有手指按着；抬起或取消后为 false。 */
+  touch(active: boolean): void;
 };
 
 /** 只报告事件与差分观察目标；不作任何意图或过程交接决策。 */
@@ -27,15 +29,18 @@ export class TimelineViewportObservers {
     let touch: { id: number; y: number } | null = null;
     const start = (event: TouchEvent) => {
       events.engage();
+      events.touch(event.touches.length > 0);
       const first = event.touches[0];
       touch = event.touches.length === 1 ? { id: first.identifier, y: first.clientY } : null;
     };
     const move = (event: TouchEvent) => {
+      // 拖动中的每一步都是用户在定位：前插保护若在按下之后才开启，也不能把它当成系统覆盖拉回。
+      events.engage();
       const first = event.touches[0];
       if (event.touches.length !== 1 || first.identifier !== touch?.id) { touch = null; return; }
       if (first.clientY - touch.y > TOUCH_READ_THRESHOLD) { touch = null; events.interrupt(); }
     };
-    const end = () => { touch = null; };
+    const end = (event: TouchEvent) => { touch = null; events.touch(event.touches.length > 0); };
     const main = list.closest(".pwa-main");
     list.addEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
     list.addEventListener("wheel", wheel, { passive: true });

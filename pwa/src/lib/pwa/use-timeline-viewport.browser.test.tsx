@@ -259,6 +259,31 @@ test("a history prepend reset to the top by the platform is restored on the next
   } finally { await screen.unmount(); }
 });
 
+test("a drag already under way when the prepend lands is never pulled back to the anchor", async () => {
+  const { screen, list, viewport, setItems } = await renderViewport();
+  try {
+    const article = document.createElement("article");
+    article.dataset.viewportRow = "history-anchor";
+    list.append(article);
+    let base = 100;
+    let scrollTop = 0;
+    vi.spyOn(article, "getBoundingClientRect").mockImplementation(() => ({ top: base - scrollTop, bottom: base - scrollTop + 20 } as DOMRect));
+    Object.defineProperty(list, "scrollTop", { configurable: true, get: () => scrollTop, set: (value: number) => { scrollTop = value; } });
+    // 手指在前插之前就已按下，之后只有拖动事件。
+    list.dispatchEvent(new TouchEvent("touchstart"));
+    flushSync(() => viewport().prepareHistoryPrepend());
+    base = 600;
+    flushSync(() => setItems([renderedTimelineItem]));
+    expect(list.scrollTop).toBe(500);
+    viewport().handleScroll(false);
+
+    list.dispatchEvent(new TouchEvent("touchmove"));
+    scrollTop = 470;
+    viewport().handleScroll(false);
+    expect(list.scrollTop).toBe(470);
+  } finally { await screen.unmount(); }
+});
+
 test("loading history into an empty viewport stays at its beginning", async () => {
   const { screen, list, viewport, setItems, scrollTo } = await renderViewport();
   try {
