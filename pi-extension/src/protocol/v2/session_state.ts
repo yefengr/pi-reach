@@ -34,6 +34,9 @@ export type V2IdempotencyRecord = {
 };
 
 const MAX_ATTEMPTS_PER_RECORD = 128;
+/** 幂等记录的默认容量与保留时长；超出容量或过期的记录被淘汰。 */
+const DEFAULT_MAX_ENTRIES = 512;
+const DEFAULT_TTL_MS = 10 * 60 * 1000;
 type Clock = () => number;
 
 export type V2SessionStateOptions = {
@@ -64,8 +67,8 @@ export class V2SessionState {
     this.assertId(options.sessionId, "sessionId");
     this.sessionIdValue = options.sessionId;
     this.leafIdValue = options.leafId;
-    this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? 512));
-    this.ttlMs = Math.max(1, options.ttlMs ?? 10 * 60 * 1000);
+    this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? DEFAULT_MAX_ENTRIES));
+    this.ttlMs = Math.max(1, options.ttlMs ?? DEFAULT_TTL_MS);
     this.clock = options.clock ?? Date.now;
   }
 

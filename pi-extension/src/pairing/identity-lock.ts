@@ -3,6 +3,9 @@ import { chmod, mkdir, open, readFile, unlink, type FileHandle } from "node:fs/p
 import { join } from "node:path";
 
 export const IDENTITY_LOCK_RELEASE_AFTER = Symbol("identity-lock-release-after");
+/** 等待其他 Pi 进程释放身份锁的默认上限与轮询间隔。 */
+export const IDENTITY_LOCK_WAIT_TIMEOUT_MS = 15_000;
+export const IDENTITY_LOCK_POLL_INTERVAL_MS = 50;
 
 export interface IdentityLockDeferredRelease {
   readonly [IDENTITY_LOCK_RELEASE_AFTER]: Promise<void>;
@@ -75,8 +78,8 @@ async function acquireIdentityLock(
 ): Promise<HeldIdentityLock> {
   await ensurePrivateIdentityDirectory(directory);
   const lockPath = join(directory, "identity.lock");
-  const waitTimeoutMs = options.waitTimeoutMs ?? 15_000;
-  const pollIntervalMs = Math.max(1, options.pollIntervalMs ?? 50);
+  const waitTimeoutMs = options.waitTimeoutMs ?? IDENTITY_LOCK_WAIT_TIMEOUT_MS;
+  const pollIntervalMs = Math.max(1, options.pollIntervalMs ?? IDENTITY_LOCK_POLL_INTERVAL_MS);
   const deadline = Date.now() + Math.max(0, waitTimeoutMs);
 
   while (true) {
