@@ -56,22 +56,24 @@ textarea:focus-visible,
 time,
 .pwa-tabular { font-variant-numeric: tabular-nums; }
 
-/* 滚动条统一：细滑块 + 透明轨道，滚动时显示、停止 2s 后隐藏（淡入淡出）。
+/* 滚动条统一：细滑块 + 透明轨道，滚动时显示、停止 3s 后隐藏（淡入淡出）。
    宽度不继承（Chrome 实测子元素仍为 auto），只能逐元素设置；颜色继承，写在 :root 即可覆盖含 body 浮层的全部容器。
    data-scroll-hints 由 useScrollIndicator 在脚本就绪后添加，脚本失败时滚动条保持可见；
+   data-scroll-host 标记真正滚动过的容器，过渡只挂在它们身上，避免覆盖组件自身的布局过渡；
    data-scroll-hold 用于加载更早记录期间抑制显示，避免看到滑块因内容高度变化而突然变短。 */
 :root,
 :root * {
   scrollbar-width: thin;
 }
 
-/* 只给可滚动后代加过渡：根元素自身不画滑块，根上过渡会把继承变化拖成一段渐变。 */
-:root * {
+[data-scroll-host] {
   transition: scrollbar-color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 
 :root { scrollbar-color: var(--pwa-control-line) transparent; }
 :root[data-scroll-hints] { scrollbar-color: transparent transparent; }
+/* 显示只作用于被滚动的那个容器：后代重新设为透明，避免消息内表格、代码块继承出可见滑块。 */
+:root[data-scroll-hints] [data-scrolling] :where(*) { scrollbar-color: transparent transparent; }
 :root[data-scroll-hints] [data-scrolling]:not([data-scroll-hold]) { scrollbar-color: var(--pwa-control-line) transparent; }
 
 a { color: var(--pwa-accent); }

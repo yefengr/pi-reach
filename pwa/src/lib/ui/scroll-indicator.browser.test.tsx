@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "vitest";
 import { useState } from "react";
 import { renderPwa } from "@/test/browser/render";
-import { SCROLL_HIDE_DELAY_MS, SCROLL_HINTS_ATTRIBUTE, SCROLLING_ATTRIBUTE, useScrollIndicator } from "./scroll-indicator";
+import { SCROLL_HIDE_DELAY_MS, SCROLL_HINTS_ATTRIBUTE, SCROLL_HOST_ATTRIBUTE, SCROLLING_ATTRIBUTE, useScrollIndicator } from "./scroll-indicator";
 
 /** 两个可横滚容器：验证显隐只作用于被滚动的那一个。 */
 function Scrollers() {
@@ -93,6 +93,9 @@ test("scrolling one container reveals only its bar, then hides it", async () => 
   table.scrollLeft = 40;
 
   await expect.poll(() => table.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+  // 首次滚动同时写入 host 标记，过渡只挂在这些容器上。
+  expect(table.hasAttribute(SCROLL_HOST_ATTRIBUTE)).toBe(true);
+  expect(getComputedStyle(table).transitionProperty).toBe("scrollbar-color");
   await expect.poll(() => scrollbarColor("table")).toBe(visibleColor());
   expect(scrollbarColor("other")).toBe(hiddenColor);
 
@@ -109,6 +112,34 @@ test("continuous scrolling keeps the bar visible past the hide delay", async () 
   table.scrollLeft = 80;
   await new Promise((resolve) => setTimeout(resolve, SCROLL_HIDE_DELAY_MS / 2 + 150));
   expect(table.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+});
+
+/** 外层滚动容器内嵌一个可横滚容器：验证显示只作用于被滚动的那个容器。 */
+function NestedScrollers() {
+  useScrollIndicator();
+  return <div data-scroller="outer" style={{ width: 200, height: 120, overflow: "auto" }}>
+    <div style={{ width: 600, height: 600 }}>
+      <div data-scroller="inner" style={{ width: 120, overflowX: "auto" }}>
+        <div style={{ width: 400, height: 20 }} />
+      </div>
+    </div>
+  </div>;
+}
+
+test("scrolling an outer container does not reveal nested container bars", async () => {
+  await renderPwa(<NestedScrollers />);
+  const outer = scroller("outer");
+  const inner = scroller("inner");
+  outer.scrollTop = 40;
+
+  await expect.poll(() => outer.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+  await expect.poll(() => scrollbarColor("outer")).toBe(visibleColor());
+  // 子容器没有滚动，不应继承父容器的可见颜色。
+  expect(scrollbarColor("inner")).toBe(hiddenColor);
+
+  inner.scrollLeft = 40;
+  await expect.poll(() => inner.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+  await expect.poll(() => scrollbarColor("inner")).toBe(visibleColor());
 });
 
 /** 加载更早记录期间（data-scroll-hold）即使滚动也不显示，加载结束后再显示新长度。 */

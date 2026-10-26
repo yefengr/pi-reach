@@ -2,6 +2,8 @@ import { useEffect } from "react";
 
 /** 滚动状态标记：滚动容器滚动时打上该属性，CSS 据此显示滚动条。 */
 export const SCROLLING_ATTRIBUTE = "data-scrolling";
+/** 滚动过至少一次的容器：只在它们身上挂过渡，避免全局 transition 覆盖组件的布局过渡。 */
+export const SCROLL_HOST_ATTRIBUTE = "data-scroll-host";
 /** 根元素上的开关：脚本就绪后才隐藏静止滚动条，脚本失败时滚动条保持可见。 */
 export const SCROLL_HINTS_ATTRIBUTE = "data-scroll-hints";
 /** 停止滚动到隐藏的延迟；覆盖惯性滚动与连续滚动，并按用户要求延长到 3 秒。 */
@@ -20,6 +22,8 @@ export function useScrollIndicator() {
     const markScrolling = (event: Event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      // 首次滚动时同时写入 host 标记：同一次任务内完成，首帧也能走过渡。
+      if (!target.hasAttribute(SCROLL_HOST_ATTRIBUTE)) target.setAttribute(SCROLL_HOST_ATTRIBUTE, "true");
       target.setAttribute(SCROLLING_ATTRIBUTE, "true");
       const pending = timers.get(target);
       if (pending !== undefined) window.clearTimeout(pending);
