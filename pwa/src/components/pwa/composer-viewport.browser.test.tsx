@@ -125,68 +125,59 @@ test("recalculates visual wrapping on width changes and includes an attachment i
   await view.screen.unmount();
 });
 
-test.each([[390, 844, 310], [844, 390, 260], [768, 1024, 440]])("keeps the keyboard above the fold and follows output at %ix%i", async (width, height, keyboardHeight) => {
+test.each([[390, 844, 310], [844, 390, 260], [768, 1024, 440]])("leaves a visual-viewport-only keyboard to the browser at %ix%i", async (width, height, keyboardHeight) => {
   await page.viewport(width, height);
-  const viewport = new ViewportMock();
-  vi.stubGlobal("visualViewport", viewport);
-  const view = await renderWorkspace("Draft line\n".repeat(8));
-  view.input.focus({ preventScroll: true });
-  viewport.change({ height: keyboardHeight, offsetTop: 12 });
-  await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
-  expect(view.shell.getBoundingClientRect().top).toBe(12);
-  expect(view.shell.getBoundingClientRect().height).toBe(keyboardHeight);
-  expect(view.input.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-  expect(view.list.clientHeight).toBeGreaterThanOrEqual(40);
-  expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
-  const send = view.screen.getByRole("button", { name: "Send message", exact: true }).element();
-  expect(send.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-  expect(send.getBoundingClientRect().bottom).toBeLessThanOrEqual(keyboardHeight + 12);
-  viewport.change({ offsetTop: 24 }, "scroll");
-  await settle();
-  expect(view.shell.getBoundingClientRect().top).toBe(24);
-  view.input.blur();
-  await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
-  viewport.change({ height, offsetTop: 0 });
-  await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
-  expect(view.shell.getBoundingClientRect().height).toBe(height);
-  expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
-  await view.screen.unmount();
-});
-
-test("tightens the composer bottom under the keyboard and restores the safe area after closing", async () => {
-  await page.viewport(390, 844);
   // 无头 Chromium 的 env(safe-area-inset-bottom) 恒为 0，用根节点变量模拟 Home 指示条安全区。
   document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
   const viewport = new ViewportMock();
   vi.stubGlobal("visualViewport", viewport);
-  const view = await renderWorkspace();
+  const scrollTo = vi.spyOn(window, "scrollTo");
+  const view = await renderWorkspace("Draft line\n".repeat(8));
   const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
-  const paddingBottom = () => parseFloat(getComputedStyle(composer).paddingBottom);
   try {
-    expect(paddingBottom()).toBe(34);
+    const before = { rect: view.shell.getBoundingClientRect().toJSON(), compact: view.shell.dataset.compactHeight, padding: getComputedStyle(composer).paddingBottom };
     view.input.focus({ preventScroll: true });
-    viewport.change({ height: 330 });
+    viewport.change({ height: keyboardHeight, offsetTop: 12 });
+    viewport.change({ offsetTop: 24 }, "scroll");
     await settle();
-    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(true);
-    expect(paddingBottom()).toBe(8);
+    // 原生方案：外壳、密度、安全区与窗口滚动都不因键盘改变，位移由浏览器负责。
+    expect(view.shell.getBoundingClientRect().toJSON()).toEqual(before.rect);
+    expect(view.shell.dataset.compactHeight).toBe(before.compact);
+    expect(getComputedStyle(composer).paddingBottom).toBe(before.padding);
+    expect(view.shell.getAttribute("style")).toBeNull();
+    expect(document.documentElement.hasAttribute("data-pwa-keyboard")).toBe(false);
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     view.input.blur();
-    viewport.change({ height: 844 });
+    viewport.change({ height, offsetTop: 0 });
     await settle();
-    expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
-    expect(paddingBottom()).toBe(34);
+    expect(view.shell.getBoundingClientRect().toJSON()).toEqual(before.rect);
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-bottom");
     await view.screen.unmount();
   }
 });
 
-test("keeps a real timeline paragraph anchored through keyboard, draft and rotation changes", async () => {
+test("applies short-window density from the real shell size and keeps following output", async () => {
+  vi.stubGlobal("visualViewport", undefined);
   await page.viewport(390, 844);
-  const viewport = new ViewportMock();
-  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const density = () => [view.shell.dataset.compactHeight ?? null, view.shell.hasAttribute("data-wide-compact")];
+  expect(density()).toEqual([null, false]);
+  for (const [width, height, expected] of [[390, 500, ["short", false]], [390, 420, ["very-short", false]], [844, 420, ["very-short", true]], [390, 844, [null, false]]] as const) {
+    await page.viewport(width, height);
+    await settle();
+    expect(density(), `${width}x${height}`).toEqual(expected);
+    expect(view.shell.getBoundingClientRect().height).toBe(height);
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+  }
+  await view.screen.unmount();
+  expect(density()).toEqual([null, false]);
+});
+
+test("keeps a real timeline paragraph anchored through draft and rotation changes", async () => {
+  await page.viewport(390, 844);
   const view = await renderWorkspace();
   const paragraph = view.screen.getByText(/^Answer 2, paragraph 3:/).element();
   view.list.scrollTop += offset(paragraph, view.list) - 2;
@@ -195,46 +186,12 @@ test("keeps a real timeline paragraph anchored through keyboard, draft and rotat
   expect(view.timeline().followingOutput).toBe(false);
   const initial = offset(paragraph, view.list);
   view.input.focus({ preventScroll: true });
-  viewport.change({ height: 330 });
-  await settle();
   await view.draft("Large draft\n".repeat(10));
   expect(Math.abs(offset(paragraph, view.list) - initial)).toBeLessThanOrEqual(1);
   await page.viewport(844, 390);
-  viewport.change({ height: 270 });
   await settle();
   expect(Math.abs(offset(paragraph, view.list) - initial)).toBeLessThanOrEqual(1);
   expect(view.timeline().followingOutput).toBe(false);
-  await view.screen.unmount();
-  expect(view.shell.style.getPropertyValue("--pwa-viewport-height")).toBe("");
-});
-
-test("ignores non-input viewport changes, zoom and already-resized layout viewports", async () => {
-  const viewport = new ViewportMock();
-  vi.stubGlobal("visualViewport", viewport);
-  const view = await renderWorkspace();
-  viewport.change({ height: 840 });
-  await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
-  view.input.focus({ preventScroll: true });
-  viewport.change({ height: 450, scale: 2 });
-  await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
-  await page.viewport(1280, 500);
-  viewport.change({ height: 500, scale: 1 });
-  await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
-  expect(view.shell.getBoundingClientRect().height).toBe(500);
-  await view.screen.unmount();
-});
-
-test("falls back to dynamic viewport CSS without visualViewport", async () => {
-  vi.stubGlobal("visualViewport", undefined);
-  const view = await renderWorkspace();
-  view.input.focus({ preventScroll: true });
-  await page.viewport(390, 500);
-  await settle();
-  expect(view.shell.hasAttribute("data-keyboard-viewport")).toBe(false);
-  expect(view.shell.getBoundingClientRect().height).toBe(500);
   await view.screen.unmount();
 });
 

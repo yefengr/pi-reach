@@ -259,7 +259,7 @@ WebKit 自动化可补充覆盖，但不能替代原 iOS 设备。原单帧回�
 ## 11. 新会话恢复入口
 
 1. 读取本文、[ROADMAP](../../ROADMAP.md) 和 [PWA 协作规则](../../../pwa/AGENTS.md)，核对当前工作区、最新 `main` 与文档的未提交状态，再创建新的实施分支；不要继续向已合并的 PR #133 或 PR #134 分支提交。
-2. 核对直接消费者：`use-timeline-viewport.ts`、`own-send-transition.ts`、`timeline-follow-motion.ts`、`timeline-viewport-anchor.ts`、`use-composer-autosize.ts`、`use-keyboard-viewport.ts`、两个发送入口，以及 MessageList／ConversationTimeline／用户行／工具与思考行／摘要。
+2. 核对直接消费者：`use-timeline-viewport.ts`、`own-send-transition.ts`、`timeline-follow-motion.ts`、`timeline-viewport-anchor.ts`、`use-composer-autosize.ts`、`use-viewport-density.ts`、两个发送入口，以及 MessageList／ConversationTimeline／用户行／工具与思考行／摘要。
 3. 特别核对 `use-live-timeline.ts` 的跟随与历史入口，以及 `workspace-content.tsx` 中同样订阅几何事件的历史视图。通知符号改动必须闭合所有消费者，不能只验证实时工作区。
 4. 冻结共享接口、写入所有权和分阶段验收后再实施；本文不固定代理 profile、临时环境路径或测试数量，以实际运行时和源码为准。
 

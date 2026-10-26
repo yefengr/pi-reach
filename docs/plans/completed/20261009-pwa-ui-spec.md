@@ -28,7 +28,7 @@
 | [globals.css](../../../pwa/src/app/globals.css) | 按钮、输入、设置页、弹窗、提示条、矮窗口与移动覆盖样式 |
 | [workspace-shell.css](../../../pwa/src/app/workspace-shell.css) | 桌面侧栏、主区 gutter、顶栏、移动导航、空状态与骨架屏 |
 | [workspace-navigation.css](../../../pwa/src/app/workspace-navigation.css) | 电脑选择入口、电脑面板、移动电脑 Drawer 与导航头部 |
-| [use-keyboard-viewport.ts](../../../pwa/src/lib/pwa/use-keyboard-viewport.ts) | 矮窗口密度的高度与宽度阈值 |
+| [use-viewport-density.ts](../../../pwa/src/lib/pwa/use-viewport-density.ts) | 矮窗口密度的高度与宽度阈值 |
 | [settings-page.tsx](../../../pwa/src/components/pwa/settings-page.tsx) | 设置页分区、选项卡片和操作组合 |
 
 当前已经具备 44px 控件、6/8/12px 主圆角档位、桌面 20px 与移动 16px 主区边距、明暗语义颜色等共同基础。需要补齐的是间距用途、宽度口径、默认规则与局部例外，以及这些规则在所有消费者中的一致执行。
@@ -129,7 +129,7 @@
 
 ## 6. 矮窗口密度
 
-现有实现按应用壳实际可见高度切换密度，软键盘弹出时同样生效；阈值以 [use-keyboard-viewport.ts](../../../pwa/src/lib/pwa/use-keyboard-viewport.ts) 的具名常量为准，本文不重复维护数值来源。
+现有实现按应用壳实际可见高度切换密度，软键盘弹出时同样生效；阈值以 [use-viewport-density.ts](../../../pwa/src/lib/pwa/use-viewport-density.ts) 的具名常量为准，本文不重复维护数值来源。
 
 | 模式 | 触发 | 已有调整 |
 | --- | --- | --- |
