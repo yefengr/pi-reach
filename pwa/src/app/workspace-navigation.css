@@ -229,10 +229,18 @@
   opacity: 0;
 }
 
-.pwa-root .pwa-peer-card:hover .pwa-peer-menu-trigger,
 .pwa-root .pwa-peer-menu-trigger:focus-visible,
 .pwa-root .pwa-peer-menu-trigger[aria-expanded="true"] {
   opacity: 1;
+}
+
+@media (hover: hover) { .pwa-root .pwa-peer-card:hover .pwa-peer-menu-trigger {
+  opacity: 1;
+} }
+
+/* 触屏或混合输入没有可靠的悬停，宽视口（如平板）也常显操作入口。 */
+@media (any-pointer: coarse), (hover: none) {
+  .pwa-root .pwa-peer-menu-trigger { opacity: 1; }
 }
 
 @media (hover: hover) { .pwa-root .pwa-peer-menu-trigger:hover:not(:disabled) {

@@ -170,11 +170,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]::before { background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-active); }
-/* 危险入口的图标按钮保留轮廓，不套用圆形浅底。 */
-.pwa-ui-scope .pwa-icon-button[data-variant="outline"] { color: var(--pwa-error); }
-@media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-error); } }
-.pwa-ui-scope .pwa-icon-button[data-variant="outline"]::before { border-color: var(--pwa-error); }
-@media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-error-wash); } }
 .pwa-ui-scope .pwa-icon-button:disabled,
 .pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: not-allowed; }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:disabled::before,
@@ -206,6 +201,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
 .pwa-ui-scope .pwa-button[data-variant="transparent"] { padding: 0 10px; border-color: transparent; color: var(--pwa-accent); background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="transparent"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
+/* outline 变体只用于危险入口（会弹出确认的操作），不作普通次级按钮。 */
 .pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: var(--pwa-error); color: var(--pwa-error); background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash); } }
 .pwa-ui-scope .pwa-button:disabled,

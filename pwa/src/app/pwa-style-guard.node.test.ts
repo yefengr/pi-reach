@@ -71,6 +71,14 @@ const EXCEPTIONS: Exception[] = [
   { file: "components/pwa/tool-reader.css", selector: ".pwa-ui-scope .pwa-button.pwa-tool-details-button", property: "margin-left", values: [-8], reason: ALIGN },
 ];
 
+type HoverRule = { file: string; selector: string };
+/** 不在 @media (hover: hover) 内的 :hover 规则只允许取消 Mantine 默认悬停或保持选中态；登记失效会失败。 */
+const HOVER_OVERRIDES: (HoverRule & { reason: string })[] = [
+  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-composer .pwa-composer-input, .pwa-ui-scope .pwa-composer .pwa-composer-input:hover, .pwa-ui-scope .pwa-composer .pwa-composer-input:focus, .pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within", reason: "取消 Mantine 输入框的悬停与聚焦样式" },
+  { file: "app/globals.css", selector: ".pwa-command-choice[data-selected]:hover:not(:disabled), .pwa-command-choice[data-selected]:focus-visible:not(:disabled)", reason: "当前项悬停时保持 selected 底色" },
+  { file: "app/workspace-navigation.css", selector: ".pwa-root .pwa-computer-select:hover, .pwa-root .pwa-computer-select:active, .pwa-root .pwa-computer-select[data-active], .pwa-root .pwa-computer-select[data-active]:hover, .pwa-root .pwa-computer-select[data-active]:active", reason: "取消 Mantine NavLink 悬停底色，由外层卡片负责" },
+];
+
 function cssFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((name) => {
     const path = join(directory, name);
@@ -92,6 +100,33 @@ function declarations(): Declaration[] {
         return [{ file, selector, property: raw.slice(0, colon).trim(), value: raw.slice(colon + 1).trim() }];
       });
     });
+  });
+}
+
+/** 逐字符跟踪花括号栈，找出外层没有 @media (hover: hover) 的 :hover 规则。 */
+function hoverRulesOutsideHoverMedia(): HoverRule[] {
+  return cssFiles(SOURCE_ROOT).sort().flatMap((path) => {
+    const file = relative(SOURCE_ROOT, path);
+    const text = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const stack: string[] = [];
+    const found: HoverRule[] = [];
+    let head = "";
+    for (const char of text) {
+      if (char === "{") {
+        const selector = head.trim().replace(/\s+/g, " ");
+        if (!selector.startsWith("@") && selector.includes(":hover") && !stack.some((outer) => /\(hover:\s*hover\)/.test(outer))) found.push({ file, selector });
+        stack.push(selector);
+        head = "";
+      } else if (char === "}") {
+        stack.pop();
+        head = "";
+      } else if (char === ";") {
+        head = "";
+      } else {
+        head += char;
+      }
+    }
+    return found;
   });
 }
 
@@ -186,6 +221,15 @@ describe("CSS static guard", () => {
       expect(matches, `${file}: ${selector}`).toHaveLength(1);
       expect(matches[0].value).toBe(`var(--pwa-radius-${size})`);
     }
+  });
+
+  test("hover feedback stays inside @media (hover: hover) except registered overrides", () => {
+    const key = (rule: HoverRule) => `${rule.file} | ${rule.selector}`;
+    const allowed = new Set(HOVER_OVERRIDES.map(key));
+    const found = hoverRulesOutsideHoverMedia();
+    expect(found.map(key).filter((rule) => !allowed.has(rule))).toEqual([]);
+    const present = new Set(found.map(key));
+    expect(HOVER_OVERRIDES.map(key).filter((rule) => !present.has(rule))).toEqual([]);
   });
 
   test("border and outline widths stay hairline", () => {

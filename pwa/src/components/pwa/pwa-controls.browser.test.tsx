@@ -10,6 +10,7 @@ import { APPEARANCE_STORAGE_KEY } from "@/lib/ui/appearance";
 import { MessageComposer } from "./message-composer";
 import { usePwaAppearance } from "./pwa-appearance";
 import { usePwaMenuTransition } from "./use-pwa-motion";
+import { ComputerRow } from "./workspace-device-control";
 
 const setMotion = (reduce: boolean) => cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: reduce ? "reduce" : "no-preference" }] });
 const matrix = (element: Element, pseudo?: string) => new DOMMatrix(getComputedStyle(element, pseudo).transform === "none" ? undefined : getComputedStyle(element, pseudo).transform);
@@ -313,6 +314,22 @@ test("fine and coarse input change visual density without overlapping 44px menu 
   if (fine) expect(Math.round(navigation.getBoundingClientRect().height)).toBeGreaterThan(fineHeight);
   expect(Math.round(description.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(navigation.getBoundingClientRect().bottom));
   expect(getComputedStyle(navigation).minHeight).toBe("44px");
+});
+
+test("computer row actions stay visible on wide touch layouts instead of relying on hover", async () => {
+  await page.viewport(1280, 900);
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  const computer = { id: "device:office", deviceId: "office-device-id", relayUrl: "https://relay.example.test", pairedAt: "2026-01-01T00:00:00.000Z", nickname: "Office Pi" };
+  const screen = await renderPwa(<ComputerRow device={computer} active={false} onSelect={() => {}} onRename={() => {}} onRemove={() => {}} />);
+  const trigger = document.querySelector<HTMLElement>(".pwa-peer-menu-trigger")!;
+  // Linux headless 禁用触控模拟后可能报告 hover: none，只在真实鼠标环境断言悬停前隐藏。
+  if (matchMedia("(hover: hover)").matches && !matchMedia("(any-pointer: coarse)").matches) {
+    expect(getComputedStyle(trigger).opacity).toBe("0");
+  }
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await expect.poll(() => matchMedia("(any-pointer: coarse)").matches).toBe(true);
+  await expect.poll(() => getComputedStyle(trigger).opacity).toBe("1");
+  await screen.unmount();
 });
 
 test.each(["entering", "entered"] as const)("a menu adopts runtime reduced motion while %s before its next close", async phase => {
