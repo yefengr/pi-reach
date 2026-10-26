@@ -219,8 +219,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-image-input { display: none; }
 .pwa-composer-card { min-width: 0; padding: var(--pwa-space-composer) 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
-.pwa-composer-preview { position: relative; max-width: 100%; margin: 2px 2px 8px; }
-.pwa-composer-preview img { display: block; max-width: min(240px, 100%); height: 76px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); object-fit: cover; background: var(--pwa-code-bg); }
 .pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; } }
@@ -424,7 +422,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-startup-icon,
 .pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--pwa-running) 44%, var(--pwa-line)); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
 .pwa-startup-icon { width: 48px; height: 48px; margin-bottom: 16px; }
-.pwa-startup-card h1 { margin: 12px 0; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: 600; line-height: var(--pwa-leading-ui); }
+.pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: 600; line-height: var(--pwa-leading-ui); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: var(--pwa-text-meta) !important; }
 .pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }

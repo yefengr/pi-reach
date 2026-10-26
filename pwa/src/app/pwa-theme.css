@@ -185,7 +185,7 @@
   --pwa-space-xl: 32px;
   --pwa-space-2xl: 48px;
 
-  /* 领域细档：2／6／10，只在对应语义内使用（见 DESIGN「间距」）。 */
+  /* 领域细档：2／6／10，只用于 DESIGN「间距」细档表列出的语义，不作为通用档位；新语义先补表再使用。 */
   --pwa-space-pair: 2px;
   --pwa-space-status: 6px;
   --pwa-space-menu-pad: 10px;

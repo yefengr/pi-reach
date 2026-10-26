@@ -669,6 +669,8 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(button.type).toBe("button");
         expect(button.disabled).toBe(false);
         expect(button.classList.contains("mantine-NavLink-root")).toBe(true);
+        // 电脑行属于紧凑卡片：上下 6、左右 8。
+        expect([getComputedStyle(button).paddingTop, getComputedStyle(button).paddingLeft]).toEqual(["6px", "8px"]);
         expect(button.hasAttribute("data-active")).toBe(index === 0);
         expect(button.hasAttribute("data-disabled")).toBe(false);
         expect(button.querySelector("button")).toBeNull();
