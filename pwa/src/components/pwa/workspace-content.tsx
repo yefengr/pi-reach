@@ -1,17 +1,17 @@
-import { useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import { useMemo, type ReactNode } from "react";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { Button } from "@mantine/core";
 import { ChevronRight, Computer, History, Link2, Radio } from "lucide-react";
+import { OnlinePiRow } from "@/components/pwa/workspace-view";
 import { MessageList } from "@/components/pwa/message-list";
 import { ReadOnlyComposer } from "@/components/pwa/message-composer";
-import { OnlinePiRow } from "@/components/pwa/workspace-view";
-import type { PwaEndpointRecord } from "@/lib/pwa/db";
+import { PwaMessageActions } from "@/components/pwa/pwa-app-actions";
 import type { ThinkingLevel } from "@/lib/pi-reach/types";
+import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
-import { TIMELINE_PAGE_SIZE } from "@/lib/pwa/timeline-history-loader";
-import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
-import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
-import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor } from "@/lib/pwa/timeline-viewport-anchor";
+import { savedRangeGaps } from "@/lib/pwa/timeline-local-pager";
+import type { TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import type { PwaEndpointRecord } from "@/lib/pwa/db";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 
@@ -19,112 +19,48 @@ export { useDelayedVisibility };
 
 const PAIR_COMMAND = "/pi-reach pair";
 
-export function LiveWorkspace({ timeline, footer }: { timeline: ReactNode; footer: ReactNode }) {
+/** 会话主区：时间线加底部操作区；在线会话与只读历史共用，只换底部输入区。 */
+export function TimelineWorkspace({ timeline, footer }: { timeline: ReactNode; footer: ReactNode }) {
   return <>
     {timeline}
     <div className="pwa-chat-footer">{footer}</div>
   </>;
 }
 
-/** 切回只读历史时恢复的阅读位置；滚动位置依赖当时已展开的记录数，两者一起保存。 */
-export type HistoryRestore = { scrollTop: number; visibleCount: number };
-
-type HistoryWorkspaceProps = {
+type HistoryConversationProps = {
+  /** 当前已展开的记录（运行时只读投影）。 */
   items: TimelineViewItem[];
+  /** 本地保存的全部正式记录：附件元数据可能落在已展开的范围之外，缺口按全集的序号标出。 */
+  savedEvents: readonly TimelineEvent[];
+  hasEarlier: boolean;
+  loadingEarlier: boolean;
+  loadEarlierFailed: boolean;
+  onLoadEarlier: () => void;
   /** 正在读取本地记录；读完之前不把空列表当作「没有记录」。 */
-  loading?: boolean;
-  restore?: HistoryRestore | null;
-  /** 供离开时保存阅读位置读取当前已展开的记录数。 */
-  visibleCountRef?: MutableRefObject<number>;
-  listRef: RefObject<HTMLDivElement | null>;
-  bottomSentinelRef: RefObject<HTMLDivElement | null>;
+  loading: boolean;
+  viewport: Pick<TimelineViewport, "messageListRef" | "bottomSentinelRef" | "handleScroll" | "followingOutput" | "showLatest">;
   /** 该 Pi 最后已知的模型与思考级别，只读输入区按在线样式显示。 */
-  modelName?: string | null;
-  thinking?: ThinkingLevel;
+  modelName: string | null;
+  thinking: ThinkingLevel;
 };
 
-/** 本地记录按序号排列后的完整性：首条之前和中间缺少的区间都未保存在此浏览器。 */
-function savedRangeGaps(items: readonly TimelineViewItem[]): { gapBefore: Set<string>; missingStart: boolean } {
-  const gapBefore = new Set<string>();
-  let previous: number | null = null;
-  let missingStart = false;
-  for (const item of items) {
-    if (item.kind !== "event" || item.event.event_seq === undefined) continue;
-    const sequence = item.event.event_seq;
-    if (previous === null) missingStart = sequence > 1;
-    else if (sequence > previous + 1) gapBefore.add(item.event.event_id);
-    previous = sequence;
-  }
-  return { gapBefore, missingStart };
-}
-
-/** 长历史先渲染最近一段，接近顶部时按页向前展开，避免一次渲染整个会话卡住界面；交互与在线会话的向前加载一致。 */
-export function HistoryWorkspace({ items, loading = false, restore = null, visibleCountRef, listRef, bottomSentinelRef, modelName = null, thinking = "off" }: HistoryWorkspaceProps) {
+/**
+ * 只读历史：与在线会话同一个时间线组件与视口，向前翻页、阅读位置与「最新」的行为一致；
+ * 只换底部为只读输入区，并标出未保存在此浏览器的区间。
+ */
+export function HistoryConversation({ items, savedEvents, hasEarlier, loadingEarlier, loadEarlierFailed, onLoadEarlier, loading, viewport, modelName, thinking }: HistoryConversationProps) {
   const { t } = useI18n();
-  const [visibleCount, setVisibleCount] = useState(() => Math.max(restore?.visibleCount ?? 0, TIMELINE_RECENT_LIMIT));
-  const visibleItems = useMemo(() => items.slice(-visibleCount), [items, visibleCount]);
-  const { gapBefore, missingStart } = useMemo(() => savedRangeGaps(items), [items]);
-  const hasEarlier = items.length > visibleCount;
+  const projection = useMemo(() => savedEvents.map((event): TimelineViewItem => ({ kind: "event", event })), [savedEvents]);
+  const { gapBefore, missingStart } = useMemo(() => savedRangeGaps(savedEvents), [savedEvents]);
   const skeletonVisible = useDelayedVisibility(loading);
-  const positionedRef = useRef(false);
-  const prependAnchorRef = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    if (visibleCountRef) visibleCountRef.current = visibleCount;
-  }, [visibleCount, visibleCountRef]);
-  useLayoutEffect(() => {
-    // 首次打开停在底部最新内容；同一次访问中切回时按当时展开的范围恢复离开时的位置。
-    const list = listRef.current;
-    if (positionedRef.current || !list || items.length === 0) return;
-    positionedRef.current = true;
-    list.scrollTop = restore?.scrollTop ?? list.scrollHeight;
-  }, [items, listRef, restore]);
-  useLayoutEffect(() => {
-    // 向前展开时保持与底部的距离，正在读的内容不跳动。
-    const anchor = prependAnchorRef.current;
-    const list = listRef.current;
-    if (anchor === null || !list) return;
-    prependAnchorRef.current = null;
-    list.scrollTop = list.scrollHeight - anchor;
-  }, [listRef, visibleCount]);
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    // 历史没有实时跟随控制器；复用相同的行锚点算法，独立处理分栏和侧栏重排。
-    let anchor = captureTimelineViewportAnchor(list);
-    let restoredTop: number | null = null;
-    const remember = () => {
-      if (restoredTop !== null && Math.abs(list.scrollTop - restoredTop) <= 1) { restoredTop = null; return; }
-      restoredTop = null;
-      anchor = captureTimelineViewportAnchor(list);
-    };
-    const restoreAnchor = () => {
-      const before = list.scrollTop;
-      if (!anchor || !restoreTimelineViewportAnchor(list, anchor)) anchor = captureTimelineViewportAnchor(list);
-      // 程序恢复产生的异步 scroll 不重写原锚点，避免调宽时取整误差累积。
-      if (list.scrollTop !== before) restoredTop = list.scrollTop;
-    };
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(restoreAnchor);
-    observer?.observe(list);
-    for (const child of list.children) observer?.observe(child);
-    list.addEventListener("scroll", remember, { passive: true });
-    list.addEventListener(TIMELINE_GEOMETRY_EVENT, restoreAnchor);
-    return () => {
-      observer?.disconnect();
-      list.removeEventListener("scroll", remember);
-      list.removeEventListener(TIMELINE_GEOMETRY_EVENT, restoreAnchor);
-    };
-  }, [listRef, visibleItems]);
-  const loadEarlier = () => {
-    const list = listRef.current;
-    if (list) prependAnchorRef.current = list.scrollHeight - list.scrollTop;
-    setVisibleCount((count) => count + TIMELINE_PAGE_SIZE);
-  };
-  return <>
-    <MessageList items={visibleItems} projectionItems={items} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier} earlierLocal gapBefore={gapBefore} topNotice={!hasEarlier && missingStart ? t.timeline.earlierNotSaved : null} listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={() => {}} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />
-    <div className="pwa-chat-footer">
+  const following = viewport.followingOutput;
+  return <TimelineWorkspace
+    timeline={<MessageList items={items} projectionItems={projection} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} onLoadEarlier={onLoadEarlier} loadEarlierFailed={loadEarlierFailed} autoLoadEarlier={!following} earlierLocal gapBefore={gapBefore} topNotice={!hasEarlier && missingStart ? t.timeline.earlierNotSaved : null} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />}
+    footer={<>
+      <PwaMessageActions show={!following} showRetry={false} showLatest={!following} unreadOutput={0} onRetry={() => {}} onLatest={viewport.showLatest} />
       <ReadOnlyComposer notice={t.workspace.readOnlyNote} modelName={modelName} thinking={thinking} />
-    </div>
-  </>;
+    </>}
+  />;
 }
 
 /** 主区空状态：阅读列中部偏上，图标、标题、一行说明，最多一个操作。 */

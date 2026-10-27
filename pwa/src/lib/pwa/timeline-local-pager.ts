@@ -70,3 +70,18 @@ export class TimelineLocalPager implements TimelineEarlierSource {
     if (!this.disposed) this.options.onState({ hasEarlier: this.hasEarlier, loading });
   }
 }
+
+/** 本地记录按序号排列后的完整性：首条之前和中间缺少的区间都未保存在此浏览器。 */
+export function savedRangeGaps(events: readonly TimelineEvent[]): { gapBefore: Set<string>; missingStart: boolean } {
+  const gapBefore = new Set<string>();
+  let previous: number | null = null;
+  let missingStart = false;
+  for (const event of events) {
+    if (event.event_seq === undefined) continue;
+    const sequence = event.event_seq;
+    if (previous === null) missingStart = sequence > 1;
+    else if (sequence > previous + 1) gapBefore.add(event.event_id);
+    previous = sequence;
+  }
+  return { gapBefore, missingStart };
+}

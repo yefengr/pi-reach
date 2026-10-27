@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@mantine/core";
 import type { ComposerCommandAction, ModelListStatus } from "@/components/pwa/composer-command-menu";
-import { HistoryWorkspace } from "@/components/pwa/workspace-content";
+import { HistoryConversation } from "@/components/pwa/workspace-content";
 import { useDelayedVisibility } from "@/components/pwa/use-delayed-visibility";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
@@ -90,7 +90,9 @@ export function GalleryConversationControls({ state, conversation: c, onResult }
   return null;
 }
 
+/** 与正式工作区相同的只读历史组件；演示数据很短，不分页。 */
 export function GalleryHistory({ items }: { items: Conversation["items"] }) {
   const viewport = useTimelineViewport(items);
-  return <HistoryWorkspace items={items} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} modelName="内存演示模型" thinking="medium" />;
+  const savedEvents = useMemo(() => items.flatMap((item) => item.kind === "event" ? [item.event] : []), [items]);
+  return <HistoryConversation items={items} savedEvents={savedEvents} hasEarlier={false} loadingEarlier={false} loadEarlierFailed={false} onLoadEarlier={() => {}} loading={false} viewport={viewport} modelName="内存演示模型" thinking="medium" />;
 }

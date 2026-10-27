@@ -650,7 +650,8 @@ test("replacing the list DOM with unchanged items rebinds observers and invalida
     expect(newList).not.toBe(oldList);
     expect(observed.has(oldList)).toBe(false);
     expect(observed.has(newList)).toBe(true);
-    flushSync(() => { viewport.prepareHistoryPrepend(); viewport.followOwnSend(capture); });
+    // 用户回看结束跟随；旧 capture 已随列表替换失效，不能据此恢复跟随。
+    flushSync(() => { viewport.handleScroll(false); viewport.followOwnSend(capture); });
     expect(viewport.followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });

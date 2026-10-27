@@ -3283,9 +3283,12 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(navigation.getByText("Local history", { exact: true })).toBeVisible();
     await expect.element(screen.getByRole("tab", { name: "History" })).not.toBeInTheDocument();
     const originalChannel = channelHarness.channels[0];
-    // 点击在线 Pi 即退出本地历史，回到同一个 Pi。
+    const listText = () => document.querySelector(".pwa-message-list")?.textContent ?? "";
+    expect(listText()).toContain("Saved session note");
+    // 点击在线 Pi 即退出本地历史，回到同一个 Pi：撤下只读投影并重新握手，不把历史当作在线会话的内容。
     await navigation.getByRole("button", { name: /Renamed live Pi/ }).click();
     await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+    await expect.poll(listText).not.toContain("Saved session note");
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
     expect(channelHarness.channels[1]?.channelId).toBe(originalChannel?.channelId);
     await expect.element(screen.getByRole("button", { name: "Open navigation" })).toHaveTextContent("Renamed live Pi");
@@ -4602,15 +4605,17 @@ test("opens long saved history behind a loading state with its latest page and k
     screen.getByRole("button", { name: "Load more", exact: true }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await expect.poll(records).toBe(110);
 
-    // 离顶部足够远，恢复位置时不触发自动展开。
+    // 离顶部超过两屏的提前量，恢复位置时不触发自动展开。用户滚动伴随输入事件，阅读位置按屏幕顶部那一行保存。
     const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
-    list.scrollTop = 1200;
-    list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+    list.scrollTop = 2400;
+    await expect.poll(() => list.scrollTop).toBe(2400);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     await selectPi("Test Pi");
     await expect.poll(records).toBe(0);
     await openHistoryRow();
     await expect.poll(records).toBe(110);
-    await expect.poll(() => document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop).toBe(1200);
+    await expect.poll(() => Math.abs(document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop - 2400)).toBeLessThanOrEqual(1);
   } finally { release(); await screen.unmount(); }
 });
 

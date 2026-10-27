@@ -479,8 +479,9 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   /**
    * 打开只读历史：断开在线会话，读出本地保存的全部记录，先显示末尾 shown 条，向前翻页与在线会话走同一条链路。
    * shown 为切回时离开前已展开的条数，阅读位置由调用方随后经 restoreSessionPosition 按行恢复。
+   * 读取结束后给出结果；期间又切走时为 null。
    */
-  const openHistory = useCallback((target: TimelinePreviewTarget, shown = TIMELINE_RECENT_LIMIT) => {
+  const openHistory = useCallback((target: TimelinePreviewTarget, shown = TIMELINE_RECENT_LIMIT): Promise<"ready" | "error" | null> => {
     const token = ++previewTokenRef.current;
     disconnect();
     const generation = ++contextGenerationRef.current;
@@ -492,8 +493,8 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     applyTimelineChange(runtimeRef.current.showReadOnly([]), true);
     setHistory({ status: "loading", events: [] });
     const current = () => token === previewTokenRef.current && generation === contextGenerationRef.current;
-    void loadTimeline({ ...target, leafId: null }).then((events) => {
-      if (!current()) return;
+    return loadTimeline({ ...target, leafId: null }).then((events) => {
+      if (!current()) return null;
       const pager = new TimelineLocalPager({
         events,
         shown: Math.max(shown, TIMELINE_RECENT_LIMIT),
@@ -502,8 +503,11 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
       attachEarlier(pager);
       applyTimelineChange(runtimeRef.current.showReadOnly(pager.initialEvents()), true);
       setHistory({ status: "ready", events });
+      return "ready" as const;
     }, () => {
-      if (current()) setHistory({ status: "error", events: [] });
+      if (!current()) return null;
+      setHistory({ status: "error", events: [] });
+      return "error" as const;
     });
   }, [applyTimelineChange, attachEarlier, disconnect, earlierHandlers, releaseEarlier, resetOutputFollowing, setEarlierFailed, setHasEarlierState]);
 

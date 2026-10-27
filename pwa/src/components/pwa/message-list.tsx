@@ -14,7 +14,7 @@ import { attachmentMessageKey, projectAttachmentMetadata, type TimelineAttachmen
 import { publishedFileFromEvent, type AttachmentMetadata } from "@pi-reach/protocol/session";
 import { PublishedFile, type PublishedFileRead } from "./published-file";
 import { UserMessage } from "./user-message";
-import { AUTO_LOAD_EARLIER_SCREENS, useAutoLoadEarlier } from "./use-auto-load-earlier";
+import { useAutoLoadEarlier } from "./use-auto-load-earlier";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
@@ -29,7 +29,7 @@ type MessageListProps = {
   onLoadEarlier?: () => void;
   /** 上次向前加载失败：停止自动加载，改为显示重试，避免失败后连续重试。 */
   loadEarlierFailed?: boolean;
-  /** 是否允许接近顶部时自动加载；在线会话仍跟随最新输出时为 false，避免打开时立即向前加载。 */
+  /** 是否允许接近顶部时自动加载；跟随最新输出时为 false，避免打开时立即向前加载。内容不足一屏时仍补页。 */
   autoLoadEarlier?: boolean;
   /** 这些正式事件之前缺少记录（只读历史中未保存的区间），在其前方标出。 */
   gapBefore?: ReadonlySet<string>;
@@ -166,9 +166,9 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
   const showEarlier = hasEarlier && !loadingEmpty;
   const checkAutoLoad = useAutoLoadEarlier({
     listRef,
-    enabled: showEarlier && autoLoadEarlier && !loadingEarlier && !loadEarlierFailed && !earlierOffline && onLoadEarlier !== undefined,
+    enabled: showEarlier && !loadingEarlier && !loadEarlierFailed && !earlierOffline && onLoadEarlier !== undefined,
+    nearTop: autoLoadEarlier,
     contentVersion: items,
-    lookaheadScreens: earlierLocal ? 0 : AUTO_LOAD_EARLIER_SCREENS,
     onLoad: () => onLoadEarlier?.(),
   });
   return <div className="pwa-message-list" data-reconnect-phase={reconnectPhase ?? undefined} data-scroll-hold={loadingEarlier ? "true" : undefined} ref={listRef} tabIndex={-1} onScroll={(event) => {
