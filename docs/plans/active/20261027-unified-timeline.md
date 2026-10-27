@@ -131,4 +131,13 @@
 - 反向验证：撤掉「离开历史一律重新握手」后，`pwa-app` 的「回到同一个在线 Pi」用例因历史内容残留而失败。
 - 调整的既有用例：`pwa-app` 长历史恢复用例改为带滚轮输入的用户滚动、阅读位置移到两屏提前量之外并按整像素比较；`use-timeline-viewport` 一项改用用户回看结束跟随（原用不可滚动列表上的前插代替）。
 
+### 9.3 「最新」入口显示时机（2026-10-27 追加）
+
+用户反馈「最新」出现得太频繁：入口与跟随共用 32px 判断，往上看一两行、惯性或回弹都会让它出现。按确认的方案调整，两种会话共用：
+
+- 入口只在离开跟随、离底部超过一屏且滚动停下（复用 `ScrollIdleGate`，200ms）后显示；回到一屏以内立即隐藏；在线会话有未读输出时照常显示。
+- 跟随的 32px 判断不变，避免新输出把稍微回看的读者拽回底部。
+- 新增 `LatestEntryVisibility` 与 Node 测试 5 项；`pwa-app` 中 5 个回看用例的模拟滚动位置由离底部 100–300px 改为 500px（模拟视口 400px），并新增「一屏以内不显示」断言；历史用例同步覆盖两种距离。反向验证：恢复旧条件后两条新断言失败。
+- 验证：Node 全量 1088 项；Browser Mode `pwa-app`、`history-conversation`、`composer-viewport`、`message-send`、`collapse`、`message-list`、`use-timeline`、`use-timeline-viewport`、`timeline-viewport.integration` 通过；lint 0 error、构建通过。
+
 未覆盖：全量 Browser Mode 与 Linux CI 以 Pull Request 结果为准；iOS 真机（历史快速甩到顶、顶部下拉、历史与在线切换恢复位置、离线阅读历史）待 staging 验收。

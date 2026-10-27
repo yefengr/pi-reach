@@ -38,7 +38,7 @@ type HistoryConversationProps = {
   onLoadEarlier: () => void;
   /** 正在读取本地记录；读完之前不把空列表当作「没有记录」。 */
   loading: boolean;
-  viewport: Pick<TimelineViewport, "messageListRef" | "bottomSentinelRef" | "handleScroll" | "followingOutput" | "showLatest">;
+  viewport: Pick<TimelineViewport, "messageListRef" | "bottomSentinelRef" | "handleScroll" | "followingOutput" | "latestEntryVisible" | "showLatest">;
   /** 该 Pi 最后已知的模型与思考级别，只读输入区按在线样式显示。 */
   modelName: string | null;
   thinking: ThinkingLevel;
@@ -57,7 +57,7 @@ export function HistoryConversation({ items, savedEvents, hasEarlier, loadingEar
   return <TimelineWorkspace
     timeline={<MessageList items={items} projectionItems={projection} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} onLoadEarlier={onLoadEarlier} loadEarlierFailed={loadEarlierFailed} autoLoadEarlier={!following} earlierLocal gapBefore={gapBefore} topNotice={!hasEarlier && missingStart ? t.timeline.earlierNotSaved : null} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />}
     footer={<>
-      <PwaMessageActions show={!following} showRetry={false} showLatest={!following} unreadOutput={0} onRetry={() => {}} onLatest={viewport.showLatest} />
+      <PwaMessageActions show={viewport.latestEntryVisible} showRetry={false} showLatest={viewport.latestEntryVisible} unreadOutput={0} onRetry={() => {}} onLatest={viewport.showLatest} />
       <ReadOnlyComposer notice={t.workspace.readOnlyNote} modelName={modelName} thinking={thinking} />
     </>}
   />;

@@ -8,6 +8,7 @@ import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import type { ThinkingLevel } from "@/lib/pi-reach/types";
 import { loadTimeline } from "@/lib/pwa/timeline-store";
+import { SCROLL_IDLE_MS } from "@/lib/pwa/scroll-idle-gate";
 import { useTimeline } from "@/lib/pwa/use-timeline";
 import type { TimelineSessionPosition } from "@/lib/pwa/use-timeline-viewport";
 
@@ -122,14 +123,23 @@ test("keeps the load more button as a keyboard entry", async () => {
   } finally { await screen.unmount(); }
 });
 
-test("shows Latest after scrolling away and returns to the end of the history", async () => {
+test("shows Latest only after settling more than one screen away and returns to the end of the history", async () => {
   const screen = await renderHistory({ saved: savedRecords(30) });
+  const latest = () => screen.getByRole("button", { name: "Latest", exact: true });
   try {
     await expect.poll(() => renderedRecords().length).toBe(30);
     await expect.poll(() => list().scrollTop > 0 && fromBottom() <= 1).toBe(true);
-    expect(screen.getByRole("button", { name: "Latest", exact: true }).query()).toBeNull();
-    userScrollTo(list().scrollTop - 300);
-    await screen.getByRole("button", { name: "Latest", exact: true }).click();
+    expect(latest().query()).toBeNull();
+    // 一屏以内回看：已离开跟随，但不显示入口。
+    userScrollTo(list().scrollTop - Math.floor(list().clientHeight / 2));
+    await expect.poll(() => api.followingOutput).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, SCROLL_IDLE_MS + 100));
+    expect(latest().query()).toBeNull();
+
+    expect(list().scrollHeight).toBeGreaterThan(list().clientHeight * 2);
+    userScrollTo(0);
+    await expect.element(latest()).toBeVisible();
+    await latest().click();
     await expect.poll(() => fromBottom()).toBeLessThanOrEqual(1);
     await expect.poll(() => screen.getByRole("button", { name: "Latest", exact: true }).query()).toBeNull();
   } finally { await screen.unmount(); }

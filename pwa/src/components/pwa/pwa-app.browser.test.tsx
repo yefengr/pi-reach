@@ -12,6 +12,7 @@ import type { ClientFrame } from "@/lib/pi-reach/protocol-v2";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_IN_FLIGHT, ATTACHMENT_MAX_MESSAGE_BYTES, PUBLISHED_FILE_TYPE, fileChunkFrameSchema, fileOpenedFrameSchema, type AttachmentDescriptor } from "@pi-reach/protocol/session";
 import { toStoredKey } from "@/lib/pwa/runtime";
+import { SCROLL_IDLE_MS } from "@/lib/pwa/scroll-idle-gate";
 import { listTimelineSessions, loadTimeline, mergeTimelineEvents, TimelineStoreConflictError } from "@/lib/pwa/timeline-store";
 import { PendingCapacityError, TimelineRuntime, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS } from "@/lib/pwa/timeline-runtime";
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
@@ -478,6 +479,7 @@ function extensionInfoFrame(channel: { channelId: string; frames: Array<{ type: 
   };
 }
 
+// 列表模拟为 1000px 内容、400px 视口：「最新」入口要离底部超过一屏才显示，回看用例滚到 100（离底部 500px）。
 async function renderReadyTimeline(renderApp = () => renderPwa(<PwaApp />)) {
   const screen = await renderOnlineApp(renderApp);
   const channel = channelHarness.channels[0];
@@ -1555,7 +1557,7 @@ test.each([
       await expect.element(screen.getByText("follow-note.txt", { exact: true })).toBeVisible();
       channelHarness.holdFinish = true;
     }
-    list.scrollTop = 300;
+    list.scrollTop = 100;
     list.dispatchEvent(new Event("scroll", { bubbles: true }));
     await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
     scrollTo.mockClear();
@@ -1577,7 +1579,7 @@ test.each([
       await expect.element(screen.getByText("Not sent; check the connection and retry", { exact: true })).toBeVisible();
       await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
       expect(scrollTo).not.toHaveBeenCalled();
-      expect(list.scrollTop).toBe(300);
+      expect(list.scrollTop).toBe(100);
       expect(document.querySelector(".pwa-composer .pwa-attachment-card")).toBeNull();
       return;
     }
@@ -2418,7 +2420,7 @@ async function expectTimelineAtBottom(list: HTMLDivElement, latest: HTMLElement)
 test("ignores stale timeline frames before persistence, history merging, and unread tracking", async () => {
   const { channel, list, screen, scrollTo } = await renderReadyTimeline();
   const db = await openPwaDatabase();
-  list.scrollTop = 500;
+  list.scrollTop = 100;
   list.dispatchEvent(new Event("scroll", { bubbles: true }));
   await expect.element(screen.getByRole("button", { name: "Latest" })).toBeVisible();
   const event = { event_id: "stale-event", event_seq: 1, kind: "assistant", session_id: "session-1", leaf_id: "stale-generation", group_id: "stale-group", timestamp: Date.now(), status: "complete", blocks: [{ type: "text", text: "stale output" }] };
@@ -2445,7 +2447,12 @@ test("ignores stale timeline frames before persistence, history merging, and unr
 
 test("shows Latest after scrolling away and preserves position while unread realtime output arrives", async () => {
   const { channel, list, screen, scrollTo } = await renderReadyTimeline();
+  // 一屏以内回看不显示入口。
   list.scrollTop = 500;
+  list.dispatchEvent(new Event("scroll", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, SCROLL_IDLE_MS + 100));
+  expect(screen.getByRole("button", { name: "Latest" }).query()).toBeNull();
+  list.scrollTop = 100;
   list.dispatchEvent(new Event("scroll", { bubbles: true }));
   await expect.element(screen.getByRole("button", { name: "Latest" })).toBeVisible();
 
@@ -3393,7 +3400,7 @@ test("preserves the session, draft, attachment, tool row and reader across layou
     const imageUrl = image.element().getAttribute("src");
     const originalInput = input.element();
 
-    list.scrollTop = 500;
+    list.scrollTop = 100;
     list.dispatchEvent(new Event("scroll", { bubbles: true }));
     await expect.element(screen.getByRole("button", { name: "Latest" })).toBeVisible();
     channel.emit({ protocol_version: 2, type: "timeline_event", session_id: "session-1", leaf_id: "generation-session-1", event: {

@@ -122,6 +122,7 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 | 向前翻页来源 | [`TimelineHistoryLoader`](../pwa/src/lib/pwa/timeline-history-loader.ts)：先读本地，缺失序号经 Relay 补齐并写回 | [`TimelineLocalPager`](../pwa/src/lib/pwa/timeline-local-pager.ts)：本地记录整体读入内存，按条数翻页，不请求、不写回，缺口保留并标出 |
 | 翻页状态与前插时机 | [`useTimelineEarlier`](../pwa/src/lib/pwa/use-timeline-earlier.ts) 统一持有加载、失败与暂存前插 | 同左 |
 | 阅读位置 | 「跟随最新」或「屏幕顶部那一行」 | 同左，另记已展开条数，恢复时先展开再按行定位 |
+| 「最新」入口 | [`LatestEntryVisibility`](../pwa/src/lib/pwa/latest-entry.ts)：离开跟随且离底部超过一屏、滚动停下后显示；有未读输出时直接显示 | 同左（没有未读输出） |
 
 Relay 断开不影响正在阅读的历史；附件元数据与缺口标记按本地保存的全部记录推算，不受已展开范围限制。
 
