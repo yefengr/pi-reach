@@ -22,24 +22,30 @@ export const PWA_MOTION_FALLBACK_MS = {
   "--pwa-duration-menu-out": 120,
   "--pwa-duration-feedback": 120,
   "--pwa-duration-content": 240,
+  "--pwa-duration-reduced": 120,
 } as const;
 
 export type PwaMotionDurationToken = keyof typeof PWA_MOTION_FALLBACK_MS;
 
 /**
- * 读取 `--pwa-duration-*` 的计算值（毫秒）。getPropertyValue 对自定义属性返回原始 var(...)，
- * 须沿 token 引用解析；减少动态效果时由全局媒体查询改写的 token 同样生效。读取失败返回同名回退值。
+ * 时长 token 的原始计算值。getPropertyValue 对自定义属性返回原始 var(...)，须沿 token 引用解析；
+ * 减少动态效果时由全局媒体查询改写的 token 同样生效。
  */
-export function readPwaMotionDuration(variable: PwaMotionDurationToken): number {
-  const fallback = PWA_MOTION_FALLBACK_MS[variable];
-  if (typeof document === "undefined") return fallback;
-  const style = getComputedStyle(document.documentElement);
+export function resolvePwaMotionDuration(style: CSSStyleDeclaration, variable: PwaMotionDurationToken): string {
   let value = style.getPropertyValue(variable).trim();
   for (let depth = 0; depth < 4; depth += 1) {
     const reference = /^var\((--pwa-duration-[\w-]+)\)$/.exec(value);
     if (!reference) break;
     value = style.getPropertyValue(reference[1]).trim();
   }
+  return value;
+}
+
+/** 读取 `--pwa-duration-*` 的计算值（毫秒）；读取失败返回同名回退值。 */
+export function readPwaMotionDuration(variable: PwaMotionDurationToken): number {
+  const fallback = PWA_MOTION_FALLBACK_MS[variable];
+  if (typeof document === "undefined") return fallback;
+  const value = resolvePwaMotionDuration(getComputedStyle(document.documentElement), variable);
   const duration = Number.parseFloat(value);
   return value.endsWith("ms") && Number.isFinite(duration) ? duration : fallback;
 }

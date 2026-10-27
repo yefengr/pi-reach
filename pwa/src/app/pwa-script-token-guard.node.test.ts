@@ -14,6 +14,9 @@ const THEME = readFileSync(new URL("./pwa-theme.css", import.meta.url), "utf8");
 /** 开发展厅与测试夹具不属于产品界面。 */
 const EXCLUDED_DIRECTORIES = new Set(["dev", "test"]);
 const VIEWPORT_QUERIES_FILE = "lib/ui/viewport-queries.ts";
+/** 动效时长与曲线只经这两个文件的公共函数读取计算样式（DESIGN「动效」）。 */
+const MOTION_READER_FILES = new Set(["lib/ui/motion-duration.ts", "lib/ui/motion.ts"]);
+const MOTION_TOKEN_READ = /getPropertyValue\(\s*["'`]--pwa-(?:duration|ease)-/g;
 const DESKTOP_MIN_WIDTH = 768;
 /** 16 按钮内与状态行、20 图标按钮与导航、24 大尺寸；12 只经具名常量出现。 */
 const ICON_SIZES = new Set(["16", "20", "24", "SMALL_SPINNER_SIZE"]);
@@ -78,6 +81,16 @@ function iconAttributes(text: string, attribute: string): { value: string; index
 describe("script token guard", () => {
   test("motion fallbacks match every millisecond duration token in the theme", () => {
     expect(PWA_MOTION_FALLBACK_MS).toEqual(themeDurations());
+  });
+
+  test("scripts read motion durations and easings only through the shared helpers", () => {
+    const offenders = sourceFiles(SOURCE_ROOT, [".ts", ".tsx"]).sort().flatMap((path) => {
+      const file = relative(SOURCE_ROOT, path);
+      if (MOTION_READER_FILES.has(file)) return [];
+      const text = readFileSync(path, "utf8");
+      return [...text.matchAll(MOTION_TOKEN_READ)].map((match) => `${file}:${lineOf(text, match.index)} ${match[0]}`);
+    });
+    expect(offenders).toEqual([]);
   });
 
   test("the single layout breakpoint agrees across CSS, scripts and Mantine", () => {

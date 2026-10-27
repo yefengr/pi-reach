@@ -53,7 +53,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  transform: translateY(calc(-4px * var(--pwa-motion-shift)));
+  transform: translateY(calc(-1 * var(--pwa-collapse-shift) * var(--pwa-motion-shift)));
   transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-standard);
 }
 .pwa-collapse[data-open] > .pwa-collapse-inner {

@@ -52,6 +52,8 @@ const FONT_SIZE_VALUE = /^(?:inherit|var\(--pwa-text-[a-z]+\)|max\(16px, var\(--
 const FONT_WEIGHT_VALUE = /^(?:inherit|var\(--pwa-weight-(?:regular|strong)\))(?:\s*!important)?$/;
 /** font 简写去掉字重、字号、行高与字体族 token 后，只应剩下分隔用的空白与 `/`。 */
 const FONT_SHORTHAND_TOKEN = /var\(--pwa-(?:weight|text|leading|font)-[a-z]+\)/g;
+/** translate 函数与 translate 属性；位移距离只引用 token 或按自身尺寸取百分比（DESIGN「动效」）。 */
+const TRANSLATE_FUNCTION = /\btranslate(?:X|Y|Z|3d)?\(/g;
 /** 44px 点击区只由 --pwa-hit-target 定义（DESIGN「按钮尺寸」）。 */
 const HIT_TARGET_LITERAL = /(?<![\d.])44px/;
 
@@ -144,6 +146,21 @@ function hoverRulesOutsideHoverMedia(): HoverRule[] {
   });
 }
 
+/** 取出 translate 函数的完整参数（含嵌套 calc、var）；translate 属性取整个值。 */
+function translateArguments(property: string, value: string): string[] {
+  if (property === "translate") return [value];
+  return [...value.matchAll(TRANSLATE_FUNCTION)].map((match) => {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let end = start;
+    for (; end < value.length && depth > 0; end++) {
+      if (value[end] === "(") depth++;
+      else if (value[end] === ")") depth--;
+    }
+    return value.slice(start, end - 1);
+  });
+}
+
 const pxValues = (value: string) => [...value.matchAll(/(-?\d*\.?\d+)px/g)].map((match) => Number(match[1]));
 const keyOf = (entry: { file: string; selector: string; property: string }) => `${entry.file} | ${entry.selector} | ${entry.property}`;
 const isApprovedSpacing = (value: number) => value >= 0 && (SPACING_SCALE.has(value) || SPACING_DENSITY.has(value));
@@ -176,6 +193,21 @@ describe("CSS static guard", () => {
         return literal || easing;
       }).map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
+  });
+
+  test("production translate distances reference shift tokens or percentages", () => {
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/"))
+      .filter((entry) => translateArguments(entry.property, entry.value).some((args) => pxValues(args).some((value) => value !== 0)))
+      .map((entry) => `${keyOf(entry)}: ${entry.value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test("translate scanner reads nested arguments and allows zero, percentages and tokens", () => {
+    const distances = (property: string, value: string) => translateArguments(property, value).flatMap(pxValues);
+    expect(distances("transform", "translateY(calc(6px * var(--pwa-motion-shift))) scale(0.9)")).toEqual([6]);
+    expect(distances("transform", "translate(-50%, -50%) translateX(0px)")).toEqual([0]);
+    expect(distances("transform", "translateY(calc(var(--pwa-overlay-shift) * var(--pwa-motion-shift)))")).toEqual([]);
+    expect(distances("translate", "0 -4px")).toEqual([-4]);
   });
 
   test("production font sizes and weights reference typography tokens", () => {
