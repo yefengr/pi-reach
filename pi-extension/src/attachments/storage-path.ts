@@ -1,9 +1,15 @@
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 // 为不同文件系统的单组件限制留余量；按 UTF-8 字节计算而非 JS 字符数。
 const MAX_FILE_NAME_BYTES = 240;
 const FALLBACK_FILE_NAME = "attachment";
 const WINDOWS_DEVICE_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³]|CONIN\$|CONOUT\$)(?:\.|$)/iu;
+
+/** 上传写入与原件取回共用的默认根目录；测试可另传 rootDir。 */
+export function defaultAttachmentRoot(): string {
+  return join(homedir(), ".pi", "pi-reach", "attachments");
+}
 
 export function localDateDirectory(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;

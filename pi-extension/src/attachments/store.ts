@@ -1,8 +1,7 @@
 import { createHash, randomUUID, type Hash } from "node:crypto";
 import { constants } from "node:fs";
 import { open, unlink, type FileHandle } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join, resolve as resolvePath } from "node:path";
+import { dirname, resolve as resolvePath } from "node:path";
 import {
   ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES,
   ATTACHMENT_MAX_IN_FLIGHT, ATTACHMENT_MAX_MESSAGE_BYTES,
@@ -10,7 +9,7 @@ import {
   type AttachmentDescriptor,
 } from "@pi-reach/protocol/session";
 import { DiskReservation } from "./reservations.js";
-import { attachmentStoragePath } from "./storage-path.js";
+import { attachmentStoragePath, defaultAttachmentRoot } from "./storage-path.js";
 import {
   assertDirectories, assertOwnedDirectory, assertRegularFile, createOwnedDirectory,
   createPrivateFile, ensurePrivateDirectory, removeOwnedDirectory, type OwnedDirectory,
@@ -90,7 +89,7 @@ export class AttachmentStore {
     if (!idSchema.safeParse(options.runtimeId).success ||
         !Number.isSafeInteger(options.minFreeBytes ?? DEFAULT_FREE_BYTES) ||
         (options.minFreeBytes ?? DEFAULT_FREE_BYTES) < 0) throw new AttachmentStoreError("invalid_upload");
-    this.root = resolvePath(options.rootDir ?? join(homedir(), ".pi", "pi-reach", "attachments"));
+    this.root = resolvePath(options.rootDir ?? defaultAttachmentRoot());
     this.floor = BigInt(options.minFreeBytes ?? DEFAULT_FREE_BYTES);
     this.metadataLimit = options.testHooks?.metadataLimit ?? MAX_METADATA_RECORDS;
     if (!Number.isSafeInteger(this.metadataLimit) || this.metadataLimit < 1 || this.metadataLimit > MAX_METADATA_RECORDS) {

@@ -516,4 +516,42 @@ describe.skipIf(!["darwin", "linux"].includes(process.platform))("FileReaderRunt
     const next = await opened(reader);
     expect(next.transfer_id).not.toBe(initial.transfer_id);
   });
+
+  describe("attachment sources", () => {
+    const attachmentFrame = (id = "open-attachment"): Extract<ClientFrame, { type: "file_attachment_open" }> => ({
+      protocol_version: 2, type: "file_attachment_open", id, channel_id: scope.channelId, session_id: scope.sessionId, attachment_id: "attachment-1",
+    });
+    const expected = (overrides: Record<string, unknown> = {}) => ({
+      sourcePath: path, fileName: "截图 1.png", byteLength: 5, sha256: createHash("sha256").update("hello").digest("hex"), ...overrides,
+    });
+
+    it("echoes attachment_id, uses the upload name and delivers the matching digest", async () => {
+      const resolve = vi.fn(() => expected());
+      const reader = runtime({ resolve });
+      const initial = await reader.handle(attachmentFrame(), scope) as Opened;
+      expect(initial).toMatchObject({ type: "file_opened", attachment_id: "attachment-1", file_name: "截图 1.png", byte_length: 5 });
+      expect("publication_id" in initial).toBe(false);
+      expect(serverFrameSchema.safeParse(initial).success).toBe(true);
+      expect(resolve).toHaveBeenCalledWith(scope, { kind: "attachment", id: "attachment-1" });
+      expect(await reader.handle(readFrame(initial), scope)).toMatchObject({ type: "file_chunk", final: true, total_bytes: 5 });
+    });
+
+    it("fails closed when the original size or digest differs from the upload record", async () => {
+      const sized = runtime({ resolve: () => expected({ byteLength: 6 }) });
+      expect(await sized.handle(attachmentFrame(), scope)).toMatchObject({ type: "file_error", code: "file_changed" });
+      const digest = runtime({ resolve: () => expected({ sha256: "0".repeat(64) }) });
+      const initial = await digest.handle(attachmentFrame(), scope) as Opened;
+      expect(initial.type).toBe("file_opened");
+      const chunk = await digest.handle(readFrame(initial), scope);
+      expect(chunk).toMatchObject({ type: "file_error", code: "file_changed", transfer_id: initial.transfer_id });
+      expect(JSON.stringify(chunk)).not.toContain("hello");
+      await drained(digest);
+    });
+
+    it("does not let a replayed request id switch between publication and attachment", async () => {
+      const reader = runtime({ resolve: () => expected() });
+      await reader.handle(attachmentFrame("same"), scope);
+      expect(await reader.handle(openFrame("same", "attachment-1"), scope)).toMatchObject({ type: "file_error", code: "invalid_transfer" });
+    });
+  });
 });

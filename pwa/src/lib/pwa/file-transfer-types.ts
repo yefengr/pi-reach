@@ -1,4 +1,5 @@
-import type { ClientFrame, FileErrorCode, PublishedFileDescriptor, ServerFrame } from "@pi-reach/protocol/session";
+import type { ClientFrame, FileErrorCode, ServerFrame } from "@pi-reach/protocol/session";
+import type { FileSourceDescriptor } from "./file-source";
 
 export type FileTransferIntent = "auto" | "view" | "download";
 export type FileTransferPhase = "idle" | "opening" | "manual" | "reading" | "ready" | "error";
@@ -8,7 +9,7 @@ export type FileOpened = Extract<ServerFrame, { type: "file_opened" }>;
 export type FileTransferResult = { blob: Blob; url: string; text?: string };
 export type PublishedFileState = {
   phase: FileTransferPhase;
-  descriptor: PublishedFileDescriptor;
+  descriptor: FileSourceDescriptor;
   current?: FileOpened;
   receivedBytes: number;
   intent: FileTransferIntent;
@@ -21,7 +22,8 @@ export type FileTransferSnapshot = {
   active: boolean;
   files: ReadonlyMap<string, PublishedFileState>;
 };
-export type FileTransferRequest = Extract<ClientFrame, { type: "file_open" | "file_read" }>;
+export type FileTransferRequest = Extract<ClientFrame, { type: "file_open" | "file_attachment_open" | "file_read" }>;
+export type FileOpenRequest = Extract<FileTransferRequest, { type: "file_open" | "file_attachment_open" }>;
 export type FileTransferResponse = Extract<ServerFrame, { type: "file_opened" | "file_chunk" }>;
 export type FileTransferTimers = {
   setTimeout: typeof globalThis.setTimeout;

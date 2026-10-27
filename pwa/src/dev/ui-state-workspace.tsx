@@ -10,6 +10,7 @@ import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { ThinkingLevel } from "@/lib/pi-reach/types";
 import { UI_REVIEW_MODELS } from "./ui-review-fixtures";
 import { createGalleryAssets, galleryAttachment, galleryItems, type GalleryState } from "./ui-state-fixtures";
+import { fileKey, isAttachmentFile } from "@/lib/pwa/file-source";
 import { GalleryConversationControls, GalleryHistory, useGalleryConversation } from "./ui-state-conversation";
 
 function GalleryTimeline({ state, conversation }: { state: GalleryState; conversation: ReturnType<typeof useGalleryConversation> }) {
@@ -64,7 +65,9 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
       if (state === "history" || !conversation.online || intent === "auto" || !assets.current) return;
       // 明确点击才交接已存在的内存内容，不模拟传输或业务计时器。
       const next = new Map(currentStates.current);
-      next.set(descriptor.publication_id, assets.current.ready(descriptor.publication_id));
+      const id = fileKey(descriptor);
+      // 已发送图片附件复用图片样例，其他附件复用文本样例。
+      next.set(id, assets.current.ready(isAttachmentFile(descriptor) && descriptor.mime_type.startsWith("image/") ? "picture" : id));
       flushSync(() => updateStates(next));
     },
     cancel: () => {

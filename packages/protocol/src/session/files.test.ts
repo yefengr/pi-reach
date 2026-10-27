@@ -182,6 +182,24 @@ describe("published file frames", () => {
     expectCode(() => decodeClientFrameV2(text), "direction");
   });
 
+  test("decodes attachment original requests and file_opened with exactly one source", () => {
+    const attachmentOpen = { ...version, type: "file_attachment_open" as const, id: "open-2", ...channel, attachment_id: "attachment-1" };
+    expect(decodeClientFrameV2(attachmentOpen)).toEqual(attachmentOpen);
+    expect(decodeClientFrameV2(encodeClientFrameTextV2(attachmentOpen))).toEqual(attachmentOpen);
+    expectCode(() => decodeClientFrameV2({ ...attachmentOpen, publication_id: "event-1" }), "schema");
+    expectCode(() => decodeClientFrameV2({ ...attachmentOpen, path: "/tmp/a.png" }), "schema");
+    expectCode(() => decodeClientFrameV2({ ...attachmentOpen, file_name: "a.png" }), "schema");
+    expectCode(() => decodeClientFrameV2({ ...attachmentOpen, leaf_id: "generation-1" }), "schema");
+    expectCode(() => decodeServerFrameV2(attachmentOpen), "direction");
+
+    const base = { ...version, ...direct, in_reply_to: "open-2", session_id: "session-1", type: "file_opened" as const,
+      transfer_id: "transfer-1", file_name: "photo.png", mime_type: "image/png", byte_length: 3, preview: { kind: "none" as const } };
+    const opened = { ...base, attachment_id: "attachment-1" };
+    expect(decodeServerFrameV2(opened)).toEqual(opened);
+    expectCode(() => decodeServerFrameV2({ ...opened, publication_id: "event-1" }), "schema");
+    expectCode(() => decodeServerFrameV2(base), "schema");
+  });
+
   test("decodes file_closed and fixed-code file_error responses", () => {
     const closed = { ...version, ...direct, in_reply_to: "close-1", session_id: "session-1", type: "file_closed" as const, transfer_id: "transfer-1" };
     const failure = { ...version, ...direct, in_reply_to: "read-1", session_id: "session-1", type: "file_error" as const, transfer_id: "transfer-1", code: "file_changed" as const };

@@ -252,6 +252,8 @@ export const en = {
     writeFailed: "Upload failed.", integrityFailed: "File verification failed.", timeout: "Upload timed out.", notFound: "Upload not found.", busy: "The computer is busy. Try again.",
     leaveTitle: "Stop sending attachments?", leaveBody: "Switching stops this send. The draft stays with the original Pi and will not be sent to another Pi.",
     leaveConfirm: "Stop and switch", leaveCancel: "Keep sending",
+    view: (name: string) => `View ${name}`, download: (name: string) => `Download ${name}`, save: (name: string) => `Save ${name}`,
+    fetchUpgrade: "Upgrade the computer's extension to view originals.", originalChanged: "The original was changed on the computer and can't be fetched.",
   },
   composer: {
     sendAfterReconnect: "You can send once the connection is back.",

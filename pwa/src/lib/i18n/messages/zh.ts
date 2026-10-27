@@ -254,6 +254,8 @@ export const zh: Messages = {
     writeFailed: "上传失败。", integrityFailed: "文件校验失败。", timeout: "上传超时。", notFound: "未找到上传文件。", busy: "电脑正忙，请重试。",
     leaveTitle: "停止发送附件？", leaveBody: "切换将停止本次发送。草稿保留在原 Pi，不会转发到其他 Pi。",
     leaveConfirm: "停止并切换", leaveCancel: "继续发送",
+    view: (name) => `查看 ${name}`, download: (name) => `下载 ${name}`, save: (name) => `保存 ${name}`,
+    fetchUpgrade: "查看原件需要升级电脑端扩展", originalChanged: "电脑上的原件已被修改，无法获取",
   },
   composer: {
     sendAfterReconnect: "连接恢复后才能发送",

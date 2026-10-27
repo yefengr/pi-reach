@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Poin
 import { ActionIcon, Button, Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { ArrowLeft, Download, Minus, Plus, RotateCcw, X } from "lucide-react";
-import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import { fileKey, isAttachmentFile, type FileSourceDescriptor } from "@/lib/pwa/file-source";
 import { useI18n } from "@/lib/i18n";
 import { FILE_TEXT_PREVIEW_BYTES, fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
 import { FileTextContent } from "./file-text-content";
@@ -60,22 +60,23 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
 /** 阅读器之上存在其他模态（确认框等）时，返回与关闭交给上层处理。 */
 const hasOtherModal = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]:not(.pwa-file-reader)')].some(element => !element.closest('[inert], [aria-hidden="true"]') && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
 
-type PublishedFileReaderProps = { file: PublishedFileDescriptor; opened: boolean; onClose: () => void; onExitTransitionEnd: () => void; source?: HTMLButtonElement };
+type PublishedFileReaderProps = { file: FileSourceDescriptor; opened: boolean; onClose: () => void; onExitTransitionEnd: () => void; source?: HTMLButtonElement };
 
 /** pin 由业务选择持有，布局迁移或 opened=false 不提前释放。 */
 export function PublishedFileReader(props: PublishedFileReaderProps) {
   const files = usePublishedFilesView();
-  const [image] = useState(() => files?.getState(props.file.publication_id)?.preview?.kind === "image");
+  const key = fileKey(props.file);
+  const [image] = useState(() => files?.getState(key)?.preview?.kind === "image");
   const pin = files?.pin;
   const unpin = files?.unpin;
-  useEffect(() => { pin?.(props.file.publication_id); return () => unpin?.(props.file.publication_id); }, [pin, unpin, props.file.publication_id]);
+  useEffect(() => { pin?.(key); return () => unpin?.(key); }, [pin, unpin, key]);
   return image ? <PublishedModalFileReader {...props} /> : <PublishedTextReader {...props} />;
 }
 
 function PublishedTextReader({ file, opened, onClose, onExitTransitionEnd }: PublishedFileReaderProps) {
   const { t } = useI18n();
   const files = usePublishedFilesView();
-  const state = files?.getState(file.publication_id);
+  const state = files?.getState(fileKey(file));
   const name = state?.fileName ?? file.file_name;
   const [entered, setEntered] = useState(false);
   const [scroll, setScroll] = useState<HTMLDivElement | null>(null);
@@ -107,7 +108,7 @@ function PublishedTextReader({ file, opened, onClose, onExitTransitionEnd }: Pub
 function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, source }: PublishedFileReaderProps) {
   const { t } = useI18n();
   const files = usePublishedFilesView();
-  const state = files?.getState(file.publication_id);
+  const state = files?.getState(fileKey(file));
   const name = state?.fileName ?? file.file_name;
   const headingId = useId();
   const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
@@ -121,7 +122,7 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
   const { instant, skipExit, resetSkipExit } = useReaderHistory({
     opened,
     stateKey: "piReachFileReader",
-    marker: `${file.publication_id}:${headingId}`,
+    marker: `${fileKey(file)}:${headingId}`,
     onClose,
     ignorePop: hasOtherModal,
   });
@@ -161,7 +162,7 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
   }, [scroll, preview, mobile]);
   return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => { setEntered(true); motion.onEnterTransitionEnd(); }} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-reader)" trapFocus returnFocus={false} transitionProps={{ transition: imageReader ? pwaFadeTransition : pwaDrawerTransitions.right, duration: imageReader ? allowImageEnter ? imageIn : fadeDuration : drawerDuration, exitDuration: instant ? 0 : imageReader ? imageOut : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim pwa-file-reader-overlay" data-image-reader={imageReader || undefined} />
-    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }} data-pwa-moving={motion.moving || undefined} data-image-reader={imageReader || undefined} data-publication-id={file.publication_id}>
+    <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }} data-pwa-moving={motion.moving || undefined} data-image-reader={imageReader || undefined} data-publication-id={isAttachmentFile(file) ? undefined : file.publication_id} data-attachment-id={isAttachmentFile(file) ? file.attachment_id : undefined}>
       <Drawer.Header className="pwa-topbar pwa-file-reader-header">
         {/* 移动全屏与设置页同为左侧返回；桌面右侧 Drawer 保留右上角关闭。 */}
         {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back" aria-label={t.files.closeReader} icon={<ArrowLeft size={20} />} /> : null}

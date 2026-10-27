@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActionIcon, Progress } from "@mantine/core";
 import { Download, Eye, FileText, Image as ImageIcon, RefreshCw, X } from "lucide-react";
 import { FILE_AUTO_IMAGE_BYTES, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import type { FileSourceDescriptor } from "@/lib/pwa/file-source";
 import { useI18n } from "@/lib/i18n";
 import { fileSaveName } from "@/lib/pwa/file-preview";
 import { usePublishedFilesView } from "./published-files-context";
@@ -9,9 +10,9 @@ import "./published-files.css";
 
 const iconAction = (label: string) => ({ className: "pwa-published-icon-action", "aria-label": label, title: label });
 
-export type PublishedFileRead = (file: PublishedFileDescriptor, trigger: HTMLButtonElement) => void;
-const IMAGE_MIME = /^image\/(png|jpeg|webp|gif)$/;
-const TEXT_MIME = /^(text\/|application\/(json|xml|javascript))/;
+export type PublishedFileRead = (file: FileSourceDescriptor, trigger: HTMLButtonElement) => void;
+export const IMAGE_MIME = /^image\/(png|jpeg|webp|gif)$/;
+export const TEXT_MIME = /^(text\/|application\/(json|xml|javascript))/;
 
 function useFileVisibility() {
   const root = useRef<HTMLElement>(null);

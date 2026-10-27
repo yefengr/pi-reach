@@ -1,13 +1,11 @@
-import {
-  FILE_AUTO_IMAGE_BYTES, FILE_MAX_BYTES, publishedFileDescriptorSchema,
-  type ClientFrame, type PublishedFileDescriptor, type ServerFrame,
-} from "@pi-reach/protocol/session";
+import { FILE_AUTO_IMAGE_BYTES, FILE_MAX_BYTES, type ClientFrame, type ServerFrame } from "@pi-reach/protocol/session";
 import type { TimelineScope } from "./timeline-runtime";
 import { textFilePreview } from "./file-preview";
 import { FILE_CACHE_BYTES, FileTransferCache } from "./file-transfer-cache";
 import { FileTransferRequests } from "./file-transfer-requests";
+import { fileKey, fileOpenOperation, isAttachmentFile, validFileSource, type FileOpenOperation, type FileSourceDescriptor } from "./file-source";
 import {
-  FileTransferError, type FileOpened, type FileTransferErrorCode, type FileTransferIntent,
+  FileTransferError, type FileOpenRequest, type FileOpened, type FileTransferErrorCode, type FileTransferIntent,
   type FileTransferOptions, type FileTransferRequest, type FileTransferResult, type FileTransferSnapshot,
   type PublishedFileState,
 } from "./file-transfer-types";
@@ -18,13 +16,14 @@ export type {
 } from "./file-transfer-types";
 
 type Task = {
-  descriptor: PublishedFileDescriptor;
+  descriptor: FileSourceDescriptor;
+  key: string;
   intent: FileTransferIntent;
   scope: TimelineScope;
   send: (frame: ClientFrame) => void;
   valid: boolean;
   generation: number;
-  openRequest?: Extract<FileTransferRequest, { type: "file_open" }>;
+  openRequest?: FileOpenRequest;
   closeAttempted?: boolean;
   current?: FileOpened;
   bytes?: Uint8Array<ArrayBuffer>;
@@ -117,48 +116,53 @@ export class FileTransferController {
   receive(frame: ServerFrame): boolean { return !this.disposed && this.requests.receive(frame); }
   cancel(): void { this.stop("cancelled"); }
   /** 解码失败后的明确重试从原件重新获取，不循环复用损坏的 Blob。 */
-  retry(descriptor: PublishedFileDescriptor, intent: FileTransferIntent): Promise<void> {
-    if (this.disposed || !publishedFileDescriptorSchema.safeParse(descriptor).success) return Promise.resolve();
+  retry(descriptor: FileSourceDescriptor, intent: FileTransferIntent): Promise<void> {
+    if (this.disposed || !validFileSource(descriptor)) return Promise.resolve();
     if (!this.scope || !this.send) return Promise.resolve();
-    this.cache.drop(descriptor.publication_id);
+    this.cache.drop(fileKey(descriptor));
     return this.open(descriptor, intent);
   }
 
   /** 失败在 snapshot 中呈现；Promise 在成功、manual、取消或错误时均结束，无自动重试。 */
-  open(descriptor: PublishedFileDescriptor, intent: FileTransferIntent): Promise<void> {
-    if (this.disposed || !publishedFileDescriptorSchema.safeParse(descriptor).success) return Promise.resolve();
-    const existing = this.state.files.get(descriptor.publication_id);
+  open(descriptor: FileSourceDescriptor, intent: FileTransferIntent): Promise<void> {
+    if (this.disposed || !validFileSource(descriptor)) return Promise.resolve();
+    const key = fileKey(descriptor);
+    const existing = this.state.files.get(key);
     if (existing?.phase === "ready") {
-      this.cache.touch(descriptor.publication_id);
-      if (existing.intent !== intent) this.publish(descriptor.publication_id, { ...existing, intent });
+      this.cache.touch(key);
+      if (existing.intent !== intent) this.publish(key, { ...existing, intent });
       return Promise.resolve();
     }
-    if (this.task?.descriptor.publication_id === descriptor.publication_id) return this.task.promise;
+    if (this.task?.key === key) return this.task.promise;
     if (intent === "auto" && (this.task || existing?.phase === "error" || existing?.phase === "manual")) return Promise.resolve();
     this.stop("cancelled");
     if (!this.scope || !this.send) {
-      this.publish(descriptor.publication_id, { descriptor, intent, phase: "error", receivedBytes: 0, error: "disconnected" });
+      this.publish(key, { descriptor, intent, phase: "error", receivedBytes: 0, error: "disconnected" });
       return Promise.resolve();
     }
     const task: Task = {
-      descriptor: { ...descriptor }, intent, scope: { ...this.scope }, send: this.send,
+      descriptor: { ...descriptor }, key, intent, scope: { ...this.scope }, send: this.send,
       valid: true, generation: this.generation, received: 0, promise: Promise.resolve(),
     };
     this.task = task;
     task.promise = Promise.resolve().then(() => this.run(task));
-    this.publish(descriptor.publication_id, { descriptor: task.descriptor, intent, phase: "opening", receivedBytes: 0 });
+    this.publish(key, { descriptor: task.descriptor, intent, phase: "opening", receivedBytes: 0 });
     return task.promise;
   }
 
   private async run(task: Task): Promise<void> {
     try {
       if (!this.isCurrent(task)) return;
-      const opened = await this.request(task, { type: "file_open", publication_id: task.descriptor.publication_id });
+      const opened = await this.request(task, fileOpenOperation(task.descriptor));
       if (opened.type !== "file_opened") return;
       task.current = opened;
       if (task.openRequest) this.requests.settleOpen(task.openRequest.id);
       // receive 已 resolve、但 run 尚未恢复时取消，也必须保住句柄的清理机会。
       if (!this.isCurrent(task)) { this.close(task); return; }
+      // 附件原件长度由上传记录确定；不一致时不拉片，也不使用电脑端的新内容。
+      if (isAttachmentFile(task.descriptor) && opened.byte_length !== task.descriptor.byte_length) {
+        throw new FileTransferError("integrity_mismatch");
+      }
       if (!previewAllowed(opened, task.intent)) {
         this.complete(task, { ...this.taskState(task), phase: "manual" });
         this.close(task);
@@ -166,7 +170,7 @@ export class FileTransferController {
       }
       if (opened.byte_length > FILE_MAX_BYTES || !this.cache.reserve(opened.byte_length)) throw new FileTransferError("no_space");
       task.bytes = new Uint8Array(opened.byte_length);
-      this.publish(task.descriptor.publication_id, { ...this.taskState(task), phase: "reading" });
+      this.publish(task.key, { ...this.taskState(task), phase: "reading" });
       await this.read(task);
     } catch (error) {
       if (!this.isCurrent(task)) return;
@@ -187,12 +191,12 @@ export class FileTransferController {
         if (chunk.total_bytes !== task.bytes.byteLength || task.received !== task.bytes.byteLength) {
           throw new FileTransferError("integrity_mismatch");
         }
-        this.publish(task.descriptor.publication_id, { ...this.taskState(task), phase: "reading" });
+        this.publish(task.key, { ...this.taskState(task), phase: "reading" });
         if (this.isCurrent(task)) await this.finish(task, chunk.sha256);
         return;
       }
       if (task.received >= task.bytes.byteLength) throw new FileTransferError("integrity_mismatch");
-      this.publish(task.descriptor.publication_id, { ...this.taskState(task), phase: "reading" });
+      this.publish(task.key, { ...this.taskState(task), phase: "reading" });
     }
   }
 
@@ -201,7 +205,7 @@ export class FileTransferController {
     const digest = await this.crypto.subtle.digest("SHA-256", task.bytes);
     if (!this.isCurrent(task) || !task.bytes) return;
     const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-    if (hash !== expected) throw new FileTransferError("integrity_mismatch");
+    if (hash !== expected || isAttachmentFile(task.descriptor) && hash !== task.descriptor.sha256) throw new FileTransferError("integrity_mismatch");
     let text: string | undefined;
     if (task.current.preview.kind === "text") {
       const preview = textFilePreview(task.bytes);
@@ -215,19 +219,18 @@ export class FileTransferController {
     const url = this.urls.createObjectURL(blob);
     if (!this.isCurrent(task)) { this.urls.revokeObjectURL(url); return; }
     const result: FileTransferResult = { blob, url, ...(text !== undefined ? { text } : {}) };
-    this.cache.commit(task.descriptor.publication_id, result);
+    this.cache.commit(task.key, result);
     task.bytes = undefined;
     this.complete(task, { ...this.taskState(task), phase: "ready", result });
     this.close(task);
   }
 
-  private request(task: Task, operation: { type: "file_open"; publication_id: string }
-    | { type: "file_read"; transfer_id: string; offset: number }) {
+  private request(task: Task, operation: FileOpenOperation | { type: "file_read"; transfer_id: string; offset: number }) {
     const frame: FileTransferRequest = {
       protocol_version: 2, id: this.requestId(), channel_id: task.scope.channelId, session_id: task.scope.sessionId, ...operation,
     };
     return this.requests.request(frame, (sent) => {
-      if (sent.type === "file_open") task.openRequest = sent;
+      if (sent.type === "file_open" || sent.type === "file_attachment_open") task.openRequest = sent;
       task.send(sent);
     }, () => { if (this.isCurrent(task)) this.stop("timeout"); });
   }
@@ -250,13 +253,13 @@ export class FileTransferController {
     this.requests.cancel(code);
     this.cache.release();
     task.bytes = undefined;
-    this.publish(task.descriptor.publication_id, { ...this.taskState(task), phase: "error", error: code });
+    this.publish(task.key, { ...this.taskState(task), phase: "error", error: code });
     this.close(task);
   }
   private complete(task: Task, state: PublishedFileState): void {
     task.valid = false;
     this.task = undefined;
-    this.publish(task.descriptor.publication_id, state);
+    this.publish(task.key, state);
   }
   private isCurrent(task: Task): boolean { return task.valid && this.task === task && !this.disposed; }
   private taskState(task: Task): PublishedFileState {

@@ -1,4 +1,4 @@
-import { PUBLISHED_FILE_TYPE, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, PUBLISHED_FILE_TYPE, type AttachmentMetadata, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { ComposerAttachmentItem } from "@/components/pwa/attachment-cards";
 import type { PublishedFileViewState } from "@/components/pwa/published-files-context";
@@ -40,6 +40,19 @@ function text(id: string, value: string): TimelineViewItem {
 function tool(status: "complete" | "error"): TimelineViewItem {
   return { kind: "event", event: { ...base, event_id: "read-result", kind: "tool", tool_call_id: "read-result", tool: "read", args: { path: "pwa/src/components/pwa/reader-shell.tsx" }, ...(status === "error" ? { status: "error" as const, error: "演示读取失败" } : { status: "complete" as const }), truncated: false, result: { content: [{ type: "text", text: status === "error" ? "演示读取失败：文件暂不可用。" : "仅本页演示：重试完成。\n" + "Independent reading content. 保持阅读与对话独立。\n".repeat(60) }] } } };
 }
+const SENT_ATTACHMENTS: AttachmentMetadata = { version: 1, client_request_id: "sent-request", sender_ref: "gallery-owner", text: "请按这两份材料调整。", attachments: [
+  { attachment_id: "sent-photo", file_name: "界面截图.png", mime_type: "image/png", byte_length: 48_213, sha256: "0".repeat(64) },
+  { attachment_id: "sent-notes", file_name: "调整说明.md", mime_type: "text/markdown", byte_length: 2_048, sha256: "1".repeat(64) },
+] };
+/** 已发送附件：元信息、正式消息与绑定三条记录，与真实时间线的投影方式一致。 */
+function sentAttachmentItems(): TimelineViewItem[] {
+  const { client_request_id, sender_ref } = SENT_ATTACHMENTS;
+  return [
+    { kind: "event", event: { ...base, event_id: "sent-meta", kind: "custom", truncated: false, payload: { custom_type: ATTACHMENT_METADATA_TYPE, data: SENT_ATTACHMENTS } } },
+    { kind: "event", event: { ...base, event_id: "sent-message", kind: "user", message_id: "sent-message", blocks: [{ type: "text", text: SENT_ATTACHMENTS.text }], origin: "pwa", sender_ref, delivery: "normal", status: "committed" } },
+    { kind: "event", event: { ...base, event_id: "sent-binding", kind: "custom", truncated: false, payload: { custom_type: ATTACHMENT_MESSAGE_TYPE, data: { version: 1, client_request_id, sender_ref, message_id: "sent-message" } } } },
+  ];
+}
 export function galleryItems(state: GalleryState, retried: boolean): TimelineViewItem[] {
   if (state === "thinking") return [text("intro", "正在整理阅读布局。"), { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "thinking", kind: "thinking", status: "delta", delta: "**检查阅读与输入的关系**\n\n在本页展开思考，检查标题、正文和运行提示。没有连接远程会话。" } }];
   if (state === "tools") return [text("intro", "正在检查工作面板；点击工具行查看原始输出。"), { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "tool:check", kind: "tool", tool_call_id: "check", tool: "bash", args: { command: "pnpm typecheck" }, status: "running", blocks: [{ type: "text", text: "演示输出：正在检查类型。\n此命令没有实际执行。" }] } }];
@@ -47,7 +60,7 @@ export function galleryItems(state: GalleryState, retried: boolean): TimelineVie
   if (state === "long") return [text("long", `## 阅读与换行\n\n中英文正文保持原有排版。Long English text should wrap inside the reading column without widening the page.\n\n\`pwa/src/components/pwa/very-long-directory-name/another-long-directory-name/reader-drawer-and-state.tsx\`\n\n> 阅读位置和输入草稿应在宽度切换时保持。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n| 状态 | 说明 |\n| --- | --- |\n| 内存 | 不连接远程服务 |\n| 草稿 | 仅保留在本页 |\n\n${"长段落用于检查自然换行。Keep the reading column comfortable. ".repeat(14)}`)];
   if (state !== "files") return conversationItems(state);
   const publications: TimelineViewItem[] = GALLERY_FILES.map(({ publication_id, ...data }) => ({ kind: "event", event: { ...base, event_id: publication_id, kind: "custom", truncated: false, payload: { custom_type: PUBLISHED_FILE_TYPE, data } } }));
-  return [tool("complete"), ...publications];
+  return [...sentAttachmentItems(), tool("complete"), ...publications];
 }
 export const GALLERY_FLOW_STEPS = ["思考开始", "思考增长", "思考完成 · 工具运行", "工具输出增长", "正式完成 · leaf 推进", "追加消息与文件", "切换内存会话"];
 const flowThought = "**检查连续运行**\n\n先检查草稿与阅读位置。";

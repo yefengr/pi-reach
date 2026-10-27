@@ -157,6 +157,7 @@ export class TimelineV2Service {
       case "attachment_cancel":
       case "attachment_discard":
       case "file_open":
+      case "file_attachment_open":
       case "file_read":
       case "file_close":
       case "queued_message_set":

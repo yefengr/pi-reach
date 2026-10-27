@@ -99,6 +99,8 @@ export const attachmentCancelFrameSchema = strictObject({ ...protocol, type: z.l
 export const attachmentDiscardFrameSchema = strictObject({ ...protocol, type: z.literal("attachment_discard"), id: idSchema, ...attachmentUploadRequest, attachment_id: idSchema });
 
 export const fileOpenFrameSchema = strictObject({ ...fileChannelRequest, type: z.literal("file_open"), id: idSchema, publication_id: idSchema });
+/** Opens a sent attachment original; the id is only a lookup key, never a path component. */
+export const fileAttachmentOpenFrameSchema = strictObject({ ...fileChannelRequest, type: z.literal("file_attachment_open"), id: idSchema, attachment_id: idSchema });
 export const fileReadFrameSchema = strictObject({ ...fileChannelRequest, type: z.literal("file_read"), id: idSchema, transfer_id: idSchema, offset: fileOffsetSchema });
 export const fileCloseFrameSchema = strictObject({ ...fileChannelRequest, type: z.literal("file_close"), id: idSchema, transfer_id: idSchema });
 
@@ -186,16 +188,20 @@ export const attachmentErrorFrameSchema = strictObject({ ...attachmentUploadResp
   }
 });
 
-export const fileOpenedFrameSchema = strictObject({
+const fileOpenedFields = {
   ...fileResponse,
   type: z.literal("file_opened"),
-  publication_id: idSchema,
   transfer_id: idSchema,
   file_name: fileFileNameSchema,
   mime_type: fileMimeSchema,
   byte_length: fileByteLengthSchema,
   preview: filePreviewSchema,
-});
+};
+/** Exactly one source id echoes the open request; both or neither fail closed. */
+export const fileOpenedFrameSchema = z.union([
+  strictObject({ ...fileOpenedFields, publication_id: idSchema }),
+  strictObject({ ...fileOpenedFields, attachment_id: idSchema }),
+]);
 
 const fileChunkFields = {
   ...fileResponse,
@@ -231,7 +237,7 @@ export const fileChunkFrameSchema = z.union([
 export const fileClosedFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_closed"), transfer_id: idSchema });
 export const fileErrorFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_error"), transfer_id: idSchema.optional(), code: fileErrorCodeSchema });
 
-export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageStatusRequestFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema]);
+export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageStatusRequestFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileAttachmentOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema]);
 export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, compactionActivityFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema, fileOpenedFrameSchema, fileChunkFrameSchema, fileClosedFrameSchema, fileErrorFrameSchema]);
 
 export const ClientFrameSchema = clientFrameSchema;

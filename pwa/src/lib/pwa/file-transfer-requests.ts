@@ -3,7 +3,7 @@ import {
   protocolErrorFrameSchema, type ServerFrame,
 } from "@pi-reach/protocol/session";
 import {
-  FileTransferError, type FileOpened, type FileTransferErrorCode, type FileTransferRequest,
+  FileTransferError, type FileOpenRequest, type FileOpened, type FileTransferErrorCode, type FileTransferRequest,
   type FileTransferResponse, type FileTransferTimers,
 } from "./file-transfer-types";
 
@@ -12,6 +12,21 @@ const RETIRED_OPEN_LIMIT = 8;
 const LOCAL_PROTOCOL_ERRORS: Readonly<Record<string, FileTransferErrorCode>> = {
   unsupported_type: "unsupported", invalid_message: "invalid_message", too_large: "too_large", internal_error: "io_error",
 };
+function isOpenRequest(request: FileTransferRequest): request is FileOpenRequest {
+  return request.type === "file_open" || request.type === "file_attachment_open";
+}
+/** 打开回执必须回显同一来源 ID；发布文件与附件互不承认。 */
+function echoesSource(request: FileOpenRequest, opened: FileOpened): boolean {
+  return request.type === "file_open"
+    ? "publication_id" in opened && opened.publication_id === request.publication_id
+    : "attachment_id" in opened && opened.attachment_id === request.attachment_id;
+}
+function localProtocolError(request: FileTransferRequest, code: string): FileTransferErrorCode | undefined {
+  // 旧 Extension 不认识附件打开 frame，解码失败时只回升级提示；仅对该请求视为功能不可用。
+  if (code === "protocol_upgrade_required" && request.type === "file_attachment_open") return "unsupported";
+  return LOCAL_PROTOCOL_ERRORS[code];
+}
+
 type Pending = {
   request: FileTransferRequest;
   resolve: (frame: FileTransferResponse) => void;
@@ -20,7 +35,7 @@ type Pending = {
 };
 
 type RetiredOpen = {
-  request: Extract<FileTransferRequest, { type: "file_open" }>;
+  request: FileOpenRequest;
   settle: (frame: FileOpened) => void;
   timer: ReturnType<typeof setTimeout>;
 };
@@ -49,7 +64,7 @@ export class FileTransferRequests {
     if (!pending || input.in_reply_to !== pending.request.id) return this.receiveRetired(input);
     const request = pending.request;
     if (input.type === "protocol_error") {
-      const code = LOCAL_PROTOCOL_ERRORS[input.code];
+      const code = localProtocolError(request, input.code);
       // 身份、session、branch 恢复错误保留给父运行态，不用文件局部失败吞掉。
       if (!code || !protocolErrorFrameSchema.safeParse(input).success
         || ("target_channel_id" in input && input.target_channel_id !== request.channel_id)) return false;
@@ -60,12 +75,12 @@ export class FileTransferRequests {
     if (input.target_channel_id !== request.channel_id || input.session_id !== request.session_id) return false;
     if (input.type === "file_error") {
       if (!fileErrorFrameSchema.safeParse(input).success) return false;
-      if (request.type === "file_open" ? input.transfer_id !== undefined : input.transfer_id !== request.transfer_id) return false;
+      if (isOpenRequest(request) ? input.transfer_id !== undefined : input.transfer_id !== request.transfer_id) return false;
       this.cancel(input.code);
       return true;
     }
-    if (request.type === "file_open") {
-      if (input.type !== "file_opened" || input.publication_id !== request.publication_id
+    if (isOpenRequest(request)) {
+      if (input.type !== "file_opened" || !echoesSource(request, input)
         || !fileOpenedFrameSchema.safeParse(input).success) return false;
     } else if (input.type !== "file_chunk" || input.transfer_id !== request.transfer_id
       || input.offset !== request.offset || !fileChunkFrameSchema.safeParse(input).success) return false;
@@ -97,7 +112,7 @@ export class FileTransferRequests {
     if (input.type !== "file_opened") return false;
     const retired = this.retired.get(input.in_reply_to);
     if (!retired || input.target_channel_id !== retired.request.channel_id
-      || input.session_id !== retired.request.session_id || input.publication_id !== retired.request.publication_id
+      || input.session_id !== retired.request.session_id || !echoesSource(retired.request, input)
       || !fileOpenedFrameSchema.safeParse(input).success) return false;
     this.settleOpen(input.in_reply_to);
     retired.settle(input);

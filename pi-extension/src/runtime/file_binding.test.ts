@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { FILE_CHUNK_BYTES, PUBLISHED_FILE_TYPE } from "@pi-reach/protocol/session";
+import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, FILE_CHUNK_BYTES, PUBLISHED_FILE_TYPE } from "@pi-reach/protocol/session";
 import { afterEach, expect, test, vi } from "vitest";
 import { collectPublications } from "../files/publications.js";
 import { TimelineRuntime } from "../timeline/runtime.js";
@@ -110,4 +110,29 @@ test("ordinary leaf append survives, cross-channel transfer does not; explicit b
   if (second?.type !== "file_opened") throw new Error("open failed");
   files.invalidate();
   expect(await files.handle({ ...read, transfer_id: second.transfer_id }, "owner-a", binding)).toMatchObject([{ type: "file_error", code: "invalid_transfer" }]);
+});
+
+test("any permitted Owner can open a sent attachment original from the current branch", async () => {
+  const { bindings, manager, hello } = await fixture();
+  const root = await realpath(await mkdtemp(join(tmpdir(), "pi-reach-file-binding-attachments-")));
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const attachmentId = "5f0c2d1e-0000-4000-8000-000000000002";
+  await mkdir(join(root, "2026-10-27", attachmentId), { recursive: true });
+  await writeFile(join(root, "2026-10-27", attachmentId, "notes.txt"), "attached");
+  const ids = { version: 1, client_request_id: "request-1", sender_ref: "owner-a" };
+  manager.appendCustomEntry(ATTACHMENT_METADATA_TYPE, { ...ids, text: "", attachments: [{ attachment_id: attachmentId,
+    file_name: "notes.txt", mime_type: "text/plain", byte_length: 8, sha256: createHash("sha256").update("attached").digest("hex") }] });
+  manager.appendCustomEntry(ATTACHMENT_MESSAGE_TYPE, { ...ids, message_id: "message-1" });
+  const files = new FileBinding({ runtimeId: "runtime", attachmentRoot: root, getManager: () => manager, getBinding: (owner) => bindings.get(owner) });
+  cleanup.push(() => files.reader.dispose());
+  hello("owner-a", "a"); hello("owner-b", "b");
+  const open = (channel: string, attachment = attachmentId) => ({ protocol_version: 2 as const, type: "file_attachment_open" as const,
+    id: `open-${channel}`, channel_id: channel, session_id: manager.getSessionId(), attachment_id: attachment });
+  const [opened] = await files.handle(open("b"), "owner-b", bindings.get("owner-b")!);
+  expect(opened).toMatchObject({ type: "file_opened", target_channel_id: "b", attachment_id: attachmentId, file_name: "notes.txt", preview: { kind: "text" } });
+  const [chunk] = await files.handle({ protocol_version: 2, type: "file_read", id: "read-b", channel_id: "b",
+    session_id: manager.getSessionId(), transfer_id: (opened as { transfer_id: string }).transfer_id, offset: 0 }, "owner-b", bindings.get("owner-b")!);
+  expect(chunk).toMatchObject({ type: "file_chunk", final: true, data_base64: Buffer.from("attached").toString("base64") });
+  expect(await files.handle(open("a", "unknown-attachment"), "owner-a", bindings.get("owner-a")!))
+    .toMatchObject([{ type: "file_error", code: "not_available" }]);
 });

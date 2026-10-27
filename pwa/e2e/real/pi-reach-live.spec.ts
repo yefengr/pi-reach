@@ -294,6 +294,24 @@ async function nativeManifestMatches(sessionId: string, expected: Array<{ name: 
   return JSON.parse(await runCompose(["exec", "-T", "interactive", "node", "-e", script, sessionId, JSON.stringify(expected)])) as boolean;
 }
 
+async function verifyAttachmentFetch(owner: Page, binary: { name: string; buffer: Buffer }, image: string): Promise<void> {
+  // 另一 Owner 刷新后经 Relay 取回原件：字节与摘要须与上传一致，图片进入既有阅读器。
+  const message = owner.locator('.pwa-message.user:not(.pending)').filter({ hasText: binary.name }).first();
+  await message.getByRole("button", { name: `Download ${binary.name}`, exact: true }).click();
+  const save = message.getByRole("link", { name: `Save ${binary.name}`, exact: true });
+  await expect(save).toBeVisible({ timeout: 60_000 });
+  const fetched = await save.evaluate(async (link) => {
+    const bytes = await (await fetch((link as HTMLAnchorElement).href)).arrayBuffer();
+    return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  });
+  expect(fetched).toBe(createHash("sha256").update(binary.buffer).digest("hex"));
+  await message.getByRole("button", { name: `View ${image}`, exact: true }).click();
+  const reader = owner.locator(".pwa-file-reader[data-attachment-id]");
+  await expect(reader.locator(`img[alt="${image}"]`)).toBeVisible({ timeout: 60_000 });
+  await owner.keyboard.press("Escape");
+  await expect(reader).toHaveCount(0);
+}
+
 async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: string): Promise<void> {
   const contents = Buffer.from(Array.from({ length: 130_123 }, (_, index) => index % 251));
   const png = Buffer.from(await page.evaluate(() => {
@@ -339,6 +357,7 @@ async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: str
     await expect(owner.locator('.pwa-message.user:not(.pending) img[alt="image-original.png"]')).toBeVisible();
     expect(await owner.locator('.pwa-message.user').allTextContents()).not.toEqual(expect.arrayContaining([expect.stringContaining('/home/pi')]));
   }
+  await verifyAttachmentFetch(otherOwner, originals[0]!, "image-original.png");
 }
 
 test("recovers a lost delivery receipt after Owner reconnection without another Pi message", async ({ browser, baseURL }) => {

@@ -28,7 +28,13 @@ export function readonlyAttachmentItems(attachments: readonly AttachmentDescript
   return attachments.map(item => ({ id: item.attachment_id, fileName: item.file_name, byteLength: item.byte_length, preview: item.preview, status: "draft" }));
 }
 
-function AttachmentThumbnail({ preview, fileName }: { preview?: AttachmentPreview; fileName: string }) {
+/** 附件卡片与已发送附件卡片共用的大小文案。 */
+export function attachmentSizeLabel(byteLength: number, locale: string): string {
+  const mib = byteLength >= 1024 * 1024;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(byteLength / (mib ? 1024 * 1024 : 1024))} ${mib ? "MiB" : "KiB"}`;
+}
+
+export function AttachmentThumbnail({ preview, fileName }: { preview?: AttachmentPreview; fileName: string }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const valid = attachmentPreviewSchema.safeParse(preview);
   const source = valid.success ? `data:image/jpeg;base64,${valid.data.data}` : null;
@@ -39,9 +45,7 @@ function AttachmentThumbnail({ preview, fileName }: { preview?: AttachmentPrevie
 function AttachmentCard({ item, onRemove, onRetry, disabled }: { item: ComposerAttachmentItem } & Omit<AttachmentCardsProps, "items" | "collapsible">) {
   const { t, locale } = useI18n();
   const progress = item.byteLength > 0 ? Math.min(100, Math.max(0, (item.receivedBytes ?? 0) / item.byteLength * 100)) : 0;
-  const size = item.byteLength >= 1024 * 1024
-    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(item.byteLength / (1024 * 1024))} MiB`
-    : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(item.byteLength / 1024)} KiB`;
+  const size = attachmentSizeLabel(item.byteLength, locale);
   const active = item.status === "preparing" || item.status === "uploading" || item.status === "paused";
   const removeLabel = active ? t.attachments.cancel(item.fileName) : t.attachments.remove(item.fileName);
   const status = item.status === "draft" || item.status === "complete" ? size : item.status === "preparing" ? t.attachments.preparing

@@ -289,7 +289,7 @@ export const CLIENT_FRAME_TYPES = [
   "session_new", "session_compact", "model_set", "thinking_set", "list_models", "queued_message_set",
   "queued_message_clear", "queued_message_steer", "approve_tool", "extension_info_request",
   "attachment_capabilities_request", "attachment_begin", "attachment_chunk", "attachment_finish", "attachment_status_request", "attachment_cancel", "attachment_discard",
-  "file_open", "file_read", "file_close",
+  "file_open", "file_attachment_open", "file_read", "file_close",
 ] as const;
 export const SERVER_FRAME_TYPES = [
   "pair_ok", "pair_error", "session_ready", "user_message_started", "user_message_status", "timeline_event",

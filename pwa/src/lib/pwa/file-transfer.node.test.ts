@@ -8,6 +8,7 @@ import { FileTransferController, type FileOpened, type FileTransferOptions } fro
 import type { TimelineScope } from "./timeline-runtime";
 import { FILE_TEXT_PREVIEW_BYTES, FILE_TEXT_RENDER_CHARACTERS } from "./file-preview";
 import { publishedFilesView } from "../../components/pwa/published-files-bridge";
+import { fileKey, type AttachmentFileDescriptor } from "./file-source";
 
 const scope: TimelineScope = {
   deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session",
@@ -715,5 +716,74 @@ describe("FileTransferController", () => {
     expect(h.controller.snapshot().files.get("publication")?.error).toBe("invalid_text");
     expect(h.create).not.toHaveBeenCalled();
     h.controller.dispose();
+  });
+});
+
+describe("FileTransferController attachment sources", () => {
+  const ATTACHMENT_ID = "attachment-1";
+  const attachment = (patch: Partial<AttachmentFileDescriptor> = {}): AttachmentFileDescriptor => ({
+    attachment_id: ATTACHMENT_ID, file_name: "截图.png", mime_type: "image/png", byte_length: bytes.byteLength, sha256: digest(bytes), ...patch,
+  });
+  function attachmentOpened(h: ReturnType<typeof harness>, patch: Record<string, unknown> = {}): ServerFrame {
+    const request = h.last("file_attachment_open");
+    return {
+      protocol_version: 2, type: "file_opened", in_reply_to: request.id, target_channel_id: request.channel_id,
+      session_id: request.session_id, attachment_id: request.attachment_id, transfer_id: `transfer-${request.id}`,
+      file_name: "截图.png", mime_type: "image/png", byte_length: bytes.byteLength, preview: { kind: "image", width: 1, height: 1 }, ...patch,
+    } as ServerFrame;
+  }
+
+  it("opens by attachment_id, keys state apart from publications and reaches ready", async () => {
+    const h = harness();
+    const promise = h.controller.open(attachment(), "view");
+    await drain();
+    expect(h.last("file_attachment_open")).toMatchObject({ attachment_id: ATTACHMENT_ID });
+    expect(h.frames.some((frame) => frame.type === "file_open")).toBe(false);
+    expect(h.controller.receive(attachmentOpened(h, { attachment_id: undefined, publication_id: ATTACHMENT_ID }))).toBe(false);
+    expect(h.controller.receive(attachmentOpened(h))).toBe(true);
+    await drain();
+    expect(h.controller.receive(h.chunk())).toBe(true);
+    await promise;
+    expect(h.controller.snapshot().files.get(fileKey(attachment()))).toMatchObject({ phase: "ready", result: { url: "blob:test-1" } });
+    expect(h.controller.snapshot().files.has(ATTACHMENT_ID)).toBe(false);
+  });
+
+  it("rejects originals whose size or digest differs from the upload record", async () => {
+    const sized = harness();
+    const first = sized.controller.open(attachment(), "view");
+    await drain();
+    expect(sized.controller.receive(attachmentOpened(sized, { byte_length: bytes.byteLength + 1 }))).toBe(true);
+    await first;
+    expect(sized.controller.snapshot().files.get(fileKey(attachment()))).toMatchObject({ phase: "error", error: "integrity_mismatch" });
+    expect(sized.last("file_close")).toMatchObject({ transfer_id: expect.stringMatching(/^transfer-/) });
+
+    const hashed = harness();
+    const second = hashed.controller.open(attachment({ sha256: "0".repeat(64) }), "view");
+    await drain();
+    expect(hashed.controller.receive(attachmentOpened(hashed))).toBe(true);
+    await drain();
+    expect(hashed.controller.receive(hashed.chunk())).toBe(true);
+    await second;
+    expect(hashed.controller.snapshot().files.get(fileKey(attachment()))).toMatchObject({ phase: "error", error: "integrity_mismatch" });
+    expect(hashed.create).not.toHaveBeenCalled();
+  });
+
+  it("treats an old extension's upgrade reply as unsupported only for attachment opens", async () => {
+    const h = harness();
+    const promise = h.controller.open(attachment(), "view");
+    await drain();
+    const request = h.last("file_attachment_open");
+    expect(h.controller.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: request.channel_id,
+      in_reply_to: request.id, code: "protocol_upgrade_required", message: "Protocol v2 is required" })).toBe(true);
+    await promise;
+    expect(h.controller.snapshot().files.get(fileKey(attachment()))).toMatchObject({ phase: "error", error: "unsupported" });
+
+    const published = h.controller.open(descriptor(), "view");
+    await drain();
+    const open = h.last("file_open");
+    expect(h.controller.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: open.channel_id,
+      in_reply_to: open.id, code: "protocol_upgrade_required", message: "Protocol v2 is required" })).toBe(false);
+    h.controller.cancel();
+    await published;
   });
 });
