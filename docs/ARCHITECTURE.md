@@ -112,7 +112,18 @@ endpoint metadata 可以落盘，但不是 presence。`use-endpoint-registry.ts`
 
 PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前在线名称保存到 IndexedDB 的 `sessions` 表，活动会话重命名时同步更新。`leafId` 只更新该稳定 session 的当前 tip 元数据，不创建新的历史条目。历史标题优先读取该名称；旧记录缺少名称时回退到消息摘要，不使用 endpoint 当前名称推测其他历史会话的名称。名称保存不改变历史的最后活动时间或排序，删除配对及清除本地数据时同时删除名称。
 
-打开本地历史时，PWA 清除实时 session channel，并按历史 scope 从 IndexedDB 读取正式事件。历史视图不发送输入、不建立远程 resume；`automaticSelectionPaused` 使实时 0/1/N 更新不能抢走正在阅读的历史。返回活动 endpoint 后，PWA 才建立新的 `session_hello`。
+打开本地历史时，PWA 清除实时 session channel，并按历史 scope 从 IndexedDB 读取正式事件。历史视图不发送输入、不建立远程 resume；`automaticSelectionPaused` 使实时 0/1/N 更新不能抢走正在阅读的历史。返回活动 endpoint（包括同一个 Pi）时撤下只读投影，PWA 才建立新的 `session_hello`。
+
+历史与在线会话共用 [`useTimeline`](../pwa/src/lib/pwa/use-timeline.ts)、同一个 `TimelineRuntime` 投影、`MessageList` 与时间线视口，差别只在数据来源与底部输入区：
+
+| 环节 | 在线会话 | 只读历史 |
+| --- | --- | --- |
+| 运行时投影 | 握手建立 scope，接收实时帧并可发送 | `showReadOnly`：没有 scope 与显示目标，拒收全部实时帧，不显示其他会话的未确认消息；握手不会把它当作增量基线 |
+| 向前翻页来源 | [`TimelineHistoryLoader`](../pwa/src/lib/pwa/timeline-history-loader.ts)：先读本地，缺失序号经 Relay 补齐并写回 | [`TimelineLocalPager`](../pwa/src/lib/pwa/timeline-local-pager.ts)：本地记录整体读入内存，按条数翻页，不请求、不写回，缺口保留并标出 |
+| 翻页状态与前插时机 | [`useTimelineEarlier`](../pwa/src/lib/pwa/use-timeline-earlier.ts) 统一持有加载、失败与暂存前插 | 同左 |
+| 阅读位置 | 「跟随最新」或「屏幕顶部那一行」 | 同左，另记已展开条数，恢复时先展开再按行定位 |
+
+Relay 断开不影响正在阅读的历史；附件元数据与缺口标记按本地保存的全部记录推算，不受已展开范围限制。
 
 桌面采用可收起的左侧导航和会话主区；移动端使用单栏与左侧全高导航 Drawer。在线 Pi 和本地历史在当前电脑范围内上下排列，电脑选择／管理复用独立面板；移动端该面板从底部打开。具体尺寸、动态效果、组件和叠层规则由[DESIGN](DESIGN.md)维护。
 
@@ -148,7 +159,7 @@ PWA 在会话握手就绪后，按 `deviceId + endpointId + sessionId` 将当前
 
 文字与附件在最终提交前只读捕获几何，transport 接受后才激活发送过程；上传开始或提交失败不取得布局控制权。Composer autosize 继续计算自然高度，发送期间只提交尺寸目标，由过渡写入真实高度；结束、下一草稿输入、用户中断及视图失效均归还控制权并释放临时尺寸。投递、重试和草稿版本保护仍由原业务模块负责；`TimelineRuntime` 持有 pending 的失败、未知与排队状态，失败重试和未知核对分开，重连后的状态查询只读，不重新投递；明确失败与已确认取消是终态，断线不降级，原目标失效的内容按原电脑与 endpoint 只读保留且不计入活动 pending 容量。视觉与时长规则见 [DESIGN](DESIGN.md#组件规则)。
 
-阅读锚点只识别列表直接子元素上的 `data-viewport-row`，键来自现有 presentation 身份。正文、用户／pending、Thinking、工具、摘要与发布文件均显式标记；pending 转正式用户记录保留同一行身份，不根据视觉 class 或标签猜测。会话阅读位置仍按已有 scope 保存和恢复，普通 leaf 推进不重置视图。向前加载先按回看保存锚点；用户发起的那一页由 [`ScrollIdleGate`](../pwa/src/lib/pwa/scroll-idle-gate.ts) 暂存到触摸结束且滚动静止 200ms 后才进入 runtime，期间保持加载中且不再请求更早的页，补齐与替换分页不经暂存。前插实际移动阅读位置后开启 1 秒保护，保护期内没有观察器上报的新输入（触摸开始或拖动、滚轮、按键、指针）而 scroll 偏离锚点时，在同一回调内恢复锚点，抵消 iOS 回弹收尾覆盖程序写入的位置；任何新输入、恢复跟随或换绑立即解除保护。
+阅读锚点只识别列表直接子元素上的 `data-viewport-row`，键来自现有 presentation 身份。正文、用户／pending、Thinking、工具、摘要与发布文件均显式标记；pending 转正式用户记录保留同一行身份，不根据视觉 class 或标签猜测。会话阅读位置仍按已有 scope 保存和恢复，普通 leaf 推进不重置视图。向前加载先按回看保存锚点，内容不足一屏且仍在跟随时的补页除外（保持跟随，前插后仍贴底）；用户发起的那一页由 [`ScrollIdleGate`](../pwa/src/lib/pwa/scroll-idle-gate.ts) 暂存到触摸结束且滚动静止 200ms 后才进入 runtime，期间保持加载中且不再请求更早的页，补齐与替换分页不经暂存。前插实际移动阅读位置后开启 1 秒保护，保护期内没有观察器上报的新输入（触摸开始或拖动、滚轮、按键、指针）而 scroll 偏离锚点时，在同一回调内恢复锚点，抵消 iOS 回弹收尾覆盖程序写入的位置；任何新输入、恢复跟随或换绑立即解除保护。
 
 ### 本地视口诊断
 

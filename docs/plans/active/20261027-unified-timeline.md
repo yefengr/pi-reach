@@ -34,12 +34,13 @@
 
 ### 4.1 数据层
 
-- **复用 `TimelineHistoryLoader`，增加只读模式**：
-  - 读本地缓存，与在线一致。
+- **本地分页器 `TimelineLocalPager`**，与 `TimelineHistoryLoader` 实现同一个向前翻页接口 `TimelineEarlierSource`：
+  - 本地记录整体读入内存，按条数翻页。
   - 本地缺的序号不请求，保留为缺口，界面沿用「更早的记录未保存在此浏览器」提示。
   - 不写回本地。
   - 首页与每页条数与在线一致。
-  - 「缺口如何处理」做成可替换策略。以后若支持经 Relay 补全历史，只替换这一策略（见第 8 节）。
+  - 以后若支持经 Relay 补全历史，历史会话改用 Relay 加载器作为来源即可（见第 8 节）。
+  - 原定方案是给 `TimelineHistoryLoader` 加只读模式，实施时改为分页器，原因见第 9 节。
 - **`TimelineRuntime` 增加只读模式**：
   - 拒收所有实时帧。
   - `sendUser` 与重试返回 null，排队与投递状态为空。
@@ -107,8 +108,27 @@
 - Extension 读取非当前会话文件；
 - 扩大浏览器可读取的会话范围。
 
-这与 ADR-20260914「不引入远程 Host 历史索引」方向相邻，须先新建 ADR 再另立事项。本轮只预留第 4.1 节的缺口策略接口。
+这与 ADR-20260914「不引入远程 Host 历史索引」方向相邻，须先新建 ADR 再另立事项。本轮只预留第 4.1 节的翻页来源接口。
 
 ## 9. 实施记录
 
-（实施过程中追加。）
+### 9.1 与方案的差异
+
+| 方案 | 实施 | 原因 |
+| --- | --- | --- |
+| 给 `TimelineHistoryLoader` 加只读模式 | 新增 `TimelineLocalPager`，两者实现同一个 `TimelineEarlierSource` 接口 | 加载器按序号区间分页且要求页完整，本地缺口大时会出现空页；每页都会从 IndexedDB 重读整个会话，而历史为推算附件本来就要一次读出全部事件 |
+| Hook 拆为三个文件 | `use-live-timeline.ts` 改名为 `use-timeline.ts`（555 行）；翻页状态与暂存前插抽到 `use-timeline-earlier.ts`，两种会话共用 | 只读历史打开流程约 40 行，拆出翻页链路后未超过 600 行；握手与补齐逻辑未搬动，降低回归风险 |
+| 认为「停在底部时自动加载已关闭」 | 实际由 `autoLoadEarlier={!followingOutput}` 控制，在线会话跟随时连内容不足一屏的补页也一并关闭 | D2 落地为：`useAutoLoadEarlier` 区分接近顶部加载（跟随时关闭）与不足一屏补页（始终允许）；视口协调器在不足一屏且跟随时的补页不结束跟随 |
+| — | 在线会话 `loadEarlier` 去掉 `handleScroll(false)` | 视口在前插前已登记回看；多余调用会让补页结束跟随 |
+
+`HistoryWorkspace` 删除；只读历史的组合（列表、缺口、附件投影、骨架、「最新」与只读输入区）集中为 `HistoryConversation`，正式工作区、DEV 状态展厅与测试共用。
+
+### 9.2 验证（2026-10-27，本地 Linux 容器）
+
+- PWA `typecheck`、`lint`（0 error，4 条既有 warning）、`build` 通过。
+- Node 全量 85 个文件 1083 项通过；新增分页器 4 项、运行时只读模式 2 项、协调器补页 1 项。
+- Browser Mode 定向通过：`history-conversation` 15 项（替代原 `history-workspace` 13 项，新增「最新」、不足一屏补页、跨大缺口翻页）、`use-timeline` 46 项（新增历史路径 3 项）、`use-auto-load-earlier` 3 项、`pwa-app` 196 项、`message-list`、`message-send`、`use-timeline-viewport`、`timeline-viewport.integration` 与三个状态展厅文件。
+- 反向验证：撤掉「离开历史一律重新握手」后，`pwa-app` 的「回到同一个在线 Pi」用例因历史内容残留而失败。
+- 调整的既有用例：`pwa-app` 长历史恢复用例改为带滚轮输入的用户滚动、阅读位置移到两屏提前量之外并按整像素比较；`use-timeline-viewport` 一项改用用户回看结束跟随（原用不可滚动列表上的前插代替）。
+
+未覆盖：全量 Browser Mode 与 Linux CI 以 Pull Request 结果为准；iOS 真机（历史快速甩到顶、顶部下拉、历史与在线切换恢复位置、离线阅读历史）待 staging 验收。
