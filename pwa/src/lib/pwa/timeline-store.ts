@@ -1,6 +1,7 @@
 import Dexie from "dexie";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { getPwaDatabase, timelineEventPreview, type PwaTimelineBranchCheckpoint, type PwaTimelineEventRecord, type PwaTimelineSessionRecord } from "./db";
+import { compareSavedTimelineEvents } from "./timeline-order";
 
 /** Runtime identity deliberately does not participate in persistent history keys. */
 export type TimelineScope = {
@@ -64,14 +65,7 @@ function scopedEvents(scope: TimelineScope, events: readonly TimelineEvent[]): S
 }
 
 function compareEvents(a: ScopedTimelineEvent, b: ScopedTimelineEvent): number {
-  const leftSequence = a.event.event_seq;
-  const rightSequence = b.event.event_seq;
-  if (leftSequence !== undefined && rightSequence === undefined) return -1;
-  if (leftSequence === undefined && rightSequence !== undefined) return 1;
-  if (leftSequence !== undefined && rightSequence !== undefined && leftSequence !== rightSequence) {
-    return leftSequence - rightSequence;
-  }
-  return a.timestamp - b.timestamp || a.event.event_id.localeCompare(b.event.event_id);
+  return compareSavedTimelineEvents(a.event, b.event);
 }
 
 export function selectPersistableTimelineEvents(scope: TimelineScope, events: readonly TimelineEvent[]): TimelineEvent[] {

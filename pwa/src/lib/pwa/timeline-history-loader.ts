@@ -4,6 +4,7 @@ import { HistoryWindowAssembler, type HistoryWindowResult } from "./timeline-tra
 import type { TimelineScope as RuntimeTimelineScope } from "./timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "./timeline-reconnect";
 import type { TimelineScope as StoreTimelineScope } from "./timeline-store";
+import type { TimelineEarlierSource } from "./timeline-local-pager";
 
 /** 向前加载一页的记录数；只读历史的分页沿用同一页大小。 */
 export const TIMELINE_PAGE_SIZE = 80;
@@ -113,7 +114,7 @@ function defaultRequestId(): string {
 }
 
 /** Loads one immutable, dense history range before exposing any part of it. */
-export class TimelineHistoryLoader {
+export class TimelineHistoryLoader implements TimelineEarlierSource {
   private readonly scope: RuntimeTimelineScope;
   private readonly headSeq: number;
   private readonly timeoutMs: number;

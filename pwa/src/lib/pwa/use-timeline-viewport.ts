@@ -6,6 +6,7 @@ import { TimelineViewportCoordinator, type ViewportCapture, type ViewportPositio
 import { TimelineViewportLayout } from "./timeline-viewport-layout";
 import { TimelineViewportObservers } from "./timeline-viewport-observers";
 import { ScrollIdleGate } from "./scroll-idle-gate";
+import { LatestEntryVisibility } from "./latest-entry";
 import { clearViewportDiagnostics, installViewportDiagnostics, recordViewportDiagnostic, viewportDiagnosticsEnabled } from "./timeline-viewport-diagnostics";
 
 export { TIMELINE_GEOMETRY_EVENT } from "./timeline-viewport-observers";
@@ -15,6 +16,8 @@ export type OwnSendCapture = ViewportCapture<OwnSendLayoutCapture>;
 export type TimelineViewport = {
   followingOutput: boolean;
   unreadOutput: number;
+  /** 「最新」入口是否显示：有未读输出，或已离开跟随、离底部超过一屏且滚动已停下。 */
+  latestEntryVisible: boolean;
   messageListRef: RefObject<HTMLDivElement | null>;
   bottomSentinelRef: RefObject<HTMLDivElement | null>;
   receiveRealtimeOutput: (groupKey: string) => void;
@@ -47,6 +50,10 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   const [idleGate] = useState(() => new ScrollIdleGate({
     now: () => performance.now(), setTimeout: (run, ms) => window.setTimeout(run, ms), clearTimeout: (id) => window.clearTimeout(id),
   }));
+  const [latestDistant, setLatestDistant] = useState(false);
+  const [latestEntry] = useState(() => new LatestEntryVisibility({
+    now: () => performance.now(), setTimeout: (run, ms) => window.setTimeout(run, ms), clearTimeout: (id) => window.clearTimeout(id),
+  }, setLatestDistant));
 
   useLayoutEffect(() => {
     core.setDiagnostics((entry) => recordViewportDiagnostic(entry, () => layoutRef.current?.diagnosticGeometry() ?? null),
@@ -58,8 +65,10 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     if (layoutRef.current?.list === list) return;
     observersRef.current?.disconnect();
     observersRef.current = null;
-    // 换绑后旧列表的触摸不会再收到抬起事件。
+    // 换绑后旧列表的触摸不会再收到抬起事件；新列表的入口按新的滚动重新判断。
     idleGate.touch(false);
+    latestEntry.touch(false);
+    latestEntry.hide();
     clearViewportDiagnostics();
     const layout = list ? new TimelineViewportLayout(list) : null;
     layoutRef.current = layout;
@@ -72,9 +81,9 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       interrupt: () => { if (valid()) core.interrupt(); },
       input: () => { if (valid()) core.input(); },
       engage: () => { if (valid()) core.engage(); },
-      touch: (active) => { if (valid()) idleGate.touch(active); },
+      touch: (active) => { if (!valid()) return; idleGate.touch(active); latestEntry.touch(active); },
     });
-  }, [core, idleGate]);
+  }, [core, idleGate, latestEntry]);
 
   // RefObject 的 current 变化不触发依赖比较；即使 items 未变，DOM 替换也必须在绘制前换绑。
   // 普通 UI 重渲染只比较身份，不重复提交内容或重新测量。
@@ -104,25 +113,33 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       layoutRef.current = null;
       core.bind(null);
       idleGate.dispose();
+      latestEntry.dispose();
       clearDiagnostics();
       window.removeEventListener("resize", settle);
       document.removeEventListener("visibilitychange", visibility);
       motion.removeEventListener("change", reduce);
     };
-  }, [bind, core, idleGate]);
+  }, [bind, core, idleGate, latestEntry]);
 
   const receiveRealtimeOutput = useCallback((key: string) => { bind(); core.output(key); }, [bind, core]);
-  const handleScroll = useCallback((nearBottom: boolean) => { bind(); idleGate.scrolled(); core.scroll(nearBottom); }, [bind, core, idleGate]);
+  const handleScroll = useCallback((nearBottom: boolean) => {
+    bind();
+    idleGate.scrolled();
+    core.scroll(nearBottom);
+    const list = layoutRef.current?.list;
+    if (list) latestEntry.scrolled(list.scrollHeight - list.scrollTop - list.clientHeight, list.clientHeight);
+  }, [bind, core, idleGate, latestEntry]);
   const showLatest = useCallback(() => { bind(); core.latest(); }, [bind, core]);
   const captureOwnSend = useCallback(() => { bind(); return core.captureOwnSend(); }, [bind, core]);
   const followOwnSend = useCallback((capture: OwnSendCapture | null) => { bind(); core.followOwnSend(capture); }, [bind, core]);
-  const reset = useCallback(() => { bind(); core.reset(); }, [bind, core]);
+  const reset = useCallback(() => { bind(); core.reset(); latestEntry.hide(); }, [bind, core, latestEntry]);
   const setReadingDetails = useCallback((reading: boolean) => { bind(); core.details(reading); }, [bind, core]);
   const prepareHistoryPrepend = useCallback(() => { bind(); core.historyPrepend(); }, [bind, core]);
   const captureSessionPosition = useCallback(() => { bind(); return core.capturePosition(); }, [bind, core]);
   const restoreSessionPosition = useCallback((position: TimelineSessionPosition | null) => { bind(); core.restorePosition(position); }, [bind, core]);
   const whenScrollIdle = useCallback((run: () => void) => idleGate.defer(run), [idleGate]);
 
-  return { ...ui, messageListRef, bottomSentinelRef, receiveRealtimeOutput, handleScroll, showLatest, captureOwnSend,
+  const latestEntryVisible = ui.unreadOutput > 0 || (!ui.followingOutput && latestDistant);
+  return { ...ui, latestEntryVisible, messageListRef, bottomSentinelRef, receiveRealtimeOutput, handleScroll, showLatest, captureOwnSend,
     followOwnSend, reset, setReadingDetails, prepareHistoryPrepend, captureSessionPosition, restoreSessionPosition, whenScrollIdle };
 }

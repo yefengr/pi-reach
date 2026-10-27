@@ -805,6 +805,59 @@ test("ignores a late or empty preview and drops it when the timeline is cleared"
   expect(cleared.previewing).toBe(false);
 });
 
+test("a read-only history shows saved records with gaps and accepts nothing live", () => {
+  const runtime = new TimelineRuntime();
+  runtime.setScope({ ...scope, runtimeInstanceId: "runtime-old" });
+  runtime.sendUser("unsure");
+  // 同一个 Pi 的会话被接管后，旧消息只读保留；它不属于历史，不能显示在历史里。
+  runtime.setScope(scope);
+  const saved = [...numberedUserEvents(1, 2), ...numberedUserEvents(7, 8)];
+  const shown = runtime.showReadOnly(saved);
+  expect(shown.items.map((item) => item.kind === "event" ? item.event.event_seq : item.kind)).toEqual([1, 2, 7, 8]);
+  expect(runtime.readOnlyView).toBe(true);
+  expect(runtime.currentScope).toBeNull();
+  expect(runtime.sendUser("from history")).toBeNull();
+
+  const live = { ...userEvent("live"), event_seq: 9 };
+  const frames: ServerFrame[] = [
+    { protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: scope.leafId, event: live },
+    partial("assistant", "streaming"),
+    { protocol_version: 2, type: "reset", target_channel_id: scope.channelId, session_id: scope.sessionId, leaf_id: "other", reason: "branch_changed" },
+  ];
+  for (const frame of frames) {
+    expect(runtime.acceptsTimelineFrame(frame)).toBe(false);
+    expect(runtime.receive(frame).items).toHaveLength(4);
+  }
+  expect(runtime.commit(live).items).toHaveLength(4);
+
+  // 向前展开的页并入同一只读投影。
+  expect(runtime.prependHistory(numberedUserEvents(3, 4)).items).toHaveLength(6);
+});
+
+test("a read-only history keeps the saved order when sequenced and unsequenced records mix", () => {
+  const runtime = new TimelineRuntime();
+  const [first, second] = numberedUserEvents(1, 2);
+  const unsequenced = { ...userEvent("legacy"), timestamp: 200 };
+  // 存储顺序：有序号的在前，无序号的在后；只按时间戳会把无序号记录插到 1 与 2 之间。
+  const shown = runtime.showReadOnly([{ ...first!, timestamp: 100 }, { ...second!, timestamp: 300 }, unsequenced]);
+  expect(shown.items.map((item) => item.kind === "event" ? item.event.event_id : item.kind)).toEqual(["event-1", "event-2", "legacy"]);
+});
+
+test("leaving a read-only history never reuses it as the live baseline", () => {
+  const runtime = new TimelineRuntime();
+  runtime.showReadOnly(numberedUserEvents(1, 10));
+  const prepared = runtime.prepareLive(scope, 12);
+  expect(prepared.plan).toEqual({ mode: "replace", startSeq: 1, endSeq: 12, earliestSeq: 1 });
+  expect(prepared.change.items).toEqual([]);
+  expect(runtime.readOnlyView).toBe(false);
+
+  const detached = new TimelineRuntime();
+  detached.showReadOnly(numberedUserEvents(1, 3));
+  expect(detached.detachLive().items).toEqual([]);
+  expect(detached.readOnlyView).toBe(false);
+  expect(detached.showPreview(previewTarget, numberedUserEvents(1, 2))?.items).toHaveLength(2);
+});
+
 function ownQueueSnapshot(snapshotId: string, items: Extract<ServerFrame, { type: "queued_message_state" }>["items"], channel = scope): Extract<ServerFrame, { type: "queued_message_state" }> {
   return { protocol_version: 2, type: "queued_message_state", session_id: channel.sessionId, leaf_id: channel.leafId, snapshot_id: snapshotId, chunk_index: 0, final: true, items };
 }

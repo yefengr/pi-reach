@@ -16,6 +16,7 @@ import {
   type TimelinePendingLimits,
 } from "./timeline-pending";
 import { attachmentRequestKey, projectAttachmentMetadata } from "./timeline-attachments";
+import { compareSavedTimelineEvents } from "./timeline-order";
 
 export { PendingCapacityError } from "./timeline-pending";
 type UserMessageFrame = Extract<ClientFrame, { type: "user_message" }>;
@@ -179,6 +180,8 @@ export class TimelineRuntime {
   private scope: TimelineScope | null = null;
   private replacement: TimelineReplacementBranch | null = null;
   private preview: TimelinePreviewTarget | null = null;
+  // 只读历史：投影只来自本地正式记录，任何实时帧、发送与握手都不得复用或改写它。
+  private readOnly = false;
   // 最近展示的电脑与 Pi：scope 因断线或失效解除后，只读保留内容仍只在原 Pi 下展示，不串到其他目标。
   private displayTarget: Pick<TimelineScope, "deviceId" | "endpointId"> | null = null;
   private liveHeadSeq: number | null = null;
@@ -217,6 +220,7 @@ export class TimelineRuntime {
   }
 
   setScope(scope: TimelineScope): TimelineRuntimeChange {
+    this.leaveReadOnly();
     this.deliveryQueries.clear();
     this.clearQueuedSnapshot();
     this.preview = null;
@@ -237,6 +241,8 @@ export class TimelineRuntime {
     return this.change();
   }
   prepareLive(scope: TimelineScope, headSeq: number): TimelineLivePreparation {
+    // 只读历史不是已保留的实时投影，不能被当作增量基线或替换期间的旧内容。
+    this.leaveReadOnly();
     const previewMatched = this.consumePreview(scope);
     if (this.scope && this.scope.selfSenderRef !== scope.selfSenderRef) {
       this.markScopeInvalid((pending) => pending.scope.deviceId === scope.deviceId
@@ -310,6 +316,7 @@ export class TimelineRuntime {
     return this.change();
   }
   clear(): TimelineRuntimeChange {
+    this.readOnly = false;
     this.deliveryQueries.clear();
     this.replacement = null;
     this.preview = null;
@@ -330,6 +337,7 @@ export class TimelineRuntime {
   }
   /** 切换到另一个 Pi：立即撤下旧投影；未确认投递按原 scope 保留，切回该会话时只读核对。 */
   detachLive(): TimelineRuntimeChange {
+    this.readOnly = false;
     this.markDisconnected();
     this.events.clear();
     this.scope = null;
@@ -345,6 +353,15 @@ export class TimelineRuntime {
     this.preview = target;
     this.displayTarget = target;
     return this.change();
+  }
+  /**
+   * 只读历史：撤下实时投影，只显示本地保存的正式记录。没有 scope 与显示目标，因此不能发送，
+   * 其他会话未确认的消息也不会显示在历史里；序号允许不连续，缺口由视图标出。
+   */
+  showReadOnly(events: readonly TimelineEvent[]): TimelineRuntimeChange {
+    this.detachLive();
+    this.readOnly = true;
+    return this.prependHistory(events);
   }
   sendUser(text: string, images?: UserMessageImages, requestIds?: { clientRequestId: string; requestId: string }): UserMessageSendResult | null {
     const scope = this.scope;
@@ -570,6 +587,7 @@ export class TimelineRuntime {
     return this.findPending((pending) => pending.clientRequestId === clientRequestId);
   }
   acceptsTimelineFrame(frame: ServerFrame): boolean {
+    if (this.readOnly) return false;
     const scope = this.scope;
     if (frame.type === "timeline_event") {
       return scope !== null && scope.sessionId === frame.session_id
@@ -770,6 +788,7 @@ export class TimelineRuntime {
   get currentScope(): TimelineScope | null { return this.scope; }
   get replacing(): boolean { return this.replacement !== null; }
   get previewing(): boolean { return this.preview !== null; }
+  get readOnlyView(): boolean { return this.readOnly; }
   formalEvents(): TimelineEvent[] { return [...this.events.values()]; }
   get pendingItems(): TimelinePending[] { return [...this.pending.values(), ...this.unknown].filter((pending) => this.isCurrentPending(pending) || this.isRetainedForDisplay(pending)); }
   /** 握手确认同一会话时预览即为已保留的投影，可增量追加；不同会话立即撤下预览。 */
@@ -832,6 +851,11 @@ export class TimelineRuntime {
       this.reconcileUserMessage(frame.message_id);
     }
     return this.change();
+  }
+  private leaveReadOnly(): void {
+    if (!this.readOnly) return;
+    this.readOnly = false;
+    this.events.clear();
   }
   private consumePreview(scope: TimelineScope): boolean {
     const preview = this.preview;
@@ -1078,8 +1102,10 @@ export class TimelineRuntime {
     const attachmentCapacityExceeded = this.reconcileAttachmentMetadata();
     const formal = this.replacement?.previousEvents ?? [...this.events.values()];
     const transient = this.replacement ? [] : [...this.pendingItems, ...this.partials.values()];
-    const items: TimelineViewItem[] = [...formal.map((event) => ({ kind: "event" as const, event })), ...transient];
-    items.sort(compareItems);
+    // 只读历史只有正式记录，沿用存储读取的顺序：本地分页器按这一顺序切页，展开的页才不会插进已显示记录之间。
+    const ordered = this.readOnly ? [...formal].sort(compareSavedTimelineEvents) : formal;
+    const items: TimelineViewItem[] = [...ordered.map((event) => ({ kind: "event" as const, event })), ...transient];
+    if (!this.readOnly) items.sort(compareItems);
     return {
       items,
       committed: result.committed ?? [],

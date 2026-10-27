@@ -154,6 +154,8 @@ export class TimelineViewportCoordinator<C, A> {
 
   /** 请求更早记录：先按回看保存锚点，前插真正移动位置后再开启短期保护。 */
   historyPrepend(): void {
+    // 内容不足一屏时的补页：读者看到的就是全部内容，继续跟随最新，前插后仍贴底。
+    if (this.following && !this.paused && this.layout && this.layout.measure().bottom <= EPSILON) return;
     this.userRead(true);
     this.prependGuard = null;
     this.prependPending = true;

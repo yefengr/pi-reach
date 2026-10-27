@@ -585,6 +585,20 @@ describe("TimelineViewportCoordinator", () => {
     expect(expired.layout.top()).toBe(0);
   });
 
+  test("filling a list shorter than one screen keeps following and lands at the new bottom", () => {
+    const f = fixture();
+    f.setBottom(0);
+    f.core.notify("commit");
+    f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    f.core.historyPrepend();
+    expect(f.core.state.following).toBe(true);
+    f.setBottom(300);
+    f.core.notify("commit");
+    expect(f.core.state.following).toBe(true);
+    expect(f.layout.top()).toBe(300);
+  });
+
   test("only a history prepend that actually moved the reader arms the guard", () => {
     const unmoved = fixture();
     unmoved.setBottom(1000); unmoved.setTop(50);
