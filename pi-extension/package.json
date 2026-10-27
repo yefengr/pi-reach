@@ -33,7 +33,7 @@
   ],
   "pi": {
     "extensions": [
-      "./dist"
+      "./index.js"
     ],
     "image": "https://raw.githubusercontent.com/yefengr/pi-reach/main/docs/assets/screenshot-hero-en.png"
   },
@@ -49,6 +49,7 @@
     "url": "https://github.com/yefengr/pi-reach/issues"
   },
   "files": [
+    "index.js",
     "dist",
     "README.md",
     "LICENSE"
