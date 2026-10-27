@@ -150,3 +150,14 @@ P1 不改变视觉效果，在单独的 `feature/*` 分支以一个 PR 完成，
 - 文档：DESIGN 新增「动效」小节；基础层「动效」行、「可访问性与动态效果」及正文三处替换时长引用改为链接；「动效时长」表新增 `reduced` 行；守卫说明补两条规则。
 - 与方案的差异：减少动态效果下 `press-in` 由 90ms 变为 120ms。此时位移已取消，只影响按下时底色、边框的过渡，肉眼难以分辨；慢放现在也覆盖 `message-in`（原清单遗漏）。
 - 验证：PWA Node 全量 86 个文件 / 1092 项通过（含守卫）；Browser Mode 定向 15 个文件 / 320 项通过（第 5 节列出的减少动态效果测试，以及 `collapse`、`timeline-viewport.integration`、`use-timeline-viewport`、`ui-review-stage-a`、`ui-states`）；`pnpm typecheck`、`pnpm build`、`pnpm check:docs` 通过；`pnpm lint` 0 错误，4 条警告都在本次未改动的文件中。CI 全量结果以 Pull Request 为准。
+
+P1 已随 PR #149 合并。
+
+### P2（2026-10-27，分支 `feature/261027-toast-exit-motion`）
+
+- token：新增 `--pwa-duration-toast-out: 140ms`，减少动态效果块改为引用 `reduced`，回退值进入 `PWA_MOTION_FALLBACK_MS`，状态展厅慢放随之自动覆盖。
+- 实现：`globals.css` 的 Toast 离开状态选择器加 `transition-duration: var(--pwa-duration-toast-out) !important`；Mantine 仍以 `toast`（180ms）决定卸载时机。
+- 文档：「动效时长」表的 `toast` 行改为 `toast` / `toast-out`，注明 `toast` 与浮动入口共用、`toast-out` 只用于 Toast。
+- 与方案的差异：离开时长断言放在已有的 `pwa-motion` 测试「uses token timing and distinct Toast exit easing」中（原断言 180 改为 140，减少动态效果仍为 120），不另在 `pwa-operation-notifications` 测试中重复。
+- 验证：守卫 5 个文件 / 46 项通过；Browser Mode `pwa-motion`、`pwa-operation-notifications`、`ui-state-surfaces`、`ui-states` 共 4 个文件 / 33 项通过；`pnpm typecheck` 通过，`pnpm lint` 0 错误（4 条警告都在本次未改动的文件中）。
+- 未覆盖：180 与 140 两种离开时长的观感对照需要人工在状态展厅（可用 0.25× 慢放）与 staging 真机上复核；不合适时按 4.4 回退为 180ms，并在规范中注明 Toast 是对称的例外。

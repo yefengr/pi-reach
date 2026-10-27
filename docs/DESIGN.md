@@ -220,7 +220,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | `drawer` | 200ms | 移动导航、电脑选择、工具与文件阅读器 Drawer 进出及其遮罩 |
 | `modal-in` / `modal-out` | 180 / 140ms | 居中 Modal 进出 |
 | `menu-in` / `menu-out` | 160 / 120ms | 附件、命令、模型与电脑动作菜单进出 |
-| `toast` | 180ms | Toast 进出；浮动入口与局部提示出现 |
+| `toast` / `toast-out` | 180 / 140ms | Toast 出现与离开；`toast` 同时是浮动入口与局部提示的出现时长，`toast-out` 只用于 Toast |
 | `collapse-in` / `collapse-out` | 180 / 140ms | 思考与工具组折叠展开、折叠箭头旋转 |
 | `status-slot` | 160ms | 思考行左侧旋转图标槽展开与收回，标题同步位移 |
 | `message-in` | 160ms | 新发送气泡进入、提交后输入区回缩与贴底 |

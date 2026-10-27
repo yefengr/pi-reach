@@ -224,6 +224,8 @@
   --pwa-duration-image-in: 260ms;
   --pwa-duration-image-out: 220ms;
   --pwa-duration-toast: 180ms;
+  /* 只用于 Toast 离开；toast 同时是浮动入口与局部提示的出现时长，不随之改变。 */
+  --pwa-duration-toast-out: 140ms;
   --pwa-duration-fade: 120ms;
   --pwa-duration-message-in: 160ms;
   --pwa-duration-press-in: 90ms;
@@ -312,6 +314,7 @@
     --pwa-duration-image-in: var(--pwa-duration-reduced);
     --pwa-duration-image-out: var(--pwa-duration-reduced);
     --pwa-duration-toast: var(--pwa-duration-reduced);
+    --pwa-duration-toast-out: var(--pwa-duration-reduced);
     --pwa-duration-menu-in: var(--pwa-duration-reduced);
     --pwa-duration-menu-out: var(--pwa-duration-reduced);
     --pwa-duration-content: var(--pwa-duration-reduced);
