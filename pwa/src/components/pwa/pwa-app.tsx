@@ -37,7 +37,7 @@ import { ACTIVE_DEVICE_SETTING, activeEndpointSettingKey, useActiveEndpointSelec
 import { PendingCapacityError, type QueuedCancellation, type TimelineScope, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { attachmentRetryDecision, submitMessage, type AttachmentLease } from "@/lib/pwa/message-submission";
 import type { TimelineSessionPosition } from "@/lib/pwa/use-timeline-viewport";
-import { useLiveTimeline } from "@/lib/pwa/use-live-timeline";
+import { useTimeline } from "@/lib/pwa/use-timeline";
 import { useHistorySessionList } from "@/lib/pwa/use-history-session-list";
 import { useHistorySessionDetails } from "@/lib/pwa/use-history-session-details";
 import { historySessionTitle } from "@/lib/pwa/history-preview";
@@ -198,9 +198,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     invalidateScope: invalidateTimelineScope,
     clearTimeline,
     switchLive: switchLiveTimeline,
-  } = useLiveTimeline({
+  } = useTimeline({
     channelRef,
-    enabled: selectedHistory === null,
     reportHistoryFailure,
   });
   const timelineItemsRef = useRef(timelineItems);

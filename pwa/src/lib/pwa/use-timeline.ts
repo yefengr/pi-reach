@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { TimelineEventFragmentAssembler } from "@/lib/pwa/timeline-transfer";
 import { TimelineHistoryLoader } from "@/lib/pwa/timeline-history-loader";
+import { TimelineLocalPager } from "@/lib/pwa/timeline-local-pager";
 import { TimelineRuntime, type TimelinePreviewTarget, type TimelineScope, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "@/lib/pwa/timeline-reconnect";
 import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
@@ -9,6 +10,7 @@ import { StreamDisplayScheduler } from "@/lib/pwa/stream-display-scheduler";
 import { clearTimelineBranchCheckpoint, discardTimelineEventsAfter, ensureTimelineBranchCheckpoint, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents, type TimelineBranchCheckpoint } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { useTimelineEarlier } from "@/lib/pwa/use-timeline-earlier";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
@@ -28,11 +30,13 @@ type StartLiveOptions = {
   onBranchMismatch: () => void;
 };
 
-type UseLiveTimelineOptions = {
+type UseTimelineOptions = {
   channelRef: MutableRef<PeerChannel | null>;
-  enabled: boolean;
   reportHistoryFailure: (message: string) => void;
 };
+
+/** 只读历史的本地读取：events 是本地保存的全部正式记录，供附件推算与缺口标记。 */
+export type TimelineHistoryState = { status: "loading" | "ready" | "error"; events: readonly TimelineEvent[] };
 
 function reducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -56,28 +60,25 @@ function recentContiguousEvents(events: readonly TimelineEvent[]): TimelineEvent
   return recent;
 }
 
-/** Owns the live timeline display independently from the Relay endpoint registry. */
-export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: UseLiveTimelineOptions) {
+/**
+ * 在线会话与只读历史共用的时间线：同一个运行时投影、向前翻页与视口协调。
+ * 在线会话经 Relay 握手与补齐；只读历史只读本地记录，不连接、不能发送。
+ */
+export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOptions) {
   const [items, setItems] = useState<TimelineViewItem[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<number>();
-  const [hasEarlierState, setHasEarlierState] = useState(false);
-  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [history, setHistory] = useState<TimelineHistoryState | null>(null);
   const [reconnectPhase, setReconnectPhase] = useState<TimelineReconnectPhase>(null);
   const [catchupFailed, setCatchupFailed] = useState(false);
   const [catchingUp, setCatchingUp] = useState(false);
-  // 普通向前翻页失败后停止自动加载，由用户重试；补齐失败另由 catchupFailed 表示。
-  const [earlierFailed, setEarlierFailed] = useState(false);
   // 接在本地预览之后的补齐只追加最新记录，不在顶部显示「正在加载记录」，避免内容上下跳动。
   const [quietCatchup, setQuietCatchup] = useState(false);
-  // 用户向前加载的一页在触摸、惯性或回弹期间暂存，静止后再前插；期间仍按加载中显示。
-  const [holdingEarlier, setHoldingEarlier] = useState(false);
-  const earlierRequestRef = useRef(false);
-  const heldEarlierRef = useRef<(() => void) | null>(null);
 
   const [runtime] = useState(() => new TimelineRuntime());
   const runtimeRef = useRef(runtime);
   // 恢复门禁属于权威接收状态；空快照和后台接收也必须通知，不能等待显示列表发布。
   const queueSnapshotReady = useSyncExternalStore(runtime.subscribeQueueSnapshot, runtime.getQueueSnapshotReady);
+  // 在线会话的 Relay 加载器，另需接收历史分页帧；只读历史的分页器只经 earlier 持有。
   const historyLoaderRef = useRef<TimelineHistoryLoader | null>(null);
   const fragmentAssemblerRef = useRef<TimelineEventFragmentAssembler | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,8 +96,10 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   const catchingUpRef = useRef(false);
   // 切换 Pi 后的本地预览读取是异步的；再次切换或清空时作废尚未返回的读取。
   const previewTokenRef = useRef(0);
-  const viewport = useTimelineViewport(items, enabled);
+  const viewport = useTimelineViewport(items);
   const { receiveRealtimeOutput, prepareHistoryPrepend, reset: resetOutputFollowing, whenScrollIdle } = viewport;
+  const earlier = useTimelineEarlier({ prepareHistoryPrepend, whenScrollIdle });
+  const { sourceRef: earlierSourceRef, release: releaseEarlier, attach: attachEarlier, handlers: earlierHandlers, setFailed: setEarlierFailed, setHasEarlier: setHasEarlierState } = earlier;
 
   const updateItems = useCallback((next: TimelineViewItem[]) => {
     itemsRef.current = next;
@@ -144,15 +147,10 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
   }, []);
 
   const disposeLoader = useCallback(() => {
-    historyLoaderRef.current?.dispose();
-    historyLoaderRef.current = null;
-    setLoadingEarlier(false);
     // 暂存页已由 loader 持久化；换会话或断线后由新连接重新计算范围，不再前插到新视图。
-    heldEarlierRef.current?.();
-    heldEarlierRef.current = null;
-    earlierRequestRef.current = false;
-    setHoldingEarlier(false);
-  }, []);
+    releaseEarlier();
+    historyLoaderRef.current = null;
+  }, [releaseEarlier]);
 
   const finishReplacement = useCallback(async (generation: number): Promise<boolean> => {
     if (generation !== contextGenerationRef.current || !runtimeRef.current.replacing) return false;
@@ -210,6 +208,8 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     streamDisplay.cancel();
     clearTransitionTimer();
     disposeLoader();
+    // 握手即离开只读历史；运行时不会把历史投影当作增量基线。
+    setHistory(null);
     replacementGateRef.current = false;
     deferredChangeRef.current = null;
     failedCatchupRef.current = null;
@@ -274,43 +274,22 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
         const persisted = await enqueueTimelinePersistence(runtimeRef.current, persistenceEpochRef.current, () => mergeTimelineEvents(target, events));
         if (!persisted) return;
       },
-      onPage: (events) => {
-        if (generation !== contextGenerationRef.current) return;
-        const apply = () => {
+      ...earlierHandlers({
+        current: () => generation === contextGenerationRef.current,
+        apply: (events) => {
           const change = runtimeRef.current.prependHistory(events);
           const replacing = runtimeRef.current.replacing;
           applyTimelineChange(change);
           if (replacing) return;
           setLastSyncedAt(Date.now());
           onHistoryChanged();
-        };
-        // 只推迟用户发起的向前翻页；补齐与替换的分页按原时序进入，不影响暂存门禁。
-        const requested = earlierRequestRef.current;
-        earlierRequestRef.current = false;
-        if (!requested || runtimeRef.current.replacing) { apply(); return; }
-        let held = true;
-        setHoldingEarlier(true);
-        const cancel = whenScrollIdle(() => {
-          held = false;
-          heldEarlierRef.current = null;
-          setHoldingEarlier(false);
-          if (generation === contextGenerationRef.current) apply();
-        });
-        if (held) heldEarlierRef.current = cancel;
-      },
-      onState: (state) => {
-        if (generation !== contextGenerationRef.current) return;
-        setHasEarlierState(state.hasEarlier);
-        setLoadingEarlier(state.loading);
-      },
-      onError: (message) => {
-        if (generation !== contextGenerationRef.current) return;
-        earlierRequestRef.current = false;
-        setEarlierFailed(true);
-        reportHistoryFailure(message);
-      },
+        },
+        immediate: () => runtimeRef.current.replacing,
+        onError: reportHistoryFailure,
+      }),
     });
     historyLoaderRef.current = loader;
+    attachEarlier(loader);
 
     const range = prepared.plan.startSeq === null
       ? null
@@ -388,7 +367,7 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     // 暂存期间保持旧投影可见；失败时保留暂存门禁，重试成功后再提交。
     void loadPreparedRange();
     return prepared.plan;
-  }, [applyTimelineChange, clearTransitionTimer, disposeLoader, finishReplacement, renderChange, reportHistoryFailure, runBranchCheck, streamDisplay, whenScrollIdle]);
+  }, [applyTimelineChange, attachEarlier, clearTransitionTimer, disposeLoader, earlierHandlers, finishReplacement, renderChange, reportHistoryFailure, runBranchCheck, setEarlierFailed, streamDisplay]);
 
   const retryCatchup = useCallback(async (): Promise<boolean> => {
     const failed = failedCatchupRef.current;
@@ -417,23 +396,21 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       setCatchupFailed(true);
     }
     return succeeded;
-  }, [finishReplacement, runBranchCheck]);
+  }, [finishReplacement, runBranchCheck, setEarlierFailed]);
 
+  const { busy: earlierBusy, request: requestEarlier } = earlier;
   const loadEarlier = useCallback(() => {
-    const loader = historyLoaderRef.current;
-    if (!loader || loadingEarlier || holdingEarlier || catchingUpRef.current) return;
+    if (!earlierSourceRef.current || earlierBusy || catchingUpRef.current) return;
     if (failedCatchupRef.current) {
       void retryCatchup();
       return;
     }
-    if (!loader.hasEarlier) return;
-    setEarlierFailed(false);
-    prepareHistoryPrepend();
-    earlierRequestRef.current = true;
-    void loader.loadEarlier();
-  }, [holdingEarlier, loadingEarlier, prepareHistoryPrepend, retryCatchup]);
+    requestEarlier();
+  }, [earlierBusy, earlierSourceRef, requestEarlier, retryCatchup]);
 
   const disconnect = useCallback(() => {
+    // 只读历史没有连接可断；Relay 断开不能撤下正在阅读的历史。
+    if (runtimeRef.current.readOnlyView) return;
     contextGenerationRef.current += 1;
     persistenceEpochRef.current = beginTimelinePersistenceEpoch(runtimeRef.current);
     clearTransitionTimer();
@@ -451,7 +428,17 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     fragmentAssemblerRef.current?.reset();
     fragmentAssemblerRef.current = null;
     applyTimelineChange(runtimeRef.current.markDisconnected(), true);
-  }, [applyTimelineChange, clearTransitionTimer, disposeLoader]);
+  }, [applyTimelineChange, clearTransitionTimer, disposeLoader, setEarlierFailed]);
+
+  /** 离开只读历史：撤下投影与分页器。在线会话的 disconnect 不处理历史，见上。 */
+  const closeHistory = useCallback(() => {
+    if (!runtimeRef.current.readOnlyView) return;
+    contextGenerationRef.current += 1;
+    releaseEarlier();
+    setEarlierFailed(false);
+    setHistory(null);
+    applyTimelineChange(runtimeRef.current.detachLive(), true);
+  }, [applyTimelineChange, releaseEarlier, setEarlierFailed]);
 
   const invalidateScope = useCallback(() => {
     forceAuthoritativeReplacementRef.current = true;
@@ -459,20 +446,22 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
     setHasEarlierState(false);
     resetOutputFollowing();
     applyTimelineChange(runtimeRef.current.invalidateScope(true), true);
-  }, [applyTimelineChange, disconnect, resetOutputFollowing]);
+  }, [applyTimelineChange, disconnect, resetOutputFollowing, setHasEarlierState]);
 
   const clearTimeline = useCallback(() => {
     previewTokenRef.current += 1;
+    closeHistory();
     disconnect();
     setHasEarlierState(false);
     setLastSyncedAt(undefined);
     resetOutputFollowing();
     applyTimelineChange(runtimeRef.current.clear(), true);
-  }, [applyTimelineChange, disconnect, resetOutputFollowing]);
+  }, [applyTimelineChange, closeHistory, disconnect, resetOutputFollowing, setHasEarlierState]);
 
   /** 切换到另一个 Pi：立即撤下旧会话；有本地缓存时先显示该会话最近的记录，握手后再增量补齐或改为加载新会话。 */
   const switchLive = useCallback((preview: TimelinePreviewTarget | null) => {
     const token = ++previewTokenRef.current;
+    closeHistory();
     disconnect();
     setHasEarlierState(false);
     setLastSyncedAt(undefined);
@@ -485,24 +474,64 @@ export function useLiveTimeline({ channelRef, enabled, reportHistoryFailure }: U
       const change = runtimeRef.current.showPreview(preview, recentContiguousEvents(events));
       if (change) applyTimelineChange(change, true);
     }, () => undefined);
-  }, [applyTimelineChange, disconnect, resetOutputFollowing]);
+  }, [applyTimelineChange, closeHistory, disconnect, resetOutputFollowing, setHasEarlierState]);
+
+  /**
+   * 打开只读历史：断开在线会话，读出本地保存的全部记录，先显示末尾 shown 条，向前翻页与在线会话走同一条链路。
+   * shown 为切回时离开前已展开的条数，阅读位置由调用方随后经 restoreSessionPosition 按行恢复。
+   */
+  const openHistory = useCallback((target: TimelinePreviewTarget, shown = TIMELINE_RECENT_LIMIT) => {
+    const token = ++previewTokenRef.current;
+    disconnect();
+    const generation = ++contextGenerationRef.current;
+    releaseEarlier();
+    setEarlierFailed(false);
+    setHasEarlierState(false);
+    setLastSyncedAt(undefined);
+    resetOutputFollowing();
+    applyTimelineChange(runtimeRef.current.showReadOnly([]), true);
+    setHistory({ status: "loading", events: [] });
+    const current = () => token === previewTokenRef.current && generation === contextGenerationRef.current;
+    void loadTimeline({ ...target, leafId: null }).then((events) => {
+      if (!current()) return;
+      const pager = new TimelineLocalPager({
+        events,
+        shown: Math.max(shown, TIMELINE_RECENT_LIMIT),
+        ...earlierHandlers({ current, apply: (page) => applyTimelineChange(runtimeRef.current.prependHistory(page)) }),
+      });
+      attachEarlier(pager);
+      applyTimelineChange(runtimeRef.current.showReadOnly(pager.initialEvents()), true);
+      setHistory({ status: "ready", events });
+    }, () => {
+      if (current()) setHistory({ status: "error", events: [] });
+    });
+  }, [applyTimelineChange, attachEarlier, disconnect, earlierHandlers, releaseEarlier, resetOutputFollowing, setEarlierFailed, setHasEarlierState]);
+
+  /** 只读历史已展开的条数；离开时与阅读位置一起保存。 */
+  const historyShownCount = useCallback((): number | null => {
+    const source = earlierSourceRef.current;
+    return runtimeRef.current.readOnlyView && source instanceof TimelineLocalPager ? source.shownCount : null;
+  }, [earlierSourceRef]);
 
   useEffect(() => () => {
     previewTokenRef.current += 1;
     contextGenerationRef.current += 1;
     clearTransitionTimer();
     streamDisplay.cancel();
-    historyLoaderRef.current?.dispose();
-  }, [clearTransitionTimer, streamDisplay]);
+    earlierSourceRef.current?.dispose();
+  }, [clearTransitionTimer, earlierSourceRef, streamDisplay]);
 
   return {
     items,
     queueSnapshotReady,
     lastSyncedAt,
     setLastSyncedAt,
-    hasEarlier: hasEarlierState || holdingEarlier || catchupFailed || (catchingUp && !quietCatchup),
-    loadingEarlier: loadingEarlier || holdingEarlier || (catchingUp && !quietCatchup),
-    loadEarlierFailed: earlierFailed || catchupFailed,
+    hasEarlier: earlier.hasEarlier || earlier.holding || catchupFailed || (catchingUp && !quietCatchup),
+    loadingEarlier: earlier.busy || (catchingUp && !quietCatchup),
+    loadEarlierFailed: earlier.failed || catchupFailed,
+    history,
+    openHistory,
+    historyShownCount,
     reconnectPhase,
     catchupFailed,
     catchingUp,

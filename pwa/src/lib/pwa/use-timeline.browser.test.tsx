@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { useLiveTimeline } from "./use-live-timeline";
+import { useTimeline } from "./use-timeline";
 import { receiveTimelineFrame } from "./timeline-frame-handler";
 import type { PeerChannel } from "../pi-reach/peer-channel";
 import type { TimelineScope, TimelineViewItem } from "./timeline-runtime";
@@ -20,7 +20,7 @@ vi.mock("./timeline-store", () => ({
   TimelineStoreConflictError: class extends Error {},
 }));
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
-type Timeline = ReturnType<typeof useLiveTimeline>;
+type Timeline = ReturnType<typeof useTimeline>;
 const report = vi.fn();
 const branchMismatch = vi.fn();
 let api: Timeline;
@@ -28,7 +28,7 @@ let api: Timeline;
 let piRunning = false;
 function Harness() {
   const channelRef = useRef<PeerChannel | null>(null);
-  const timeline = useLiveTimeline({ channelRef, enabled: true, reportHistoryFailure: report });
+  const timeline = useTimeline({ channelRef, reportHistoryFailure: report });
   useLayoutEffect(() => { api = timeline; });
   return <PwaUiProvider><div className="pwa-root"><div style={{ display: "flex", flexDirection: "column", height: 400 }}><MessageList items={timeline.items} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} onLoadEarlier={timeline.loadEarlier} loadEarlierFailed={timeline.loadEarlierFailed} autoLoadEarlier={!timeline.followingOutput} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} reconnectPhase={timeline.reconnectPhase} running={piRunning} /></div></div></PwaUiProvider>;
 }
@@ -608,6 +608,79 @@ test("auto-loads earlier history near the top only after the reader leaves the l
   } finally { await screen.unmount(); }
 });
 
+const historyTarget = { deviceId: scope.deviceId, endpointId: scope.endpointId, sessionId: scope.sessionId };
+
+test("a read-only history opens at its newest saved records and pages earlier ones through the same held prepend", async () => {
+  vi.mocked(loadTimeline).mockResolvedValue(events(1, 200));
+  const screen = await render(<Harness />);
+  try {
+    flushSync(() => { api.openHistory(historyTarget); });
+    expect(api.history?.status).toBe("loading");
+    await expect.poll(() => sequences().length).toBe(30);
+    expect(sequences()[0]).toBe(171);
+    expect(api.history).toMatchObject({ status: "ready" });
+    expect(api.history?.events).toHaveLength(200);
+    expect(api.hasEarlier).toBe(true);
+    expect(api.historyShownCount()).toBe(30);
+    expect(vi.mocked(loadTimeline)).toHaveBeenCalledWith({ ...historyTarget, leafId: null });
+    const list = api.messageListRef.current!;
+    await expect.poll(() => list.scrollHeight - list.clientHeight - list.scrollTop).toBeLessThanOrEqual(1);
+
+    const finger = new Touch({ identifier: 1, target: list, clientX: 10, clientY: 10 });
+    list.dispatchEvent(new TouchEvent("touchstart", { touches: [finger] }));
+    list.scrollTop = 0;
+    // 本地页立即读出，但手指未抬起时同样暂存，不改动滚动几何，也不连续展开。
+    await expect.poll(() => api.loadingEarlier).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, SCROLL_IDLE_MS + 100));
+    expect(sequences()).toHaveLength(30);
+
+    list.dispatchEvent(new TouchEvent("touchend"));
+    await expect.poll(() => sequences().length).toBe(110);
+    expect(api.historyShownCount()).toBe(110);
+    // 只读：不写回本地，也没有 Relay 加载器。
+    expect(vi.mocked(mergeTimelineEvents)).not.toHaveBeenCalled();
+    expect(api.historyLoaderRef.current).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("a read-only history reopens at its saved expansion and survives a relay disconnect until it is left", async () => {
+  vi.mocked(loadTimeline).mockResolvedValue([...events(1, 5), ...events(150, 200)]);
+  const screen = await render(<Harness />);
+  try {
+    flushSync(() => { api.openHistory(historyTarget, 54); });
+    await expect.poll(() => sequences().length).toBe(54);
+    expect(sequences().slice(0, 4)).toEqual([3, 4, 5, 150]);
+    expect(api.hasEarlier).toBe(true);
+
+    api.disconnect();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(sequences()).toHaveLength(54);
+    expect(api.history?.status).toBe("ready");
+
+    flushSync(() => { api.switchLive(null); });
+    expect(api.items).toEqual([]);
+    expect(api.history).toBeNull();
+    expect(api.historyShownCount()).toBeNull();
+    expect(api.runtimeRef.current.readOnlyView).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("opening a history ends the live session and a failed local read is reported", async () => {
+  const screen = await render(<Harness />);
+  try {
+    const frames = start(200);
+    await expect.poll(() => frames.filter((frame) => frame.type === "session_sync").length).toBe(1);
+    vi.mocked(loadTimeline).mockRejectedValueOnce(new Error("blocked"));
+    flushSync(() => { api.openHistory(historyTarget); });
+    expect(api.historyLoaderRef.current).toBeNull();
+    expect(api.runtimeRef.current.currentScope).toBeNull();
+    expect(api.runtimeRef.current.acceptsTimelineFrame({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: scope.leafId, event: events(201, 201)[0]! })).toBe(false);
+    await expect.poll(() => api.history?.status).toBe("error");
+    expect(api.items).toEqual([]);
+    expect(api.hasEarlier).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
 test("a cold start replaces saved records when the persisted sequence is ahead of the head", async () => {
   vi.mocked(latestTimelineEvent).mockResolvedValue(events(100, 100)[0]!);
   const screen = await render(<Harness />);
@@ -636,7 +709,7 @@ test("a cold start of an empty session clears saved records left from another br
 
 function DisplayHarness({ onDisplay }: { onDisplay: (items: TimelineViewItem[]) => void }) {
   const channelRef = useRef<PeerChannel | null>(null);
-  const timeline = useLiveTimeline({ channelRef, enabled: true, reportHistoryFailure: report });
+  const timeline = useTimeline({ channelRef, reportHistoryFailure: report });
   useLayoutEffect(() => { api = timeline; });
   useLayoutEffect(() => onDisplay(timeline.items), [timeline.items, onDisplay]);
   return null;

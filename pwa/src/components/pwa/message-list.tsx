@@ -8,7 +8,7 @@ import "./timeline-reconnect.css";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useI18n } from "@/lib/i18n";
-import type { TimelineReconnectPhase } from "@/lib/pwa/use-live-timeline";
+import type { TimelineReconnectPhase } from "@/lib/pwa/use-timeline";
 import { runCompletions } from "@/lib/pwa/run-completion";
 import { attachmentMessageKey, projectAttachmentMetadata, type TimelineAttachmentProjection } from "@/lib/pwa/timeline-attachments";
 import { publishedFileFromEvent, type AttachmentMetadata } from "@pi-reach/protocol/session";
