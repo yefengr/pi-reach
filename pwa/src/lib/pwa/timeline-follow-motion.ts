@@ -1,3 +1,6 @@
+import { pwaStandardEasing } from "@/lib/ui/motion";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
+
 /** 浏览器解析现有曲线；只提供时钟，不持有 RAF 或改写滚动。 */
 export class FollowMotionClock {
   private readonly timing: Animation;
@@ -6,13 +9,8 @@ export class FollowMotionClock {
   private progress = 0;
 
   constructor(list: HTMLElement) {
-    const style = getComputedStyle(list);
-    const value = style.getPropertyValue("--pwa-duration-message-in").trim();
-    const number = Number.parseFloat(value);
-    this.duration = Number.isFinite(number) ? number * (value.endsWith("ms") ? 1 : 1000) : 0;
-    this.timing = new Animation(new KeyframeEffect(null, [], {
-      duration: this.duration, easing: style.getPropertyValue("--pwa-ease-standard").trim() || "linear", fill: "both",
-    }));
+    this.duration = readPwaMotionDuration("--pwa-duration-message-in");
+    this.timing = new Animation(new KeyframeEffect(null, [], { duration: this.duration, easing: pwaStandardEasing(list), fill: "both" }));
     this.timing.currentTime = 0;
   }
 

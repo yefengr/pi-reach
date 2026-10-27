@@ -231,12 +231,17 @@
   --pwa-duration-menu-in: 160ms;
   --pwa-duration-menu-out: 120ms;
   --pwa-duration-feedback: 120ms;
+  /* 减少动态效果时所有非循环过渡统一取此值；与 fade 同值但独立，调整通用淡化不连带改变减少动态效果。 */
+  --pwa-duration-reduced: 120ms;
   /* 只作用于内部绘制层；外层44px命中区与焦点轮廓不缩放。 */
   --pwa-press-icon-scale: 0.97;
   --pwa-press-button-scale: 0.98;
   --pwa-menu-offset: 4px;
   /* 居中 Modal、Toast 与浮动入口进出时的位移距离，乘以 --pwa-motion-shift。 */
   --pwa-overlay-shift: 8px;
+  /* 新发送气泡从下方进入、折叠内容收起时上移的距离，乘以 --pwa-motion-shift。 */
+  --pwa-message-shift: 6px;
+  --pwa-collapse-shift: 4px;
   /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;
@@ -296,21 +301,25 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --pwa-motion-shift: 0;
-    --pwa-duration-sidebar: var(--pwa-duration-fade);
-    --pwa-duration-page: var(--pwa-duration-fade);
-    --pwa-duration-drawer: var(--pwa-duration-fade);
-    --pwa-duration-modal-in: var(--pwa-duration-fade);
-    --pwa-duration-modal-out: var(--pwa-duration-fade);
-    --pwa-duration-status-slot: var(--pwa-duration-fade);
-    --pwa-duration-collapse-in: var(--pwa-duration-fade);
-    --pwa-duration-collapse-out: var(--pwa-duration-fade);
-    --pwa-duration-image-in: var(--pwa-duration-fade);
-    --pwa-duration-image-out: var(--pwa-duration-fade);
-    --pwa-duration-toast: var(--pwa-duration-fade);
-    --pwa-duration-menu-in: var(--pwa-duration-fade);
-    --pwa-duration-menu-out: var(--pwa-duration-fade);
-    --pwa-duration-content: var(--pwa-duration-fade);
-    --pwa-duration-message-in: var(--pwa-duration-fade);
+    --pwa-duration-sidebar: var(--pwa-duration-reduced);
+    --pwa-duration-page: var(--pwa-duration-reduced);
+    --pwa-duration-drawer: var(--pwa-duration-reduced);
+    --pwa-duration-modal-in: var(--pwa-duration-reduced);
+    --pwa-duration-modal-out: var(--pwa-duration-reduced);
+    --pwa-duration-status-slot: var(--pwa-duration-reduced);
+    --pwa-duration-collapse-in: var(--pwa-duration-reduced);
+    --pwa-duration-collapse-out: var(--pwa-duration-reduced);
+    --pwa-duration-image-in: var(--pwa-duration-reduced);
+    --pwa-duration-image-out: var(--pwa-duration-reduced);
+    --pwa-duration-toast: var(--pwa-duration-reduced);
+    --pwa-duration-menu-in: var(--pwa-duration-reduced);
+    --pwa-duration-menu-out: var(--pwa-duration-reduced);
+    --pwa-duration-content: var(--pwa-duration-reduced);
+    --pwa-duration-message-in: var(--pwa-duration-reduced);
+    --pwa-duration-fade: var(--pwa-duration-reduced);
+    --pwa-duration-press-in: var(--pwa-duration-reduced);
+    --pwa-duration-press-out: var(--pwa-duration-reduced);
+    --pwa-duration-feedback: var(--pwa-duration-reduced);
   }
 
   *,
