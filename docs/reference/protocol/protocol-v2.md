@@ -255,6 +255,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `attachment_cancel`
 - `attachment_discard`
 - `file_open`
+- `file_attachment_open`
 - `file_read`
 - `file_close`
 
@@ -345,6 +346,8 @@ PWA 的查询等待为 10 秒，关联自查询发出起最多保留 60 秒、�
 
 正式事件、user blocks 与 queue item 不新增附件字段。原生 custom `pi-reach:attachments-v1` 保存 request/sender、原文、描述及预览；`pi-reach:attachment-message-v1` 将同一 request/sender 关联到正式 `message_id`。PWA 按 session、sender、request 和 message 严格关联，不要求同 leaf；冲突时撤回派生展示，不能借用其他 Owner 或会话的数据。这些 custom 参与正式 `event_seq` 与历史持久化，展示时隐藏原始 payload。
 
+已发送附件可在线取回原件：PWA 以 `file_attachment_open` 提交 `attachment_id`，读取、关闭、错误与限额复用[会话文件发布与获取](#会话文件发布与获取)。Extension 只承认当前原生分支上已绑定正式消息的附件元数据，按存储规则在电脑端定位原件，不接受客户端路径；`file_opened` 的名称取上传时的原文件名，原件长度或 SHA-256 与元数据不一致时返回 `file_changed`，PWA 也按元数据摘要再次校验。只读历史与 pending 不取回。旧 Extension 不认识该 frame，以 `protocol_upgrade_required` 回复，PWA 只把它视为本次附件取回不可用。
+
 旧页面可读取合法 custom 和规范化 user/history，但不认识新定向帧时仍会拒绝该帧；同 Owner 的旧页面可能看到协议提示，或需要刷新重新确认当前会话后才能发送文字。不能因此宣称旧缓存页面完全没有可见影响。能力不足不改变协议版本，也不提供 v1 fallback；部署顺序仍先 PWA、后 Extension。
 
 ## 会话文件发布与获取
@@ -358,7 +361,8 @@ PWA 在完成会话握手和历史同步后获取文件。Extension 每次打开
 | Frame | 行为与关联 |
 | --- | --- |
 | `file_open` | 用 `publication_id` 请求原件；同 scope 的活跃请求 ID 可幂等重放，不能改为其他文件。 |
-| `file_opened` | 返回 `publication_id`、`transfer_id`、当前 `file_name/mime_type/byte_length` 和 `preview`；旧发布 metadata 不是内容版本或快照。 |
+| `file_attachment_open` | 用 `attachment_id` 请求已发送附件的原件（见[会话附件](#会话附件)）；与 `file_open` 共用幂等和资源规则，同一请求 ID 不能切换来源。 |
+| `file_opened` | 回显请求中的 `publication_id` 或 `attachment_id`（恰有其一），返回 `transfer_id`、当前 `file_name/mime_type/byte_length` 和 `preview`；旧发布 metadata 不是内容版本或快照。 |
 | `file_read` | 用 `transfer_id` 和精确 `offset` 连续读取；不提供任意范围读取或断点恢复。 |
 | `file_chunk` | 返回对应 `transfer_id/offset`、canonical Base64 `data_base64` 和 `final`；末片必须有 `total_bytes` 与小写 SHA-256，非末片禁止这两个字段。只有零字节文件的末片可为空。 |
 | `file_close` / `file_closed` | 按 `transfer_id` 尽力释放句柄；取消、断线和失效先停止使用结果，再清理资源。无关闭回执不表示远端已释放。 |

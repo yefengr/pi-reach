@@ -114,7 +114,7 @@ function renderItem(item: TimelineViewItem, onRetryFailed: MessageListProps["onR
     if (file) return <PublishedFile key={item.event.event_id} file={file} live={live} onRead={onRead} timelineKey={timelineKey} />;
   }
   if (item.kind === "pending") return <UserMessage value={item} timelineKey={timelineKey} entering={userMessageIn} onRetryFailed={onRetryFailed} onCheckStatus={onCheckStatus} onCancelQueued={onCancelQueued} canCheckStatus={canCheckStatus} />;
-  if (item.kind === "event" && item.event.kind === "user") return <UserMessage value={item.event} timelineKey={timelineKey} entering={userMessageIn} metadata={projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id))} />;
+  if (item.kind === "event" && item.event.kind === "user") return <UserMessage value={item.event} timelineKey={timelineKey} entering={userMessageIn} metadata={projection.messages.get(attachmentMessageKey(item.event.session_id, item.event.message_id))} onReadFile={live ? onRead : undefined} />;
   const value = item.kind === "event" ? item.event : item.partial;
   // projectTimeline 将全部工具投影为 ToolEntry，由 ConversationTimeline 提供详情入口。
   if (value.kind === "tool") return null;

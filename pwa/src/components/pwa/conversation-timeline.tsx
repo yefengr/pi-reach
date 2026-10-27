@@ -9,7 +9,7 @@ import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
 import { readerFocusable, useReaderIntent } from "./reader-shared";
 import type { PublishedFileRead } from "./published-file";
-import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import { fileKey, type FileSourceDescriptor } from "@/lib/pwa/file-source";
 import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
 import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolBatchClosed, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
@@ -181,7 +181,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
   const [summaryReader, setSummaryReader] = useState<{ key: string; sessionId: string; trigger: HTMLButtonElement } | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [fileReader, setFileReader] = useState<{ file: PublishedFileDescriptor; trigger: HTMLButtonElement; scopeToken: object } | null>(null);
+  const [fileReader, setFileReader] = useState<{ file: FileSourceDescriptor; trigger: HTMLButtonElement; scopeToken: object } | null>(null);
   // 记录已打开的是哪一个阅读器：挂载与打开分两步，期间被关闭或换目标时旧的打开请求自然失效。
   const [fileOpenedFor, setFileOpenedFor] = useState<object | null>(null);
   const files = usePublishedFilesView();
@@ -367,6 +367,6 @@ export function ConversationTimeline({ items, live, completions, running = false
     {compacting ? <CompactionStatus /> : workingVisible ? <WorkingStatus /> : null}
     <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
     <SummaryReader event={summaryEvent} opened={summaryOpen && summaryEvent !== null} onClose={() => setSummaryOpen(false)} onExitTransitionEnd={finishSummaryReader} />
-    {scopedFileReader ? <PublishedFileReader key={scopedFileReader.file.publication_id} file={scopedFileReader.file} source={scopedFileReader.trigger} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
+    {scopedFileReader ? <PublishedFileReader key={fileKey(scopedFileReader.file)} file={scopedFileReader.file} source={scopedFileReader.trigger} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;
 }

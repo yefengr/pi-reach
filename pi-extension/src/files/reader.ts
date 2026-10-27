@@ -7,17 +7,21 @@ import { inspectFile } from "./content-type.js";
 import { FileAccessError, openSourceFile } from "./safe-open.js";
 
 export type FileScope = { ownerId: string; channelId: string; runtimeId: string; sessionId: string; generation: number };
-type Request = Extract<ClientFrame, { type: "file_open" | "file_read" | "file_close" }>;
+type Request = Extract<ClientFrame, { type: "file_open" | "file_attachment_open" | "file_read" | "file_close" }>;
+type OpenRequest = Extract<Request, { type: "file_open" | "file_attachment_open" }>;
 type Response = Extract<ServerFrame, { type: "file_opened" | "file_chunk" | "file_closed" | "file_error" }>;
 type Opened = Extract<Response, { type: "file_opened" }>;
+export type FileSource = { kind: "publication" | "attachment"; id: string };
+/** 附件来源另带上传时记录的名称、长度和摘要；发布文件只有源路径。 */
+export type ResolvedFile = { sourcePath: string; fileName?: string; byteLength?: number; sha256?: string };
 type Options = {
-  resolve: (scope: FileScope, publicationId: string) => { sourcePath: string } | null | Promise<{ sourcePath: string } | null>;
+  resolve: (scope: FileScope, source: FileSource) => ResolvedFile | null | Promise<ResolvedFile | null>;
   isCurrent: (scope: FileScope) => boolean;
   idleMs?: number;
   maxResources?: number;
 };
 type Resource = {
-  scope?: FileScope; key?: string; publicationId?: string; transferId: string; lease: symbol;
+  scope?: FileScope; key?: string; source?: FileSource; expected?: ResolvedFile; transferId: string; lease: symbol;
   path?: string; stat?: BigIntStats; handle?: FileHandle; hash: Hash; offset: number;
   invalid: boolean; active: boolean; lastUsed: number; opened?: Opened; pending?: Promise<Response>;
   cancelled: Promise<never>; cancel: (code: FileErrorCode) => void; closing?: Promise<void>; closeFailed?: boolean; retryAt?: number;
@@ -35,6 +39,9 @@ function sameFile(a: BigIntStats, b: BigIntStats): boolean {
 }
 function errorCode(error: unknown): FileErrorCode {
   return error instanceof FileAccessError ? error.code : "io_error";
+}
+function requestSource(frame: OpenRequest): FileSource {
+  return frame.type === "file_open" ? { kind: "publication", id: frame.publication_id } : { kind: "attachment", id: frame.attachment_id };
 }
 function scopeKey(scope: FileScope): string {
   return JSON.stringify([scope.ownerId, scope.channelId, scope.runtimeId, scope.sessionId, scope.generation]);
@@ -59,7 +66,7 @@ export class FileReaderRuntime {
 
   get resourceCount(): number { return this.resources.size; }
 
-  private reserve(scope?: FileScope, key?: string, publicationId?: string): Resource {
+  private reserve(scope?: FileScope, key?: string, source?: FileSource): Resource {
     if (this.disposed) throw new FileAccessError("not_available");
     if (this.resources.size >= this.maxResources || processLeases.size >= DEFAULT_MAX_RESOURCES) throw new ReaderError("busy");
     let reject!: (error: Error) => void;
@@ -67,7 +74,7 @@ export class FileReaderRuntime {
     // 没有请求等待的 idle 取消也不能制造 unhandled rejection。
     void cancelled.catch(() => undefined);
     const resource: Resource = {
-      scope: scope && { ...scope }, key, publicationId, transferId: randomUUID(), lease: Symbol(), hash: createHash("sha256"),
+      scope: scope && { ...scope }, key, source, transferId: randomUUID(), lease: Symbol(), hash: createHash("sha256"),
       offset: 0, invalid: false, active: true, lastUsed: Date.now(), cancelled,
       cancel: (code) => reject(new ReaderError(code)),
     };
@@ -117,12 +124,12 @@ export class FileReaderRuntime {
 
   private async eligible(resource: Resource): Promise<void> {
     this.assertCurrent(resource);
-    if (!resource.scope || !resource.publicationId) return;
-    const publication = await this.options.resolve(resource.scope, resource.publicationId);
+    if (!resource.scope || !resource.source) return;
+    const resolved = await this.options.resolve(resource.scope, resource.source);
     this.assertCurrent(resource);
-    if (!publication) throw new FileAccessError("not_available");
-    if (resource.path && publication.sourcePath !== resource.path) throw new FileAccessError("file_changed");
-    if (!resource.path) resource.path = publication.sourcePath;
+    if (!resolved) throw new FileAccessError("not_available");
+    if (resource.path && resolved.sourcePath !== resource.path) throw new FileAccessError("file_changed");
+    if (!resource.path) { resource.path = resolved.sourcePath; resource.expected = resolved; }
   }
 
   private async checked<T>(resource: Resource, operation: () => Promise<T>, policy: "publication" | "scope" = "publication"): Promise<T> {
@@ -184,7 +191,7 @@ export class FileReaderRuntime {
     const scope = { ...suppliedScope };
     try {
       if (this.disposed || !this.options.isCurrent(scope)) throw new ReaderError("invalid_transfer");
-      if (frame.type === "file_open") return await this.open(frame, scope);
+      if (frame.type === "file_open" || frame.type === "file_attachment_open") return await this.open(frame, scope);
       const resource = [...this.resources].find((item) => item.transferId === frame.transfer_id
         && item.scope && scopeKey(item.scope) === scopeKey(scope));
       if (!resource) throw new ReaderError("invalid_transfer");
@@ -208,11 +215,12 @@ export class FileReaderRuntime {
     } catch (error) { return this.failure(frame, scope, error); }
   }
 
-  private async open(frame: Extract<Request, { type: "file_open" }>, scope: FileScope): Promise<Response> {
+  private async open(frame: OpenRequest, scope: FileScope): Promise<Response> {
     const key = `${scopeKey(scope)}:${JSON.stringify(frame.id)}`;
     const existing = this.opens.get(key);
+    const source = requestSource(frame);
     if (existing) {
-      if (existing.publicationId !== frame.publication_id) throw new ReaderError("invalid_transfer");
+      if (existing.source?.kind !== source.kind || existing.source.id !== source.id) throw new ReaderError("invalid_transfer");
       this.assertCurrent(existing);
       const replay = async () => {
         await this.eligible(existing);
@@ -220,7 +228,7 @@ export class FileReaderRuntime {
       };
       return this.openResponse(existing, replay());
     }
-    const resource = this.reserve(scope, key, frame.publication_id);
+    const resource = this.reserve(scope, key, source);
     resource.pending = this.openTask(resource, frame, scope);
     return this.openResponse(resource, resource.pending);
   }
@@ -242,7 +250,7 @@ export class FileReaderRuntime {
     }
   }
 
-  private async openTask(resource: Resource, frame: Extract<Request, { type: "file_open" }>, scope: FileScope): Promise<Response> {
+  private async openTask(resource: Resource, frame: OpenRequest, scope: FileScope): Promise<Response> {
     try {
       await this.eligible(resource);
       this.assertCurrent(resource);
@@ -251,12 +259,16 @@ export class FileReaderRuntime {
       resource.handle = opened.handle; resource.stat = opened.stat;
       this.assertCurrent(resource);
       await this.eligible(resource);
-      const fileName = basename(opened.path);
+      // 附件磁盘名经过安全处理，展示与类型推断使用上传时的原文件名。
+      const fileName = resource.expected?.fileName ?? basename(opened.path);
       if (!fileName || fileName.length > 255 || /\p{Cc}/u.test(fileName)) throw new FileAccessError("not_available");
+      const expectedBytes = resource.expected?.byteLength;
+      if (expectedBytes !== undefined && Number(opened.stat.size) !== expectedBytes) throw new FileAccessError("file_changed");
       const inspection = await this.checked(resource, () => inspectFile(opened.handle, Number(opened.stat.size), fileName));
       await this.verify(resource);
       this.assertCurrent(resource);
-      resource.opened = { ...this.reply(frame, scope), type: "file_opened", publication_id: frame.publication_id,
+      const source = frame.type === "file_open" ? { publication_id: frame.publication_id } : { attachment_id: frame.attachment_id };
+      resource.opened = { ...this.reply(frame, scope), type: "file_opened", ...source,
         transfer_id: resource.transferId, file_name: fileName, byte_length: Number(opened.stat.size),
         mime_type: inspection.mimeType, preview: inspection.preview };
       return resource.opened;
@@ -323,6 +335,8 @@ export class FileReaderRuntime {
         offset: frame.offset, data_base64: data.toString("base64") };
       if (resource.offset !== total) return { ...common, final: false };
       const sha256 = resource.hash.digest("hex");
+      // 附件原件须与上传记录一致；被 Pi 或用户改动后不交付改动后的内容。
+      if (resource.expected?.sha256 !== undefined && sha256 !== resource.expected.sha256) throw new FileAccessError("file_changed");
       await this.checked(resource, () => this.closeHandle(resource), "scope");
       this.assertCurrent(resource);
       return { ...common, final: true, total_bytes: total, sha256 };

@@ -6,6 +6,8 @@ import type { TimelinePending } from "@/lib/pwa/timeline-runtime";
 import type { AttachmentMetadata } from "@pi-reach/protocol/session";
 import { useI18n, type Messages } from "@/lib/i18n";
 import { AttachmentCards, readonlyAttachmentItems } from "./attachment-cards";
+import type { PublishedFileRead } from "./published-file";
+import { SentAttachmentCards } from "./sent-attachment-cards";
 
 type UserEvent = Extract<TimelineEvent, { kind: "user" }>;
 type Props = {
@@ -17,6 +19,8 @@ type Props = {
   onCheckStatus?: (id: string) => void;
   onCancelQueued?: (id: string) => void;
   canCheckStatus?: boolean;
+  /** 仅在线会话的正式消息提供；缺省时附件保持只读卡片。 */
+  onReadFile?: PublishedFileRead;
 };
 
 /** 未知原因码统一退到 unavailable，不为未映射的代码留空行。 */
@@ -25,7 +29,7 @@ function failureReason(reasons: Messages["timeline"]["deliveryFailed"], code: st
 }
 
 /** pending 与正式记录共用同一节点；确认只替换内容与状态，不重启动效。 */
-export function UserMessage({ value, metadata, entering, timelineKey, onRetryFailed, onCheckStatus, onCancelQueued, canCheckStatus = true }: Props) {
+export function UserMessage({ value, metadata, entering, timelineKey, onRetryFailed, onCheckStatus, onCancelQueued, canCheckStatus = true, onReadFile }: Props) {
   const { t, format } = useI18n();
   // 入场资格仅在气泡创建时确定，离线／重连不能撤下再添加动画 class。
   const [animateEntrance] = useState(entering);
@@ -59,7 +63,8 @@ export function UserMessage({ value, metadata, entering, timelineKey, onRetryFai
         {pending || metadata ? <>
           {text ? <p>{text}</p> : null}
           {pending?.images?.map((image, index) => <img className="pwa-message-image" key={index} src={`data:${image.mime};base64,${image.data}`} alt={t.timeline.attachmentAlt(index + 1)} />)}
-          {attachments?.length ? <AttachmentCards items={readonlyAttachmentItems(attachments)} /> : null}
+          {attachments?.length ? event && onReadFile ? <SentAttachmentCards attachments={attachments} onRead={onReadFile} />
+            : <AttachmentCards items={readonlyAttachmentItems(attachments)} /> : null}
         </> : event?.blocks.map((block, index) => block.type === "text" ? <p key={index}>{block.text}</p> : "omitted" in block ? <div className="pwa-image-omitted" key={index}>{t.timeline.imageOmitted(block.mime_type, format.number(block.byte_length))}</div> : <img className="pwa-message-image" key={index} src={`data:${block.mime_type};base64,${block.data}`} alt={t.timeline.attachmentAlt(index + 1)} />)}
       </div>
     </article>

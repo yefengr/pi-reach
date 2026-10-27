@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { FilePreview, PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import type { FilePreview } from "@pi-reach/protocol/session";
+import type { FileSourceDescriptor } from "@/lib/pwa/file-source";
 
 export type PublishedFileViewState = {
   phase: "idle" | "opening" | "manual" | "reading" | "ready" | "error";
@@ -17,8 +18,8 @@ export type PublishedFilesView = {
   canFetch: boolean;
   active: boolean;
   getState: (id: string) => PublishedFileViewState | undefined;
-  open: (descriptor: PublishedFileDescriptor, intent: "auto" | "view" | "download") => Promise<void>;
-  retry?: (descriptor: PublishedFileDescriptor, intent: "view" | "download") => Promise<void>;
+  open: (descriptor: FileSourceDescriptor, intent: "auto" | "view" | "download") => Promise<void>;
+  retry?: (descriptor: FileSourceDescriptor, intent: "view" | "download") => Promise<void>;
   cancel: () => void;
   pin: (id: string) => void;
   unpin: (id: string) => void;

@@ -1,32 +1,37 @@
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ClientFrame, ServerFrame } from "../protocol/v2/index.js";
+import { AttachmentSourceResolver } from "../files/attachment-source.js";
 import { collectPublications } from "../files/publications.js";
 import { FileReaderRuntime, type FileScope } from "../files/reader.js";
 import type { OwnerBinding } from "./create_owner_binding.js";
 
-type FileFrame = Extract<ClientFrame, { type: "file_open" | "file_read" | "file_close" }>;
+type FileFrame = Extract<ClientFrame, { type: "file_open" | "file_attachment_open" | "file_read" | "file_close" }>;
 type BindingOptions = {
   runtimeId: string;
+  attachmentRoot?: string;
   getManager: () => SessionManager | null;
   getBinding: (ownerId: string) => OwnerBinding | undefined;
 };
 
 export function isFileFrame(frame: ClientFrame): frame is FileFrame {
-  return frame.type === "file_open" || frame.type === "file_read" || frame.type === "file_close";
+  return frame.type === "file_open" || frame.type === "file_attachment_open" || frame.type === "file_read" || frame.type === "file_close";
 }
 
-/** 共用发布检查与读取账目；会话代际只在真实 reset 推进，不随普通 leaf 变化。 */
+/** 发布文件与已发送附件共用资格检查与读取账目；会话代际只在真实 reset 推进，不随普通 leaf 变化。 */
 export class FileBinding {
   generation = 0;
   readonly reader: FileReaderRuntime;
+  private readonly attachments: AttachmentSourceResolver;
 
   constructor(private readonly options: BindingOptions) {
+    this.attachments = new AttachmentSourceResolver(options.attachmentRoot);
     this.reader = new FileReaderRuntime({
       isCurrent: (scope) => this.isCurrent(scope),
-      resolve: (scope, id) => {
+      resolve: (scope, source) => {
         const manager = options.getManager();
         if (!manager || !this.isCurrent(scope)) return null;
-        const publication = collectPublications(manager).get(id);
+        if (source.kind === "attachment") return this.attachments.resolve(manager, source.id);
+        const publication = collectPublications(manager).get(source.id);
         return publication ? { sourcePath: publication.sourcePath } : null;
       },
     });

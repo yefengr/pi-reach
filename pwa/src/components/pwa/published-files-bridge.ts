@@ -1,4 +1,5 @@
 import type { FileTransferController, FileTransferSnapshot } from "@/lib/pwa/file-transfer";
+import { fileKey } from "@/lib/pwa/file-source";
 import type { PublishedFilesView } from "./published-files-context";
 
 /** UI 只消费预览门面；缓冲、请求和 URL 的所有权仍归 controller。 */
@@ -18,7 +19,7 @@ export function publishedFilesView(controller: FileTransferController, _state: F
       };
     },
     open: (descriptor, intent) => {
-      if (controller.snapshot().files.get(descriptor.publication_id)?.phase === "ready" || canFetchNow()) return controller.open(descriptor, intent);
+      if (controller.snapshot().files.get(fileKey(descriptor))?.phase === "ready" || canFetchNow()) return controller.open(descriptor, intent);
       return Promise.resolve();
     },
     retry: (descriptor, intent) => canFetchNow() ? controller.retry(descriptor, intent) : Promise.resolve(),
