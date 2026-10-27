@@ -14,6 +14,7 @@ export const PWA_MOTION_FALLBACK_MS = {
   "--pwa-duration-image-in": 260,
   "--pwa-duration-image-out": 220,
   "--pwa-duration-toast": 180,
+  "--pwa-duration-toast-out": 140,
   "--pwa-duration-fade": 120,
   "--pwa-duration-message-in": 160,
   "--pwa-duration-press-in": 90,

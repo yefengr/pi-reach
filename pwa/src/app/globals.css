@@ -511,9 +511,10 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-operation-notifications[data-position="top-center"]:has(.pwa-operation-notification) { display: block; position: absolute; top: max(calc(var(--pwa-safe-top) + var(--pwa-topbar-height) + 8px), calc(var(--pwa-main-notices-bottom, 0px) + 8px)); left: var(--pwa-main-center, 50%); right: auto; bottom: auto; width: min(400px, calc(var(--pwa-main-width, 100%) - 32px)); max-width: 400px; margin: 0; padding: 0; transform: translateX(-50%); pointer-events: none; }
 .pwa-operation-notifications .pwa-operation-notification { min-height: var(--pwa-hit-target); padding: 4px 4px 4px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: auto; }
 .pwa-operation-notifications .pwa-operation-notification::before { display: none; }
-/* 进出只做轻微位移＋淡化；Mantine 通知状态变量区分退出，不使用整段滑入与回弹。 */
+/* 进出只做轻微位移＋淡化；Mantine 通知状态变量区分退出，不使用整段滑入与回弹。
+ * Mantine 只接受一个 transitionDuration（取 toast，决定卸载时机），离开时长在此覆盖；离开短于卸载时机，只会更早结束。 */
 .pwa-operation-notifications .pwa-operation-notification { transform: translateY(calc((1 - var(--notifications-state-opacity, 1)) * -1 * var(--pwa-overlay-shift) * var(--pwa-motion-shift, 1))) !important; transition-timing-function: var(--pwa-ease-enter) !important; }
-.pwa-operation-notifications .pwa-operation-notification[style*="--notifications-state-opacity: 0"] { transition-timing-function: var(--pwa-ease-exit) !important; }
+.pwa-operation-notifications .pwa-operation-notification[style*="--notifications-state-opacity: 0"] { transition-duration: var(--pwa-duration-toast-out) !important; transition-timing-function: var(--pwa-ease-exit) !important; }
 /* Mantine 的遮罩与内容是兄弟节点，不能继承内容 in/out 上的曲线变量；Drawer 遮罩沿用 transitionProps 的标准曲线，只有 Modal 遮罩区分进入／退出。 */
 .mantine-Modal-overlay.pwa-scrim[style] { transition-timing-function: var(--pwa-ease-enter) !important; }
 .mantine-Modal-overlay.pwa-scrim[style*="opacity: 0;"] { transition-timing-function: var(--pwa-ease-exit) !important; }

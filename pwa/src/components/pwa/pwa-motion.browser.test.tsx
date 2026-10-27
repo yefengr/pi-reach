@@ -146,7 +146,8 @@ test.each([false, true])("uses token timing and distinct Toast exit easing (redu
     (screen.getByRole("button", { name: "Dismiss operation notification" }).element() as HTMLElement).click();
     await expect.poll(() => card.style.getPropertyValue("--notifications-state-opacity")).toBe("0");
     expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : exitEase);
-    expect(duration(card)).toBe(reduce ? 120 : 180);
+    // 离开时长由 CSS 覆盖 Mantine 的内联时长；Mantine 改变离开状态的写法时这里会失败。
+    expect(duration(card)).toBe(reduce ? 120 : 140);
     if (reduce) expectNoShift(card);
     await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
   } finally { await screen.unmount(); }
