@@ -58,7 +58,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | 焦点 | 所有控件 2px `accent` 轮廓，默认贴边绘制（偏移 0）；细指针菜单行的视觉底内缩时，轮廓同步内缩 2px，完整命中区不变。Mantine 自带焦点环关闭，由全局 `:focus-visible` 统一 |
 | 滚动条 | 全应用滚动区统一 `scrollbar-width: thin`、`scrollbar-color` 为 `control-line` 滑块 + 透明轨道；由 [`useScrollIndicator`](../pwa/src/lib/ui/scroll-indicator.ts) 在滚动时标记、停止 3s 后隐藏，显示只作用于被滚动的那个容器（脚本就绪后每个元素自身取透明、不靠继承，切换时只重算被滚动的容器），出现与消失用 `--pwa-duration-fade` 淡入淡出，过渡只挂在真正滚动过的容器（`data-scroll-host`）上以免覆盖组件自身的布局过渡，自带 transition 的滚动容器（如消息列表）在自身声明中补上 `scrollbar-color`；加载更早记录期间（`data-scroll-hold`）抑制显示，不用 `scrollbar-width: none` 移除滚动能力；脚本未就绪（无 `data-scroll-hints`）时滚动条保持可见。滑块长度由浏览器按内容比例绘制，没有过渡。消息区保留 `scrollbar-gutter: stable`，显隐不改变正文宽度 |
 | 断点 | 主布局仍以 768px 区分桌面与移动：正式 CSS 写作 `max-width: 767.98px`，脚本只用 [`viewport-queries.ts`](../pwa/src/lib/ui/viewport-queries.ts) 的 `MOBILE_LAYOUT_QUERY`／`DESKTOP_LAYOUT_QUERY`，Mantine `sm` = 48em，三处由守卫对齐，不另设宽度断点。组件另按自身容器和输入能力适配：窄桌面面板不等于宽布局，大视口也不代表只有鼠标 |
-| 动效 | 曲线只用标准 `cubic-bezier(0.2, 0, 0, 1)`、进入 `cubic-bezier(0, 0, 0, 1)`、退出 `cubic-bezier(0.3, 0, 1, 1)`：标准曲线用于按压、局部图标反馈及屏幕内移动或改变尺寸（侧栏收展、折叠展开、设置页滑入／滑出、Drawer 进出），进入／退出曲线用于 Modal、Popover、Menu、Toast 的出现与离开；时长以 `--pwa-duration-*` 定义，取值与用途见[「动效时长」](#动效时长)。无限循环动画（旋转、骨架呼吸）是唯一使用 `linear` 的例外。Drawer（移动导航、移动电脑选择、工具与文本文件阅读器）与设置页转场统一为覆盖模型：200ms 标准曲线纯位移、进出同长，只有上层面板移动，下层视图保持原位，面板全程不透明、不叠加淡化，遮罩以同一时长与曲线同步淡化；图片阅读器使用下述局部图片几何与原位淡化。减少动态效果只跟随系统 `prefers-reduced-motion`，由全局规则把位移、缩放与尺寸过渡改为约 120ms 的颜色与透明度淡化，并将 `--pwa-motion-shift` 置 0；加载、运行中和骨架等循环只在页面前台且元素位于可见区域时运行；离屏、页面隐藏或系统减少动态效果时暂停，状态图标、文字与业务时钟保留，重入不重播历史状态 |
+| 动效 | 曲线只用标准 `cubic-bezier(0.2, 0, 0, 1)`、进入 `cubic-bezier(0, 0, 0, 1)`、退出 `cubic-bezier(0.3, 0, 1, 1)`：标准曲线用于按压、局部图标反馈及屏幕内移动或改变尺寸（侧栏收展、折叠展开、设置页滑入／滑出、Drawer 进出），进入／退出曲线用于 Modal、Popover、Menu、Toast 以及浮动入口与局部提示的出现与离开；时长以 `--pwa-duration-*` 定义，取值与用途见[「动效时长」](#动效时长)。浮动入口与局部提示（「最新」／「N 条新输出」、「重试」、连接提示条、局部错误条、运行时提示条）出现时淡入（`toast` 时长、进入曲线），消失时淡出（`fade` 时长、退出曲线），淡出期间不可点击、不可聚焦，也不再被读屏播报；浮在内容上的入口另从下方 `--pwa-overlay-shift` 位移进出，占布局的提示条高度一次到位、只淡化；文字或计数变化原位更新、不重播，出现或消失中途反向时从当前透明度继续；由 [`usePresence`](../pwa/src/components/pwa/use-presence.ts) 与 `.pwa-presence` 实现，不支持 `@starting-style` 的浏览器直接显示。无限循环动画（旋转、骨架呼吸）是唯一使用 `linear` 的例外。Drawer（移动导航、移动电脑选择、工具与文本文件阅读器）与设置页转场统一为覆盖模型：200ms 标准曲线纯位移、进出同长，只有上层面板移动，下层视图保持原位，面板全程不透明、不叠加淡化，遮罩以同一时长与曲线同步淡化；图片阅读器使用下述局部图片几何与原位淡化。减少动态效果只跟随系统 `prefers-reduced-motion`，由全局规则把位移、缩放与尺寸过渡改为约 120ms 的颜色与透明度淡化，并将 `--pwa-motion-shift` 置 0；加载、运行中和骨架等循环只在页面前台且元素位于可见区域时运行；离屏、页面隐藏或系统减少动态效果时暂停，状态图标、文字与业务时钟保留，重入不重播历史状态 |
 | 悬停与触屏 | `:hover` 反馈（`hover` 浅底、颜色变化）只写在 `@media (hover: hover)` 内，避免触屏点击后残留悬停态；需要按下反馈的行（如折叠头）另用 `:active`，松手即消失。取消 Mantine 默认悬停样式或保持选中态的覆盖规则不受此限，由 [`pwa-style-guard`](../pwa/src/app/pwa-style-guard.node.test.ts) 逐条登记。只在悬停时显示的入口，在 `(any-pointer: coarse), (hover: none)` 下常显，不按视口宽度判断。键盘 `:focus-visible` 不受影响 |
 | 图标 | Lucide，经 `LucideProvider` 统一线宽 1.8；尺寸只用 16（按钮内、元数据、状态行）、20（图标按钮与导航）、24（空状态等大尺寸）。例外：与 13px 状态文字同行的运行中旋转图标为 12（连接状态、导航行、输入区提示行、更早记录加载提示），线宽 2.4，使实际线宽与 16 图标一致，全局线宽与 12 档取值为 [`icon-metrics.ts`](../pwa/src/lib/ui/icon-metrics.ts) 的具名常量；TSX 中 Lucide 图标的 `size` 只写 16／20／24 或该常量，`strokeWidth` 只引用这些常量，由守卫校验。同一含义只用一个图标：重试与刷新为 `RefreshCw`，恢复默认（重置布局、还原缩放）为 `RotateCcw`，操作菜单为 `Ellipsis`，只读信息为 `Info` |
 | Mantine | [`piReachTheme`](../pwa/src/lib/ui/pi-reach-theme.ts) 的字号、标题字重、间距（2xs–2xl 依次为 4／8／12／16／24／32／48）、圆角与阴影引用上述 token，`ActionIcon` 默认尺寸引用 `--pwa-hit-target`；Mantine 圆角 `xs` 对应 4，`sm/md` 同为 8，`lg/xl` 同为 12，不额外增加档位。断点以 em 字面量对应 768px；`piReachCssVariablesResolver` 把 Mantine 语义颜色变量（body、text、dimmed、default、primary、disabled、overlay 等）映射到同名角色，不维护平行色值。Mantine 必须写实际色值的 `white`／`black`（浅色 `bg`／`ink`）与雾蓝色阶（浅色主色第 6–8 档为 `accent`／`accent-hover`／`accent-active`，深色主色第 3 档为深色 `accent`）由守卫与 token 对齐 |
@@ -193,7 +193,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | `drawer` | 200ms | 移动导航、电脑选择、工具与文件阅读器 Drawer 进出及其遮罩 |
 | `modal-in` / `modal-out` | 180 / 140ms | 居中 Modal 进出 |
 | `menu-in` / `menu-out` | 160 / 120ms | 附件、命令、模型与电脑动作菜单进出 |
-| `toast` | 180ms | Toast 进出 |
+| `toast` | 180ms | Toast 进出；浮动入口与局部提示出现 |
 | `collapse-in` / `collapse-out` | 180 / 140ms | 思考与工具组折叠展开、折叠箭头旋转 |
 | `status-slot` | 160ms | 思考行左侧旋转图标槽展开与收回，标题同步位移 |
 | `message-in` | 160ms | 新发送气泡进入、提交后输入区回缩与贴底 |
@@ -201,7 +201,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | `image-in` / `image-out` | 260 / 220ms | 图片阅读器的局部几何过渡 |
 | `press-in` / `press-out` | 90 / 120ms | `Button` 与 `ActionIcon` 内部绘制层按压缩放 |
 | `feedback` | 120ms | 复制成功等原位图标交叉淡化 |
-| `fade` | 120ms | 通用淡化（Popover、会话操作菜单、重连后消息区）；减少动态效果时其余过渡时长统一取此值 |
+| `fade` | 120ms | 通用淡化（Popover、会话操作菜单、重连后消息区、浮动入口与局部提示消失）；减少动态效果时其余过渡时长统一取此值 |
 | `spin` | 1.3s | 运行中、连接中等旋转图标转一圈，`linear` 无限循环 |
 | `breathe` | 2s | 骨架屏明暗呼吸一个周期，`linear` 无限循环 |
 

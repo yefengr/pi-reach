@@ -6,6 +6,7 @@ import { renderPwa } from "@/test/browser/render";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
+import { PwaConnectionBanner } from "./pwa-app-actions";
 
 const scope = { session_id: "viewport-session", leaf_id: "generation" };
 const paragraphs = (prefix: string, count = 18) => Array.from({ length: count }, (_, index) => `${prefix} paragraph ${index}: content that stays available while reading.`).join("\n\n");
@@ -557,5 +558,44 @@ test.each([1280, 390])("running tool heading changes keep following and reading 
     await readAt(screen.getByText("Earlier paragraph 4: content that stays available while reading.").element());
     await checkHandoff(["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
     expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("a connection banner entering and fading out above the list keeps the reading row in place", async () => {
+  let setKind!: (kind: "relay" | null) => void;
+  let viewport!: TimelineViewport;
+  const items = [answer("first", paragraphs("First")), answer("second", paragraphs("Second")), answer("third", paragraphs("Third"))];
+  function Harness() {
+    const [kind, setBannerKind] = useState<"relay" | null>(null);
+    setKind = setBannerKind;
+    viewport = useTimelineViewport(items);
+    return <main className="pwa-main" style={{ width: "100vw", height: 600, display: "flex", flexDirection: "column" }}>
+      <div className="pwa-main-notices"><PwaConnectionBanner kind={kind} connection="retrying" /></div>
+      <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} />
+    </main>;
+  }
+  const screen = await renderPwa(<Harness />);
+  try {
+    await settleLayout();
+    const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+    const row = [...list.querySelectorAll("p")].find((element) => element.textContent?.startsWith("Second paragraph 4"))!;
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
+    list.scrollTop += offset(row, list) - 40;
+    flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
+    await settleLayout();
+    expect(viewport.followingOutput).toBe(false);
+    const before = offset(row, list);
+
+    // 提示条占布局：列表变矮一次，阅读行按锚点保持在原处。
+    flushSync(() => setKind("relay"));
+    await settleLayout();
+    expect(document.querySelector(".pwa-connection-banner")).not.toBeNull();
+    expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
+
+    flushSync(() => setKind(null));
+    await expect.poll(() => document.querySelector(".pwa-connection-banner"), { timeout: 2000 }).toBeNull();
+    await settleLayout();
+    expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
+    expect(viewport.followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });
