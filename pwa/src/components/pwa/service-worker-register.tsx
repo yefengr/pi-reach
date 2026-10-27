@@ -6,6 +6,7 @@ import { createOperationNotificationController, type OperationNotificationContro
 import { PwaRuntimeNoticePortal } from "@/components/pwa/pwa-app-shell";
 import { refreshPwaApp } from "@/lib/pwa/service-worker-update";
 import { useI18n } from "@/lib/i18n";
+import { presenceProps, usePresence } from "./use-presence";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -38,12 +39,17 @@ function hasOpenDialog(): boolean {
   ));
 }
 
+type NoticeView = { unsupported: boolean; install: boolean };
+const sameNoticeView = (left: NoticeView, right: NoticeView) => left.unsupported === right.unsupported && left.install === right.install;
+
 type ServiceWorkerNoticeProps = {
   installPrompt: boolean;
   unsupported: boolean;
   onInstall: () => void;
   onDismiss: () => void;
   onFocusRecoveryReady?: (restore: (() => void) | null) => void;
+  /** 关闭或条件消失后的淡出阶段：保留最后的内容，不可交互。 */
+  leaving?: boolean;
 };
 
 export function ServiceWorkerNotice({
@@ -52,6 +58,7 @@ export function ServiceWorkerNotice({
   onInstall,
   onDismiss,
   onFocusRecoveryReady,
+  leaving = false,
 }: ServiceWorkerNoticeProps) {
   const noticeRef = useRef<HTMLDivElement | null>(null);
   const priorFocusRef = useRef<HTMLElement | null>(null);
@@ -107,7 +114,8 @@ export function ServiceWorkerNotice({
 
   return <PwaRuntimeNoticePortal><Alert
     ref={noticeRef}
-    className="pwa-runtime-notice"
+    {...presenceProps({ rendered: true, leaving })}
+    className="pwa-runtime-notice pwa-presence"
     classNames={{
       wrapper: "pwa-runtime-notice-wrapper",
       body: "pwa-runtime-notice-body",
@@ -248,10 +256,13 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
     }, () => setDismissedUpdateVersion(updateVersion));
   }, [applyUpdate, dismissedUpdateVersion, notifications, updateNotice, updateRequested, updateVersion]);
 
-  if (process.env.NODE_ENV !== "production") return null;
   // 更新提示使用独立的操作 Toast；安装与浏览器能力提示仍在文档流 Alert 中。
   const showNotice = !dismissed && (unsupported || Boolean(installPrompt));
-  if (!showNotice) return null;
+  // 关闭或安装后淡出，淡出期间保留原有标题与操作。
+  const notice = usePresence(showNotice ? { unsupported, install: Boolean(installPrompt) } : null, sameNoticeView);
+  if (process.env.NODE_ENV !== "production") return null;
+  const view = notice.rendered;
+  if (!view) return null;
 
   const install = async () => {
     if (!installPrompt) return;
@@ -262,8 +273,9 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
   };
 
   return <ServiceWorkerNotice
-    installPrompt={Boolean(installPrompt)}
-    unsupported={unsupported}
+    installPrompt={view.install}
+    unsupported={view.unsupported}
+    leaving={notice.leaving}
     onInstall={() => void install()}
     onDismiss={() => setDismissed(true)}
     onFocusRecoveryReady={setNoticeFocusRecovery}

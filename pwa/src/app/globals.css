@@ -195,6 +195,19 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-bottom-sentinel { width: 1px; height: 1px; }
 /* 发送过渡只改变高度，不在结束时切换格式化上下文，避免滚动合成层重新定位。 */
 .pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; position: relative; z-index: var(--pwa-z-composer); }
+/*
+ * 浮动入口与局部提示的进出（DESIGN「动效」）：出现淡入（toast 时长、进入曲线），离开淡出（fade 时长、退出曲线），
+ * 离开期间由 usePresence 设置 inert 与 aria-hidden。占布局的提示条只淡化、高度一次到位；
+ * 浮在内容上的入口另从下方位移进出。不支持 starting-style 时直接显示，属于安全降级。
+ */
+.pwa-presence { transition: opacity var(--pwa-duration-toast) var(--pwa-ease-enter); }
+.pwa-presence[data-presence="leaving"] { opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit); }
+.pwa-presence-float { transition: opacity var(--pwa-duration-toast) var(--pwa-ease-enter), transform var(--pwa-duration-toast) var(--pwa-ease-enter); }
+.pwa-presence-float[data-presence="leaving"] { transform: translateY(calc(var(--pwa-overlay-shift) * var(--pwa-motion-shift))); transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit), transform var(--pwa-duration-fade) var(--pwa-ease-exit); }
+@starting-style {
+  .pwa-presence { opacity: 0; }
+  .pwa-presence-float { transform: translateY(calc(var(--pwa-overlay-shift) * var(--pwa-motion-shift))); }
+}
 .pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: var(--pwa-hit-target); display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-main-inset-end) 12px var(--pwa-main-inset-start); pointer-events: none; }
 
 /* 按钮层级：主操作实心强调色；次级为表面＋边线；文字按钮无底无框；危险入口为错误色轮廓。 */
@@ -215,6 +228,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: not-allowed; }
 .pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
 .pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
+.pwa-message-action { display: inline-flex; }
 .pwa-ui-scope .pwa-button.pwa-latest-button { min-height: var(--pwa-hit-target); padding: 0 12px; border: 1px solid var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-accent); background: var(--pwa-hover); } }
 

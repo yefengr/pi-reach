@@ -235,7 +235,7 @@
   --pwa-press-icon-scale: 0.97;
   --pwa-press-button-scale: 0.98;
   --pwa-menu-offset: 4px;
-  /* 居中 Modal 与 Toast 出现时的位移距离，乘以 --pwa-motion-shift。 */
+  /* 居中 Modal、Toast 与浮动入口进出时的位移距离，乘以 --pwa-motion-shift。 */
   --pwa-overlay-shift: 8px;
   /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
   --pwa-menu-row-padding: 6px;
