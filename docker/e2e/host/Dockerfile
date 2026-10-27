@@ -10,9 +10,17 @@ COPY packages/protocol/ ./packages/protocol/
 RUN corepack enable && pnpm --filter @yefengr/pi-reach... install --frozen-lockfile
 COPY pi-extension/src ./pi-extension/src
 COPY pi-extension/scripts ./pi-extension/scripts
-COPY pi-extension/tsconfig.json pi-extension/README.md pi-extension/LICENSE ./pi-extension/
+COPY pi-extension/index.js pi-extension/tsconfig.json pi-extension/README.md pi-extension/LICENSE ./pi-extension/
 RUN pnpm --filter @yefengr/pi-reach build \
     && pnpm --filter @yefengr/pi-reach deploy --legacy /out/extension
+
+# Pi 按发布清单加载入口，编译成功不代表 deploy 产物包含所有入口。
+RUN node -e '\
+    const fs = require("node:fs"); \
+    const path = require("node:path"); \
+    const root = "/out/extension"; \
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")); \
+    for (const entry of pkg.pi.extensions) fs.accessSync(path.resolve(root, entry));'
 
 # Pi itself is pinned independently from the host's package installation.
 FROM node:24.20.0-bookworm-slim
