@@ -16,6 +16,7 @@ import {
   type TimelinePendingLimits,
 } from "./timeline-pending";
 import { attachmentRequestKey, projectAttachmentMetadata } from "./timeline-attachments";
+import { compareSavedTimelineEvents } from "./timeline-order";
 
 export { PendingCapacityError } from "./timeline-pending";
 type UserMessageFrame = Extract<ClientFrame, { type: "user_message" }>;
@@ -1101,8 +1102,10 @@ export class TimelineRuntime {
     const attachmentCapacityExceeded = this.reconcileAttachmentMetadata();
     const formal = this.replacement?.previousEvents ?? [...this.events.values()];
     const transient = this.replacement ? [] : [...this.pendingItems, ...this.partials.values()];
-    const items: TimelineViewItem[] = [...formal.map((event) => ({ kind: "event" as const, event })), ...transient];
-    items.sort(compareItems);
+    // 只读历史只有正式记录，沿用存储读取的顺序：本地分页器按这一顺序切页，展开的页才不会插进已显示记录之间。
+    const ordered = this.readOnly ? [...formal].sort(compareSavedTimelineEvents) : formal;
+    const items: TimelineViewItem[] = [...ordered.map((event) => ({ kind: "event" as const, event })), ...transient];
+    if (!this.readOnly) items.sort(compareItems);
     return {
       items,
       committed: result.committed ?? [],

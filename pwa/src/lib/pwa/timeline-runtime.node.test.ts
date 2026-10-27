@@ -834,6 +834,15 @@ test("a read-only history shows saved records with gaps and accepts nothing live
   expect(runtime.prependHistory(numberedUserEvents(3, 4)).items).toHaveLength(6);
 });
 
+test("a read-only history keeps the saved order when sequenced and unsequenced records mix", () => {
+  const runtime = new TimelineRuntime();
+  const [first, second] = numberedUserEvents(1, 2);
+  const unsequenced = { ...userEvent("legacy"), timestamp: 200 };
+  // 存储顺序：有序号的在前，无序号的在后；只按时间戳会把无序号记录插到 1 与 2 之间。
+  const shown = runtime.showReadOnly([{ ...first!, timestamp: 100 }, { ...second!, timestamp: 300 }, unsequenced]);
+  expect(shown.items.map((item) => item.kind === "event" ? item.event.event_id : item.kind)).toEqual(["event-1", "event-2", "legacy"]);
+});
+
 test("leaving a read-only history never reuses it as the live baseline", () => {
   const runtime = new TimelineRuntime();
   runtime.showReadOnly(numberedUserEvents(1, 10));
