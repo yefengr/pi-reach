@@ -24,7 +24,8 @@ export function useScrollIndicator() {
       if (!(target instanceof Element)) return;
       // 首次滚动时同时写入 host 标记：同一次任务内完成，首帧也能走过渡。
       if (!target.hasAttribute(SCROLL_HOST_ATTRIBUTE)) target.setAttribute(SCROLL_HOST_ATTRIBUTE, "true");
-      target.setAttribute(SCROLLING_ATTRIBUTE, "true");
+      // 跟随贴底时每帧都有程序滚动；属性已在时只续期定时器，不重复写入触发样式失效。
+      if (!target.hasAttribute(SCROLLING_ATTRIBUTE)) target.setAttribute(SCROLLING_ATTRIBUTE, "true");
       const pending = timers.get(target);
       if (pending !== undefined) window.clearTimeout(pending);
       timers.set(target, window.setTimeout(() => {

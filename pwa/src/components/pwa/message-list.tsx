@@ -14,7 +14,7 @@ import { attachmentMessageKey, projectAttachmentMetadata, type TimelineAttachmen
 import { publishedFileFromEvent, type AttachmentMetadata } from "@pi-reach/protocol/session";
 import { PublishedFile, type PublishedFileRead } from "./published-file";
 import { UserMessage } from "./user-message";
-import { useAutoLoadEarlier } from "./use-auto-load-earlier";
+import { AUTO_LOAD_EARLIER_SCREENS, useAutoLoadEarlier } from "./use-auto-load-earlier";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
@@ -168,6 +168,7 @@ export function MessageList({ items, hasEarlier, loadingEarlier = false, onLoadE
     listRef,
     enabled: showEarlier && autoLoadEarlier && !loadingEarlier && !loadEarlierFailed && !earlierOffline && onLoadEarlier !== undefined,
     contentVersion: items,
+    lookaheadScreens: earlierLocal ? 0 : AUTO_LOAD_EARLIER_SCREENS,
     onLoad: () => onLoadEarlier?.(),
   });
   return <div className="pwa-message-list" data-reconnect-phase={reconnectPhase ?? undefined} data-scroll-hold={loadingEarlier ? "true" : undefined} ref={listRef} tabIndex={-1} onScroll={(event) => {

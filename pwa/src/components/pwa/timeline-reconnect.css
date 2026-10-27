@@ -1,6 +1,7 @@
+/* 列表自身的 transition 会覆盖全局 [data-scroll-host] 的滚动条过渡，滚动条淡入淡出在这里一并声明。 */
 .pwa-message-list {
   opacity: 1;
-  transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard);
+  transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard), scrollbar-color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 
 .pwa-message-list[data-reconnect-phase="fade-out"],

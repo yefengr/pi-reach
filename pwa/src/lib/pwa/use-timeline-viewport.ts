@@ -5,6 +5,7 @@ import type { TimelineViewportAnchor } from "./timeline-viewport-anchor";
 import { TimelineViewportCoordinator, type ViewportCapture, type ViewportPosition } from "./timeline-viewport-coordinator";
 import { TimelineViewportLayout } from "./timeline-viewport-layout";
 import { TimelineViewportObservers } from "./timeline-viewport-observers";
+import { ScrollIdleGate } from "./scroll-idle-gate";
 import { clearViewportDiagnostics, installViewportDiagnostics, recordViewportDiagnostic, viewportDiagnosticsEnabled } from "./timeline-viewport-diagnostics";
 
 export { TIMELINE_GEOMETRY_EVENT } from "./timeline-viewport-observers";
@@ -26,6 +27,8 @@ export type TimelineViewport = {
   prepareHistoryPrepend: () => void;
   captureSessionPosition: () => TimelineSessionPosition | null;
   restoreSessionPosition: (position: TimelineSessionPosition | null) => void;
+  /** 等触摸、惯性与回弹结束后执行会改动滚动几何的工作；返回取消函数。 */
+  whenScrollIdle: (run: () => void) => () => void;
 };
 
 /** React 仅订阅 UI、注册浏览器事件并报告布局；不持有过程或滚动控制权。 */
@@ -41,6 +44,9 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     now: () => performance.now(), request: (callback) => requestAnimationFrame(callback), cancel: (frame) => cancelAnimationFrame(frame),
   }, (state) => setUi((previous) => previous.followingOutput === state.following && previous.unreadOutput === state.unread
     ? previous : { followingOutput: state.following, unreadOutput: state.unread })));
+  const [idleGate] = useState(() => new ScrollIdleGate({
+    now: () => performance.now(), setTimeout: (run, ms) => window.setTimeout(run, ms), clearTimeout: (id) => window.clearTimeout(id),
+  }));
 
   useLayoutEffect(() => {
     core.setDiagnostics((entry) => recordViewportDiagnostic(entry, () => layoutRef.current?.diagnosticGeometry() ?? null),
@@ -52,6 +58,8 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     if (layoutRef.current?.list === list) return;
     observersRef.current?.disconnect();
     observersRef.current = null;
+    // 换绑后旧列表的触摸不会再收到抬起事件。
+    idleGate.touch(false);
     clearViewportDiagnostics();
     const layout = list ? new TimelineViewportLayout(list) : null;
     layoutRef.current = layout;
@@ -63,8 +71,10 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       resize: () => { if (valid()) core.notify("resize"); },
       interrupt: () => { if (valid()) core.interrupt(); },
       input: () => { if (valid()) core.input(); },
+      engage: () => { if (valid()) core.engage(); },
+      touch: (active) => { if (valid()) idleGate.touch(active); },
     });
-  }, [core]);
+  }, [core, idleGate]);
 
   // RefObject 的 current 变化不触发依赖比较；即使 items 未变，DOM 替换也必须在绘制前换绑。
   // 普通 UI 重渲染只比较身份，不重复提交内容或重新测量。
@@ -93,24 +103,26 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       observersRef.current = null;
       layoutRef.current = null;
       core.bind(null);
+      idleGate.dispose();
       clearDiagnostics();
       window.removeEventListener("resize", settle);
       document.removeEventListener("visibilitychange", visibility);
       motion.removeEventListener("change", reduce);
     };
-  }, [bind, core]);
+  }, [bind, core, idleGate]);
 
   const receiveRealtimeOutput = useCallback((key: string) => { bind(); core.output(key); }, [bind, core]);
-  const handleScroll = useCallback((nearBottom: boolean) => { bind(); core.scroll(nearBottom); }, [bind, core]);
+  const handleScroll = useCallback((nearBottom: boolean) => { bind(); idleGate.scrolled(); core.scroll(nearBottom); }, [bind, core, idleGate]);
   const showLatest = useCallback(() => { bind(); core.latest(); }, [bind, core]);
   const captureOwnSend = useCallback(() => { bind(); return core.captureOwnSend(); }, [bind, core]);
   const followOwnSend = useCallback((capture: OwnSendCapture | null) => { bind(); core.followOwnSend(capture); }, [bind, core]);
   const reset = useCallback(() => { bind(); core.reset(); }, [bind, core]);
   const setReadingDetails = useCallback((reading: boolean) => { bind(); core.details(reading); }, [bind, core]);
-  const prepareHistoryPrepend = useCallback(() => { bind(); core.userRead(true); }, [bind, core]);
+  const prepareHistoryPrepend = useCallback(() => { bind(); core.historyPrepend(); }, [bind, core]);
   const captureSessionPosition = useCallback(() => { bind(); return core.capturePosition(); }, [bind, core]);
   const restoreSessionPosition = useCallback((position: TimelineSessionPosition | null) => { bind(); core.restorePosition(position); }, [bind, core]);
+  const whenScrollIdle = useCallback((run: () => void) => idleGate.defer(run), [idleGate]);
 
   return { ...ui, messageListRef, bottomSentinelRef, receiveRealtimeOutput, handleScroll, showLatest, captureOwnSend,
-    followOwnSend, reset, setReadingDetails, prepareHistoryPrepend, captureSessionPosition, restoreSessionPosition };
+    followOwnSend, reset, setReadingDetails, prepareHistoryPrepend, captureSessionPosition, restoreSessionPosition, whenScrollIdle };
 }

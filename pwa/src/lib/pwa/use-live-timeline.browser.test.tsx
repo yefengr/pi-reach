@@ -10,6 +10,7 @@ import type { TimelineScope, TimelineViewItem } from "./timeline-runtime";
 import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { MessageList } from "@/components/pwa/message-list";
+import { SCROLL_IDLE_MS } from "./scroll-idle-gate";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 import { clearTimelineBranchCheckpoint, discardTimelineEventsAfter, ensureTimelineBranchCheckpoint, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents } from "./timeline-store";
 
@@ -533,6 +534,33 @@ test("a lower head for the same session still replaces the stale local projectio
   } finally { await screen.unmount(); }
 });
 
+test("an earlier page that arrives while a finger is down is held until the scroll settles", async () => {
+  const screen = await render(<Harness />);
+  const syncs = (frames: ClientFrame[]) => frames.filter((frame): frame is Extract<ClientFrame, { type: "session_sync" }> => frame.type === "session_sync");
+  try {
+    const frames = start(200);
+    await expect.poll(() => syncs(frames).length).toBe(1);
+    reply(frames, events(171, 200));
+    await expect.poll(() => sequences().length).toBe(30);
+    const list = api.messageListRef.current!;
+    await expect.poll(() => list.scrollHeight - list.clientHeight - list.scrollTop).toBeLessThanOrEqual(1);
+
+    const finger = new Touch({ identifier: 1, target: list, clientX: 10, clientY: 10 });
+    list.dispatchEvent(new TouchEvent("touchstart", { touches: [finger] }));
+    list.scrollTop = 0;
+    await expect.poll(() => syncs(frames).length).toBe(2);
+    reply(frames, events(91, 170));
+    // 手指未抬起：这一页暂存，不改动滚动几何，顶部仍按加载中显示，也不继续请求更早的页。
+    await new Promise((resolve) => setTimeout(resolve, SCROLL_IDLE_MS + 100));
+    expect(sequences()).toHaveLength(30);
+    expect(api.loadingEarlier).toBe(true);
+    expect(syncs(frames)).toHaveLength(2);
+
+    list.dispatchEvent(new TouchEvent("touchend"));
+    await expect.poll(() => sequences().length).toBe(110);
+  } finally { await screen.unmount(); }
+});
+
 test("auto-loads earlier history near the top only after the reader leaves the latest output, and stops after a failure", async () => {
   const screen = await render(<Harness />);
   const syncs = (frames: ClientFrame[]) => frames.filter((frame): frame is Extract<ClientFrame, { type: "session_sync" }> => frame.type === "session_sync");
@@ -555,6 +583,8 @@ test("auto-loads earlier history near the top only after the reader leaves the l
     reply(frames, events(91, 170));
     await expect.poll(() => sequences().length).toBe(110);
 
+    // 用户主动滚回顶部伴随输入事件；没有输入的跳顶会被当作系统覆盖前插位置而恢复。
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
     list.scrollTop = 0;
     await expect.poll(() => syncs(frames).length).toBe(3);
     const failed = syncs(frames)[2]!;

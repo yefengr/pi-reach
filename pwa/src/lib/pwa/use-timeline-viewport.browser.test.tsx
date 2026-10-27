@@ -229,6 +229,61 @@ test("a history prepend keeps the existing visible element at the same viewport 
   } finally { await screen.unmount(); }
 });
 
+test("a history prepend reset to the top by the platform is restored on the next scroll until the user touches", async () => {
+  const { screen, list, viewport, setItems } = await renderViewport();
+  try {
+    const article = document.createElement("article");
+    article.dataset.viewportRow = "history-anchor";
+    list.append(article);
+    // 行位置随 scrollTop 移动，模拟真实布局：前插让同一行下移 500px。
+    let base = 100;
+    let scrollTop = 0;
+    vi.spyOn(article, "getBoundingClientRect").mockImplementation(() => ({ top: base - scrollTop, bottom: base - scrollTop + 20 } as DOMRect));
+    Object.defineProperty(list, "scrollTop", { configurable: true, get: () => scrollTop, set: (value: number) => { scrollTop = value; } });
+    flushSync(() => viewport().prepareHistoryPrepend());
+    base = 600;
+    flushSync(() => setItems([renderedTimelineItem]));
+    expect(list.scrollTop).toBe(500);
+    viewport().handleScroll(false);
+
+    // iOS 回弹收尾把位置覆盖回顶部：同一个 scroll 回调内恢复，随后读取顶部距离的逻辑看到的是恢复后的位置。
+    scrollTop = 0;
+    viewport().handleScroll(false);
+    expect(list.scrollTop).toBe(500);
+    expect(viewport().followingOutput).toBe(false);
+
+    list.dispatchEvent(new TouchEvent("touchstart"));
+    scrollTop = 0;
+    viewport().handleScroll(false);
+    expect(list.scrollTop).toBe(0);
+  } finally { await screen.unmount(); }
+});
+
+test("a drag already under way when the prepend lands is never pulled back to the anchor", async () => {
+  const { screen, list, viewport, setItems } = await renderViewport();
+  try {
+    const article = document.createElement("article");
+    article.dataset.viewportRow = "history-anchor";
+    list.append(article);
+    let base = 100;
+    let scrollTop = 0;
+    vi.spyOn(article, "getBoundingClientRect").mockImplementation(() => ({ top: base - scrollTop, bottom: base - scrollTop + 20 } as DOMRect));
+    Object.defineProperty(list, "scrollTop", { configurable: true, get: () => scrollTop, set: (value: number) => { scrollTop = value; } });
+    // 手指在前插之前就已按下，之后只有拖动事件。
+    list.dispatchEvent(new TouchEvent("touchstart"));
+    flushSync(() => viewport().prepareHistoryPrepend());
+    base = 600;
+    flushSync(() => setItems([renderedTimelineItem]));
+    expect(list.scrollTop).toBe(500);
+    viewport().handleScroll(false);
+
+    list.dispatchEvent(new TouchEvent("touchmove"));
+    scrollTop = 470;
+    viewport().handleScroll(false);
+    expect(list.scrollTop).toBe(470);
+  } finally { await screen.unmount(); }
+});
+
 test("loading history into an empty viewport stays at its beginning", async () => {
   const { screen, list, viewport, setItems, scrollTo } = await renderViewport();
   try {
