@@ -26,6 +26,21 @@ test("a target that keeps growing never drops the speed back to rest", () => {
   expect(Math.max(...moving)).toBeLessThan(12);
 });
 
+test("handoff retains velocity while rebasing actual position and frame time", () => {
+  const inherited = new FollowGlide(0);
+  inherited.advance(0, 100);
+  inherited.advance(16, 100);
+  const before = inherited.advance(32, 100).top;
+  inherited.handoff(before + 10, null);
+  expect(inherited.advance(100, 110).top).toBe(before + 10);
+  const next = inherited.advance(116, 110).top;
+  const restarted = new FollowGlide(before + 10);
+  restarted.advance(100, 110);
+  expect(next).toBeGreaterThan(restarted.advance(116, 110).top);
+  inherited.handoff(next, 116);
+  expect(inherited.advance(116, 120).top).toBe(next);
+});
+
 test("moves upward as smoothly as downward and applies layout shifts without changing speed", () => {
   const glide = new FollowGlide(200, TRANSITION_GLIDE_OMEGA);
   const tops = run(glide, () => 120, 0, 30);

@@ -3,6 +3,7 @@ import { ActivityFollowTransition, activityFollowSpace } from "./timeline-follow
 import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor, type TimelineViewportAnchor } from "./timeline-viewport-anchor";
 import type { ViewportGeometry, ViewportLayout } from "./timeline-viewport-coordinator";
 import type { ViewportDiagnosticGeometry } from "./timeline-viewport-diagnostics";
+import type { ReplyProbe } from "./timeline-viewport-continuity";
 
 /** Pi 回复行的 class；流式中另有 partial，正式版本接管后保留同一行身份。 */
 const REPLY_ROW_CLASSES = ["pwa-message", "assistant"];
@@ -52,6 +53,15 @@ export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCaptu
   top() { return this.list.scrollTop; }
   scroll(top: number, smooth: boolean) { this.list.scrollTo({ top, behavior: smooth ? "smooth" : "auto" }); }
   captureSend() { return this.list.isConnected ? captureOwnSendLayout(this.list) : null; }
+  /** 激活时仅扫描一次；后续 sample 只读取缓存节点，不扫描历史。 */
+  captureReply(): ReplyProbe | null {
+    const rows = this.list.querySelectorAll<HTMLElement>("[data-viewport-row].pwa-message.assistant.partial");
+    const row = rows.item(rows.length - 1);
+    const identity = row?.getAttribute("data-viewport-row");
+    if (!row || !identity) return null;
+    return { sample: () => row.isConnected && row.parentElement === this.list && row.getAttribute("data-viewport-row") === identity
+      ? { height: row.getBoundingClientRect().height, streaming: row.classList.contains(STREAMING_CLASS) } : null };
+  }
   send(capture: OwnSendLayoutCapture) { return new OwnSendTransition(capture); }
   activity(from: number, target: (geometry: ViewportGeometry) => number) {
     return new ActivityFollowTransition(this.list, from, () => target(this.measure()));

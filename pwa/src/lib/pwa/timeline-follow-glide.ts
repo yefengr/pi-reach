@@ -31,6 +31,12 @@ export class FollowGlide {
     this.top += delta;
   }
 
+  /** 控制权交接时对齐实际位置与时钟，保留速度；同步布局不消费两次帧间时间。 */
+  handoff(top: number, now: number | null): void {
+    this.top = top;
+    this.time = now;
+  }
+
   /** 推进到 now 并返回本帧位置；越过目标时停在目标上，不回弹。 */
   advance(now: number, target: number): { top: number; settled: boolean } {
     const elapsed = this.time === null ? 0 : Math.min(this.maxFrameMs, Math.max(0, now - this.time));

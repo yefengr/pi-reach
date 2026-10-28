@@ -61,6 +61,21 @@ test("loading earlier history inserts it before existing records without moving 
   expect(view.entries.slice(1).map(entry => entry.key)).toEqual(first.entries.map(entry => entry.key));
 });
 
+test.each(["assistant", "thinking"] as const)("keeps %s block identity across leaf advancement and isolates session/turn/message/index", kind => {
+  const live: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...base,
+    partial_id: `answer:${kind}:0`, kind, status: "delta", delta: "Readable" };
+  const first = projectTimeline([item(live)]);
+  const advanced = projectTimeline([item({ ...live, leaf_id: "next" })], first);
+  expect(advanced.entries[0]!.key).toBe(first.entries[0]!.key);
+  const completed = projectTimeline([item({ ...answer("answer", "Readable"), leaf_id: "formal-next",
+    blocks: [{ type: kind === "thinking" ? "thinking" : "text", text: "Readable" }] })], advanced);
+  expect(completed.entries[0]!.key).toBe(first.entries[0]!.key);
+  for (const change of [{ session_id: "other" }, { group_id: "other" },
+    { partial_id: `other:${kind}:0` }, { partial_id: `answer:${kind}:1` }]) {
+    expect(projectTimeline([item({ ...live, ...change })], first).entries[0]!.key).not.toBe(first.entries[0]!.key);
+  }
+});
+
 test("retains thinking identity as the formal message replaces its partial", () => {
   const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "answer:thinking:0", kind: "thinking", status: "delta", delta: "Considering" };
   const first = projectTimeline([item(thinking)]);

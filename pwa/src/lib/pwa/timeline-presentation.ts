@@ -13,7 +13,8 @@ export type PresentationEntry = ToolEntry | ThinkingEntry | TextEntry | RecordEn
 export type PresentationSnapshot = { items: readonly TimelineViewItem[]; entries: PresentationEntry[] };
 
 function timelineGroupKey(value: Grouped): string {
-  return JSON.stringify([value.session_id, value.leaf_id, value.group_id]);
+  // leaf 是提交游标而非展示身份；正常推进不能重建尚在收尾的消息块。
+  return JSON.stringify([value.session_id, value.group_id]);
 }
 
 // leaf 随普通消息提交推进；工具身份与正式结果匹配规则一致，只由会话、轮次和调用 ID 决定。
