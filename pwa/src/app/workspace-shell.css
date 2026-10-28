@@ -29,9 +29,11 @@
   --pwa-main-safe-bottom: calc(var(--pwa-safe-bottom) * var(--pwa-main-flush));
   --pwa-main-inset-start: calc(var(--pwa-gutter) + var(--pwa-main-safe-left));
   --pwa-main-inset-end: calc(var(--pwa-gutter) + var(--pwa-main-safe-right));
+  /* 主屏 PWA 状态栏背景条的颜色，与状态栏下方的底层一致：侧栏展开时为 panel，主区贴顶时为 bg。 */
+  --pwa-status-backdrop: var(--pwa-panel);
   transition: --pwa-main-flush var(--pwa-sidebar-motion) var(--pwa-ease-standard);
 }
-.pwa-root[data-sidebar-collapsed] { --pwa-main-flush: 1; }
+.pwa-root[data-sidebar-collapsed] { --pwa-main-flush: 1; --pwa-status-backdrop: var(--pwa-bg); }
 
 /* 工作区与设置页两层视图：设置页为当前视图时工作区隐藏但保持挂载，保留会话、草稿与阅读位置。
    转场与右侧 Drawer 同一模型：工作区不动，设置层带模态阴影滑入，遮罩只在转场中由脚本淡入淡出。 */
@@ -42,6 +44,13 @@
 /* 转场与跟手拖动期间保留阴影，页面表面始终为直角。 */
 .pwa-root[data-view-transition] .pwa-settings-view { border-radius: 0; box-shadow: var(--pwa-shadow-modal); }
 .pwa-root[data-view="settings"]:not([data-view-transition]) .pwa-workspace-view { visibility: hidden; }
+
+/* iOS 27 主屏 PWA：顶部没有 fixed 实色元素时，状态栏下方的模糊会向下延伸并盖住顶栏。
+   在状态栏区域铺一条与底层同色的 fixed 背景条来换成实色状态栏；iOS 要求它距顶不超过 4px、高至少 6px、宽至少 80%。
+   放在工作区视图内，移动导航和遮罩在同一层叠上下文中压住它，设置层与阅读器在其上；设置页隐藏工作区时它仍保持可见。 */
+@media (display-mode: standalone) {
+  .pwa-root .pwa-workspace-view::before { content: ""; position: fixed; z-index: var(--pwa-z-status-backdrop); top: 0; right: 0; left: 0; height: max(6px, var(--pwa-safe-top)); background: var(--pwa-status-backdrop); pointer-events: none; visibility: visible; transition: background-color var(--pwa-sidebar-motion) var(--pwa-ease-standard); }
+}
 
 .pwa-root .pwa-layout {
   position: relative;
@@ -207,7 +216,7 @@
 @media (max-width: 767.98px) {
   :root { --pwa-gutter: 16px; }
   /* 移动主区贴满屏幕，不做卡片；内部按各侧安全区避让。 */
-  .pwa-root { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-main-safe-right: var(--pwa-safe-right); --pwa-main-safe-bottom: var(--pwa-safe-bottom); transition: none; }
+  .pwa-root { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-main-safe-right: var(--pwa-safe-right); --pwa-main-safe-bottom: var(--pwa-safe-bottom); --pwa-status-backdrop: var(--pwa-bg); transition: none; }
   .pwa-root .pwa-layout { display: flex; transition: none; background: var(--pwa-bg); }
   .pwa-root .pwa-main { flex: 1 1 auto; margin: 0; border-radius: 0; touch-action: pan-y; transition: none; }
   .pwa-root .pwa-workspace-state { touch-action: pan-y; }

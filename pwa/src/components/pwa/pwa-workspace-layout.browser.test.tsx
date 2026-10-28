@@ -519,6 +519,40 @@ test("standalone overlays fill the app height instead of the clipped initial con
   }
 });
 
+test("standalone status bar backdrop matches the layer below and sits under navigation and settings", async () => {
+  await page.viewport(1280, 844);
+  const screen = await renderLayout({ events: [] });
+  await expect.element(screen.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  const view = document.querySelector<HTMLElement>(".pwa-workspace-view")!;
+  const backdrop = () => getComputedStyle(view, "::before");
+  const color = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor;
+  // 浏览器标签页不生成背景条。
+  expect(backdrop().content).toBe("none");
+  const standalone = applyStandaloneRules();
+  try {
+    // iOS 只在 fixed 元素距顶不超过 4px、高至少 6px、宽至少 80% 时改为实色状态栏；无安全区时取最小高度。
+    expect([backdrop().position, backdrop().top, backdrop().height, backdrop().width, backdrop().pointerEvents]).toEqual(["fixed", "0px", "6px", `${window.innerWidth}px`, "none"]);
+    expect(Number(backdrop().zIndex)).toBeLessThan(Number(getComputedStyle(document.documentElement).getPropertyValue("--pwa-z-page")));
+    // 桌面侧栏展开：状态栏下方是 panel；收起后主区贴顶，换成 bg。
+    expect(backdrop().backgroundColor).toBe(color(".pwa-desktop-navigation .pwa-sidebar"));
+    await screen.getByRole("button", { name: "Collapse sidebar" }).click();
+    await expect.poll(() => backdrop().backgroundColor).toBe(color(".pwa-main"));
+    // 设置页隐藏工作区时背景条仍可见。
+    view.style.visibility = "hidden";
+    expect(backdrop().visibility).toBe("visible");
+    view.style.visibility = "";
+    // 移动端为 bg，移动导航与遮罩在同一层叠上下文中盖住背景条。
+    await page.viewport(390, 844);
+    await expect.poll(() => backdrop().backgroundColor).toBe(color(".pwa-main"));
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+    const drawerRoot = document.querySelector<HTMLElement>(".pwa-workspace-view .mantine-Drawer-root .mantine-Drawer-inner")!;
+    expect(Number(getComputedStyle(drawerRoot).zIndex)).toBeGreaterThan(Number(backdrop().zIndex));
+  } finally {
+    standalone.remove();
+  }
+});
+
 const computerDevices = [
   { ...device, nickname: "Office Pi" },
   { ...device, id: "device:offline", deviceId: "offline-device", nickname: "Offline workstation with a very long computer name that must stay truncated even across the wide landscape navigation drawer" },
