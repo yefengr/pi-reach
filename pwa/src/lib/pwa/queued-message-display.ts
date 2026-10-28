@@ -17,9 +17,13 @@ export function isQueuedMessage(item: TimelineViewItem): item is TimelinePending
   return item.queueExpected === true && item.queueInFlight !== true && item.deliveryFailure === undefined && EXPECTED_QUEUE_DELIVERIES.has(item.delivery);
 }
 
+/** 发布时按值保存归属；Runtime 会原位更新 pending，不能把旧对象当成旧快照。 */
+export function queuedMessageSnapshot(items: readonly TimelineViewItem[]): ReadonlySet<string> {
+  return new Set(items.filter(isQueuedMessage).map((item) => item.id));
+}
+
 /** 本次显示变更中是否有排队消息离开排队区、作为正常投递中的消息进入对话区。 */
-export function leftQueueIntoTimeline(previous: readonly TimelineViewItem[], next: readonly TimelineViewItem[]): boolean {
-  const queued = new Set(previous.filter(isQueuedMessage).map((item) => item.id));
+export function leftQueueIntoTimeline(queued: ReadonlySet<string>, next: readonly TimelineViewItem[]): boolean {
   if (queued.size === 0) return false;
   // 用布尔结果比较归属，避免类型守卫取反把同一 pending 收窄为 never。
   const inQueue: (item: TimelineViewItem) => boolean = isQueuedMessage;

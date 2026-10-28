@@ -10,7 +10,7 @@ import { StreamDisplayScheduler } from "@/lib/pwa/stream-display-scheduler";
 import { clearTimelineBranchCheckpoint, discardTimelineEventsAfter, ensureTimelineBranchCheckpoint, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents, type TimelineBranchCheckpoint } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
-import { leftQueueIntoTimeline } from "@/lib/pwa/queued-message-display";
+import { leftQueueIntoTimeline, queuedMessageSnapshot } from "@/lib/pwa/queued-message-display";
 import { useTimelineEarlier } from "@/lib/pwa/use-timeline-earlier";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
@@ -83,7 +83,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   const historyLoaderRef = useRef<TimelineHistoryLoader | null>(null);
   const fragmentAssemblerRef = useRef<TimelineEventFragmentAssembler | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const itemsRef = useRef<TimelineViewItem[]>([]);
+  const publishedQueueRef = useRef<ReadonlySet<string>>(new Set());
   const contextGenerationRef = useRef(0);
   const replacementGateRef = useRef(false);
   const deferredChangeRef = useRef<TimelineRuntimeChange | null>(null);
@@ -103,7 +103,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   const { sourceRef: earlierSourceRef, release: releaseEarlier, attach: attachEarlier, handlers: earlierHandlers, setFailed: setEarlierFailed, setHasEarlier: setHasEarlierState } = earlier;
 
   const updateItems = useCallback((next: TimelineViewItem[]) => {
-    itemsRef.current = next;
+    publishedQueueRef.current = queuedMessageSnapshot(next);
     setItems(next);
   }, []);
 
@@ -111,7 +111,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   useLayoutEffect(() => {
     streamDisplay.setPublisher((next, realtime) => {
       // 排队消息出队进入对话区：仍在跟随时与本端发送共用过渡，排队条收起、气泡进入与贴底在同一时钟内完成。
-      const dequeued = followingNow() && leftQueueIntoTimeline(itemsRef.current, next) ? captureOwnSend() : null;
+      const dequeued = followingNow() && leftQueueIntoTimeline(publishedQueueRef.current, next) ? captureOwnSend() : null;
       updateItems(next);
       if (dequeued) followOwnSend(dequeued);
       if (!realtime) return;
@@ -121,11 +121,15 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   }, [captureOwnSend, followOwnSend, followingNow, receiveRealtimeOutput, streamDisplay, updateItems]);
 
   const renderChange = useCallback((change: TimelineRuntimeChange, resetDisplay: boolean) => {
+    if (resetDisplay) publishedQueueRef.current = new Set();
     streamDisplay.update(change.items, resetDisplay);
   }, [streamDisplay]);
 
   useEffect(() => {
-    const onVisibilityChange = () => streamDisplay.setHidden(document.hidden);
+    const onVisibilityChange = () => {
+      publishedQueueRef.current = new Set();
+      streamDisplay.setHidden(document.hidden);
+    };
     onVisibilityChange();
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {

@@ -6,6 +6,9 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   let bottom = 100;
   let animate = true;
   let reply: { row: string; streaming: boolean } | null = null;
+  let replyHeight = 100;
+  let replyStreaming = true;
+  let replyConnected = true;
   let tailSpace = 0;
   let finishes = 0;
   let starts = 0;
@@ -27,7 +30,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   const motion = (target = () => bottom): ViewportMotion => {
     starts += 1;
     let start: number | null = null;
-    return { advance(now) { advances += 1; samples.push(now); start ??= now; return { top: (top + target()) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
+    return { advance(now) { advances += 1; samples.push(now); start ??= now; return { top: now - start >= 160 ? target() : (top + target()) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
   };
   const layout: ViewportLayout<number, number> = {
     measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate, tailSpace, compensation: 0, tailReply: reply }; }, top: () => top,
@@ -40,6 +43,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
       restored.push(anchor); top = Math.min(bottom, anchor + anchorShift); reenter?.(); return true;
     },
   };
+  Object.assign(layout, { captureReply: () => reply ? { sample: () => replyConnected ? { height: replyHeight, streaming: replyStreaming } : null } : null });
   const core = new TimelineViewportCoordinator({ now: () => now,
     request(callback) { const id = ++next; frames.set(id, callback); late.push(callback); return id; },
     cancel(id) { frames.delete(id); },
@@ -53,6 +57,9 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     step(value = now) { now = value; const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); },
     setBottom(value: number) { bottom = value; }, setTop(value: number) { top = value; },
     setTailSpace(value: number) { tailSpace = value; },
+    growReply(value: number) { replyHeight += value; bottom += value; },
+    stopReply() { replyStreaming = false; },
+    disconnectReply() { replyConnected = false; },
     stream(value: { row: string; streaming: boolean } | null = { row: "reply", streaming: true }) { reply = value; },
     reduce() { animate = false; }, allowMotion() { animate = true; }, reenter(callback: () => void) { reenter = callback; },
     get finishes() { return finishes; }, get starts() { return starts; }, get advances() { return advances; },
@@ -196,6 +203,100 @@ describe("TimelineViewportCoordinator", () => {
     expect(Math.max(...deltas)).toBeLessThan(20);
     deltas.forEach((delta) => expect(delta).toBeGreaterThanOrEqual(0));
     expect(finished).toBe(1);
+  });
+
+  test.each([16, 33])("send completion hands its glide to remaining displayed reply growth (%ims)", frameMs => {
+    const f = fixture();
+    f.core.notify("commit"); f.stream();
+    f.setBottom(130); f.core.notify("commit"); f.step(frameMs); f.step(frameMs * 2);
+    const beforeSend = f.layout.top();
+    // 捕获仍在显示的回复；用户行接替末尾不能使探针失效。
+    let start: number | null = null;
+    f.layout.send = () => ({
+      advance(now) { start ??= now; return { top: f.layout.top(), target: f.layout.measure().bottom, finished: now - start >= 160 }; },
+      finish() { f.setBottom(f.layout.measure().bottom + 8); },
+    });
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.stream(null); f.setBottom(160); f.core.notify("commit");
+    expect(f.layout.top()).toBe(beforeSend);
+    f.step(frameMs * 3);
+    expect(f.layout.top()).toBeGreaterThan(beforeSend); // 承接原速度，不能从静止重新起步。
+    let time = frameMs * 3;
+    for (let frame = 0; frame < 120 && f.core.state.mode === "send"; frame += 1) { time += frameMs; f.step(time); }
+    expect(f.core.state.mode).not.toBe("send");
+    const released = f.layout.top();
+    expect(released).toBeLessThan(f.layout.measure().bottom);
+    f.growReply(20); f.core.notify("commit");
+    expect(f.layout.top()).toBe(released); // 完成后的下一次增长不能补完剩余距离。
+    time += frameMs; f.step(time);
+    expect(f.layout.top()).toBeGreaterThan(released);
+    expect(f.layout.top()).toBeLessThan(f.layout.measure().bottom);
+    f.stopReply();
+    expect(glideFrames(f, time).at(-1)).toBe(f.layout.measure().bottom);
+    f.setBottom(f.layout.measure().bottom + 10); f.core.notify("commit");
+    expect(f.layout.top()).toBe(f.layout.measure().bottom); // 收尾后普通新行不 smooth。
+  });
+
+  test.each([10, 100])("old partial does not smooth an unrelated new row of %ipx", growth => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.stream(null); f.core.notify("commit"); f.step(160); glideFrames(f, 160);
+    f.setBottom(f.layout.measure().bottom + growth); f.core.notify("commit");
+    expect(f.layout.top()).toBe(f.layout.measure().bottom);
+    expect(f.frames.size).toBe(0);
+  });
+
+  test("stationary reply continuity does not intercept a blank-area tap", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.stream(null); f.core.notify("commit"); f.step(160); glideFrames(f, 160);
+    expect(f.frames.size).toBe(0);
+    f.core.interrupt();
+    expect(f.core.state.following).toBe(true);
+    f.growReply(20); f.core.notify("commit");
+    expect(f.layout.top()).toBeLessThan(f.layout.measure().bottom);
+    expect(glideFrames(f, 1000).at(-1)).toBe(f.layout.measure().bottom);
+  });
+
+  test.each(["input", "user", "details", "reset", "bind", "hidden", "reduce", "viewport-resize", "disconnect", "stop"] as const)("%s releases the captured reply probe", action => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.stream(null); f.core.notify("commit"); f.step(160); glideFrames(f, 160);
+    if (action === "input") { f.core.followOwnSend(f.core.captureOwnSend()); f.core.input(); }
+    else if (action === "user") f.core.userRead();
+    else if (action === "details") f.core.details(true);
+    else if (action === "reset") f.core.reset();
+    else if (action === "bind") f.core.bind({ ...f.layout });
+    else if (action === "disconnect") f.disconnectReply();
+    else if (action === "stop") { f.stopReply(); f.core.notify("commit"); }
+    else f.core.settle(action);
+    f.core.notify("commit"); glideFrames(f, 1000);
+    const before = f.layout.top();
+    f.growReply(20); f.core.notify("commit");
+    expect(f.layout.top()).toBe(action === "user" || action === "details" ? before : f.layout.measure().bottom);
+  });
+
+  test("reply continuity never relaxes the screen-distance limit after convergence", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.stream(null); f.core.notify("commit"); f.step(160); glideFrames(f, 160);
+    f.growReply(100); f.core.notify("commit");
+    expect(f.layout.top()).toBe(f.layout.measure().bottom);
+  });
+
+  test("activity completion retains the moving reply's velocity and clock", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.setBottom(140); f.core.notify("commit"); f.step(16); f.step(32); f.step(48);
+    f.layout.activity = () => ({ advance: () => ({ top: f.layout.top(), finished: true }), finish() {} });
+    f.core.notify("activity");
+    const at = f.layout.top();
+    f.step(64);
+    expect(f.layout.top() - at).toBeGreaterThan(1);
   });
 
   test("explicit input during a follow glide ends following at the current position", () => {
@@ -583,7 +684,9 @@ describe("TimelineViewportCoordinator", () => {
     f.step(200);
     expect(f.finishes).toBe(1);
     f.step(201);
-    expect(f.writes.at(-1)).toBe(220);
+    expect(f.layout.top()).toBe(170);
+    expect(f.writes.at(-1)).toBe(170);
+    expect(f.frames.size).toBe(0);
   });
 
   test("details closing never overrides a user reading intent; explicit Latest does", () => {

@@ -1,4 +1,5 @@
 import { FollowGlide, TRANSITION_GLIDE_OMEGA } from "./timeline-follow-glide";
+import { ReplyContinuity, type ReplyProbe } from "./timeline-viewport-continuity";
 
 export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "viewport-resize", "hidden", "reduce", "output", "frame", "send", "latest", "input", "user", "details", "reset", "bind", "settle", "scroll"] as const;
 export type ViewportReason = typeof VIEWPORT_REASONS[number];
@@ -19,6 +20,7 @@ export interface ViewportLayout<C, A> {
   top(): number;
   scroll(top: number, smooth: boolean): void;
   captureSend(): C | null;
+  captureReply?(): ReplyProbe | null;
   send(capture: C): ViewportMotion;
   activity(from: number, target: (geometry: ViewportGeometry) => number): ViewportMotion;
   captureAnchor(fallback?: boolean): A | null;
@@ -70,6 +72,8 @@ export class TimelineViewportCoordinator<C, A> {
   private tailCredit = 0;
   private ready = false;
   private handoff = false;
+  /** 发送时捕获的唯一回复行；静止保留探针不等于拥有滚动位置。 */
+  private replyContinuity: ReplyContinuity | null = null;
   private activityPending = false;
   private processing = false;
   private exiting = false;
@@ -77,19 +81,15 @@ export class TimelineViewportCoordinator<C, A> {
   /** 已请求更早记录、等待前插实际移动阅读位置。 */
   private prependPending = false;
   private prependGuard: { anchor: A; until: number } | null = null;
-
   constructor(private readonly scheduler: ViewportScheduler, private readonly changed: (state: ViewportState) => void,
     private trace?: (entry: ViewportTrace) => void, private tracing: () => boolean = () => true) {}
-
   setDiagnostics(trace: (entry: ViewportTrace) => void, enabled: () => boolean): void {
     this.trace = trace;
     this.tracing = enabled;
   }
-
   get state(): ViewportState {
     return { following: this.following, unread: this.unread.size, paused: this.paused, mode: this.mode, generation: this.generation };
   }
-
   bind(layout: ViewportLayout<C, A> | null): void {
     if (layout === this.layout) return;
     this.exit(false);
@@ -103,12 +103,10 @@ export class TimelineViewportCoordinator<C, A> {
     this.clearPrepend();
     this.publish("bind");
   }
-
   reset(): void {
     this.pendingAnchor = null;
     this.resumeFollowing("reset");
   }
-
   /** 到底只恢复阅读意图；迟到历史的 scope 锚点须等目标行真正到达。 */
   private resumeFollowing(reason: "reset" | "scroll"): void {
     this.exit(false);
@@ -132,7 +130,12 @@ export class TimelineViewportCoordinator<C, A> {
   followOwnSend(capture: ViewportCapture<C> | null): void {
     if (!capture || capture.binding !== this.layout || capture.generation !== this.generation || !this.layout) return;
     // 连续成功发送从捕获的可见尺寸接续，不先写上一次输入的终点。
+    const inherited = this.motionGlide ?? this.glide;
     this.exit(false, false);
+    this.motionGlide = inherited;
+    this.motionGlide?.handoff(this.layout.top(), null);
+    const probe = this.layout.captureReply?.();
+    this.replyContinuity = probe ? new ReplyContinuity(probe, this.layout.measure()) : null;
     this.generation += 1;
     this.following = true;
     this.paused = false;
@@ -355,6 +358,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.receipt = null;
     this.glide = null;
     this.handoff = false;
+    this.replyContinuity = null;
     this.activityPending = false;
     this.pendingReasons.clear();
     this.mode = "idle";
@@ -462,6 +466,12 @@ export class TimelineViewportCoordinator<C, A> {
     this.lastBottom = geometry.bottom;
     const viewportChanged = Math.abs(geometry.height - geometry.bottom - this.lastViewport) > EPSILON;
     this.lastViewport = geometry.height - geometry.bottom;
+    const continuityRejected = this.replyContinuity !== null && !this.replyContinuity.update(geometry, this.motion !== null);
+    if (continuityRejected) {
+      this.replyContinuity = null;
+      this.handoff = false;
+      this.glide = null;
+    }
     // 只有实时回复（流式中或刚由同一行交接）平滑；历史加载与直接到达的正式回复仍瞬时。
     const tail = geometry.tailReply;
     const liveReply = tail !== null && (tail.streaming || tail.row === this.liveReplyRow);
@@ -493,27 +503,39 @@ export class TimelineViewportCoordinator<C, A> {
         const step = this.motion.advance(time);
         if (epoch !== this.frameEpoch || this.layout !== layout) return;
         const tracked = this.trackMotion(step, time);
-        if (!step.finished || !tracked.settled) {
+        if (!step.finished) {
           requested = tracked.top;
           this.write(tracked.top, false);
           this.schedule();
           this.record(reason, geometry, requested);
           return;
         }
-        this.exit(false);
+        // 尺寸时钟完成不等于滚动到位；释放 footer 后保留当前位置/速度，由后继 RAF 收敛。
+        this.write(tracked.top, false);
+        const motion = this.motion;
+        this.motion = null;
+        this.glide = this.motionGlide ?? this.glide;
+        this.motionGlide = null;
+        this.motionTime = null;
+        this.exiting = true;
+        try { motion.finish(); } finally { this.exiting = false; }
         geometry = layout.measure();
+        this.glide?.handoff(geometry.top, time);
+        this.lastViewport = geometry.height - geometry.bottom;
+        if (this.replyContinuity && !this.replyContinuity.update(geometry, true)) this.replyContinuity = null;
         this.handoff = true;
-        requested = this.followTarget(geometry);
-        this.write(requested, false, geometry);
+        this.ready = true;
+        this.mode = "idle";
         this.schedule();
-        this.record(reason, geometry, requested);
+        this.record(reason, geometry, null);
         return;
       }
     }
     this.mode = "follow";
     const target = this.followTarget(geometry);
     const distance = target - geometry.top;
-    const glide = this.handoff || viewportChanged || !liveReply ? null : this.glideMode(geometry, distance);
+    const continuing = this.handoff || this.replyContinuity !== null;
+    const glide = (continuityRejected || (!continuing && (viewportChanged || !liveReply))) ? null : this.glideMode(geometry, distance);
     if (glide === "hold") {
       // 输入暂停期不写入滚动，逐帧等待暂停结束后从静止重新跟随。
       this.lastTop = geometry.top;
@@ -521,7 +543,7 @@ export class TimelineViewportCoordinator<C, A> {
     } else if (glide === "glide") {
       requested = target;
       this.advanceGlide(geometry, target, frameTime);
-    } else if (this.handoff || Math.abs(distance) > EPSILON) {
+    } else if (Math.abs(distance) > EPSILON) {
       this.glide = null;
       this.handoff = false;
       requested = this.tailCredit === 0 ? geometry.height : target;
@@ -529,6 +551,10 @@ export class TimelineViewportCoordinator<C, A> {
     } else {
       this.glide = null;
       this.lastTop = geometry.top;
+    }
+    if (!this.glide && Math.abs(target - layout.top()) <= EPSILON) {
+      this.handoff = false;
+      if (!this.replyContinuity?.retain(false)) this.replyContinuity = null;
     }
     this.ready = true;
     this.record(reason, geometry, requested);
@@ -548,7 +574,8 @@ export class TimelineViewportCoordinator<C, A> {
    */
   private glideMode(geometry: ViewportGeometry, distance: number): "glide" | "hold" | null {
     const viewport = geometry.height - geometry.bottom;
-    if (!geometry.animate || !this.ready || viewport <= 0 || distance > viewport * FOLLOW_GLIDE_SCREENS) return null;
+    if (!geometry.animate || !this.ready || viewport <= 0
+      || (!this.handoff && distance > viewport * FOLLOW_GLIDE_SCREENS)) return null;
     if (this.glide ? distance < -EPSILON : distance <= EPSILON) return null;
     return this.scheduler.now() < this.inputHoldUntil ? "hold" : "glide";
   }
