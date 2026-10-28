@@ -174,7 +174,6 @@
   --pwa-z-composer: 3;
   --pwa-z-sidebar-toggle: 7;
   --pwa-z-workspace-float: 8;
-  --pwa-z-status-backdrop: 10;
   --pwa-z-page: 20;
   --pwa-z-reader: 30;
   --pwa-z-image-transition: 31;
@@ -184,6 +183,7 @@
   --pwa-z-modal: 300;
   --pwa-z-modal-top: 310;
   --pwa-z-feedback: 400;
+  --pwa-z-status-backdrop: 500;
 
   --pwa-radius-xs: 4px;
   --pwa-radius-md: 8px;
