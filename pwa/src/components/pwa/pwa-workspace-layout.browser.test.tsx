@@ -16,6 +16,7 @@ import { ConnectionStatus, type WorkspaceNavigationProps } from "./workspace-vie
 import { UnpairedWorkspace } from "./workspace-content";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
+import { applyStandaloneRules } from "@/test/browser/standalone";
 
 const device: PwaDeviceRecord = {
   id: "device:office",
@@ -478,20 +479,6 @@ test("routes mobile navigation choices and closes the chooser before rename", as
   await screen.getByRole("menuitem", { name: "Rename Office Pi" }).click();
   await expect.poll(() => events).toEqual(["close-request", "endpoint:other", "close-request", "rename:device:office"]);
 });
-
-/** Chromium 的媒体模拟不支持 display-mode；取出 standalone 媒体查询内的规则直接生效，模拟主屏 PWA。 */
-function applyStandaloneRules() {
-  const blocks: string[] = [];
-  for (const sheet of document.styleSheets) {
-    for (const rule of sheet.cssRules) {
-      if (rule instanceof CSSMediaRule && rule.conditionText.includes("display-mode: standalone")) blocks.push([...rule.cssRules].map(inner => inner.cssText).join("\n"));
-    }
-  }
-  const style = document.createElement("style");
-  style.textContent = blocks.join("\n");
-  document.head.append(style);
-  return { blocks: blocks.length, remove: () => style.remove() };
-}
 
 test("standalone overlays fill the app height instead of the clipped initial containing block", async () => {
   await page.viewport(390, 844);
