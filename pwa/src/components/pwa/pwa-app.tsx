@@ -882,6 +882,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     else if (!prepareReported) reportSessionFailure("Could not send this message. Try again.", "message-send");
   }, [applyTimelineChange, attachmentComposer, captureOwnSend, draft, draftKey, followOwnSend, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
   const deliveryQueriesRef = useRef<{ channel: PeerChannel | null; sessionId: string | null; checked: Map<string, string> }>({ channel: null, sessionId: null, checked: new Map() });
+  // 查询超时后的自动重查到期时由定时器递增，重新运行下方的自动查询。
+  const [deliveryRetryTick, setDeliveryRetryTick] = useState(0);
   const checkDeliveryStatus = useCallback((clientRequestId: string) => {
     const channel = channelRef.current;
     if (!channel || channel.closed || connectionRef.current !== "online" || selectedHistoryRef.current || pendingActionRef.current?.action === "session_new") return;
@@ -923,13 +925,23 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       deliveryQueriesRef.current = { channel, sessionId, checked: new Map() };
     }
     const checked = deliveryQueriesRef.current.checked;
+    const now = Date.now();
+    let nextRetryAt: number | null = null;
     for (const pending of runtime.pendingItems) {
       if (pending.scopeInvalid === true || pending.delivery !== "unknown_delivery" || pending.statusQuery || pending.statusQueryUnsupported
-        || pending.messageId || pending.senderRef !== runtime.currentScope?.selfSenderRef
-        || checked.get(pending.clientRequestId) === JSON.stringify([pending.requestId, pending.queuedActionRequestId ?? null])) continue;
+        || pending.messageId || pending.senderRef !== runtime.currentScope?.selfSenderRef) continue;
+      if (checked.get(pending.clientRequestId) === JSON.stringify([pending.requestId, pending.queuedActionRequestId ?? null])) {
+        // 已查过的消息只在上次查询超时、未获任何答复时按退避自动重查。
+        const retryAt = runtime.deliveryQueryRetryAt(pending.clientRequestId);
+        if (retryAt === null) continue;
+        if (retryAt > now) { nextRetryAt = nextRetryAt === null ? retryAt : Math.min(nextRetryAt, retryAt); continue; }
+      }
       checkDeliveryStatus(pending.clientRequestId);
     }
-  }, [catchingUp, catchupFailed, checkDeliveryStatus, connection, pendingAction?.action, queueSnapshotReady, reconnectPhase, selectedHistory, timelineItems, timelineRuntimeRef]);
+    if (nextRetryAt === null) return;
+    const timer = window.setTimeout(() => setDeliveryRetryTick((tick) => tick + 1), nextRetryAt - now);
+    return () => window.clearTimeout(timer);
+  }, [catchingUp, catchupFailed, checkDeliveryStatus, connection, deliveryRetryTick, pendingAction?.action, queueSnapshotReady, reconnectPhase, selectedHistory, timelineItems, timelineRuntimeRef]);
   useEffect(() => {
     if (connection !== "online") return;
     const runtime = timelineRuntimeRef.current;

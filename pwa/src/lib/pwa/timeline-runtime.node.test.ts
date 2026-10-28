@@ -3,6 +3,7 @@ import { DELIVERY_STATUS_QUERY_TIMEOUT_MS, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS,
 import type { ServerFrame } from "../pi-reach/protocol-v2/frames";
 import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES, ATTACHMENT_MAX_MESSAGE_BYTES, type AttachmentDescriptor, type TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { pendingPayloadBytes } from "./timeline-pending";
+import { DELIVERY_STATUS_RETRY_DELAYS_MS } from "./delivery-query-retry";
 
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime-a", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
 function userEvent(messageId: string): Extract<TimelineEvent, { kind: "user" }> { return { event_id: messageId, message_id: messageId, session_id: scope.sessionId, leaf_id: scope.leafId, timestamp: 2, group_id: "group", kind: "user", blocks: [{ type: "text", text: "hello" }], origin: "pwa", sender_ref: scope.selfSenderRef, delivery: "normal", status: "committed" }; }
@@ -493,6 +494,59 @@ test("queries are read-only, synchronously deduplicate, and expire without enabl
   expect(runtime.retryFailed(pending.clientRequestId)).toBeNull();
   expect(runtime.requestDeliveryStatus(pending.clientRequestId)).not.toBeNull();
   expect(runtime.pendingItems).toEqual([pending]);
+});
+
+test("only unanswered queries schedule bounded automatic retries for the same attempt", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("unsure")!;
+  runtime.markUnknownDelivery(sent.frame.client_request_id);
+  const id = sent.frame.client_request_id;
+  const timeOut = () => {
+    runtime.requestDeliveryStatus(id);
+    const pending = runtime.pendingItems[0]!;
+    expect(runtime.deliveryQueryRetryAt(id)).toBeNull();
+    const deadline = pending.statusQuery!.requestedAt + DELIVERY_STATUS_QUERY_TIMEOUT_MS;
+    runtime.expireDeliveryStatusQueries(deadline);
+    return deadline;
+  };
+  // 两次超时后分别按退避重查，第三次超时后只保留手动核对。
+  for (const delay of DELIVERY_STATUS_RETRY_DELAYS_MS) {
+    const timedOutAt = timeOut();
+    expect(runtime.deliveryQueryRetryAt(id)).toBe(timedOutAt + delay);
+  }
+  timeOut();
+  expect(runtime.deliveryQueryRetryAt(id)).toBeNull();
+
+  // 任何答复都结束自动重查；弱状态或 not_found 不触发循环查询。
+  const answered = runtime.sendUser("answered")!;
+  runtime.markUnknownDelivery(answered.frame.client_request_id);
+  const query = runtime.requestDeliveryStatus(answered.frame.client_request_id)!;
+  const pending = runtime.pendingItems.find((item) => item.clientRequestId === answered.frame.client_request_id)!;
+  runtime.expireDeliveryStatusQueries(pending.statusQuery!.requestedAt + DELIVERY_STATUS_QUERY_TIMEOUT_MS);
+  expect(runtime.deliveryQueryRetryAt(answered.frame.client_request_id)).not.toBeNull();
+  runtime.receive({ ...deliveryReply(answered.frame), in_reply_to: query.frame.id, status: "not_found" });
+  expect(runtime.deliveryQueryRetryAt(answered.frame.client_request_id)).toBeNull();
+});
+
+test("a reconnect or new send attempt resets the automatic query retry", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const sent = runtime.sendUser("unsure")!;
+  const id = sent.frame.client_request_id;
+  runtime.markUnknownDelivery(id);
+  runtime.requestDeliveryStatus(id);
+  const pending = runtime.pendingItems[0]!;
+  runtime.expireDeliveryStatusQueries(pending.statusQuery!.requestedAt + DELIVERY_STATUS_QUERY_TIMEOUT_MS);
+  expect(runtime.deliveryQueryRetryAt(id)).not.toBeNull();
+  runtime.prepareLive({ ...scope, channelId: "new-channel" }, 0);
+  expect(runtime.deliveryQueryRetryAt(id)).toBeNull();
+
+  runtime.requestDeliveryStatus(id);
+  runtime.expireDeliveryStatusQueries(pending.statusQuery!.requestedAt + DELIVERY_STATUS_QUERY_TIMEOUT_MS);
+  expect(runtime.deliveryQueryRetryAt(id)).not.toBeNull();
+  // 本地发送失败不是答复，不清除记录；新尝试换了请求 ID，旧尝试的超时不再计入。
+  runtime.markDeliveryFailed(id, "transport_unavailable", true);
+  expect(runtime.retryFailed(id)).not.toBeNull();
+  expect(runtime.deliveryQueryRetryAt(id)).toBeNull();
 });
 
 test("confirmation expires at 30 seconds and received starts a new bounded window", () => {
