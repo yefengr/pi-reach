@@ -42,6 +42,8 @@ const DELIVERY_QUERY_ASSOCIATION_LIMIT = 128;
 const DELIVERY_QUERY_ASSOCIATION_TTL_MS = 60_000;
 export type PendingDelivery = "pending" | "received" | "accepted" | "committed" | "unknown_delivery" | "failed" | "cancelled";
 export type QueuedInsertionStatus = "waiting" | "unconfirmed";
+/** 只影响展示的发送选项，不改变投递帧与确认流程。 */
+export type SendDisplayOptions = { queueExpected?: boolean };
 export type TimelinePending = {
   kind: "pending";
   id: string;
@@ -56,6 +58,8 @@ export type TimelinePending = {
   queued?: boolean;
   /** 权威队列快照声明该项已在途发送（editable===false）；只影响展示归属，不代表可操作性。 */
   queueInFlight?: boolean;
+  /** 发送时 Pi 正在运行，预计进入队列；只影响队列快照到达前的展示归属，不参与投递确认。 */
+  queueExpected?: boolean;
   queuedAction?: "insert" | "cancel";
   queuedActionRequestId?: string;
   insertionStatus?: QueuedInsertionStatus;
@@ -365,7 +369,7 @@ export class TimelineRuntime {
     this.readOnly = true;
     return this.prependHistory(events);
   }
-  sendUser(text: string, images?: UserMessageImages, requestIds?: { clientRequestId: string; requestId: string }): UserMessageSendResult | null {
+  sendUser(text: string, images?: UserMessageImages, requestIds?: { clientRequestId: string; requestId: string }, display: SendDisplayOptions = {}): UserMessageSendResult | null {
     const scope = this.scope;
     const hasImages = Boolean(images?.length);
     if (this.replacement || !scope || images?.length && images.length > 1 || (!text.trim() && !hasImages)) return null;
@@ -374,14 +378,14 @@ export class TimelineRuntime {
     const requestId = requestIds?.requestId ?? randomId();
     const candidate: PendingPayload = { text, ...(hasImages ? { images } : {}) };
     if (exceedsPendingCapacity([...this.pendingPayloads(), candidate], this.limits)) throw new PendingCapacityError();
-    this.storePending({ kind: "pending", scope, id: `pending:${clientRequestId}`, clientRequestId, requestId, text, ...(hasImages ? { images } : {}), senderRef: scope.selfSenderRef, createdAt: Date.now(), confirmationStartedAt: Date.now(), delivery: "pending" }, candidate, true);
+    this.storePending({ kind: "pending", scope, id: `pending:${clientRequestId}`, clientRequestId, requestId, text, ...(hasImages ? { images } : {}), senderRef: scope.selfSenderRef, ...(display.queueExpected ? { queueExpected: true } : {}), createdAt: Date.now(), confirmationStartedAt: Date.now(), delivery: "pending" }, candidate, true);
     return { frame: this.userMessageFrame(scope, requestId, clientRequestId, text, images), change: this.change() };
   }
   /**
    * 附件消息入口：只传 attachment_ids，绝不把预览或原件写入 user_message。
    * 严格校验描述、数量、总量与 ID 唯一，任一不合法直接 fail closed（返回 null）。
    */
-  sendUserWithAttachments(text: string, attachments: readonly AttachmentDescriptor[], requestIds?: { clientRequestId: string; requestId: string }): UserMessageSendResult | null {
+  sendUserWithAttachments(text: string, attachments: readonly AttachmentDescriptor[], requestIds?: { clientRequestId: string; requestId: string }, display: SendDisplayOptions = {}): UserMessageSendResult | null {
     const scope = this.scope;
     if (this.replacement || !scope) return null;
     if (attachments.length < 1 || attachments.length > ATTACHMENT_MAX_COUNT) return null;
@@ -402,7 +406,7 @@ export class TimelineRuntime {
     const requestId = requestIds?.requestId ?? randomId();
     const candidate: PendingPayload = { text, attachments: descriptors };
     if (exceedsPendingCapacity([...this.pendingPayloads(), candidate], this.limits)) throw new PendingCapacityError();
-    this.storePending({ kind: "pending", scope, id: `pending:${clientRequestId}`, clientRequestId, requestId, text, attachments: descriptors, senderRef: scope.selfSenderRef, createdAt: Date.now(), confirmationStartedAt: Date.now(), delivery: "pending" }, candidate, true);
+    this.storePending({ kind: "pending", scope, id: `pending:${clientRequestId}`, clientRequestId, requestId, text, attachments: descriptors, senderRef: scope.selfSenderRef, ...(display.queueExpected ? { queueExpected: true } : {}), createdAt: Date.now(), confirmationStartedAt: Date.now(), delivery: "pending" }, candidate, true);
     return { frame: this.userMessageFrame(scope, requestId, clientRequestId, text, undefined, descriptors.map((descriptor) => descriptor.attachment_id)), change: this.change() };
   }
   actOnQueued(clientRequestId: string, action: "insert" | "cancel"): { frame: ClientFrame; change: TimelineRuntimeChange } | null {

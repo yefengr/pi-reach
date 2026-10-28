@@ -5,7 +5,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   let top = 0;
   let bottom = 100;
   let animate = true;
-  let streaming = false;
+  let reply: { row: string; streaming: boolean } | null = null;
   let tailSpace = 0;
   let finishes = 0;
   let starts = 0;
@@ -30,7 +30,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     return { advance(now) { advances += 1; samples.push(now); start ??= now; return { top: (top + target()) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
   };
   const layout: ViewportLayout<number, number> = {
-    measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate, tailSpace, compensation: 0, streamingRow: streaming ? "reply" : null }; }, top: () => top,
+    measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate, tailSpace, compensation: 0, tailReply: reply }; }, top: () => top,
     scroll(value, smooth) { writes.push(value); smooths.push(smooth); top = Math.min(bottom, value); reenter?.(); },
     captureSend: () => top, send: () => motion(), activity: (from, target) => {
       activityOrigins.push(from); return motion(() => target(layout.measure()));
@@ -53,7 +53,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     step(value = now) { now = value; const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); },
     setBottom(value: number) { bottom = value; }, setTop(value: number) { top = value; },
     setTailSpace(value: number) { tailSpace = value; },
-    stream(value = true) { streaming = value; },
+    stream(value: { row: string; streaming: boolean } | null = { row: "reply", streaming: true }) { reply = value; },
     reduce() { animate = false; }, allowMotion() { animate = true; }, reenter(callback: () => void) { reenter = callback; },
     get finishes() { return finishes; }, get starts() { return starts; }, get advances() { return advances; },
     get measures() { return measures; },
@@ -78,61 +78,110 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.core.state.following).toBe(false);
   });
 
-  test("following glides small streaming growth natively and snaps other or large growth", () => {
+  /** 逐帧推进直到不再预约动画帧，返回每帧后的位置。 */
+  function glideFrames(f: ReturnType<typeof fixture>, from: number, limit = 60): number[] {
+    const tops: number[] = [];
+    for (let frame = 1; frame <= limit && f.frames.size > 0; frame += 1) {
+      f.step(from + frame * 16);
+      tops.push(f.layout.top());
+    }
+    return tops;
+  }
+
+  test("following glides small reply growth frame by frame and snaps other or large growth", () => {
     const f = fixture();
     f.core.notify("commit");
-    // 新行、回执或状态行出现时仍瞬时贴底。
+    // 用户消息、工具或回执等非回复增长仍瞬时贴底。
     f.setBottom(110); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(false);
-    // 流式回复行首次出现也是新行，仍瞬时；之后同一行增长才平滑。
-    f.stream(); f.setBottom(120); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(false);
-    expect(f.smooths.at(-1)).toBe(false);
-    f.setBottom(130); f.core.notify("resize"); f.step(16);
-    expect(f.writes.at(-1)).toBe(130);
-    expect(f.smooths.at(-1)).toBe(true);
-    // 目标未变时不重复请求同一段平滑滚动。
-    const count = f.writes.length;
-    f.setTop(110); f.core.notify("commit");
-    expect(f.writes.length).toBe(count);
-    f.setTop(130); f.core.scroll(true);
+    expect(f.layout.top()).toBe(110);
+    // 回复增长（含首次出现）不在同步提交中跳到底部，由后续动画帧推进。
+    f.stream(); f.setBottom(140); f.core.notify("commit");
+    expect(f.layout.top()).toBe(110);
+    const tops = glideFrames(f, 0);
+    expect(tops.length).toBeGreaterThan(4);
+    expect(tops.at(-1)).toBe(140);
+    tops.slice(1).forEach((top, index) => expect(top).toBeGreaterThanOrEqual(tops[index]));
+    expect(f.smooths.every((smooth) => !smooth)).toBe(true);
+    expect(f.frames.size).toBe(0);
+    // 超过一屏或减少动态效果时瞬时贴底。
     f.setBottom(200); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(false);
+    expect(f.layout.top()).toBe(200);
     f.reduce(); f.setBottom(210); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(false);
+    expect(f.layout.top()).toBe(210);
     expect(f.core.state.following).toBe(true);
   });
 
-  test("viewport height changes snap even while the reply is streaming", () => {
+  test("retargeting mid-glide keeps the current velocity instead of restarting from rest", () => {
     const f = fixture();
     f.stream(); f.core.notify("commit");
     f.setBottom(130); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(true);
-    f.core.scroll(true);
-    // 另一条回复行接替末尾时按新行瞬时贴底。
-    f.layout.measure = (original => () => ({ ...original(), streamingRow: "next" }))(f.layout.measure.bind(f.layout));
-    f.setBottom(135); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(false);
-    f.layout.measure = (original => () => ({ ...original(), streamingRow: "reply" }))(f.layout.measure.bind(f.layout));
-    f.core.notify("commit");
-    // 输入区回缩等改变可视高度：height - bottom 由 50 变为 40。
-    f.layout.measure = (original => () => ({ ...original(), height: 180 }))(f.layout.measure.bind(f.layout));
-    f.setBottom(140); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(false);
+    const tops = [f.layout.top()];
+    for (let frame = 1; frame <= 4; frame += 1) { f.step(frame * 16); tops.push(f.layout.top()); }
+    const before = tops[4] - tops[3];
+    f.setBottom(150); f.core.notify("commit");
+    f.step(5 * 16);
+    expect(before).toBeGreaterThan(1);
+    expect(f.layout.top() - tops[4]).toBeGreaterThanOrEqual(before);
   });
 
-  test("explicit input during a follow glide stops at the current position and ends following", () => {
+  test("only live replies glide: a streamed row keeps gliding through formal takeover, history replies snap", () => {
+    const f = fixture();
+    // 直接到达或历史加载的正式回复不平滑。
+    f.stream({ row: "history", streaming: false }); f.core.notify("commit");
+    f.setBottom(120); f.core.notify("commit");
+    expect(f.layout.top()).toBe(120);
+    // 流式中的同一行被正式版本接管后，结尾增长仍逐帧接续。
+    f.stream({ row: "reply", streaming: true }); f.setBottom(130); f.core.notify("commit");
+    expect(f.layout.top()).toBe(120);
+    expect(glideFrames(f, 0).at(-1)).toBe(130);
+    f.stream({ row: "reply", streaming: false }); f.setBottom(150); f.core.notify("commit");
+    expect(f.layout.top()).toBe(130);
+    expect(glideFrames(f, 2000).at(-1)).toBe(150);
+    // 另一条非流式回复接替末尾时瞬时。
+    f.stream({ row: "next", streaming: false }); f.setBottom(170); f.core.notify("commit");
+    expect(f.layout.top()).toBe(170);
+  });
+
+  test("viewport height changes snap even while the reply grows", () => {
     const f = fixture();
     f.stream(); f.core.notify("commit");
-    f.setBottom(130); f.core.notify("commit");
-    expect(f.smooths.at(-1)).toBe(true);
-    f.setTop(115);
+    // 输入区回缩等改变可视高度：height - bottom 由 50 变为 40。
+    f.layout.measure = (original => () => { const geometry = original(); return { ...geometry, height: geometry.bottom + 40 }; })(f.layout.measure.bind(f.layout));
+    f.setBottom(120); f.core.notify("commit");
+    expect(f.layout.top()).toBe(120);
+  });
+
+  test("any input pauses reply following without writing until scrolling has been idle", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.setBottom(130); f.core.notify("commit"); f.step(16); f.step(32);
+    const stopped = f.layout.top();
+    expect(stopped).toBeGreaterThan(100);
+    f.core.engage();
+    f.setBottom(140); f.core.notify("commit"); f.step(48); f.step(64);
+    expect(f.layout.top()).toBe(stopped);
+    // 暂停期内的用户滚动（惯性或拖动）顺延暂停。
+    f.setNow(150); f.setTop(stopped + 2); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    f.setNow(300); f.core.notify("commit"); f.step(316);
+    expect(f.layout.top()).toBe(stopped + 2);
+    // 暂停结束后从当前位置静止起步，继续贴底。
+    const tops = glideFrames(f, 360);
+    expect(tops.at(-1)).toBe(140);
+    expect(tops[0]! - (stopped + 2)).toBeLessThan(5);
+  });
+
+  test("explicit input during a follow glide ends following at the current position", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.setBottom(130); f.core.notify("commit"); f.step(16); f.step(32); f.step(48);
+    const at = f.layout.top();
+    expect(at).toBeGreaterThan(100);
+    expect(at).toBeLessThan(130);
     f.core.interrupt();
-    expect(f.writes.at(-1)).toBe(115);
-    expect(f.smooths.at(-1)).toBe(false);
     expect(f.core.state.following).toBe(false);
-    f.setBottom(160); f.core.notify("commit");
-    expect(f.layout.top()).toBe(115);
+    f.step(64); f.setBottom(160); f.core.notify("commit"); f.step(80);
+    expect(f.layout.top()).toBe(at);
   });
 
   test.each([2, 8, 20])("scrolling down %ipx into borrowed space preserves follow without snapping back", (distance) => {

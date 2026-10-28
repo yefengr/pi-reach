@@ -2,13 +2,10 @@ import { useEffect, useRef } from "react";
 import { QueuedMessages } from "./queued-messages";
 import { useI18n } from "@/lib/i18n";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
-import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, type TimelinePending, type TimelineRuntime, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, type TimelineRuntime, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { isQueuedMessage } from "@/lib/pwa/queued-message-display";
 
-export function isQueuedMessage(item: TimelineViewItem): item is TimelinePending {
-  if (item.kind !== "pending" || item.messageId !== undefined) return false;
-  // 插入提示是显式 notice，优先保留；在途项（editable===false）留在对话区，其余队列成员才进等待区。
-  return item.insertionStatus !== undefined || (item.queued === true && item.queueInFlight !== true);
-}
+export { isQueuedMessage };
 
 function nearestInsertionDeadline(items: TimelineViewItem[]): number | null {
   let deadline: number | null = null;

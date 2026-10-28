@@ -39,6 +39,10 @@ export function submitMessage(input: {
   historyOpen: boolean;
   newSessionPending: boolean;
   runtime: TimelineRuntime;
+  /** Pi 正在运行：消息预计进入队列，直接显示在排队区，不进入对话区。 */
+  queueExpected?: boolean;
+  /** 当前是否仍在跟随最新输出；预计排队的消息不进入对话区，回看时不为它恢复跟随。 */
+  following?: () => boolean;
   capture: () => OwnSendCapture | null;
   follow: (capture: OwnSendCapture | null) => void;
   apply: (change: TimelineRuntimeChange) => void;
@@ -56,8 +60,8 @@ export function submitMessage(input: {
   let prepared;
   try {
     prepared = input.attachments?.length
-      ? runtime.sendUserWithAttachments(input.text, input.attachments)
-      : runtime.sendUser(input.text);
+      ? runtime.sendUserWithAttachments(input.text, input.attachments, undefined, { queueExpected: input.queueExpected })
+      : runtime.sendUser(input.text, undefined, undefined, { queueExpected: input.queueExpected });
   } catch (error) {
     input.onPrepareError?.(error);
     return "not-handled";
@@ -76,6 +80,6 @@ export function submitMessage(input: {
     input.apply(runtime.markDeliveryFailed(prepared.frame.client_request_id, "transport_unavailable", true));
     return "handled";
   }
-  input.follow(capture);
+  if (!input.queueExpected || input.following?.() !== false) input.follow(capture);
   return "handled";
 }

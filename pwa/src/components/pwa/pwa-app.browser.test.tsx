@@ -528,11 +528,20 @@ test("streaming replies preserve the composer render boundary, draft and open co
     if (sent.type !== "user_message") throw new Error("missing working send");
     expect(sent).toMatchObject({ text: "Keep this draft" });
     await expect.element(input).toHaveValue("");
+    // 运行中发送预计排队：权威快照到达前就显示在排队区，不先进入对话区再被移走。
+    expect(document.querySelector(".pwa-queued-messages")?.textContent).toContain("Keep this draft");
+    expect(list.textContent).not.toContain("Keep this draft");
     // Pi 输出期间快照 leaf 已领先本端 tip，仍应把这条放到输入框上方而不是对话区。
     channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "assistant-marker", snapshot_id: "working-queue", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: true, created_at: 1 }] });
     await expect.element(screen.getByRole("button", { name: /Insert into conversation/ })).toBeEnabled();
     expect(document.querySelector(".pwa-queued-messages")?.textContent).toContain("Keep this draft");
     expect(list.textContent).not.toContain("Keep this draft");
+    // 开始投递后离开排队区，以发送同款进入动画出现在对话区；排队条高度由发送过渡收回。
+    channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "assistant-marker", snapshot_id: "working-queue-started", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
+    await expect.poll(() => list.querySelector(".pwa-message.user.pwa-user-message-in")?.textContent).toContain("Keep this draft");
+    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).not.toBe("");
+    await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
     await screen.getByRole("button", { name: "Stop current task", exact: true }).click();
     expect(channel.frames.findLast(frame => frame.type === "cancel")).toMatchObject({ group_id: "stream-run" });
   } finally { await screen.unmount(); }
@@ -1602,8 +1611,11 @@ test.each([
     await expect.poll(() => list.scrollTop).toBe(600);
     await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).not.toBeInTheDocument();
     Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1100 });
+    scrollTo.mockClear();
     channel.emit(partialFrame("own-send-reply", "own-send-run", "Reply after the new message"));
-    await expect.poll(() => scrollTo).toHaveBeenCalledWith({ top: 1100, behavior: "auto" });
+    // 回复跟随到底：发送过渡未结束时由其交接，结束后逐帧平滑；都只做瞬时写入，不发起原生平滑滚动。
+    await expect.poll(() => list.scrollTop).toBe(1100 - list.clientHeight);
+    expect(scrollTo.mock.calls.every(([options]) => options.behavior === "auto")).toBe(true);
   } finally { await screen.unmount(); }
 });
 
