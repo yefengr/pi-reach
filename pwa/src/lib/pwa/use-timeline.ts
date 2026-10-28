@@ -10,6 +10,7 @@ import { StreamDisplayScheduler } from "@/lib/pwa/stream-display-scheduler";
 import { clearTimelineBranchCheckpoint, discardTimelineEventsAfter, ensureTimelineBranchCheckpoint, latestTimelineEvent, loadTimeline, mergeTimelineEvents, replaceTimelineEvents, type TimelineBranchCheckpoint } from "@/lib/pwa/timeline-store";
 import { beginTimelinePersistenceEpoch, enqueueTimelinePersistence } from "@/lib/pwa/timeline-persistence";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { leftQueueIntoTimeline } from "@/lib/pwa/queued-message-display";
 import { useTimelineEarlier } from "@/lib/pwa/use-timeline-earlier";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
@@ -97,7 +98,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   // 切换 Pi 后的本地预览读取是异步的；再次切换或清空时作废尚未返回的读取。
   const previewTokenRef = useRef(0);
   const viewport = useTimelineViewport(items);
-  const { receiveRealtimeOutput, prepareHistoryPrepend, reset: resetOutputFollowing, whenScrollIdle } = viewport;
+  const { receiveRealtimeOutput, prepareHistoryPrepend, reset: resetOutputFollowing, whenScrollIdle, captureOwnSend, followOwnSend, followingNow } = viewport;
   const earlier = useTimelineEarlier({ prepareHistoryPrepend, whenScrollIdle });
   const { sourceRef: earlierSourceRef, release: releaseEarlier, attach: attachEarlier, handlers: earlierHandlers, setFailed: setEarlierFailed, setHasEarlier: setHasEarlierState } = earlier;
 
@@ -109,12 +110,15 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   const [streamDisplay] = useState(() => new StreamDisplayScheduler(new StreamDisplayBuffer(), () => undefined));
   useLayoutEffect(() => {
     streamDisplay.setPublisher((next, realtime) => {
+      // 排队消息出队进入对话区：仍在跟随时与本端发送共用过渡，排队条收起、气泡进入与贴底在同一时钟内完成。
+      const dequeued = followingNow() && leftQueueIntoTimeline(itemsRef.current, next) ? captureOwnSend() : null;
       updateItems(next);
+      if (dequeued) followOwnSend(dequeued);
       if (!realtime) return;
       const groups = new Set(next.flatMap((item) => item.kind === "partial" ? [item.partial.group_id] : []));
       for (const groupId of groups) receiveRealtimeOutput(groupId);
     });
-  }, [receiveRealtimeOutput, streamDisplay, updateItems]);
+  }, [captureOwnSend, followOwnSend, followingNow, receiveRealtimeOutput, streamDisplay, updateItems]);
 
   const renderChange = useCallback((change: TimelineRuntimeChange, resetDisplay: boolean) => {
     streamDisplay.update(change.items, resetDisplay);

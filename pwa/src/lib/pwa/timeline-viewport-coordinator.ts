@@ -1,9 +1,11 @@
+import { FollowGlide } from "./timeline-follow-glide";
+
 export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "viewport-resize", "hidden", "reduce", "output", "frame", "send", "latest", "input", "user", "details", "reset", "bind", "settle", "scroll"] as const;
 export type ViewportReason = typeof VIEWPORT_REASONS[number];
 export const VIEWPORT_MODES = ["idle", "follow", "send", "activity", "latest"] as const;
 export type ViewportMode = typeof VIEWPORT_MODES[number];
-/** streamingRow：末尾内容行是仍在流式输出的回复时为其行身份，否则为 null。 */
-export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean; tailSpace: number; compensation: number; streamingRow: string | null };
+/** tailReply：末尾内容行是 Pi 回复时为其行身份与是否仍在流式输出；正式版本接管后行身份不变。 */
+export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean; tailSpace: number; compensation: number; tailReply: { row: string; streaming: boolean } | null };
 export type ViewportMotion = { advance(now: number): { top: number; finished: boolean }; finish(settleInput?: boolean): void };
 export type ViewportCapture<C> = Readonly<{ generation: number; binding: object; value: C }>;
 export type ViewportPosition<A> = { following: true } | { following: false; anchor: A };
@@ -29,8 +31,10 @@ const EPSILON = 1;
 const PREPEND_GUARD_MS = 1000;
 /** Latest 距离超过该屏数时先瞬时靠近，只平滑最后一屏，避免长距离平滑滚动连续多帧来不及绘制。 */
 const LATEST_SMOOTH_SCREENS = 2;
-/** 跟随中正文增长不超过该屏数时用原生平滑滚动接续，更大的跳变（如整段工具输出）仍瞬时贴底。 */
+/** 跟随中 Pi 回复增长不超过该屏数时逐帧平滑接续，更大的跳变（如整段补齐）仍瞬时贴底。 */
 const FOLLOW_GLIDE_SCREENS = 1;
+/** 任何输入后暂停逐帧跟随的时长，与滚动静止判定一致；期间用户滚动会顺延，避免与惯性争夺位置。 */
+const FOLLOW_INPUT_HOLD_MS = 200;
 
 /** 不引用 DOM：所有过程的退出、布局释放和后继推进都在这里决定。 */
 export class TimelineViewportCoordinator<C, A> {
@@ -51,8 +55,11 @@ export class TimelineViewportCoordinator<C, A> {
   private lastBottom = 0;
   /** 上次测量的可视高度；输入区或窗口改变可视高度时的贴底不平滑。 */
   private lastViewport = 0;
-  /** 上次测量的末尾流式行；只有同一行继续增长才平滑，新行出现仍瞬时。 */
-  private lastStreamingRow: string | null = null;
+  /** 上次测量时仍在流式输出的末尾回复行；同一行被正式版本接管后仍按实时回复接续。 */
+  private liveReplyRow: string | null = null;
+  /** 跟随 Pi 回复增长的逐帧运动；任何输入、退出或非回复增长都会结束。 */
+  private glide: FollowGlide | null = null;
+  private inputHoldUntil = 0;
   private tailCredit = 0;
   private ready = false;
   private handoff = false;
@@ -171,6 +178,8 @@ export class TimelineViewportCoordinator<C, A> {
   /** 新的触摸、滚轮、按键或指针输入表示用户接管位置，前插保护随即失效。 */
   engage(): void {
     this.prependGuard = null;
+    this.glide = null;
+    this.inputHoldUntil = this.scheduler.now() + FOLLOW_INPUT_HOLD_MS;
   }
 
   details(reading: boolean): void {
@@ -194,7 +203,7 @@ export class TimelineViewportCoordinator<C, A> {
 
   /** 明确输入只打断正在拥有滚动位置的过程；轻点不调用本入口。 */
   interrupt(): void {
-    if (this.motion || this.mode === "latest" || this.handoff || this.receipt?.smooth) this.userRead();
+    if (this.motion || this.mode === "latest" || this.handoff || this.glide) this.userRead();
   }
 
   input(): void {
@@ -227,11 +236,8 @@ export class TimelineViewportCoordinator<C, A> {
       if (Math.abs(current - reachable) <= EPSILON) {
         this.lastTop = current;
         if (receipt.smooth) {
-          // 跟随平滑滚动的落点可能取整；到达后瞬时校正到精确目标，后续增长按真实位置接续。
-          const glide = this.mode === "follow";
           this.receipt = null;
           this.mode = "follow";
-          if (glide && current !== reachable) this.write(reachable, false);
           this.schedule();
         } else if (!this.motion && !this.handoff) this.receipt = null;
         return;
@@ -247,6 +253,8 @@ export class TimelineViewportCoordinator<C, A> {
       }
       this.receipt = null;
     }
+    // 非程序写入的滚动：输入暂停期内的惯性或拖动继续顺延，不恢复逐帧跟随。
+    if (this.scheduler.now() < this.inputHoldUntil) this.inputHoldUntil = this.scheduler.now() + FOLLOW_INPUT_HOLD_MS;
     if (this.reassertPrepend(layout, current)) return;
     // MessageList 的 nearBottom 只描述物理底部；借过留白的有效目标可能远于 32px。
     if (this.tailCredit > 0 && this.following && !this.paused && !this.motion) {
@@ -331,13 +339,13 @@ export class TimelineViewportCoordinator<C, A> {
     if (this.exiting) return;
     const layout = this.layout;
     const anchor = preserve ? layout?.captureAnchor() : null;
-    // Latest 与跟随平滑滚动都由浏览器驱动，退出时停在当前位置。
-    const stopSmooth = this.mode === "latest" || this.receipt?.smooth === true;
+    const stopLatest = this.mode === "latest";
     const motion = this.motion;
     this.cancelFrame();
     this.motion = null;
     this.motionTime = null;
     this.receipt = null;
+    this.glide = null;
     this.handoff = false;
     this.activityPending = false;
     this.pendingReasons.clear();
@@ -346,7 +354,7 @@ export class TimelineViewportCoordinator<C, A> {
     try {
       motion?.finish(settleInput);
       if (anchor && layout) this.restoreAnchor(layout, anchor);
-      if (stopSmooth && layout) layout.scroll(layout.top(), false);
+      if (stopLatest && layout) layout.scroll(layout.top(), false);
       this.lastTop = layout?.top() ?? 0;
     } finally { this.exiting = false; }
   }
@@ -445,9 +453,11 @@ export class TimelineViewportCoordinator<C, A> {
     let geometry = layout.measure();
     this.lastBottom = geometry.bottom;
     const viewportChanged = Math.abs(geometry.height - geometry.bottom - this.lastViewport) > EPSILON;
-    const streamGrowth = geometry.streamingRow !== null && geometry.streamingRow === this.lastStreamingRow;
     this.lastViewport = geometry.height - geometry.bottom;
-    this.lastStreamingRow = geometry.streamingRow;
+    // 只有实时回复（流式中或刚由同一行交接）平滑；历史加载与直接到达的正式回复仍瞬时。
+    const tail = geometry.tailReply;
+    const liveReply = tail !== null && (tail.streaming || tail.row === this.liveReplyRow);
+    this.liveReplyRow = liveReply ? tail.row : null;
     if (this.mode === "latest") {
       const target = Math.min(this.receipt?.target ?? geometry.bottom, geometry.bottom);
       if (geometry.animate && Math.abs(geometry.top - target) > EPSILON) { this.schedule(); return; }
@@ -492,28 +502,50 @@ export class TimelineViewportCoordinator<C, A> {
     }
     this.mode = "follow";
     const target = this.followTarget(geometry);
-    if (this.handoff || Math.abs(target - geometry.top) > EPSILON) {
-      const glide = !this.handoff && !viewportChanged && streamGrowth && this.glides(geometry, target);
+    const distance = target - geometry.top;
+    const glide = this.handoff || viewportChanged || !liveReply ? null : this.glideMode(geometry, distance);
+    if (glide === "hold") {
+      // 输入暂停期不写入滚动，逐帧等待暂停结束后从静止重新跟随。
+      this.lastTop = geometry.top;
+      this.schedule();
+    } else if (glide === "glide") {
+      requested = target;
+      this.advanceGlide(geometry, target, frameTime);
+    } else if (this.handoff || Math.abs(distance) > EPSILON) {
+      this.glide = null;
       this.handoff = false;
-      if (glide) {
-        requested = target;
-        // 目标未变时不重复请求，避免浏览器重启同一段平滑滚动。
-        const receipt = this.receipt;
-        if (!receipt?.smooth || Math.abs(receipt.target - Math.min(target, geometry.bottom)) > EPSILON) this.write(target, true, geometry);
-      } else {
-        requested = this.tailCredit === 0 ? geometry.height : target;
-        this.write(requested, false, geometry);
-      }
-    } else this.lastTop = geometry.top;
+      requested = this.tailCredit === 0 ? geometry.height : target;
+      this.write(requested, false, geometry);
+    } else {
+      this.glide = null;
+      this.lastTop = geometry.top;
+    }
     this.ready = true;
     this.record(reason, geometry, requested);
   }
 
-  /** 已稳定跟随时，流式正文向下增长的小段位移交给原生平滑滚动；新行、回执、首次贴底与回缩仍瞬时。 */
-  private glides(geometry: ViewportGeometry, target: number): boolean {
+  /**
+   * 已稳定跟随时，实时 Pi 回复向下增长的小段位移逐帧平滑接续，输入暂停期内保持不动；
+   * 其他新行、回执、首次贴底、回缩与可视高度变化仍瞬时。
+   */
+  private glideMode(geometry: ViewportGeometry, distance: number): "glide" | "hold" | null {
     const viewport = geometry.height - geometry.bottom;
-    const distance = target - geometry.top;
-    return geometry.animate && this.ready && viewport > 0 && distance > EPSILON && distance <= viewport * FOLLOW_GLIDE_SCREENS;
+    if (!geometry.animate || !this.ready || viewport <= 0 || distance > viewport * FOLLOW_GLIDE_SCREENS) return null;
+    if (this.glide ? distance < -EPSILON : distance <= EPSILON) return null;
+    return this.scheduler.now() < this.inputHoldUntil ? "hold" : "glide";
+  }
+
+  /** 同步布局只更新目标并预约下一帧；位移只在动画帧按真实时间推进。 */
+  private advanceGlide(geometry: ViewportGeometry, target: number, frameTime?: number): void {
+    this.glide ??= new FollowGlide(geometry.top);
+    if (frameTime === undefined) {
+      this.schedule();
+      return;
+    }
+    const step = this.glide.advance(frameTime, target);
+    this.write(step.top, false, geometry);
+    if (step.settled) this.glide = null;
+    else this.schedule();
   }
 
   private record(reason: ViewportReason, geometry: ViewportGeometry, requested: number | null): void {

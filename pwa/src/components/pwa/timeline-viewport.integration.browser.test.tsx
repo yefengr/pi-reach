@@ -78,6 +78,14 @@ test.each([1280, 390])("Markdown growth, shrink and completion keep the follower
       await expect.poll(() => bottomGap(list)).toBeLessThanOrEqual(1);
       expect(viewport().followingOutput).toBe(true);
     }
+    // 逐帧跟随静止后再取基准：连续两帧滚动位置不变。
+    let previous = Number.NaN;
+    await expect.poll(async () => {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const stable = list.scrollTop === previous;
+      previous = list.scrollTop;
+      return stable;
+    }).toBe(true);
     const row = list.querySelector<HTMLElement>("article.partial")!;
     const before = { height: row.getBoundingClientRect().height, scrollTop: list.scrollTop };
     update([history, answer("live", drafts.at(-1)!)]);

@@ -147,6 +147,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const channelRef = useRef<PeerChannel | null>(null); const draftVersionRef = useRef(0); const draftKeyRef = useRef("");
   const connectionGenerationRef = useRef(0); const connectionRef = useRef(connection); const selectedHistoryRef = useRef<TimelineSessionSummary | null>(selectedHistory);
   useLayoutEffect(() => { connectionRef.current = connection; selectedHistoryRef.current = selectedHistory; }, [connection, selectedHistory]);
+  /** 发送瞬间读取 Pi 是否在运行：运行中发送的消息预计排队，直接显示在排队区。 */
+  const piWorkingRef = useRef(false);
   const retryPendingRef = useRef(false); const retryDeviceIdRef = useRef<string | null>(null); const retryEndpointIdRef = useRef<string | null>(null);
   const sessionChannelIdRef = useRef(id()); const sessionRecoveryStateRef = useRef(new ReconnectState());
   const sessionIdentityRef = useRef<string | null>(null);
@@ -186,6 +188,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     showLatest,
     captureOwnSend,
     followOwnSend,
+    followingNow,
     reset: resetOutputFollowing,
     captureSessionPosition,
     restoreSessionPosition,
@@ -243,6 +246,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       text: message.text, attachments: message.attachments, scope, channel: channelRef.current,
       online: connectionRef.current === "online", historyOpen: selectedHistoryRef.current !== null,
       newSessionPending: pendingActionRef.current?.action === "session_new", runtime: timelineRuntimeRef.current,
+      queueExpected: piWorkingRef.current, following: followingNow,
       capture: captureOwnSend, follow: followOwnSend, apply: applyTimelineChange,
       onPrepareError: (error) => reportSessionFailure(error instanceof PendingCapacityError ? error.message
         : error && typeof error === "object" && "invalidPayload" in error
@@ -340,6 +344,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const draftSession = displayEndpoint ? draftSessions[`${endpointDraftKey}\u0000${displayEndpoint.runtimeInstanceId}`] : null;
   const draftKey = displayEndpoint ? JSON.stringify([displayEndpoint.deviceId, displayEndpoint.endpointId, displayEndpoint.runtimeInstanceId, draftSession ?? null]) : "";
   useLayoutEffect(() => { if (draftKeyRef.current !== draftKey) { draftVersionRef.current += 1; draftKeyRef.current = draftKey; } }, [draftKey]);
+  const piWorking = displayEndpoint?.working === true;
+  useLayoutEffect(() => { piWorkingRef.current = piWorking; }, [piWorking]);
   const currentViewKey = selectedHistory ? `history:${selectedHistory.id}` : displayEndpoint ? `live:${endpointDraftKey}` : null;
   useLayoutEffect(() => { currentViewKeyRef.current = currentViewKey; }, [currentViewKey]);
   const draft = drafts[draftKey] ?? "";
@@ -873,14 +879,15 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     let prepareReported = false;
     const outcome = submitMessage({ text, scope, channel, online: connectionRef.current === "online",
       historyOpen: selectedHistoryRef.current !== null, newSessionPending: false,
-      runtime: timelineRuntimeRef.current, capture: captureOwnSend, follow: followOwnSend, apply: applyTimelineChange,
+      runtime: timelineRuntimeRef.current, queueExpected: piWorkingRef.current, following: followingNow,
+      capture: captureOwnSend, follow: followOwnSend, apply: applyTimelineChange,
       onPrepareError: (error) => { prepareReported = true; reportSessionFailure(error instanceof PendingCapacityError ? error.message
         : error && typeof error === "object" && "invalidPayload" in error
           ? "This message is too large or invalid to send. Shorten it and try again."
           : "Could not send this message. Try again.", "message-send"); } });
     if (outcome === "handled") setDraftFor(draftKey, "");
     else if (!prepareReported) reportSessionFailure("Could not send this message. Try again.", "message-send");
-  }, [applyTimelineChange, attachmentComposer, captureOwnSend, draft, draftKey, followOwnSend, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
+  }, [applyTimelineChange, attachmentComposer, captureOwnSend, draft, draftKey, followOwnSend, followingNow, pendingActionRef, reportSessionFailure, setDraftFor, timelineRuntimeRef]);
   const deliveryQueriesRef = useRef<{ channel: PeerChannel | null; sessionId: string | null; checked: Map<string, string> }>({ channel: null, sessionId: null, checked: new Map() });
   // 查询超时后的自动重查到期时由定时器递增，重新运行下方的自动查询。
   const [deliveryRetryTick, setDeliveryRetryTick] = useState(0);

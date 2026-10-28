@@ -24,6 +24,8 @@ export type TimelineViewport = {
   handleScroll: (nearBottom: boolean) => void;
   showLatest: () => void;
   captureOwnSend: () => OwnSendCapture | null;
+  /** 当前是否仍在跟随最新输出且未因阅读详情暂停；回调中读取协调器的即时状态，不等 React 提交。 */
+  followingNow: () => boolean;
   followOwnSend: (capture: OwnSendCapture | null) => void;
   reset: () => void;
   setReadingDetails: (reading: boolean) => void;
@@ -131,6 +133,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   }, [bind, core, idleGate, latestEntry]);
   const showLatest = useCallback(() => { bind(); core.latest(); }, [bind, core]);
   const captureOwnSend = useCallback(() => { bind(); return core.captureOwnSend(); }, [bind, core]);
+  const followingNow = useCallback(() => core.state.following && !core.state.paused, [core]);
   const followOwnSend = useCallback((capture: OwnSendCapture | null) => { bind(); core.followOwnSend(capture); }, [bind, core]);
   const reset = useCallback(() => { bind(); core.reset(); latestEntry.hide(); }, [bind, core, latestEntry]);
   const setReadingDetails = useCallback((reading: boolean) => { bind(); core.details(reading); }, [bind, core]);
@@ -141,5 +144,5 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
 
   const latestEntryVisible = ui.unreadOutput > 0 || (!ui.followingOutput && latestDistant);
   return { ...ui, latestEntryVisible, messageListRef, bottomSentinelRef, receiveRealtimeOutput, handleScroll, showLatest, captureOwnSend,
-    followOwnSend, reset, setReadingDetails, prepareHistoryPrepend, captureSessionPosition, restoreSessionPosition, whenScrollIdle };
+    followingNow, followOwnSend, reset, setReadingDetails, prepareHistoryPrepend, captureSessionPosition, restoreSessionPosition, whenScrollIdle };
 }

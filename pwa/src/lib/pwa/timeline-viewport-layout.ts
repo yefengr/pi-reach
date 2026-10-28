@@ -4,14 +4,16 @@ import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor, type Time
 import type { ViewportGeometry, ViewportLayout } from "./timeline-viewport-coordinator";
 import type { ViewportDiagnosticGeometry } from "./timeline-viewport-diagnostics";
 
-/** 流式回复行的 class；正式版本接管后移除 partial。 */
-const STREAMING_ROW_CLASSES = ["pwa-message", "assistant", "partial"];
+/** Pi 回复行的 class；流式中另有 partial，正式版本接管后保留同一行身份。 */
+const REPLY_ROW_CLASSES = ["pwa-message", "assistant"];
+const STREAMING_CLASS = "partial";
 
-/** 末尾内容行（跳过状态行等非内容子元素）仍在流式输出时返回其行身份；每次测量都会调用，只读属性与 class，不做选择器匹配。 */
-function streamingTailRow(list: HTMLDivElement): string | null {
+/** 末尾内容行（跳过状态行等非内容子元素）为 Pi 回复时返回行身份与流式状态；每次测量都会调用，只读属性与 class，不做选择器匹配。 */
+function tailReply(list: HTMLDivElement): { row: string; streaming: boolean } | null {
   for (let child = list.lastElementChild; child; child = child.previousElementSibling) {
     const row = child.getAttribute("data-viewport-row");
-    if (row !== null) return STREAMING_ROW_CLASSES.every((name) => child.classList.contains(name)) ? row : null;
+    if (row === null) continue;
+    return REPLY_ROW_CLASSES.every((name) => child.classList.contains(name)) ? { row, streaming: child.classList.contains(STREAMING_CLASS) } : null;
   }
   return null;
 }
@@ -27,7 +29,7 @@ export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCaptu
     const space = activityFollowSpace(this.list);
     const height = this.list.scrollHeight;
     return { top: this.list.scrollTop, bottom: Math.max(0, height - this.list.clientHeight), height,
-      animate: this.list.isConnected && viewportMotionAllowed(), streamingRow: streamingTailRow(this.list), ...space };
+      animate: this.list.isConnected && viewportMotionAllowed(), tailReply: tailReply(this.list), ...space };
   }
   /** 仅由已启用的诊断路径调用；不保留 DOM 引用或任意业务字段。 */
   diagnosticGeometry(): ViewportDiagnosticGeometry {

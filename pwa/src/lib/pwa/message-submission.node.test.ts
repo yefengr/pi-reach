@@ -5,6 +5,7 @@ import type { AttachmentDescriptor } from "../pi-reach/protocol-v2/schema";
 import { AttachmentComposer } from "./attachment-composer";
 import { TimelineRuntime, type TimelineScope } from "./timeline-runtime";
 import { attachmentRetryDecision, submitMessage, type AttachmentLease } from "./message-submission";
+import { isQueuedMessage } from "./queued-message-display";
 
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "leaf", selfSenderRef: "self", channelId: "channel" };
 const attachment: AttachmentDescriptor = { attachment_id: "file", file_name: "file.txt", mime_type: "text/plain", byte_length: 3, sha256: "a".repeat(64) };
@@ -122,4 +123,20 @@ test.each([
 ] as const)("attachment retry decision: %s", (_name, composerTarget, capability, lease, expected) => {
   const leases = new Map<string, AttachmentLease>(lease ? [[attachment.attachment_id, { target: "A", uploadScope: lease }]] : []);
   expect(attachmentRetryDecision({ attachments: [attachment], target: "A", composer: { target: composerTarget, capability }, leases })).toBe(expected);
+});
+
+test("sends while Pi works go straight to the queue area and keep following only when already following", () => {
+  for (const following of [false, true]) {
+    const { input, runtime } = setup();
+    expect(submitMessage({ ...input, queueExpected: true, following: () => following })).toBe("handled");
+    const [pending] = runtime.pendingItems;
+    expect(pending).toMatchObject({ queueExpected: true, delivery: "pending" });
+    expect(isQueuedMessage(pending!)).toBe(true);
+    // 预计排队的消息不进入对话区，回看时不为它恢复跟随。
+    expect(input.follow).toHaveBeenCalledTimes(following ? 1 : 0);
+  }
+  const { input, runtime } = setup();
+  expect(submitMessage({ ...input, following: () => false })).toBe("handled");
+  expect(isQueuedMessage(runtime.pendingItems[0]!)).toBe(false);
+  expect(input.follow).toHaveBeenCalledOnce();
 });

@@ -1,6 +1,7 @@
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "./timeline-runtime";
 import { partialMessageIdentity } from "./timeline-identity";
+import { entersTimeline } from "./queued-message-display";
 
 type Grouped = { session_id: string; leaf_id: string | null; group_id: string };
 export type TimelineToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }>;
@@ -181,7 +182,8 @@ function reconcileUserRecords(entries: PresentationEntry[], previous: Presentati
     if (entry.kind !== "record") return entry;
     const item = entry.item;
     const retained = item.kind === "event" && item.event.kind === "user" ? messages.get(item.event.message_id) : known.get(entry.key);
-    const userMessageIn = retained?.userMessageIn ?? (previous !== undefined && item.kind === "pending" && item.delivery === "pending" && !item.queued && !known.has(entry.key));
+    // 新发送或刚出队的本端消息首次进入对话区时播放进入动画；初次投影与已出现过的行不重播。
+    const userMessageIn = retained?.userMessageIn ?? (previous !== undefined && item.kind === "pending" && entersTimeline(item) && !known.has(entry.key));
     return { ...entry, key: retained?.key ?? entry.key, ...(userMessageIn ? { userMessageIn: true } : {}) };
   });
 }
