@@ -168,8 +168,12 @@ export class TimelineRuntime {
   }
 
   /** 登记即将以 steer 投递的用户消息；其 message_start 不在本次调用的 ALS 范围内。 */
-  expectSteer(content: unknown, correlation: Correlation): void {
-    this.steers.expect(content, correlation);
+  canExpectSteer(): boolean {
+    return this.steers.hasCapacity();
+  }
+
+  expectSteer(content: unknown, correlation: Correlation): boolean {
+    return this.steers.expect(content, correlation);
   }
 
   /** SDK 同步拒绝 steer 时撤销登记，避免遗留登记被后续相同内容的消息取走。 */
