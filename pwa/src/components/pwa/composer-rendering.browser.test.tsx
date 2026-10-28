@@ -76,7 +76,7 @@ test("memoized input still applies changed draft, working state and the latest a
     document.querySelector<HTMLFormElement>(".pwa-composer")!.requestSubmit();
     await expect.poll(() => latestSend.mock.calls.length).toBe(1);
     expect(oldSend).not.toHaveBeenCalled();
-    flushSync(() => update({ isWorking: true, onStop: latestStop }));
+    flushSync(() => update({ draft: "", isWorking: true, onStop: latestStop }));
     await screen.getByRole("button", { name: getMessages().composer.stopTask }).click();
     expect(latestStop).toHaveBeenCalledOnce();
   } finally { await screen.unmount(); }

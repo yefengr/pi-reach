@@ -519,6 +519,12 @@ test("streaming replies preserve the composer render boundary, draft and open co
     await expect.element(input).toHaveValue("Keep this draft");
     await expect.element(screen.getByRole("menuitem", { name: /\/new/ })).toBeVisible();
     await userEvent.keyboard("{Escape}");
+    // 运行中有草稿时按钮是发送：消息交给 Extension 排队，清空草稿后才回到停止。
+    await expect.element(screen.getByRole("button", { name: "Stop current task", exact: true })).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(channel.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ text: "Keep this draft" });
+    await expect.element(input).toHaveValue("");
     await screen.getByRole("button", { name: "Stop current task", exact: true }).click();
     expect(channel.frames.findLast(frame => frame.type === "cancel")).toMatchObject({ group_id: "stream-run" });
   } finally { await screen.unmount(); }
