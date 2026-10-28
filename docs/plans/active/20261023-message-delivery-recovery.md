@@ -281,3 +281,23 @@
 | 旧端解码器联调 | 使用基线 `0848bae` 的真实旧 schema／frames 与两端 PeerChannel；旧端返回 `protocol_upgrade_required` 后，仅该消息查询不可用，不触发 SDK 或会话恢复 |
 
 旧端解码器联调不等于真实已安装旧版 Extension 的完整链路；iOS／Android 真机仍未验证。本轮真实恢复用例保持 Relay 和 Pi 运行，不声称 Relay 整体重启后仍可查到旧记录：当前 Extension 的 Relay 断线处理会清理 Owner binding，记录不存在时继续保留未知、不自动补发。全量 Browser／根 `pnpm verify` 按项目本地验证范围留给 CI；这些边界未闭合前，项目事项仍保持“进行中”。
+
+## 13. 2026-10-28 握手补推与查询超时重查
+
+§12 的恢复只靠 PWA 拉取：Relay 不缓存定向帧，PWA 断线期间发出的启动／投递回执会丢失，重连后先显示「尚未确认」，等追平和队列快照完成才发查询；单次查询超时后，同一连接内不再自动核对。本轮补两处，规则以[会话协议](../../reference/protocol/protocol-v2.md#消息投递确认)为准：
+
+- Extension 在同一 channel 重新握手时，为已有 `message_id`、尚未收到 `user_message_observed` 的记录补推 `accepted`，`in_reply_to` 沿用原发送尝试，单次最多 32 条。PWA 现有关联规则直接接收，不改协议 schema，部署顺序不受影响。
+- PWA 查询超时且没有任何答复时，对同一发送尝试在超时后 15 秒、45 秒各自动重查一次；弱状态、`not_found` 或查询错误都算答复，不再重查，保留 §12 的“确认窗口有界”约束。
+
+真实浏览器恢复用例拆为两段：原场景在重连后丢弃补推，并断言 Extension 确有补推，继续覆盖查询兜底；新场景放行补推，断言零查询、一个气泡、无 pending，以及 Pi 原生 JSONL 中只有一条记录。
+
+| 本地验证 | 结果 |
+| --- | --- |
+| Extension 补推单测与跨端 runtime 回归 | 5 项通过；撤掉握手接入后其中 3 项失败 |
+| Extension 全部测试与构建 | 752 项（1 项跳过）通过；构建通过 |
+| PWA 全部 Node 测试 | 86 文件 1100 项通过 |
+| `pwa-app` 定向 Browser Mode（查询相关） | 14 项通过；新增重查用例在撤掉 effect 改动后失败 |
+| PWA 类型检查（含 e2e）、lint | 通过；lint 为 0 errors，4 条既有 warnings |
+| 真实浏览器 Owner 重连恢复用例 | 两段均通过 |
+
+未覆盖：Extension 自身 Relay 重连会清理 Owner binding 及其投递记录，补推和查询都无法恢复，仍按 §12 保留未知；附件消息的投递保护只走查询，不补推。根 `pnpm verify`、全量 Browser Mode 与根 `pnpm test:e2e` 留给 CI 和发布前验证。

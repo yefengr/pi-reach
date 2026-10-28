@@ -14,7 +14,8 @@ import { ATTACHMENT_CHUNK_BYTES, ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_FILE_BYTES
 import { toStoredKey } from "@/lib/pwa/runtime";
 import { SCROLL_IDLE_MS } from "@/lib/pwa/scroll-idle-gate";
 import { listTimelineSessions, loadTimeline, mergeTimelineEvents, TimelineStoreConflictError } from "@/lib/pwa/timeline-store";
-import { PendingCapacityError, TimelineRuntime, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS } from "@/lib/pwa/timeline-runtime";
+import { DELIVERY_STATUS_QUERY_TIMEOUT_MS, PendingCapacityError, TimelineRuntime, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS } from "@/lib/pwa/timeline-runtime";
+import { DELIVERY_STATUS_RETRY_DELAYS_MS } from "@/lib/pwa/delivery-query-retry";
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { PwaApp } from "./pwa-app";
 import { connectionBannerTiming } from "./pwa-app-actions";
@@ -1870,6 +1871,45 @@ test.each([false, true])("delivery query late upgrade error stays local after ti
     expect(document.body.textContent).not.toContain(safeProtocolFeedbackMessage("protocol_upgrade_required"));
     expect(channel.frames.filter(frame => frame.type === "session_hello")).toHaveLength(hellos);
     expect(channelHarness.channels).toHaveLength(1);
+    expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(1);
+  } finally { vi.useRealTimers(); await screen.unmount(); }
+});
+
+test("an unanswered automatic delivery query retries after backoff and stops once answered", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    await screen.getByPlaceholder("Message your agent…").fill("Retry unanswered query");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    const sent = channel.frames.find(frame => frame.type === "user_message")!;
+    const queries = () => channel.frames.filter(frame => frame.type === "user_message_status_request");
+    // 必须在 unknown 自动查询和 effect 创建定时器之前安装受控时钟。
+    vi.useFakeTimers();
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
+    const commitEffects = async () => {
+      for (let index = 0; index < 3; index++) await new Promise<void>(resolve => {
+        const port = new MessageChannel(); port.port1.onmessage = () => { port.port1.close(); port.port2.close(); resolve(); }; port.port2.postMessage(null);
+      });
+    };
+    await commitEffects();
+    expect(queries()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(DELIVERY_STATUS_QUERY_TIMEOUT_MS);
+    await commitEffects();
+    await vi.advanceTimersByTimeAsync(DELIVERY_STATUS_RETRY_DELAYS_MS[0] - 1);
+    await commitEffects();
+    expect(queries()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await commitEffects();
+    expect(queries()).toHaveLength(2);
+    // 重查得到答复后结束；not_found 只说明证据不足，不再循环查询。
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+      in_reply_to: queries()[1]!.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "not_found" });
+    await commitEffects();
+    await vi.advanceTimersByTimeAsync(DELIVERY_STATUS_QUERY_TIMEOUT_MS + DELIVERY_STATUS_RETRY_DELAYS_MS[1]);
+    await commitEffects();
+    vi.useRealTimers();
+    expect(queries()).toHaveLength(2);
+    await expect.element(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
     expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(1);
   } finally { vi.useRealTimers(); await screen.unmount(); }
 });

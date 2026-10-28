@@ -17,6 +17,7 @@ import {
 } from "./timeline-pending";
 import { attachmentRequestKey, projectAttachmentMetadata } from "./timeline-attachments";
 import { compareSavedTimelineEvents } from "./timeline-order";
+import { deliveryQueryRetryAt, recordDeliveryQueryTimeout, type DeliveryQueryRetry } from "./delivery-query-retry";
 
 export { PendingCapacityError } from "./timeline-pending";
 type UserMessageFrame = Extract<ClientFrame, { type: "user_message" }>;
@@ -194,6 +195,7 @@ export class TimelineRuntime {
   private readonly deliveryEvidence = new WeakMap<Pending, object>();
   private readonly latestDeliveryQuery = new WeakMap<Pending, string>();
   private readonly deliveryQueries = new Map<string, DeliveryQueryAssociation>();
+  private readonly deliveryQueryRetries = new WeakMap<Pending, DeliveryQueryRetry>();
   private unknown: Pending[] = [];
   private queuedSnapshotId: string | null = null;
   private readonly queuedSnapshotItems = new Map<string, QueueItem>();
@@ -547,6 +549,7 @@ export class TimelineRuntime {
     if (!this.isCurrentDeliveryQuery(frame.in_reply_to, query) || pending.messageId
       || this.deliveryEvidence.get(pending) !== query.evidence) return this.change();
     if (pending.statusQuery?.requestId === frame.in_reply_to) delete pending.statusQuery;
+    this.deliveryQueryRetries.delete(pending);
     if (pending.delivery === "unknown_delivery" && frame.code === "protocol_upgrade_required") pending.statusQueryUnsupported = true;
     return this.change();
   }
@@ -570,7 +573,12 @@ export class TimelineRuntime {
   expireDeliveryStatusQueries(now = Date.now()): TimelineRuntimeChange {
     for (const pending of this.pendingItems) {
       const deadline = statusQueryDeadline(pending);
-      if (deadline !== null && deadline <= now) delete pending.statusQuery;
+      if (deadline === null || deadline > now) continue;
+      delete pending.statusQuery;
+      // 只有当前目标的消息可以重查；仅保留展示的旧目标消息不登记。
+      const owned = this.findPendingOrUnknown(pending.clientRequestId);
+      if (owned !== pending) continue;
+      this.deliveryQueryRetries.set(owned, recordDeliveryQueryTimeout(this.deliveryQueryRetries.get(owned), owned.requestId, owned.queuedActionRequestId, now));
     }
     return this.change();
   }
@@ -582,6 +590,12 @@ export class TimelineRuntime {
       if (deadline !== null && (next === null || deadline < next)) next = deadline;
     }
     return next;
+  }
+  /** 查询超时且未获答复后，下一次自动重查的时间；null 表示无需或不再自动重查。 */
+  deliveryQueryRetryAt(clientRequestId: string): number | null {
+    const pending = this.findPendingOrUnknown(clientRequestId);
+    if (!pending || pending.statusQuery) return null;
+    return deliveryQueryRetryAt(this.deliveryQueryRetries.get(pending), pending.requestId, pending.queuedActionRequestId);
   }
   findPendingOrUnknown(clientRequestId: string): Pending | undefined {
     return this.findPending((pending) => pending.clientRequestId === clientRequestId);
@@ -815,6 +829,7 @@ export class TimelineRuntime {
     // 取消已由 Pi 确认，迟到的查询或投递回执不能把它改回未知或在途。
     if (pending.delivery === "cancelled") return this.change();
     this.deliveryEvidence.set(pending, {});
+    this.deliveryQueryRetries.delete(pending);
     if (frame.status === "not_found") return this.change();
     if (frame.status === "cancelled") {
       // 服务端只对未投递的 received/queued 记录返回 cancelled。排队项和因证据缺失进入未知的消息
@@ -1093,6 +1108,7 @@ export class TimelineRuntime {
     for (const pending of [...this.pending.values(), ...this.unknown]) {
       delete pending.statusQuery;
       delete pending.statusQueryUnsupported;
+      this.deliveryQueryRetries.delete(pending);
       if (pending.messageId || pending.delivery === "committed") continue;
       if (pending.insertionStatus) this.markInsertionUnconfirmed(pending);
       if (!isTerminalDelivery(pending.delivery)) pending.delivery = "unknown_delivery";

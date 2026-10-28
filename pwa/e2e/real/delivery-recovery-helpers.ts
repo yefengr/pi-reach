@@ -22,11 +22,13 @@ function frameIdentity(payload: string | Buffer): FrameIdentity | null {
 
 export async function installDeliveryRecoveryProbe(page: Page) {
   let mode: "idle" | "drop-delivery" | "recover" = "idle";
+  let dropReplay = true;
   let original: (FrameIdentity & { connection: number }) | undefined;
   let originalConnection: { page: WebSocketRoute; server: WebSocketRoute } | undefined;
   let connections = 0;
   let messageCount = 0;
   let droppedReceipts = 0;
+  let replayedReceipts = 0;
   let heldQueryReply: { route: WebSocketRoute; payload: string | Buffer } | undefined;
   let queryStatus: string | undefined;
   let queryHasMessage = false;
@@ -52,6 +54,12 @@ export async function installDeliveryRecoveryProbe(page: Page) {
         queryHasMessage = Boolean(frame.messageId);
         return;
       }
+      // 重新握手后 Extension 以原发送尝试补推确认；查询场景丢弃它，才能覆盖查询兜底。
+      if (mode === "recover" && frame?.type === "user_message_status" && frame.clientRequestId === original?.clientRequestId
+        && frame.replyTo === original?.id) {
+        replayedReceipts += 1;
+        if (dropReplay) return;
+      }
       if (frame?.type === "user_message_status" && frame.replyTo) statusReplies.add(frame.replyTo);
       const originalReceipt = frame?.type === "user_message_status" && frame.clientRequestId === original?.clientRequestId
         || frame?.type === "user_message_started" && frame.replyTo === original?.id;
@@ -64,7 +72,20 @@ export async function installDeliveryRecoveryProbe(page: Page) {
     });
   });
   return {
-    arm() { mode = "drop-delivery"; },
+    /** 每个场景重新开始计数；`replay` 为 true 时放行重新握手后的补推确认。 */
+    arm(options: { replay?: boolean } = {}) {
+      mode = "drop-delivery";
+      dropReplay = options.replay !== true;
+      original = undefined;
+      originalConnection = undefined;
+      messageCount = 0;
+      droppedReceipts = 0;
+      replayedReceipts = 0;
+      heldQueryReply = undefined;
+      queryStatus = undefined;
+      queryHasMessage = false;
+      queries.length = 0;
+    },
     async reconnectOwner() {
       if (!originalConnection) throw new Error("Delivery recovery probe has no active message connection.");
       mode = "recover";
@@ -80,7 +101,7 @@ export async function installDeliveryRecoveryProbe(page: Page) {
     snapshot() {
       const query = queries.find(item => item.clientRequestId === original?.clientRequestId);
       return {
-        messageCount, droppedReceipts, queryReplyHeld: heldQueryReply !== undefined, queryStatus, queryHasMessage,
+        messageCount, droppedReceipts, replayedReceipts, queryReplyHeld: heldQueryReply !== undefined, queryStatus, queryHasMessage,
         queryCount: queries.filter(item => item.clientRequestId === original?.clientRequestId).length,
         queryId: query?.id,
         queriedOnNewConnection: Boolean(query && query.connection !== original?.connection),
@@ -91,14 +112,16 @@ export async function installDeliveryRecoveryProbe(page: Page) {
   };
 }
 
-export async function verifyMessageDeliveryRecovery(input: {
+type DeliveryRecoveryInput = {
   page: Page;
   otherOwner: Page;
   probe: Awaited<ReturnType<typeof installDeliveryRecoveryProbe>>;
   otherProbe: Awaited<ReturnType<typeof installDeliveryRecoveryProbe>>;
   sessionId: string;
   runCompose: (args: readonly string[]) => Promise<string>;
-}) {
+};
+
+export async function verifyMessageDeliveryRecovery(input: DeliveryRecoveryInput) {
   const { page, otherOwner, probe, otherProbe } = input;
   const text = `E2E delivery recovery ${crypto.randomUUID()}`;
   probe.arm();
@@ -111,6 +134,7 @@ export async function verifyMessageDeliveryRecovery(input: {
   // 仅断开提交消息的 Owner；Relay 和 Pi 保持运行，保留仍有效的有界投递记录。
   // PWA 的 channel ID 为页面级稳定值，真正重连由 WebSocket 实例变化证明。
   await probe.reconnectOwner();
+  await expect.poll(() => probe.snapshot().replayedReceipts).toBeGreaterThan(0);
   await expect.poll(() => probe.snapshot().queriedOnNewConnection).toBe(true);
   await expect(page.getByLabel("Connected", { exact: true })).toBeVisible();
   await expect.poll(() => probe.snapshot().queryReplyHeld).toBe(true);
@@ -130,7 +154,30 @@ export async function verifyMessageDeliveryRecovery(input: {
   expect(recovered.queriedOnNewConnection).toBe(true);
   expect(otherProbe.hasStatusReply(recovered.queryId!)).toBe(false);
   await expect(otherOwner.locator(".pwa-message.user").filter({ hasText: text })).toHaveCount(1);
-  // 原生用户记录数量是实际 Pi 投递证据；SDK 调用次数另由 queue/binding 回归直接断言。
+  await expectNativeUserMessageCount(input, text, 1);
+}
+
+/** 重新握手后由 Extension 补推的确认直接结清消息，不再依赖状态查询。 */
+export async function verifyReceiptReplayRecovery(input: DeliveryRecoveryInput) {
+  const { page, otherOwner, probe } = input;
+  const text = `E2E receipt replay ${crypto.randomUUID()}`;
+  probe.arm({ replay: true });
+  await page.getByRole("textbox").fill(text);
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(otherOwner.locator(".pwa-message.user:not(.pending)").filter({ hasText: text })).toHaveCount(1);
+  await expect.poll(() => probe.snapshot().droppedReceipts).toBeGreaterThan(0);
+  await probe.reconnectOwner();
+  await expect(page.getByLabel("Connected", { exact: true })).toBeVisible();
+  await expect.poll(() => probe.snapshot().replayedReceipts).toBeGreaterThan(0);
+  await expect(page.locator(".pwa-message.user").filter({ hasText: text })).toHaveCount(1);
+  await expect(page.locator(".pwa-message.user.pending")).toHaveCount(0);
+  await expect(page.getByText("Not confirmed", { exact: true })).toHaveCount(0);
+  expect(probe.snapshot()).toMatchObject({ queryCount: 0, messageCount: 1 });
+  await expectNativeUserMessageCount(input, text, 1);
+}
+
+// 原生用户记录数量是实际 Pi 投递证据；SDK 调用次数另由 queue/binding 回归直接断言。
+async function expectNativeUserMessageCount(input: DeliveryRecoveryInput, text: string, expected: number) {
   const script = `const fs=require('node:fs'),path=require('node:path');
     const sessionId=process.argv[1],text=process.argv[2];let count=0;
     function visit(dir){for(const name of fs.readdirSync(dir)){const file=path.join(dir,name);
@@ -143,5 +190,5 @@ export async function verifyMessageDeliveryRecovery(input: {
     visit('/home/pi/.pi/agent/sessions');console.log(JSON.stringify(count));`;
   await expect.poll(async () => JSON.parse(await input.runCompose([
     "exec", "-T", "interactive", "node", "-e", script, input.sessionId, text,
-  ])) as number).toBe(1);
+  ])) as number).toBe(expected);
 }

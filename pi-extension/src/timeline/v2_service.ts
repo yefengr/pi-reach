@@ -12,6 +12,7 @@ import {
 } from "../protocol/v2/index.js";
 import { attachmentReplayFrames, type AttachmentReplay } from "./attachment_delivery.js";
 import { userMessageIdempotencyPayload } from "./attachment_content.js";
+import { receiptReplayFrames } from "./receipt_replay.js";
 import { TimelineHistoryPager } from "./history.js";
 import { TimelineRequestScope } from "./request_scope.js";
 import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js";
@@ -127,7 +128,8 @@ export class TimelineV2Service {
   handle(frame: ClientFrame): ServerFrame[] {
     switch (frame.type) {
       case "session_hello":
-        return [this.ready(frame), ...this.currentQueueSnapshot()];
+        return [this.ready(frame), ...receiptReplayFrames(this.state.snapshot().records, { senderRef: this.senderRef, channelId: frame.channel_id,
+          sessionId: this.sessionId, leafId: this.leafId }, (id) => this.requestChannels.get(id)), ...this.currentQueueSnapshot()];
       case "extension_info_request":
         return this.handleExtensionInfo(frame);
       case "pair_request":

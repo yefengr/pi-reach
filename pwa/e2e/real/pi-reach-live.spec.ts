@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type BrowserContext, type Page, type TestInfo } from "playwright/test";
 import { verifyPublishedFiles } from "./published-file-helpers";
 import { verifyReaderDrawerLive } from "./reader-helpers";
-import { installDeliveryRecoveryProbe, verifyMessageDeliveryRecovery } from "./delivery-recovery-helpers";
+import { installDeliveryRecoveryProbe, verifyMessageDeliveryRecovery, verifyReceiptReplayRecovery } from "./delivery-recovery-helpers";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const COMPOSE_FILE = "docker/e2e/compose.yml";
@@ -380,7 +380,9 @@ test("recovers a lost delivery receipt after Owner reconnection without another 
     const session = await startFreshSession(page, previous.sessionId);
     await Promise.all([expect(page.getByLabel("Connected", { exact: true })).toBeVisible(),
       expect(otherOwner.getByLabel("Connected", { exact: true })).toBeVisible()]);
-    await verifyMessageDeliveryRecovery({ page, otherOwner, probe, otherProbe, sessionId: session.sessionId!, runCompose });
+    const recovery = { page, otherOwner, probe, otherProbe, sessionId: session.sessionId!, runCompose };
+    await verifyMessageDeliveryRecovery(recovery);
+    await verifyReceiptReplayRecovery(recovery);
   } finally {
     await Promise.allSettled([ownerA.close(), ownerB.close()]);
   }

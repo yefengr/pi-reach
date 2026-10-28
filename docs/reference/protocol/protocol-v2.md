@@ -306,9 +306,11 @@ PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，�
 
 PWA 可在重新握手或确认超时后发送只读 `user_message_status_request`，携带 `id`、`channel_id`、`session_id`、`leaf_id` 与 `client_request_id`。Extension 按当前 Owner、channel、session 和 leaf 校验，读取会话投递记录、真实队列、附件投递保护和当前正式投影，返回定向 `user_message_status`；不创建幂等记录、不重新入队，也不调用 Pi 投递。查不到只表示当前证据不足，不能作为重发依据。旧扩展不识别查询时返回 `protocol_error` 和 `protocol_upgrade_required`。
 
+Relay 不缓存定向帧，PWA 断线期间发出的 `user_message_started` 与 `user_message_status` 会丢失。同一 channel 重新发送 `session_hello` 时，Extension 在 `session_ready` 之后、队列快照之前，为该 Owner 在此 channel 上已有 `message_id`、尚未收到 `user_message_observed` 的记录补发定向 `user_message_status`：`status` 一律为 `accepted`（committed 也按 accepted 补发，最终以正式事件为准），`in_reply_to` 为原发送尝试 `id`，单次握手最多 32 条，优先最近的消息。补发不创建记录、不调用 Pi 投递；未补到的消息仍由状态查询恢复，附件消息的投递保护同样只走查询。
+
 可重试的 `rejected` 允许同一 `client_request_id`、相同内容以未处理过的请求 `id` 重新提交；相同请求 `id` 的重复帧只重放结果，包括中间经过其他尝试后再次收到的旧帧。每条有效幂等记录最多记住 128 个尝试（含首试）；达到上限后，新尝试不能重新准入，仍为可重试拒绝的记录转为 `rejected`／`unavailable`／`retryable: false`，不通过淘汰旧尝试换取准入。该保护仍受现有记录 TTL、容量回收和进程生命周期限制。
 
-PWA 的查询等待为 10 秒，关联自查询发出起最多保留 60 秒、最多 128 条；等待超时不立即丢弃关联。迟到回执仍需匹配本消息、发送尝试、队列操作、最新查询和当前目标／连接；弱状态与否定结果不能覆盖查询后取得的新证据，带 `message_id` 的肯定回执可与正式记录原位合并。查询关联到期或被回收后不再消费该查询结果，不因此补发消息。
+PWA 的查询等待为 10 秒，关联自查询发出起最多保留 60 秒、最多 128 条；等待超时不立即丢弃关联。迟到回执仍需匹配本消息、发送尝试、队列操作、最新查询和当前目标／连接；弱状态与否定结果不能覆盖查询后取得的新证据，带 `message_id` 的肯定回执可与正式记录原位合并。查询关联到期或被回收后不再消费该查询结果，不因此补发消息。查询等待超时且未收到任何答复时，PWA 对同一发送尝试与队列操作在超时后 15 秒、45 秒各自动重查一次，之后只保留手动核对；收到任何答复（含弱状态、`not_found` 与查询错误）、重新握手或改用新发送尝试都会结束这一轮重查。
 
 队列快照是 Owner 广播的实时状态，`leaf_id` 取 Extension 当前 tip；Pi 输出期间 Extension 在消息开始时就写入 marker，快照的 `leaf_id` 会领先于 PWA 只随正式事件推进的 tip，因此 PWA 只按 `session_id` 接收快照，分支切换由 `reset` 处理。
 
