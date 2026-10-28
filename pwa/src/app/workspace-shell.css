@@ -51,7 +51,7 @@
    没有状态栏安全区时高度为 0，不参与取样。 */
 .pwa-root .pwa-status-backdrop { display: none; }
 @media (display-mode: standalone) {
-  .pwa-root .pwa-status-backdrop { position: fixed; z-index: var(--pwa-z-status-backdrop); top: 0; right: 0; left: 0; display: block; height: var(--pwa-safe-top); padding-top: var(--pwa-safe-top); background-color: var(--pwa-status-backdrop); background-clip: content-box; pointer-events: none; }
+  .pwa-root .pwa-status-backdrop { position: fixed; z-index: var(--pwa-z-status-backdrop); top: 0; right: 0; left: 0; display: block; height: var(--pwa-safe-top); padding-top: var(--pwa-safe-top); background-color: var(--pwa-error); pointer-events: none; }
 }
 /* 移动导航打开时状态栏下方是 panel 头部；设置层在其上时仍按设置页取 bg，所以设置规则放在后面。 */
 .pwa-root:has(.pwa-navigation-drawer) { --pwa-status-backdrop: var(--pwa-panel); }
