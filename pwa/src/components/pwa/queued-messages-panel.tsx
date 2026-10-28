@@ -56,20 +56,24 @@ export function QueuedMessagesPanel({ items, isOnline, runtimeRef, channelRef, a
     onError("Could not update the queued message. Check the connection and try again.");
   };
   return <QueuedMessages
-    items={items.filter(isQueuedMessage).filter((item) => !item.insertionNoticeDismissed).map((item) => ({
-      id: item.clientRequestId,
-      text: item.text,
-      images: item.images,
-      attachments: item.attachments,
-      status: item.insertionStatus === "unconfirmed" ? q.unconfirmed
+    items={items.filter(isQueuedMessage).filter((item) => !item.insertionNoticeDismissed).map((item) => {
+      const status = item.insertionStatus === "unconfirmed" ? q.unconfirmed
         : item.insertionStatus === "waiting" ? item.queuedAction === "insert" ? q.requestingInsert : q.awaitingInsert
           : item.delivery === "unknown_delivery" ? q.waitingReconnect
             : item.queuedAction === "cancel" ? q.cancelling
-              : item.cancelable ? q.queued : q.sending,
-      ...(item.insertionStatus === "unconfirmed" ? { notice: q.unconfirmedNotice, attention: true, dismissible: true } : {}),
-      canManage: item.insertionStatus === undefined && item.cancelable === true && item.delivery !== "unknown_delivery",
-      busy: item.queuedAction !== undefined || item.insertionStatus !== undefined,
-    }))}
+              : item.cancelable ? q.queued : q.sending;
+      return {
+        id: item.clientRequestId,
+        text: item.text,
+        images: item.images,
+        attachments: item.attachments,
+        status,
+        ...(status === q.queued ? { waiting: true } : {}),
+        ...(item.insertionStatus === "unconfirmed" ? { notice: q.unconfirmedNotice, attention: true, dismissible: true } : {}),
+        canManage: item.insertionStatus === undefined && item.cancelable === true && item.delivery !== "unknown_delivery",
+        busy: item.queuedAction !== undefined || item.insertionStatus !== undefined,
+      };
+    })}
     isOnline={isOnline}
     onInsert={(requestId) => act(requestId, "insert")}
     onCancel={(requestId) => act(requestId, "cancel")}

@@ -1,6 +1,6 @@
 import { ActionIcon } from "@mantine/core";
 import { useI18n, type Messages } from "@/lib/i18n";
-import { CornerDownLeft, X } from "lucide-react";
+import { ArrowUp, Clock, Undo2, X } from "lucide-react";
 import type { AttachmentDescriptor } from "@pi-reach/protocol/session";
 import { AttachmentCards, readonlyAttachmentItems } from "./attachment-cards";
 
@@ -10,6 +10,8 @@ export type QueuedMessageView = {
   images?: { data: string; mime: string }[];
   attachments?: readonly AttachmentDescriptor[];
   status: string;
+  /** 仍在排队等待、可插入或撤回：状态前显示时钟；发送中、确认中等过程状态只用文字。 */
+  waiting?: boolean;
   notice?: string;
   /** 需要用户关注（如插入未确认）：状态与说明用运行色，普通排队保持中性。 */
   attention?: boolean;
@@ -30,7 +32,7 @@ function queuedMessageDescription(item: QueuedMessageView, index: number, t: Mes
   return t.description(index + 1, item.text.trim());
 }
 
-/** 排队消息：每条一行（状态、单行正文、插入与取消图标按钮），两条以上才显示标题与计数；投递提示在下方补一行说明。 */
+/** 排队消息：每条一行（状态、单行正文、插入与撤回图标按钮），两条以上才显示标题与计数；投递提示在下方补一行说明。 */
 export function QueuedMessages({ items, isOnline, onInsert, onCancel, onDismissNotice }: QueuedMessagesProps) {
   const { t } = useI18n();
   const q = t.queued;
@@ -51,15 +53,15 @@ export function QueuedMessages({ items, isOnline, onInsert, onCancel, onDismissN
           </div> : null}
           <div className="pwa-queued-message-copy">
             <div className="pwa-queued-message-line">
-              <span className="pwa-queued-message-status">{item.status}</span>
+              <span className="pwa-queued-message-status">{item.waiting ? <Clock size={16} aria-hidden="true" /> : null}<span>{item.status}</span></span>
               {item.text ? <p className="pwa-queued-message-text">{item.text}</p> : null}
             </div>
             {item.attachments?.length ? <AttachmentCards items={readonlyAttachmentItems(item.attachments)} /> : null}
             {item.notice ? <p className="pwa-queued-message-notice">{item.notice}</p> : null}
           </div>
           <div className="pwa-queued-message-actions">
-            <ActionIcon className="pwa-queued-message-insert" type="button" disabled={disabled} onClick={() => onInsert(item.id)} aria-label={q.insertLabel(description)} title={q.insertLabel(description)}><CornerDownLeft size={20} /></ActionIcon>
-            <ActionIcon className="pwa-queued-message-cancel" type="button" disabled={disabled} onClick={() => onCancel(item.id)} aria-label={q.cancelLabel(description)} title={q.cancelLabel(description)}><X size={20} /></ActionIcon>
+            <ActionIcon className="pwa-queued-message-insert" type="button" disabled={disabled} onClick={() => onInsert(item.id)} aria-label={q.insertLabel(description)} title={q.insertLabel(description)}><ArrowUp size={20} /></ActionIcon>
+            <ActionIcon className="pwa-queued-message-cancel" type="button" disabled={disabled} onClick={() => onCancel(item.id)} aria-label={q.cancelLabel(description)} title={q.cancelLabel(description)}><Undo2 size={20} /></ActionIcon>
             {item.dismissible && onDismissNotice ? <ActionIcon className="pwa-queued-message-dismiss" type="button" onClick={() => onDismissNotice(item.id)} aria-label={q.dismissLabel(description)} title={q.dismissLabel(description)}><X size={20} /></ActionIcon> : null}
           </div>
         </article>;

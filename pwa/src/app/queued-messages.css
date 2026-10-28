@@ -76,10 +76,18 @@
 
 .pwa-queued-message-status {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pwa-space-status);
   color: var(--pwa-secondary);
   font-size: var(--pwa-text-meta);
   line-height: var(--pwa-leading-ui);
   white-space: nowrap;
+}
+
+/* 图标不参与基线：由文字决定状态的基线，整行仍与正文按基线对齐。 */
+.pwa-queued-message-status > span {
+  align-self: baseline;
 }
 
 .pwa-queued-message-text {

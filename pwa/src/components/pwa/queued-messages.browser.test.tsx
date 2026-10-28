@@ -96,6 +96,7 @@ test("renders parent-supplied status, previews, actions, and disabled states", a
   await expect.element(screen.getByRole("heading", { name: "Queued messages" })).toBeVisible();
   await expect.element(screen.getByLabelText("3 queued messages")).toBeVisible();
   await expect.element(screen.getByText("Waiting for the current task")).toBeVisible();
+  expect(document.querySelector(".pwa-queued-message-status svg")).toBeNull();
   await expect.element(screen.getByText("First queued message with a preview")).toBeVisible();
   const image = screen.getByRole("img", { name: "Queued message 1 image 1" });
   expect(image.element().getAttribute("src")).toBe(`data:image/png;base64,${imageData}`);
@@ -139,8 +140,10 @@ test("uses a scheduled timeout for an insertion notice and never sends when it i
   vi.useFakeTimers();
   try {
     const insert = screen.getByRole("button", { name: /Insert into conversation/ });
+    expect(document.querySelector(".pwa-queued-message-status .lucide-clock")).not.toBeNull();
     insert.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await expect.element(screen.getByText("Requesting insertion…", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-queued-message-status .lucide-clock")).toBeNull();
     expect(onSend).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS);
@@ -261,7 +264,7 @@ test("hides an in-flight item from the waiting area while other-owner waiting it
 });
 
 test("keeps a single queued message on one compact row with icon actions", async () => {
-  const screen = await renderPwa(<QueuedMessages items={[queuedItem({ text: `Single queued message ${"that keeps going ".repeat(12)}` })]} isOnline onInsert={() => {}} onCancel={() => {}} />);
+  const screen = await renderPwa(<QueuedMessages items={[queuedItem({ waiting: true, text: `Single queued message ${"that keeps going ".repeat(12)}` })]} isOnline onInsert={() => {}} onCancel={() => {}} />);
   try {
     // 只有一条时不显示标题与计数；正文单行省略，插入与取消都是 44px 图标按钮，取消不用危险色轮廓。
     await expect.element(screen.getByRole("heading", { name: "Queued messages" })).not.toBeInTheDocument();
@@ -278,6 +281,28 @@ test("keeps a single queued message on one compact row with icon actions", async
       expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     }
     expect(cancel.getAttribute("data-variant")).not.toBe("outline");
+    // 插入是「立即发送」，撤回把内容放回输入框；等待中的状态前有时钟，并与状态文字垂直居中。
+    expect(insert.querySelector(".lucide-arrow-up")).not.toBeNull();
+    expect(cancel.querySelector(".lucide-undo-2")).not.toBeNull();
+    const clock = row.querySelector<SVGElement>(".pwa-queued-message-status .lucide-clock")!;
+    const label = row.querySelector<HTMLElement>(".pwa-queued-message-status > span")!;
+    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+    expect(Math.round(clock.getBoundingClientRect().width)).toBe(16);
+    expect(Math.abs(Math.round(middle(clock.getBoundingClientRect()) - middle(label.getBoundingClientRect())))).toBeLessThanOrEqual(1);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("the waiting clock keeps the status text on the same baseline as a status without it", async () => {
+  const screen = await renderPwa(<QueuedMessages items={[queuedItem({ waiting: true }), queuedItem({ id: "queued-2" })]} isOnline onInsert={() => {}} onCancel={() => {}} />);
+  try {
+    const offsets = [...document.querySelectorAll<HTMLElement>(".pwa-queued-message")].map((row) => {
+      const label = row.querySelector<HTMLElement>(".pwa-queued-message-status > span")!;
+      const text = row.querySelector<HTMLElement>(".pwa-queued-message-text")!;
+      return [label, text].map((node) => Math.round(node.getBoundingClientRect().top - row.getBoundingClientRect().top));
+    });
+    expect(offsets[0]).toEqual(offsets[1]);
   } finally {
     await screen.unmount();
   }
