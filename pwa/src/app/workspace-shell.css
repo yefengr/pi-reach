@@ -29,9 +29,11 @@
   --pwa-main-safe-bottom: calc(var(--pwa-safe-bottom) * var(--pwa-main-flush));
   --pwa-main-inset-start: calc(var(--pwa-gutter) + var(--pwa-main-safe-left));
   --pwa-main-inset-end: calc(var(--pwa-gutter) + var(--pwa-main-safe-right));
+  /* 主屏 PWA 状态栏背景条的颜色，与状态栏下方的顶栏一致：侧栏展开时为 panel，主区贴顶与设置页为 bg。 */
+  --pwa-status-backdrop: var(--pwa-panel);
   transition: --pwa-main-flush var(--pwa-sidebar-motion) var(--pwa-ease-standard);
 }
-.pwa-root[data-sidebar-collapsed] { --pwa-main-flush: 1; }
+.pwa-root[data-sidebar-collapsed] { --pwa-main-flush: 1; --pwa-status-backdrop: var(--pwa-bg); }
 
 /* 工作区与设置页两层视图：设置页为当前视图时工作区隐藏但保持挂载，保留会话、草稿与阅读位置。
    转场与右侧 Drawer 同一模型：工作区不动，设置层带模态阴影滑入，遮罩只在转场中由脚本淡入淡出。 */
@@ -42,6 +44,23 @@
 /* 转场与跟手拖动期间保留阴影，页面表面始终为直角。 */
 .pwa-root[data-view-transition] .pwa-settings-view { border-radius: 0; box-shadow: var(--pwa-shadow-modal); }
 .pwa-root[data-view="settings"]:not([data-view-transition]) .pwa-workspace-view { visibility: hidden; }
+
+/* iOS 27 主屏 PWA 在页面顶边中点下方约 4px 处命中检测：命中元素或其祖先是 fixed 时，按其背景色铺实色状态栏；否则状态栏下方
+   加一段向下延伸的模糊，盖住顶栏。实色状态栏只在页面不延伸到状态栏下方时出现，因此 viewport 不设 viewport-fit=cover。
+   伪元素命中后按宿主元素处理，所以用真实元素，并放在全部叠层之上，导航、设置页与阅读器打开时同样命中。
+   iOS 只在盒高超过 10px 时直接读背景色（否则改为采样像素），取 12px；背景只裁到零高的内容盒，不绘制，也不接收点击。 */
+.pwa-root .pwa-status-backdrop { display: none; }
+@media (display-mode: standalone) {
+  .pwa-root .pwa-status-backdrop { position: fixed; z-index: var(--pwa-z-status-backdrop); top: 0; right: 0; left: 0; display: block; height: 12px; padding-top: 12px; background-color: var(--pwa-status-backdrop); background-clip: content-box; pointer-events: none; }
+}
+/* 移动导航打开时状态栏下方是 panel 头部；设置层在其上时仍按设置页取 bg，所以设置规则放在后面。 */
+.pwa-root:has(.pwa-navigation-drawer) { --pwa-status-backdrop: var(--pwa-panel); }
+.pwa-root[data-view="settings"] { --pwa-status-backdrop: var(--pwa-bg); }
+/* 主屏 PWA 不设 viewport-fit=cover，iOS 不再报告底部安全区；移动输入区与只读说明条的底部下限由 16 提到 24，给 Home 指示条留白。
+   软键盘仍交给浏览器：键盘弹出时这段留白不变。 */
+@media (display-mode: standalone) {
+  @media (max-width: 767.98px) { .pwa-root { --pwa-composer-bottom: 24px; } }
+}
 
 .pwa-root .pwa-layout {
   position: relative;
@@ -64,7 +83,7 @@
   /* 展开时立即可见；只在收起时延迟到过渡结束再隐藏，避免从设置页返回时继承的隐藏状态被过渡拖住而无法聚焦。 */
   transition: transform var(--pwa-sidebar-motion) var(--pwa-ease-standard), opacity var(--pwa-sidebar-motion) var(--pwa-ease-standard), visibility 0s;
 }
-/* 主屏 PWA 的状态栏透明，桌面断点（如 iPad）同样避让安全区，侧栏底色延伸到状态栏下方。 */
+/* 系统报告状态栏安全区时，桌面断点（如 iPad）同样避让，侧栏底色延伸到状态栏下方。 */
 .pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: var(--pwa-safe-top); padding-left: calc(8px + var(--pwa-safe-left)); }
 .pwa-root[data-sidebar-collapsed] .pwa-desktop-navigation { transform: translateX(calc(-100% * var(--pwa-motion-shift))); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, var(--pwa-sidebar-motion); }
 
@@ -192,7 +211,7 @@
 .pwa-root .pwa-choose-pi-list .pwa-nav-link-section { color: var(--pwa-secondary); }
 
 /* 本地历史的只读说明条替换输入区。 */
-.pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(16px, var(--pwa-main-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(var(--pwa-composer-bottom, 16px), var(--pwa-main-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 
 /* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }
@@ -207,7 +226,7 @@
 @media (max-width: 767.98px) {
   :root { --pwa-gutter: 16px; }
   /* 移动主区贴满屏幕，不做卡片；内部按各侧安全区避让。 */
-  .pwa-root { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-main-safe-right: var(--pwa-safe-right); --pwa-main-safe-bottom: var(--pwa-safe-bottom); transition: none; }
+  .pwa-root { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-main-safe-right: var(--pwa-safe-right); --pwa-main-safe-bottom: var(--pwa-safe-bottom); --pwa-status-backdrop: var(--pwa-bg); transition: none; }
   .pwa-root .pwa-layout { display: flex; transition: none; background: var(--pwa-bg); }
   .pwa-root .pwa-main { flex: 1 1 auto; margin: 0; border-radius: 0; touch-action: pan-y; transition: none; }
   .pwa-root .pwa-workspace-state { touch-action: pan-y; }

@@ -11,6 +11,7 @@ import type { ComposerAttachmentItem } from "./attachment-cards";
 import { MessageList } from "./message-list";
 import { PwaAppShell } from "./pwa-app-shell";
 import { PwaUiProvider } from "./pwa-ui-provider";
+import { applyStandaloneRules } from "@/test/browser/standalone";
 
 const items: TimelineViewItem[] = Array.from({ length: 5 }, (_, index) => ({
   kind: "event", event: {
@@ -154,6 +155,30 @@ test.each([[390, 844, 310], [844, 390, 260], [768, 1024, 440]])("leaves a visual
     expect(view.shell.getBoundingClientRect().toJSON()).toEqual(before.rect);
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
   } finally {
+    document.documentElement.style.removeProperty("--pwa-safe-bottom");
+    await view.screen.unmount();
+  }
+});
+
+test("keeps the mobile Composer clear of the home indicator in a standalone app without a reported safe area", async () => {
+  await page.viewport(390, 844);
+  const view = await renderWorkspace();
+  const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+  const bottom = () => getComputedStyle(composer).paddingBottom;
+  // 浏览器标签页沿用 16；主屏 PWA 不设 viewport-fit=cover，系统不报告底部安全区，移动布局下限为 24。
+  expect(bottom()).toBe("16px");
+  const standalone = applyStandaloneRules();
+  try {
+    expect(bottom()).toBe("24px");
+    // 系统报告的安全区更大时仍取安全区，不叠加。
+    document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
+    expect(bottom()).toBe("34px");
+    document.documentElement.style.removeProperty("--pwa-safe-bottom");
+    // 桌面布局不变。
+    await page.viewport(1280, 844);
+    await expect.poll(bottom).toBe("16px");
+  } finally {
+    standalone.remove();
     document.documentElement.style.removeProperty("--pwa-safe-bottom");
     await view.screen.unmount();
   }

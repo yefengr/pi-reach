@@ -16,6 +16,7 @@ import { ConnectionStatus, type WorkspaceNavigationProps } from "./workspace-vie
 import { UnpairedWorkspace } from "./workspace-content";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
+import { applyStandaloneRules } from "@/test/browser/standalone";
 
 const device: PwaDeviceRecord = {
   id: "device:office",
@@ -479,20 +480,6 @@ test("routes mobile navigation choices and closes the chooser before rename", as
   await expect.poll(() => events).toEqual(["close-request", "endpoint:other", "close-request", "rename:device:office"]);
 });
 
-/** Chromium 的媒体模拟不支持 display-mode；取出 standalone 媒体查询内的规则直接生效，模拟主屏 PWA。 */
-function applyStandaloneRules() {
-  const blocks: string[] = [];
-  for (const sheet of document.styleSheets) {
-    for (const rule of sheet.cssRules) {
-      if (rule instanceof CSSMediaRule && rule.conditionText.includes("display-mode: standalone")) blocks.push([...rule.cssRules].map(inner => inner.cssText).join("\n"));
-    }
-  }
-  const style = document.createElement("style");
-  style.textContent = blocks.join("\n");
-  document.head.append(style);
-  return { blocks: blocks.length, remove: () => style.remove() };
-}
-
 test("standalone overlays fill the app height instead of the clipped initial containing block", async () => {
   await page.viewport(390, 844);
   const screen = await renderLayout({ events: [] });
@@ -514,6 +501,43 @@ test("standalone overlays fill the app height instead of the clipped initial con
     await screen.getByRole("button", { name: "Choose computer, current Office Pi" }).click();
     await expect.element(screen.getByRole("dialog", { name: "Choose computer" })).toBeVisible();
     await expect.poll(() => bottom(".pwa-device-drawer")).toBe(window.innerHeight);
+  } finally {
+    standalone.remove();
+  }
+});
+
+test("standalone status bar backdrop is a top-layer fixed element that only exposes the status bar color", async () => {
+  await page.viewport(1280, 844);
+  const screen = await renderLayout({ events: [] });
+  await expect.element(screen.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  const backdrop = document.querySelector<HTMLElement>(".pwa-root > .pwa-status-backdrop")!;
+  const style = () => getComputedStyle(backdrop);
+  const color = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor;
+  const layer = (name: string) => Number(getComputedStyle(document.documentElement).getPropertyValue(`--pwa-z-${name}`));
+  // 浏览器标签页不参与 iOS 状态栏取色。
+  expect(style().display).toBe("none");
+  const standalone = applyStandaloneRules();
+  try {
+    // iOS 在顶边中点下方约 4px 处命中检测，只认真实 fixed 元素，盒高超过 10px 才直接读背景色；
+    // 它须高于所有叠层，背景只裁到零高内容盒，不绘制也不接收点击。
+    const rect = backdrop.getBoundingClientRect();
+    expect([rect.top, rect.left, rect.width, rect.height].map(Math.round)).toEqual([0, 0, window.innerWidth, 12]);
+    expect([style().position, style().paddingTop, style().backgroundClip, style().pointerEvents]).toEqual(["fixed", "12px", "content-box", "none"]);
+    expect(Number(style().zIndex)).toBeGreaterThan(layer("feedback"));
+    // 桌面侧栏展开：状态栏下方是 panel；收起后主区贴顶，换成 bg。
+    expect(style().backgroundColor).toBe(color(".pwa-desktop-navigation .pwa-sidebar"));
+    await screen.getByRole("button", { name: "Collapse sidebar" }).click();
+    await expect.poll(() => style().backgroundColor).toBe(color(".pwa-main"));
+    // 移动端为 bg；导航打开时取导航头部的 panel。
+    await page.viewport(390, 844);
+    await expect.poll(() => style().backgroundColor).toBe(color(".pwa-main"));
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
+    expect(style().backgroundColor).toBe(color(".pwa-session-sheet-head"));
+    // 设置层盖在导航之上时取设置页顶栏的 bg。
+    await screen.getByRole("button", { name: "Open settings" }).click();
+    await expect.element(screen.getByRole("main", { name: "Settings" })).toBeVisible();
+    await expect.poll(() => style().backgroundColor).toBe(color(".pwa-settings-header"));
   } finally {
     standalone.remove();
   }

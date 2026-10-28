@@ -298,6 +298,7 @@ export function PwaWorkspaceLayout({
   const settingsView = settingsRoute.open ? "settings" : "workspace";
 
   return <div ref={rootRef} className="pwa-root" data-view={settingsView} data-view-transition={transitioning || workspaceDrag.dragging || undefined} data-sidebar-collapsed={sidebarCollapsed || undefined}>
+    <div className="pwa-status-backdrop" aria-hidden="true" />
     <div ref={workspaceRef} className="pwa-workspace-view" inert={settingsRoute.open || undefined}>
     <div className="pwa-layout">
       <div id="pwa-desktop-navigation" className="pwa-desktop-navigation" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed || undefined}><PwaDesktopNavigation navigation={desktopNavigation} collapsed={sidebarCollapsed} /></div>
