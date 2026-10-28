@@ -266,7 +266,8 @@ const MessageComposerContent = memo(function MessageComposerContent({
   const hasMessage = Boolean(draft.trim() || attachments.length);
   const newSessionPending = commandPendingAction === "session_new";
   const modelPending = modelExitPending || commandPendingAction === "model_set" || commandPendingAction === "thinking_set";
-  const showStop = isOnline && isWorking;
+  // 运行中有草稿时显示发送，消息进入 Extension 队列；草稿为空才把按钮让给停止。
+  const showStop = isOnline && isWorking && !hasMessage;
   const addDisabled = !canAttach || sendingAttachments || newSessionPending;
   const notice = attachmentNotice || (!isOnline ? t.composer.sendAfterReconnect : null);
   // 操作状态是当前最具体、最短命的一行，压过附件与断线提示；它结束后约束提示自动恢复。
@@ -274,7 +275,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (sendPendingRef.current || !isOnline || showStop || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)) return;
+    if (sendPendingRef.current || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)) return;
     sendPendingRef.current = true;
     try {
       await onSend();
@@ -332,12 +333,12 @@ const MessageComposerContent = memo(function MessageComposerContent({
     const nativeEvent = event.nativeEvent;
     if (event.key !== "Enter" || !window.matchMedia(DESKTOP_LAYOUT_QUERY).matches
       || composingRef.current || ignoreShortcutEvent(nativeEvent) || event.altKey || event.shiftKey
-      || isWorking || commandMenuOpenRef.current || imageMenuOpenRef.current || modelMenuOpenRef.current
+      || commandMenuOpenRef.current || imageMenuOpenRef.current || modelMenuOpenRef.current
       || hasKeyboardOverlay()) return;
     const plainEnter = !event.metaKey && !event.ctrlKey;
     if (!(plainEnter ? enterSends : isPrimaryModifier(nativeEvent))) return;
     if (!isOnline || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)) return;
-    // 仍由表单统一校验并发发送和权限；快捷键不触发运行中的停止按钮。
+    // 仍由表单统一校验并发发送和权限；空草稿已在上方返回，快捷键不会触发运行中的停止按钮。
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   };

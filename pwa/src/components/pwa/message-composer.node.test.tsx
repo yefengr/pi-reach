@@ -64,12 +64,22 @@ test("locks adding/text/sending during upload without disabling individual cance
   expect(html).toContain("Review these files</textarea>");
 });
 
-test.each(["", "Continue this task"])("shows only Stop while working with draft %s", draft => {
+test.each(["", "   "])("shows only Stop while working with an empty draft %j", draft => {
   const html = renderComposer({ isWorking: true, draft });
   expect(button(html, "Stop current task")).toMatch(/pwa-composer-stop/);
   expect(button(html, "Stop current task")).toMatch(/data-variant="filled"/);
   expect(html).not.toContain('aria-label="Send message"');
   expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain('disabled=""');
+});
+
+test.each([
+  { draft: "Continue this task", attachments: [] },
+  { draft: "", attachments: [attachment] },
+])("shows only an enabled Send while working with content to queue", overrides => {
+  const html = renderComposer({ isWorking: true, ...overrides });
+  expect(button(html, "Send message")).toMatch(/pwa-composer-send/);
+  expect(button(html, "Send message")).not.toContain('disabled=""');
+  expect(html).not.toContain('aria-label="Stop current task"');
 });
 
 test("shows one disabled pending Stop", () => {

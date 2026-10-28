@@ -225,17 +225,25 @@ describe("desktop composer sending shortcuts", () => {
     expect(sends).toBe(0);
   });
 
-  test("keeps working Enter editable and never maps Enter shortcuts to Stop", async () => {
+  test("sends a working draft for queueing and never maps Enter shortcuts to Stop", async () => {
     let sends = 0;
     let stops = 0;
     const screen = await renderPwa(<ComposerHarness initialWorking initialDraft="Continue" onSend={() => { sends += 1; }} onStop={() => { stops += 1; }} />);
+    await expect.element(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+    await expect.element(screen.getByRole("button", { name: "Stop current task" })).not.toBeInTheDocument();
     const input = screen.getByRole("textbox").element() as HTMLTextAreaElement;
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
     await userEvent.keyboard("{Enter}");
-    expect(input.value).toBe("Continue\n");
+    await expect.poll(() => sends).toBe(1);
     await userEvent.keyboard(primaryEnter);
-    expect(sends).toBe(0);
+    await expect.poll(() => sends).toBe(2);
+    expect(input.value).toBe("Continue");
+    await userEvent.clear(input);
+    await expect.element(screen.getByRole("button", { name: "Stop current task" })).toBeVisible();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(primaryEnter);
+    expect(sends).toBe(2);
     expect(stops).toBe(0);
     await expect.element(screen.getByRole("button", { name: "Stop current task" })).toBeVisible();
   });
@@ -1004,11 +1012,16 @@ test("updates Stop and Send client state through working, stopping, image sendin
   await stop.click();
   expect(stopCalls).toBe(1);
 
+  // 运行中有草稿时同一位置换成发送，消息交给 Extension 排队。
   screen.getByTestId("composer-set-draft").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   await expect.element(textarea).toHaveValue("Continue this task");
-  await expect.element(screen.getByRole("button", { name: "Send message" })).not.toBeInTheDocument();
-  expect(sendCalls).toBe(0);
+  await expect.element(screen.getByRole("button", { name: "Stop current task" })).not.toBeInTheDocument();
+  const workingSend = screen.getByRole("button", { name: "Send message" });
+  await expect.element(workingSend).toBeEnabled();
+  await workingSend.click();
+  await expect.poll(() => sendCalls).toBe(1);
 
+  await userEvent.clear(textarea);
   screen.getByTestId("composer-set-stopping").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   await expect.element(screen.getByRole("button", { name: "Stopping current task" })).toBeDisabled();
 
@@ -1017,7 +1030,8 @@ test("updates Stop and Send client state through working, stopping, image sendin
   await expect.element(textarea).toHaveAttribute("readonly");
   await expect.element(textarea).toBeEnabled();
   await expect.element(screen.getByRole("button", { name: "Remove Queued image" })).toBeEnabled();
-  await expect.element(screen.getByRole("button", { name: "Send message" })).not.toBeInTheDocument();
+  await expect.element(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  await expect.element(screen.getByRole("button", { name: "Stopping current task" })).not.toBeInTheDocument();
 
   screen.getByTestId("composer-go-offline").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   const offlineSend = screen.getByRole("button", { name: "Send message" });
