@@ -7,11 +7,11 @@ packages:
 catalog:
   '@noble/ed25519': 3.1.0
   '@types/node': 25.9.4
-  '@vitest/browser-playwright': 4.1.11
-  '@vitest/coverage-v8': 4.1.11
+  '@vitest/browser-playwright': 4.1.12
+  '@vitest/coverage-v8': 4.1.12
   typescript: 6.0.3
   vite: 8.2.4
-  vitest: 4.1.11
+  vitest: 4.1.12
   zod: 4.6.6
 
 # 保留 PWA 已验证的编译器与 Node 类型基线，不在构建迁移中强升大版本。
@@ -44,3 +44,4 @@ overrides:
   undici: ^8.10.2
   vite: 8.2.4
   ws: ^8.21.0
+  zod: ^4.6.6
