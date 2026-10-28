@@ -1,6 +1,6 @@
-import { isValidElement, memo, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { Fragment, isValidElement, memo, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, LoaderCircle } from "lucide-react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options as MarkdownOptions } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@mantine/core";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
@@ -11,6 +11,7 @@ import { CopyButton } from "./copy-button";
 import { Collapse } from "./collapse";
 import { markdownTableComponents } from "./markdown-table";
 import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
+import { rehypeStreamReveal, splitMarkdownChunks, type MarkdownChunk } from "@/lib/pwa/markdown-stream";
 import { useThinkingHeading } from "./use-thinking-heading";
 export { thinkingTitle, thinkingSummary } from "@/lib/pwa/thinking-text-parser";
 import "./timeline-content.css";
@@ -48,9 +49,35 @@ const markdownComponents: Components = {
   ...markdownTableComponents,
 };
 
-// 历史消息正文在流式追加时保持不变；只按文本比较，避免整段重新解析 Markdown。
-export const MarkdownContent = memo(function MarkdownContent({ text }: { text: string }) {
-  return <div className="pwa-markdown"><ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>{text}</ReactMarkdown></div>;
+const NO_MARKS: readonly number[] = [];
+
+function sameMarks(a: readonly number[], b: readonly number[]): boolean {
+  return a === b || a.length === b.length && a.every((mark, index) => mark === b[index]);
+}
+
+/** 只保留与本块重叠的新显示片段；每段从标记起点延续到下一个标记或正文末尾。 */
+function chunkMarks(marks: readonly number[], chunk: MarkdownChunk, textLength: number): readonly number[] {
+  const chunkEnd = chunk.offset + chunk.text.length;
+  const overlapping = marks.filter((mark, index) => mark < chunkEnd && (marks[index + 1] ?? textLength) > chunk.offset);
+  return overlapping.length ? overlapping : NO_MARKS;
+}
+
+type MarkdownChunkProps = { text: string; base: number; marks: readonly number[] };
+
+// 流式追加通常只改变最后一块；已完成的块按文本与片段标记比较，不重新解析 Markdown。
+const MarkdownChunkView = memo(function MarkdownChunkView({ text, base, marks }: MarkdownChunkProps) {
+  const rehypePlugins: MarkdownOptions["rehypePlugins"] = marks.length ? [[rehypeStreamReveal, { source: text, base, marks }]] : undefined;
+  return <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={markdownComponents}>{text}</ReactMarkdown>;
+}, (a, b) => a.text === b.text && a.base === b.base && sameMarks(a.marks, b.marks));
+
+/** 历史消息正文在流式追加时保持不变；reveal 为流式新显示文字的起点，用于淡入。 */
+export const MarkdownContent = memo(function MarkdownContent({ text, reveal = NO_MARKS }: { text: string; reveal?: readonly number[] }) {
+  const chunks = useMemo(() => splitMarkdownChunks(text), [text]);
+  // 整体解析在相邻块之间留一个换行文本节点；分块渲染保持同样的 DOM 与 textContent。
+  return <div className="pwa-markdown">{chunks.map((chunk, index) => <Fragment key={index}>
+    {index > 0 ? "\n" : null}
+    <MarkdownChunkView text={chunk.text} base={chunk.offset} marks={chunkMarks(reveal, chunk, text.length)} />
+  </Fragment>)}</div>;
 });
 
 /** 保留正文顺序，仅将相邻同类片段合并为一个阅读区域。 */

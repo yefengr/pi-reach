@@ -175,6 +175,8 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     await expect.poll(() => list.querySelector("article.partial")?.textContent?.includes("After tools. ".repeat(25).trim())).toBe(true);
     await settle();
     const reply = list.querySelector<HTMLElement>("article.partial")!;
+    // 流式正文增长由原生平滑滚动接续，先等待落点再检查可见性。
+    await expect.poll(() => list.scrollTop - activity.top).toBe(list.scrollHeight - activity.height);
     expect([...list.querySelectorAll("article")].slice(0, 2)).toEqual(original);
     await expect.element(reply).toBeVisible();
     await expect.element(page.getByText("Working…", { exact: true })).toBeVisible();
@@ -726,21 +728,23 @@ function displayText(items: TimelineViewItem[]): string | undefined {
   return item?.kind === "partial" ? item.partial.blocks?.map(block => block.text).join("\n") ?? item.partial.delta : undefined;
 }
 
-test.each(["assistant", "thinking", "blocks", "tool"] as const)("hook coalesces %s frame bursts into one latest display commit per window", async mode => {
+test.each(["assistant", "thinking", "blocks", "tool"] as const)("hook coalesces %s frame bursts into one latest display commit per frame", async mode => {
   const onDisplay = vi.fn();
   const screen = await render(<DisplayHarness onDisplay={onDisplay} />);
   try {
     flushSync(() => api.applyTimelineChange(api.runtimeRef.current.setScope(scope), true));
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance"] });
     flushSync(() => api.applyTimelineChange(api.runtimeRef.current.receive(displayPartial("ok", mode))));
     const before = onDisplay.mock.calls.length;
     for (let i = 0; i < 100; i++) flushSync(() => api.applyTimelineChange(api.runtimeRef.current.receive(displayPartial(mode === "blocks" ? `ok${"x".repeat(i + 1)}` : "x", mode))));
     expect(onDisplay).toHaveBeenCalledTimes(before);
-    flushSync(() => vi.advanceTimersByTime(33));
+    flushSync(() => vi.advanceTimersByTime(16));
     expect(onDisplay).toHaveBeenCalledTimes(before + 1);
-    flushSync(() => vi.advanceTimersByTime(99));
+    flushSync(() => vi.advanceTimersByTime(96));
+    expect(onDisplay.mock.calls.length).toBeLessThanOrEqual(before + 7);
+    // 按目标延迟匀速放完积压，不在固定窗口内倾倒。
+    flushSync(() => vi.advanceTimersByTime(2000));
     expect(displayText(api.items)).toBe(`ok${"x".repeat(100)}`);
-    expect(onDisplay.mock.calls.length).toBeLessThanOrEqual(before + 4);
   } finally { vi.useRealTimers(); await screen.unmount(); }
 });
 

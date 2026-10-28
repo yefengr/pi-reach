@@ -1640,3 +1640,28 @@ test("shows the delayed earlier-records loader with the small status spinner bes
     expect(getComputedStyle(document.querySelector(".pwa-earlier")!).fontSize).toBe("13px");
   } finally { await screen.unmount(); }
 });
+
+test("streaming reply fades in only newly shown text and keeps each fade's start through re-renders", async () => {
+  const streaming: TimelinePartial = { protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: "group-1", partial_id: "answer:assistant:0", kind: "assistant", status: "delta", delta: "First paragraph." };
+  const { screen, update } = await liveList([partialItem(streaming)]);
+  try {
+    const row = () => document.querySelector<HTMLElement>(".pwa-message.assistant")!;
+    await expect.element(page.elementLocator(row())).toBeVisible();
+    // 首次挂载的已有正文不重播淡入。
+    expect(row().querySelector(".pwa-stream-reveal")).toBeNull();
+    await update([partialItem({ ...streaming, delta: "First paragraph. More" })]);
+    const first = row().querySelector<HTMLElement>(".pwa-stream-reveal")!;
+    expect(first.textContent).toBe(" More");
+    const start = first.getAnimations()[0]?.startTime;
+    expect(start).not.toBeNull();
+    await update([partialItem({ ...streaming, delta: "First paragraph. More text\n\nSecond" })]);
+    const spans = [...row().querySelectorAll<HTMLElement>(".pwa-stream-reveal")];
+    expect(spans.map(span => span.textContent)).toEqual([" More", " text", "Second"]);
+    expect(spans[0].getAnimations()[0]?.startTime).toBe(start);
+    expect([...row().querySelectorAll(".pwa-markdown > p")].map(node => node.textContent)).toEqual(["First paragraph. More text", "Second"]);
+    const formal: TimelineEvent = { ...assistantEvent, blocks: [{ type: "text", text: "First paragraph. More text\n\nSecond" }] };
+    await update([eventItem(formal)]);
+    await expect.poll(() => document.querySelector(".pwa-message.assistant.partial")).toBeNull();
+    expect([...row().querySelectorAll(".pwa-markdown > p")].map(node => node.textContent)).toEqual(["First paragraph. More text", "Second"]);
+  } finally { await screen.unmount(); }
+});

@@ -1,12 +1,32 @@
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import type { TimelineViewItem } from "./timeline-runtime";
 
-const DISPLAY_INTERVAL_MS = 33;
+/** 无 rAF 时的等间隔提交周期。 */
+const FALLBACK_FRAME_MS = 16;
+/** rAF 提交的最小间隔：60Hz 每帧提交，120Hz 隔帧提交，限制 Markdown 渲染频率。 */
+const MIN_FRAME_INTERVAL_MS = 12;
 type PublishDisplay = (items: TimelineViewItem[], realtime: boolean) => void;
+type FrameHandle = { cancel(): void };
+
+/** 跟随显示刷新提交；无 rAF 的环境（Node 测试、后台 Worker）退回等间隔定时器。 */
+function requestDisplayFrame(run: () => void): FrameHandle {
+  if (typeof requestAnimationFrame === "function") {
+    const requestedAt = performance.now();
+    let frame = 0;
+    const tick = () => {
+      if (performance.now() - requestedAt < MIN_FRAME_INTERVAL_MS) frame = requestAnimationFrame(tick);
+      else run();
+    };
+    frame = requestAnimationFrame(tick);
+    return { cancel: () => cancelAnimationFrame(frame) };
+  }
+  const timer = setTimeout(run, FALLBACK_FRAME_MS);
+  return { cancel: () => clearTimeout(timer) };
+}
 
 /** 仅调度显示：不缓存帧、不参与接收、确认或持久化。 */
 export class StreamDisplayScheduler {
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: FrameHandle | null = null;
   private epoch = 0;
   private hidden = false;
   private dirty = false;
@@ -49,14 +69,14 @@ export class StreamDisplayScheduler {
 
   private clearTimer(): void {
     this.epoch += 1;
-    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer?.cancel();
     this.timer = null;
   }
 
   private schedule(): void {
     if (this.hidden || this.timer !== null || (!this.dirty && !this.buffer.hasPending())) return;
     const epoch = this.epoch;
-    this.timer = setTimeout(() => {
+    this.timer = requestDisplayFrame(() => {
       if (epoch !== this.epoch || this.hidden) return;
       this.timer = null;
       const now = performance.now();
@@ -65,6 +85,6 @@ export class StreamDisplayScheduler {
       if (this.dirty || change.shouldRender) this.publish(change.items, true);
       this.dirty = false;
       this.schedule();
-    }, DISPLAY_INTERVAL_MS);
+    });
   }
 }

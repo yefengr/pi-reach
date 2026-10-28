@@ -1,10 +1,17 @@
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
-import { matchesFormalMessage } from "./timeline-identity";
+import { matchesFormalMessage, partialMessageIdentity } from "./timeline-identity";
 import type { TimelinePartialView, TimelinePending, TimelineViewItem } from "./timeline-runtime";
 
-const DRAIN_WINDOW_MS = 128;
 const BASE_TICK_MS = 16;
+/** 目标显示延迟：积压按此时长换算成放出速率，吸收上游 chunk 的到达抖动，不再放完即停。 */
+const TARGET_LATENCY_MS = 240;
+/** 速率平滑时间常数：新 chunk 到达时速度渐变，不随积压突变。 */
+const RATE_SMOOTHING_MS = 120;
+/** 速率上下限（字素/ms）：积压很少时每帧至少一个字素，突发大段时也不一帧铺满。 */
+const MIN_RELEASE_PER_MS = 1 / BASE_TICK_MS;
 const MAX_RELEASE_PER_MS = 64 / BASE_TICK_MS;
+/** 正式版本到达后，剩余积压在此窗口内放完再交接，避免结尾整段跳出。 */
+const FINISH_WINDOW_MS = 160;
 const INITIAL_BURST = 2;
 const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
@@ -22,7 +29,13 @@ type StreamState = {
   /** null 表示即时展示：正文已全部可见，不保留字素游标。 */
   cursor: GraphemeCursor | null;
   visibleText: string;
+  /** 平滑后的放出速率与未满一个字素的余量。 */
+  rate: number;
+  credit: number;
+  /** 收尾窗口内已用时长；只在 finishing 期间有意义。 */
   elapsedMs: number;
+  /** 正在收尾时为对应正式事件 ID：正式版本暂缓显示，由本 lane 在其位置放完尾巴。 */
+  finishing: string | null;
   seen: boolean;
 };
 
@@ -250,6 +263,37 @@ function isDrained(state: StreamState): boolean {
   return state.cursor.visibleCount >= state.cursor.graphemes.length && state.visibleText === state.targetText;
 }
 
+/** 积压换算目标速率并按时间平滑；余量累计到满一个字素才放出。 */
+function paceRelease(state: StreamState, backlog: number, elapsed: number): number {
+  const desired = Math.min(MAX_RELEASE_PER_MS, Math.max(MIN_RELEASE_PER_MS, backlog / TARGET_LATENCY_MS));
+  // 新 lane 直接取目标速率起步，之后才平滑，避免开头空等。
+  state.rate = state.rate === 0 ? desired : state.rate + (desired - state.rate) * Math.min(1, elapsed / RATE_SMOOTHING_MS);
+  state.credit += state.rate * elapsed;
+  const release = Math.min(backlog, Math.floor(state.credit));
+  state.credit -= release;
+  return release;
+}
+
+/** 收尾按剩余窗口比例放出，窗口结束时必定放完。 */
+function finishRelease(state: StreamState, backlog: number, elapsed: number): number {
+  const remaining = Math.max(1, FINISH_WINDOW_MS - state.elapsedMs);
+  state.elapsedMs += elapsed;
+  return Math.ceil(backlog * Math.min(1, elapsed / remaining));
+}
+
+/** 正式版本中与 partial 对应的块正文；无法对应时不收尾。 */
+function formalBlockText(partial: TimelinePartial, event: TimelineEvent): string | undefined {
+  if (event.kind !== "assistant" || partial.kind === "tool") return undefined;
+  const identity = partialMessageIdentity(partial);
+  const block = identity ? event.blocks[identity.contentIndex] : undefined;
+  const type = partial.kind === "thinking" ? "thinking" : "text";
+  return block?.type === type ? block.text : undefined;
+}
+
+function contentIndex(state: StreamState): number {
+  return partialMessageIdentity(state.partial.partial)?.contentIndex ?? 0;
+}
+
 /**
  * Projects authoritative timeline snapshots into a paced display snapshot.
  * The runtime remains authoritative; this class only owns the transient display cursor.
@@ -279,10 +323,14 @@ export class StreamDisplayBuffer {
       urgent ||= changed.urgent;
     }
 
+    for (const event of formalEvents) {
+      if (this.beginFinish(event)) needsSnapshot = true;
+    }
     for (const [id, state] of this.streams) {
       const formal = formalEvents.some((event) => matchesFormalMessage(state.partial.partial, event));
-      // 正式版本立即接管对应消息，不延迟完成状态，也不重播已完成文字。
-      if (!state.seen || formal) {
+      // 收尾中的 lane 只在正式版本仍存在时保留；其余由正式版本立即接管，不重播已显示文字。
+      if (state.finishing !== null && formal) continue;
+      if (state.finishing !== null || !state.seen || formal) {
         this.streams.delete(id);
         needsSnapshot = true;
         urgent = true;
@@ -291,6 +339,31 @@ export class StreamDisplayBuffer {
 
     if (!needsSnapshot) return this.unchanged();
     return { ...this.rebuild(previous, true), urgent };
+  }
+
+  /**
+   * 正式版本到达时仍有积压，则暂缓接管：同一消息的全部 lane 在其位置按收尾窗口放完后再交接。
+   * 正式正文与已显示前缀不一致时不收尾，直接由正式版本接管。
+   */
+  private beginFinish(event: TimelineEvent): boolean {
+    const lanes = [...this.streams.values()].filter((state) => matchesFormalMessage(state.partial.partial, event));
+    if (lanes.length === 0 || lanes.every((state) => state.finishing === event.event_id)) return false;
+    const texts = lanes.map((state) => formalBlockText(state.partial.partial, event));
+    const extendsShown = lanes.every((state, index) => texts[index]?.startsWith(state.targetText) === true);
+    const pending = lanes.some((state, index) => state.cursor !== null && (!isDrained(state) || texts[index] !== state.targetText));
+    if (!extendsShown || !pending) return false;
+    lanes.forEach((state, index) => {
+      const text = texts[index]!;
+      state.finishing = event.event_id;
+      if (text !== state.targetText) {
+        if (state.cursor === null) state.visibleText = text;
+        else appendLaneText(state, text);
+        state.targetText = text;
+      }
+      state.elapsedMs = 0;
+      state.seen = true;
+    });
+    return true;
   }
 
   private ingestPartial(partial: TimelinePartialView): { needsSnapshot: boolean; urgent: boolean } {
@@ -303,7 +376,7 @@ export class StreamDisplayBuffer {
       this.streams.set(id, {
         thinkingTextEpoch: {}, partial, targetText, cursor,
         visibleText: cursor === null ? targetText : cursorText(cursor),
-        elapsedMs: cursor === null ? DRAIN_WINDOW_MS : 0, seen: true,
+        rate: 0, credit: 0, elapsedMs: 0, finishing: null, seen: true,
       });
       return { needsSnapshot: true, urgent: true };
     }
@@ -323,7 +396,7 @@ export class StreamDisplayBuffer {
       // 即时展示不建立字素游标，也无需分割全文。
       existing.cursor = null;
       existing.visibleText = targetText;
-      existing.elapsedMs = DRAIN_WINDOW_MS;
+      existing.elapsedMs = 0;
       needsSnapshot = true;
     } else if (targetChanged && textExtends) {
       appendLaneText(existing, targetText);
@@ -336,7 +409,7 @@ export class StreamDisplayBuffer {
     } else if (immediate && !streamsImmediately(existing.partial.partial)) {
       existing.cursor = null;
       existing.visibleText = targetText;
-      existing.elapsedMs = DRAIN_WINDOW_MS;
+      existing.elapsedMs = 0;
       needsSnapshot = true;
     }
     existing.targetText = targetText;
@@ -359,7 +432,10 @@ export class StreamDisplayBuffer {
         targetText,
         cursor: null,
         visibleText: targetText,
-        elapsedMs: DRAIN_WINDOW_MS,
+        rate: 0,
+        credit: 0,
+        elapsedMs: 0,
+        finishing: null,
         seen: true,
       });
     }
@@ -381,20 +457,20 @@ export class StreamDisplayBuffer {
 
   advance(elapsedMs = BASE_TICK_MS): StreamDisplayBufferChange {
     const previous = this.displayed;
+    const elapsed = Math.max(0, elapsedMs);
     let changed = false;
     for (const state of this.streams.values()) {
       const cursor = state.cursor;
       if (cursor === null) continue;
       const backlog = cursor.graphemes.length - cursor.visibleCount;
       if (backlog > 0) {
-        const elapsed = Math.max(0, elapsedMs);
-        const remaining = Math.max(1, DRAIN_WINDOW_MS - state.elapsedMs);
-        const release = Math.min(Math.ceil(MAX_RELEASE_PER_MS * elapsed), Math.ceil(backlog * Math.min(1, elapsed / remaining)));
-        state.elapsedMs += elapsed;
+        const release = state.finishing === null ? paceRelease(state, backlog, elapsed) : finishRelease(state, backlog, elapsed);
+        if (release <= 0) continue;
         cursor.visibleCount = Math.min(cursor.graphemes.length, cursor.visibleCount + release);
         state.visibleText = cursorText(cursor);
         changed = true;
       } else {
+        state.credit = 0;
         const expected = cursorText(cursor);
         if (state.visibleText !== expected) {
           state.visibleText = expected;
@@ -402,8 +478,24 @@ export class StreamDisplayBuffer {
         }
       }
     }
+    if (this.completeFinished()) changed = true;
     if (!changed) return this.unchanged();
     return this.rebuild(previous, true);
+  }
+
+  /** 同一正式事件的全部 lane 放完后一起交接。 */
+  private completeFinished(): boolean {
+    const finishing = new Map<string, StreamState[]>();
+    for (const state of this.streams.values()) {
+      if (state.finishing !== null) finishing.set(state.finishing, [...finishing.get(state.finishing) ?? [], state]);
+    }
+    let completed = false;
+    for (const lanes of finishing.values()) {
+      if (!lanes.every(isDrained)) continue;
+      for (const state of lanes) this.streams.delete(state.partial.partial.partial_id);
+      completed = true;
+    }
+    return completed;
   }
 
   hasPending(): boolean {
@@ -419,9 +511,14 @@ export class StreamDisplayBuffer {
   private buildSnapshot(): TimelineViewItem[] {
     // 保留运行态顺序；主机 timestamp 和浏览器 createdAt 不能用于跨端比较。
     return this.authoritative.flatMap((item): TimelineViewItem[] => {
+      if (item.kind === "event") {
+        // 收尾中的正式版本由对应 lane 原位代替，按内容顺序排列。
+        const lanes = [...this.streams.values()].filter((state) => state.finishing === item.event.event_id);
+        return lanes.length ? lanes.sort((a, b) => contentIndex(a) - contentIndex(b)).map(projectedPartial) : [item];
+      }
       if (item.kind !== "partial") return [item];
       const state = this.streams.get(item.partial.partial_id);
-      return state ? [projectedPartial(state)] : [];
+      return state && state.finishing === null ? [projectedPartial(state)] : [];
     });
   }
 

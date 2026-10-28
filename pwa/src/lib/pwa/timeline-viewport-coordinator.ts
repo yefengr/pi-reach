@@ -2,7 +2,8 @@ export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "vi
 export type ViewportReason = typeof VIEWPORT_REASONS[number];
 export const VIEWPORT_MODES = ["idle", "follow", "send", "activity", "latest"] as const;
 export type ViewportMode = typeof VIEWPORT_MODES[number];
-export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean; tailSpace: number; compensation: number };
+/** streamingRow：末尾内容行是仍在流式输出的回复时为其行身份，否则为 null。 */
+export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean; tailSpace: number; compensation: number; streamingRow: string | null };
 export type ViewportMotion = { advance(now: number): { top: number; finished: boolean }; finish(settleInput?: boolean): void };
 export type ViewportCapture<C> = Readonly<{ generation: number; binding: object; value: C }>;
 export type ViewportPosition<A> = { following: true } | { following: false; anchor: A };
@@ -28,6 +29,8 @@ const EPSILON = 1;
 const PREPEND_GUARD_MS = 1000;
 /** Latest 距离超过该屏数时先瞬时靠近，只平滑最后一屏，避免长距离平滑滚动连续多帧来不及绘制。 */
 const LATEST_SMOOTH_SCREENS = 2;
+/** 跟随中正文增长不超过该屏数时用原生平滑滚动接续，更大的跳变（如整段工具输出）仍瞬时贴底。 */
+const FOLLOW_GLIDE_SCREENS = 1;
 
 /** 不引用 DOM：所有过程的退出、布局释放和后继推进都在这里决定。 */
 export class TimelineViewportCoordinator<C, A> {
@@ -46,6 +49,10 @@ export class TimelineViewportCoordinator<C, A> {
   private receipt: { target: number; last: number; smooth: boolean } | null = null;
   private lastTop = 0;
   private lastBottom = 0;
+  /** 上次测量的可视高度；输入区或窗口改变可视高度时的贴底不平滑。 */
+  private lastViewport = 0;
+  /** 上次测量的末尾流式行；只有同一行继续增长才平滑，新行出现仍瞬时。 */
+  private lastStreamingRow: string | null = null;
   private tailCredit = 0;
   private ready = false;
   private handoff = false;
@@ -187,7 +194,7 @@ export class TimelineViewportCoordinator<C, A> {
 
   /** 明确输入只打断正在拥有滚动位置的过程；轻点不调用本入口。 */
   interrupt(): void {
-    if (this.motion || this.mode === "latest" || this.handoff) this.userRead();
+    if (this.motion || this.mode === "latest" || this.handoff || this.receipt?.smooth) this.userRead();
   }
 
   input(): void {
@@ -220,8 +227,11 @@ export class TimelineViewportCoordinator<C, A> {
       if (Math.abs(current - reachable) <= EPSILON) {
         this.lastTop = current;
         if (receipt.smooth) {
+          // 跟随平滑滚动的落点可能取整；到达后瞬时校正到精确目标，后续增长按真实位置接续。
+          const glide = this.mode === "follow";
           this.receipt = null;
           this.mode = "follow";
+          if (glide && current !== reachable) this.write(reachable, false);
           this.schedule();
         } else if (!this.motion && !this.handoff) this.receipt = null;
         return;
@@ -321,7 +331,8 @@ export class TimelineViewportCoordinator<C, A> {
     if (this.exiting) return;
     const layout = this.layout;
     const anchor = preserve ? layout?.captureAnchor() : null;
-    const stopLatest = this.mode === "latest";
+    // Latest 与跟随平滑滚动都由浏览器驱动，退出时停在当前位置。
+    const stopSmooth = this.mode === "latest" || this.receipt?.smooth === true;
     const motion = this.motion;
     this.cancelFrame();
     this.motion = null;
@@ -335,7 +346,7 @@ export class TimelineViewportCoordinator<C, A> {
     try {
       motion?.finish(settleInput);
       if (anchor && layout) this.restoreAnchor(layout, anchor);
-      if (stopLatest && layout) layout.scroll(layout.top(), false);
+      if (stopSmooth && layout) layout.scroll(layout.top(), false);
       this.lastTop = layout?.top() ?? 0;
     } finally { this.exiting = false; }
   }
@@ -433,6 +444,10 @@ export class TimelineViewportCoordinator<C, A> {
     }
     let geometry = layout.measure();
     this.lastBottom = geometry.bottom;
+    const viewportChanged = Math.abs(geometry.height - geometry.bottom - this.lastViewport) > EPSILON;
+    const streamGrowth = geometry.streamingRow !== null && geometry.streamingRow === this.lastStreamingRow;
+    this.lastViewport = geometry.height - geometry.bottom;
+    this.lastStreamingRow = geometry.streamingRow;
     if (this.mode === "latest") {
       const target = Math.min(this.receipt?.target ?? geometry.bottom, geometry.bottom);
       if (geometry.animate && Math.abs(geometry.top - target) > EPSILON) { this.schedule(); return; }
@@ -478,12 +493,27 @@ export class TimelineViewportCoordinator<C, A> {
     this.mode = "follow";
     const target = this.followTarget(geometry);
     if (this.handoff || Math.abs(target - geometry.top) > EPSILON) {
+      const glide = !this.handoff && !viewportChanged && streamGrowth && this.glides(geometry, target);
       this.handoff = false;
-      requested = this.tailCredit === 0 ? geometry.height : target;
-      this.write(requested, false, geometry);
+      if (glide) {
+        requested = target;
+        // 目标未变时不重复请求，避免浏览器重启同一段平滑滚动。
+        const receipt = this.receipt;
+        if (!receipt?.smooth || Math.abs(receipt.target - Math.min(target, geometry.bottom)) > EPSILON) this.write(target, true, geometry);
+      } else {
+        requested = this.tailCredit === 0 ? geometry.height : target;
+        this.write(requested, false, geometry);
+      }
     } else this.lastTop = geometry.top;
     this.ready = true;
     this.record(reason, geometry, requested);
+  }
+
+  /** 已稳定跟随时，流式正文向下增长的小段位移交给原生平滑滚动；新行、回执、首次贴底与回缩仍瞬时。 */
+  private glides(geometry: ViewportGeometry, target: number): boolean {
+    const viewport = geometry.height - geometry.bottom;
+    const distance = target - geometry.top;
+    return geometry.animate && this.ready && viewport > 0 && distance > EPSILON && distance <= viewport * FOLLOW_GLIDE_SCREENS;
   }
 
   private record(reason: ViewportReason, geometry: ViewportGeometry, requested: number | null): void {

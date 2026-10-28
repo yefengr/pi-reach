@@ -4,6 +4,18 @@ import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor, type Time
 import type { ViewportGeometry, ViewportLayout } from "./timeline-viewport-coordinator";
 import type { ViewportDiagnosticGeometry } from "./timeline-viewport-diagnostics";
 
+/** 流式回复行的 class；正式版本接管后移除 partial。 */
+const STREAMING_ROW_CLASSES = ["pwa-message", "assistant", "partial"];
+
+/** 末尾内容行（跳过状态行等非内容子元素）仍在流式输出时返回其行身份；每次测量都会调用，只读属性与 class，不做选择器匹配。 */
+function streamingTailRow(list: HTMLDivElement): string | null {
+  for (let child = list.lastElementChild; child; child = child.previousElementSibling) {
+    const row = child.getAttribute("data-viewport-row");
+    if (row !== null) return STREAMING_ROW_CLASSES.every((name) => child.classList.contains(name)) ? row : null;
+  }
+  return null;
+}
+
 export function viewportMotionAllowed(): boolean {
   return !document.hidden && !(typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
@@ -15,7 +27,7 @@ export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCaptu
     const space = activityFollowSpace(this.list);
     const height = this.list.scrollHeight;
     return { top: this.list.scrollTop, bottom: Math.max(0, height - this.list.clientHeight), height,
-      animate: this.list.isConnected && viewportMotionAllowed(), ...space };
+      animate: this.list.isConnected && viewportMotionAllowed(), streamingRow: streamingTailRow(this.list), ...space };
   }
   /** 仅由已启用的诊断路径调用；不保留 DOM 引用或任意业务字段。 */
   diagnosticGeometry(): ViewportDiagnosticGeometry {
