@@ -212,6 +212,31 @@ describe("TimelineRuntime", () => {
     expect(runtime.getPublishedEvents().map((event) => event.kind)).toEqual(["user", "user"]);
   });
 
+  test("attributes steered user messages to their own correlation instead of the run's ALS scope", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const started: Correlation[] = [];
+    const runtime = new TimelineRuntime({ onStarted: (value) => started.push(value.correlation) });
+    runtime.attach(session);
+    const root: Correlation = { clientRequestId: "root", origin: "pwa", delivery: "normal", senderRef: "owner" };
+    const first: Correlation = { clientRequestId: "steer-1", origin: "pwa", delivery: "normal", senderRef: "owner", deliveryToken: "token-1" };
+    const second: Correlation = { clientRequestId: "steer-2", origin: "pwa", delivery: "normal", senderRef: "owner", deliveryToken: "token-2" };
+    runtime.expectSteer("继续", first);
+    runtime.expectSteer("继续", second);
+
+    // SDK 在本轮边界发出插入消息的 message_start，此时 ALS 仍是发起本轮的请求。
+    runtime.runWithCorrelation(root, () => {
+      runtime.onMessageStart(userMessage("root"), session);
+      runtime.onMessageStart(userMessage("继续", 3), session);
+      runtime.onMessageStart(userMessage("继续", 4), session);
+      runtime.onMessageStart(userMessage("terminal follow-up", 5), session);
+    });
+
+    expect(started.map((correlation) => correlation.clientRequestId)).toEqual(["root", "steer-1", "steer-2", "root"]);
+    runtime.expectSteer("stale", first);
+    runtime.resetSession(SessionManager.inMemory(process.cwd()));
+    expect(runtime.runWithCorrelation(root, () => runtime.onMessageStart(userMessage("stale", 6), session))?.correlation.clientRequestId).toBe("root");
+  });
+
   test("publishes stable assistant and thinking partials without persisting them", async () => {
     const session = SessionManager.inMemory(process.cwd());
     const partials: unknown[] = [];

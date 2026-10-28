@@ -151,6 +151,7 @@ export class UserDeliveryBinding {
       pi.sendUserMessage(content, options);
     };
     const timeline = this.options.getTimeline();
+    if (timeline && options?.deliverAs === "steer") timeline.expectSteer(content, correlation);
     if (timeline) timeline.runWithCorrelation(correlation, send); else send();
   }
 
