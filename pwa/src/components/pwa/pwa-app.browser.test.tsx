@@ -1875,15 +1875,17 @@ test.each([false, true])("delivery query late upgrade error stays local after ti
   } finally { vi.useRealTimers(); await screen.unmount(); }
 });
 
-test("an unanswered automatic delivery query retries after backoff and stops once answered", async () => {
+// 答复后停止与重查次数上限由 runtime Node 测试覆盖；这里只推进一次退避，CI 上每秒假时钟都有渲染成本。
+test("an unanswered automatic delivery query retries once its backoff elapses", async () => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     await screen.getByPlaceholder("Message your agent…").fill("Retry unanswered query");
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     const sent = channel.frames.find(frame => frame.type === "user_message")!;
     const queries = () => channel.frames.filter(frame => frame.type === "user_message_status_request");
-    // 必须在 unknown 自动查询和 effect 创建定时器之前安装受控时钟。
-    vi.useFakeTimers();
+    // 必须在 unknown 自动查询和 effect 创建定时器之前安装受控时钟；只接管查询与重查用到的 setTimeout 和 Date，
+    // 其余周期任务保持真实，避免推进 25 秒假时钟时反复渲染。
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
       in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "unknown_delivery" });
     const commitEffects = async () => {
@@ -1900,19 +1902,12 @@ test("an unanswered automatic delivery query retries after backoff and stops onc
     expect(queries()).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
     await commitEffects();
-    expect(queries()).toHaveLength(2);
-    // 重查得到答复后结束；not_found 只说明证据不足，不再循环查询。
-    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
-      in_reply_to: queries()[1]!.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "not_found" });
-    await commitEffects();
-    await vi.advanceTimersByTimeAsync(DELIVERY_STATUS_QUERY_TIMEOUT_MS + DELIVERY_STATUS_RETRY_DELAYS_MS[1]);
-    await commitEffects();
     vi.useRealTimers();
     expect(queries()).toHaveLength(2);
-    await expect.element(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+    expect(queries()[1]).toMatchObject({ client_request_id: sent.client_request_id });
     expect(channel.frames.filter(frame => frame.type === "user_message")).toHaveLength(1);
   } finally { vi.useRealTimers(); await screen.unmount(); }
-});
+}, 30_000);
 
 test.each([[true, "accepted"], [true, "committed"], [false, "accepted"], [false, "committed"]] as const)("delivery query late %s %s receipt merges formal history once", async (expired, status) => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
