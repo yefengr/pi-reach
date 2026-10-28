@@ -325,7 +325,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 独立设置页：与工作区同为 bg 底，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
 /* 设置层左右都贴屏幕边缘，由页面自身内缩左右安全区；内部 640 容器及其内边距不再叠加。 */
 .pwa-root .pwa-settings-page { min-height: 100%; padding-inline: var(--pwa-safe-left) var(--pwa-safe-right); color: var(--pwa-ink); background: var(--pwa-bg); }
-/* 桌面设置页没有固定顶栏，顶部吸附一条与页面同底色的遮挡条，内容不滚入透明状态栏；负外边距使其不占布局高度。 */
+/* 桌面设置页没有固定顶栏，顶部吸附一条与页面同底色的遮挡条，系统报告状态栏安全区时内容不滚入状态栏；负外边距使其不占布局高度。 */
 .pwa-root .pwa-status-bar-shield { position: sticky; z-index: 1; top: 0; height: var(--pwa-safe-top); margin-bottom: calc(-1 * var(--pwa-safe-top)); background: var(--pwa-bg); }
 .pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) var(--pwa-gutter) calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
 .pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }

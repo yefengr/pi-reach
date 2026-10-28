@@ -520,8 +520,6 @@ test("standalone overlays fill the app height instead of the clipped initial con
 });
 
 test("standalone status bar backdrop is a top-layer fixed element that only exposes the status bar color", async () => {
-  const safeTop = 47;
-  document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
   await page.viewport(1280, 844);
   const screen = await renderLayout({ events: [] });
   await expect.element(screen.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
@@ -533,16 +531,17 @@ test("standalone status bar backdrop is a top-layer fixed element that only expo
   expect(style().display).toBe("none");
   const standalone = applyStandaloneRules();
   try {
-    // iOS 在顶边中点下方约 4px 处命中检测，只认真实 fixed 元素；它须高于所有叠层，背景只裁到零高内容盒，不绘制也不接收点击。
+    // iOS 在顶边中点下方约 4px 处命中检测，只认真实 fixed 元素，盒高超过 10px 才直接读背景色；
+    // 它须高于所有叠层，背景只裁到零高内容盒，不绘制也不接收点击。
     const rect = backdrop.getBoundingClientRect();
-    expect([rect.top, rect.left, rect.width, rect.height].map(Math.round)).toEqual([0, 0, window.innerWidth, safeTop]);
-    expect([style().position, style().paddingTop, style().backgroundClip, style().pointerEvents]).toEqual(["fixed", `${safeTop}px`, "content-box", "none"]);
+    expect([rect.top, rect.left, rect.width, rect.height].map(Math.round)).toEqual([0, 0, window.innerWidth, 12]);
+    expect([style().position, style().paddingTop, style().backgroundClip, style().pointerEvents]).toEqual(["fixed", "12px", "content-box", "none"]);
     expect(Number(style().zIndex)).toBeGreaterThan(layer("feedback"));
     // 桌面侧栏展开：状态栏下方是 panel；收起后主区贴顶，换成 bg。
     expect(style().backgroundColor).toBe(color(".pwa-desktop-navigation .pwa-sidebar"));
     await screen.getByRole("button", { name: "Collapse sidebar" }).click();
     await expect.poll(() => style().backgroundColor).toBe(color(".pwa-main"));
-    // 移动端为 bg；导航打开时取导航头部的 panel，关闭后恢复。
+    // 移动端为 bg；导航打开时取导航头部的 panel。
     await page.viewport(390, 844);
     await expect.poll(() => style().backgroundColor).toBe(color(".pwa-main"));
     await screen.getByRole("button", { name: "Open navigation" }).click();
@@ -554,7 +553,6 @@ test("standalone status bar backdrop is a top-layer fixed element that only expo
     await expect.poll(() => style().backgroundColor).toBe(color(".pwa-settings-header"));
   } finally {
     standalone.remove();
-    document.documentElement.style.removeProperty("--pwa-safe-top");
   }
 });
 

@@ -45,13 +45,13 @@
 .pwa-root[data-view-transition] .pwa-settings-view { border-radius: 0; box-shadow: var(--pwa-shadow-modal); }
 .pwa-root[data-view="settings"]:not([data-view-transition]) .pwa-workspace-view { visibility: hidden; }
 
-/* iOS 27 主屏 PWA 在页面顶部中点取样：命中元素及其祖先都不是 fixed 时，状态栏下方的模糊会向下延伸并盖住顶栏；
-   命中 fixed 元素时改用其背景色铺实色状态栏。伪元素命中后按宿主元素处理，所以用真实元素，并放在全部叠层之上，
-   导航、设置页与阅读器打开时同样命中。背景只裁到零高的内容盒：不绘制，也不接收点击，只供 iOS 取色。
-   没有状态栏安全区时高度为 0，不参与取样。 */
+/* iOS 27 主屏 PWA 在页面顶边中点下方约 4px 处命中检测：命中元素或其祖先是 fixed 时，按其背景色铺实色状态栏；否则状态栏下方
+   加一段向下延伸的模糊，盖住顶栏。实色状态栏只在页面不延伸到状态栏下方时出现，因此 viewport 不设 viewport-fit=cover。
+   伪元素命中后按宿主元素处理，所以用真实元素，并放在全部叠层之上，导航、设置页与阅读器打开时同样命中。
+   iOS 只在盒高超过 10px 时直接读背景色（否则改为采样像素），取 12px；背景只裁到零高的内容盒，不绘制，也不接收点击。 */
 .pwa-root .pwa-status-backdrop { display: none; }
 @media (display-mode: standalone) {
-  .pwa-root .pwa-status-backdrop { position: fixed; z-index: var(--pwa-z-status-backdrop); top: 0; right: 0; left: 0; display: block; height: max(6px, var(--pwa-safe-top)); background-color: var(--pwa-error); pointer-events: none; }
+  .pwa-root .pwa-status-backdrop { position: fixed; z-index: var(--pwa-z-status-backdrop); top: 0; right: 0; left: 0; display: block; height: 12px; padding-top: 12px; background-color: var(--pwa-status-backdrop); background-clip: content-box; pointer-events: none; }
 }
 /* 移动导航打开时状态栏下方是 panel 头部；设置层在其上时仍按设置页取 bg，所以设置规则放在后面。 */
 .pwa-root:has(.pwa-navigation-drawer) { --pwa-status-backdrop: var(--pwa-panel); }
@@ -78,7 +78,7 @@
   /* 展开时立即可见；只在收起时延迟到过渡结束再隐藏，避免从设置页返回时继承的隐藏状态被过渡拖住而无法聚焦。 */
   transition: transform var(--pwa-sidebar-motion) var(--pwa-ease-standard), opacity var(--pwa-sidebar-motion) var(--pwa-ease-standard), visibility 0s;
 }
-/* 主屏 PWA 的状态栏透明，桌面断点（如 iPad）同样避让安全区，侧栏底色延伸到状态栏下方。 */
+/* 系统报告状态栏安全区时，桌面断点（如 iPad）同样避让，侧栏底色延伸到状态栏下方。 */
 .pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: var(--pwa-safe-top); padding-left: calc(8px + var(--pwa-safe-left)); }
 .pwa-root[data-sidebar-collapsed] .pwa-desktop-navigation { transform: translateX(calc(-100% * var(--pwa-motion-shift))); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, var(--pwa-sidebar-motion); }
 
