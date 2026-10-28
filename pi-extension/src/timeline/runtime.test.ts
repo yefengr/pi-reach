@@ -237,6 +237,27 @@ describe("TimelineRuntime", () => {
     expect(runtime.runWithCorrelation(root, () => runtime.onMessageStart(userMessage("stale", 6), session))?.correlation.clientRequestId).toBe("root");
   });
 
+  test("a leftover steer registration never overrides a fresh request's own correlation", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const started: Correlation[] = [];
+    const runtime = new TimelineRuntime({ onStarted: (value) => started.push(value.correlation) });
+    runtime.attach(session);
+    const stale: Correlation = { clientRequestId: "stale-steer", origin: "pwa", delivery: "normal", senderRef: "owner-a", deliveryToken: "stale" };
+    const idle: Correlation = { clientRequestId: "idle-steer", origin: "pwa", delivery: "normal", senderRef: "owner-a", deliveryToken: "idle" };
+    const fresh: Correlation = { clientRequestId: "fresh", origin: "pwa", delivery: "normal", senderRef: "owner-b", deliveryToken: "fresh" };
+    // 中止的运行留下从未开始的登记；空闲时的 steer 会在自身 ALS 内立即开始。
+    runtime.expectSteer("继续", stale);
+    runtime.expectSteer("idle", idle);
+    runtime.runWithCorrelation(idle, () => runtime.onMessageStart(userMessage("idle", 2), session));
+    runtime.runWithCorrelation(fresh, () => runtime.onMessageStart(userMessage("继续", 3), session));
+    // 同一 ALS 下的后续用户消息才视为插入；空闲 steer 的登记已撤销，不会再被取走。
+    runtime.runWithCorrelation(fresh, () => runtime.onMessageStart(userMessage("idle", 4), session));
+
+    expect(started.map((correlation) => correlation.clientRequestId)).toEqual(["idle-steer", "fresh", "fresh"]);
+    runtime.discardSteer(stale);
+    expect(runtime.runWithCorrelation(fresh, () => runtime.onMessageStart(userMessage("继续", 5), session))?.correlation.clientRequestId).toBe("fresh");
+  });
+
   test("publishes stable assistant and thinking partials without persisting them", async () => {
     const session = SessionManager.inMemory(process.cwd());
     const partials: unknown[] = [];

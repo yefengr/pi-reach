@@ -209,8 +209,11 @@ describe("UserDeliveryBinding", () => {
     service.handle({ protocol_version: 2, type: "queued_message_steer", id: "steer-1", channel_id: "channel-1", session_id: session.getSessionId(), leaf_id: service.leafId, target_id: "request-1" });
     expect(sendUserMessage).toHaveBeenCalledWith("继续", { deliverAs: "steer" });
 
-    // 本轮由另一请求发起；SDK 在下一个边界才发出插入消息的 message_start。
-    runtime.runWithCorrelation({ origin: "unknown", delivery: "unknown" }, () => runtime.onMessageStart({ role: "user", content: "继续", timestamp: 3 }, session));
+    // 本轮由另一请求发起；SDK 在下一个边界才于同一 ALS 下发出插入消息的 message_start。
+    runtime.runWithCorrelation({ origin: "unknown", delivery: "unknown" }, () => {
+      runtime.onMessageStart({ role: "user", content: "root", timestamp: 2 }, session);
+      runtime.onMessageStart({ role: "user", content: "继续", timestamp: 3 }, session);
+    });
     expect(sent).toContainEqual(expect.objectContaining({ type: "user_message_started", in_reply_to: "wire-1", target_channel_id: "channel-1" }));
     binding.clearAll();
   });
@@ -218,6 +221,7 @@ describe("UserDeliveryBinding", () => {
   test("isolates owners and hands a queued target to steer at most once", () => {
     const session = SessionManager.inMemory(process.cwd());
     const runtime = new TimelineRuntime();
+    runtime.attach(session);
     const targets = new Map<string, UserDeliveryTarget>();
     let fail = true;
     const sendUserMessage = vi.fn(() => {
@@ -262,6 +266,8 @@ describe("UserDeliveryBinding", () => {
     expect(binding.snapshot("owner-b", serviceB)[0]).toMatchObject({ items: [{ id: "target-1", text: "bravo" }] });
     expect(sendUserMessage).toHaveBeenNthCalledWith(1, "alpha", { deliverAs: "steer" });
     expect(sendUserMessage).toHaveBeenCalledTimes(1);
+    // SDK 同步抛错的 steer 撤销登记，之后相同内容的消息不会被归到该请求。
+    expect(runtime.onMessageStart({ role: "user", content: "alpha", timestamp: 9 }, session)?.correlation).toMatchObject({ origin: "unknown" });
     binding.clearAll();
   });
 

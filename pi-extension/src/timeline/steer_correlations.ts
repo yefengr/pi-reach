@@ -19,7 +19,8 @@ export class SteerCorrelations {
   private expected: ExpectedSteer[] = [];
 
   expect(content: unknown, correlation: Correlation): void {
-    this.expected.push({ key: contentKey(content), correlation: { ...correlation } });
+    // 保留原对象以便按身份撤销；取出时再复制。
+    this.expected.push({ key: contentKey(content), correlation });
     // 被中止的运行可能留下从未开始的登记；超出上限时淘汰最早的，避免无界增长。
     if (this.expected.length > MAX_EXPECTED_STEERS) this.expected.shift();
   }
@@ -31,6 +32,11 @@ export class SteerCorrelations {
     if (index < 0) return undefined;
     const [entry] = this.expected.splice(index, 1);
     return { ...entry!.correlation };
+  }
+
+  /** 撤销某次请求的登记：已在自身 ALS 内开始或 SDK 同步抛错时，不再参与内容匹配。 */
+  discard(correlation: Correlation): void {
+    this.expected = this.expected.filter((entry) => entry.correlation !== correlation);
   }
 
   clear(): void {
