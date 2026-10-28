@@ -162,6 +162,25 @@ test("finishes the buffered tail in place within the finish window before the fo
   expect(buffer.snapshot()).toEqual([assistantEvent("e", "g", "long answer!")]);
 });
 
+test("a large tail stretches the finish window so each frame releases only a few lines", () => {
+  const buffer = new StreamDisplayBuffer();
+  const body = "字".repeat(802);
+  buffer.ingest([partial("e:assistant:0", "g", body)]);
+  buffer.ingest([assistantEvent("e", "g", body)]);
+  const lengths = [2];
+  while (buffer.hasPending()) {
+    buffer.advance(16);
+    const item = buffer.snapshot()[0];
+    lengths.push(item?.kind === "partial" ? text(item)!.length : 802);
+  }
+  const releases = lengths.slice(1).map((length, index) => length - lengths[index]!);
+  // 800 个字素按每毫秒约 1 个放出，受 640ms 上限约束：约 40 帧，每帧不超过约 21 个。
+  expect(releases.length).toBeGreaterThan(30);
+  expect(releases.length).toBeLessThanOrEqual(41);
+  expect(Math.max(...releases)).toBeLessThanOrEqual(25);
+  expect(buffer.snapshot()).toEqual([assistantEvent("e", "g", body)]);
+});
+
 test("formal events take over immediately when drained or when they do not extend the shown text", () => {
   const drained = new StreamDisplayBuffer();
   drained.ingest([partial("e:assistant:0", "g", "ok")]);

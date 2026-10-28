@@ -1,4 +1,4 @@
-import { FollowGlide } from "./timeline-follow-glide";
+import { FollowGlide, TRANSITION_GLIDE_OMEGA } from "./timeline-follow-glide";
 
 export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "viewport-resize", "hidden", "reduce", "output", "frame", "send", "latest", "input", "user", "details", "reset", "bind", "settle", "scroll"] as const;
 export type ViewportReason = typeof VIEWPORT_REASONS[number];
@@ -6,7 +6,12 @@ export const VIEWPORT_MODES = ["idle", "follow", "send", "activity", "latest"] a
 export type ViewportMode = typeof VIEWPORT_MODES[number];
 /** tailReply：末尾内容行是 Pi 回复时为其行身份与是否仍在流式输出；正式版本接管后行身份不变。 */
 export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean; tailSpace: number; compensation: number; tailReply: { row: string; streaming: boolean } | null };
-export type ViewportMotion = { advance(now: number): { top: number; finished: boolean }; finish(settleInput?: boolean): void };
+/**
+ * target：本帧的滚动目标；提供时滚动由协调器平滑追赶，目标中途变化不在末段一次补完。
+ * shift：布局补偿（如顶部 padding 变化）对当前位置的整体平移。
+ */
+export type ViewportMotionStep = { top: number; finished: boolean; target?: number; shift?: number };
+export type ViewportMotion = { advance(now: number): ViewportMotionStep; finish(settleInput?: boolean): void };
 export type ViewportCapture<C> = Readonly<{ generation: number; binding: object; value: C }>;
 export type ViewportPosition<A> = { following: true } | { following: false; anchor: A };
 export interface ViewportLayout<C, A> {
@@ -59,6 +64,8 @@ export class TimelineViewportCoordinator<C, A> {
   private liveReplyRow: string | null = null;
   /** 跟随 Pi 回复增长的逐帧运动；任何输入、退出或非回复增长都会结束。 */
   private glide: FollowGlide | null = null;
+  /** 运动过程报告目标时的滚动追赶；过程结束且到达目标后才交接。 */
+  private motionGlide: FollowGlide | null = null;
   private inputHoldUntil = 0;
   private tailCredit = 0;
   private ready = false;
@@ -343,6 +350,7 @@ export class TimelineViewportCoordinator<C, A> {
     const motion = this.motion;
     this.cancelFrame();
     this.motion = null;
+    this.motionGlide = null;
     this.motionTime = null;
     this.receipt = null;
     this.glide = null;
@@ -481,11 +489,13 @@ export class TimelineViewportCoordinator<C, A> {
       if (!geometry.animate) { this.exit(false); geometry = layout.measure(); }
       else {
         const epoch = this.frameEpoch;
-        const step = this.motion.advance(this.sampleMotionTime(frameTime));
+        const time = this.sampleMotionTime(frameTime);
+        const step = this.motion.advance(time);
         if (epoch !== this.frameEpoch || this.layout !== layout) return;
-        if (!step.finished) {
-          requested = step.top;
-          this.write(step.top, false);
+        const tracked = this.trackMotion(step, time);
+        if (!step.finished || !tracked.settled) {
+          requested = tracked.top;
+          this.write(tracked.top, false);
           this.schedule();
           this.record(reason, geometry, requested);
           return;
@@ -522,6 +532,14 @@ export class TimelineViewportCoordinator<C, A> {
     }
     this.ready = true;
     this.record(reason, geometry, requested);
+  }
+
+  /** 过程报告目标时以阻尼运动追赶，否则直接采用过程给出的位置。 */
+  private trackMotion(step: ViewportMotionStep, time: number): { top: number; settled: boolean } {
+    if (step.target === undefined) return { top: step.top, settled: true };
+    if (!this.motionGlide) this.motionGlide = new FollowGlide(step.top, TRANSITION_GLIDE_OMEGA);
+    else if (step.shift) this.motionGlide.shift(step.shift);
+    return this.motionGlide.advance(time, step.target);
   }
 
   /**
