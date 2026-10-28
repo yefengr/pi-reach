@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { QueuedMessages } from "./queued-messages";
 import { useI18n } from "@/lib/i18n";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
@@ -23,17 +23,31 @@ function nearestInsertionDeadline(items: TimelineViewItem[]): number | null {
 type QueuedMessagesPanelProps = {
   items: TimelineViewItem[];
   isOnline: boolean;
+  /** Pi 是否正在运行：插入要等本轮下一个边界才开始，运行期间不判定未确认。 */
+  isWorking?: boolean;
   runtimeRef: { current: TimelineRuntime };
   channelRef: { current: PeerChannel | null };
   applyChange: (change: TimelineRuntimeChange) => void;
   onError: (message: string) => void;
 };
 
-export function QueuedMessagesPanel({ items, isOnline, runtimeRef, channelRef, applyChange, onError }: QueuedMessagesPanelProps) {
+export function QueuedMessagesPanel({ items, isOnline, isWorking = false, runtimeRef, channelRef, applyChange, onError }: QueuedMessagesPanelProps) {
   const q = useI18n().t.queued;
+  const wasWorkingRef = useRef(isWorking);
+  const runEndedAtRef = useRef<number | null>(null);
   useEffect(() => {
-    const deadline = nearestInsertionDeadline(items);
-    if (deadline === null) return;
+    if (isWorking) wasWorkingRef.current = true;
+    else if (wasWorkingRef.current) {
+      wasWorkingRef.current = false;
+      runEndedAtRef.current = Date.now();
+    }
+  }, [isWorking]);
+  useEffect(() => {
+    if (isWorking) return;
+    const requested = nearestInsertionDeadline(items);
+    if (requested === null) return;
+    // 运行结束后再给完整确认窗口：长回复可能超过固定时长，本轮结束时插入才会开始。
+    const deadline = Math.max(requested, (runEndedAtRef.current ?? 0) + QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS);
     const now = Date.now();
     if (deadline <= now) {
       applyChange(runtimeRef.current.expireQueuedInsertions(now));
@@ -41,7 +55,7 @@ export function QueuedMessagesPanel({ items, isOnline, runtimeRef, channelRef, a
     }
     const timer = window.setTimeout(() => applyChange(runtimeRef.current.expireQueuedInsertions()), deadline - now);
     return () => window.clearTimeout(timer);
-  }, [applyChange, items, runtimeRef]);
+  }, [applyChange, isWorking, items, runtimeRef]);
 
   const act = (requestId: string, action: "insert" | "cancel") => {
     const runtime = runtimeRef.current;
@@ -58,7 +72,7 @@ export function QueuedMessagesPanel({ items, isOnline, runtimeRef, channelRef, a
   return <QueuedMessages
     items={items.filter(isQueuedMessage).filter((item) => !item.insertionNoticeDismissed).map((item) => {
       const status = item.insertionStatus === "unconfirmed" ? q.unconfirmed
-        : item.insertionStatus === "waiting" ? item.queuedAction === "insert" ? q.requestingInsert : q.awaitingInsert
+        : item.insertionStatus === "waiting" ? q.inserting
           : item.delivery === "unknown_delivery" ? q.waitingReconnect
             : item.queuedAction === "cancel" ? q.cancelling
               : item.cancelable ? q.queued : q.sending;
@@ -69,6 +83,7 @@ export function QueuedMessagesPanel({ items, isOnline, runtimeRef, channelRef, a
         attachments: item.attachments,
         status,
         ...(status === q.queued ? { waiting: true } : {}),
+        ...(status === q.inserting || status === q.cancelling || status === q.sending ? { pending: true } : {}),
         ...(item.insertionStatus === "unconfirmed" ? { notice: q.unconfirmedNotice, attention: true, dismissible: true } : {}),
         canManage: item.insertionStatus === undefined && item.cancelable === true && item.delivery !== "unknown_delivery",
         busy: item.queuedAction !== undefined || item.insertionStatus !== undefined,

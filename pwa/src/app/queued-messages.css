@@ -36,17 +36,20 @@
   line-height: var(--pwa-leading-ui);
 }
 
+/* 所有排队消息共用一块面板，行间以分隔线区分，比逐条卡片更省高度。 */
 .pwa-queued-message-list {
   display: grid;
-  gap: 6px;
   max-height: min(220px, 25dvh);
+  border: 1px solid var(--pwa-line);
+  border-radius: var(--pwa-radius-md);
+  background: var(--pwa-panel);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
-/* 每条一行：状态、单行正文、插入与取消图标按钮；有投递提示时在下方补一行说明。 */
+/* 每条一行：序号、状态、单行正文、操作图标按钮；有投递提示时在下方补一行说明。 */
 .pwa-queued-message {
   display: flex;
   align-items: center;
@@ -54,9 +57,19 @@
   min-width: 0;
   min-height: var(--pwa-hit-target);
   padding: 0 0 0 12px;
-  border: 1px solid var(--pwa-line);
-  border-radius: var(--pwa-radius-md);
-  background: var(--pwa-panel);
+}
+
+.pwa-queued-message + .pwa-queued-message {
+  border-top: 1px solid var(--pwa-line);
+}
+
+.pwa-queued-message-index {
+  flex: 0 0 auto;
+  min-width: 12px;
+  color: var(--pwa-secondary);
+  font-size: var(--pwa-text-meta);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--pwa-leading-ui);
 }
 
 .pwa-queued-message-copy {
@@ -67,9 +80,10 @@
   padding-block: 6px;
 }
 
+/* 状态可能只有图标，整行按垂直居中而非基线对齐，图标与正文中线一致。 */
 .pwa-queued-message-line {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
@@ -83,11 +97,6 @@
   font-size: var(--pwa-text-meta);
   line-height: var(--pwa-leading-ui);
   white-space: nowrap;
-}
-
-/* 图标不参与基线：由文字决定状态的基线，整行仍与正文按基线对齐。 */
-.pwa-queued-message-status > span {
-  align-self: baseline;
 }
 
 .pwa-queued-message-text {
@@ -112,8 +121,17 @@
 }
 
 .pwa-queued-message[data-attention] .pwa-queued-message-status,
-.pwa-queued-message[data-attention] .pwa-queued-message-notice {
+.pwa-queued-message[data-attention] .pwa-queued-message-notice,
+.pwa-queued-message-status[data-pending] svg {
   color: var(--pwa-running);
+}
+
+.pwa-ui-scope .pwa-queued-message-list .pwa-queued-messages-more[data-variant="transparent"] {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 12px;
+  border-top-color: var(--pwa-line);
+  border-radius: 0;
 }
 
 .pwa-queued-message-images {

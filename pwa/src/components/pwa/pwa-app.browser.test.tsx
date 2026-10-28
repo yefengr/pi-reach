@@ -554,11 +554,12 @@ test("keeps queued messages beside the composer and inserts the original item on
   const request = channel.frames.find((frame) => frame.type === "queued_message_steer")!;
   expect(request).toMatchObject({ target_id: "queued-1" });
   expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(0);
-  await expect.element(insert).toBeDisabled();
+  // 插入进行中不再提供操作，只显示运行中状态。
+  await expect.element(insert).not.toBeInTheDocument();
   channel.emit({ ...queued, items: [] });
-  await expect.element(screen.getByText("Insertion requested · awaiting confirmation", { exact: true })).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: /Insert into conversation/ })).toBeDisabled();
-  await expect.element(screen.getByRole("button", { name: /Cancel queued message/ })).toBeDisabled();
+  await expect.element(screen.getByText("Inserting…", { exact: true })).toBeVisible();
+  await expect.element(screen.getByRole("button", { name: /Insert into conversation/ })).not.toBeInTheDocument();
+  await expect.element(screen.getByRole("button", { name: /Edit queued message/ })).not.toBeInTheDocument();
   channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId, in_reply_to: request.id, client_request_id: "queued-1", session_id: "session-1", leaf_id: "generation-session-1", status: "accepted", message_id: "message-1" });
   await expect.element(screen.getByRole("heading", { name: "Queued messages" })).not.toBeInTheDocument();
   await screen.unmount();
@@ -1647,7 +1648,7 @@ test.each([false, true])("attachment final submission preserves a restored draft
     const input = screen.getByPlaceholder("Message your agent…");
     await input.fill("Original attachment draft");
     channel.emit(queuedStateFrame([{ id: "restore-during-send", text: "Next draft survives" }], "before-draft-handoff"));
-    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     // 撤回已请求但尚未收到权威快照，最终提交时再交付这条异步回执。
     pasteAttachments(input.element(), new File(["Note"], "draft-handoff.txt", { type: "text/plain" }));
     await expect.element(screen.getByText("draft-handoff.txt", { exact: true })).toBeVisible();
@@ -1774,7 +1775,7 @@ test("a recovered queued message gets a new automatic query for its later cancel
     channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
       in_reply_to: first.id, client_request_id: "recover-cancel", session_id: "session-1", leaf_id: "generation-session-1", status: "accepted" });
     channel.emit(queuedStateFrame([{ id: "recover-cancel", text: "Recover then cancel" }], "recover-restored"));
-    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     channel.emit(queuedStateFrame([], "cancel-missing"));
     await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message_status_request").length).toBe(2);
     const query = channel.frames.findLast(frame => frame.type === "user_message_status_request")!;
@@ -4063,7 +4064,7 @@ test("returns a withdrawn queued message from the direct cancellation receipt wi
     await expect.element(screen.getByText("Check landscape mode next", { exact: true })).toBeVisible();
     const input = screen.getByRole("textbox");
     await input.fill("Draft in progress");
-    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     const clear = channel.frames.findLast((frame) => frame.type === "queued_message_clear")!;
     // 与 Extension 一致：定向 cancelled 回执先于不含该项的快照。
     flushSync(() => {
@@ -4086,7 +4087,7 @@ test("falls back to a status query when the cancellation receipt is lost", async
     await expect.element(screen.getByText("Check landscape mode next", { exact: true })).toBeVisible();
     const input = screen.getByRole("textbox");
     await input.fill("Draft in progress");
-    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     expect(channel.frames.filter((frame) => frame.type === "queued_message_clear")).toHaveLength(1);
     // 取消尚未确认时不回填。
     await expect.element(input).toHaveValue("Draft in progress");
@@ -4106,7 +4107,7 @@ test("does not return a queued message that Pi already read", async () => {
   try {
     channel.emit(queuedStateFrame([{ id: "queued-1", text: "Already consumed message" }], "queue-1"));
     await expect.element(screen.getByText("Already consumed message", { exact: true })).toBeVisible();
-    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     const request = channel.frames.findLast((frame) => frame.type === "queued_message_clear")!;
     // Pi 在取消到达前已读取这条消息：先回执进入对话，再给出不含它的快照。
     channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId, in_reply_to: request.id, client_request_id: "queued-1", session_id: "session-1", leaf_id: "generation-session-1", status: "accepted", message_id: "message-1" });
@@ -4344,7 +4345,7 @@ test("queued cancellation restores a released descriptor and removal discards th
     expect(channelHarness.uploads.size).toBe(1);
     await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
     channel.emit(queuedStateFrame([{ id: message.client_request_id, text: message.text }], "queue-before-cancel"));
-    await screen.getByRole("button", { name: /^Cancel queued message 1/ }).click();
+    await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     channel.emit(queuedStateFrame([], "queue-after-cancel"));
     await expect.poll(() => channel.frames.some((frame) => frame.type === "user_message_status_request")).toBe(true);
     const query = channel.frames.findLast((frame) => frame.type === "user_message_status_request")!;
