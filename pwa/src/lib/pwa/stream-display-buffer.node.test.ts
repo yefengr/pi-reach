@@ -77,18 +77,46 @@ test("delivery query, failure and evidence metadata publish urgently without cha
   expect(buffer.ingest([pending, stream]).shouldRender).toBe(false);
 });
 
-test("shows only a small burst initially and drains within eight ticks", () => {
+test("starts with a small burst and paces the backlog over the target latency", () => {
   const buffer = new StreamDisplayBuffer();
-  const target = partial("p", "g", "abcdefghijklmnop");
-  const first = buffer.ingest([target]);
-  expect(text(first.items[0])).toBe("ab");
-  let ticks = 0;
-  while (buffer.hasPending() && ticks < 8) {
-    buffer.advance();
-    ticks += 1;
+  const first = buffer.ingest([partial("p", "g", "x".repeat(122))]);
+  expect(text(first.items[0])).toBe("xx");
+  const lengths: number[] = [];
+  for (let tick = 0; tick < 15; tick += 1) {
+    buffer.advance(16);
+    lengths.push(text(buffer.snapshot()[0])!.length);
   }
-  expect(ticks <= 8).toBe(true);
-  expect(text(buffer.snapshot()[0])).toBe("abcdefghijklmnop");
+  // 每帧都有进展，但不在一帧内倾倒积压；约一个目标延迟（240ms）后放出大半。
+  lengths.forEach((length, index) => expect(length).toBeGreaterThan(index === 0 ? 2 : lengths[index - 1]));
+  expect(lengths[0]).toBeLessThan(20);
+  expect(lengths.at(-1)!).toBeGreaterThan(60);
+  expect(lengths.at(-1)!).toBeLessThan(122);
+  while (buffer.hasPending()) buffer.advance(16);
+  expect(text(buffer.snapshot()[0])).toBe("x".repeat(122));
+});
+
+test("keeps releasing across jittered chunk arrivals instead of draining and stalling", () => {
+  const buffer = new StreamDisplayBuffer();
+  const gaps = [3, 22, 8, 18, 5, 25, 12, 15, 4, 20];
+  const releases: number[] = [];
+  let target = "";
+  let shown = 0;
+  let nextArrival = 0;
+  for (let tick = 0, arrival = 0; tick < 160; tick += 1) {
+    if (tick === nextArrival) {
+      // 约 200 字/秒，到达间隔在 48ms 到 400ms 之间抖动。
+      const gap = gaps[arrival++ % gaps.length];
+      target += "y".repeat(Math.round(gap * 16 * 0.2));
+      buffer.ingest([partial("p", "g", target)]);
+      nextArrival += gap;
+    }
+    buffer.advance(16);
+    const length = text(buffer.snapshot()[0])!.length;
+    if (tick >= 30) releases.push(length - shown);
+    shown = length;
+  }
+  expect(releases.filter((release) => release === 0)).toHaveLength(0);
+  expect(Math.max(...releases)).toBeLessThanOrEqual(10);
 });
 
 test("does not split emoji graphemes", () => {
@@ -116,12 +144,49 @@ test("keeps independent partial lanes separate", () => {
   expect(change.items.filter((item) => item.kind === "partial").map(text)).toEqual(["al", "br"]);
 });
 
-test("shows the matching formal event immediately without replaying its buffered tail", () => {
+test("finishes the buffered tail in place within the finish window before the formal event takes over", () => {
   const buffer = new StreamDisplayBuffer();
   buffer.ingest([partial("e:assistant:0", "g", "long answer")]);
-  const withFormal = buffer.ingest([assistantEvent("e", "g", "long answer"), partial("e:assistant:0", "g", "long answer")]);
-  expect(withFormal.items).toEqual([assistantEvent("e", "g", "long answer")]);
-  expect(buffer.hasPending()).toBe(false);
+  const withFormal = buffer.ingest([assistantEvent("e", "g", "long answer!")]);
+  expect(withFormal.items).toHaveLength(1);
+  expect(text(withFormal.items[0])).toBe("lo");
+  const lengths: number[] = [];
+  while (buffer.hasPending()) {
+    buffer.advance(16);
+    const item = buffer.snapshot()[0];
+    if (item?.kind === "partial") lengths.push(text(item)!.length);
+  }
+  // 160ms 窗口内逐帧放完，且尾巴扩展到正式正文。
+  expect(lengths.length).toBeGreaterThan(1);
+  expect(lengths.length).toBeLessThanOrEqual(10);
+  expect(buffer.snapshot()).toEqual([assistantEvent("e", "g", "long answer!")]);
+});
+
+test("formal events take over immediately when drained or when they do not extend the shown text", () => {
+  const drained = new StreamDisplayBuffer();
+  drained.ingest([partial("e:assistant:0", "g", "ok")]);
+  expect(drained.ingest([assistantEvent("e", "g", "ok")]).items).toEqual([assistantEvent("e", "g", "ok")]);
+  const replaced = new StreamDisplayBuffer();
+  replaced.ingest([partial("e:assistant:0", "g", "long answer")]);
+  expect(replaced.ingest([assistantEvent("e", "g", "rewritten")]).items).toEqual([assistantEvent("e", "g", "rewritten")]);
+  expect(replaced.hasPending()).toBe(false);
+});
+
+test("holds every lane of one formal message in content order until all are drained", () => {
+  const buffer = new StreamDisplayBuffer();
+  buffer.ingest([partial("e:thinking:0", "g", "hm", "thinking"), partial("e:assistant:1", "g", "long answer")]);
+  const event: TimelineViewItem = { kind: "event", event: { event_id: "e", session_id: "s", leaf_id: "g", timestamp: 2, group_id: "g", kind: "assistant", status: "complete",
+    blocks: [{ type: "thinking", text: "hm" }, { type: "text", text: "long answer" }] } };
+  const held = buffer.ingest([event]);
+  expect(held.items.map((item) => item.kind === "partial" ? item.partial.partial_id : item.kind)).toEqual(["e:thinking:0", "e:assistant:1"]);
+  while (buffer.hasPending()) buffer.advance(16);
+  expect(buffer.snapshot()).toEqual([event]);
+  // 正式版本被撤下时收尾随之放弃。
+  const dropped = new StreamDisplayBuffer();
+  dropped.ingest([partial("e:assistant:0", "g", "long answer")]);
+  dropped.ingest([assistantEvent("e", "g", "long answer")]);
+  expect(dropped.ingest([]).items).toEqual([]);
+  expect(dropped.hasPending()).toBe(false);
 });
 
 test("removes a partial immediately when its group has no formal event", () => {

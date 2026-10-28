@@ -74,7 +74,8 @@ test.each([1280, 390])("Markdown growth, shrink and completion keep the follower
     for (const text of drafts.slice(1)) {
       update([history, partial("live", text)]);
       await settleLayout();
-      expect(bottomGap(list)).toBeLessThanOrEqual(1);
+      // 流式正文增长由原生平滑滚动接续，落点时长由浏览器决定。
+      await expect.poll(() => bottomGap(list)).toBeLessThanOrEqual(1);
       expect(viewport().followingOutput).toBe(true);
     }
     const row = list.querySelector<HTMLElement>("article.partial")!;

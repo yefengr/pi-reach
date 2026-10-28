@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { ThinkingContent, MarkdownContent } from "./timeline-content";
+import { useStreamRevealAnimation, useStreamRevealMarks } from "./use-stream-reveal";
 import { initialToolGroupRunningIndicators, ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
 import { SummaryEntry, SummaryReader } from "./summary-reader";
@@ -52,9 +53,13 @@ type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string,
 /** Pi 回复靠左占满阅读列、无底色；不显示发送方，只为读屏保留「Pi：」。 */
 function TextRow({ entry }: { entry: TextEntry }) {
   const { t } = useI18n();
-  return <article className={`pwa-message assistant${entry.streaming ? " partial" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key}>
+  const row = useRef<HTMLElement | null>(null);
+  // 流式新显示的文字淡入；正式版本接管后不再新增片段，已开始的淡入原位完成。
+  const reveal = useStreamRevealMarks(entry.text, entry.streaming);
+  useStreamRevealAnimation(row, reveal);
+  return <article ref={row} className={`pwa-message assistant${entry.streaming ? " partial" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key}>
     <span className="pwa-sr-only">{t.timeline.srPi}</span>
-    <MarkdownContent text={entry.text} />
+    <MarkdownContent text={entry.text} reveal={reveal} />
   </article>;
 }
 

@@ -41,10 +41,13 @@ test("same-run replies never hide earlier messages or restart after catching up"
   expect(labels(h.view())).toEqual(["A", "tool", "After the tool"]);
   h.ingest(h.runtime.receive(partial("B", " continued")).items);
   expect(labels(h.view())[2]).toBe("After the tool");
-  const settled = h.ingest(h.runtime.commit(answer("B", 3, "After the tool continued")).items);
-  expect(labels(settled)).toEqual(["A", "tool", "After the tool continued"]);
-  expect(settled.entries.filter(entry => entry.kind === "text").every(entry => !entry.streaming)).toBe(true);
-  expect(h.buffer.hasPending()).toBe(false);
+  // 正式版本到达后原位放完尾巴，不隐藏也不重播已显示文字。
+  const finishing = h.ingest(h.runtime.commit(answer("B", 3, "After the tool continued")).items);
+  expect(labels(finishing).slice(0, 2)).toEqual(["A", "tool"]);
+  expect(labels(finishing)[2]).toMatch(/^After the tool/);
+  while (h.buffer.hasPending()) h.tick();
+  expect(labels(h.view())).toEqual(["A", "tool", "After the tool continued"]);
+  expect(h.view().entries.filter(entry => entry.kind === "text").every(entry => !entry.streaming)).toBe(true);
 });
 
 test.each(["assistant", "provider_error"] as const)("a late %s completion clears only its source message and rejects late deltas", kind => {
@@ -90,7 +93,7 @@ test.each(["opaque", "A:thinking:0", "A:assistant:9007199254740992"])("unidentif
   expect(h.buffer.hasPending()).toBe(false);
 });
 
-test("a formal event flushes all of its blocks but leaves the next message streaming", () => {
+test("a formal event finishes all of its blocks in place before handing over and leaves the next message streaming", () => {
   const h = setup();
   h.ingest(h.runtime.receive(partial("A", "first long block")).items);
   h.ingest(h.runtime.receive(partial("A", "second long block", 1)).items);
@@ -99,6 +102,10 @@ test("a formal event flushes all of its blocks but leaves the next message strea
   if (event.kind !== "assistant") throw new Error("invalid fixture");
   event.blocks = [{ type: "text", text: "first long block" }, { type: "text", text: "second long block" }];
   const changed = h.ingest(h.runtime.commit(event).items);
-  expect(changed.entries.slice(0, 2)).toMatchObject([{ text: "first long block", streaming: false }, { text: "second long block", streaming: false }]);
+  expect(changed.entries.slice(0, 2)).toMatchObject([{ text: "fi", streaming: true }, { text: "se", streaming: true }]);
   expect(changed.entries[2]).toMatchObject({ kind: "text", streaming: true });
+  // 收尾窗口 160ms（10 个 16ms 帧）内放完后整条交接为正式版本。
+  for (let frame = 0; frame < 10; frame += 1) h.tick();
+  expect(h.view().entries.slice(0, 2)).toMatchObject([{ text: "first long block", streaming: false }, { text: "second long block", streaming: false }]);
+  expect(h.view().entries[2]).toMatchObject({ kind: "text", streaming: true });
 });

@@ -26,18 +26,19 @@ function fixture() {
 }
 afterEach(() => vi.useRealTimers());
 
-test.each(["assistant", "thinking", "blocks", "tool"] as const)("coalesces %s content to one latest commit per 33ms", mode => {
+test.each(["assistant", "thinking", "blocks", "tool"] as const)("coalesces %s content to one latest commit per display frame", mode => {
   const { scheduler, publish } = fixture();
   scheduler.update([partial("ok", mode)]);
   expect(publish).toHaveBeenCalledTimes(1);
   for (let i = 1; i <= 100; i++) scheduler.update([partial(`ok${"x".repeat(i)}`, mode)]);
   expect(publish).toHaveBeenCalledTimes(1);
-  vi.advanceTimersByTime(32);
+  vi.advanceTimersByTime(15);
   expect(publish).toHaveBeenCalledTimes(1);
   vi.advanceTimersByTime(1);
   expect(publish).toHaveBeenCalledTimes(2);
-  vi.advanceTimersByTime(99);
-  expect(publish.mock.calls.length).toBeLessThanOrEqual(5);
+  vi.advanceTimersByTime(96);
+  expect(publish.mock.calls.length).toBeLessThanOrEqual(8);
+  vi.runAllTimers();
   expect(text(publish.mock.calls.at(-1)![0])).toBe(`ok${"x".repeat(100)}`);
   expect(vi.getTimerCount()).toBe(0);
 });
@@ -120,21 +121,24 @@ test("an already scheduled display uses the latest committed publisher", () => {
   scheduler.update([partial("a buffered answer")]);
   const latest = vi.fn();
   scheduler.setPublisher(latest);
-  vi.advanceTimersByTime(33);
+  vi.advanceTimersByTime(16);
   expect(publish).toHaveBeenCalledTimes(1);
   expect(latest).toHaveBeenCalledOnce();
   vi.runAllTimers();
   expect(text(latest.mock.calls.at(-1)![0])).toBe("a buffered answer");
 });
 
-test("elapsed time, not callback count, controls the 128ms catch-up and release cap", () => {
-  const buffer = new StreamDisplayBuffer();
-  buffer.ingest([partial("x".repeat(400))]);
-  buffer.advance(64);
-  expect(text(buffer.snapshot())?.length).toBeGreaterThan(100);
-  buffer.advance(64);
-  expect(text(buffer.snapshot())).toBe("x".repeat(400));
-  expect(buffer.hasPending()).toBe(false);
+test("elapsed time, not callback count, controls pacing and the release cap", () => {
+  const once = new StreamDisplayBuffer();
+  once.ingest([partial("x".repeat(400))]);
+  once.advance(64);
+  const split = new StreamDisplayBuffer();
+  split.ingest([partial("x".repeat(400))]);
+  for (let i = 0; i < 4; i += 1) split.advance(16);
+  const released = text(once.snapshot())!.length;
+  expect(released).toBeGreaterThan(80);
+  expect(Math.abs(released - text(split.snapshot())!.length)).toBeLessThanOrEqual(8);
+  const buffer = once;
   buffer.reset([partial("ok")]);
   buffer.ingest([partial(`ok${"x".repeat(1000)}`)]);
   expect(text(buffer.advance(33).items)?.length).toBeLessThanOrEqual(134);
