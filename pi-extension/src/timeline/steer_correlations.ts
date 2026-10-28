@@ -2,8 +2,11 @@ import { createHash } from "node:crypto";
 import { userContentBlocks } from "./attachment_content.js";
 import type { Correlation } from "./runtime.js";
 
-/** 与投递队列容量一致：同一时刻最多这么多条排队消息可能被插入。 */
-const MAX_EXPECTED_STEERS = 32;
+/**
+ * 尚未开始的插入上限。steer 调用 SDK 后即释放投递队列容量，队列上限不能约束该数量，
+ * 由调用方在投递前用 hasCapacity 拒绝，而不是淘汰仍有效的登记。
+ */
+export const MAX_EXPECTED_STEERS = 32;
 
 type ExpectedSteer = { key: string; correlation: Correlation };
 
@@ -18,11 +21,16 @@ function contentKey(content: unknown): string {
 export class SteerCorrelations {
   private expected: ExpectedSteer[] = [];
 
-  expect(content: unknown, correlation: Correlation): void {
+  hasCapacity(): boolean {
+    return this.expected.length < MAX_EXPECTED_STEERS;
+  }
+
+  /** 已满时不登记并返回 false：调用方须先检查 hasCapacity，不能淘汰仍在等待开始的插入。 */
+  expect(content: unknown, correlation: Correlation): boolean {
+    if (!this.hasCapacity()) return false;
     // 保留原对象以便按身份撤销；取出时再复制。
     this.expected.push({ key: contentKey(content), correlation });
-    // 被中止的运行可能留下从未开始的登记；超出上限时淘汰最早的，避免无界增长。
-    if (this.expected.length > MAX_EXPECTED_STEERS) this.expected.shift();
+    return true;
   }
 
   take(content: unknown): Correlation | undefined {

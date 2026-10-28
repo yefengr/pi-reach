@@ -101,6 +101,8 @@ export class UserDeliveryBinding {
   }
 
   steerQueued(ownerId: string, service: TimelineV2Service, targetId: string): UserDeliverySteerResult {
+    // 未开始的插入已满时在调用 SDK 前拒绝，排队项留在队列中，PWA 可稍后重试。
+    if (this.options.getTimeline()?.canExpectSteer() === false) return { kind: "busy" };
     return this.queue.steer(ownerId, service, targetId);
   }
 
@@ -151,7 +153,8 @@ export class UserDeliveryBinding {
       pi.sendUserMessage(content, options);
     };
     const timeline = this.options.getTimeline();
-    const steer = timeline !== null && options?.deliverAs === "steer";
+    // 只有排队插入带投递令牌需要回执；直接 steer 帧按未知投递处理，无需登记。
+    const steer = timeline !== null && options?.deliverAs === "steer" && correlation.deliveryToken !== undefined;
     if (steer) timeline.expectSteer(content, correlation);
     try {
       if (timeline) timeline.runWithCorrelation(correlation, send); else send();

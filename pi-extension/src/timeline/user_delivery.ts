@@ -42,7 +42,9 @@ export type UserDeliveryEnqueueResult = "queued" | "duplicate" | "conflict" | "r
 export type UserDeliverySteerResult =
   | { kind: "sent"; scope: UserDeliveryScope }
   | { kind: "unknown_delivery"; scope: UserDeliveryScope }
-  | { kind: "missing" };
+  | { kind: "missing" }
+  /** 尚未开始的插入已达上限：未调用 SDK，排队项保持不变。 */
+  | { kind: "busy" };
 
 type DeliveryJob = {
   scope: UserDeliveryScope;

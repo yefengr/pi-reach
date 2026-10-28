@@ -38,7 +38,7 @@ export type V2ServiceOptions = {
   onAction?: (frame: V2ActionFrame) => void;
   onQueueSnapshot?: () => ServerFrame[];
   onQueuedMessageClear?: (targetId?: string) => string[];
-  onQueuedMessageSteer?: (targetId: string) => "sent" | "unknown_delivery" | "missing";
+  onQueuedMessageSteer?: (targetId: string) => "sent" | "unknown_delivery" | "missing" | "busy";
   onListModels?: () => Pick<Extract<ServerFrame, { type: "models_list" }>, "models" | "current" | "thinking_level">;
 };
 
@@ -346,6 +346,9 @@ export class TimelineV2Service {
       if (result === "sent" || result === "unknown_delivery") {
         this.terminateQueuedRequest(frame.target_id);
         return this.currentQueueSnapshot();
+      }
+      if (result === "busy") {
+        return [this.error(frame.id, "invalid_message", "Too many insertions are still waiting to start. Try again after the current step.", frame.channel_id), ...this.currentQueueSnapshot()];
       }
       return [this.error(frame.id, "invalid_message", "This queued message is no longer available to steer.", frame.channel_id), ...this.currentQueueSnapshot()];
     } catch {

@@ -4,6 +4,7 @@ import { ATTACHMENT_METADATA_TYPE } from "@pi-reach/protocol/session";
 import { describe, expect, test, vi } from "vitest";
 import type { ClientFrame, ServerFrame } from "../protocol/v2/index.js";
 import { TimelineRuntime } from "./runtime.js";
+import { MAX_EXPECTED_STEERS } from "./steer_correlations.js";
 import { USER_DELIVERY_START_TIMEOUT_MS } from "./user_delivery.js";
 import { UserDeliveryBinding, type UserDeliveryTarget } from "./user_delivery_binding.js";
 import { TimelineV2Service } from "./v2_service.js";
@@ -215,6 +216,49 @@ describe("UserDeliveryBinding", () => {
       runtime.onMessageStart({ role: "user", content: "继续", timestamp: 3 }, session);
     });
     expect(sent).toContainEqual(expect.objectContaining({ type: "user_message_started", in_reply_to: "wire-1", target_channel_id: "channel-1" }));
+    binding.clearAll();
+  });
+
+  test("rejects a queued insertion before calling the SDK while too many insertions wait to start", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    runtime.attach(session);
+    const sendUserMessage = vi.fn();
+    let service!: TimelineV2Service;
+    const binding = new UserDeliveryBinding({
+      isIdle: () => false,
+      canAcceptNormal: () => true,
+      getPi: () => ({ sendUserMessage }) as unknown as ExtensionAPI,
+      getTimeline: () => runtime,
+      getCurrentSessionId: () => session.getSessionId(),
+      getCurrentLeafId: () => service.leafId,
+      findTarget: () => ({ service, sessionId: session.getSessionId(), leafId: service.leafId }),
+      sendFrames: vi.fn(),
+    });
+    service = new TimelineV2Service({
+      sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime,
+      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
+        ownerId: "owner-1", sessionId: session.getSessionId(), leafId: service.leafId, service, clientRequestId: frame.client_request_id,
+      }),
+      onQueueSnapshot: () => binding.snapshot("owner-1", service),
+      onQueuedMessageSteer: (targetId) => binding.steerQueued("owner-1", service, targetId).kind,
+    });
+    service.handle(hello());
+    service.handle(user(service.leafId));
+    // steer 调用 SDK 后即释放投递容量，未开始的插入须单独限量，不能淘汰仍有效的登记。
+    for (let index = 0; index < MAX_EXPECTED_STEERS; index += 1) {
+      expect(runtime.expectSteer(`waiting ${index}`, { origin: "pwa", delivery: "normal", senderRef: "owner-1", deliveryToken: `token-${index}` })).toBe(true);
+    }
+    const replies = service.handle({ protocol_version: 2, type: "queued_message_steer", id: "steer-full", channel_id: "channel-1", session_id: session.getSessionId(), leaf_id: service.leafId, target_id: "request-1" });
+
+    expect(sendUserMessage).not.toHaveBeenCalled();
+    expect(replies[0]).toMatchObject({ type: "protocol_error", in_reply_to: "steer-full", code: "invalid_message" });
+    expect(replies[1]).toMatchObject({ type: "queued_message_state", items: [{ id: "request-1", editable: true }] });
+    expect(runtime.expectSteer("overflow", { origin: "pwa", delivery: "normal", deliveryToken: "overflow" })).toBe(false);
+    expect(runtime.runWithCorrelation({ origin: "unknown", delivery: "unknown" }, () => {
+      runtime.onMessageStart({ role: "user", content: "root", timestamp: 2 }, session);
+      return runtime.onMessageStart({ role: "user", content: "waiting 0", timestamp: 3 }, session);
+    })?.correlation.deliveryToken).toBe("token-0");
     binding.clearAll();
   });
 
