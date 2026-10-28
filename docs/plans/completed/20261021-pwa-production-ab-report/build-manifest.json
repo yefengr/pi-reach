@@ -1,0 +1,45 @@
+{
+  "versions": {
+    "before": {
+      "revision": "a3a87693d8c8d19d66e15da2da8f9ade343bd42c",
+      "tree": "25ec48198c5a49c89c1fa76173a9236ac268f89d",
+      "productionReact": true,
+      "fixtureHashes": {
+        "bootstrap.tsx": "1850b974ce9eea650167754bad599fa8124aaac4e9cf9a33db600334cd6c1d04",
+        "transports.ts": "e2c002aca59c790a420c4c53fc3367b4bb4afa2af111a6021aca85a9b40524fa",
+        "history.ts": "2239856be7811a450ebdd6624c36877ace712ab79ef5aae40ac60f5ad1474210"
+      },
+      "realPwaApp": true,
+      "isolatedEntry": true,
+      "sourceModuleCount": 136,
+      "assets": [
+        {
+          "file": "index-DlpW3SwC.js",
+          "bytes": 1778904,
+          "sha256": "97efd8158fd2baef4b9129aee85ac692a39f03a7caaa5ede6a79c7fb513d20df"
+        }
+      ]
+    },
+    "after": {
+      "revision": "f15d266bbf95b24a0138e1dae9bcc517fc69211a",
+      "tree": "78f2928f37635ba9d665bd4c9b94221689d23e7e",
+      "productionReact": true,
+      "fixtureHashes": {
+        "bootstrap.tsx": "1850b974ce9eea650167754bad599fa8124aaac4e9cf9a33db600334cd6c1d04",
+        "transports.ts": "e2c002aca59c790a420c4c53fc3367b4bb4afa2af111a6021aca85a9b40524fa",
+        "history.ts": "2239856be7811a450ebdd6624c36877ace712ab79ef5aae40ac60f5ad1474210"
+      },
+      "realPwaApp": true,
+      "isolatedEntry": true,
+      "sourceModuleCount": 137,
+      "assets": [
+        {
+          "file": "index-CbnqpBqL.js",
+          "bytes": 1781716,
+          "sha256": "9b07db63eb8da267e643f607edeab831504ba888ceddd8ae39517074ab8c885e"
+        }
+      ]
+    }
+  },
+  "lockfileSha256": "71483527a390180f23226f15683396a880bcfa3effbbf96b6f31f402fa552531"
+}
