@@ -523,8 +523,15 @@ test("streaming replies preserve the composer render boundary, draft and open co
     await expect.element(screen.getByRole("button", { name: "Stop current task", exact: true })).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
-    expect(channel.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ text: "Keep this draft" });
+    const sent = channel.frames.findLast((frame) => frame.type === "user_message")!;
+    if (sent.type !== "user_message") throw new Error("missing working send");
+    expect(sent).toMatchObject({ text: "Keep this draft" });
     await expect.element(input).toHaveValue("");
+    // Pi 输出期间快照 leaf 已领先本端 tip，仍应把这条放到输入框上方而不是对话区。
+    channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "assistant-marker", snapshot_id: "working-queue", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: true, created_at: 1 }] });
+    await expect.element(screen.getByRole("button", { name: /Insert into conversation/ })).toBeEnabled();
+    expect(document.querySelector(".pwa-queued-messages")?.textContent).toContain("Keep this draft");
+    expect(list.textContent).not.toContain("Keep this draft");
     await screen.getByRole("button", { name: "Stop current task", exact: true }).click();
     expect(channel.frames.findLast(frame => frame.type === "cancel")).toMatchObject({ group_id: "stream-run" });
   } finally { await screen.unmount(); }

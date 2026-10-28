@@ -45,8 +45,20 @@ test("queue snapshots preserve content, honor ownership/editability, and publish
   expect(runtime.pendingItems[0]).toMatchObject({ queued: true, cancelable: true, images: item.images });
   expect(runtime.actOnQueued("other", "insert")).toBeNull();
   expect(runtime.actOnQueued("flight", "cancel")).toBeNull();
-  runtime.receive(snapshot([], { leaf_id: "stale" }));
+  runtime.receive(snapshot([], { session_id: "other" }));
   expect(runtime.pendingItems).toHaveLength(3);
+});
+
+test("a queue snapshot ahead of the local tip during a run still marks the sent message as queued", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  runtime.sendUser("later", undefined, { clientRequestId: "q", requestId: "send" });
+  runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c", in_reply_to: "send",
+    client_request_id: "q", session_id: "s", leaf_id: "g", status: "accepted" });
+  // Pi 输出期间 Extension 已写入下一条消息的 marker，快照 leaf 领先于本端尚未收到正式事件的 tip。
+  runtime.receive(snapshot([{ ...item, images: undefined }], { leaf_id: "assistant-marker" }));
+  expect(queuedPending(runtime)).toMatchObject({ queued: true, cancelable: true, delivery: "accepted" });
+  expect(runtime.currentScope?.leafId).toBe("g");
+  expect(runtime.actOnQueued("q", "insert")?.frame).toMatchObject({ type: "queued_message_steer", leaf_id: "g", target_id: "q" });
 });
 
 test("queue snapshot evidence requires contiguous chunks and accepts a complete empty snapshot", () => {
@@ -64,7 +76,6 @@ test("queue snapshot evidence requires contiguous chunks and accepts a complete 
   runtime.receive(snapshot([], { snapshot_id: "out-of-order", chunk_index: 1 }));
   waiting();
   runtime.receive(snapshot([], { snapshot_id: "wrong-scope", session_id: "other" }));
-  runtime.receive(snapshot([], { snapshot_id: "wrong-leaf", leaf_id: "other" }));
   waiting();
   runtime.receive(snapshot([], { snapshot_id: "complete", final: false }));
   waiting();
