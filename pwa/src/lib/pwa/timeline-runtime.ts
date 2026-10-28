@@ -609,7 +609,9 @@ export class TimelineRuntime {
     if (frame.type === "reset") return { ...this.invalidateScope(), reset: frame };
     if (frame.type === "queued_message_state") {
       const scope = this.scope;
-      if (!scope || !isMatchingScope(scope, frame)) return this.change();
+      // 队列快照与 partial 同属运行中的实时状态，只按 session 匹配：Extension 在消息开始时就写入 marker，
+      // 快照的 leaf 会领先于本端只随正式事件推进的 tip；分支切换由 reset 使 scope 失效。
+      if (!scope || scope.sessionId !== frame.session_id) return this.change();
       if (this.rejectedQueuedSnapshotId === frame.snapshot_id) return this.change();
       if (this.queuedSnapshotId !== frame.snapshot_id && frame.chunk_index === 0) {
         this.queuedSnapshotId = frame.snapshot_id;

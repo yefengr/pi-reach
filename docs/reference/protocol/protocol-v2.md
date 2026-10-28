@@ -310,6 +310,8 @@ PWA 可在重新握手或确认超时后发送只读 `user_message_status_reques
 
 PWA 的查询等待为 10 秒，关联自查询发出起最多保留 60 秒、最多 128 条；等待超时不立即丢弃关联。迟到回执仍需匹配本消息、发送尝试、队列操作、最新查询和当前目标／连接；弱状态与否定结果不能覆盖查询后取得的新证据，带 `message_id` 的肯定回执可与正式记录原位合并。查询关联到期或被回收后不再消费该查询结果，不因此补发消息。
 
+队列快照是 Owner 广播的实时状态，`leaf_id` 取 Extension 当前 tip；Pi 输出期间 Extension 在消息开始时就写入 marker，快照的 `leaf_id` 会领先于 PWA 只随正式事件推进的 tip，因此 PWA 只按 `session_id` 接收快照，分支切换由 `reset` 处理。
+
 `queued_message_clear` 移除本端排队消息时，先回复定向 `user_message_status`（`status: "cancelled"`，`in_reply_to` 为撤回请求），再发队列快照。排队插入调用 SDK 后的同步异常按可能已投递处理，不重新入队、不允许再次插入或取消；有界迟到关联仍可接收启动／正式事件，已经取得的肯定证据不回退。
 
 - `cancel` 必须携带目标 `group_id`；Extension 仅在其等于当前运行轮次时调用停止。`cancelled` 只确认受理，PWA 等待该轮正式 `run_end`；匹配的 `protocol_error` 解除等待。晚到请求不得停止下一轮。
