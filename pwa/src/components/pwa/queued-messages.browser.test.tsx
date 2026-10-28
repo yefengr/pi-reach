@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
@@ -91,7 +92,7 @@ test("renders parent-supplied status, previews, actions, and disabled states", a
   ];
   const screen = await renderPwa(<QueuedMessages items={items} isOnline onInsert={onInsert} onCancel={onCancel} />);
   const insert = screen.getByRole("button", { name: "Insert into conversation — queued message 1: First queued message with a preview" });
-  const cancel = screen.getByRole("button", { name: "Cancel queued message 1: First queued message with a preview" });
+  const cancel = screen.getByRole("button", { name: "Edit queued message 1: First queued message with a preview" });
 
   await expect.element(screen.getByRole("heading", { name: "Queued messages" })).toBeVisible();
   await expect.element(screen.getByLabelText("3 queued messages")).toBeVisible();
@@ -108,15 +109,16 @@ test("renders parent-supplied status, previews, actions, and disabled states", a
   expect(onInsert).toHaveBeenCalledWith("queued-1");
   expect(onInsert).toHaveBeenCalledTimes(2);
   expect(onCancel).toHaveBeenCalledWith("queued-1");
-  await expect.element(screen.getByRole("button", { name: "Insert into conversation — queued message 2: Busy queued message" })).toBeDisabled();
-  await expect.element(screen.getByRole("button", { name: "Cancel queued message 2: Busy queued message" })).toBeDisabled();
-  await expect.element(screen.getByRole("button", { name: "Insert into conversation — queued message 3: Read-only queued message" })).toBeDisabled();
-  await expect.element(screen.getByRole("button", { name: "Cancel queued message 3: Read-only queued message" })).toBeDisabled();
+  // 正在处理或他人发送的条目没有可用操作，直接不显示按钮，避免看起来可点。
+  const rows = [...document.querySelectorAll<HTMLElement>(".pwa-queued-message")];
+  expect(rows.map((row) => row.querySelectorAll(".pwa-queued-message-actions button").length)).toEqual([2, 0, 0]);
+  expect(rows.map((row) => row.querySelector(".pwa-queued-message-index")?.textContent)).toEqual(["1", "2", "3"]);
   await screen.unmount();
 
   const offline = await renderPwa(<QueuedMessages items={[queuedItem({ text: "Offline queued message" })]} isOnline={false} onInsert={onInsert} onCancel={onCancel} />);
   await expect.element(offline.getByRole("button", { name: "Insert into conversation — queued message 1: Offline queued message" })).toBeDisabled();
-  await expect.element(offline.getByRole("button", { name: "Cancel queued message 1: Offline queued message" })).toBeDisabled();
+  await expect.element(offline.getByRole("button", { name: "Edit queued message 1: Offline queued message" })).toBeDisabled();
+  expect(document.querySelector(".pwa-queued-message-index")).toBeNull();
 });
 
 test("queue panel passes pending attachments to readonly bounded cards", async () => {
@@ -129,7 +131,7 @@ test("queue panel passes pending attachments to readonly bounded cards", async (
   const cards = document.querySelector<HTMLElement>(".pwa-attachment-cards")!;
   expect(cards.querySelector("button")).toBeNull();
   expect(getComputedStyle(cards.querySelector(".pwa-attachment-list")!).overflowY).toBe("auto");
-  await expect.element(screen.getByRole("button", { name: /^Cancel queued message/ })).toBeEnabled();
+  await expect.element(screen.getByRole("button", { name: /^Edit queued message/ })).toBeEnabled();
   await screen.unmount();
 });
 
@@ -142,17 +144,20 @@ test("uses a scheduled timeout for an insertion notice and never sends when it i
     const insert = screen.getByRole("button", { name: /Insert into conversation/ });
     expect(document.querySelector(".pwa-queued-message-status .lucide-clock")).not.toBeNull();
     insert.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    await expect.element(screen.getByText("Requesting insertion…", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Inserting…", { exact: true })).toBeVisible();
     expect(document.querySelector(".pwa-queued-message-status .lucide-clock")).toBeNull();
+    expect(document.querySelector(".pwa-queued-message-status[data-pending] .pwa-spin")).not.toBeNull();
     expect(onSend).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS);
     await Promise.resolve();
     await Promise.resolve();
-    await expect.element(screen.getByText("Insertion status unconfirmed", { exact: true })).toBeVisible();
-    await expect.element(screen.getByText("May still be processed. Dismissing this notice does not cancel it.", { exact: true })).toBeVisible();
-    await expect.element(insert).toBeDisabled();
-    await expect.element(screen.getByRole("button", { name: /Cancel queued message/ })).toBeDisabled();
+    await expect.element(screen.getByText("Unconfirmed", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("May still be processed; dismissing won't withdraw it.", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-queued-message-status .lucide-circle-alert")).not.toBeNull();
+    // 未确认只保留关闭提示，不再显示插入与撤回。
+    await expect.element(insert).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: /Edit queued message/ })).not.toBeInTheDocument();
     const dismiss = screen.getByRole("button", { name: /Dismiss notice/ });
     await expect.element(dismiss).toBeEnabled();
     await dismiss.click();
@@ -172,7 +177,7 @@ test("expires an already overdue insertion when the panel mounts", async () => {
   vi.setSystemTime(new Date(QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS));
   const screen = await renderPwa(<QueuePanelHarness runtime={runtime} onSend={() => true} />);
   try {
-    await expect.element(screen.getByText("Insertion status unconfirmed", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Unconfirmed", { exact: true })).toBeVisible();
   } finally {
     vi.useRealTimers();
     await screen.unmount();
@@ -186,9 +191,9 @@ test("dismisses an unconfirmed insertion offline without sending", async () => {
   const onSend = vi.fn(() => true);
   const screen = await renderPwa(<QueuePanelHarness runtime={runtime} onSend={onSend} isOnline={false} />);
   try {
-    await expect.element(screen.getByText("Insertion status unconfirmed", { exact: true })).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: /Insert into conversation/ })).toBeDisabled();
-    await expect.element(screen.getByRole("button", { name: /Cancel queued message/ })).toBeDisabled();
+    await expect.element(screen.getByText("Unconfirmed", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: /Insert into conversation/ })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: /Edit queued message/ })).not.toBeInTheDocument();
     const dismiss = screen.getByRole("button", { name: /Dismiss notice/ });
     await expect.element(dismiss).toBeEnabled();
     await dismiss.click();
@@ -204,16 +209,18 @@ test.each([[1280, 900], [390, 844], [390, 500]])("keeps a scrolling queue above 
   const items = Array.from({ length: 8 }, (_, index) => queuedItem({
     id: `queued-${index + 1}`,
     text: `Queued message ${index + 1}: ${"long preview text ".repeat(10)}`,
-    status: index === 0 ? "Insertion status unconfirmed" : "Waiting for the current task",
-    ...(index === 0 ? { notice: "May still be processed. Dismissing this notice does not cancel it.", dismissible: true, canManage: false } : {}),
+    status: index === 0 ? "Unconfirmed" : "Queued",
+    ...(index === 0 ? { notice: "May still be processed; dismissing won't withdraw it.", attention: true, dismissible: true, canManage: false } : { waiting: true }),
   }));
   const screen = await renderPwa(<QueueComposerHarness items={items} />);
   try {
+    // 默认折叠到 3 条；展开后的长队列在面板内滚动，不挤压输入区。
+    await screen.getByRole("button", { name: "5 more" }).click();
     const list = document.querySelector<HTMLElement>(".pwa-queued-message-list")!;
     const composer = document.querySelector<HTMLElement>(".pwa-composer-card")!;
     const textarea = screen.getByRole("textbox").element();
-    const insert = screen.getByRole("button", { name: /Insert into conversation — queued message 1:/ }).element();
-    const cancel = screen.getByRole("button", { name: /Cancel queued message 1:/ }).element();
+    const insert = screen.getByRole("button", { name: /Insert into conversation — queued message 2:/ }).element();
+    const cancel = screen.getByRole("button", { name: /Edit queued message 2:/ }).element();
     const dismiss = screen.getByRole("button", { name: /Dismiss notice — queued message 1:/ }).element();
     const composerBefore = composer.getBoundingClientRect();
     const textareaBox = textarea.getBoundingClientRect();
@@ -274,36 +281,91 @@ test("keeps a single queued message on one compact row with icon actions", async
     expect(getComputedStyle(text).whiteSpace).toBe("nowrap");
     expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
     const insert = screen.getByRole("button", { name: /^Insert into conversation/ }).element();
-    const cancel = screen.getByRole("button", { name: /^Cancel queued message/ }).element();
+    const cancel = screen.getByRole("button", { name: /^Edit queued message/ }).element();
     for (const action of [insert, cancel]) {
       expect(action.textContent).toBe("");
       expect(action.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
       expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     }
     expect(cancel.getAttribute("data-variant")).not.toBe("outline");
-    // 插入是「立即发送」，撤回把内容放回输入框；等待中的状态前有时钟，并与状态文字垂直居中。
+    // 插入是「立即发送」，撤回编辑把内容放回输入框；排队中只显示时钟，文字仅供读屏，时钟与正文垂直居中。
     expect(insert.querySelector(".lucide-arrow-up")).not.toBeNull();
-    expect(cancel.querySelector(".lucide-undo-2")).not.toBeNull();
+    expect(cancel.querySelector(".lucide-pencil")).not.toBeNull();
     const clock = row.querySelector<SVGElement>(".pwa-queued-message-status .lucide-clock")!;
-    const label = row.querySelector<HTMLElement>(".pwa-queued-message-status > span")!;
     const middle = (rect: DOMRect) => rect.top + rect.height / 2;
     expect(Math.round(clock.getBoundingClientRect().width)).toBe(16);
-    expect(Math.abs(Math.round(middle(clock.getBoundingClientRect()) - middle(label.getBoundingClientRect())))).toBeLessThanOrEqual(1);
+    expect(Math.abs(Math.round(middle(clock.getBoundingClientRect()) - middle(text.getBoundingClientRect())))).toBeLessThanOrEqual(1);
+    expect(row.querySelector(".pwa-queued-message-status .pwa-sr-only")?.textContent).toBe("Waiting for the current task");
+    expect(row.querySelector(".pwa-queued-message-index")).toBeNull();
   } finally {
     await screen.unmount();
   }
 });
 
-test("the waiting clock keeps the status text on the same baseline as a status without it", async () => {
-  const screen = await renderPwa(<QueuedMessages items={[queuedItem({ waiting: true }), queuedItem({ id: "queued-2" })]} isOnline onInsert={() => {}} onCancel={() => {}} />);
+test("queued rows share one panel with dividers and keep the message text at the same height with or without an icon", async () => {
+  const screen = await renderPwa(<QueuedMessages items={[queuedItem({ waiting: true }), queuedItem({ id: "queued-2", status: "Sending…", pending: true })]} isOnline onInsert={() => {}} onCancel={() => {}} />);
   try {
-    const offsets = [...document.querySelectorAll<HTMLElement>(".pwa-queued-message")].map((row) => {
-      const label = row.querySelector<HTMLElement>(".pwa-queued-message-status > span")!;
-      const text = row.querySelector<HTMLElement>(".pwa-queued-message-text")!;
-      return [label, text].map((node) => Math.round(node.getBoundingClientRect().top - row.getBoundingClientRect().top));
-    });
-    expect(offsets[0]).toEqual(offsets[1]);
+    const list = document.querySelector<HTMLElement>(".pwa-queued-message-list")!;
+    const rows = [...list.querySelectorAll<HTMLElement>(".pwa-queued-message")];
+    expect(getComputedStyle(list).borderTopWidth).toBe("1px");
+    expect(rows.map((row) => getComputedStyle(row).borderTopWidth)).toEqual(["0px", "1px"]);
+    expect(rows.map((row) => getComputedStyle(row).borderRadius)).toEqual(["0px", "0px"]);
+    const offsets = rows.map((row) => Math.round(row.querySelector<HTMLElement>(".pwa-queued-message-text")!.getBoundingClientRect().top - row.getBoundingClientRect().top));
+    expect(Math.abs(offsets[0]! - offsets[1]!)).toBeLessThanOrEqual(1);
   } finally {
+    await screen.unmount();
+  }
+});
+
+test("collapses a long queue after three rows and expands on request", async () => {
+  const items = Array.from({ length: 5 }, (_, index) => queuedItem({ id: `queued-${index + 1}`, text: `Folded message ${index + 1}` }));
+  const screen = await renderPwa(<QueuedMessages items={items} isOnline onInsert={() => {}} onCancel={() => {}} />);
+  try {
+    expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(3);
+    await expect.element(screen.getByLabelText("5 queued messages")).toBeVisible();
+    const more = screen.getByRole("button", { name: "2 more" });
+    await expect.element(more).toHaveAttribute("aria-expanded", "false");
+    expect(Math.round(more.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    await more.click();
+    expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(5);
+    await expect.element(screen.getByText("Folded message 5")).toBeVisible();
+    await screen.getByRole("button", { name: "Show less" }).click();
+    expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(3);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("waits for the run to end before an insertion becomes unconfirmed", async () => {
+  const runtime = panelRuntime();
+  let setWorking!: (working: boolean) => void;
+  function WorkingHarness() {
+    const [working, updateWorking] = useState(true);
+    useLayoutEffect(() => { setWorking = updateWorking; }, []);
+    const [items, setItems] = useState<TimelineViewItem[]>(() => runtime.pendingItems);
+    const runtimeRef = useRef(runtime);
+    const channelRef = useRef<PeerChannel | null>({ send: () => true } as unknown as PeerChannel);
+    return <QueuedMessagesPanel items={items} isOnline isWorking={working} runtimeRef={runtimeRef} channelRef={channelRef} applyChange={(change) => setItems(change.items)} onError={() => {}} />;
+  }
+  const screen = await renderPwa(<WorkingHarness />);
+  vi.useFakeTimers();
+  try {
+    screen.getByRole("button", { name: /Insert into conversation/ }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await expect.element(screen.getByText("Inserting…", { exact: true })).toBeVisible();
+    // 运行中 steer 要等本轮边界才开始，长回复超过固定窗口也不能判定未确认。
+    vi.advanceTimersByTime(QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS * 3);
+    await Promise.resolve();
+    await expect.element(screen.getByText("Inserting…", { exact: true })).toBeVisible();
+    flushSync(() => setWorking(false));
+    vi.advanceTimersByTime(QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS - 1);
+    await Promise.resolve();
+    await expect.element(screen.getByText("Inserting…", { exact: true })).toBeVisible();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect.element(screen.getByText("Unconfirmed", { exact: true })).toBeVisible();
+  } finally {
+    vi.useRealTimers();
     await screen.unmount();
   }
 });
