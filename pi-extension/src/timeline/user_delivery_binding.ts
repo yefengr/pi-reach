@@ -151,8 +151,14 @@ export class UserDeliveryBinding {
       pi.sendUserMessage(content, options);
     };
     const timeline = this.options.getTimeline();
-    if (timeline && options?.deliverAs === "steer") timeline.expectSteer(content, correlation);
-    if (timeline) timeline.runWithCorrelation(correlation, send); else send();
+    const steer = timeline !== null && options?.deliverAs === "steer";
+    if (steer) timeline.expectSteer(content, correlation);
+    try {
+      if (timeline) timeline.runWithCorrelation(correlation, send); else send();
+    } catch (error) {
+      if (steer) timeline.discardSteer(correlation);
+      throw error;
+    }
   }
 
   private isCurrent(scope: UserDeliveryScope): boolean {

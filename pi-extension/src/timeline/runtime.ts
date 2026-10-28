@@ -79,6 +79,8 @@ export class TimelineRuntime {
   private readonly correlations = new AsyncLocalStorage<Correlation>();
   private readonly messageCorrelations = new WeakMap<object, Correlation>();
   private readonly steers = new SteerCorrelations();
+  /** 已有用户消息开始的 ALS 关联；之后同一 ALS 下开始的用户消息来自本轮插入或终端输入。 */
+  private readonly startedUserCorrelations = new WeakSet<Correlation>();
   private readonly pending = new WeakMap<object, PendingMessage>();
   private readonly pendingByRole: Record<MessageRole, PendingMessage[]> = {
     user: [],
@@ -168,6 +170,11 @@ export class TimelineRuntime {
   /** 登记即将以 steer 投递的用户消息；其 message_start 不在本次调用的 ALS 范围内。 */
   expectSteer(content: unknown, correlation: Correlation): void {
     this.steers.expect(content, correlation);
+  }
+
+  /** SDK 同步拒绝 steer 时撤销登记，避免遗留登记被后续相同内容的消息取走。 */
+  discardSteer(correlation: Correlation): void {
+    this.steers.discard(correlation);
   }
 
   currentCorrelation(): Correlation | undefined {
@@ -438,11 +445,18 @@ export class TimelineRuntime {
   }
 
   private correlationFor(message: unknown): Correlation {
-    // 插入的用户消息在本轮边界开始，ALS 仍是发起本轮的请求，须先按内容取回自己的关联。
-    const record = this.asMessageRecord(message);
-    const steered = record?.role === "user" ? this.steers.take(record.content) : undefined;
-    if (steered) return steered;
     const existing = this.currentCorrelation();
+    if (this.asMessageRecord(message)?.role === "user") {
+      // 新请求在自身 ALS 内开始时以它为准，并撤销其 steer 登记（空闲时 steer 会立即开始）。
+      if (existing && !this.startedUserCorrelations.has(existing)) {
+        this.startedUserCorrelations.add(existing);
+        this.steers.discard(existing);
+        return { ...existing };
+      }
+      // ALS 已被发起本轮的消息使用或不存在：插入的消息在本轮边界开始，按内容取回自己的关联。
+      const steered = this.steers.take((message as { content?: unknown }).content);
+      if (steered) return steered;
+    }
     if (existing) return { ...existing };
     const objectMessage = typeof message === "object" && message !== null ? message : null;
     const known = objectMessage ? this.messageCorrelations.get(objectMessage) : undefined;
