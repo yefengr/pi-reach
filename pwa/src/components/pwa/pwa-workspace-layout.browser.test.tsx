@@ -191,8 +191,7 @@ test("mobile title bar and navigation head share the top bar below a translucent
     await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
     // 等进入动画落位后再量：导航头与标题区同一规格；品牌与下方导航列表左缘对齐。
     await expect.poll(() => Math.round(document.querySelector(".pwa-session-sheet")!.getBoundingClientRect().left)).toBe(0);
-    // 贴边的左侧为直角，朝向主区的右侧两角为 12。
-    expect(getComputedStyle(document.querySelector(".pwa-session-sheet")!).borderRadius).toBe("0px 12px 12px 0px");
+    expect(getComputedStyle(document.querySelector(".pwa-session-sheet")!).borderRadius).toBe("0px");
     const head = document.querySelector(".pwa-session-sheet-head")!.getBoundingClientRect();
     expect(Math.round(head.height)).toBe(48 + safeTop);
     const brand = document.querySelector(".pwa-session-sheet-head .pwa-brand-mark")!.getBoundingClientRect();
@@ -650,6 +649,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         // 模态 Drawer 靠遮罩与模态阴影分离，不额外描边。
         const drawer = getComputedStyle(document.querySelector<HTMLElement>(".pwa-device-drawer")!);
         expect([drawer.borderTopWidth, drawer.borderLeftWidth, drawer.borderRightWidth]).toEqual(["0px", "0px", "0px"]);
+        expect(drawer.borderRadius).toBe("0px");
         expect(drawer.boxShadow).not.toBe("none");
       } else {
         await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);

@@ -14,6 +14,10 @@
 
 [严格运行结束 ADR](20260930-strict-run-completion.md) 覆盖 ADR-20260927 中缺少 `run_end` 时的降级规则：实时与历史只以正式 `run_end` 确认该轮结束，不再根据 Pi 空闲或下一轮开始推断；事件 shape 与协议版本不变。
 
+## 当前覆盖 — ADR-20261028
+
+[侧栏与抽屉直角 ADR](20261028-square-navigation-and-drawers.md) 覆盖 ADR-20261010 第 7 条的抽屉与页面转场圆角规则；侧栏展开时的桌面主区圆角保留。
+
 本块是当前决策入口；下方各节记录仍然有效的已关闭决策。
 
 ## 决策记录索引
@@ -30,10 +34,11 @@
 | [ADR-20261001](20261001-neutral-surfaces-mist-blue.md) | 中性底色与雾蓝主色 | — |
 | [ADR-20261006](20261006-staging-promotion.md) | 同机 staging 验收与同 digest 晋升 | 第 1、7 条的 staging 来源由 ADR-20261009 调整 |
 | [ADR-20261009](20261009-branch-staging.md) | 功能分支推送自动部署 staging | — |
-| [ADR-20261010](20261010-desktop-inset-main.md) | 桌面主区改为内嵌圆角卡片 | 收起侧栏部分由 ADR-20261011（主区贴满）取代 |
+| [ADR-20261010](20261010-desktop-inset-main.md) | 桌面主区改为内嵌圆角卡片 | 收起侧栏部分由 ADR-20261011（主区贴满）取代；抽屉与页面转场圆角由 ADR-20261028 覆盖 |
 | [ADR-20261011](20261011-collapsed-sidebar-flush-main.md) | 收起侧栏后桌面主区贴满窗口 | — |
 | [ADR-20261011](20261011-live-tool-grouping.md) | 工具调用实时分组 | — |
 | [ADR-20261018](20261018-reader-drawer-only.md) | 阅读器统一为右侧 Drawer | 取代宽屏分栏阅读设计 |
+| [ADR-20261028](20261028-square-navigation-and-drawers.md) | 侧栏、抽屉与页面切换表面改为直角 | 覆盖 ADR-20261010 的抽屉与页面转场圆角规则 |
 
 ---
 
