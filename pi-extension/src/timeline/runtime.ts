@@ -8,6 +8,7 @@ import { partialDeltaChunks } from "./partial_delta.js";
 import { TimelinePublications } from "./publication.js";
 import { isRunEndMarker, runEndEvent, runEndMarker, runEndStatus } from "./run_end.js";
 import { sequenceTimelineProjections, type TimelineProjection } from "./sequence.js";
+import { SteerCorrelations } from "./steer_correlations.js";
 import { recoverToolCalls, ToolLifecycleTracker, toolPartial, toolTimelineEvent, type ToolCallDetails } from "./tool_lifecycle.js";
 import { systemTimelineEvent } from "./system_event.js";
 import { collectPublications } from "../files/publications.js";
@@ -77,6 +78,7 @@ export type TimelineRuntimeOptions = {
 export class TimelineRuntime {
   private readonly correlations = new AsyncLocalStorage<Correlation>();
   private readonly messageCorrelations = new WeakMap<object, Correlation>();
+  private readonly steers = new SteerCorrelations();
   private readonly pending = new WeakMap<object, PendingMessage>();
   private readonly pendingByRole: Record<MessageRole, PendingMessage[]> = {
     user: [],
@@ -123,6 +125,7 @@ export class TimelineRuntime {
     this.pendingByRole.assistant = [];
     this.pendingByRole.toolResult = [];
     this.toolAssociations.clear();
+    this.steers.clear();
   }
 
   get sessionId(): string | null {
@@ -160,6 +163,11 @@ export class TimelineRuntime {
 
   runWithCorrelation<T>(correlation: Correlation, callback: () => T): T {
     return this.correlations.run(correlation, callback);
+  }
+
+  /** 登记即将以 steer 投递的用户消息；其 message_start 不在本次调用的 ALS 范围内。 */
+  expectSteer(content: unknown, correlation: Correlation): void {
+    this.steers.expect(content, correlation);
   }
 
   currentCorrelation(): Correlation | undefined {
@@ -430,6 +438,10 @@ export class TimelineRuntime {
   }
 
   private correlationFor(message: unknown): Correlation {
+    // 插入的用户消息在本轮边界开始，ALS 仍是发起本轮的请求，须先按内容取回自己的关联。
+    const record = this.asMessageRecord(message);
+    const steered = record?.role === "user" ? this.steers.take(record.content) : undefined;
+    if (steered) return steered;
     const existing = this.currentCorrelation();
     if (existing) return { ...existing };
     const objectMessage = typeof message === "object" && message !== null ? message : null;

@@ -178,6 +178,43 @@ describe("UserDeliveryBinding", () => {
     }
   });
 
+  test("confirms a steered queue item when its message_start arrives later under the run's ALS scope", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    let binding!: UserDeliveryBinding;
+    const runtime = new TimelineRuntime({ onStarted: (started) => binding.onStarted(started) });
+    runtime.attach(session);
+    const sent: ServerFrame[] = [];
+    const sendUserMessage = vi.fn();
+    let service!: TimelineV2Service;
+    binding = new UserDeliveryBinding({
+      isIdle: () => false,
+      canAcceptNormal: () => true,
+      getPi: () => ({ sendUserMessage }) as unknown as ExtensionAPI,
+      getTimeline: () => runtime,
+      getCurrentSessionId: () => session.getSessionId(),
+      getCurrentLeafId: () => service.leafId,
+      findTarget: () => ({ service, sessionId: session.getSessionId(), leafId: service.leafId }),
+      sendFrames: (_ownerId, frames) => { sent.push(...frames); },
+    });
+    service = new TimelineV2Service({
+      sessionManager: session, senderRef: "owner-1", extensionVersion: "1.2.3", runtime,
+      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
+        ownerId: "owner-1", sessionId: session.getSessionId(), leafId: service.leafId, service, clientRequestId: frame.client_request_id,
+      }),
+      onQueueSnapshot: () => binding.snapshot("owner-1", service),
+      onQueuedMessageSteer: (targetId) => binding.steerQueued("owner-1", service, targetId).kind,
+    });
+    service.handle(hello());
+    expect(service.handle({ ...user(service.leafId), text: "继续" })[0]).toMatchObject({ status: "accepted" });
+    service.handle({ protocol_version: 2, type: "queued_message_steer", id: "steer-1", channel_id: "channel-1", session_id: session.getSessionId(), leaf_id: service.leafId, target_id: "request-1" });
+    expect(sendUserMessage).toHaveBeenCalledWith("继续", { deliverAs: "steer" });
+
+    // 本轮由另一请求发起；SDK 在下一个边界才发出插入消息的 message_start。
+    runtime.runWithCorrelation({ origin: "unknown", delivery: "unknown" }, () => runtime.onMessageStart({ role: "user", content: "继续", timestamp: 3 }, session));
+    expect(sent).toContainEqual(expect.objectContaining({ type: "user_message_started", in_reply_to: "wire-1", target_channel_id: "channel-1" }));
+    binding.clearAll();
+  });
+
   test("isolates owners and hands a queued target to steer at most once", () => {
     const session = SessionManager.inMemory(process.cwd());
     const runtime = new TimelineRuntime();
