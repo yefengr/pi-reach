@@ -1,4 +1,5 @@
 import { FollowMotionClock } from "./timeline-follow-motion";
+import type { ViewportMotionStep } from "./timeline-viewport-coordinator";
 
 type InputSize = { height: number; maximum: number; overflow: string };
 const inputOwners = new WeakMap<HTMLTextAreaElement, OwnSendTransition>();
@@ -91,8 +92,8 @@ export class OwnSendTransition {
     return this.composer.getBoundingClientRect().height - this.input.getBoundingClientRect().height;
   }
 
-  /** 返回当前帧的滚动目标；后续布局只更新目标，时钟不会重启。 */
-  advance(now: number): { top: number; finished: boolean } {
+  /** 返回当前帧的滚动目标；后续布局只更新目标，时钟不会重启。滚动由协调器按目标平滑追赶，本过程只拥有输入区尺寸。 */
+  advance(now: number): ViewportMotionStep {
     const { progress, fraction, finished } = this.clock.sample(now);
     const size = this.inputSize;
     if (this.input && size) {
@@ -111,10 +112,11 @@ export class OwnSendTransition {
     const bottom = Math.max(0, this.list.scrollHeight - this.list.clientHeight + remainingShrink);
     // 真实预算切换可能改变顶部 padding；先补偿锚点，不让密度切换在第一帧移动旧正文。
     const padding = Number.parseFloat(getComputedStyle(this.list).paddingTop) || 0;
-    this.scrollTop += padding - this.paddingTop;
+    const shift = padding - this.paddingTop;
+    this.scrollTop += shift;
     this.paddingTop = padding;
     this.scrollTop += (bottom - this.scrollTop) * fraction;
-    return { top: this.scrollTop, finished };
+    return { top: this.scrollTop, finished, target: bottom, shift };
   }
 
   /** 清理绑定及临时尺寸，取消后迟到帧不再拥有这些元素。 */

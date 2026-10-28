@@ -10,8 +10,13 @@ const RATE_SMOOTHING_MS = 120;
 /** 速率上下限（字素/ms）：积压很少时每帧至少一个字素，突发大段时也不一帧铺满。 */
 const MIN_RELEASE_PER_MS = 1 / BASE_TICK_MS;
 const MAX_RELEASE_PER_MS = 64 / BASE_TICK_MS;
-/** 正式版本到达后，剩余积压在此窗口内放完再交接，避免结尾整段跳出。 */
-const FINISH_WINDOW_MS = 160;
+/**
+ * 正式版本到达后，剩余积压在收尾窗口内放完再交接，避免结尾整段跳出。
+ * 窗口按积压换算并限定上下限：积压很多时也逐帧放出，让跟随保持在平滑范围内。
+ */
+const FINISH_MIN_MS = 160;
+const FINISH_MAX_MS = 640;
+const FINISH_RELEASE_PER_MS = 1;
 const INITIAL_BURST = 2;
 const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
@@ -32,8 +37,9 @@ type StreamState = {
   /** 平滑后的放出速率与未满一个字素的余量。 */
   rate: number;
   credit: number;
-  /** 收尾窗口内已用时长；只在 finishing 期间有意义。 */
+  /** 收尾窗口内已用时长与窗口长度；只在 finishing 期间有意义。 */
   elapsedMs: number;
+  finishWindowMs: number;
   /** 正在收尾时为对应正式事件 ID：正式版本暂缓显示，由本 lane 在其位置放完尾巴。 */
   finishing: string | null;
   seen: boolean;
@@ -276,7 +282,7 @@ function paceRelease(state: StreamState, backlog: number, elapsed: number): numb
 
 /** 收尾按剩余窗口比例放出，窗口结束时必定放完。 */
 function finishRelease(state: StreamState, backlog: number, elapsed: number): number {
-  const remaining = Math.max(1, FINISH_WINDOW_MS - state.elapsedMs);
+  const remaining = Math.max(1, state.finishWindowMs - state.elapsedMs);
   state.elapsedMs += elapsed;
   return Math.ceil(backlog * Math.min(1, elapsed / remaining));
 }
@@ -361,6 +367,8 @@ export class StreamDisplayBuffer {
         state.targetText = text;
       }
       state.elapsedMs = 0;
+      const backlog = state.cursor === null ? 0 : state.cursor.graphemes.length - state.cursor.visibleCount;
+      state.finishWindowMs = Math.min(FINISH_MAX_MS, Math.max(FINISH_MIN_MS, backlog / FINISH_RELEASE_PER_MS));
       state.seen = true;
     });
     return true;
@@ -376,7 +384,7 @@ export class StreamDisplayBuffer {
       this.streams.set(id, {
         thinkingTextEpoch: {}, partial, targetText, cursor,
         visibleText: cursor === null ? targetText : cursorText(cursor),
-        rate: 0, credit: 0, elapsedMs: 0, finishing: null, seen: true,
+        rate: 0, credit: 0, elapsedMs: 0, finishWindowMs: FINISH_MIN_MS, finishing: null, seen: true,
       });
       return { needsSnapshot: true, urgent: true };
     }
@@ -435,6 +443,7 @@ export class StreamDisplayBuffer {
         rate: 0,
         credit: 0,
         elapsedMs: 0,
+        finishWindowMs: FINISH_MIN_MS,
         finishing: null,
         seen: true,
       });

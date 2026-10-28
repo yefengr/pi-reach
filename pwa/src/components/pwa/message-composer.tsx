@@ -1,4 +1,4 @@
-import { createContext, memo, useCallback, useContext, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type Ref } from "react";
 import { ActionIcon, FileButton, Menu, Textarea, UnstyledButton } from "@mantine/core";
 import { ArrowUp, Camera, ChevronDown, Files, LoaderCircle, Plus, Slash, Square } from "lucide-react";
 import { AttachmentCards, type ComposerAttachmentItem } from "./attachment-cards";
@@ -284,6 +284,11 @@ const MessageComposerContent = memo(function MessageComposerContent({
     }
   };
 
+  // 输入框已聚焦时按下发送不抢走焦点：保留软键盘，发送过渡不与键盘收起后的整页复位叠加。
+  const keepComposerFocus = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (document.activeElement === textareaRef.current) event.preventDefault();
+  };
+
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.files);
     if (!files.length || addDisabled) return;
@@ -492,7 +497,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
                 />
               </Menu.Dropdown>
             </Menu>
-            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" disabled={!isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
+            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" onMouseDown={keepComposerFocus} disabled={!isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
           </div>
         </div>
       </div>

@@ -171,6 +171,33 @@ describe("TimelineViewportCoordinator", () => {
     expect(tops[0]! - (stopped + 2)).toBeLessThan(5);
   });
 
+  test("a send transition chases a target that grows near its end instead of jumping", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    // 发送过程只拥有输入区尺寸并报告目标；滚动由协调器平滑追赶。
+    let start: number | null = null;
+    let finished = 0;
+    f.layout.send = () => ({
+      advance(now) { start ??= now; return { top: f.layout.top(), finished: now - start >= 160, target: f.layout.measure().bottom }; },
+      finish() { finished += 1; },
+    });
+    const capture = f.core.captureOwnSend();
+    f.setBottom(150);
+    f.core.followOwnSend(capture);
+    const tops = [f.layout.top()];
+    for (let frame = 1; frame <= 40 && f.frames.size > 0; frame += 1) {
+      // 过渡末段 Working 出现，目标增加 56px。
+      if (frame === 7) f.setBottom(206);
+      f.step(frame * 16);
+      tops.push(f.layout.top());
+    }
+    const deltas = tops.slice(1).map((top, index) => top - tops[index]!);
+    expect(tops.at(-1)).toBe(206);
+    expect(Math.max(...deltas)).toBeLessThan(20);
+    deltas.forEach((delta) => expect(delta).toBeGreaterThanOrEqual(0));
+    expect(finished).toBe(1);
+  });
+
   test("explicit input during a follow glide ends following at the current position", () => {
     const f = fixture();
     f.stream(); f.core.notify("commit");

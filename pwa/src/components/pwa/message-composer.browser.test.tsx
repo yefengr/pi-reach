@@ -1232,3 +1232,24 @@ test("unconfirmed operation hint is neutral without a spinner", async () => {
     expect(hint.textContent).toContain("Compaction not confirmed.");
   } finally { await screen.unmount(); }
 });
+
+test("sending from a focused input keeps focus so the soft keyboard stays open", async () => {
+  let sends = 0;
+  const screen = await renderPwa(<ComposerHarness initialDraft="Ready" onSend={() => { sends += 1; }} />);
+  try {
+    const input = screen.getByRole("textbox", { name: /Message your agent/i }).element() as HTMLTextAreaElement;
+    input.focus();
+    const send = screen.getByRole("button", { name: "Send message", exact: true });
+    // 按下发送不抢走焦点；未聚焦输入框时保留按钮默认行为。
+    const pressed = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    send.element().dispatchEvent(pressed);
+    expect(pressed.defaultPrevented).toBe(true);
+    await send.click();
+    await expect.poll(() => sends).toBe(1);
+    expect(document.activeElement).toBe(input);
+    input.blur();
+    const unfocused = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    send.element().dispatchEvent(unfocused);
+    expect(unfocused.defaultPrevented).toBe(false);
+  } finally { await screen.unmount(); }
+});

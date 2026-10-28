@@ -105,6 +105,11 @@ test.each([390, 1280])("tail pending confirmation preserves extent and old body 
   } finally { await h.screen.unmount(); }
 });
 
+/** 以 16ms 帧推进假时钟；滚动追赶按真实帧推进，不能用一次大步代替。 */
+function stepFrames(clock: ReturnType<typeof layoutClock>, from: number, to: number) {
+  for (let time = from; time <= to; time += 16) clock.step(time);
+}
+
 function layoutClock() {
   let now = 1000;
   let nextId = 0;
@@ -147,9 +152,11 @@ test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width,
       expect(samples[i].input).toBeLessThanOrEqual(samples[i - 1].input);
       expect(samples[i].scroll).toBeGreaterThanOrEqual(samples[i - 1].scroll - 1);
     }
+    // 输入区回缩在 160ms 内完成；滚动以阻尼运动追赶目标，随后数帧内贴底。
+    stepFrames(clock, 176, 320);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     expect(h.viewport().followingOutput).toBe(true);
-    clock.step(200);
+    clock.step(340);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
 });
@@ -308,9 +315,13 @@ test.each([40, 145])("Working arriving at %ims updates the send without an insta
     const before = h.list.scrollTop;
     h.work(true);
     expect(h.list.scrollTop).toBe(before);
-    clock.step(160);
+    // 新增距离逐帧平滑追上：不在过渡末段一次补完（Working 行高约 56px），也不重启输入区时钟。
+    const tops = [before];
+    for (let frame = time + 16; frame <= 400; frame += 16) { clock.step(frame); tops.push(h.list.scrollTop); }
+    const deltas = tops.slice(1).map((value, index) => value - tops[index]!);
+    expect(Math.max(...deltas)).toBeLessThan(24);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
-    clock.step(200);
+    clock.step(420);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
 });
@@ -750,10 +761,11 @@ test("receipts and output arriving inside a send update its target without resta
     clock.step(80);
     h.update([history, formal(h.sent()), { ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text: "First reply" }] } }]);
     clock.step(160);
+    stepFrames(clock, 176, 320);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     expect(document.querySelector(".pwa-chat-footer")!.getAttribute("style") ?? "").not.toContain("height");
     expect(h.viewport().followingOutput).toBe(true);
-    clock.step(200);
+    clock.step(340);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
 });
