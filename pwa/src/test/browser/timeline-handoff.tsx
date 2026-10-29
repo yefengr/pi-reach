@@ -86,7 +86,7 @@ export async function renderHandoffHarness({ width = 390, height = 650, initialE
     return <div className="pwa-app-shell"><main className="pwa-main" style={{ display: "flex", flexDirection: "column", width: "100vw", height, flex: "none" }}>
       <header data-testid="handoff-header" style={{ flex: "0 0 48px", display: "flex", alignItems: "center", padding: "0 16px" }}>Handoff</header>
       <MessageList items={timeline.items.filter((item) => !isQueuedMessage(item))} isLive running={isRunning} hasEarlier={false} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} onRetryFailed={noop} onCheckStatus={noop} />
-      <div className="pwa-chat-footer"><MessageComposer {...composer} isWorking={isRunning} queuedMessages={<QueuedMessagesPanel items={timeline.items} isOnline isWorking={isRunning} runtimeRef={timeline.runtimeRef} channelRef={channelRef} applyChange={timeline.applyTimelineChange} onError={noop} />} /></div>
+      <div className="pwa-chat-footer"><MessageComposer {...composer} isWorking={isRunning} queuedMessages={<QueuedMessagesPanel items={timeline.items} onCommit={timeline.reportQueueCommit} isOnline isWorking={isRunning} runtimeRef={timeline.runtimeRef} channelRef={channelRef} applyChange={timeline.applyTimelineChange} onError={noop} />} /></div>
     </main></div>;
   }
   const screen = await renderPwa(<Harness />);

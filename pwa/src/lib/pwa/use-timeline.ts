@@ -84,6 +84,8 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   const fragmentAssemblerRef = useRef<TimelineEventFragmentAssembler | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const publishedQueueRef = useRef<ReadonlySet<string>>(new Set());
+  const committedQueueRef = useRef<ReadonlySet<string>>(new Set());
+  const reportQueueCommit = useCallback((ids: ReadonlySet<string>) => { committedQueueRef.current = ids; }, []);
   const contextGenerationRef = useRef(0);
   const replacementGateRef = useRef(false);
   const deferredChangeRef = useRef<TimelineRuntimeChange | null>(null);
@@ -110,8 +112,9 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   const [streamDisplay] = useState(() => new StreamDisplayScheduler(new StreamDisplayBuffer(), () => undefined));
   useLayoutEffect(() => {
     streamDisplay.setPublisher((next, realtime) => {
-      // 排队消息出队进入对话区：仍在跟随时与本端发送共用过渡，排队条收起、气泡进入与贴底在同一时钟内完成。
-      const dequeued = followingNow() && leftQueueIntoTimeline(publishedQueueRef.current, next) ? captureOwnSend() : null;
+      // 只为已经提交到排队面板的消息接管；同批瞬时入队、出队不代表界面发生过排队过渡。
+      const displayedQueue = new Set([...publishedQueueRef.current].filter((id) => committedQueueRef.current.has(id)));
+      const dequeued = followingNow() && leftQueueIntoTimeline(displayedQueue, next) ? captureOwnSend() : null;
       updateItems(next);
       if (dequeued) followOwnSend(dequeued);
       if (!realtime) return;
@@ -121,13 +124,17 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   }, [captureOwnSend, followOwnSend, followingNow, receiveRealtimeOutput, streamDisplay, updateItems]);
 
   const renderChange = useCallback((change: TimelineRuntimeChange, resetDisplay: boolean) => {
-    if (resetDisplay) publishedQueueRef.current = new Set();
+    if (resetDisplay) {
+      publishedQueueRef.current = new Set();
+      committedQueueRef.current = new Set();
+    }
     streamDisplay.update(change.items, resetDisplay);
   }, [streamDisplay]);
 
   useEffect(() => {
     const onVisibilityChange = () => {
       publishedQueueRef.current = new Set();
+      committedQueueRef.current = new Set();
       streamDisplay.setHidden(document.hidden);
     };
     onVisibilityChange();
@@ -535,6 +542,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
 
   return {
     items,
+    reportQueueCommit,
     queueSnapshotReady,
     lastSyncedAt,
     setLastSyncedAt,
