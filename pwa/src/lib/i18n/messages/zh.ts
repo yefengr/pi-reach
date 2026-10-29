@@ -201,6 +201,18 @@ export const zh: Messages = {
     notConnected: "未连接",
     noOnlinePi: "未选择在线 Pi",
     copyVersionInfo: "复制版本信息",
+    viewportDiagnostics: {
+      title: "滚动诊断",
+      hint: "默认关闭。请在 Pi 空闲且队列为空时准备，返回对话并在 60 秒内发送一次；有效发送后最多记录 1.5 秒或 256 条。仅在本地记录时间、状态和几何，不含消息、附件、名称、地址或凭据，不会上传。设置往返不会取消采样，隐藏应用会取消。入口资源名不是提交 SHA，回调时间不能证明屏幕已绘制。",
+      prepare: "准备下一次发送", cancel: "取消采样", clear: "清除诊断",
+      off: "诊断已关闭。", armed: "已准备，请返回对话并在 60 秒内发送一次。",
+      recording: "正在记录发送窗口…", complete: "报告已就绪，采样已关闭。",
+      cancelled: "已取消，采样已关闭。", timeout: "60 秒内未发生有效发送，采样已关闭。",
+      offline: "请先连接在线 Pi 会话，再准备采样。",
+      copy: "复制诊断 JSON", save: "保存诊断 JSON", json: "诊断 JSON",
+      jsonHint: "复制或保存失败时，可选中这里的文本手动复制。",
+      saveFailed: "无法保存文件，请复制或选中 JSON 文本。",
+    },
   },
   shortcuts: {
     title: "键盘快捷键",

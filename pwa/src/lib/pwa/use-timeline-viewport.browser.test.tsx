@@ -5,6 +5,7 @@ import { renderPwa } from "@/test/browser/render";
 import type { TimelineViewItem } from "./timeline-runtime";
 import { useTimelineViewport, type TimelineViewport } from "./use-timeline-viewport";
 import { captureOwnSendLayout, OwnSendTransition, stageOwnSendInputSize } from "./own-send-transition";
+import { viewportDiagnosticCapture, recordViewportDiagnostic, viewportDiagnosticsEnabled } from "./timeline-viewport-diagnostics";
 
 type ViewportHarnessProps = {
   onViewport: (viewport: TimelineViewport) => void;
@@ -76,6 +77,43 @@ async function renderViewport(options: RenderViewportOptions = {}) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+test.each(["pagehide", "visibility", "unmount"] as const)("native %s cancels armed and active diagnostic captures and releases their timers", async (event) => {
+  for (const active of [false, true]) {
+    const { screen, viewport } = await renderViewport();
+    let unmounted = false;
+    try {
+      // 仅作为 hook 生命周期夹具，不提供自然几何或真机证据。
+      viewport().captureOwnSend();
+      const schedule = vi.spyOn(window, "setTimeout");
+      const clear = vi.spyOn(window, "clearTimeout");
+      viewportDiagnosticCapture.arm({ appVersion: "0.0.31", entryResource: null, standalone: true, displayMode: "standalone", dpr: 3, reducedMotion: false });
+      const entry = { following: true, paused: false, unread: 0, generation: 1, mode: "send" as const, reason: "send" as const,
+        top: 0, bottom: 20, requested: 20, actual: 20 };
+      if (active) recordViewportDiagnostic(entry);
+      expect(viewportDiagnosticCapture.getSnapshot().phase).toBe(active ? "recording" : "armed");
+      const timerIndex = schedule.mock.calls.findLastIndex((args) => args[1] === (active ? 1500 : 60_000));
+      expect(timerIndex).toBeGreaterThanOrEqual(0);
+      const timer = schedule.mock.results[timerIndex].value;
+      clear.mockClear();
+      if (event === "unmount") { await screen.unmount(); unmounted = true; }
+      else if (event === "visibility") {
+        vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+      } else window.dispatchEvent(new Event("pagehide"));
+      expect(viewportDiagnosticCapture.getSnapshot()).toEqual({ phase: "cancelled", report: null });
+      expect(clear).toHaveBeenCalledWith(timer);
+      expect(viewportDiagnosticsEnabled()).toBe(false);
+      const sample = vi.fn(() => null);
+      recordViewportDiagnostic(entry, sample);
+      expect(sample).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+      if (!unmounted) await screen.unmount();
+      viewportDiagnosticCapture.clear();
+    }
+  }
 });
 
 test("send capture is readonly and activation after autosize preserves its natural target", () => {

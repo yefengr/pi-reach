@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { installViewportDiagnostics, recordViewportDiagnostic, ViewportDiagnostics, type ViewportDiagnosticGeometry } from "./timeline-viewport-diagnostics";
+import { installViewportDiagnostics, recordViewportDiagnostic, clearViewportDiagnostics, viewportDiagnosticCapture, ViewportDiagnostics, type ViewportDiagnosticGeometry } from "./timeline-viewport-diagnostics";
 import type { ViewportTrace } from "./timeline-viewport-coordinator";
 const entry: ViewportTrace = { following: true, unread: 0, paused: false, mode: "follow", generation: 1,
   reason: "commit", top: 0, bottom: 100, requested: 100, actual: 100 };
@@ -43,7 +43,7 @@ test("only fixed enums and finite numeric geometry enter diagnostic storage", ()
   const measured = { ...geometry, listClientHeight: Infinity, inputHeight: "private", footerTop: NaN, token: "private" };
   diagnostics.record(candidate, () => measured as unknown as ViewportDiagnosticGeometry);
   const result = diagnostics.read()[0];
-  expect(Object.keys(result).sort()).toEqual([...Object.keys(entry), ...Object.keys(geometry), "time"].sort());
+  expect(Object.keys(result).sort()).toEqual([...Object.keys(entry), ...Object.keys(geometry), "time", "effectiveTarget", "callbackTime", "motionTime"].sort());
   expect(result.listClientHeight).toBeNull();
   expect(result.inputHeight).toBeNull();
   expect(result.footerTop).toBeNull();
@@ -56,6 +56,25 @@ test("only fixed enums and finite numeric geometry enter diagnostic storage", ()
   diagnostics.clear();
   diagnostics.record(entry);
   for (const key of Object.keys(geometry) as (keyof ViewportDiagnosticGeometry)[]) expect(diagnostics.read()[0][key]).toBeNull();
+});
+
+test.each(["enable", "disable", "clear", "reset", "bind", "hidden", "unbind"] as const)("capture lifecycle %s invalidates timers without a later ghost enable", (action) => {
+  vi.useFakeTimers();
+  vi.stubGlobal("window", { setTimeout, clearTimeout });
+  try {
+    const cleanup = installViewportDiagnostics();
+    viewportDiagnosticCapture.arm({ appVersion: "0.0.31", entryResource: null, standalone: true, displayMode: "standalone", dpr: 3, reducedMotion: false });
+    recordViewportDiagnostic({ ...entry, reason: "send" }, () => geometry);
+    expect(viewportDiagnosticCapture.getSnapshot().phase).toBe("recording");
+    const control = window.__PI_REACH_VIEWPORT__!;
+    if (action === "enable" || action === "disable" || action === "clear") control[action]();
+    else if (action === "unbind") clearViewportDiagnostics();
+    else recordViewportDiagnostic({ ...entry, reason: action });
+    expect(viewportDiagnosticCapture.getSnapshot().phase).not.toBe("recording");
+    vi.runAllTimers();
+    expect(viewportDiagnosticCapture.getSnapshot().report).toBeNull();
+    cleanup();
+  } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
 });
 
 test("production control keeps its fixed API and unbinding clears and disables sampling", () => {

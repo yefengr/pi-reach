@@ -67,6 +67,72 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   };
 }
 
+test("passive diagnostic target and consumed clocks preserve requests and motion samples", () => {
+  const traces: ViewportTrace[] = [];
+  const on = fixture((entry) => traces.push(entry));
+  const off = fixture(undefined, () => false);
+  for (const f of [on, off]) {
+    f.core.notify("commit");
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.step(100); f.step(116); f.step(132);
+  }
+  expect(on.writes).toEqual(off.writes);
+  expect(on.samples).toEqual(off.samples);
+  expect(on.measures).toBe(off.measures);
+  const frame = traces.findLast((entry) => entry.reason === "frame")!;
+  expect(frame).toMatchObject({ callbackTime: 132, motionTime: 132, effectiveTarget: null });
+});
+
+test.each([0, 90])("passive diagnostics keep an explicit target %i distinct from the motion position", (target) => {
+  const traces: ViewportTrace[] = [];
+  const f = fixture((entry) => traces.push(entry));
+  f.core.notify("commit");
+  f.layout.send = () => ({ advance: () => ({ top: 20, target, finished: false }), finish() {} });
+  f.core.followOwnSend(f.core.captureOwnSend());
+  f.step(100);
+  expect(traces.findLast((entry) => entry.reason === "frame")).toMatchObject({ effectiveTarget: target, requested: 20, actual: 20 });
+});
+
+test("an activity motion without a target never reports its position as an effective target", () => {
+  const traces: ViewportTrace[] = [];
+  const f = fixture((entry) => traces.push(entry));
+  f.core.notify("commit");
+  f.setBottom(200);
+  f.core.notify("activity");
+  f.step(100);
+  expect(f.activityOrigins).toHaveLength(1);
+  expect(traces.findLast((entry) => entry.reason === "frame")).toMatchObject({ mode: "activity", effectiveTarget: null });
+});
+
+test("armed signal tracing observes send without adding reading geometry measurements", () => {
+  const traces: ViewportTrace[] = [];
+  const f = fixture();
+  let sampling = false;
+  f.core.setDiagnostics((entry) => traces.push(entry), () => true, () => sampling);
+  f.core.userRead();
+  f.core.notify("geometry");
+  expect(f.measures).toBe(0);
+  sampling = true;
+  f.core.notify("geometry");
+  expect(f.measures).toBe(1);
+  sampling = false;
+  f.core.followOwnSend(f.core.captureOwnSend());
+  expect(traces.some((entry) => entry.reason === "send")).toBe(true);
+});
+
+test("explicit latest trace never reuses an earlier consumed motion clock", () => {
+  const traces: ViewportTrace[] = [];
+  const f = fixture((entry) => traces.push(entry));
+  f.core.notify("commit");
+  f.core.followOwnSend(f.core.captureOwnSend());
+  f.step(100);
+  expect(traces.at(-1)).toMatchObject({ reason: "frame", motionTime: 100 });
+  const samples = [...f.samples];
+  f.core.latest();
+  expect(traces.at(-1)).toMatchObject({ reason: "latest", motionTime: null, callbackTime: null });
+  expect(f.samples).toEqual(samples);
+});
+
 describe("TimelineViewportCoordinator", () => {
   test("activity borrows tail space and native logical-target receipts never end following", () => {
     const f = fixture();

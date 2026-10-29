@@ -1,3 +1,4 @@
+import { ViewportDiagnosticCapture } from "./timeline-viewport-diagnostic-capture";
 import { VIEWPORT_MODES, VIEWPORT_REASONS, type ViewportTrace } from "./timeline-viewport-coordinator";
 
 const CAPACITY = 256;
@@ -42,25 +43,39 @@ export class ViewportDiagnostics implements ViewportDiagnosticControl {
       const value = measured?.[key];
       geometry[key] = typeof value === "number" && Number.isFinite(value) ? value : null;
     }
+    const passive = {} as Record<"effectiveTarget" | "callbackTime" | "motionTime", number | null>;
+    for (const key of ["effectiveTarget", "callbackTime", "motionTime"] as const) {
+      const value = entry[key];
+      passive[key] = typeof value === "number" && Number.isFinite(value) ? value : null;
+    }
     const elapsed = this.now() - this.start;
-    this.entries.push(Object.freeze({ time: Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0, reason, following, paused, unread,
+    this.entries.push(Object.freeze({ ...passive, time: Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0, reason, following, paused, unread,
       mode, generation, top, bottom, requested, actual, ...geometry }));
     if (this.entries.length > CAPACITY) this.entries.splice(0, this.entries.length - CAPACITY);
   }
 }
 
 const diagnostics = new ViewportDiagnostics(() => performance.now());
+export const viewportDiagnosticCapture = new ViewportDiagnosticCapture(diagnostics, {
+  set: (run, ms) => window.setTimeout(run, ms), clear: (id) => window.clearTimeout(id),
+});
 const control = Object.freeze({
-  enable: () => diagnostics.enable(), disable: () => diagnostics.disable(),
-  read: () => diagnostics.read(), clear: () => diagnostics.clear(),
+  enable: () => { viewportDiagnosticCapture.terminate(); diagnostics.enable(); },
+  disable: () => { viewportDiagnosticCapture.terminate(); diagnostics.disable(); },
+  read: () => diagnostics.read(),
+  clear: () => { viewportDiagnosticCapture.terminate(); diagnostics.clear(); },
 });
 
 export function installViewportDiagnostics(): () => void {
   window.__PI_REACH_VIEWPORT__ = control;
-  return () => { diagnostics.disable(); };
+  return () => { viewportDiagnosticCapture.terminate(); diagnostics.disable(); };
 }
-export function viewportDiagnosticsEnabled(): boolean { return diagnostics.isEnabled(); }
+export function viewportDiagnosticsEnabled(): boolean { return diagnostics.isEnabled() || viewportDiagnosticCapture.pending(); }
+/** armed 只接收发送信号，不能因此为回看分支增加布局读取。 */
+export function viewportDiagnosticSamplingEnabled(): boolean { return diagnostics.isEnabled(); }
 export function recordViewportDiagnostic(entry: ViewportTrace, sample?: () => ViewportDiagnosticGeometry | null): void {
-  diagnostics.record(entry, sample);
+  if (entry.reason === "reset" || entry.reason === "bind" || entry.reason === "hidden") viewportDiagnosticCapture.terminate();
+  if (viewportDiagnosticCapture.pending()) viewportDiagnosticCapture.record(entry, sample);
+  else diagnostics.record(entry, sample);
 }
-export function clearViewportDiagnostics(): void { diagnostics.clear(); }
+export function clearViewportDiagnostics(): void { viewportDiagnosticCapture.terminate(); diagnostics.clear(); }
