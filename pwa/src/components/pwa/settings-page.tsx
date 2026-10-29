@@ -5,6 +5,7 @@ import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appea
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
 import type { PwaTextSize } from "@/lib/ui/text-size";
+import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
@@ -21,6 +22,8 @@ export type SettingsPagePreferences = {
 
 type SettingsPageProps = {
   preferences?: SettingsPagePreferences;
+  viewportDiagnostics?: boolean;
+  viewportDiagnosticsOnline?: boolean;
   relayUrl: string;
   defaultRelayUrl: string;
   relayVersion: string | null;
@@ -53,7 +56,7 @@ function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize }} />;
 }
 
-function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
+function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
   const [value, setValue] = useState(relayUrl);
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
@@ -150,6 +153,7 @@ function SettingsPageContent({ preferences, relayUrl, defaultRelayUrl, relayVers
           <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
       </section>
+      {viewportDiagnostics ? <ViewportDiagnosticsSettings online={viewportDiagnosticsOnline} /> : null}
       <section className="pwa-settings-section" aria-labelledby="pwa-about-heading">
         <div className="pwa-settings-about-heading">
           <h2 id="pwa-about-heading" className="pwa-settings-section-title">{s.about}</h2>

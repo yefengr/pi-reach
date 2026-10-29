@@ -32,7 +32,8 @@ export interface ViewportScheduler {
   cancel(frame: number): void;
 }
 export type ViewportState = Readonly<{ following: boolean; unread: number; paused: boolean; mode: ViewportMode; generation: number }>;
-export type ViewportTrace = ViewportState & { reason: ViewportReason; top: number; bottom: number; requested: number | null; actual: number };
+export type ViewportTrace = ViewportState & { reason: ViewportReason; top: number; bottom: number; requested: number | null; actual: number;
+  effectiveTarget?: number | null; callbackTime?: number | null; motionTime?: number | null };
 const EPSILON = 1;
 /** iOS 回弹或惯性收尾期间，前插后恢复的位置会被系统滚动线程覆盖回顶部；此窗口内无新输入的偏移按覆盖处理。 */
 const PREPEND_GUARD_MS = 1000;
@@ -52,6 +53,9 @@ export class TimelineViewportCoordinator<C, A> {
   private mode: ViewportMode = "idle";
   private motion: ViewportMotion | null = null;
   private motionTime: number | null = null;
+  private diagnosticCallbackTime: number | null = null;
+  private diagnosticMotionTime: number | null = null;
+  private diagnosticGeometryTracing: (() => boolean) | null = null;
   private frame: number | null = null;
   private frameEpoch = 0;
   private anchor: A | null = null;
@@ -83,9 +87,10 @@ export class TimelineViewportCoordinator<C, A> {
   private prependGuard: { anchor: A; until: number } | null = null;
   constructor(private readonly scheduler: ViewportScheduler, private readonly changed: (state: ViewportState) => void,
     private trace?: (entry: ViewportTrace) => void, private tracing: () => boolean = () => true) {}
-  setDiagnostics(trace: (entry: ViewportTrace) => void, enabled: () => boolean): void {
+  setDiagnostics(trace: (entry: ViewportTrace) => void, enabled: () => boolean, geometryEnabled = enabled): void {
     this.trace = trace;
     this.tracing = enabled;
+    this.diagnosticGeometryTracing = geometryEnabled;
   }
   get state(): ViewportState {
     return { following: this.following, unread: this.unread.size, paused: this.paused, mode: this.mode, generation: this.generation };
@@ -441,12 +446,14 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   private advance(layout: ViewportLayout<C, A>, reason: ViewportReason, frameTime?: number): void {
+    this.diagnosticCallbackTime = frameTime ?? null;
+    this.diagnosticMotionTime = null;
     if (this.pendingAnchor) {
       if (this.restoreAnchor(layout, this.pendingAnchor, true)) {
         this.pendingAnchor = null;
         this.userRead();
         this.acceptRestoredTop(layout);
-        if (this.trace && this.tracing()) this.record(reason, layout.measure(), null);
+        if (this.trace && this.tracing() && (this.diagnosticGeometryTracing?.() ?? true)) this.record(reason, layout.measure(), null);
         return;
       }
     }
@@ -459,7 +466,7 @@ export class TimelineViewportCoordinator<C, A> {
       }
       this.anchor ??= layout.captureAnchor();
       this.lastTop = layout.top();
-      if (this.trace && this.tracing()) this.record(reason, layout.measure(), null);
+      if (this.trace && this.tracing() && (this.diagnosticGeometryTracing?.() ?? true)) this.record(reason, layout.measure(), null);
       return;
     }
     let geometry = layout.measure();
@@ -500,6 +507,7 @@ export class TimelineViewportCoordinator<C, A> {
       else {
         const epoch = this.frameEpoch;
         const time = this.sampleMotionTime(frameTime);
+        this.diagnosticMotionTime = time;
         const step = this.motion.advance(time);
         if (epoch !== this.frameEpoch || this.layout !== layout) return;
         const tracked = this.trackMotion(step, time);
@@ -507,7 +515,7 @@ export class TimelineViewportCoordinator<C, A> {
           requested = tracked.top;
           this.write(tracked.top, false);
           this.schedule();
-          this.record(reason, geometry, requested);
+          this.record(reason, geometry, requested, step.target ?? null);
           return;
         }
         // 尺寸时钟完成不等于滚动到位；释放 footer 后保留当前位置/速度，由后继 RAF 收敛。
@@ -527,7 +535,7 @@ export class TimelineViewportCoordinator<C, A> {
         this.ready = true;
         this.mode = "idle";
         this.schedule();
-        this.record(reason, geometry, null);
+        this.record(reason, geometry, null, step.target ?? null);
         return;
       }
     }
@@ -557,7 +565,7 @@ export class TimelineViewportCoordinator<C, A> {
       if (!this.replyContinuity?.retain(false)) this.replyContinuity = null;
     }
     this.ready = true;
-    this.record(reason, geometry, requested);
+    this.record(reason, geometry, requested, target);
   }
 
   /** 过程报告目标时以阻尼运动追赶，否则直接采用过程给出的位置。 */
@@ -587,13 +595,17 @@ export class TimelineViewportCoordinator<C, A> {
       this.schedule();
       return;
     }
+    this.diagnosticMotionTime = frameTime;
     const step = this.glide.advance(frameTime, target);
     this.write(step.top, false, geometry);
     if (step.settled) this.glide = null;
     else this.schedule();
   }
 
-  private record(reason: ViewportReason, geometry: ViewportGeometry, requested: number | null): void {
-    if (this.tracing()) this.trace?.({ ...this.state, reason, top: geometry.top, bottom: geometry.bottom, requested, actual: this.lastTop });
+  private record(reason: ViewportReason, geometry: ViewportGeometry, requested: number | null, effectiveTarget: number | null = null): void {
+    if (this.tracing()) this.trace?.({ ...this.state, reason, top: geometry.top, bottom: geometry.bottom, requested, actual: this.lastTop,
+      // latest 的显式记录在 advance 之外，没有消费旧 motion 时钟。
+      effectiveTarget, callbackTime: reason === "frame" ? this.diagnosticCallbackTime : null,
+      motionTime: reason === "latest" ? null : this.diagnosticMotionTime });
   }
 }

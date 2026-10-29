@@ -7,7 +7,7 @@ import { TimelineViewportLayout } from "./timeline-viewport-layout";
 import { TimelineViewportObservers } from "./timeline-viewport-observers";
 import { ScrollIdleGate } from "./scroll-idle-gate";
 import { LatestEntryVisibility } from "./latest-entry";
-import { clearViewportDiagnostics, installViewportDiagnostics, recordViewportDiagnostic, viewportDiagnosticsEnabled } from "./timeline-viewport-diagnostics";
+import { clearViewportDiagnostics, installViewportDiagnostics, recordViewportDiagnostic, viewportDiagnosticCapture, viewportDiagnosticsEnabled, viewportDiagnosticSamplingEnabled } from "./timeline-viewport-diagnostics";
 
 export { TIMELINE_GEOMETRY_EVENT } from "./timeline-viewport-observers";
 /** 离开会话时的位置；只有调用方确认的相同 scope 可显式迁移恢复。 */
@@ -59,7 +59,8 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
 
   useLayoutEffect(() => {
     core.setDiagnostics((entry) => recordViewportDiagnostic(entry, () => layoutRef.current?.diagnosticGeometry() ?? null),
-      () => layoutRef.current !== null && viewportDiagnosticsEnabled());
+      () => layoutRef.current !== null && viewportDiagnosticsEnabled(),
+      () => layoutRef.current !== null && viewportDiagnosticSamplingEnabled());
   }, [core]);
 
   const bind = useCallback(() => {
@@ -103,11 +104,13 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   useEffect(() => {
     const clearDiagnostics = installViewportDiagnostics();
     const settle = () => { bind(); core.settle("viewport-resize"); };
-    const visibility = () => { if (document.hidden) { bind(); core.settle("hidden"); } };
+    const pagehide = () => viewportDiagnosticCapture.terminate();
+    const visibility = () => { if (document.hidden) { pagehide(); bind(); core.settle("hidden"); } };
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const reduce = () => { if (motion.matches) { bind(); core.settle("reduce"); } };
     window.addEventListener("resize", settle);
     document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("pagehide", pagehide);
     motion.addEventListener("change", reduce);
     return () => {
       observersRef.current?.disconnect();
@@ -119,6 +122,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       clearDiagnostics();
       window.removeEventListener("resize", settle);
       document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("pagehide", pagehide);
       motion.removeEventListener("change", reduce);
     };
   }, [bind, core, idleGate, latestEntry]);

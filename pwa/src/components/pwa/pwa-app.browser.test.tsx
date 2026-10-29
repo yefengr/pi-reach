@@ -18,6 +18,7 @@ import { DELIVERY_STATUS_QUERY_TIMEOUT_MS, PendingCapacityError, TimelineRuntime
 import { DELIVERY_STATUS_RETRY_DELAYS_MS } from "@/lib/pwa/delivery-query-retry";
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { PwaApp } from "./pwa-app";
+import { viewportDiagnosticCapture } from "@/lib/pwa/timeline-viewport-diagnostics";
 import { connectionBannerTiming } from "./pwa-app-actions";
 import { useComposerAutosize } from "./use-composer-autosize";
 import { RELAY_PROBE_TIMEOUT_MS } from "@/lib/pwa/use-relay-connection";
@@ -500,6 +501,62 @@ async function renderReadyTimeline(renderApp = () => renderPwa(<PwaApp />)) {
   Object.defineProperty(list, "scrollTo", { configurable: true, value: scrollTo });
   return { channel, list, screen, scrollTo };
 }
+
+test.each([false, true])("mobile diagnostic settings round trip preserves natural layout and transport behavior (enabled=%s)", async (enabled) => {
+  await page.viewport(390, 844);
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1"));
+    channel.emit(queuedStateFrame([], "diagnostic-empty-queue"));
+    emitEvent(channel, numberedEvents(1)[0]!);
+    const input = screen.getByRole("textbox", { name: /Message your agent/i });
+    await expect.element(input).toBeEnabled();
+    await expect.poll(listText).toContain("Record 1");
+    const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+    const row = list.querySelector("article");
+    const measure = () => [list.clientHeight, list.clientWidth, list.getBoundingClientRect().top].map(Math.round);
+    await input.fill("Diagnostic draft remains local");
+    const geometry = measure();
+    await screen.getByRole("button", { name: "Open navigation", exact: true }).click();
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    await expect.element(screen.getByRole("heading", { name: "Scroll diagnostics", exact: true })).toBeVisible();
+    if (enabled) await screen.getByRole("button", { name: "Prepare next send", exact: true }).click();
+    await screen.getByRole("button", { name: "Back to navigation", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-session-sheet .pwa-navigation-close")!);
+    await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+    expect(document.querySelector(".pwa-message-list")).toBe(list);
+    expect(list.querySelector("article")).toBe(row);
+    expect(measure()).toEqual(geometry);
+    await expect.element(input).toHaveValue("Diagnostic draft remains local");
+    expect(viewportDiagnosticCapture.getSnapshot().phase).toBe(enabled ? "armed" : "off");
+    input.element().focus();
+    expect(document.activeElement).toBe(input.element());
+    // 真实表单提交与运输门禁；失败不能触发 followOwnSend。
+    channelHarness.nextSendResults.push(false);
+    (input.element().closest("form") as HTMLFormElement).requestSubmit();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(viewportDiagnosticCapture.getSnapshot().phase).toBe(enabled ? "armed" : "off");
+    // handled 已将草稿交给 pending，即使运输失败也应清空输入；下一次发送使用新草稿。
+    await expect.element(input).toHaveValue("");
+    await input.fill("Diagnostic second send");
+    channelHarness.nextSendResults.push(true);
+    (input.element().closest("form") as HTMLFormElement).requestSubmit();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(2);
+    await expect.element(input).toHaveValue("");
+    expect(list.querySelector("article")).toBe(row);
+    if (enabled) {
+      await expect.poll(() => viewportDiagnosticCapture.getSnapshot().phase, { timeout: 5000 }).toBe("complete");
+      const entries = viewportDiagnosticCapture.getSnapshot().report!.entries;
+      expect(entries[0]).toMatchObject({ reason: "send", listClientWidth: list.clientWidth });
+      expect(entries.some((entry) => entry.effectiveTarget !== null && entry.effectiveTarget !== undefined)).toBe(true);
+      expect(entries.some((entry) => entry.callbackTime !== null && entry.callbackTime !== undefined)).toBe(true);
+      expect(JSON.stringify(entries)).not.toContain("Diagnostic draft");
+    }
+    expect(channelHarness.channels).toHaveLength(1);
+  } finally { viewportDiagnosticCapture.clear(); await screen.unmount(); }
+});
 
 test("streaming replies preserve the composer render boundary, draft and open command menu", async () => {
   const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);

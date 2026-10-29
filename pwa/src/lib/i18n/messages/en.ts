@@ -199,6 +199,18 @@ export const en = {
     notConnected: "Not connected",
     noOnlinePi: "No online Pi selected",
     copyVersionInfo: "Copy version information",
+    viewportDiagnostics: {
+      title: "Scroll diagnostics",
+      hint: "Off by default. When Pi is idle and the queue is empty, prepare, return to the conversation and send once within 60 seconds. Records up to 1.5 seconds or 256 samples after a valid send. Only local timing, state and geometry are recorded, never messages, attachments, names, addresses or credentials. Nothing is uploaded. Returning here does not cancel sampling; hiding the app does. Entry resource names are not a commit SHA; callback times do not prove a screen paint.",
+      prepare: "Prepare next send", cancel: "Cancel capture", clear: "Clear capture",
+      off: "Diagnostics are off.", armed: "Armed. Return to the conversation and send once within 60 seconds.",
+      recording: "Recording the send window…", complete: "Report ready. Sampling is off.",
+      cancelled: "Capture cancelled. Sampling is off.", timeout: "No valid send within 60 seconds. Sampling is off.",
+      offline: "Connect to an online Pi conversation to prepare a capture.",
+      copy: "Copy diagnostic JSON", save: "Save diagnostic JSON", json: "Diagnostic JSON",
+      jsonHint: "If copying or saving fails, select this text and copy it manually.",
+      saveFailed: "Could not save the file. Copy or select the JSON instead.",
+    },
   },
   shortcuts: {
     title: "Keyboard shortcuts",
