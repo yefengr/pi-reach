@@ -2,7 +2,7 @@ export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
 const EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty";
 const TOUCH_READ_THRESHOLD = 4;
 type Events = {
-  geometry(activity: boolean): void;
+  geometry(activity: boolean, added?: number): void;
   resize(): void;
   interrupt(): void;
   input(): void;
@@ -21,7 +21,11 @@ export class TimelineViewportObservers {
 
   constructor(readonly list: HTMLDivElement, events: Events) {
     this.observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => events.resize());
-    const geometry = (event: Event) => events.geometry(event instanceof CustomEvent && event.detail?.reason === "activity");
+    const geometry = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail : null;
+      const added = typeof detail?.added === "number" && Number.isFinite(detail.added) ? Math.max(0, detail.added) : 0;
+      events.geometry(detail?.reason === "activity", added);
+    };
     const input = (event: Event) => { if (event.target instanceof HTMLTextAreaElement) events.input(); };
     const wheel = (event: WheelEvent) => { events.engage(); if (event.deltaY < 0) events.interrupt(); };
     const key = (event: KeyboardEvent) => { events.engage(); if (["ArrowUp", "PageUp", "Home"].includes(event.key)) events.interrupt(); };

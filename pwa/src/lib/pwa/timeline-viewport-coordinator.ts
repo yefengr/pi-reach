@@ -79,6 +79,8 @@ export class TimelineViewportCoordinator<C, A> {
   /** 发送时捕获的唯一回复行；静止保留探针不等于拥有滚动位置。 */
   private replyContinuity: ReplyContinuity | null = null;
   private activityPending = false;
+  private activityGrowth = 0;
+  private sendFloor: number | null = null;
   private processing = false;
   private exiting = false;
   private pendingReasons = new Set<ViewportReason>();
@@ -323,11 +325,13 @@ export class TimelineViewportCoordinator<C, A> {
     this.pendingAnchor = position && !position.following ? position.anchor : null;
   }
 
-  notify(reason: "commit" | "geometry" | "activity" | "resize", hasContent = true): void {
+  /** added 是 Working 提交时的净占高；0 表示状态行移除或未测量。 */
+  notify(reason: "commit" | "geometry" | "activity" | "resize", hasContent = true, added = 0): void {
     if (!hasContent) { this.ready = false; return; }
     if (reason === "activity") {
       // 子 layout effect 已处于 DOM mutation 之后；同步保留可达空间并启动唯一时钟。
       this.activityPending = true;
+      this.activityGrowth += added;
       this.process(reason);
       return;
     }
@@ -365,6 +369,8 @@ export class TimelineViewportCoordinator<C, A> {
     this.handoff = false;
     this.replyContinuity = null;
     this.activityPending = false;
+    this.activityGrowth = 0;
+    this.sendFloor = null;
     this.pendingReasons.clear();
     this.mode = "idle";
     this.exiting = true;
@@ -441,7 +447,8 @@ export class TimelineViewportCoordinator<C, A> {
 
   private followTarget(geometry: ViewportGeometry): number {
     // Thinking/工具转正文不一定再发 Working 显隐通知。净收缩先归还借用量，不能把旧正文往下拉。
-    this.tailCredit = Math.min(this.tailCredit, geometry.tailSpace, Math.max(0, this.naturalBottom(geometry) - this.lastTop));
+    const floor = this.sendFloor === null ? this.lastTop : Math.max(this.lastTop, this.sendFloor);
+    this.tailCredit = Math.min(this.tailCredit, geometry.tailSpace, Math.max(0, this.naturalBottom(geometry) - floor));
     return this.naturalBottom(geometry) - this.tailCredit;
   }
 
@@ -491,11 +498,17 @@ export class TimelineViewportCoordinator<C, A> {
     }
     if (this.activityPending) {
       this.activityPending = false;
+      const growth = this.activityGrowth;
+      this.activityGrowth = 0;
+      if (this.mode === "send" && growth > 0) this.tailCredit = Math.min(geometry.tailSpace, this.tailCredit + growth);
       if (this.ready && this.mode !== "send" && this.mode !== "latest") {
         const bottom = this.naturalBottom(geometry);
         const target = Math.min(bottom, Math.max(0, this.lastTop, bottom - geometry.tailSpace));
         this.tailCredit = bottom - target;
-        if (!this.motion && geometry.animate && Math.abs(target - this.lastTop) > EPSILON) {
+        // 向下追赶交给现有 glide；只有 Working 新增高度、或内容收缩后需要向上修正时才新建运动，
+        // 避免在长滞后状态下用 160ms 重新定速。向上修正从静止开始，旧的下行速度不跨过渡继续生效。
+        if ((growth > 0 || target < this.lastTop - EPSILON) && !this.motion && geometry.animate && Math.abs(target - this.lastTop) > EPSILON) {
+          if (growth === 0) this.glide = null;
           this.motion = layout.activity(this.lastTop, (value) => this.followTarget(value));
           this.mode = "activity";
         }
@@ -510,6 +523,12 @@ export class TimelineViewportCoordinator<C, A> {
         this.diagnosticMotionTime = time;
         const step = this.motion.advance(time);
         if (epoch !== this.frameEpoch || this.layout !== layout) return;
+        if (this.mode === "send" && step.target !== undefined) {
+          this.sendFloor ??= Math.max(0, step.target - this.tailCredit);
+          if (step.shift) this.sendFloor += step.shift;
+          this.tailCredit = Math.min(this.tailCredit, geometry.tailSpace, Math.max(0, step.target - this.sendFloor));
+          step.target -= this.tailCredit;
+        }
         const tracked = this.trackMotion(step, time);
         if (!step.finished) {
           requested = tracked.top;
@@ -561,6 +580,7 @@ export class TimelineViewportCoordinator<C, A> {
       this.lastTop = geometry.top;
     }
     if (!this.glide && Math.abs(target - layout.top()) <= EPSILON) {
+      this.sendFloor = null;
       this.handoff = false;
       if (!this.replyContinuity?.retain(false)) this.replyContinuity = null;
     }

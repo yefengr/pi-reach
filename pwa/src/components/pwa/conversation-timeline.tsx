@@ -220,7 +220,18 @@ export function ConversationTimeline({ items, live, completions, running = false
   useLayoutEffect(() => {
     if (previousWorking.current === workingVisible) return;
     previousWorking.current = workingVisible;
-    listRef.current?.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "activity" } }));
+    const list = listRef.current;
+    const working = workingVisible ? list?.querySelector<HTMLElement>(".pwa-working-label")?.parentElement : null;
+    let added = 0;
+    if (working) {
+      const style = getComputedStyle(working);
+      const previous = working.previousElementSibling;
+      const previousMargin = previous ? Number.parseFloat(getComputedStyle(previous).marginBottom) || 0 : 0;
+      // 只在 Working 提交时读取它自己的净占高，包含与上一行折叠后的外边距。
+      added = working.getBoundingClientRect().height + (Number.parseFloat(style.marginBottom) || 0)
+        + Math.max(0, (Number.parseFloat(style.marginTop) || 0) - previousMargin);
+    }
+    list?.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "activity", added } }));
   }, [workingVisible, listRef]);
   // 手动展开思考与工具组都暂停自动跟随，保持当前阅读位置。
   const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {

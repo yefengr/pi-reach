@@ -162,7 +162,7 @@ test("finishes the buffered tail in place within the finish window before the fo
   expect(buffer.snapshot()).toEqual([assistantEvent("e", "g", "long answer!")]);
 });
 
-test("a large tail stretches the finish window so each frame releases only a few lines", () => {
+test("a large tail finishes at the pacing rate instead of resetting to the slow finish window", () => {
   const buffer = new StreamDisplayBuffer();
   const body = "字".repeat(802);
   buffer.ingest([partial("e:assistant:0", "g", body)]);
@@ -174,11 +174,37 @@ test("a large tail stretches the finish window so each frame releases only a few
     lengths.push(item?.kind === "partial" ? text(item)!.length : 802);
   }
   const releases = lengths.slice(1).map((length, index) => length - lengths[index]!);
-  // 800 个字素按每毫秒约 1 个放出，受 640ms 上限约束：约 40 帧，每帧不超过约 21 个。
-  expect(releases.length).toBeGreaterThan(30);
-  expect(releases.length).toBeLessThanOrEqual(41);
-  expect(Math.max(...releases)).toBeLessThanOrEqual(25);
+  // 收尾沿用积压换算的目标速率（约 240ms），不再回到 1 字/ms 的 640ms 慢窗口。
+  expect(releases.length).toBeGreaterThanOrEqual(14);
+  expect(releases.length).toBeLessThanOrEqual(16);
+  expect(Math.max(...releases)).toBeLessThanOrEqual(60);
   expect(buffer.snapshot()).toEqual([assistantEvent("e", "g", body)]);
+});
+
+test("a low-rate tail keeps its established pace instead of jumping to the finish window", () => {
+  const buffer = new StreamDisplayBuffer();
+  buffer.ingest([partial("e:assistant:0", "g", "a".repeat(48))]);
+  buffer.advance(16);
+  expect(text(buffer.snapshot()[0]!)).toBe("aaaaa");
+  const formalText = "a".repeat(48) + "b".repeat(112);
+  buffer.ingest([assistantEvent("e", "g", formalText)]);
+  // 零时长 tick 不得推进位置或积分。
+  const beforeZero = text(buffer.snapshot()[0]!) ?? "";
+  buffer.advance(0);
+  expect(text(buffer.snapshot()[0]!)).toBe(beforeZero);
+  const releases: number[] = [];
+  let previous = beforeZero.length;
+  while (buffer.hasPending()) {
+    buffer.advance(16);
+    const item = buffer.snapshot()[0];
+    const shown = item?.kind === "partial" ? text(item)! : formalText;
+    releases.push(shown.length - previous);
+    previous = shown.length;
+  }
+  // 低速阶段约 3 字素/帧；收尾沿用该速率，不跳到 160ms 窗口的约 16 字素/帧。
+  expect(releases[0]).toBeLessThanOrEqual(6);
+  expect(Math.max(...releases)).toBeLessThanOrEqual(12);
+  expect(previous).toBe(formalText.length);
 });
 
 test("formal events take over immediately when drained or when they do not extend the shown text", () => {
