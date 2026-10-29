@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { QueuedMessages } from "./queued-messages";
 import { useI18n } from "@/lib/i18n";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
@@ -26,10 +26,17 @@ type QueuedMessagesPanelProps = {
   channelRef: { current: PeerChannel | null };
   applyChange: (change: TimelineRuntimeChange) => void;
   onError: (message: string) => void;
+  /** React 提交后的排队成员快照，使用原始 pending.id，包含折叠项。 */
+  onCommit?: (ids: ReadonlySet<string>) => void;
 };
 
-export function QueuedMessagesPanel({ items, isOnline, isWorking = false, runtimeRef, channelRef, applyChange, onError }: QueuedMessagesPanelProps) {
+export function QueuedMessagesPanel({ items, isOnline, isWorking = false, runtimeRef, channelRef, applyChange, onError, onCommit }: QueuedMessagesPanelProps) {
   const q = useI18n().t.queued;
+  const queued = items.filter(isQueuedMessage).filter((item) => !item.insertionNoticeDismissed);
+  // 在渲染时复制 ID，提交时不再读取可能已被 Runtime 原位修改的对象。
+  const queuedIds = new Set(queued.map((item) => item.id));
+  useLayoutEffect(() => { onCommit?.(queuedIds); });
+  useLayoutEffect(() => () => { onCommit?.(new Set()); }, [onCommit]);
   const wasWorkingRef = useRef(isWorking);
   const runEndedAtRef = useRef<number | null>(null);
   useEffect(() => {
@@ -67,7 +74,7 @@ export function QueuedMessagesPanel({ items, isOnline, isWorking = false, runtim
     onError("Could not update the queued message. Check the connection and try again.");
   };
   return <QueuedMessages
-    items={items.filter(isQueuedMessage).filter((item) => !item.insertionNoticeDismissed).map((item) => {
+    items={queued.map((item) => {
       const status = item.insertionStatus === "unconfirmed" ? q.unconfirmed
         : item.insertionStatus === "waiting" ? q.inserting
           : item.delivery === "unknown_delivery" ? q.waitingReconnect

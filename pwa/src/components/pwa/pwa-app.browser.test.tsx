@@ -23,6 +23,10 @@ import { connectionBannerTiming } from "./pwa-app-actions";
 import { useComposerAutosize } from "./use-composer-autosize";
 import { RELAY_PROBE_TIMEOUT_MS } from "@/lib/pwa/use-relay-connection";
 import { safeProtocolFeedbackMessage } from "@/lib/pwa/feedback-messages";
+import { decodeServerFrameV2 } from "@/lib/pi-reach/protocol-v2";
+import { TimelineViewportCoordinator } from "@/lib/pwa/timeline-viewport-coordinator";
+import { ownSendFooterChrome } from "@/lib/pwa/own-send-transition";
+import { installHandoffClock } from "@/test/browser/timeline-handoff";
 
 const relayHarness = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -4786,6 +4790,160 @@ test("catching up after a saved preview appends the newest records without a top
     await expect.poll(listText).toContain("Record 5");
     expect(document.querySelector(".pwa-earlier")).toBeNull();
   } finally { await screen.unmount(); }
+});
+
+type QueueCommitChannel = (typeof channelHarness.channels)[number];
+type QueueCommitRequest = Extract<ClientFrame, { type: "user_message" }>;
+
+async function queueCommitFrames(count = 3) {
+  for (let index = 0; index < count; index++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function prepareQueueCommitCase(queued: boolean) {
+  await page.viewport(402, 812);
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const channel = channelHarness.channels[0]!;
+  const emit = (frame: unknown) => channel.emit(decodeServerFrameV2(frame));
+  emit(readyFrame(channel, "session-1"));
+  emit(queuedStateFrame([], "queue-commit-initial"));
+  await expect.poll(() => document.querySelector<HTMLButtonElement>('[aria-label="Add attachments"]')?.disabled).toBe(false);
+  const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+  // 保留真实全应用几何，不能复用 renderReadyTimeline 的固定滚动范围。
+  for (const key of ["scrollHeight", "clientHeight", "scrollTop", "scrollTo"]) expect(Object.hasOwn(list, key)).toBe(false);
+  const seed = numberedEvents(1)[0]!;
+  if (seed.kind !== "assistant") throw new Error("Expected assistant history fixture");
+  const text = Array.from({ length: 32 }, (_, index) => `第${index + 1}段。这是已经完成的合成历史，发送新消息期间保持原样。通过旧正文的位置观察滚动，不使用真实会话内容，也不改变段落排版。`).join("\n\n");
+  const history = { ...seed, blocks: [{ type: "text" as const, text }] };
+  emit({ protocol_version: 2, type: "timeline_event", session_id: history.session_id, leaf_id: history.leaf_id, event: history });
+  const end = runEnd(history.group_id, 2);
+  emit({ protocol_version: 2, type: "timeline_event", session_id: end.session_id, leaf_id: end.leaf_id, event: end });
+  await expect.poll(() => list.querySelectorAll(".pwa-turn-meta").length).toBe(1);
+  const db = await openPwaDatabase();
+  await expect.poll(() => db.events.count(), { timeout: 6000 }).toBe(2);
+  await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
+  if (queued) { markWorking(); await queueCommitFrames(); }
+  const input = screen.getByPlaceholder("Message your agent…");
+  await input.fill("继续输出一段合成内容");
+  const textarea = input.element();
+  if (!(textarea instanceof HTMLTextAreaElement)) throw new Error("Expected composer textarea");
+  textarea.blur();
+  await queueCommitFrames(4);
+  return { screen, channel, list, input: textarea, old: list.querySelector<HTMLElement>(".pwa-message.assistant")! };
+}
+
+function queueCommitReplies(channel: QueueCommitChannel, sent: QueueCommitRequest) {
+  const emit = (frame: unknown) => channel.emit(decodeServerFrameV2(frame));
+  const accepted = (started = false) => emit({
+    protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
+    in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: sent.session_id, leaf_id: sent.leaf_id,
+    status: "accepted", ...(started ? { message_id: "queue-commit-message", group_id: "queue-commit-group" } : {}),
+  });
+  const queue = (editable: boolean) => emit({
+    protocol_version: 2, type: "queued_message_state", session_id: sent.session_id, leaf_id: sent.leaf_id,
+    snapshot_id: editable ? "queue-commit-waiting" : "queue-commit-inflight", chunk_index: 0, final: true,
+    items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable, created_at: 1 }],
+  });
+  const started = () => {
+    accepted(true);
+    emit({ protocol_version: 2, type: "user_message_started", target_channel_id: channel.channelId, in_reply_to: sent.id,
+      session_id: sent.session_id, leaf_id: sent.leaf_id, message: { id: "queue-commit-message", group_id: "queue-commit-group",
+        blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal" } });
+    emit({ protocol_version: 2, type: "queued_message_state", session_id: sent.session_id, leaf_id: sent.leaf_id,
+      snapshot_id: "queue-commit-removed", chunk_index: 0, final: true, items: [] });
+  };
+  return { accepted, queue, started };
+}
+
+test.each([false, true])("queue display commit: follows only a displayed queue departure (queued=%s)", async (queued) => {
+  const { screen, channel, list, input, old } = await prepareQueueCommitCase(queued);
+  const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+  const header = document.querySelector<HTMLElement>(".pwa-main header")!;
+  const headerTop = Math.round(header.getBoundingClientRect().top);
+  const inputTop = Math.round(input.getBoundingClientRect().top);
+  const anchors: number[] = [];
+  const sample = () => anchors.push(Math.round(old.getBoundingClientRect().top + list.scrollTop));
+  const queueNodes = new Set<Element>();
+  const collect = (records: MutationRecord[]) => {
+    for (const record of records) for (const node of record.addedNodes) if (node instanceof Element) {
+      if (node.matches(".pwa-queued-messages")) queueNodes.add(node);
+      for (const child of node.querySelectorAll(".pwa-queued-messages")) queueNodes.add(child);
+    }
+  };
+  const observer = new MutationObserver(collect);
+  observer.observe(document.querySelector(".pwa-main")!, { childList: true, subtree: true });
+  let activations = 0;
+  const cores: TimelineViewportCoordinator<unknown, unknown>[] = [];
+  const original = TimelineViewportCoordinator.prototype.followOwnSend;
+  const follow = vi.spyOn(TimelineViewportCoordinator.prototype, "followOwnSend").mockImplementation(function (this: TimelineViewportCoordinator<unknown, unknown>, capture) {
+    cores.push(this);
+    const generation = this.state.generation;
+    original.call(this, capture);
+    if (this.state.generation !== generation) activations++;
+  });
+  const clock = installHandoffClock();
+  try {
+    sample();
+    const submit = screen.getByRole("button", { name: "Send message", exact: true }).element();
+    if (!(submit instanceof HTMLButtonElement)) throw new Error("Expected send button");
+    submit.click();
+    clock.step(18);
+    const sent = channel.frames.findLast((frame): frame is QueueCommitRequest => frame.type === "user_message")!;
+    expect(sent).toBeDefined();
+    const replies = queueCommitReplies(channel, sent);
+    if (queued) {
+      expect(document.querySelector(".pwa-queued-messages")).not.toBeNull();
+      expect(list.querySelectorAll(".pwa-message.user")).toHaveLength(0);
+    }
+    const departureAt = queued ? 650 : 180;
+    let beforeDeparture = 0;
+    const events = [
+      ...(queued ? [{ at: 33, run: () => { replies.accepted(); replies.queue(true); } }] : []),
+      { at: departureAt, run: () => {
+        expect(footer.style.height).toBe("");
+        beforeDeparture = list.scrollTop;
+        const beforeOld = Math.round(old.getBoundingClientRect().top);
+        flushSync(() => { if (!queued) { replies.accepted(); replies.queue(true); } replies.queue(false); });
+        expect(Math.round(list.scrollTop)).toBe(Math.round(beforeDeparture));
+        expect(Math.round(old.getBoundingClientRect().top)).toBe(beforeOld);
+      } },
+      { at: departureAt + 14, run: () => { replies.started(); markWorking(); } },
+    ];
+    for (let frame = 2; frame <= (queued ? 78 : 48); frame++) {
+      const at = frame * 1000 / 60;
+      while (events[0] && events[0].at <= at) {
+        const event = events.shift()!;
+        clock.step(event.at);
+        flushSync(event.run);
+        sample();
+      }
+      clock.step(at);
+      sample();
+    }
+    collect(observer.takeRecords());
+    expect.soft(activations).toBe(queued ? 2 : 1);
+    if (!queued) expect.soft(Math.abs(list.scrollTop - beforeDeparture)).toBeLessThanOrEqual(1);
+    expect(queueNodes.size).toBe(queued ? 1 : 0);
+    expect(channel.frames.filter((frame) => frame.type === "user_message")).toHaveLength(1);
+    expect(input.value).toBe("");
+    expect(list.querySelectorAll(".pwa-message.user")).toHaveLength(1);
+    expect(list.querySelector(".pwa-message.user")?.textContent).toContain(sent.text);
+    expect(list.querySelector(".pwa-message.assistant")).toBe(old);
+    expect(Math.max(...anchors) - Math.min(...anchors)).toBeLessThanOrEqual(1);
+    const working = list.querySelector<HTMLElement>(".pwa-thinking-status")!;
+    expect(working).not.toBeNull();
+    expect(working.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(working.getBoundingClientRect().bottom).toBeLessThanOrEqual(list.getBoundingClientRect().bottom + 1);
+    expect(footer.style.height).toBe("");
+    expect(ownSendFooterChrome(input)).toBeNull();
+    expect(cores.at(-1)?.state).toMatchObject({ following: true, paused: false, mode: "follow" });
+    expect(Math.round(header.getBoundingClientRect().top)).toBe(headerTop);
+    expect(Math.round(input.getBoundingClientRect().top)).toBe(inputTop);
+  } finally {
+    observer.disconnect();
+    follow.mockRestore();
+    await screen.unmount();
+    clock.restore();
+  }
 });
 
 test("the desktop sidebar fades out the old session before switching to another Pi", async () => {
