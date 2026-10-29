@@ -376,7 +376,7 @@ test("real activity layout hands the reply glide's velocity to the next growth f
     grow(); core.notify("commit");
     clock.step(16); clock.step(32); clock.step(48);
     const working = document.createElement("div"); working.style.height = `${layout.measure().tailSpace + 56}px`; list.append(working);
-    core.notify("activity");
+    core.notify("activity", true, layout.measure().tailSpace + 56);
     expect(activity).toHaveBeenCalledOnce();
     clock.step(208); // 真实 ActivityFollowTransition 的 160ms 尺寸时钟结束。
     expect(core.state.mode).toBe("idle");

@@ -286,7 +286,7 @@ describe("turn presentation", () => {
     const finished = Date.UTC(2026, 0, 1, 9, 30);
     const html = renderList(events(user("u1", "g1", finished - 5000), answer("a1", "g1", finished - 1000), runEnd("r1", "g1", finished)), { hasEarlier: false });
     expect(html.match(/class="pwa-turn-meta"/g)).toHaveLength(1);
-    expect(html).toMatch(/class="pwa-turn-meta"><time[^>]*dateTime="2026-01-01T09:30:00.000Z"/);
+    expect(html).toMatch(/class="pwa-turn-meta"[^>]*><time[^>]*dateTime="2026-01-01T09:30:00.000Z"/);
     expect(html).toMatch(/<span class="pwa-sr-only">You:<\/span>/);
     expect(html).toMatch(/<span class="pwa-sr-only">Pi:<\/span>/);
     expect(html).not.toMatch(/>Agent</);

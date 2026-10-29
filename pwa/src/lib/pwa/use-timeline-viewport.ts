@@ -79,7 +79,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     if (!list || !layout) return;
     const valid = () => enabledRef.current && messageListRef.current === list && layoutRef.current === layout;
     observersRef.current = new TimelineViewportObservers(list, {
-      geometry: (activity) => { if (valid()) core.notify(activity ? "activity" : "geometry"); },
+      geometry: (activity, added) => { if (valid()) core.notify(activity ? "activity" : "geometry", true, activity ? added : 0); },
       resize: () => { if (valid()) core.notify("resize"); },
       interrupt: () => { if (valid()) core.interrupt(); },
       input: () => { if (valid()) core.input(); },

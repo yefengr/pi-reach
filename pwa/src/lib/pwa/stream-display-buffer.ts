@@ -12,11 +12,11 @@ const MIN_RELEASE_PER_MS = 1 / BASE_TICK_MS;
 const MAX_RELEASE_PER_MS = 64 / BASE_TICK_MS;
 /**
  * 正式版本到达后，剩余积压在收尾窗口内放完再交接，避免结尾整段跳出。
- * 窗口按积压换算并限定上下限：积压很多时也逐帧放出，让跟随保持在平滑范围内。
+ * 窗口沿用已建立的放出速率，只有新 lane 才用积压/目标延迟初始化；边界 160–640ms，
+ * 低速尾巴不突增，高速尾巴不骤降。
  */
 const FINISH_MIN_MS = 160;
 const FINISH_MAX_MS = 640;
-const FINISH_RELEASE_PER_MS = 1;
 const INITIAL_BURST = 2;
 const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
   ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
@@ -282,9 +282,30 @@ function paceRelease(state: StreamState, backlog: number, elapsed: number): numb
 
 /** 收尾按剩余窗口比例放出，窗口结束时必定放完。 */
 function finishRelease(state: StreamState, backlog: number, elapsed: number): number {
+  // 零时长 tick 不得推进：不释放、不积分。
+  if (elapsed <= 0) return 0;
   const remaining = Math.max(1, state.finishWindowMs - state.elapsedMs);
+  if (elapsed >= remaining) {
+    // 到达收尾截止：按原限时语义一次性放完当前积压，吸收浮点尾差。
+    state.credit = 0;
+    state.elapsedMs += elapsed;
+    return backlog;
+  }
+  const dt = Math.min(elapsed, remaining);
+  // 指数接速：按完整剩余窗口求目标速率，并以 RATE_SMOOTHING_MS 逼近，避免末段线性翻倍。
+  const debt = Math.max(0, backlog - state.credit);
+  const memory = RATE_SMOOTHING_MS * (1 - Math.exp(-remaining / RATE_SMOOTHING_MS));
+  const desired = Math.max(state.rate, (debt - state.rate * memory) / (remaining - memory));
+  const decay = Math.exp(-dt / RATE_SMOOTHING_MS);
+  const area = RATE_SMOOTHING_MS * (1 - decay);
+  const budget = desired * dt + (state.rate - desired) * area;
+  const nextRate = desired + (state.rate - desired) * decay;
+  state.credit += Math.max(0, budget);
+  state.rate = nextRate;
   state.elapsedMs += elapsed;
-  return Math.ceil(backlog * Math.min(1, elapsed / remaining));
+  const release = Math.min(backlog, Math.floor(state.credit));
+  state.credit -= release;
+  return release;
 }
 
 /** 正式版本中与 partial 对应的块正文；无法对应时不收尾。 */
@@ -368,7 +389,13 @@ export class StreamDisplayBuffer {
       }
       state.elapsedMs = 0;
       const backlog = state.cursor === null ? 0 : state.cursor.graphemes.length - state.cursor.visibleCount;
-      state.finishWindowMs = Math.min(FINISH_MAX_MS, Math.max(FINISH_MIN_MS, backlog / FINISH_RELEASE_PER_MS));
+      // 收尾沿用已建立的放出速率：低速不突增，高速不骤降；仅新 lane 用积压换算初始化。
+      const finishRate = state.rate > 0
+        ? state.rate
+        : Math.min(MAX_RELEASE_PER_MS, Math.max(MIN_RELEASE_PER_MS, backlog / TARGET_LATENCY_MS));
+      if (state.rate === 0) state.rate = finishRate;
+      // 已累计未放出的 credit 计入余量，窗口按有效待释放量换算并保持 160–640ms 边界。
+      state.finishWindowMs = Math.min(FINISH_MAX_MS, Math.max(FINISH_MIN_MS, Math.max(0, backlog - state.credit) / finishRate));
       state.seen = true;
     });
     return true;

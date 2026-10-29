@@ -104,8 +104,8 @@ test("a formal event finishes all of its blocks in place before handing over and
   const changed = h.ingest(h.runtime.commit(event).items);
   expect(changed.entries.slice(0, 2)).toMatchObject([{ text: "fi", streaming: true }, { text: "se", streaming: true }]);
   expect(changed.entries[2]).toMatchObject({ kind: "text", streaming: true });
-  // 收尾窗口 160ms（10 个 16ms 帧）内放完后整条交接为正式版本。
-  for (let frame = 0; frame < 10; frame += 1) h.tick();
+  // 收尾窗口按边界最多 640ms（40 个 16ms 帧），放完后整条交接为正式版本。
+  for (let frame = 0; frame < 40; frame += 1) h.tick();
   expect(h.view().entries.slice(0, 2)).toMatchObject([{ text: "first long block", streaming: false }, { text: "second long block", streaming: false }]);
   expect(h.view().entries[2]).toMatchObject({ kind: "text", streaming: true });
 });

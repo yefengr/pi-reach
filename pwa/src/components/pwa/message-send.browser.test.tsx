@@ -320,7 +320,14 @@ test.each([40, 145])("Working arriving at %ims updates the send without an insta
     for (let frame = time + 16; frame <= 400; frame += 16) { clock.step(frame); tops.push(h.list.scrollTop); }
     const deltas = tops.slice(1).map((value, index) => value - tops[index]!);
     expect(Math.max(...deltas)).toBeLessThan(24);
-    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    // 发送借出的空间就是 Working 的净占高：发送结束后页面停在 Working 上方，不再多推 50px。
+    expect(gap(h.list)).toBeGreaterThan(32);
+    expect(gap(h.list)).toBeLessThanOrEqual(72);
+    const status = h.list.querySelector<HTMLElement>(".pwa-thinking-status")!;
+    const listRect = h.list.getBoundingClientRect();
+    const statusRect = status.getBoundingClientRect();
+    expect(statusRect.top).toBeGreaterThanOrEqual(listRect.top - 1);
+    expect(statusRect.bottom).toBeLessThanOrEqual(listRect.bottom + 1);
     clock.step(420);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }

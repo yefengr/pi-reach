@@ -98,7 +98,7 @@ test("an activity motion without a target never reports its position as an effec
   const f = fixture((entry) => traces.push(entry));
   f.core.notify("commit");
   f.setBottom(200);
-  f.core.notify("activity");
+  f.core.notify("activity", true, 100);
   f.step(100);
   expect(f.activityOrigins).toHaveLength(1);
   expect(traces.findLast((entry) => entry.reason === "frame")).toMatchObject({ mode: "activity", effectiveTarget: null });
@@ -137,7 +137,7 @@ describe("TimelineViewportCoordinator", () => {
   test("activity borrows tail space and native logical-target receipts never end following", () => {
     const f = fixture();
     f.setTailSpace(80); f.core.notify("commit");
-    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(156); f.core.notify("activity", true, 56);
     expect(f.layout.top()).toBe(100);
     expect(f.starts).toBe(0);
     for (let i = 0; i < 3; i++) f.core.scroll(false);
@@ -359,7 +359,7 @@ describe("TimelineViewportCoordinator", () => {
     f.stream(); f.core.notify("commit");
     f.setBottom(140); f.core.notify("commit"); f.step(16); f.step(32); f.step(48);
     f.layout.activity = () => ({ advance: () => ({ top: f.layout.top(), finished: true }), finish() {} });
-    f.core.notify("activity");
+    f.core.notify("activity", true, 40);
     const at = f.layout.top();
     f.step(64);
     expect(f.layout.top() - at).toBeGreaterThan(1);
@@ -381,7 +381,7 @@ describe("TimelineViewportCoordinator", () => {
   test.each([2, 8, 20])("scrolling down %ipx into borrowed space preserves follow without snapping back", (distance) => {
     const f = fixture();
     f.setTailSpace(80); f.core.notify("commit");
-    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(156); f.core.notify("activity", true, 56);
     f.setTop(100 + distance); f.core.scroll(false);
     expect(f.core.state.following).toBe(true);
     f.core.notify("commit");
@@ -395,7 +395,7 @@ describe("TimelineViewportCoordinator", () => {
     f.setTailSpace(80); f.reduce(); f.core.latest();
     expect(f.layout.top()).toBe(100);
     f.core.scroll(true);
-    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(156); f.core.notify("activity", true, 56);
     expect(f.layout.top()).toBe(100);
     expect(f.core.state.following).toBe(true);
     expect(f.starts).toBe(0);
@@ -406,7 +406,7 @@ describe("TimelineViewportCoordinator", () => {
   test("activity scrolls only the deficit and keeps its effective target through handoff", () => {
     const f = fixture();
     f.setTailSpace(80); f.core.notify("commit");
-    f.setBottom(300); f.core.notify("activity");
+    f.setBottom(300); f.core.notify("activity", true, 200);
     expect(f.starts).toBe(1);
     expect(f.layout.top()).toBe(160);
     f.step(160); f.step(200);
@@ -417,10 +417,53 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.frames.size).toBe(0);
   });
 
+  test("a Working removal keeps the running glide instead of starting a 160ms catch-up", () => {
+    const f = fixture();
+    // 放大可视高度，让 200px 的回复增长仍走逐帧 glide 而不是一屏瞬贴。
+    const measure = f.layout.measure;
+    f.layout.measure = () => ({ ...measure(), height: measure().bottom + 400 });
+    f.setTailSpace(80); f.core.notify("commit");
+    f.stream(); f.setBottom(300); f.core.notify("commit");
+    f.step(16); f.step(32);
+    const lagging = f.layout.top();
+    expect(lagging).toBeLessThan(200);
+    const origins = f.activityOrigins.length;
+    // 内容收缩后目标仍在当前位置下方：不重建活动运动，保留已借留白。
+    f.setBottom(280); f.core.notify("activity", true, 0);
+    expect(f.activityOrigins).toHaveLength(origins);
+    expect(f.core.state.mode).toBe("follow");
+    const tops = glideFrames(f, 32);
+    expect(tops.at(-1)).toBe(200);
+    expect((f.core as unknown as { tailCredit: number }).tailCredit).toBe(80);
+  });
+
+  test("a Working height borrowed during send shortens the send target and survives handoff", () => {
+    const f = fixture();
+    f.setTailSpace(80); f.core.notify("commit");
+    let finished = false;
+    f.layout.send = () => ({
+      advance: () => ({ top: finished ? 120 : 60, target: 170, finished }),
+      finish() {},
+    });
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.setBottom(170);
+    f.core.notify("activity", true, 50);
+    f.core.notify("commit");
+    f.step(16);
+    expect(f.core.state.mode).toBe("send");
+    expect(f.writes.at(-1)).toBeLessThanOrEqual(120);
+    finished = true;
+    f.step(32);
+    glideFrames(f, 32);
+    expect(f.layout.top()).toBe(120);
+    expect((f.core as unknown as { tailCredit: number }).tailCredit).toBe(50);
+    expect(f.activityOrigins).toHaveLength(0);
+  });
+
   test.each(["details", "hidden", "reduce", "viewport-resize"] as const)("%s preserves borrowed space and rejects stale work", (action) => {
     const f = fixture();
     f.setTailSpace(80); f.core.notify("commit");
-    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(156); f.core.notify("activity", true, 56);
     if (action === "details") { f.core.details(true); f.core.details(false); }
     else { if (action === "reduce") f.reduce(); f.core.settle(action); }
     f.step(200); f.core.notify("commit");
@@ -431,7 +474,7 @@ describe("TimelineViewportCoordinator", () => {
   test.each(["latest", "reset", "send", "rebind"] as const)("%s clears old tail credit", (action) => {
     const f = fixture();
     f.setTailSpace(80); f.core.notify("commit");
-    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(156); f.core.notify("activity", true, 56);
     if (action === "latest") { f.reduce(); f.core.latest(); }
     else if (action === "reset") f.core.reset();
     else if (action === "send") f.core.followOwnSend(f.core.captureOwnSend());
@@ -444,7 +487,7 @@ describe("TimelineViewportCoordinator", () => {
   test("net content shrink returns borrowed space before moving the existing body downward", () => {
     const f = fixture();
     f.setTailSpace(80); f.core.notify("commit");
-    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(156); f.core.notify("activity", true, 56);
     f.setBottom(144); f.core.notify("commit");
     expect(f.layout.top()).toBe(100);
     f.core.notify("geometry"); f.core.scroll(false);
@@ -457,7 +500,7 @@ describe("TimelineViewportCoordinator", () => {
   test("a smaller current tail budget clamps credit permanently, without borrowing it again", () => {
     const f = fixture();
     f.setTailSpace(80); f.core.notify("commit");
-    f.setBottom(156); f.core.notify("activity");
+    f.setBottom(156); f.core.notify("activity", true, 56);
     f.setTailSpace(0); f.core.settle("viewport-resize");
     expect(f.layout.top()).toBe(156);
     f.setTailSpace(80); f.core.notify("geometry");
@@ -495,7 +538,9 @@ describe("TimelineViewportCoordinator", () => {
     f.setNow(20);
     if (first !== "activity") f.core.followOwnSend(f.core.captureOwnSend());
     f.setBottom(150);
-    f.setNow(36); f.core.notify(first);
+    f.setNow(36);
+    if (first === "activity") f.core.notify("activity", true, 50);
+    else f.core.notify(first);
     f.setNow(52); f.core.notify("commit");
     f.setNow(68); f.core.notify("geometry");
     expect(f.samples).toEqual([36, 36, 36]);
@@ -503,7 +548,7 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.frames.size).toBe(1);
     f.step(76);
     f.setBottom(200);
-    f.setNow(92); f.core.notify("activity");
+    f.setNow(92); f.core.notify("activity", true, 50);
     f.setNow(108); f.core.notify("commit");
     expect(f.samples.slice(-3)).toEqual([76, 76, 76]);
     expect(f.starts).toBe(1);
@@ -573,7 +618,7 @@ describe("TimelineViewportCoordinator", () => {
     f.step(660);
     expect(f.core.state.mode).toBe("idle");
     f.step(676);
-    f.setBottom(150); f.setNow(800); f.core.notify("activity");
+    f.setBottom(150); f.setNow(800); f.core.notify("activity", true, 50);
     expect(f.samples.at(-1)).toBe(800);
     expect(f.core.state.mode).toBe("activity");
   });
@@ -677,7 +722,7 @@ describe("TimelineViewportCoordinator", () => {
     const f = fixture();
     f.core.notify("commit");
     f.setBottom(150);
-    f.core.notify("activity");
+    f.core.notify("activity", true, 50);
     expect(f.starts).toBe(1);
     expect(f.advances).toBe(1);
     expect(f.core.state.mode).toBe("activity");
