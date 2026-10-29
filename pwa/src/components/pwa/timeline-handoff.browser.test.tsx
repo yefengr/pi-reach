@@ -5,6 +5,7 @@ import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { TimelineViewportLayout } from "@/lib/pwa/timeline-viewport-layout";
 import { TimelineViewportCoordinator } from "@/lib/pwa/timeline-viewport-coordinator";
+import { ReplyContinuity } from "@/lib/pwa/timeline-viewport-continuity";
 import { renderPwa } from "@/test/browser/render";
 import { HANDOFF_SCOPE, installHandoffClock, renderHandoffHarness, type HandoffHarness } from "@/test/browser/timeline-handoff";
 
@@ -216,6 +217,56 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
   }
 });
 
+test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...replay, delay }))))(
+  "same-turn completion joins the reply before queue drain (width=$width frame=$frameMs delay=$delay)", async ({ width, frameMs, delay }) => {
+  // 同轮正式 user 使 run_end 在回复尚有显示积压时就能生成真实完成时间。
+  const user: TimelineEvent = { event_id: "completion-user", event_seq: 2, message_id: "completion-user",
+    session_id: HANDOFF_SCOPE.sessionId, leaf_id: HANDOFF_SCOPE.leafId, group_id: "handoff-turn", timestamp: 2,
+    kind: "user", status: "committed", origin: "pwa", sender_ref: HANDOFF_SCOPE.selfSenderRef,
+    delivery: "normal", blocks: [{ type: "text", text: "A reply that will finish before the queue starts" }] };
+  const h = await renderHandoffHarness({ width, initialEvents: [initialEvent, user], running: false });
+  const clock = installHandoffClock();
+  const recording = recordHandoff(h);
+  try {
+    clock.step(STREAM_START_MS);
+    const body = paragraphs("Reply", 12);
+    const suffix = `\n\n${paragraphs("Tail", 5)}`;
+    h.receive(partial(body));
+    h.timeline().followOwnSend(h.timeline().captureOwnSend());
+    h.receive(queue(true));
+    for (let time = STREAM_START_MS + frameMs; time <= FORMAL_AT_MS; time += frameMs) clock.step(time);
+    clock.step(FORMAL_AT_MS);
+    h.receive(partial(suffix));
+    const event = { ...formal(body + suffix, true), event_seq: 3 };
+    h.commit(event);
+    expect(h.list.querySelector(".pwa-turn-meta")).toBeNull();
+    expect(h.list.querySelector(".pwa-thinking-status")).toBeNull();
+    const completion = recording.capture("completion", FORMAL_AT_MS, () => h.commit({
+      event_id: "completion-run-end", event_seq: 4, session_id: HANDOFF_SCOPE.sessionId,
+      leaf_id: event.leaf_id, group_id: "handoff-turn", timestamp: 3, kind: "run_end", status: "complete",
+    }));
+    expect(h.list.querySelector(".pwa-turn-meta")).not.toBeNull();
+    expect(completion.before.partial && completion.after.partial).toBe(true);
+    expect(completion.before.queued && completion.after.queued).toBe(true);
+    expect(completion.after.height).toBeGreaterThan(completion.before.height);
+    expect(completion.before.top).toBeLessThanOrEqual(completion.after.bottom);
+    expect(completion.after.client).toBe(completion.before.client);
+    expect(completion.after.header).toBe(completion.before.header);
+    expect(completion.after.input).toBe(completion.before.input);
+    expect.soft(Math.abs(completion.after.old - completion.before.old)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
+    expect.soft(synchronousJumps([completion])).toEqual([]);
+    if (delay === 0) recording.capture("queue starts", FORMAL_AT_MS, () => h.receive(queue(false)));
+    for (let time = FORMAL_AT_MS + frameMs; time <= SETTLED_AT_MS; time += frameMs) {
+      recording.capture("finish", time, () => clock.step(time));
+      if (delay === frameMs && time === FORMAL_AT_MS + frameMs) {
+        recording.capture("queue starts", time, () => h.receive(queue(false)));
+      }
+    }
+    assertSettled(h, clock, event);
+    expect(synchronousJumps(recording.samples)).toEqual([]);
+  } finally { recording.close(); await h.screen.unmount(); clock.restore(); }
+});
+
 test.each(["read", "reset"] as const)("queue continuity releases control on %s", async action => {
   const h = await renderHandoffHarness({ initialEvents: [initialEvent] });
   const clock = installHandoffClock();
@@ -335,6 +386,72 @@ test("real activity layout hands the reply glide's velocity to the next growth f
     clock.step(224);
     expect(list.scrollTop).toBeGreaterThan(at); // 不能因 activity 的无 target step 清空旧速度和时钟。
   } finally { core.bind(null); activity.mockRestore(); await screen.unmount(); clock.restore(); }
+});
+
+test.each(["same-turn", "different-turn", "separated", "new-user", "new-tool"] as const)(
+  "a cached reply probe limits completion geometry to %s", async kind => {
+  const screen = await renderPwa(<main className="pwa-main">
+    <div data-testid="completion-probe" className="pwa-message-list" style={{ height: 300, flex: "none", overflow: "auto" }}>
+      <article className="pwa-message assistant partial" data-viewport-row="probe-reply" data-viewport-turn="probe-turn">
+        {Array.from({ length: 20 }, (_, index) => <p key={index}>A measured reply paragraph {index}</p>)}
+      </article>
+    </div>
+  </main>);
+  const list = document.querySelector<HTMLDivElement>("[data-testid='completion-probe']")!;
+  const layout = new TimelineViewportLayout(list);
+  const probe = layout.captureReply()!;
+  const before = layout.measure();
+  const initialHeight = probe.sample()!.height;
+  const continuity = new ReplyContinuity(probe, before);
+  const query = vi.spyOn(list, "querySelectorAll");
+  try {
+    const meta = document.createElement("p");
+    meta.className = "pwa-turn-meta";
+    meta.setAttribute("data-viewport-completion", kind === "different-turn" ? "other-turn" : "probe-turn");
+    meta.textContent = "00:00";
+    if (kind === "separated") {
+      const separator = document.createElement("div");
+      separator.style.height = "44px";
+      list.append(separator);
+    }
+    list.append(meta);
+    if (kind === "new-user" || kind === "new-tool") {
+      const other = document.createElement("article");
+      other.className = kind === "new-user" ? "pwa-message user" : "pwa-tool";
+      other.setAttribute("data-viewport-row", kind);
+      other.style.height = "60px";
+      list.append(other);
+    }
+    const after = layout.measure();
+    const localGrowth = probe.sample()!.height - initialHeight;
+    expect(after.height).toBeGreaterThan(before.height);
+    expect(continuity.update(after)).toBe(kind === "same-turn");
+    if (kind === "same-turn") {
+      expect(Math.abs(localGrowth - (after.height - before.height))).toBeLessThanOrEqual(PIXEL_TOLERANCE);
+      expect(meta.hasAttribute("data-viewport-row")).toBe(false);
+    } else expect(Math.abs(localGrowth - (after.height - before.height))).toBeGreaterThan(PIXEL_TOLERANCE);
+    expect(query).not.toHaveBeenCalled();
+  } finally { query.mockRestore(); await screen.unmount(); }
+});
+
+test.each(["turn", "identity", "parent"] as const)("a cached reply probe rejects a changed %s", async kind => {
+  const screen = await renderPwa(<main className="pwa-main">
+    <div data-testid="completion-identity" className="pwa-message-list">
+      <article className="pwa-message assistant partial" data-viewport-row="probe-reply" data-viewport-turn="probe-turn">Reply</article>
+    </div>
+  </main>);
+  try {
+    const list = document.querySelector<HTMLDivElement>("[data-testid='completion-identity']")!;
+    const row = list.querySelector("article")!;
+    const probe = new TimelineViewportLayout(list).captureReply()!;
+    expect(probe.sample()).not.toBeNull();
+    if (kind === "parent") {
+      const wrapper = document.createElement("div");
+      list.append(wrapper);
+      wrapper.append(row);
+    } else row.setAttribute(kind === "turn" ? "data-viewport-turn" : "data-viewport-row", "different");
+    expect(probe.sample()).toBeNull();
+  } finally { await screen.unmount(); }
 });
 
 test("Reduced Motion immediately releases queue dimensions and skips the inherited glide", async () => {

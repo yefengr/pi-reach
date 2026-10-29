@@ -58,9 +58,18 @@ export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCaptu
     const rows = this.list.querySelectorAll<HTMLElement>("[data-viewport-row].pwa-message.assistant.partial");
     const row = rows.item(rows.length - 1);
     const identity = row?.getAttribute("data-viewport-row");
+    const group = row?.getAttribute("data-viewport-turn");
     if (!row || !identity) return null;
-    return { sample: () => row.isConnected && row.parentElement === this.list && row.getAttribute("data-viewport-row") === identity
-      ? { height: row.getBoundingClientRect().height, streaming: row.classList.contains(STREAMING_CLASS) } : null };
+    return { sample: () => {
+      if (!row.isConnected || row.parentElement !== this.list || row.getAttribute("data-viewport-row") !== identity
+        || row.getAttribute("data-viewport-turn") !== group) return null;
+      const rect = row.getBoundingClientRect();
+      const next = row.nextElementSibling;
+      // 只接续紧邻的同轮完成标记；跨度包含折叠后的间距，不把其他新行归入回复。
+      const completion = group != null && next?.getAttribute("data-viewport-completion") === group ? next : null;
+      const bottom = completion?.getBoundingClientRect().bottom ?? rect.bottom;
+      return { height: bottom - rect.top, streaming: row.classList.contains(STREAMING_CLASS) };
+    } };
   }
   send(capture: OwnSendLayoutCapture) { return new OwnSendTransition(capture); }
   activity(from: number, target: (geometry: ViewportGeometry) => number) {

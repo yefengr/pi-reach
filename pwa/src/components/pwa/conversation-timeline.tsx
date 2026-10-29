@@ -57,17 +57,17 @@ function TextRow({ entry }: { entry: TextEntry }) {
   // 流式新显示的文字淡入；正式版本接管后不再新增片段，已开始的淡入原位完成。
   const reveal = useStreamRevealMarks(entry.text, entry.streaming);
   useStreamRevealAnimation(row, reveal);
-  return <article ref={row} className={`pwa-message assistant${entry.streaming ? " partial" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key}>
+  return <article ref={row} className={`pwa-message assistant${entry.streaming ? " partial" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key} data-viewport-turn={entry.groupId}>
     <span className="pwa-sr-only">{t.timeline.srPi}</span>
     <MarkdownContent text={entry.text} reveal={reveal} />
   </article>;
 }
 
 /** 一轮结束后在末尾显示一次完成时间；中断或出错时附状态。 */
-function TurnMeta({ completion, interrupted }: { completion: RunCompletion; interrupted: boolean }) {
+function TurnMeta({ completion, interrupted, groupId }: { completion: RunCompletion; interrupted: boolean; groupId: string }) {
   const { t, format } = useI18n();
   const status = completion.status === "error" ? t.timeline.turnError : completion.status === "interrupted" || interrupted ? t.timeline.turnInterrupted : null;
-  return <p className="pwa-turn-meta"><time className="pwa-tabular" dateTime={new Date(completion.timestamp).toISOString()}>{format.time(completion.timestamp)}</time>{status ? <span className={completion.status === "error" ? "pwa-turn-status-error" : "pwa-turn-status"}> · {status}</span> : null}</p>;
+  return <p className="pwa-turn-meta" data-viewport-completion={groupId}><time className="pwa-tabular" dateTime={new Date(completion.timestamp).toISOString()}>{format.time(completion.timestamp)}</time>{status ? <span className={completion.status === "error" ? "pwa-turn-status-error" : "pwa-turn-status"}> · {status}</span> : null}</p>;
 }
 
 function WorkingStatus() {
@@ -110,7 +110,7 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
   let interrupted = false;
   const closeSegment = () => {
     const completion = segmentGroup === undefined ? undefined : completions?.get(segmentGroup);
-    if (completion && hasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={interrupted} />);
+    if (segmentGroup !== undefined && completion && hasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={interrupted} groupId={segmentGroup} />);
   };
   for (const entry of entries) {
     const groupId = entryGroupId(entry);

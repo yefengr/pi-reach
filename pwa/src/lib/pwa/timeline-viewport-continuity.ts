@@ -3,7 +3,7 @@ export type ReplyProbe = { sample(): { height: number; streaming: boolean } | nu
 type Geometry = { height: number; bottom: number; compensation: number };
 const EPSILON = 1;
 
-/** 仅延续发送时已在显示的回复，不把其他行或视口变化归因于旧 partial。 */
+/** 仅延续发送时已在显示的回复及紧邻的同轮完成标记，不包含其他新行或视口变化。 */
 export class ReplyContinuity {
   private rowHeight = 0;
   private contentHeight = 0;
@@ -14,7 +14,7 @@ export class ReplyContinuity {
     this.update(geometry, true);
   }
 
-  /** 尺寸过程拥有 footer 变化；释放后每次净内容变化都必须由追踪行高度解释。 */
+  /** 尺寸过程拥有 footer 变化；释放后每次净内容变化都必须由追踪的局部布局解释。 */
   update(geometry: Geometry, sizing = false): boolean {
     const row = this.probe.sample();
     if (!row) return false;
