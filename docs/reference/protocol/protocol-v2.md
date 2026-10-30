@@ -383,6 +383,7 @@ PWA 同时最多一个获取任务和一片在途，请求超时 15 秒。完成
 - `TimelineEvent` 是实时正式事件与历史事件的唯一 shape；正式事件携带连续的正整数 `event_seq`。
 - `session_ready.head_seq` 是该连接建立时 Extension 当前正式事件的最大序号；PWA 只显示连接后收到且 `event_seq > head_seq` 的实时事件，历史事件通过 `session_sync` 显式加载。
 - `timeline_partial` 只表示实时可变状态，不进入 marker、SessionManager 或 IndexedDB。
+- 工具 `timeline_partial` 的 `status` 为 `preparing`（模型仍在生成该调用，参数可能不完整，尚未执行）、`running`（已开始执行）或 `delta`（执行中的输出快照）；正文与思考 partial 只使用 `running`、`delta`。同一调用的准备与执行共用 `partial_id`（`tool:<tool_call_id>`）：Extension 在 `toolcall_start`／`toolcall_delta` 时按调用节流发布准备中参数，`toolcall_end` 立即发布参数，开始执行后不再发布准备中；准备中参数只用于显示摘要，单个字符串截至 2048 字符，完整参数随执行开始的运行帧送达；PWA 也不允许状态从执行退回准备中。运行结束时仍为准备中的调用从未执行，PWA 不再显示，与刷新后的历史一致。旧 PWA 不认识 `preparing`，会拒收该帧并显示协议提示，因此必须先部署 PWA 再发布 Extension。
 - 正式 user event 满足 `event_id === message_id`。
 - `origin=pwa` 必须携带 `sender_ref`；非 PWA origin 禁止携带。
 - tool event 的 `complete | error | interrupted` 字段组合互斥。
