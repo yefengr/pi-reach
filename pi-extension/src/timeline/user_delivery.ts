@@ -54,6 +54,8 @@ type DeliveryJob = {
   content: UserMessageContent | undefined;
   payload: UserDeliveryPayload | undefined;
   state: DeliveryState;
+  /** 空闲时入队、下一次 drain 即投递：对外已按在途报告，不再提供编辑、清除或插入。 */
+  dispatching: boolean;
   timer: DeliveryTimer | undefined;
 };
 
@@ -122,6 +124,7 @@ export class UserDeliveryQueue {
       content,
       payload: copyPayload(payload),
       state: "queued",
+      dispatching: false,
       timer: undefined,
     };
     if (!this.canQueueItem(scope, this.itemFor(job))) return "rejected";
@@ -131,6 +134,8 @@ export class UserDeliveryQueue {
     this.queue.push(job);
     this.queuedPayloadCount += 1;
     this.queuedPayloadBytes += bytes;
+    // 同步回执紧随其后发出；此刻若报告可编辑，PWA 会把马上投递的消息移入排队区一帧再移回。
+    job.dispatching = this.queue.length === 1 && !this.active && this.isIdle();
     this.scheduleDrain();
     return "queued";
   }
@@ -152,7 +157,7 @@ export class UserDeliveryQueue {
   clearQueued(ownerId: string, service: TimelineV2Service, targetId?: string): UserDeliveryScope[] {
     const removed: UserDeliveryScope[] = [];
     for (const job of [...this.jobs.values()]) {
-      if (job.state !== "queued" || !this.matches(job, ownerId, service)) continue;
+      if (!isEditable(job) || !this.matches(job, ownerId, service)) continue;
       if (targetId !== undefined && job.scope.clientRequestId !== targetId) continue;
       removed.push(job.scope);
       this.remove(job);
@@ -163,7 +168,7 @@ export class UserDeliveryQueue {
 
   steer(ownerId: string, service: TimelineV2Service, targetId: string): UserDeliverySteerResult {
     const job = this.findTarget(ownerId, service, targetId);
-    if (!job || job.state !== "queued" || job.content === undefined) return { kind: "missing" };
+    if (!job || !isEditable(job) || job.content === undefined) return { kind: "missing" };
 
     job.state = "steering";
     this.queue = this.queue.filter((candidate) => candidate !== job);
@@ -242,7 +247,10 @@ export class UserDeliveryQueue {
   }
 
   private drain(): void {
-    if (this.active || !this.isIdle()) return;
+    if (this.active || !this.isIdle()) {
+      this.withdrawDispatching();
+      return;
+    }
     for (;;) {
       const job = this.queue.shift();
       if (!job) return;
@@ -260,6 +268,7 @@ export class UserDeliveryQueue {
         continue;
       }
       job.state = "in_flight";
+      job.dispatching = false;
       this.active = job;
       this.notifyQueueChanged(job.scope);
       try {
@@ -270,6 +279,15 @@ export class UserDeliveryQueue {
       }
       if (job.state === "in_flight") this.startTimer(job);
       return;
+    }
+  }
+
+  /** 入队后 Pi 在 drain 前转忙：消息仍在排队，补发快照恢复可编辑。 */
+  private withdrawDispatching(): void {
+    for (const job of this.queue) {
+      if (!job.dispatching) continue;
+      job.dispatching = false;
+      if (this.jobs.has(job.scope.deliveryToken) && this.isCurrentScope(job.scope)) this.notifyQueueChanged(job.scope);
     }
   }
 
@@ -350,7 +368,7 @@ export class UserDeliveryQueue {
       text: payload.display_text ?? payload.text,
       ...(payload.images?.length ? { images: payload.images.map((image) => ({ ...image })) } : {}),
       sender_ref: job.scope.ownerId,
-      editable: job.state === "queued",
+      editable: isEditable(job),
       created_at: job.createdAt,
     };
   }
@@ -400,6 +418,10 @@ export class UserDeliveryQueue {
     clearImmediate(this.scheduled);
     this.scheduled = undefined;
   }
+}
+
+function isEditable(job: DeliveryJob): boolean {
+  return job.state === "queued" && !job.dispatching;
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {
