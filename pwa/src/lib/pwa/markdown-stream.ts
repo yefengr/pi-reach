@@ -7,9 +7,26 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const CONTINUES_BLOCK = /^(?:\s|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|\|)/;
 /** 引用式链接定义与脚注会跨块引用，含有时整体解析。 */
 const CROSS_BLOCK_REFERENCE = /^ {0,3}\[[^\]]+\]:|\[\^/m;
+/** CommonMark 第 1—5 类原始 HTML 块可以跨空行，直到遇到对应的结束标记；第 6、7 类在空行处结束，不需要跟踪。 */
+const HTML_BLOCKS: readonly { start: RegExp; end: RegExp }[] = [
+  { start: /^ {0,3}<(?:pre|script|style|textarea)(?:\s|>|$)/i, end: /<\/(?:pre|script|style|textarea)>/i },
+  { start: /^ {0,3}<!--/, end: /-->/ },
+  { start: /^ {0,3}<\?/, end: /\?>/ },
+  { start: /^ {0,3}<![A-Za-z]/, end: />/ },
+  { start: /^ {0,3}<!\[CDATA\[/, end: /\]\]>/ },
+];
+
+/** 返回本行开启且未在本行结束的 HTML 块的结束标记；结束标记只在开始标记之后查找。 */
+function openHtmlBlock(line: string): RegExp | null {
+  for (const block of HTML_BLOCKS) {
+    const start = block.start.exec(line);
+    if (start) return block.end.test(line.slice(start[0].length)) ? null : block.end;
+  }
+  return null;
+}
 
 /**
- * 只在代码围栏之外、空行后紧跟独立块的位置切分；各块单独解析的 DOM 与整体解析一致。
+ * 只在代码围栏与跨空行的原始 HTML 块之外、空行后紧跟独立块的位置切分；各块单独解析的 DOM 与整体解析一致。
  * 返回的块按原文顺序首尾相接，offset 为块在原文中的起点。
  */
 export function splitMarkdownChunks(text: string): MarkdownChunk[] {
@@ -18,21 +35,27 @@ export function splitMarkdownChunks(text: string): MarkdownChunk[] {
   let start = 0;
   let lineStart = 0;
   let fence: string | null = null;
+  let htmlEnd: RegExp | null = null;
   let afterBlank = false;
   while (lineStart <= text.length) {
     const newline = text.indexOf("\n", lineStart);
     const lineEnd = newline < 0 ? text.length : newline;
     const line = text.slice(lineStart, lineEnd);
     const blank = line.trim() === "";
-    if (fence === null && afterBlank && !blank && !CONTINUES_BLOCK.test(line) && lineStart > start) {
+    if (fence === null && htmlEnd === null && afterBlank && !blank && !CONTINUES_BLOCK.test(line) && lineStart > start) {
       chunks.push({ text: text.slice(start, lineStart), offset: start });
       start = lineStart;
     }
-    const marker = FENCE.exec(line)?.[1];
-    if (marker && fence === null) fence = marker;
-    else if (marker && fence !== null && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null;
+    if (htmlEnd !== null) {
+      if (htmlEnd.test(line)) htmlEnd = null;
+    } else {
+      const marker = FENCE.exec(line)?.[1];
+      if (marker && fence === null) fence = marker;
+      else if (marker && fence !== null && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null;
+      else if (fence === null) htmlEnd = openHtmlBlock(line);
+    }
     if (!blank) afterBlank = false;
-    else if (fence === null) afterBlank = true;
+    else if (fence === null && htmlEnd === null) afterBlank = true;
     if (newline < 0) break;
     lineStart = newline + 1;
   }

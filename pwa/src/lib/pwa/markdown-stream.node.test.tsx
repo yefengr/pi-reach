@@ -20,6 +20,11 @@ const SAMPLES = [
   "缩进代码前\n\n    indented\n\n    still code\n\n后文",
   "参考 [链接][x]\n\n[x]: https://example.com\n\n脚注[^1]\n\n[^1]: 说明",
   "*强调开头的段落*\n\n* 列表项\n\n__粗体__ 结尾",
+  "注释前\n\n<!--\n\n# example\n\n[链接](https://example.com)\n\n-->\n\n注释后",
+  "<pre>\nline\n\n# not heading\n\n</pre>\n\n后文\n\n<script>\n\n- a\n\n</script>\n\n<style>\n\n> q\n\n</style>",
+  "<?php\n\n# x\n\n?>\n\n<!DOCTYPE\n\n# y\n\n>\n\n<![CDATA[\n\n# z\n\n]]>\n\n后文",
+  "<!-- 单行注释 -->\n\n# 标题\n\n<div>\n\n**粗体**\n\n</div>",
+  "```\n<!--\n```\n\n围栏后的段落\n\n<!--\n\n未闭合注释\n\n继续",
 ];
 
 test.each(SAMPLES)("chunks render the same DOM as the whole text: %#", (text) => {
@@ -38,6 +43,9 @@ test("splits only between independent blocks and never inside fences, lists or c
   // 流式中尚未闭合的围栏之后不切分，闭合后恢复。
   expect(splitMarkdownChunks("前\n\n```\ncode\n\nmore")).toHaveLength(2);
   expect(splitMarkdownChunks("前\n\n```\ncode\n```\n\n后")).toHaveLength(3);
+  expect(splitMarkdownChunks("<!--\n\n# example\n\n-->")).toHaveLength(1);
+  expect(splitMarkdownChunks("前\n\n<!-- a -->\n\n后")).toHaveLength(3);
+  expect(splitMarkdownChunks("<pre>\n\nx\n\n</pre>\n\n后")).toHaveLength(2);
 });
 
 test("reveal wraps only newly shown text and keeps text content and code blocks intact", () => {
