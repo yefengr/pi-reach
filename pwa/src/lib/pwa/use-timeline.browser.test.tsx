@@ -209,6 +209,8 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     expect(api.followingOutput).toBe(true);
     expect(list.style.paddingBottom).toBe("");
     const reading = original[0].querySelectorAll("p")[5];
+    // 真实回看先经过滚轮等输入中断逐帧跟随；只改 scrollTop 会在跟随仍在进行的慢机器上被当成外部漂移写回。
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
     list.scrollTop += reading.getBoundingClientRect().top - list.getBoundingClientRect().top - 2;
     flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
     await settle();
