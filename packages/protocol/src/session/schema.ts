@@ -229,6 +229,8 @@ export const timelinePartialSchema = z.union([
   }),
   strictObject({
     ...partialBaseShape,
+    // preparing：模型仍在生成该调用（参数可能不完整），尚未开始执行；只有工具 partial 使用。
+    status: z.enum(["preparing", "running", "delta"]),
     kind: z.literal("tool"),
     tool_call_id: idSchema,
     tool: nonEmptyTextSchema,
