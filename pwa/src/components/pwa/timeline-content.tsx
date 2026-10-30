@@ -124,10 +124,12 @@ type ThinkingContentProps = {
   thinkingTextEpoch?: object;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  /** P4 旧时间线桥接；统一过程组接管后移除。 */
+  onRead?: (trigger: HTMLButtonElement) => void;
   timelineKey?: string;
 };
 
-export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, expanded: controlledExpanded, onExpandedChange, timelineKey }: ThinkingContentProps) {
+export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, expanded: controlledExpanded, onExpandedChange, onRead, timelineKey }: ThinkingContentProps) {
   const { t } = useI18n();
   const [parser] = useState(() => new ThinkingTextParser());
   const parsed = parser.read(text, streaming ? thinkingTextEpoch : undefined, streaming);
@@ -154,8 +156,9 @@ export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, ex
     <div className="pwa-thinking-title pwa-timeline-heading">{t.timeline.thinkingTrace}</div>
   </section>;
   const title = heading ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
+  const read = text.trim() ? onRead : undefined;
   return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey} data-viewport-row={timelineKey}>
-    <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
+    <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={read ? t.timeline.readThinking : expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-haspopup={read ? "dialog" : undefined} aria-expanded={read ? undefined : expanded} aria-controls={read ? undefined : id} onClick={event => read ? read(event.currentTarget) : setExpanded(!expanded)}>
       <span className={`pwa-thinking-title pwa-thinking-heading${streaming ? " pwa-thinking-live" : ""}`} title={streaming ? undefined : title} aria-live={streaming ? "off" : undefined}>
         <i className="pwa-thinking-icon-slot" aria-hidden="true"><LoaderCircle className={streaming ? "pwa-spin" : undefined} size={16} aria-hidden="true" /></i>
         <span title={title}>{title}</span>
@@ -164,7 +167,7 @@ export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, ex
     </button>
     {/* 独立的稳定状态保留读屏提示，不随视觉标题的流式增量重复播报。 */}
     {streaming ? <span className="pwa-sr-only" role="status">{announcementReady ? t.timeline.thinking : ""}</span> : null}
-    <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" toggleLabels={{ showFull: en.timeline.showFull(en.timeline.thinkingLabel), showLess: en.timeline.showLess(en.timeline.thinkingLabel) }} /></Collapse>
+    {read ? null : <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" toggleLabels={{ showFull: en.timeline.showFull(en.timeline.thinkingLabel), showLess: en.timeline.showLess(en.timeline.thinkingLabel) }} /></Collapse>}
   </section>;
 }
 

@@ -2,18 +2,18 @@ import { Fragment, useLayoutEffect, useRef } from "react";
 import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 import { ReaderShell } from "./reader-shell";
 import { ToolImage } from "./tool-output";
-import { toolContentBlocks, toolError, toolReaderArguments, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolValue } from "./tool-presentation";
+import { toolContentBlocks, toolError, toolReaderArguments, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
+import { READER_FOLLOW_THRESHOLD_PX } from "./reader-shared";
 import "./tool-reader.css";
 
 type ToolReaderProps = {
   value: ToolValue | null;
+  status?: ToolStatus;
   opened: boolean;
   onClose: () => void;
   onExitTransitionEnd?: () => void;
 };
-
-const FOLLOW_THRESHOLD_PX = 32;
 
 function diffLineClass(line: string): string {
   if (line.startsWith("+") && !line.startsWith("+++")) return "pwa-reader-line pwa-reader-line-add";
@@ -42,7 +42,7 @@ function StatusIcon({ status }: { status: ReturnType<typeof toolStatus> }) {
  * 工具详情阅读器：桌面为右侧 Drawer，移动端全屏。
  * 打开时压入一条历史记录，系统返回关闭阅读器而不离开会话。
  */
-export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
+export function ToolReader({ value, status: statusOverride, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
@@ -55,7 +55,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     if (scroll && followRef.current) scroll.scrollTop = scroll.scrollHeight;
   }, [outputKey]);
 
-  const status = value ? toolStatus(value) : "unknown";
+  const status = value ? toolStatus(value, statusOverride) : "unknown";
   // 参数对象可以拆成名称与值两部分：只有名称加重，长参数块不会整块压过输出正文。
   const callArguments = value ? toolReaderArguments(value) : undefined;
   // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
@@ -74,7 +74,7 @@ export function ToolReader({ value, opened, onClose, onExitTransitionEnd }: Tool
     </>}>
         <div className="pwa-tool-reader-scroll" ref={scrollRef} onScroll={(event) => {
           const target = event.currentTarget;
-          followRef.current = target.scrollHeight - target.scrollTop - target.clientHeight <= FOLLOW_THRESHOLD_PX;
+          followRef.current = target.scrollHeight - target.scrollTop - target.clientHeight <= READER_FOLLOW_THRESHOLD_PX;
         }}>
           {value === null ? <p className="pwa-tool-empty">{t.tools.noDetails}</p> : <>
             {callArguments

@@ -122,13 +122,14 @@ test("disables status checks while querying and explains offline recovery", () =
   expect(offline).not.toContain('aria-label="Check status"');
 });
 
-test("keeps final answers visible while thinking is collapsed and skips empty assistant cards", () => {
+test("keeps final answers visible while Thinking content stays in its Reader and skips empty assistant cards", () => {
   const base = { event_id: "answer", session_id: "s", leaf_id: "g", timestamp: 0, group_id: "group", kind: "assistant" as const, status: "complete" as const };
   const html = renderList([
     { kind: "event", event: { ...base, blocks: [{ type: "thinking", text: "private preview" }, { type: "text", text: "**Visible answer**" }] } },
     { kind: "event", event: { ...base, event_id: "empty", blocks: [] } },
   ]);
-  expect(html).toContain("Expand thinking");
+  expect(html).toContain('aria-label="Read thinking"');
+  expect(html).toContain('aria-haspopup="dialog"');
   expect(html).not.toContain("private preview");
   expect(html).toContain("<strong>Visible answer</strong>");
   expect(html.match(/<article /g)).toHaveLength(1);
@@ -178,7 +179,7 @@ test("summarizes running tools in the group header without mounting raw args", (
   expect(html).not.toContain("&quot;command&quot;");
 });
 
-test("keeps streaming thinking collapsed independently of the tools", () => {
+test("keeps streaming Thinking content out of the timeline and exposes its Reader entry", () => {
   const partial: TimelinePartial = {
     protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
     group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Inspecting the request.\nFull reasoning stays collapsed.",
@@ -192,7 +193,9 @@ test("keeps streaming thinking collapsed independently of the tools", () => {
   expect(html).not.toContain("Full reasoning stays collapsed.");
   expect(html).not.toContain("pwa-text-plain");
   expect(html).not.toContain("pwa-tool-code");
-  expect(html).toContain('aria-expanded="false"');
+  expect(html).toContain('aria-label="Read thinking"');
+  expect(html).toContain('aria-haspopup="dialog"');
+  expect(html).not.toContain('aria-expanded=');
 });
 
 test("does not render run_end markers as timeline rows", () => {
@@ -369,7 +372,10 @@ test.each([
   expect(html).toContain(`<span title="${title}">${title}</span>`);
   expect(html).toContain('<span class="pwa-sr-only" role="status"></span>');
   expect(html).toContain('aria-live="off"');
-  expect(html).toContain('aria-expanded="false"');
+  const readable = !!text.trim();
+  expect(html.includes('aria-haspopup="dialog"')).toBe(readable);
+  expect(html.includes('aria-label="Read thinking"')).toBe(readable);
+  expect(html.includes('aria-expanded="false"')).toBe(!readable);
   expect(html).not.toContain("pwa-text-plain");
 });
 
@@ -388,7 +394,9 @@ test.each([
   expect(html).toContain(">Thinking<");
   expect(html.includes('title="Thinking"')).toBe(visible);
   expect(html.includes("pwa-thinking-trace")).toBe(!visible);
-  expect(html.includes('aria-expanded="false"')).toBe(visible);
+  expect(html.includes('aria-haspopup="dialog"')).toBe(visible);
+  expect(html.includes('aria-label="Read thinking"')).toBe(visible);
+  expect(html).not.toContain('aria-expanded=');
   expect(html).not.toContain("Thinking…");
   expect(html).not.toContain("pwa-thinking-live");
 });

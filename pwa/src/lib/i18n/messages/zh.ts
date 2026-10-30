@@ -437,6 +437,11 @@ export const zh: Messages = {
     thinking: en.timeline.thinking,
     thinkingTrace: en.timeline.thinkingTrace,
     thoughtProcess: en.timeline.thoughtProcess,
+    processGroup: "思考与工具",
+    readThinking: "阅读思考",
+    closeThinkingReader: "关闭思考阅读器",
+    copyThinking: "复制思考",
+    otherRunningTools: (count) => `另有 ${count} 个工具正在运行`,
   },
   summaryReader: {
     compactionComplete: "上下文已压缩",

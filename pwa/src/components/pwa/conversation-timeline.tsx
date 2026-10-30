@@ -4,14 +4,17 @@ import { ThinkingContent, MarkdownContent } from "./timeline-content";
 import { useStreamRevealAnimation, useStreamRevealMarks } from "./use-stream-reveal";
 import { initialToolGroupRunningIndicators, ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
+import { ThinkingReader } from "./thinking-reader";
+import { effectiveProcessStatus } from "./timeline-activity";
+import type { ProcessEntry } from "./process-groups";
 import { SummaryEntry, SummaryReader } from "./summary-reader";
 import { isSummaryEvent } from "./summary-presentation";
 import { PublishedFileReader } from "./published-file-reader";
 import { usePublishedFilesView } from "./published-files-context";
-import { readerFocusable, useReaderIntent } from "./reader-shared";
+import { readerFocusable, useReaderIntent, useReaderSelection, type ProcessReaderSelection } from "./reader-shared";
 import type { PublishedFileRead } from "./published-file";
 import { fileKey, type FileSourceDescriptor } from "@/lib/pwa/file-source";
-import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry, type ToolEntry } from "@/lib/pwa/timeline-presentation";
+import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry } from "@/lib/pwa/timeline-presentation";
 import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolBatchClosed, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
@@ -23,7 +26,7 @@ import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 type ConversationTimelineProps = {
   items: readonly TimelineViewItem[];
   live: boolean;
-  /** 每一轮的结束时间与状态（来自 run_end，缺失时按降级规则推断）。 */
+  /** 每一轮的结束时间与状态，仅来自正式 run_end。 */
   completions?: ReadonlyMap<string, RunCompletion>;
   /** 在线 Pi 正在运行（working）：本轮没有具体运行指示时显示「Working…」。 */
   running?: boolean;
@@ -150,9 +153,9 @@ function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: Rea
     appended = new Set(appendedTools(view.entries, timeline.view.entries));
     setTimeline({ view, observed, appended });
   }
-  const projectedGaps = gapBefore.size === 0 ? { keys: NO_GAPS, toolBreakKeys: NO_GAPS, atEnd: false } : projectTimelineGaps(items, gapBefore, view.entries);
+  const projectedGaps = gapBefore.size === 0 ? { keys: NO_GAPS, processBreakKeys: NO_GAPS, atEnd: false } : projectTimelineGaps(items, gapBefore, view.entries);
   const gapKeys = projectedGaps.keys;
-  const segments = toolSegments(view.entries, new Set([...gapKeys, ...projectedGaps.toolBreakKeys]), observed);
+  const segments = toolSegments(view.entries, new Set([...gapKeys, ...projectedGaps.processBreakKeys]), observed);
   const segmentOf = new Map<string, ToolSegment>();
   for (const segment of segments) for (const tool of segment.tools) segmentOf.set(tool.key, segment);
   return { view, gapKeys, projectedGapAtEnd: projectedGaps.atEnd, segments, segmentOf, appended };
@@ -167,7 +170,6 @@ function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): 
 }
 
 export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, enterInitialPending = false, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
-  const [thinkingChoices, setThinkingChoices] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [toolChoices, setToolChoices] = useState<ReadonlyMap<string, ToolExpansion>>(() => new Map());
   const [toolIndicators, setToolIndicators] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
   const reportToolIndicators = useCallback((key: string, indicators: readonly string[] | null) => {
@@ -180,30 +182,21 @@ export function ConversationTimeline({ items, live, completions, running = false
       return next;
     });
   }, []);
-  const [reader, setReader] = useState<string | null>(null);
   const { changeSelection, acceptsSelection } = useReaderIntent();
-  const [readerOpen, setReaderOpen] = useState(false);
-  const [readerOrigin, setReaderOrigin] = useState<HTMLButtonElement | null>(null);
-  const [summaryReader, setSummaryReader] = useState<{ key: string; sessionId: string; trigger: HTMLButtonElement } | null>(null);
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [fileReader, setFileReader] = useState<{ file: FileSourceDescriptor; trigger: HTMLButtonElement; scopeToken: object } | null>(null);
-  // 记录已打开的是哪一个阅读器：挂载与打开分两步，期间被关闭或换目标时旧的打开请求自然失效。
-  const [fileOpenedFor, setFileOpenedFor] = useState<object | null>(null);
+  const process = useReaderSelection<ProcessReaderSelection>();
+  const summary = useReaderSelection<{ key: string; sessionId: string; trigger: HTMLButtonElement }>();
+  const file = useReaderSelection<{ file: FileSourceDescriptor; trigger: HTMLButtonElement; scopeToken: object }>();
+  const reader = process.state;
+  const summaryReader = summary.state;
   const files = usePublishedFilesView();
   const fileReadingChange = files?.onReadingChange;
-  const scopedFileReader = fileReader?.scopeToken === files?.scopeToken ? fileReader : null;
-  // 真实目标失效直接卸载，复用 Reader 的 pin/history cleanup，不播放旧目标退出或回焦。
-  if (fileReader !== null && scopedFileReader === null) {
-    setFileReader(null);
-    setFileOpenedFor(null);
-  }
-  const currentFileReader = useRef(scopedFileReader);
-  useLayoutEffect(() => { currentFileReader.current = scopedFileReader; }, [scopedFileReader]);
+  const scopedFileReader = file.state?.selection.scopeToken === files?.scopeToken ? file.state : null;
+  const currentFileReader = file.current;
 
   const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore, enterInitialPending);
-  const readerValue = reader ? view.entries.find((entry): entry is ToolEntry => entry.kind === "tool" && entry.key === reader)?.value ?? null : null;
-  const summaryItem = summaryReader ? view.entries.find(entry => entry.kind === "record" && entry.key === summaryReader.key) : null;
-  const summaryEvent = summaryItem?.kind === "record" && summaryItem.item.kind === "event" && summaryItem.item.event.session_id === summaryReader?.sessionId && isSummaryEvent(summaryItem.item.event) ? summaryItem.item.event : null;
+  const readerEntry = reader ? view.entries.find((entry): entry is ProcessEntry => entry.kind === reader.selection.kind && entry.key === reader.selection.entryKey && (entry.kind !== "thinking" || !!entry.text.trim())) ?? null : null;
+  const summaryItem = summaryReader ? view.entries.find(entry => entry.kind === "record" && entry.key === summaryReader.selection.key) : null;
+  const summaryEvent = summaryItem?.kind === "record" && summaryItem.item.kind === "event" && summaryItem.item.event.session_id === summaryReader?.selection.sessionId && isSummaryEvent(summaryItem.item.event) ? summaryItem.item.event : null;
   const idlePartials = useIdlePartials(view.entries, live && !running);
   const runEnded = (groupId: string) => completions?.has(groupId) === true;
   const activity = timelineActivity(view.entries, live, running, runEnded, idlePartials);
@@ -233,108 +226,118 @@ export function ConversationTimeline({ items, live, completions, running = false
     }
     list?.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "activity", added } }));
   }, [workingVisible, listRef]);
-  // 手动展开思考与工具组都暂停自动跟随，保持当前阅读位置。
-  const readingInline = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => segments.some((segment) => {
-    const choice = segmentExpansion(segment.tools, tools);
-    return choice?.expanded === true;
-  }) || view.entries.some(entry => entry.kind === "thinking" && thinking.get(entry.key) === true);
-  // 历史窗口替换可能移除阅读内容；阅读锁随可见内容同步，并保留到 Reader 退出结束。
-  const reading = reader !== null || summaryReader !== null || scopedFileReader !== null || readingInline(toolChoices, thinkingChoices);
-  useEffect(() => { onReadingChange?.(reading); fileReadingChange?.(reading); }, [onReadingChange, fileReadingChange, reading]);
+  // 只有手动展开申请 inline 锁；所有 Reader（含退出中）各自持有锁，不能互相释放。
+  const readingInline = segments.some(segment => segmentExpansion(segment.tools, toolChoices)?.expanded === true);
+  const reading = reader !== null || summaryReader !== null || scopedFileReader !== null || readingInline;
+  const latest = useRef({ segments, segmentOf, entries: view.entries, toolChoices, onReadingChange, fileReadingChange });
+  useLayoutEffect(() => { latest.current = { segments, segmentOf, entries: view.entries, toolChoices, onReadingChange, fileReadingChange }; });
+  const { holds: processHolds } = process;
+  const { holds: summaryHolds } = summary;
+  const { holds: fileHolds } = file;
+  const notifyReading = useCallback(() => {
+    const current = latest.current;
+    const held = processHolds() || summaryHolds() || fileHolds()
+      || current.segments.some(segment => segmentExpansion(segment.tools, current.toolChoices)?.expanded === true);
+    current.onReadingChange?.(held);
+    current.fileReadingChange?.(held);
+  }, [processHolds, summaryHolds, fileHolds]);
+  useEffect(() => { notifyReading(); }, [onReadingChange, fileReadingChange, reading, notifyReading]);
+  // 回调更换（如文件 provider 移除）时释放旧回调持有的锁，新回调随后由上一 effect 补发当前状态。
   useEffect(() => () => { onReadingChange?.(false); fileReadingChange?.(false); }, [onReadingChange, fileReadingChange]);
 
-  const notifyReading = (tools: ReadonlyMap<string, ToolExpansion>, thinking: ReadonlyMap<string, boolean>) => {
-    onReadingChange?.(reader !== null || summaryReader !== null || scopedFileReader !== null || readingInline(tools, thinking));
-  };
-  const chooseThinking = (key: string, expanded: boolean) => {
-    const choices = new Map(thinkingChoices).set(key, expanded);
-    setThinkingChoices(choices);
-    notifyReading(toolChoices, choices);
+  const restoreReadingFocus = (trigger?: HTMLButtonElement | null, selection?: ProcessReaderSelection) => {
+    const active = document.activeElement;
+    // 只补救仍留在阅读器内的焦点；上层 Modal 等其他对话框中的有效焦点保持不动。
+    if (readerFocusable(active) && !active.closest(".pwa-tool-reader, .pwa-file-reader")) return;
+    let target: HTMLElement | null | undefined = trigger;
+    if (selection) {
+      const current = latest.current;
+      const entry = current.entries.find(entry => entry.key === selection.entryKey && entry.kind === selection.kind);
+      const segment = current.segmentOf.get(selection.entryKey);
+      const expanded = segment && segmentExpansion(segment.tools, current.toolChoices)?.expanded === true;
+      // 历史前插可能改变 legacy 根锚点；总是按当前成员重新查组。
+      const groupKey = entry?.kind === "thinking" ? entry.key : segment ? `tools:${segment.tools[0]!.key}` : null;
+      if (!entry || (selection.kind === "tool" && !expanded) || !readerFocusable(target)) {
+        const root = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-timeline-key]") ?? [])].find(node => node.dataset.timelineKey === groupKey);
+        target = root?.querySelector<HTMLButtonElement>("button") ?? null;
+      }
+    }
+    if (readerFocusable(target)) target.focus({ preventScroll: true });
+    else listRef.current?.focus({ preventScroll: true });
   };
   // 选择记在组内全部成员上，分组拆分后仍保留用户的阅读选择。
   const chooseSegment = (segment: ToolSegment, expanded: boolean) => {
-    const choices = withExpansion(toolChoices, segment.tools.map(tool => tool.key), expanded);
+    const choices = withExpansion(latest.current.toolChoices, segment.tools.map(tool => tool.key), expanded);
+    latest.current.toolChoices = choices;
     setToolChoices(choices);
-    notifyReading(choices, thinkingChoices);
+    notifyReading();
   };
-  const clearOtherReaders = () => {
+  const holdsReader = () => process.holds() || summary.holds() || file.holds();
+  const captureProcess = (entry: ProcessEntry, trigger: HTMLButtonElement) => {
+    if (holdsReader()) return;
+    const current = latest.current.entries.find(candidate => candidate.key === entry.key && candidate.kind === entry.kind);
+    if (!current || (current.kind === "thinking" && !current.text.trim())) return;
+    const segment = latest.current.segmentOf.get(entry.key);
+    const groupKey = entry.kind === "thinking" ? entry.key : segment ? `tools:${segment.tools[0]!.key}` : null;
+    if (groupKey === null) return;
+    if (!process.open({ kind: entry.kind, entryKey: entry.key, groupKey, trigger })) return;
     changeSelection();
-    setReader(null);
-    setReaderOpen(false);
-    setReaderOrigin(null);
-    setFileReader(null);
-    setFileOpenedFor(null);
+    notifyReading();
   };
-  const restoreReadingFocus = (trigger: HTMLButtonElement | null | undefined) => {
-    const active = document.activeElement;
-    if (readerFocusable(active) && !active.closest(".pwa-tool-reader, .pwa-file-reader")) return;
-    if (readerFocusable(trigger)) trigger.focus({ preventScroll: true });
-    else listRef.current?.focus({ preventScroll: true });
-  };
-  const openReader = (key: string, trigger: HTMLButtonElement) => {
-    // 抽屉打开时对话被遮罩隔离，程序化到达的第二份内容不替换当前正文。
-    if (scopedFileReader !== null || summaryReader !== null) return;
-    clearOtherReaders();
-    setReaderOrigin(trigger);
-    onReadingChange?.(true);
-    setReader(key);
-    setReaderOpen(true);
-  };
-  const finishReader = () => {
-    if (reader === null) return;
+  const finishReader = (token: object, selection: ProcessReaderSelection) => {
+    if (!process.finish(token)) return;
     changeSelection();
-    setReaderOpen(false);
-    setReader(null);
-    setReaderOrigin(null);
-    // 退出只回焦失效的阅读器焦点，不覆盖用户已在输入区等位置的焦点。
-    restoreReadingFocus(readerValue !== null ? readerOrigin : null);
-    onReadingChange?.(readingInline(toolChoices, thinkingChoices));
+    restoreReadingFocus(selection.trigger, selection);
+    notifyReading();
   };
-
   const openSummaryReader = (key: string, sessionId: string, trigger: HTMLButtonElement) => {
-    if (reader !== null || scopedFileReader !== null || summaryReader !== null) return;
-    clearOtherReaders();
-    onReadingChange?.(true);
-    setSummaryReader({ key, sessionId, trigger });
-    setSummaryOpen(true);
-  };
-  const finishSummaryReader = () => {
-    const trigger = summaryReader?.trigger;
+    if (holdsReader()) return;
+    if (!summary.open({ key, sessionId, trigger })) return;
     changeSelection();
-    setSummaryOpen(false);
-    setSummaryReader(null);
-    // 不覆盖退出期间用户主动转移到其他有效控件的焦点。
-    const active = document.activeElement;
-    if (!active || active === document.body || active === document.documentElement || !active.isConnected || active.closest("[role='dialog']")) {
-      if (summaryEvent && trigger?.isConnected && trigger.getClientRects().length > 0 && !trigger.closest("[inert], [aria-hidden='true']") && !trigger.disabled) trigger.focus({ preventScroll: true });
-      else listRef.current?.focus({ preventScroll: true });
-    }
-    onReadingChange?.(readingInline(toolChoices, thinkingChoices));
+    notifyReading();
   };
-
-  const openFileReader: PublishedFileRead = (file, trigger) => {
-    // acquire 的 await 捕获本次选择；旧文件迟到完成不能抢走后来主动选择的详情。
-    if (!files || !acceptsSelection() || reader !== null || summaryReader !== null || scopedFileReader !== null) return;
-    clearOtherReaders();
-    const next = { file, trigger, scopeToken: files.scopeToken };
-    // 阅读器随 opened=true 一起挂载时 Mantine 的过渡初始即“已进入”，不播放进入动画；
-    // 先以收起态挂载，下一帧再打开。期间被关闭或换目标则放弃。
-    // 首次查看在获取完成的 await 之后调用，已脱离点击事件；须同步提交挂载，否则帧到期时打开会与挂载合并。
-    flushSync(() => setFileReader(next));
-    requestAnimationFrame(() => setFileOpenedFor(next));
-  };
-  // 旧退出/关闭回调不能碰新的阅读器；门面 getter 也能识别尚未提交 render 的 reset。
-  const ownsFileReader = () => scopedFileReader !== null && currentFileReader.current === scopedFileReader
-    && files?.scopeToken === scopedFileReader.scopeToken;
-  const closeFileReader = () => { if (ownsFileReader()) setFileOpenedFor(null); };
-  const finishFileReader = () => {
-    if (!ownsFileReader()) return;
-    const trigger = scopedFileReader?.trigger;
+  const finishSummaryReader = (token: object, trigger: HTMLButtonElement) => {
+    if (!summary.finish(token)) return;
     changeSelection();
-    setFileOpenedFor(null);
-    setFileReader(null);
     restoreReadingFocus(trigger);
+    notifyReading();
   };
+  const openFileReader: PublishedFileRead = (descriptor, trigger) => {
+    // acquire 的旧选择即使迟到，也不能抢占当前或正在退出的阅读器。
+    if (!files || !acceptsSelection() || holdsReader()) return;
+    changeSelection();
+    // 同步提交后 reading 变为 true，由上报 effect 通知；渲染期传出的回调不读取 ref 快照。
+    flushSync(() => file.open({ file: descriptor, trigger, scopeToken: files.scopeToken }));
+  };
+  const ownsFileReader = () => scopedFileReader !== null && currentFileReader.current?.token === scopedFileReader.token
+    && files?.scopeToken === scopedFileReader.selection.scopeToken;
+  const closeFileReader = () => { if (ownsFileReader()) file.close(scopedFileReader!.token); };
+  const finishFileReader = () => {
+    if (!ownsFileReader() || !file.finish(scopedFileReader!.token)) return;
+    changeSelection();
+    restoreReadingFocus(scopedFileReader!.selection.trigger);
+    notifyReading();
+  };
+  // 来源失效直接卸载；未进入的 Drawer 没有 exit，不等待回调才释放 owner。
+  useLayoutEffect(() => {
+    let invalidated = false;
+    if (reader && readerEntry === null && process.current.current?.token === reader.token) {
+      process.reset();
+      restoreReadingFocus(null, reader.selection);
+      invalidated = true;
+    }
+    if (summaryReader && summaryEvent === null && summary.current.current?.token === summaryReader.token) {
+      summary.reset();
+      restoreReadingFocus(null);
+      invalidated = true;
+    }
+    if (file.state && scopedFileReader === null && currentFileReader.current?.token === file.state.token) {
+      file.reset();
+      restoreReadingFocus(null);
+      invalidated = true;
+    }
+    if (invalidated) { changeSelection(); notifyReading(); }
+  });
   const renderEntry = (entry: PresentationEntry) => {
       if (entry.kind === "record") {
         if (entry.item.kind === "event" && isSummaryEvent(entry.item.event)) {
@@ -350,15 +353,14 @@ export function ConversationTimeline({ items, live, completions, running = false
         text={entry.text}
         streaming={entry.streaming}
         thinkingTextEpoch={entry.thinkingTextEpoch}
-        expanded={thinkingChoices.get(entry.key) ?? false}
-        onExpandedChange={expanded => chooseThinking(entry.key, expanded)}
+        onRead={trigger => captureProcess(entry, trigger)}
       />;
       return <ToolCard
         key={entry.key}
         timelineKey={entry.key}
         value={entry.value}
-        status={"partial_id" in entry.value && !live ? "unknown" : undefined}
-        onRead={trigger => openReader(entry.key, trigger)}
+        status={effectiveProcessStatus(entry, view.entries, activity) as Exclude<ReturnType<typeof effectiveProcessStatus>, "neutral">}
+        onRead={trigger => captureProcess(entry, trigger)}
       />;
   };
   const renderSegment = (segment: ToolSegment) => <ToolGroupCard
@@ -381,8 +383,14 @@ export function ConversationTimeline({ items, live, completions, running = false
     {rows}
     {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
     {compacting ? <CompactionStatus /> : workingVisible ? <WorkingStatus /> : null}
-    <ToolReader value={readerValue} opened={readerOpen && readerValue !== null} onClose={() => setReaderOpen(false)} onExitTransitionEnd={finishReader} />
-    <SummaryReader event={summaryEvent} opened={summaryOpen && summaryEvent !== null} onClose={() => setSummaryOpen(false)} onExitTransitionEnd={finishSummaryReader} />
-    {scopedFileReader ? <PublishedFileReader key={fileKey(scopedFileReader.file)} file={scopedFileReader.file} source={scopedFileReader.trigger} opened={scopedFileReader === fileOpenedFor} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
+    {reader && readerEntry?.kind === "tool" ? <ToolReader key={reader.generation} value={readerEntry.value}
+      status={effectiveProcessStatus(readerEntry, view.entries, activity) as Exclude<ReturnType<typeof effectiveProcessStatus>, "neutral">}
+      opened={reader.opened} onClose={() => process.close(reader.token)} onExitTransitionEnd={() => finishReader(reader.token, reader.selection)} /> : null}
+    {reader && readerEntry?.kind === "thinking" ? <ThinkingReader key={reader.generation} entry={readerEntry}
+      status={effectiveProcessStatus(readerEntry, view.entries, activity)} opened={reader.opened}
+      onClose={() => process.close(reader.token)} onExitTransitionEnd={() => finishReader(reader.token, reader.selection)} /> : null}
+    {summaryReader && summaryEvent ? <SummaryReader key={summaryReader.generation} event={summaryEvent} opened={summaryReader.opened}
+      onClose={() => summary.close(summaryReader.token)} onExitTransitionEnd={() => finishSummaryReader(summaryReader.token, summaryReader.selection.trigger)} /> : null}
+    {scopedFileReader ? <PublishedFileReader key={`${fileKey(scopedFileReader.selection.file)}:${scopedFileReader.generation}`} file={scopedFileReader.selection.file} source={scopedFileReader.selection.trigger} opened={scopedFileReader.opened} onClose={closeFileReader} onExitTransitionEnd={finishFileReader} /> : null}
   </>;
 }

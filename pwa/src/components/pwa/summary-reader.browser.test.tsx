@@ -143,15 +143,16 @@ test.each(["remove", "session"])("invalidated summary closes and releases readin
   expect(document.activeElement).toBe(document.querySelector(".pwa-message-list"));
 });
 
-test("summary keeps existing inline reading lock until the inline section is closed", async () => {
-  const assistant: TimelineEvent = { event_id: "thinking", session_id: "session", leaf_id: "leaf", timestamp: 0, group_id: "group", kind: "assistant", status: "complete", blocks: [{ type: "thinking", text: "Existing thought" }] };
-  const { reading } = await harness([assistant, summary]);
-  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
+test("summary preserves another manually expanded group's reading hold until that group closes", async () => {
+  const tool: TimelineEvent = { event_id: "reading-tool", session_id: "session", leaf_id: "leaf", timestamp: 0, group_id: "group", kind: "tool", tool_call_id: "reading-tool", tool: "read", args: { path: "pwa/src/components/pwa/summary-reader.tsx" }, status: "complete", result: "Reader-only output", truncated: false };
+  const { reading } = await harness([tool, summary]);
+  const toggle = document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!;
+  await userEvent.click(toggle);
   await openReader();
   await userEvent.keyboard("{Escape}");
   await closed();
   expect(reading).toHaveBeenLastCalledWith(true);
-  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-thinking .pwa-timeline-toggle")!);
+  await userEvent.click(toggle);
   expect(reading).toHaveBeenLastCalledWith(false);
 });
 
