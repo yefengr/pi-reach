@@ -636,10 +636,14 @@ test("keeps queued messages beside the composer and inserts the original item on
   await screen.unmount();
 });
 
-test.each([1280, 390])("keeps a just-sent message in the conversation while it drains from the queue at %ipx", async (width) => {
+test.each([[1280, false], [390, false], [1280, true]] as const)("keeps a just-sent message in the conversation while it drains from the queue at %ipx (history=%s)", async (width, history) => {
   await page.viewport(width, 844);
   const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
   try {
+    if (history) {
+      for (const event of numberedEvents(3)) emitEvent(channel, event);
+      await expect.poll(listText).toContain("Record 3");
+    }
     const input = screen.getByRole("textbox", { name: /Message your agent/i });
     await input.fill("In-flight follow up");
     // 每步至少真实绘制一帧，避免微任务轮转造成的假绿。
@@ -650,19 +654,25 @@ test.each([1280, 390])("keeps a just-sent message in the conversation while it d
     if (sent.type !== "user_message") throw new Error("missing local send");
     await expect.poll(() => list.querySelectorAll(".pwa-message.user")).toHaveLength(1);
     const bubble = list.querySelector(".pwa-message.user")!;
-    // 权威快照声明这条已在途：它仍在对话区，不进入排队条，也不重建气泡。
-    channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: "queue-in-flight", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
-    await painted();
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
-    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    // 回归：空闲发送不得被移入排队条再移回——那会让空会话提示闪现一帧，并让旧正文随气泡重入回跳。
+    const expectStable = async () => {
+      await painted();
+      expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+      expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+      expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+    };
+    const inFlight = (snapshotId: string) => ({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: snapshotId, chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
+    // 按 Extension 空闲发送的实际帧序：同步回执 accepted + 在途快照，随后 drain 再推一次在途快照。
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId, in_reply_to: sent.id, client_request_id: sent.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "accepted" });
+    channel.emit(inFlight("queue-reply"));
+    await expectStable();
+    channel.emit(inFlight("queue-drain"));
+    await expectStable();
     channel.emit({ protocol_version: 2, type: "user_message_started", target_channel_id: channel.channelId, in_reply_to: sent.id, session_id: "session-1", leaf_id: "generation-session-1", message: { id: "message-flight", group_id: "group-flight", blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal" } });
-    await painted();
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
-    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
-    emitEvent(channel, { event_id: "message-flight", message_id: "message-flight", event_seq: 1, session_id: "session-1", leaf_id: "generation-session-1", group_id: "group-flight", timestamp: 2, kind: "user", blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal", status: "committed" });
-    await painted();
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
-    expect(list.querySelector(".pwa-message.user")).toBe(bubble);
+    channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: "queue-started", chunk_index: 0, final: true, items: [] });
+    await expectStable();
+    emitEvent(channel, { event_id: "message-flight", message_id: "message-flight", event_seq: 10, session_id: "session-1", leaf_id: "generation-session-1", group_id: "group-flight", timestamp: 20, kind: "user", blocks: [{ type: "text", text: sent.text }], origin: "pwa", sender_ref: "sender-session-1", delivery: "normal", status: "committed" });
+    await expectStable();
     expect(list.textContent).toContain("In-flight follow up");
   } finally { await screen.unmount(); }
 });
