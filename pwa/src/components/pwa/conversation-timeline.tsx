@@ -8,6 +8,8 @@ import { effectiveProcessStatus, isPartialEntry, observeProcessEntries, timeline
 import { processGroups, processNoticeBreakKeys, type ProcessEntry, type ProcessGroup as ProcessGroupModel } from "./process-groups";
 import { ProcessGroup } from "./process-group";
 import { useProcessPresentation } from "./use-process-presentation";
+import { COLLAPSE_EXIT_FALLBACK_MARGIN_MS } from "./collapse";
+import { usePwaMotionDuration } from "./use-pwa-motion";
 import { SummaryEntry, SummaryReader } from "./summary-reader";
 import { isSummaryEvent } from "./summary-presentation";
 import { PublishedFileReader } from "./published-file-reader";
@@ -194,6 +196,25 @@ export function ConversationTimeline({ items, live, completions, running = false
   const activity = timelineActivity(view.entries, live, running, runEnded, idlePartials);
   const { states, workingGroupKey, workingVisible, readingInline, chooseGroup, manualReading, reportFocus, reportIndicators } = useProcessPresentation({
     groups, entries: view.entries, activity, observed, completions, compacting, readerEntryKey: reader?.selection.entryKey,
+    noticeAfterSeqs: notices.map(notice => notice.afterSeq),
+  });
+  // 组由展开转为收起的同一提交里报告预计收回的高度，视口据此按净布局处理，不为同一提交的新增内容先向下追。
+  // 必须先于下方 Working 显隐通知：同一提交里协调器先得知收起，再处理 Working 等新增或移除。
+  const collapseDuration = usePwaMotionDuration("--pwa-duration-collapse-out");
+  const presentedExpansion = useRef<ReadonlyMap<string, boolean>>(new Map());
+  useLayoutEffect(() => {
+    const previous = presentedExpansion.current;
+    const next = new Map([...states].map(([key, state]) => [key, state.expanded]));
+    presentedExpansion.current = next;
+    const list = listRef.current;
+    if (!list) return;
+    let removed = 0;
+    for (const [key, expanded] of next) {
+      if (expanded || previous.get(key) !== true) continue;
+      const root = [...list.querySelectorAll<HTMLElement>(":scope > [data-timeline-key]")].find(node => node.dataset.timelineKey === key);
+      removed += root?.querySelector<HTMLElement>(":scope > .pwa-process-details")?.getBoundingClientRect().height ?? 0;
+    }
+    if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: collapseDuration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS } }));
   });
   const previousWorking = useRef(workingVisible);
   useLayoutEffect(() => {

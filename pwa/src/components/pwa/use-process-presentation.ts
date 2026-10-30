@@ -15,6 +15,8 @@ type ProcessPresentationOptions = {
   compacting: boolean;
   /** 打开或退出中的过程 Reader 所选成员；所在组暂缓自动收起。 */
   readerEntryKey?: string;
+  /** 本地提示（如压缩终态）插入位置；落在末段组之后时是展示边界，该组不再承载 Working。 */
+  noticeAfterSeqs?: readonly number[];
 };
 
 const sameKeys = (left: readonly string[], right: readonly string[]) =>
@@ -23,6 +25,12 @@ const sameKeys = (left: readonly string[], right: readonly string[]) =>
 function isLoneEmptyTrace(group: ProcessGroup): boolean {
   const only = group.entries.length === 1 ? group.entries[0]! : null;
   return only?.kind === "thinking" && !only.streaming && !only.text.trim();
+}
+
+/** 与行装配一致：提示排在第一条序号大于它的条目之前；末成员序号不大于提示时提示落在组后。 */
+function noticeFollows(group: ProcessGroup, afterSeqs: readonly number[]): boolean {
+  const seq = group.entries.at(-1)!.seq;
+  return seq !== undefined && afterSeqs.some(afterSeq => afterSeq >= seq);
 }
 
 /** 组件尚未上报可见性前，按组头与明细会实际绘制的运行图标估计。 */
@@ -37,7 +45,7 @@ function renderedRunningKeys(group: ProcessGroup, state: ProcessGroupState): rea
  * 已建立的展开状态在无新输入时保持，避免短暂离线反复开合。
  * Working 先让位于可见的具体运行图标，再由末段过程组承载，最后才在末尾兜底。
  */
-export function useProcessPresentation({ groups, entries, activity, observed, completions, compacting, readerEntryKey }: ProcessPresentationOptions) {
+export function useProcessPresentation({ groups, entries, activity, observed, completions, compacting, readerEntryKey, noticeAfterSeqs = [] }: ProcessPresentationOptions) {
   const [choices, setChoices] = useState<ReadonlyMap<string, ProcessExpansion>>(() => new Map());
   const [presented, setPresented] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [focused, setFocused] = useState<ReadonlySet<string>>(() => new Set());
@@ -74,7 +82,7 @@ export function useProcessPresentation({ groups, entries, activity, observed, co
   // 单个空思考痕迹保持静态行，不为承载 Working 变成无内容可展开的组。
   const host = groups.findLast(group => {
     const state = states.get(group.key)!;
-    return state.canHostWorking && !isLoneEmptyTrace(group) && (state.expanded || state.activeEntry === null);
+    return state.canHostWorking && !isLoneEmptyTrace(group) && !noticeFollows(group, noticeAfterSeqs) && (state.expanded || state.activeEntry === null);
   });
   const workingGroupKey = genericWorking && host !== undefined ? host.key : null;
   const workingVisible = genericWorking && host === undefined;

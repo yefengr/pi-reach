@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode, type TransitionEvent } from "react";
 import { usePwaMotionDuration } from "@/components/pwa/use-pwa-motion";
 
-const EXIT_FALLBACK_MARGIN_MS = 50;
+/** 过渡结束事件缺失时的兜底余量；视口的收起保持期使用同一时限。 */
+export const COLLAPSE_EXIT_FALLBACK_MARGIN_MS = 50;
 
 type CollapseProps = {
   open: boolean;
@@ -42,7 +43,7 @@ export function Collapse({ open, id, className, onPresentationChange, children }
 
   useEffect(() => {
     if (!exiting) return;
-    const timer = window.setTimeout(() => setExiting(false), exitDuration + EXIT_FALLBACK_MARGIN_MS);
+    const timer = window.setTimeout(() => setExiting(false), exitDuration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS);
     return () => window.clearTimeout(timer);
   }, [exiting, exitDuration]);
 

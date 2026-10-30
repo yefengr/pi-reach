@@ -67,5 +67,3 @@ export const MarkdownContent = memo(function MarkdownContent({ text, reveal = NO
     <MarkdownChunkView text={chunk.text} base={chunk.offset} marks={chunkMarks(reveal, chunk, text.length)} />
   </Fragment>)}</div>;
 });
-
-/** 保留正文顺序，仅将相邻同类片段合并为一个阅读区域。 */

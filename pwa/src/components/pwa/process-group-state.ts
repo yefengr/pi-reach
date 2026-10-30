@@ -108,11 +108,6 @@ function toolSummary(tools: readonly SummaryTool[], t: Messages["tools"]): { par
   return { parts, failureCount, interruptedCount, unknownCount };
 }
 
-/** 保持旧工具组摘要输出；组件与纯状态模型复用同一统计核心。 */
-export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tools"]): string {
-  return toolSummary(values.map(value => ({ value, status: toolStatus(value) })), t).parts.join(" · ");
-}
-
 export function processGroupSummary(group: ProcessGroup, statuses: ReadonlyMap<string, ProcessStatus>, t: Messages["tools"]): { fullLabel: string; compactLabel: string; failureCount: number; interruptedCount: number; unknownCount: number } {
   const tools: SummaryTool[] = [];
   let unknownThinking = 0;

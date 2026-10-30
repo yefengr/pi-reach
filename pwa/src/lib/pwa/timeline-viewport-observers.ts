@@ -3,6 +3,8 @@ const EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty";
 const TOUCH_READ_THRESHOLD = 4;
 type Events = {
   geometry(activity: boolean, added?: number): void;
+  /** 过程组开始收起：removed 为预计收回的高度，duration 为收起时长加兜底；只是预期，不是位置终点。 */
+  collapse(removed: number, duration: number): void;
   resize(): void;
   interrupt(): void;
   input(): void;
@@ -21,8 +23,10 @@ export class TimelineViewportObservers {
 
   constructor(readonly list: HTMLDivElement, events: Events) {
     this.observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => events.resize());
+    const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
     const geometry = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail : null;
+      if (detail?.reason === "collapse") { events.collapse(finite(detail.removed), finite(detail.duration)); return; }
       const added = typeof detail?.added === "number" && Number.isFinite(detail.added) ? Math.max(0, detail.added) : 0;
       events.geometry(detail?.reason === "activity", added);
     };

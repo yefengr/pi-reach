@@ -482,7 +482,13 @@ test.each(activityCases)("expanding a live tool group preserves reading until La
   } finally { await screen.unmount(); }
 });
 
-test.each(activityCases)("Working and Thinking replace each other without moving the follower at $width px ($motion)", async ({ width, motion }) => {
+/** 末行底边到可视区底边的距离；过程组增长优先使用底部留白，但最后一行必须完整可见并保留基础间距。 */
+const lastRowClearance = (list: HTMLElement) => {
+  const rows = [...list.querySelectorAll<HTMLElement>(":scope > [data-viewport-row], :scope > .pwa-thinking-status")];
+  return Math.round(list.getBoundingClientRect().bottom - rows.at(-1)!.getBoundingClientRect().bottom);
+};
+
+test.each(activityCases)("Working and a running Thinking group hand off without blank or doubled indicators and keep the follower in place at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
   // partial 必须属于最后正式记录所在轮次，才能接管该轮的 Working。
@@ -492,17 +498,20 @@ test.each(activityCases)("Working and Thinking replace each other without moving
     const working = list.querySelector<HTMLElement>(".pwa-thinking-status")!;
     expect(Math.round(working.getBoundingClientRect().height)).toBe(44);
     expect(getComputedStyle(working).fontSize).toBe("16px");
-    const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
+    const scrollTop = Math.round(list.scrollTop);
     for (const thinking of [true, false, true]) {
       const samples = await sampleActivityLayout(list, () => update(thinking ? [history, partial("live-output", "**Checking results**\nReasoning in progress.", "thinking")] : [history]));
-      for (const sample of samples) expect(sample).toMatchObject({ ...before, working: !thinking, thinking, tool: false });
-      expect(bottomGap(list)).toBeLessThanOrEqual(1);
+      // 每个已绘制帧恰好一种运行提示；运行中的组默认展开，多出的明细行使用已有底部留白，已稳定的正文不移动。
+      for (const sample of samples) expect(sample).toMatchObject({ scrollTop, working: !thinking, thinking, tool: false });
+      expect(new Set(samples.map(sample => sample.height)).size).toBe(1);
+      expect(lastRowClearance(list)).toBeGreaterThanOrEqual(8);
       expect(viewport().followingOutput).toBe(true);
+      expect(viewport().unreadOutput).toBe(0);
     }
   } finally { await screen.unmount(); }
 });
 
-test.each(activityCases)("a completed queued call keeps group activity, height and reading position at $width px ($motion)", async ({ width, motion }) => {
+test.each(activityCases)("a completed call hands the running heading to the next member while following and reading positions hold at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
   const history = answer("live-output", paragraphs("Earlier", 30));
@@ -515,33 +524,32 @@ test.each(activityCases)("a completed queued call keeps group activity, height a
   } };
   const { screen, list, update, readAt, viewport } = await renderTimeline([history, tool("a")]);
   try {
-    const spinner = list.querySelector(".pwa-tool-group-status .pwa-tool-spinner")!;
-    const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
-    const queued = [history, tool("a", true), tool("b")];
-    const samples = await sampleActivityLayout(list, () => {
-      update(queued);
-      expect(list.querySelector(".pwa-tool-group-current")?.textContent).toBe("reada.ts");
-    });
-    for (const sample of samples) expect(sample).toMatchObject({ ...before, working: false, tool: true });
-    await expect.poll(() => list.querySelector(".pwa-tool-group-current")?.textContent, { timeout: 3000 }).toBe("readb.ts");
-    expect(list.querySelector(".pwa-tool-group-status .pwa-tool-spinner")).toBe(spinner);
-    expect({ scrollTop: Math.round(list.scrollTop), height: list.scrollHeight }).toEqual(before);
+    const head = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
+    const spinner = head.querySelector(".pwa-process-status-running > .pwa-spin")!;
+    expect(spinner).not.toBeNull();
+    const samples = await sampleActivityLayout(list, () => update([history, tool("a", true), tool("b")]));
+    // 组头运行图标原位保留，不因成员交接重新挂载；工具新行按跟随规则贴底，过程中不反向。
+    for (const sample of samples) expect(sample).toMatchObject({ working: false, tool: true });
+    for (const [index, sample] of samples.entries()) if (index > 0) expect(sample.scrollTop).toBeGreaterThanOrEqual(samples[index - 1]!.scrollTop);
+    expect(head.querySelector(".pwa-process-status-running > .pwa-spin")).toBe(spinner);
+    await settleLayout();
+    expect(lastRowClearance(list)).toBeGreaterThanOrEqual(8);
     expect(viewport().followingOutput).toBe(true);
-    expect(bottomGap(list)).toBeLessThanOrEqual(1);
 
     const target = screen.getByText("Earlier paragraph 4: content that stays available while reading.").element();
     await readAt(target);
     const anchorTop = Math.round(offset(target, list));
-    const reading = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
     const readingSamples = await sampleActivityLayout(list, () => update([history, tool("a", true), tool("b", true), tool("c")]));
-    for (const sample of readingSamples) expect(sample).toMatchObject({ ...reading, working: false, tool: true });
+    for (const sample of readingSamples) expect(sample).toMatchObject({ working: false, tool: true });
+    // 回看时成员追加不改变阅读位置。
+    expect(new Set(readingSamples.map(sample => sample.scrollTop)).size).toBe(1);
     expect(Math.round(offset(target, list))).toBe(anchorTop);
     expect(viewport().followingOutput).toBe(false);
     expect(viewport().unreadOutput).toBe(1);
   } finally { await screen.unmount(); }
 });
 
-test.each([1280, 390])("running tool heading changes keep following and reading positions stable at %ipx", async width => {
+test.each([1280, 390])("running tool members keep following without reversal and hold the reading position at %ipx", async width => {
   await page.viewport(width, 844);
   const history = answer("live-output", paragraphs("Earlier", 30));
   const tool = (id: string): TimelineViewItem => ({ kind: "partial", createdAt: 1, partial: {
@@ -550,9 +558,8 @@ test.each([1280, 390])("running tool heading changes keep following and reading 
   } });
   const { screen, list, update, readAt, viewport } = await renderTimeline([history, tool("a")]);
   try {
-    const checkHandoff = async (ids: string[]) => {
-      const before = { scrollTop: Math.round(list.scrollTop), height: list.scrollHeight };
-      const samples: typeof before[] = [];
+    const sampleUpdate = async (ids: string[]) => {
+      const samples: { scrollTop: number; height: number }[] = [];
       update([history, ...ids.map(tool)]);
       const start = performance.now();
       await new Promise<void>(resolve => {
@@ -564,14 +571,20 @@ test.each([1280, 390])("running tool heading changes keep following and reading 
         requestAnimationFrame(sample);
       });
       expect(samples.length).toBeGreaterThan(1);
-      for (const sample of samples) expect(sample).toEqual(before);
-      expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+      expect(list.querySelector(".pwa-thinking-status, .pwa-process-working")).toBeNull();
+      return samples;
     };
-    await checkHandoff(["a", "b", "c", "d", "e"]);
-    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    const following = await sampleUpdate(["a", "b", "c", "d", "e"]);
+    for (const [index, sample] of following.entries()) if (index > 0) expect(sample.scrollTop).toBeGreaterThanOrEqual(following[index - 1]!.scrollTop);
+    await settleLayout();
+    expect(lastRowClearance(list)).toBeGreaterThanOrEqual(8);
     expect(viewport().followingOutput).toBe(true);
-    await readAt(screen.getByText("Earlier paragraph 4: content that stays available while reading.").element());
-    await checkHandoff(["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
+    const target = screen.getByText("Earlier paragraph 4: content that stays available while reading.").element();
+    await readAt(target);
+    const anchorTop = Math.round(offset(target, list));
+    const reading = await sampleUpdate(["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
+    expect(new Set(reading.map(sample => sample.scrollTop)).size).toBe(1);
+    expect(Math.round(offset(target, list))).toBe(anchorTop);
     expect(viewport().followingOutput).toBe(false);
   } finally { await screen.unmount(); }
 });
@@ -612,5 +625,137 @@ test("a connection banner entering and fading out above the list keeps the readi
     await settleLayout();
     expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
     expect(viewport.followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+/** 同轮的长过程组：16 个已完成工具在运行中默认展开，超过一屏；正式 run_end 到达时自动收起并出现完成时间。 */
+function collapsingRun(options: { reply?: boolean } = {}) {
+  const history = answer("live-output", paragraphs("Earlier", 30));
+  const tool = (id: string): TimelineViewItem => ({ kind: "event", event: {
+    ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id,
+    tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok",
+  } });
+  const tools = Array.from({ length: 16 }, (_, index) => tool(`t${index}`));
+  const reply: TimelineViewItem[] = options.reply ? [{ kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text: paragraphs("Reply", 30) }] } }] : [];
+  const ended: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "end", group_id: "live-output", timestamp: 3, kind: "run_end", status: "complete" } };
+  return { running: [history, ...tools, ...reply], ended: [history, ...tools, ...reply, ended] };
+}
+
+/** 采样一次收起所需的窗口；每帧在该帧回调与提交完成后读取。 */
+async function sampleCollapse(list: HTMLElement, action: () => void, read: () => number) {
+  action();
+  const samples = [read()];
+  const start = performance.now();
+  await new Promise<void>(resolve => {
+    const sample = () => window.setTimeout(() => {
+      samples.push(read());
+      if (performance.now() - start >= 400) resolve();
+      else requestAnimationFrame(sample);
+    }, 0);
+    requestAnimationFrame(sample);
+  });
+  await settleLayout();
+  expect(samples.length).toBeGreaterThan(2);
+  expect(list.style.paddingBottom).toBe("");
+  return samples;
+}
+
+test.each(activityCases)("a long group collapsing at run_end while following moves only toward the new bottom at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const run = collapsingRun();
+  const { screen, list, update, viewport } = await renderTimeline(run.running);
+  try {
+    const head = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
+    expect(head.getAttribute("aria-expanded")).toBe("true");
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    // 收起与完成时间出现在同一提交：按净高度处理，不先为完成时间向下追、再随收起回落。
+    // 先行一步发生在同步提交内，因此与更新前的位置一起比较。
+    const before = Math.round(list.scrollTop);
+    const samples = [before, ...await sampleCollapse(list, () => update(run.ended), () => Math.round(list.scrollTop))];
+    for (const [index, top] of samples.entries()) if (index > 0) expect(top).toBeLessThanOrEqual(samples[index - 1]!);
+    expect(head.getAttribute("aria-expanded")).toBe("false");
+    const meta = list.querySelector<HTMLElement>(".pwa-turn-meta")!;
+    expect(meta).not.toBeNull();
+    expect(Math.round(list.getBoundingClientRect().bottom - meta.getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(8);
+    expect(viewport().followingOutput).toBe(true);
+    expect(viewport().unreadOutput).toBe(0);
+    await expect.element(screen.getByText("Earlier paragraph 29: content that stays available while reading.")).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
+test.each(activityCases)("reading below a collapsing group keeps the anchor in every frame at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const run = collapsingRun({ reply: true });
+  const { screen, list, update, readAt, viewport } = await renderTimeline(run.running);
+  try {
+    expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
+    const anchor = screen.getByText("Reply paragraph 12: content that stays available while reading.").element();
+    await readAt(anchor);
+    const top = Math.round(offset(anchor, list));
+    const samples = await sampleCollapse(list, () => update(run.ended), () => Math.round(offset(anchor, list)));
+    for (const sample of samples) expect(Math.abs(sample - top)).toBeLessThanOrEqual(1);
+    expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("false");
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test.each(activityCases)("an unreachable reading position moves once in one direction with the collapse and leaves no padding at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const run = collapsingRun();
+  const { screen, list, update, readAt, viewport } = await renderTimeline(run.running);
+  try {
+    const anchor = screen.getByText("Earlier paragraph 25: content that stays available while reading.").element();
+    await readAt(anchor);
+    const before = Math.round(offset(anchor, list));
+    // 收起后滚动范围不足以保持原位置：不垫长期空白，阅读内容只随收起向下移动一次（减少动态效果时一步到位）。
+    const samples = await sampleCollapse(list, () => update(run.ended), () => Math.round(offset(anchor, list)));
+    for (const [index, sample] of [before, ...samples].entries()) if (index > 0) expect(sample).toBeGreaterThanOrEqual(index === 1 ? before : samples[index - 2]!);
+    expect(samples.at(-1)!).toBeGreaterThan(before);
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test.each(activityCases)("an anchor inside collapsing details falls back to the still-visible group head at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const run = collapsingRun();
+  const { screen, list, update, readAt, viewport } = await renderTimeline(run.running);
+  try {
+    // 选组内靠前的成员，保证各宽度下都离底部足够远，确实处于回看状态。
+    const member = list.querySelector<HTMLElement>(".pwa-process-group .pwa-tool-card")!;
+    await readAt(member);
+    const head = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
+    await sampleCollapse(list, () => update(run.ended), () => Math.round(list.scrollTop));
+    expect(member.isConnected).toBe(false);
+    const rect = head.getBoundingClientRect();
+    const bounds = list.getBoundingClientRect();
+    expect(Math.round(rect.top)).toBeGreaterThanOrEqual(Math.round(bounds.top));
+    expect(Math.round(rect.bottom)).toBeLessThanOrEqual(Math.round(bounds.bottom));
+    expect(viewport().followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test.each(activityCases)("the usual turn ending — group, reply, trailing Working, then run_end — never moves backward while following at $width px ($motion)", async ({ width, motion }) => {
+  await page.viewport(width, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
+  const run = collapsingRun({ reply: true });
+  const { screen, list, update, viewport } = await renderTimeline(run.running);
+  try {
+    // 正文之后由末尾兜底行承载 Working；同一提交里 Working 消失、组收起、完成时间出现。
+    expect(list.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+    expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    const before = Math.round(list.scrollTop);
+    const samples = [before, ...await sampleCollapse(list, () => update(run.ended), () => Math.round(list.scrollTop))];
+    for (const [index, top] of samples.entries()) if (index > 0) expect(top).toBeLessThanOrEqual(samples[index - 1]!);
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("false");
+    const meta = list.querySelector<HTMLElement>(".pwa-turn-meta")!;
+    expect(Math.round(list.getBoundingClientRect().bottom - meta.getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(8);
+    expect(viewport().followingOutput).toBe(true);
   } finally { await screen.unmount(); }
 });

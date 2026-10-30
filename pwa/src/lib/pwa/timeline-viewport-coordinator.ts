@@ -80,6 +80,11 @@ export class TimelineViewportCoordinator<C, A> {
   private replyContinuity: ReplyContinuity | null = null;
   private activityPending = false;
   private activityGrowth = 0;
+  /**
+   * 过程组收起保持期：from 为开始时的自然底部，removed 为预计收回的高度。
+   * 保持期不拥有滚动写入，只阻止跟随为同一提交的新增内容先向下追；收起中浏览器夹住位置触发的滚动回执不会结束它。
+   */
+  private collapseHold: { from: number; removed: number; until: number } | null = null;
   private sendFloor: number | null = null;
   private processing = false;
   private exiting = false;
@@ -107,6 +112,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.lastTop = layout?.top() ?? 0;
     this.lastBottom = 0;
     this.tailCredit = 0;
+    this.collapseHold = null;
     this.clearPrepend();
     this.publish("bind");
   }
@@ -116,6 +122,8 @@ export class TimelineViewportCoordinator<C, A> {
   }
   /** 到底只恢复阅读意图；迟到历史的 scope 锚点须等目标行真正到达。 */
   private resumeFollowing(reason: "reset" | "scroll"): void {
+    // 收起导致的位置钳制会以 scroll 回到底部；只有重置（来源切换、Latest）才放弃保持期。
+    if (reason === "reset") this.collapseHold = null;
     this.exit(false);
     this.generation += 1;
     this.following = true;
@@ -138,6 +146,7 @@ export class TimelineViewportCoordinator<C, A> {
     if (!capture || capture.binding !== this.layout || capture.generation !== this.generation || !this.layout) return;
     // 连续成功发送从捕获的可见尺寸接续，不先写上一次输入的终点。
     const inherited = this.motionGlide ?? this.glide;
+    this.collapseHold = null;
     this.exit(false, false);
     this.motionGlide = inherited;
     this.motionGlide?.handoff(this.layout.top(), null);
@@ -201,6 +210,7 @@ export class TimelineViewportCoordinator<C, A> {
 
   details(reading: boolean): void {
     if (reading === this.paused) return;
+    this.collapseHold = null;
     this.exit(true);
     this.paused = reading;
     this.anchor = this.layout?.captureAnchor() ?? null;
@@ -209,6 +219,7 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   userRead(fallback = false): void {
+    this.collapseHold = null;
     this.exit(true);
     this.pendingAnchor = null;
     if (this.following) this.unread.clear();
@@ -231,6 +242,7 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   settle(reason: "settle" | "hidden" | "reduce" | "viewport-resize" = "settle"): void {
+    this.collapseHold = null;
     this.exit(!this.following || this.paused);
     this.process(reason);
   }
@@ -323,6 +335,18 @@ export class TimelineViewportCoordinator<C, A> {
 
   restorePosition(position: ViewportPosition<A> | null): void {
     this.pendingAnchor = position && !position.following ? position.anchor : null;
+  }
+
+  /**
+   * 过程组开始收起：跟随中不为同一提交的新增内容先向下追，让收起带来的自然回落把底部带入视野。
+   * 回看、暂停、发送过渡、Latest 与无动画时忽略；duration 为收起时长加兜底。
+   */
+  collapse(removed: number, duration: number): void {
+    const layout = this.layout;
+    if (!layout || removed <= EPSILON || !this.following || this.paused || this.mode === "send" || this.mode === "latest") return;
+    const geometry = layout.measure();
+    if (!geometry.animate) return;
+    this.collapseHold = { from: this.naturalBottom(geometry), removed, until: this.scheduler.now() + duration };
   }
 
   /** added 是 Working 提交时的净占高；0 表示状态行移除或未测量。 */
@@ -558,6 +582,7 @@ export class TimelineViewportCoordinator<C, A> {
         return;
       }
     }
+    if (this.collapseHold && this.holdForCollapse(geometry, reason)) return;
     this.mode = "follow";
     const target = this.followTarget(geometry);
     const distance = target - geometry.top;
@@ -586,6 +611,23 @@ export class TimelineViewportCoordinator<C, A> {
     }
     this.ready = true;
     this.record(reason, geometry, requested, target);
+  }
+
+  /** 保持期内只放行向上修正；自然底部已收回预计高度、到达时限或动画不可用时结束，随后按现有规则跟随净变化。 */
+  private holdForCollapse(geometry: ViewportGeometry, reason: ViewportReason): boolean {
+    const hold = this.collapseHold!;
+    if (!geometry.animate || this.scheduler.now() >= hold.until || this.naturalBottom(geometry) <= hold.from - hold.removed + EPSILON) {
+      this.collapseHold = null;
+      return false;
+    }
+    const target = this.followTarget(geometry);
+    if (target <= geometry.top + EPSILON) return false;
+    this.mode = "follow";
+    this.lastTop = geometry.top;
+    this.ready = true;
+    this.schedule();
+    this.record(reason, geometry, null, target);
+    return true;
   }
 
   /** 过程报告目标时以阻尼运动追赶，否则直接采用过程给出的位置。 */

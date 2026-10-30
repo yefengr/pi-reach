@@ -33,7 +33,7 @@
 /* 一轮结束后的完成时间，与运行期间的即时兜底提示。 */
 .pwa-turn-meta { margin: 4px 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-turn-status-error { color: var(--pwa-error); }
-/* 与思考／工具组头保持相同的字号、字重、高度和外边距；运行色与左侧图标一致，保持正体，不与思考标题共用斜体。 */
+/* 与过程组组头保持相同的字号、字重、高度和外边距；运行色与左侧图标一致，保持正体，不与思考标题共用斜体。 */
 .pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
 /* 图标即时反馈，文字只淡入；不移动状态行、不延迟真实运行状态。 */

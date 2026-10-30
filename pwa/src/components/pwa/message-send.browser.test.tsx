@@ -503,7 +503,7 @@ test.each(["details", "hidden", "reduce", "latest", "send", "reset"])("borrowed 
   } finally { await h.screen.unmount(); }
 });
 
-test("borrowed tail survives equal Thinking/tool replacement and body takeover without delayed refill", async () => {
+test("borrowed tail grows only as needed for a process group, then survives equal replacement and body takeover without delayed refill", async () => {
   const h = await harness();
   try {
     const clock = layoutClock();
@@ -517,18 +517,33 @@ test("borrowed tail survives equal Thinking/tool replacement and body takeover w
     const tool: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
       protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "tool", kind: "tool", tool_call_id: "read", tool: "read", args: { path: "note.txt" }, status: "running",
     } };
-    for (const item of [thinking, tool, thinking]) {
+    // 运行中的过程组默认展开（组头＋明细），比单行 Working 高；先用借用的留白，不足时只补到保留基础间距。
+    h.work(true, [history, thinking]);
+    expect(h.list.querySelector(".pwa-thinking-status")).toBeNull();
+    clock.step(400);
+    const group = h.list.querySelector<HTMLElement>(":scope > .pwa-process-group")!;
+    const clearance = () => Math.round(h.list.getBoundingClientRect().bottom - group.getBoundingClientRect().bottom - (Number.parseFloat(getComputedStyle(group).marginBottom) || 0));
+    const settledTop = Math.round(h.list.scrollTop);
+    expect(settledTop).toBeGreaterThanOrEqual(Math.round(before));
+    if (settledTop > Math.round(before)) expect(Math.abs(clearance() - 8)).toBeLessThanOrEqual(1);
+    else expect(clearance()).toBeGreaterThanOrEqual(8);
+    // 多出的占高计入借用留白：间隙＝原借用＋净增高－必要位移。
+    expect(gap(h.list)).toBeGreaterThanOrEqual(borrowed);
+    const groupGap = gap(h.list);
+    expect(h.viewport().followingOutput).toBe(true);
+    // 同组思考与工具等高互换：不再移动，也不重新补齐借用的留白。
+    for (const item of [tool, thinking]) {
       h.work(true, [history, item]);
       expect(h.list.querySelector(".pwa-thinking-status")).toBeNull();
       clock.step(400);
-      expect(Math.round(h.list.scrollTop)).toBe(Math.round(before));
-      expect(gap(h.list)).toBe(borrowed);
+      expect(Math.round(h.list.scrollTop)).toBe(settledTop);
+      expect(gap(h.list)).toBe(groupGap);
       expect(h.viewport().followingOutput).toBe(true);
     }
     const reply = (text: string): TimelineViewItem => ({ ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text }] } });
     h.work(false, [history, reply("First reply")]);
     const bottom = h.list.scrollHeight - h.list.clientHeight;
-    const expected = Math.min(bottom, Math.max(before, bottom - 80));
+    const expected = Math.min(bottom, Math.max(settledTop, bottom - 80));
     clock.step(600); clock.step(800);
     expect(Math.round(h.list.scrollTop)).toBe(Math.round(expected));
     const credit = gap(h.list);
