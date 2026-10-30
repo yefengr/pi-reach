@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { projectTimeline, type PresentationEntry } from "@/lib/pwa/timeline-presentation";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
-import { appendedTools, observeTools, segmentExpansion, timelineActivity, toolBatchClosed, toolSegments, withExpansion } from "./tool-groups";
+import { timelineActivity } from "./timeline-activity";
 
 const scope = { session_id: "s", leaf_id: "l" };
 const tool = (id: string, group = "g1", status: "complete" | "error" = "complete"): TimelineViewItem => {
@@ -18,102 +18,6 @@ const streaming = (id: string, group = "g1"): TimelineViewItem => ({
 });
 const runEnd = (group: string): TimelineEvent => ({ ...scope, event_id: `end-${group}`, group_id: group, timestamp: 2, kind: "run_end", status: "complete" });
 const entries = (items: TimelineViewItem[]): PresentationEntry[] => projectTimeline(items).entries;
-const segmentsOf = (items: TimelineViewItem[], gapKeys: ReadonlySet<string> = new Set()) => {
-  const list = entries(items);
-  return toolSegments(list, gapKeys, observeTools(list, new Map()));
-};
-const commands = (items: TimelineViewItem[]) => segmentsOf(items).map(segment => segment.tools.map(entry => "args" in entry.value && typeof entry.value.args === "object" && entry.value.args !== null && "command" in entry.value.args ? entry.value.args.command : ""));
-
-describe("toolSegments", () => {
-  test("groups from the first tool regardless of status or count", () => {
-    expect(commands([tool("a")])).toEqual([["a"]]);
-    expect(commands([tool("a"), running("b"), tool("c", "g1", "error")])).toEqual([["a", "b", "c"]]);
-  });
-
-  test("breaks at text, other turns and unsaved gaps", () => {
-    expect(commands([tool("a"), text("t"), tool("b"), tool("c", "g2")])).toEqual([["a"], ["b"], ["c"]]);
-    const items = [tool("a"), tool("b")];
-    const gap = new Set([entries([tool("b")])[0]!.key]);
-    expect(segmentsOf(items, gap).map(segment => segment.tools.length)).toEqual([1, 1]);
-  });
-
-  test("keeps the identity of an observed group when earlier history is prepended", () => {
-    const live = entries([tool("b"), tool("c")]);
-    const observed = observeTools(live, new Map());
-    const [before] = toolSegments(live, new Set(), observed);
-    const withHistory = projectTimeline([tool("a"), tool("b"), tool("c")], { items: [], entries: live }).entries;
-    const nextObserved = observeTools(withHistory, observed);
-    const [after] = toolSegments(withHistory, new Set(), nextObserved);
-    expect(after!.tools).toHaveLength(3);
-    expect(after!.key).toBe(before!.key);
-    expect(observeTools(withHistory, nextObserved)).toBe(nextObserved);
-  });
-});
-
-describe("toolBatchClosed", () => {
-  const closed = (items: TimelineViewItem[], ended: string[] = []) => {
-    const list = entries(items);
-    const segment = toolSegments(list, new Set(), observeTools(list, new Map()))[0]!;
-    return toolBatchClosed(list, segment, group => ended.includes(group));
-  };
-
-  test("only same-turn output after the final tool closes a batch", () => {
-    expect(closed([text("before"), tool("a"), tool("b")])).toBe(false);
-    expect(closed([tool("a"), text("after")])).toBe(true);
-    expect(closed([tool("a"), streaming("after")])).toBe(true);
-    expect(closed([tool("a"), text("other", "g2")])).toBe(false);
-    expect(closed([tool("a"), text("other", "g2"), streaming("residual")])).toBe(false);
-    const thought: TimelineViewItem = { kind: "partial", createdAt: 0, partial: { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "thought:thinking:0", kind: "thinking", status: "delta", delta: "Thinking" } };
-    expect(closed([tool("a"), thought])).toBe(true);
-    const formalThought: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "thought", group_id: "g1", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "thinking", text: "Thinking" }] } };
-    expect(closed([tool("a"), formalThought])).toBe(true);
-    // 闭合判断不负责判断工具是否终态。
-    expect(closed([running("a"), text("after")])).toBe(true);
-  });
-
-  test("formal run_end closes without output, but sends and other records do not", () => {
-    expect(closed([tool("a"), { kind: "event", event: runEnd("g1") }], ["g1"])).toBe(true);
-    expect(closed([tool("a"), { kind: "event", event: runEnd("g2") }], ["g2"])).toBe(false);
-    const pending: TimelineViewItem = { kind: "pending", id: "next", clientRequestId: "next", requestId: "next", text: "next", createdAt: 3, delivery: "pending" };
-    expect(closed([tool("a"), pending])).toBe(false);
-    const custom: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "custom", group_id: "g1", timestamp: 2, kind: "custom", payload: {}, truncated: false } };
-    expect(closed([tool("a"), custom])).toBe(false);
-    expect(toolBatchClosed([], { key: "empty", tools: [] }, () => true)).toBe(false);
-  });
-});
-
-describe("appendedTools", () => {
-  test("only counts tools that arrive after content already on screen", () => {
-    const before = entries([text("t"), tool("a")]);
-    const after = projectTimeline([text("t"), tool("a"), tool("b")], { items: [], entries: before }).entries;
-    expect(appendedTools(after, before)).toEqual([after[2]!.key]);
-    // 首次加载、切换会话与向前补齐的历史都不算新追加。
-    expect(appendedTools(before, [])).toEqual([]);
-    expect(appendedTools(entries([tool("x", "other")]), before)).toEqual([]);
-    const prepended = projectTimeline([tool("old"), text("t"), tool("a")], { items: [], entries: before }).entries;
-    expect(appendedTools(prepended, before)).toEqual([]);
-  });
-});
-
-describe("expansion choices", () => {
-  test("the latest choice among members wins after regrouping", () => {
-    const [segment] = segmentsOf([tool("a"), tool("b")]);
-    const [first, second] = segment!.tools;
-    let choices = withExpansion(new Map(), [first!.key], true);
-    choices = withExpansion(choices, [second!.key], false);
-    expect(segmentExpansion(segment!.tools, choices)?.expanded).toBe(false);
-    expect(segmentExpansion([first!], choices)?.expanded).toBe(true);
-  });
-
-  test("every part of a split group inherits the choice made on the whole group", () => {
-    const [segment] = segmentsOf([tool("a"), tool("b"), tool("c")]);
-    const choices = withExpansion(new Map(), segment!.tools.map(entry => entry.key), true);
-    // 迟到的正文插入后拆成两段，两段都保持展开。
-    const parts = segmentsOf([tool("a"), text("late"), tool("b"), tool("c")]);
-    expect(parts.map(part => segmentExpansion(part.tools, choices)?.expanded)).toEqual([true, true]);
-  });
-});
-
 describe("timelineActivity", () => {
   const activity = (items: TimelineViewItem[], { live = true, working = true, ended = [] as string[] } = {}) => {
     const list = entries(items);

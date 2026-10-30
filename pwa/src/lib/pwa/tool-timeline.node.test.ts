@@ -5,7 +5,7 @@ import { decodeServerFrameV2 } from "../pi-reach/protocol-v2/codec";
 import { TimelineRuntime, type TimelineScope } from "./timeline-runtime";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import { projectTimeline } from "./timeline-presentation";
-import { observeTools, toolSegments } from "@/components/pwa/tool-groups";
+import { processGroups } from "@/components/pwa/process-groups";
 
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
 const association = { groupId: "group", tool: "read", args: { path: "README.md" }, correlation: null };
@@ -48,7 +48,7 @@ test("tool identity survives the leaf advancing between live output and its form
   const running = projectTimeline(receive(toolPartial("call-a", association, scope, {
     content: [{ type: "text", text: "Live output" }],
   })!));
-  const observed = observeTools(running.entries, new Map());
+  const runningGroups = processGroups(running.entries, new Set());
   const result = toolTimelineEvent(
     { event_id: "result-a", session_id: scope.sessionId, leaf_id: "result-leaf", timestamp: 2 },
     association.groupId,
@@ -58,8 +58,7 @@ test("tool identity survives the leaf advancing between live output and its form
   const settled = projectTimeline(receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: "result-leaf", event: { ...result, event_seq: 2 } }), running);
   expect(settled.entries).toHaveLength(1);
   expect(settled.entries[0]).toMatchObject({ key: running.entries[0]!.key, value: { status: "complete", leaf_id: "result-leaf" } });
-  expect(toolSegments(settled.entries, new Set(), observeTools(settled.entries, observed))[0]!.key)
-    .toBe(toolSegments(running.entries, new Set(), observed)[0]!.key);
+  expect(processGroups(settled.entries, new Set(), runningGroups)[0]!.key).toBe(runningGroups[0]!.key);
 });
 
 test("large live output stays decodable and images never become preview text", () => {

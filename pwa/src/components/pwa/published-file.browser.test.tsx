@@ -100,9 +100,10 @@ test("legal custom is independent output and a summary boundary with one group c
   await expect.element(h.screen.getByText("说明.md", { exact: true })).toBeVisible();
   expect(document.querySelectorAll(".pwa-published-file")).toHaveLength(1);
   // 文件行把工具分成两段，各自成组。
-  expect([...document.querySelectorAll(".pwa-tool-group")].map(group => group.getAttribute("data-tool-group-size"))).toEqual(["2", "1"]);
+  // 已发布文件断开同轮工具组；组头摘要按成员统计，证明两侧分别成组。
+  expect([...document.querySelectorAll("button.pwa-process-head")].map(head => head.getAttribute("title"))).toEqual(["Read 2 files", "Read 1 file"]);
   expect(document.querySelectorAll(".pwa-turn-meta")).toHaveLength(1);
-  expect(document.querySelector(".pwa-published-file")?.closest(".pwa-tool-group")).toBeNull();
+  expect(document.querySelector(".pwa-published-file")?.closest(".pwa-process-group")).toBeNull();
   await h.screen.unmount();
 });
 

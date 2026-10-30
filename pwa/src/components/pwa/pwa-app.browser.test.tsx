@@ -3561,6 +3561,8 @@ test("preserves the session, draft, attachment, tool row and reader across layou
       assertSessionUnchanged();
     }
     await screen.getByRole("button", { name: "View read tool details" }).click();
+    // 阅读器先收起挂载、下一帧再打开；等正文真实出现后再取节点。
+    await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll")).not.toBeNull();
     // 正文在同一个 Drawer 中保持挂载，断点变化不重建阅读内容。
     const reader = document.querySelector(".pwa-tool-reader-scroll")!;
     for (const width of [390, 1280]) {

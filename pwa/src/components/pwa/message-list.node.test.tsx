@@ -6,6 +6,7 @@ import type { TimelinePending } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { thinkingSummary, thinkingTitle } from "./timeline-content";
+import { ThinkingProcessRow } from "./thinking-process-row";
 import { setLanguagePreference } from "@/lib/i18n";
 
 function renderList(items: Parameters<typeof MessageList>[0]["items"], overrides: Partial<Parameters<typeof MessageList>[0]> = {}): string {
@@ -128,18 +129,19 @@ test("keeps final answers visible while Thinking content stays in its Reader and
     { kind: "event", event: { ...base, blocks: [{ type: "thinking", text: "private preview" }, { type: "text", text: "**Visible answer**" }] } },
     { kind: "event", event: { ...base, event_id: "empty", blocks: [] } },
   ]);
-  expect(html).toContain('aria-label="Read thinking"');
-  expect(html).toContain('aria-haspopup="dialog"');
+  // 已停止的历史过程组默认收起，正文只经 Reader 阅读，不在时间线铺开。
+  expect(html.match(/class="pwa-process-group /g)).toHaveLength(1);
+  expect(html).toContain('aria-label="Expand Thinking"');
   expect(html).not.toContain("private preview");
   expect(html).toContain("<strong>Visible answer</strong>");
-  expect(html.match(/<article /g)).toHaveLength(1);
+  expect(html.match(/class="pwa-message assistant"/g)).toHaveLength(1);
 });
 
 test("keeps failed tool details out of the conversation with a visible error status", () => {
   const event: TimelineEvent = { ...toolEvent, status: "error", error: "Permission denied", args: { path: "file.txt" }, result: [{ type: "text", text: "Readable text" }] };
   const html = renderList([{ kind: "event", event }]);
   expect(html).toContain("Read 1 file · 1 failed");
-  expect(html).toContain("pwa-tool-group-alert");
+  expect(html).toContain("pwa-process-alert-error");
   expect(html).not.toContain("Permission denied");
   expect(html).not.toContain("Readable text");
   expect(html).not.toContain("Tool input");
@@ -167,12 +169,14 @@ test("summarizes running tools in the group header without mounting raw args", (
     { kind: "partial", createdAt: 0, partial: running("read", "read-1", { path: "src/components/pwa/message-list.tsx" }) },
     { kind: "partial", createdAt: 0, partial: running("bash", "bash-1", { command: "pnpm   test" }) },
     { kind: "partial", createdAt: 0, partial: running("grep", "search-1", { pattern: "ToolCard", path: "src" }) },
-  ]);
+  ], { running: true });
 
+  // 运行中的组默认展开，明细行只显示工具名与命令／路径摘要。
+  expect(html.match(/class="pwa-process-group /g)).toHaveLength(3);
   expect(html).toContain("src/components/pwa/message-list.tsx");
-  expect(html).toContain("Expand read src/components/pwa/message-list.tsx · 1 running");
-  expect(html).toContain("Expand bash pnpm   test · 1 running");
-  expect(html).toContain("Expand grep ToolCard · 1 running");
+  expect(html).toContain('aria-label="read: Running"');
+  expect(html).toContain('aria-label="bash: Running"');
+  expect(html).toContain('aria-label="grep: Running"');
   expect(html).toContain("pnpm   test");
   expect(html).toContain("ToolCard");
   expect(html).not.toContain("&quot;path&quot;");
@@ -184,18 +188,16 @@ test("keeps streaming Thinking content out of the timeline and exposes its Reade
     protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
     group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Inspecting the request.\nFull reasoning stays collapsed.",
   };
-  const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
+  const html = renderList([{ kind: "partial", createdAt: 0, partial }], { running: true });
 
-  expect(html).not.toContain('title="Thinking"');
-  expect(html).toContain('<span class="pwa-sr-only" role="status"></span>');
-  expect(html).toContain('<span title="Inspecting the request.">Inspecting the request.</span>');
-  expect(html.indexOf("pwa-spin")).toBeLessThan(html.indexOf('title="Inspecting the request."'));
+  expect(html).toContain('<span class="pwa-process-thinking-heading" title="Inspecting the request.">Inspecting the request.</span>');
+  expect(html.lastIndexOf("pwa-process-status-running")).toBeLessThan(html.indexOf('title="Inspecting the request."'));
   expect(html).not.toContain("Full reasoning stays collapsed.");
-  expect(html).not.toContain("pwa-text-plain");
   expect(html).not.toContain("pwa-tool-code");
-  expect(html).toContain('aria-label="Read thinking"');
-  expect(html).toContain('aria-haspopup="dialog"');
-  expect(html).not.toContain('aria-expanded=');
+  const row = html.match(/<button class="pwa-thinking-process-row-action"[^>]*>/)?.[0] ?? "";
+  expect(row).toContain('aria-label="Read thinking"');
+  expect(row).toContain('aria-haspopup="dialog"');
+  expect(row).not.toContain("aria-expanded=");
 });
 
 test("does not render run_end markers as timeline rows", () => {
@@ -306,11 +308,12 @@ describe("turn presentation", () => {
   });
 
   test.each([
-    { label: "idle", running: false },
-    { label: "history", running: true, isLive: false },
-    { label: "later formal run", running: true, later: "formal" },
-    { label: "later partial run", running: true, later: "partial" },
-  ])("groups tools but does not finish the turn without run_end ($label)", ({ running, isLive, later }) => {
+    { label: "idle", running: false, expanded: false },
+    { label: "history", running: true, isLive: false, expanded: false },
+    { label: "later formal run", running: true, later: "formal", expanded: false },
+    // 后续轮的 partial 只是残留，本轮仍在运行，过程组保持默认展开。
+    { label: "later partial run", running: true, later: "partial", expanded: true },
+  ])("groups tools but does not finish the turn without run_end ($label)", ({ running, isLive, later, expanded }) => {
     const items: Parameters<typeof MessageList>[0]["items"] = events(
       user("u1", "group-1", 1), toolEvent,
       { ...toolEvent, event_id: "tool-2", tool_call_id: "tool-2", timestamp: 2 },
@@ -321,9 +324,9 @@ describe("turn presentation", () => {
     } });
     const html = renderList(items, { hasEarlier: false, running, isLive });
     expect(html).not.toContain("pwa-turn-meta");
-    expect(html.match(/data-tool-group-size="2"/g)).toHaveLength(1);
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("View read tool details");
+    expect(html.match(/class="pwa-process-group /g)).toHaveLength(1);
+    expect(html).toContain(`aria-expanded="${expanded}"`);
+    expect(html.match(/View read tool details/g)?.length ?? 0).toBe(expanded ? 2 : 0);
   });
 
   test("uses Working immediately as a fallback behind specific live indicators", () => {
@@ -341,7 +344,7 @@ describe("turn presentation", () => {
     // 首次渲染即有已完成队首和后续运行调用，组级图标也须接管 Working。
     const mixed = renderList([...events(user("u1", "g1", 1), { ...toolEvent, group_id: "g1" }), { kind: "partial", createdAt: 2, partial: tool }], live);
     expect(mixed).toContain("pwa-tool-spinner");
-    expect(mixed).toContain("1 running");
+    expect(mixed).toContain('aria-label="bash: Running"');
     expect(mixed).not.toContain("Working…");
     // 旧轮、已结束轮的具体指示不能压制新轮兜底。
     const residuals = [{ kind: "partial" as const, createdAt: 2, partial: thinking }, { kind: "partial" as const, createdAt: 2, partial: tool }];
@@ -368,15 +371,12 @@ test.each([
     protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
     group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: text,
   };
-  const html = renderList([{ kind: "partial", createdAt: 0, partial }]);
-  expect(html).toContain(`<span title="${title}">${title}</span>`);
-  expect(html).toContain('<span class="pwa-sr-only" role="status"></span>');
-  expect(html).toContain('aria-live="off"');
+  const html = renderList([{ kind: "partial", createdAt: 0, partial }], { running: true });
+  expect(html).toContain(`<span class="pwa-process-thinking-heading" title="${title}">${title}</span>`);
   const readable = !!text.trim();
   expect(html.includes('aria-haspopup="dialog"')).toBe(readable);
   expect(html.includes('aria-label="Read thinking"')).toBe(readable);
-  expect(html.includes('aria-expanded="false"')).toBe(!readable);
-  expect(html).not.toContain("pwa-text-plain");
+  expect(html.includes("pwa-thinking-process-row-static")).toBe(!readable);
 });
 
 test.each([
@@ -392,24 +392,19 @@ test.each([
   const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
   expect(html).toContain("Visible answer.");
   expect(html).toContain(">Thinking<");
+  // 空痕迹只是静态行；有正文的历史思考是收起的过程组，正文经 Reader 打开。
   expect(html.includes('title="Thinking"')).toBe(visible);
-  expect(html.includes("pwa-thinking-trace")).toBe(!visible);
-  expect(html.includes('aria-haspopup="dialog"')).toBe(visible);
-  expect(html.includes('aria-label="Read thinking"')).toBe(visible);
-  expect(html).not.toContain('aria-expanded=');
+  expect(html.includes("pwa-process-head-static")).toBe(!visible);
+  expect(html.includes('aria-expanded="false"')).toBe(visible);
   expect(html).not.toContain("Thinking…");
-  expect(html).not.toContain("pwa-thinking-live");
+  expect(html).not.toContain("pwa-spin");
 });
 
-test("formal thinking retains the latest heading and an empty icon slot without a live status", () => {
-  const event: TimelineEvent = {
-    event_id: "historical-thinking", session_id: "session-1", leaf_id: "history-1", timestamp: 1,
-    group_id: "group-1", kind: "assistant", status: "complete",
-    blocks: [{ type: "thinking", text: "**First**\nBody\n**Latest**\n**Unfinished" }],
-  };
-  const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
+test("formal thinking retains the latest heading and a fixed neutral slot without a live status", () => {
+  const entry = { kind: "thinking" as const, key: "historical-thinking", groupId: "group-1", text: "**First**\nBody\n**Latest**\n**Unfinished", streaming: false };
+  const html = renderToStaticMarkup(<PwaUiProvider><ThinkingProcessRow entry={entry} status="neutral" onRead={() => {}} /></PwaUiProvider>);
   expect(html).toContain('title="Latest"');
-  expect(html).toContain("pwa-thinking-icon-slot");
+  expect(html).toContain("pwa-process-status-slot pwa-process-status-neutral");
   expect(html).not.toContain("pwa-spin");
   expect(html).not.toContain('role="status"');
   expect(html).not.toContain('title="First"');

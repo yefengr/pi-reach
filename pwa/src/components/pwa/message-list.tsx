@@ -1,11 +1,10 @@
 import { useLayoutEffect, useMemo, useState, type RefObject } from "react";
 import { Button } from "@mantine/core";
 import { LoaderCircle } from "lucide-react";
-import { AssistantBlocks, ThinkingContent } from "./timeline-content";
 import { CompactionNoticeRow, CompactionStatus, ConversationTimeline, GapNotice } from "./conversation-timeline";
 import { useTimelineEnterFade } from "./use-timeline-enter-fade";
 import "./timeline-reconnect.css";
-import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
+import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useI18n } from "@/lib/i18n";
 import type { TimelineReconnectPhase } from "@/lib/pwa/use-timeline";
@@ -67,11 +66,6 @@ type MessageListProps = {
   notices?: readonly CompactionNotice[];
 };
 
-function blockText(event: TimelineEvent | TimelinePartial): string {
-  if ("blocks" in event && event.blocks) return event.blocks.map((block) => ("text" in block ? block.text : "")).join("\n");
-  return "delta" in event && event.delta ? event.delta : "";
-}
-
 /** 隐藏未知 custom、run_end 与纯空白正文；保留空思考记录，由投影合并为静态痕迹。 */
 function isVisibleItem(item: TimelineViewItem): boolean {
   if (item.kind !== "event") return true;
@@ -96,18 +90,9 @@ function visibleGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<
 }
 
 function EventCard({ event, metadata, timelineKey }: { event: Exclude<TimelineEvent, { kind: "tool" }>; metadata?: AttachmentMetadata; timelineKey: string }) {
-  const { t } = useI18n();
   if (event.kind === "user") return <UserMessage value={event} metadata={metadata} entering={false} timelineKey={timelineKey} />;
-  if (event.kind === "assistant") return <article className="pwa-message assistant" data-viewport-row={timelineKey}><span className="pwa-sr-only">{t.timeline.srPi}</span><AssistantBlocks blocks={event.blocks} /></article>;
-  // 摘要和服务错误由 ConversationTimeline 提供安全阅读入口，不在会话中铺开正文。
+  // 回复与思考由投影转为正文和过程组；摘要和服务错误由 ConversationTimeline 提供安全阅读入口，不在会话中铺开正文。
   return null;
-}
-
-function PartialCard({ partial, timelineKey }: { partial: Exclude<TimelinePartial, { kind: "tool" }>; timelineKey: string }) {
-  const { t } = useI18n();
-  const text = blockText(partial);
-  if (partial.kind === "thinking") return <ThinkingContent text={text} streaming timelineKey={timelineKey} />;
-  return <article className="pwa-message assistant partial" data-viewport-row={timelineKey}><span className="pwa-sr-only">{t.timeline.srPi}</span>{partial.blocks ? <AssistantBlocks blocks={partial.blocks} streaming /> : text.trim() ? <div className="pwa-stream-text">{text}</div> : null}</article>;
 }
 
 function renderItem(item: TimelineViewItem, onRetryFailed: MessageListProps["onRetryFailed"], onCheckStatus: MessageListProps["onCheckStatus"], onCancelQueued: MessageListProps["onCancelQueued"], canCheckStatus: boolean, projection: TimelineAttachmentProjection, live: boolean, onRead: PublishedFileRead, userMessageIn: boolean, timelineKey: string) {
@@ -121,7 +106,6 @@ function renderItem(item: TimelineViewItem, onRetryFailed: MessageListProps["onR
   // projectTimeline 将全部工具投影为 ToolEntry，由 ConversationTimeline 提供详情入口。
   if (value.kind === "tool") return null;
   if (item.kind === "event" && item.event.kind !== "tool") return <EventCard event={item.event} key={item.event.event_id} timelineKey={timelineKey} />;
-  if (item.kind === "partial" && item.partial.kind !== "tool") return <PartialCard partial={item.partial} key={item.partial.partial_id} timelineKey={timelineKey} />;
   return null;
 }
 

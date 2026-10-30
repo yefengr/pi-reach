@@ -97,7 +97,8 @@ async function harness(options: Partial<Config> = {}) {
   return { screen, update, setTop, completeFile, reading, fileReading, pin, unpin };
 }
 
-const thoughtButton = () => document.querySelector<HTMLButtonElement>(".pwa-thinking button[aria-haspopup='dialog']")!;
+const thoughtButton = () => document.querySelector<HTMLButtonElement>(".pwa-thinking-process-row-action")!;
+const groupHeads = () => [...document.querySelectorAll<HTMLButtonElement>("button.pwa-process-head")];
 async function openThought() {
   const trigger = thoughtButton();
   expect(trigger).not.toBeNull();
@@ -113,8 +114,15 @@ async function closeThought() {
   await expect.poll(thinkingDialog).toBeNull();
   await expect.poll(() => history.state?.piReachThinkingReader).toBeUndefined();
 }
+/** 已结束的过程组默认收起；手动展开即一次阅读选择。 */
 async function expandTools() {
-  for (const toggle of document.querySelectorAll<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button[aria-expanded='false']")) await userEvent.click(toggle);
+  for (const toggle of document.querySelectorAll<HTMLButtonElement>("button.pwa-process-head[aria-expanded='false']")) await userEvent.click(toggle);
+}
+/** 运行中默认展开不产生选择；需要手动展开时先收起再展开，记录一次用户操作。 */
+async function chooseExpanded(head: HTMLButtonElement) {
+  if (head.getAttribute("aria-expanded") === "true") await userEvent.click(head);
+  await userEvent.click(head);
+  await expect.poll(() => head.getAttribute("aria-expanded")).toBe("true");
 }
 const toolButton = () => document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!;
 const fileButton = () => document.querySelector<HTMLButtonElement>('.pwa-published-file .pwa-published-actions button[aria-label="View"]')!;
@@ -124,7 +132,8 @@ const gapToBottom = (scroll: HTMLElement) => Math.abs(scroll.scrollHeight - scro
 test.each([1280, 402, 320])("real Thinking entry opens a single scrollable Reader and returns focus at %ipx", async width => {
   await page.viewport(width, 844);
   const text = `## Original heading\n\n${"Original model paragraph.\n\n".repeat(160)}FINAL THINKING LINE`;
-  const view = await harness({ items: [formalThought(text), end], running: false });
+  // 本轮仍在运行时过程组默认展开，不产生手动阅读选择。
+  const view = await harness({ items: [formalThought(text)] });
   const trigger = await openThought();
   const dialog = thinkingDialog()!;
   expect(Math.round(dialog.getBoundingClientRect().width)).toBe(width >= 768 ? 720 : width);
@@ -222,8 +231,8 @@ test("tool Reader receives exactly the same unknown state as the retained partia
 
 test("an empty historical Thinking trace has no Reader entry or invented body", async () => {
   const view = await harness({ items: [formalThought("   "), end], live: false, running: false });
-  expect(document.querySelector(".pwa-thinking-trace")?.textContent).toBe("Thinking");
-  expect(document.querySelector(".pwa-thinking button")).toBeNull();
+  expect(document.querySelector(".pwa-process-head-static")?.textContent).toBe("Thinking");
+  expect(document.querySelector(".pwa-process-group button")).toBeNull();
   expect(thinkingDialog()).toBeNull();
   expect(hasHistory()).toBe(false);
   expect(view.reading.mock.calls.at(-1)?.[0]).toBe(false);
@@ -252,12 +261,12 @@ test("the reading hold survives closing animation, then releases only after the 
 
 test("closing a Reader does not release another manually expanded group", async () => {
   const view = await harness({ items: [tool(), body("Separate the process groups."), thought("**Reader content**\nIndependent text.")] });
-  await expandTools();
-  expect(view.reading.mock.calls.at(-1)?.[0]).toBe(true);
+  await chooseExpanded(groupHeads()[0]!);
+  await expect.poll(() => view.reading.mock.calls.at(-1)?.[0]).toBe(true);
   await openThought();
   await closeThought();
   expect(view.reading.mock.calls.at(-1)?.[0]).toBe(true);
-  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!);
+  await userEvent.click(groupHeads()[0]!);
   await expect.poll(() => view.reading.mock.calls.at(-1)?.[0]).toBe(false);
 });
 
@@ -400,7 +409,7 @@ test("clicking the desktop scrim closes only Thinking, clears history and return
 
 test("mobile right-swipe on the Thinking body closes the Reader through the real exit", async () => {
   await page.viewport(390, 844);
-  const view = await harness({ items: [formalThought(`**Swipe original**\n\n${"Swipe paragraph.\n\n".repeat(60)}`), end], running: false });
+  const view = await harness({ items: [formalThought(`**Swipe original**\n\n${"Swipe paragraph.\n\n".repeat(60)}`)] });
   await enableTouch();
   try {
     const trigger = await openThought();
@@ -435,7 +444,7 @@ test("source removal under a top Modal leaves focus inside that Modal", async ()
 test("an invalid tool trigger returns focus to its still-visible group head", async () => {
   await harness({ items: [tool(), tool("second")], running: false });
   await expandTools();
-  const head = document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!;
+  const head = groupHeads()[0]!;
   const trigger = toolButton();
   trigger.focus();
   await userEvent.click(trigger);

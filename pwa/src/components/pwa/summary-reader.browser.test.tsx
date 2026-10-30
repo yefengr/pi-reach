@@ -146,7 +146,7 @@ test.each(["remove", "session"])("invalidated summary closes and releases readin
 test("summary preserves another manually expanded group's reading hold until that group closes", async () => {
   const tool: TimelineEvent = { event_id: "reading-tool", session_id: "session", leaf_id: "leaf", timestamp: 0, group_id: "group", kind: "tool", tool_call_id: "reading-tool", tool: "read", args: { path: "pwa/src/components/pwa/summary-reader.tsx" }, status: "complete", result: "Reader-only output", truncated: false };
   const { reading } = await harness([tool, summary]);
-  const toggle = document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!;
+  const toggle = document.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
   await userEvent.click(toggle);
   await openReader();
   await userEvent.keyboard("{Escape}");

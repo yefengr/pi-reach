@@ -80,7 +80,7 @@ async function settle() {
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 }
 async function openTool(index = 0) {
-  for (const group of document.querySelectorAll<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button[aria-expanded='false']")) await userEvent.click(group);
+  for (const group of document.querySelectorAll<HTMLButtonElement>("button.pwa-process-head[aria-expanded='false']")) await userEvent.click(group);
   const button = document.querySelectorAll<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")[index]!;
   await userEvent.click(button);
   await expect.poll(() => toolReader()).not.toBeNull();
@@ -130,7 +130,7 @@ test.each([1440, 390])("a running tool keeps one reader body and follows complet
     tool_call_id: "stream", tool: "bash", args: { command: "fixed fixture" }, status: "delta", blocks: [{ type: "text", text: "First output" }],
   } } satisfies TimelineViewItem;
   flushSync(() => controls.current!.setRows([running]));
-  const group = document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!;
+  const group = document.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
   await userEvent.click(group);
   const source = document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!;
   await userEvent.click(source);

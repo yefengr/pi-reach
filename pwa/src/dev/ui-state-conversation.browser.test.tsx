@@ -7,7 +7,7 @@ import type { GalleryState } from "./ui-state-fixtures";
 const input = () => document.querySelector<HTMLTextAreaElement>(".pwa-composer textarea")!;
 const send = () => document.querySelector<HTMLButtonElement>(".pwa-composer-send")!;
 const reader = () => document.querySelector<HTMLElement>(".pwa-tool-reader-scroll");
-const group = () => document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!;
+const group = () => document.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
 const historyOpen = () => Boolean(history.state?.piReachFileReader || history.state?.piReachToolReader || history.state?.piReachSummaryReader);
 async function choose(state: GalleryState) {
   await page.getByLabelText("演示状态", { exact: true }).selectOptions(state);
@@ -185,16 +185,20 @@ test("flow preserves thinking, tool expansion, reader and draft through formal l
   const composer = input();
   await userEvent.fill(composer, "连续推进不丢失");
   await choose("flow");
-  const thought = document.querySelector<HTMLButtonElement>(".pwa-thinking-head")!;
-  await userEvent.click(thought);
-  await next(1);
-  expect(document.querySelector(".pwa-thinking-head")).toBe(thought);
-  expect(thought.getAttribute("aria-expanded")).toBe("true");
-  await next(2);
-  expect(document.querySelector(".pwa-thinking-head")).toBe(thought);
-  expect(thought.getAttribute("aria-expanded")).toBe("true");
+  // 运行中的过程组默认展开；先收起再展开，记录一次手动选择。
   const toolGroup = group();
+  expect(toolGroup.getAttribute("aria-expanded")).toBe("true");
   await userEvent.click(toolGroup);
+  await userEvent.click(toolGroup);
+  expect(toolGroup.getAttribute("aria-expanded")).toBe("true");
+  await next(1);
+  expect(group()).toBe(toolGroup);
+  expect(toolGroup.getAttribute("aria-expanded")).toBe("true");
+  // 同轮工具加入同一过程组：组身份与手动展开均保持。
+  await next(2);
+  expect(group()).toBe(toolGroup);
+  expect(toolGroup.getAttribute("aria-expanded")).toBe("true");
+  expect(document.querySelectorAll(".pwa-process-group")).toHaveLength(1);
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!);
   await expect.poll(reader).not.toBeNull();
   // 抽屉为模态：阅读器打开时页面控件在遮罩后不可操作，先关闭再推进。
@@ -216,7 +220,7 @@ test("flow preserves thinking, tool expansion, reader and draft through formal l
   expect(composer.value).toBe("连续推进不丢失");
   await next(6);
   expect(reader()).toBeNull();
-  expect(document.querySelector(".pwa-tool-group")).toBeNull();
+  expect(document.querySelector(".pwa-process-group")).toBeNull();
   await page.getByRole("button", { name: "重放流程", exact: true }).click();
   expect(document.querySelector("[data-flow-step]")?.getAttribute("data-flow-step")).toBe("0");
   expect(input()).toBe(composer);
