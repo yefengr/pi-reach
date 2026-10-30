@@ -218,7 +218,7 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
 });
 
 test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...replay, delay }))))(
-  "same-turn completion joins the reply before queue drain (width=$width frame=$frameMs delay=$delay)", async ({ width, frameMs, delay }) => {
+  "same-turn completion waits for the reply to finish before showing its time (width=$width frame=$frameMs delay=$delay)", async ({ width, frameMs, delay }) => {
   // 同轮正式 user 使 run_end 在回复尚有显示积压时就能生成真实完成时间。
   const user: TimelineEvent = { event_id: "completion-user", event_seq: 2, message_id: "completion-user",
     session_id: HANDOFF_SCOPE.sessionId, leaf_id: HANDOFF_SCOPE.leafId, group_id: "handoff-turn", timestamp: 2,
@@ -240,20 +240,17 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
     const event = { ...formal(body + suffix, true), event_seq: 3 };
     h.commit(event);
     expect(h.list.querySelector(".pwa-turn-meta")).toBeNull();
-    expect(h.list.querySelector(".pwa-thinking-status")).toBeNull();
+    expect(h.list.querySelector(".pwa-turn-activity")).toBeNull();
     const completion = recording.capture("completion", FORMAL_AT_MS, () => h.commit({
       event_id: "completion-run-end", event_seq: 4, session_id: HANDOFF_SCOPE.sessionId,
       leaf_id: event.leaf_id, group_id: "handoff-turn", timestamp: 3, kind: "run_end", status: "complete",
     }));
-    expect(h.list.querySelector(".pwa-turn-meta")).not.toBeNull();
+    // run_end 等本轮显示放完才呈现：回复仍在收尾时不出现完成时间，也不改变布局。
+    expect(h.list.querySelector(".pwa-turn-meta")).toBeNull();
     expect(completion.before.partial && completion.after.partial).toBe(true);
     expect(completion.before.queued && completion.after.queued).toBe(true);
-    expect(completion.after.height).toBeGreaterThan(completion.before.height);
-    expect(completion.before.top).toBeLessThanOrEqual(completion.after.bottom);
-    expect(completion.after.client).toBe(completion.before.client);
     expect(completion.after.header).toBe(completion.before.header);
     expect(completion.after.input).toBe(completion.before.input);
-    expect.soft(Math.abs(completion.after.old - completion.before.old)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
     expect.soft(synchronousJumps([completion])).toEqual([]);
     if (delay === 0) recording.capture("queue starts", FORMAL_AT_MS, () => h.receive(queue(false)));
     for (let time = FORMAL_AT_MS + frameMs; time <= SETTLED_AT_MS; time += frameMs) {
@@ -263,6 +260,8 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
       }
     }
     assertSettled(h, clock, event);
+    // 回复放完后完成时间出现，整个过程没有同步跳变。
+    expect(h.list.querySelector(".pwa-turn-meta")).not.toBeNull();
     expect(synchronousJumps(recording.samples)).toEqual([]);
   } finally { recording.close(); await h.screen.unmount(); clock.restore(); }
 });

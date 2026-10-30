@@ -31,7 +31,7 @@ describe("process group state transitions", () => {
   test("S01 initial running group is expanded synchronously without writing choices", () => {
     const choices = new Map<string, ProcessExpansion>();
     const a = tool("a");
-    expect(state(group(a), { choices })).toMatchObject({ expanded: true, expansionSource: "running", status: "running", activeEntry: a, canHostWorking: true });
+    expect(state(group(a), { choices })).toMatchObject({ expanded: true, expansionSource: "running", status: "running", activeEntry: a });
     expect(choices.size).toBe(0);
   });
 
@@ -45,21 +45,25 @@ describe("process group state transitions", () => {
   test("S03 all tools complete without run_end does not close a running group", () => {
     const g = group(tool("a", "complete"), tool("b", "complete"));
     const current = state(g);
-    expect(current).toMatchObject({ expanded: true, expansionSource: "running", status: "running", activeEntry: null, canHostWorking: true });
+    expect(current).toMatchObject({ expanded: true, expansionSource: "running", status: "running", activeEntry: null });
     expect([...current.entryStatuses.values()]).toEqual(["complete", "complete"]);
     expect(state(g, { running: false, previousExpanded: true })).toMatchObject({ expanded: true, expansionSource: "retained", status: "unknown" });
   });
 
-  test("S03 same-turn body changes hosting, not completion or expansion", () => {
+  test("S03 same-turn body after settled members collapses the group without completing it", () => {
     const g = group(tool("a", "complete"));
-    expect(state(g, { entries: [...g.entries, body], previousExpanded: true })).toMatchObject({ expanded: true, status: "running", canHostWorking: false });
-    expect(state(g, { entries: [...g.entries, body], running: false, previousExpanded: true })).toMatchObject({ expanded: true, status: "unknown", expansionSource: "retained" });
+    expect(state(g, { entries: [...g.entries, body], previousExpanded: true, supersededByText: true })).toMatchObject({ expanded: false, status: "running", expansionSource: "superseded" });
+    // 组内仍有进行中的成员时等其结束；手动展开与阅读保护优先于让位。
+    const running = group(tool("a", "complete"), tool("b"));
+    expect(state(running, { entries: [...running.entries, body], previousExpanded: true, supersededByText: true })).toMatchObject({ expanded: true, expansionSource: "running" });
+    expect(state(g, { supersededByText: true, protectedReading: true })).toMatchObject({ expanded: true, expansionSource: "protected" });
+    expect(state(g, { supersededByText: true, choices: withProcessExpansion(new Map(), ["a"], true) })).toMatchObject({ expanded: true, expansionSource: "manual" });
   });
 
   test("S04 completion and repeated completion are idempotent", () => {
     const g = group(tool("a", "complete"));
     const first = state(g, { completion: end, previousExpanded: true });
-    expect(first).toMatchObject({ expanded: false, expansionSource: "completed", status: "complete", activeEntry: null, canHostWorking: false });
+    expect(first).toMatchObject({ expanded: false, expansionSource: "completed", status: "complete", activeEntry: null });
     expect(state(g, { completion: { ...end }, previousExpanded: first.expanded })).toEqual(first);
   });
 
@@ -82,29 +86,29 @@ describe("process group state transitions", () => {
     const g = group(tool("a"));
     const choices = new Map<string, ProcessExpansion>();
     const offline = state(g, { live: false, previousExpanded: true, choices });
-    expect(offline).toMatchObject({ expanded: true, expansionSource: "retained", status: "unknown", activeEntry: null, canHostWorking: false });
+    expect(offline).toMatchObject({ expanded: true, expansionSource: "retained", status: "unknown", activeEntry: null });
     expect(state(g, { live: false, previousExpanded: false })).toMatchObject({ expanded: false, expansionSource: "retained" });
     expect(state(g, { running: false, previousExpanded: true })).toMatchObject({ expanded: true, status: "unknown" });
     expect(state(g, { previousExpanded: offline.expanded, choices })).toMatchObject({ expanded: true, status: "running" });
     expect(choices.size).toBe(0);
   });
 
-  test("S08 old turn / idle residue cannot host current Working", () => {
+  test("S08 old turn / idle residue is not a current running member", () => {
     const g = group(tool("old"));
     const current: PresentationEntry = { ...body, groupId: "new" };
-    expect(state(g, { entries: [current, ...g.entries] })).toMatchObject({ status: "unknown", activeEntry: null, canHostWorking: false });
+    expect(state(g, { entries: [current, ...g.entries] })).toMatchObject({ status: "unknown", activeEntry: null });
     const entries = [...g.entries, { kind: "record", key: "pending", item: {
       kind: "pending", id: "p", clientRequestId: "p", requestId: "p", text: "next", createdAt: 3, delivery: "pending",
     } } satisfies PresentationEntry];
     const activity = timelineActivity(entries, true, true, () => false, new Set(["old"]));
     expect(activity.working).toBe(true);
-    expect(state(g, { entries, activity })).toMatchObject({ status: "unknown", activeEntry: null, canHostWorking: false });
+    expect(state(g, { entries, activity })).toMatchObject({ status: "unknown", activeEntry: null });
   });
 
   test("S09/S15 run_end beats late working and leaves unmatched partials unknown", () => {
     const g = group(thought("thinking"), tool("a"));
     const result = state(g, { completion: end, running: true });
-    expect(result).toMatchObject({ status: "unknown", activeEntry: null, expanded: false, canHostWorking: false });
+    expect(result).toMatchObject({ status: "unknown", activeEntry: null, expanded: false });
     expect([...result.entryStatuses.values()]).toEqual(["unknown", "unknown"]);
     expect(processGroupSummary(g, result.entryStatuses, en.tools)).toMatchObject({ unknownCount: 2, failureCount: 0, interruptedCount: 0 });
   });
@@ -141,7 +145,7 @@ describe("process group state transitions", () => {
     const g = group(a, b, thinking);
     expect(state(g)).toMatchObject({ activeEntry: thinking, additionalRunningTools: 2 });
     const after = state(g, { entries: [...g.entries, body] });
-    expect(after).toMatchObject({ activeEntry: b, additionalRunningTools: 1, canHostWorking: false });
+    expect(after).toMatchObject({ activeEntry: b, additionalRunningTools: 1 });
     expect(after.entryStatuses.get(thinking.key)).toBe("unknown");
     const finished = group(tool("a", "complete"), tool("b", "complete"), thinking);
     expect(state(finished, { entries: [...finished.entries, body] }).activeEntry).toBeNull();
@@ -162,17 +166,6 @@ describe("process group state transitions", () => {
     expect(state(g, { completion: end, protectedReading: false, previousExpanded: true })).toMatchObject({ expanded: false, expansionSource: "completed" });
     expect(state(g, { completion: end, protectedReading: true, choices: withProcessExpansion(new Map(), ["a"], false) })).toMatchObject({ expanded: false, expansionSource: "manual" });
     expect(state(g, { completion: end, protectedReading: false, choices: withProcessExpansion(new Map(), ["a"], true) })).toMatchObject({ expanded: true, expansionSource: "manual" });
-  });
-
-  test("Working hosting requires the final timeline entry and the current running boundary", () => {
-    const g = group(tool("a", "complete"));
-    const record: PresentationEntry = { kind: "record", key: "record", item: { kind: "event", event: {
-      ...scope, kind: "custom", event_id: "custom", timestamp: 1, payload: {}, truncated: false,
-    } } };
-    expect(state(g).canHostWorking).toBe(true);
-    expect(state(g, { entries: [...g.entries, record] }).canHostWorking).toBe(false);
-    expect(state(g, { entries: [...g.entries, thought("other")] }).canHostWorking).toBe(false);
-    expect(state(g, { running: false }).canHostWorking).toBe(false);
   });
 });
 

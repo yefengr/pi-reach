@@ -174,6 +174,8 @@ function applyQueueInFlight(pending: Pending, editable: boolean): void {
   else pending.queueInFlight = true;
 }
 function mergePartial(previous: TimelinePartial | undefined, next: TimelinePartial): TimelinePartial {
+  // 调用开始执行后不退回准备中：迟到的准备帧只可能携带更旧的参数。
+  if (previous?.kind === "tool" && previous.status !== "preparing" && next.kind === "tool" && next.status === "preparing") return previous;
   if (!previous || ("blocks" in next && next.blocks !== undefined)) return next;
   if (next.delta === undefined) return { ...next, ...(previous.delta === undefined ? {} : { delta: previous.delta }) };
   return { ...next, delta: `${previous.delta ?? ""}${next.delta}` };
@@ -1049,6 +1051,12 @@ export class TimelineRuntime {
     if (event.kind === "assistant" || event.kind === "provider_error" || event.kind === "tool") {
       for (const [partialId, partial] of this.partials) {
         if (matchesFormalMessage(partial.partial, event)) this.partials.delete(partialId);
+      }
+    }
+    // 运行已结束仍在准备中的调用从未执行（如模型中止），不会有正式结果；与刷新后的历史一致，不再显示。
+    if (event.kind === "run_end") {
+      for (const [partialId, { partial }] of this.partials) {
+        if (partial.kind === "tool" && partial.status === "preparing" && partial.session_id === event.session_id && partial.group_id === event.group_id) this.partials.delete(partialId);
       }
     }
   }

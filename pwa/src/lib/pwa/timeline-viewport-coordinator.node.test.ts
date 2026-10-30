@@ -197,6 +197,24 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.layout.top() - tops[4]).toBeGreaterThanOrEqual(before);
   });
 
+  test("a settle mid-glide keeps following when the last programmatic write reports back", () => {
+    const f = fixture();
+    // 运行中的过程组与流式回复同样声明为实时末尾行。
+    f.stream({ row: "process", streaming: true }); f.core.notify("commit");
+    f.setBottom(130); f.core.notify("commit");
+    f.step(16); f.step(32);
+    const midway = f.layout.top();
+    expect(midway).toBeGreaterThan(100);
+    expect(midway).toBeLessThan(130);
+    // 窗口尺寸变化在逐帧接续途中触发 settle；上一次写入的原生 scroll 随后才到达，不能被当成回看。
+    f.core.settle("viewport-resize");
+    f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+    // 之后真正的用户滚动落点不同，仍按回看处理。
+    f.setTop(midway - 40); f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+  });
+
   test("only live replies glide: a streamed row keeps gliding through formal takeover, history replies snap", () => {
     const f = fixture();
     // 直接到达或历史加载的正式回复不平滑。

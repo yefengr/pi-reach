@@ -141,3 +141,51 @@ export function rehypeStreamReveal(options: StreamRevealOptions) {
     wrapChildren(tree, options, first);
   };
 }
+
+/** 流式补闭合处理的行内标记；`_` 与单个 `*` 易与标识符、列表混淆，不处理。 */
+const PAIRED_MARKERS = ["**", "~~"] as const;
+/** 正在生成中的链接：`[文字](` 之后地址未闭合。 */
+const PARTIAL_LINK = /\[[^\]\n]*\]\([^)\s]*$/;
+
+/** 末尾未闭合的代码围栏内不处理行内标记。 */
+function insideFence(text: string): boolean {
+  let fence: string | null = null;
+  for (const line of text.split("\n")) {
+    const marker = FENCE.exec(line)?.[1];
+    if (!marker) continue;
+    if (fence === null) fence = marker;
+    else if (marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null;
+  }
+  return fence !== null;
+}
+
+/**
+ * 流式正文最后一块的临时补闭合：未闭合的 `**`、`~~` 与行内代码按打开顺序反向补齐，
+ * 生成中的链接从 `[` 起暂缓显示；只在末尾追加或截断，已显示文字的偏移不变，淡入标记仍然对齐。
+ * 标记后还没有内容时暂缓该标记本身，避免渲染出字面量。
+ */
+export function closeStreamingInline(text: string): string {
+  if (insideFence(text)) return text;
+  const paragraph = text.search(/\n[ \t]*\n(?![\s\S]*\n[ \t]*\n)/);
+  const start = paragraph < 0 ? 0 : paragraph;
+  const tail = text.slice(start);
+  const ticks = tail.match(/`/g)?.length ?? 0;
+  if (ticks % 2 === 1) return /`\s*$/.test(tail) ? text.replace(/`\s*$/, "") : `${text}\``;
+  const link = PARTIAL_LINK.exec(tail);
+  if (link) return text.slice(0, start + link.index);
+  // 行内代码中的标记不参与配对。
+  const scan = tail.replace(/`[^`]*`/g, (span) => " ".repeat(span.length));
+  const open: { marker: string; at: number }[] = [];
+  for (const marker of PAIRED_MARKERS) {
+    const positions = [...scan.matchAll(marker === "**" ? /\*\*/g : /~~/g)].map((match) => match.index);
+    if (positions.length % 2 === 1) open.push({ marker, at: positions.at(-1)! });
+  }
+  if (open.length === 0) return text;
+  open.sort((left, right) => right.at - left.at);
+  const trimmed = text.replace(/\s+$/, "");
+  const latest = open[0]!;
+  if (start + latest.at + latest.marker.length >= trimmed.length) return text.slice(0, start + latest.at);
+  // 收尾标记只到了一半（`**文字*`）：只补缺少的一个字符。
+  // 收尾标记须紧贴文字才能闭合，末尾空白先去掉（只截断末尾，不改变已显示偏移）。
+  return trimmed + open.map(({ marker }, index) => index === 0 && marker === "**" && /[^*]\*$/.test(trimmed) ? "*" : marker).join("");
+}

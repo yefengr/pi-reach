@@ -26,7 +26,6 @@ type Source = {
   live: boolean;
   running: boolean;
   ended: boolean;
-  showWorking: boolean;
   choices: ReadonlyMap<string, ProcessExpansion>;
 };
 type Snapshot = Source & {
@@ -36,7 +35,7 @@ type Snapshot = Source & {
   states: ReadonlyMap<string, ProcessGroupState>;
 };
 function project(previous: Snapshot | undefined, patch: Partial<Source>): Snapshot {
-  const source: Source = { entries: [], live: true, running: true, ended: false, showWorking: false, choices: new Map(), ...previous, ...patch };
+  const source: Source = { entries: [], live: true, running: true, ended: false, choices: new Map(), ...previous, ...patch };
   const groups = processGroups(source.entries, new Set(), previous?.groups);
   const observed = observeProcessEntries(source.entries, previous?.observed ?? new Map());
   const activity = timelineActivity(source.entries, source.live, source.running, () => source.ended);
@@ -74,7 +73,7 @@ async function harness(options: Partial<Source> = {}) {
       return project(previous, { choices: withProcessExpansion(previous.choices, group.entries.map(entry => entry.key), expanded) });
     });
     return <div style={{ maxWidth: 720, width: "100%" }}>{source.groups.map(group => <ProcessGroupView key={group.key} group={group} state={source.states.get(group.key)!}
-      showWorking={source.showWorking} onToggle={toggle} onRead={read} onFocusWithinChange={focused} onRunningToolsChange={visible} />)}</div>;
+      onToggle={toggle} onRead={read} onFocusWithinChange={focused} onRunningToolsChange={visible} />)}</div>;
   }
   const screen = await renderPwa(<Harness />);
   const root = () => document.querySelector<HTMLElement>(".pwa-process-group")!;
@@ -115,10 +114,10 @@ test("collapsed header switches immediately to the latest still-running item and
   expect(view.head().textContent).toContain("pnpm first");
   expect(view.head().textContent).not.toContain("pnpm second");
   expect(view.head().textContent).not.toContain("+0");
-  view.update({ entries: [tool("first", "complete"), tool("second", "complete")], showWorking: true });
-  expect(view.head().textContent).toContain(en.timeline.working);
+  // 组头不再承载 Working：全部完成后显示分类摘要，Working 只在时间线末尾兜底。
+  view.update({ entries: [tool("first", "complete"), tool("second", "complete")] });
+  expect(view.head().textContent).not.toContain(en.timeline.working);
   expect(view.head().textContent).not.toMatch(/pnpm (first|second)/);
-  expect(getComputedStyle(view.head().querySelector(".pwa-process-working")!).fontSize).toBe(getComputedStyle(view.head()).fontSize);
 });
 
 test("a current Thinking header counts every parallel running tool and does not restart title motion", async () => {

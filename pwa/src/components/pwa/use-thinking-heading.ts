@@ -43,5 +43,6 @@ export function useThinkingHeading(parsed: ThinkingTextResult, streaming: boolea
     }, THINKING_SUMMARY_WINDOW_MS);
   }, [epoch, streaming, title, summary, current.summary]);
 
-  return title ?? (streaming && summary ? current.summary : undefined);
+  // 结束后保留最后有效摘要（加粗标题优先，其次首行摘要），不退回占位，已显示的内容不消失。
+  return title ?? (streaming ? (summary ? current.summary : undefined) : summary);
 }

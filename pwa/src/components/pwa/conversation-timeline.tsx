@@ -8,6 +8,7 @@ import { effectiveProcessStatus, isPartialEntry, observeProcessEntries, timeline
 import { processGroups, processNoticeBreakKeys, type ProcessEntry, type ProcessGroup as ProcessGroupModel } from "./process-groups";
 import { ProcessGroup } from "./process-group";
 import { useProcessPresentation } from "./use-process-presentation";
+import { useEnteredKeys, useIdleWorking } from "./use-turn-activity";
 import { COLLAPSE_EXIT_FALLBACK_MARGIN_MS } from "./collapse";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import { SummaryEntry, SummaryReader } from "./summary-reader";
@@ -56,15 +57,15 @@ const NO_NOTICES: readonly CompactionNotice[] = [];
 type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string, number>; groups: readonly ProcessGroupModel[] };
 
 /** Pi 回复靠左占满阅读列、无底色；不显示发送方，只为读屏保留「Pi：」。 */
-function TextRow({ entry }: { entry: TextEntry }) {
+function TextRow({ entry, entering }: { entry: TextEntry; entering: boolean }) {
   const { t } = useI18n();
   const row = useRef<HTMLElement | null>(null);
   // 流式新显示的文字淡入；正式版本接管后不再新增片段，已开始的淡入原位完成。
   const reveal = useStreamRevealMarks(entry.text, entry.streaming);
   useStreamRevealAnimation(row, reveal);
-  return <article ref={row} className={`pwa-message assistant${entry.streaming ? " partial" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key} data-viewport-turn={entry.groupId}>
+  return <article ref={row} className={`pwa-message assistant${entry.streaming ? " partial" : ""}${entering ? " pwa-row-enter" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key} data-viewport-turn={entry.groupId}>
     <span className="pwa-sr-only">{t.timeline.srPi}</span>
-    <MarkdownContent text={entry.text} reveal={reveal} />
+    <MarkdownContent text={entry.text} reveal={reveal} streaming={entry.streaming} />
   </article>;
 }
 
@@ -75,9 +76,17 @@ function TurnMeta({ completion, interrupted, groupId }: { completion: RunComplet
   return <p className="pwa-turn-meta" data-viewport-completion={groupId}><time className="pwa-tabular" dateTime={new Date(completion.timestamp).toISOString()}>{format.time(completion.timestamp)}</time>{status ? <span className={completion.status === "error" ? "pwa-turn-status-error" : "pwa-turn-status"}> · {status}</span> : null}</p>;
 }
 
-function WorkingStatus() {
+/**
+ * 本轮活动区：运行期间在时间线末尾保持固定高度，Working 只在界面没有可见动作时淡入；
+ * 显隐只改透明度，不改变列表高度。
+ */
+function TurnActivitySlot({ working }: { working: boolean }) {
   const { t } = useI18n();
-  return <p className="pwa-thinking-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span className="pwa-working-label">{t.timeline.working}</span></p>;
+  return <p className="pwa-thinking-status pwa-turn-activity" role="status" data-working={working ? "true" : undefined}>
+    <span className="pwa-turn-activity-working" aria-hidden={working ? undefined : true}>
+      <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span className="pwa-working-label">{t.timeline.working}</span>
+    </span>
+  </p>;
 }
 
 /** 压缩进行中沿用 Working 行的高度与字号，避免与终态切换时跳动。 */
@@ -194,12 +203,16 @@ export function ConversationTimeline({ items, live, completions, running = false
   const idlePartials = useIdlePartials(view.entries, live && !running);
   const runEnded = (groupId: string) => completions?.has(groupId) === true;
   const activity = timelineActivity(view.entries, live, running, runEnded, idlePartials);
-  const { states, workingGroupKey, workingVisible, readingInline, chooseGroup, manualReading, reportFocus, reportIndicators } = useProcessPresentation({
-    groups, entries: view.entries, activity, observed, completions, compacting, readerEntryKey: reader?.selection.entryKey,
-    noticeAfterSeqs: notices.map(notice => notice.afterSeq),
+  const { states, toolMotionVisible, readingInline, chooseGroup, manualReading, reportFocus, reportIndicators } = useProcessPresentation({
+    groups, entries: view.entries, activity, observed, completions, readerEntryKey: reader?.selection.entryKey,
   });
+  // 活动区跟随本轮运行：开始运行起保留（出现时机与发送过渡、留白优先规则衔接），本轮结束呈现
+  // （显示已追上的 run_end）、Pi 空闲或离线时收起；Working 是其中的空窗兜底。
+  const slotPresent = !compacting && activity.working;
+  const workingVisible = useIdleWorking(view.entries, slotPresent, toolMotionVisible);
+  const entered = useEnteredKeys(view.entries, live);
   // 组由展开转为收起的同一提交里报告预计收回的高度，视口据此按净布局处理，不为同一提交的新增内容先向下追。
-  // 必须先于下方 Working 显隐通知：同一提交里协调器先得知收起，再处理 Working 等新增或移除。
+  // 必须先于下方活动区显隐通知：同一提交里协调器先得知收起，再处理活动区等新增或移除。
   const collapseDuration = usePwaMotionDuration("--pwa-duration-collapse-out");
   const presentedExpansion = useRef<ReadonlyMap<string, boolean>>(new Map());
   useLayoutEffect(() => {
@@ -216,23 +229,24 @@ export function ConversationTimeline({ items, live, completions, running = false
     }
     if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: collapseDuration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS } }));
   });
-  const previousWorking = useRef(workingVisible);
+  // 只有活动区的出现与收起改变高度；其中 Working 的显隐只改透明度，不通知视口。
+  const previousSlot = useRef(slotPresent);
   useLayoutEffect(() => {
-    if (previousWorking.current === workingVisible) return;
-    previousWorking.current = workingVisible;
+    if (previousSlot.current === slotPresent) return;
+    previousSlot.current = slotPresent;
     const list = listRef.current;
-    const working = workingVisible ? list?.querySelector<HTMLElement>(".pwa-working-label")?.parentElement : null;
+    const slot = slotPresent ? list?.querySelector<HTMLElement>(":scope > .pwa-turn-activity") : null;
     let added = 0;
-    if (working) {
-      const style = getComputedStyle(working);
-      const previous = working.previousElementSibling;
+    if (slot) {
+      const style = getComputedStyle(slot);
+      const previous = slot.previousElementSibling;
       const previousMargin = previous ? Number.parseFloat(getComputedStyle(previous).marginBottom) || 0 : 0;
-      // 只在 Working 提交时读取它自己的净占高，包含与上一行折叠后的外边距。
-      added = working.getBoundingClientRect().height + (Number.parseFloat(style.marginBottom) || 0)
+      // 只在活动区提交时读取它自己的净占高，包含与上一行折叠后的外边距。
+      added = slot.getBoundingClientRect().height + (Number.parseFloat(style.marginBottom) || 0)
         + Math.max(0, (Number.parseFloat(style.marginTop) || 0) - previousMargin);
     }
     list?.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "activity", added } }));
-  }, [workingVisible, listRef]);
+  }, [slotPresent, listRef]);
   // 只有手动展开申请 inline 锁；所有 Reader（含退出中）各自持有锁，不能互相释放。
   const reading = reader !== null || summaryReader !== null || scopedFileReader !== null || readingInline;
   const latest = useRef({ groups, entries: view.entries, onReadingChange, fileReadingChange });
@@ -343,13 +357,13 @@ export function ConversationTimeline({ items, live, completions, running = false
       return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true, entry.key)}</Fragment>;
     }
     // 思考与工具只经过程组呈现。
-    return entry.kind === "text" ? <TextRow entry={entry} key={entry.key} /> : null;
+    return entry.kind === "text" ? <TextRow entry={entry} entering={entered.has(entry.key)} key={entry.key} /> : null;
   };
   const renderGroup = (group: ProcessGroupModel) => <ProcessGroup
     key={group.key}
     group={group}
     state={states.get(group.key)!}
-    showWorking={workingGroupKey === group.key}
+    enteredKeys={entered}
     onToggle={toggleGroup}
     onRead={captureProcess}
     onFocusWithinChange={reportFocus}
@@ -361,7 +375,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   return <>
     {rows}
     {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
-    {compacting ? <CompactionStatus /> : workingVisible ? <WorkingStatus /> : null}
+    {compacting ? <CompactionStatus /> : slotPresent ? <TurnActivitySlot working={workingVisible} /> : null}
     {reader && readerEntry?.kind === "tool" ? <ToolReader key={reader.generation} value={readerEntry.value}
       status={effectiveProcessStatus(readerEntry, view.entries, activity) as Exclude<ReturnType<typeof effectiveProcessStatus>, "neutral">}
       opened={reader.opened} onClose={() => process.close(reader.token)} onExitTransitionEnd={() => finishReader(reader.token, reader.selection)} /> : null}

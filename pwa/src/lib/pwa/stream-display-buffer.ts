@@ -1,6 +1,8 @@
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
 import { matchesFormalMessage, partialMessageIdentity } from "./timeline-identity";
-import type { TimelinePartialView, TimelinePending, TimelineViewItem } from "./timeline-runtime";
+import { nonStreamTokens, partialText, sameItems, sameNonStreamTokens, type NonStreamToken } from "./stream-display-items";
+import { StreamStructureGate } from "./stream-structure-gate";
+import type { TimelinePartialView, TimelineViewItem } from "./timeline-runtime";
 
 const BASE_TICK_MS = 16;
 /** 目标显示延迟：积压按此时长换算成放出速率，吸收上游 chunk 的到达抖动，不再放完即停。 */
@@ -45,31 +47,6 @@ type StreamState = {
   seen: boolean;
 };
 
-type NonStreamToken =
-  | { kind: "event"; id: string; event: TimelineEvent }
-  | {
-    kind: "pending";
-    id: string;
-    clientRequestId: string;
-    text: string;
-    images: TimelinePending["images"];
-    createdAt: number;
-    delivery: TimelinePending["delivery"];
-    deliveryFailure: TimelinePending["deliveryFailure"];
-    statusQuery: TimelinePending["statusQuery"];
-    statusQueryUnsupported: TimelinePending["statusQueryUnsupported"];
-    lastEvidenceAt: TimelinePending["lastEvidenceAt"];
-    cancelable: boolean | undefined;
-    queued: boolean | undefined;
-    queueInFlight: boolean | undefined;
-    queuedAction: TimelinePending["queuedAction"];
-    queuedActionRequestId: string | undefined;
-    insertionStatus: TimelinePending["insertionStatus"];
-    insertionRequestedAt: number | undefined;
-    insertionNoticeDismissed: boolean | undefined;
-    messageId: string | undefined;
-  };
-
 export type StreamDisplayBufferChange = {
   items: TimelineViewItem[];
   shouldRender: boolean;
@@ -77,11 +54,6 @@ export type StreamDisplayBufferChange = {
   urgent: boolean;
   hasPending: boolean;
 };
-
-function partialText(partial: TimelinePartial): string {
-  if (partial.blocks !== undefined) return partial.blocks.map((block) => block.text).join("\n");
-  return partial.delta ?? "";
-}
 
 function hasBlocks(partial: TimelinePartial): boolean {
   return partial.blocks !== undefined;
@@ -145,112 +117,6 @@ function appendLaneText(state: StreamState, targetText: string): void {
   appendTargetGraphemes(cursor, state.targetText, targetText);
   cursor.visibleCount = Math.min(cursor.visibleCount, cursor.graphemes.length);
   state.elapsedMs = 0;
-}
-
-function itemId(item: TimelineViewItem): string {
-  if (item.kind === "event") return item.event.event_id;
-  if (item.kind === "partial") return item.partial.partial_id;
-  return item.clientRequestId;
-}
-
-type DeliveryMetadata = Pick<TimelinePending, "deliveryFailure" | "statusQuery" | "statusQueryUnsupported" | "lastEvidenceAt">;
-function sameDeliveryMetadata(a: DeliveryMetadata, b: DeliveryMetadata): boolean {
-  return a.deliveryFailure?.code === b.deliveryFailure?.code
-    && a.deliveryFailure?.retryable === b.deliveryFailure?.retryable
-    && a.statusQuery?.requestId === b.statusQuery?.requestId
-    && a.statusQuery?.requestedAt === b.statusQuery?.requestedAt
-    && a.statusQueryUnsupported === b.statusQueryUnsupported
-    && a.lastEvidenceAt === b.lastEvidenceAt;
-}
-
-function sameItem(a: TimelineViewItem, b: TimelineViewItem): boolean {
-  if (a.kind !== b.kind || itemId(a) !== itemId(b)) return false;
-  if (a.kind === "event" && b.kind === "event") return a.event === b.event;
-  if (a.kind === "pending" && b.kind === "pending") {
-    return a.delivery === b.delivery
-      && sameDeliveryMetadata(a, b)
-      && a.text === b.text
-      && a.createdAt === b.createdAt
-      && a.messageId === b.messageId
-      && a.cancelable === b.cancelable
-      && a.queued === b.queued
-      && a.queueInFlight === b.queueInFlight
-      && a.queuedAction === b.queuedAction
-      && a.queuedActionRequestId === b.queuedActionRequestId
-      && a.insertionStatus === b.insertionStatus
-      && a.insertionRequestedAt === b.insertionRequestedAt
-      && a.insertionNoticeDismissed === b.insertionNoticeDismissed
-      && a.images === b.images;
-  }
-  if (a.kind === "partial" && b.kind === "partial") return partialText(a.partial) === partialText(b.partial);
-  return false;
-}
-
-function sameItems(a: readonly TimelineViewItem[], b: readonly TimelineViewItem[]): boolean {
-  return a.length === b.length && a.every((item, index) => sameItem(item, b[index]));
-}
-
-function nonStreamTokens(items: readonly TimelineViewItem[]): NonStreamToken[] {
-  const tokens: NonStreamToken[] = [];
-  for (const item of items) {
-    if (item.kind === "event") {
-      tokens.push({ kind: "event", id: item.event.event_id, event: item.event });
-      continue;
-    }
-    if (item.kind === "pending") {
-      tokens.push({
-        kind: "pending",
-        id: item.id,
-        clientRequestId: item.clientRequestId,
-        text: item.text,
-        images: item.images,
-        createdAt: item.createdAt,
-        delivery: item.delivery,
-        // runtime 原位修改 pending；嵌套字段须按值捕获，不能持有可变引用。
-        deliveryFailure: item.deliveryFailure ? { ...item.deliveryFailure } : undefined,
-        statusQuery: item.statusQuery ? { ...item.statusQuery } : undefined,
-        statusQueryUnsupported: item.statusQueryUnsupported,
-        lastEvidenceAt: item.lastEvidenceAt,
-        cancelable: item.cancelable,
-        queued: item.queued,
-        queueInFlight: item.queueInFlight,
-        queuedAction: item.queuedAction,
-        queuedActionRequestId: item.queuedActionRequestId,
-        insertionStatus: item.insertionStatus,
-        insertionRequestedAt: item.insertionRequestedAt,
-        insertionNoticeDismissed: item.insertionNoticeDismissed,
-        messageId: item.messageId,
-      });
-    }
-  }
-  return tokens;
-}
-
-function sameNonStreamTokens(a: readonly NonStreamToken[], b: readonly NonStreamToken[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((token, index) => {
-    const next = b[index];
-    if (token.kind !== next.kind || token.id !== next.id) return false;
-    if (token.kind === "event" && next.kind === "event") return token.event === next.event;
-    if (token.kind === "pending" && next.kind === "pending") {
-      return token.clientRequestId === next.clientRequestId
-        && token.text === next.text
-        && token.images === next.images
-        && token.createdAt === next.createdAt
-        && token.delivery === next.delivery
-        && sameDeliveryMetadata(token, next)
-        && token.cancelable === next.cancelable
-        && token.queued === next.queued
-        && token.queueInFlight === next.queueInFlight
-        && token.queuedAction === next.queuedAction
-        && token.queuedActionRequestId === next.queuedActionRequestId
-        && token.insertionStatus === next.insertionStatus
-        && token.insertionRequestedAt === next.insertionRequestedAt
-        && token.insertionNoticeDismissed === next.insertionNoticeDismissed
-        && token.messageId === next.messageId;
-    }
-    return false;
-  });
 }
 
 function projectedPartial(state: StreamState): TimelinePartialView {
@@ -330,6 +196,7 @@ export class StreamDisplayBuffer {
   private displayed: TimelineViewItem[] = [];
   private renderedNonStreamTokens: NonStreamToken[] = [];
   private readonly streams = new Map<string, StreamState>();
+  private readonly gate = new StreamStructureGate();
 
   ingest(authoritative: readonly TimelineViewItem[]): StreamDisplayBufferChange {
     const previous = this.displayed;
@@ -363,6 +230,7 @@ export class StreamDisplayBuffer {
         urgent = true;
       }
     }
+    if (this.gate.plan(this.authoritative, this.laneBusy)) needsSnapshot = true;
 
     if (!needsSnapshot) return this.unchanged();
     return { ...this.rebuild(previous, true), urgent };
@@ -457,6 +325,7 @@ export class StreamDisplayBuffer {
     const previous = this.displayed;
     this.authoritative = [...authoritative];
     this.streams.clear();
+    this.gate.reset(this.authoritative);
     const partials = this.authoritative.filter((item): item is TimelinePartialView => item.kind === "partial");
     for (const partial of partials) {
       const targetText = partialText(partial.partial);
@@ -494,10 +363,12 @@ export class StreamDisplayBuffer {
   advance(elapsedMs = BASE_TICK_MS): StreamDisplayBufferChange {
     const previous = this.displayed;
     const elapsed = Math.max(0, elapsedMs);
+    this.gate.tick(elapsed);
     let changed = false;
     for (const state of this.streams.values()) {
       const cursor = state.cursor;
-      if (cursor === null) continue;
+      // 排队中的新行尚未显示，不提前消耗其文字。
+      if (cursor === null || !this.laneReleased(state)) continue;
       const backlog = cursor.graphemes.length - cursor.visibleCount;
       if (backlog > 0) {
         const release = state.finishing === null ? paceRelease(state, backlog, elapsed) : finishRelease(state, backlog, elapsed);
@@ -515,6 +386,8 @@ export class StreamDisplayBuffer {
       }
     }
     if (this.completeFinished()) changed = true;
+    if (this.gate.plan(this.authoritative, this.laneBusy)) changed = true;
+    if (this.gate.holdsExpired()) changed = true;
     if (!changed) return this.unchanged();
     return this.rebuild(previous, true);
   }
@@ -535,7 +408,22 @@ export class StreamDisplayBuffer {
   }
 
   hasPending(): boolean {
-    return [...this.streams.values()].some((state) => !isDrained(state));
+    return [...this.streams.values()].some((state) => !isDrained(state))
+      || this.gate.waiting(this.authoritative) || this.gate.holdingTools();
+  }
+
+  /** 已显示的条目是否仍在放文字（含收尾 lane），供结构门控判断后续新行能否放出。 */
+  private readonly laneBusy = (item: TimelineViewItem): boolean => {
+    if (item.kind === "partial") {
+      const state = this.streams.get(item.partial.partial_id);
+      return state !== undefined && state.finishing === null && !isDrained(state);
+    }
+    if (item.kind !== "event") return false;
+    return [...this.streams.values()].some((state) => state.finishing === item.event.event_id);
+  };
+
+  private laneReleased(state: StreamState): boolean {
+    return this.gate.isReleased(state.finishing ?? state.partial.partial.partial_id);
   }
 
   private formalEvents(): TimelineEvent[] {
@@ -545,16 +433,19 @@ export class StreamDisplayBuffer {
   }
 
   private buildSnapshot(): TimelineViewItem[] {
-    // 保留运行态顺序；主机 timestamp 和浏览器 createdAt 不能用于跨端比较。
+    this.gate.beginBuild();
+    // 保留运行态顺序；主机 timestamp 和浏览器 createdAt 不能用于跨端比较。排队中的新行暂不显示。
     return this.authoritative.flatMap((item): TimelineViewItem[] => {
+      if (!this.gate.visible(item)) return [];
       if (item.kind === "event") {
         // 收尾中的正式版本由对应 lane 原位代替，按内容顺序排列。
         const lanes = [...this.streams.values()].filter((state) => state.finishing === item.event.event_id);
-        return lanes.length ? lanes.sort((a, b) => contentIndex(a) - contentIndex(b)).map(projectedPartial) : [item];
+        // 工具在最短运行展示期内仍显示进行中视图，到期后才交接正式结果。
+        return lanes.length ? lanes.sort((a, b) => contentIndex(a) - contentIndex(b)).map(projectedPartial) : [this.gate.toolView(item)];
       }
       if (item.kind !== "partial") return [item];
       const state = this.streams.get(item.partial.partial_id);
-      return state && state.finishing === null ? [projectedPartial(state)] : [];
+      return state && state.finishing === null ? [this.gate.toolView(projectedPartial(state))] : [];
     });
   }
 

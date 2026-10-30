@@ -24,13 +24,15 @@ function completed(id: string): TimelineViewItem {
 
 const head = () => document.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
 const headIcon = () => head().querySelector<SVGSVGElement>(".pwa-process-status-slot > svg");
-/** 通用 Working 可在末尾兜底行，也可由末段过程组的组头承载。 */
-const workingShown = () => document.querySelector(".pwa-working-label, .pwa-process-working") !== null;
+/** Working 只在末尾活动区、界面静止后显示；组头不承载。 */
+const workingShown = () => document.querySelector(".pwa-turn-activity[data-working], .pwa-process-working") !== null;
+/** 界面静止超过空闲阈值后 Working 出现在末尾活动区。 */
+const workingAfterIdle = () => expect.poll(() => document.querySelector(".pwa-turn-activity[data-working]")?.textContent).toBe("Working…");
 
 /** 已绘制的具体运行图标：明细行的工具图标，或组头正显示成员时的状态图标；裁剪在折叠区外的不算。 */
 function paintedSpinner(): boolean | null {
   let subpixelBoundary = false;
-  const headMember = head() && head().querySelector(".pwa-process-working") === null ? [headIcon()] : [];
+  const headMember = head() ? [headIcon()] : [];
   for (const svg of [...document.querySelectorAll<SVGSVGElement>(".pwa-process-details .pwa-tool-spinner"), ...headMember]) {
     if (!svg || !svg.classList.contains("pwa-spin") && !svg.classList.contains("pwa-tool-spinner")) continue;
     if (!svg.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
@@ -73,9 +75,9 @@ async function sampleTransition(action: () => void, reverse = false) {
     requestAnimationFrame(sample);
   });
   expect(samples.length).toBeGreaterThan(1);
-  // 运行中每个已绘制帧只出现一种提示：具体运行图标或通用 Working，既不重复也不留空窗。
-  for (const sample of samples) if (sample.spinner !== null) {
-    expect(sample.working, JSON.stringify(sample)).toBe(!sample.spinner);
+  // 已绘制转动图标的帧不再显示 Working；没有转动图标时由空闲计时决定，过渡窗口内不要求立即出现。
+  for (const sample of samples) if (sample.spinner === true) {
+    expect(sample.working, JSON.stringify(sample)).toBe(false);
   }
   return samples;
 }
@@ -94,7 +96,7 @@ async function renderTimeline(initial: TimelineViewItem[], style?: CSSProperties
 }
 
 const cases = [1280, 390].flatMap(width => ["no-preference", "reduce"].map(motion => ({ width, motion })));
-test.each(cases)("Working visibility follows painted collapse frames at $width px ($motion)", async ({ width, motion }) => {
+test.each(cases)("a painted spinner keeps Working hidden through collapse frames at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
   const update = await renderTimeline([running("a"), running("b")], { width: "100vw", height: "100vh" });
@@ -111,22 +113,22 @@ test.each(cases)("Working visibility follows painted collapse frames at $width p
   for (const frame of [...exiting, ...entering]) expect(frame).toMatchObject({ spinner: true, working: false });
   expect(headIcon()).toBe(icon);
   await sampleTransition(toggle, true);
-  // 全部工具结束但本轮未收到 run_end：Working 原位交给末段组头，不伪造结束。
+  // 全部工具结束但本轮未收到 run_end：静止后在末尾活动区兜底，组头不承载，也不伪造结束。
   const finished = await sampleTransition(() => update([completed("a"), completed("b")]));
-  expect(finished.at(-1)).toMatchObject({ spinner: false, working: true });
-  expect(head().querySelector(".pwa-process-working")?.textContent).toBe("Working…");
-  expect(document.querySelector(".pwa-thinking-status")).toBeNull();
+  expect(finished.at(-1)).toMatchObject({ spinner: false });
+  await workingAfterIdle();
+  expect(head().querySelector(".pwa-process-working")).toBeNull();
   const previous = [completed("a"), completed("b"), running("c")];
   update(previous);
   expect(snapshot()).toMatchObject({ spinner: true, working: false });
   const next: TimelineEvent = { ...scope, group_id: "next", event_id: "next-user", message_id: "next-user", timestamp: 2, kind: "user", status: "committed", origin: "pwa", sender_ref: "me", delivery: "normal", blocks: [{ type: "text", text: "Next turn" }] };
   update([...previous, { kind: "event", event: next }]);
-  // 旧轮过程组不能挂回新轮的 Working，也不能压制新轮的末尾兜底。
+  // 旧轮过程组的转动图标不能压制新轮的末尾兜底。
   expect(document.querySelector(".pwa-process-working")).toBeNull();
-  expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+  await workingAfterIdle();
   update([{ kind: "event", event: next }]);
   expect(document.querySelector(".pwa-process-group")).toBeNull();
-  expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+  expect(document.querySelector(".pwa-turn-activity")).not.toBeNull();
 });
 
 test.each(cases)("a running heading keeps its status icon and layout while members change at $width px ($motion)", async ({ width, motion }) => {
@@ -154,10 +156,13 @@ test.each(cases)("a running heading keeps its status icon and layout while membe
   expect(headIcon()).toBe(spinner);
   expect(spinner.getAnimations()[0]).toBe(spin);
   update(["a", "b", "c", "d", "e"].map(completed));
-  expect(snapshot()).toMatchObject({ spinner: false, working: true, bottom: before.bottom });
+  // 活动区高度不变：Working 静止后淡入，不改变列表高度。
+  expect(snapshot()).toMatchObject({ spinner: false, bottom: before.bottom });
+  await workingAfterIdle();
+  expect(snapshot().bottom).toBe(before.bottom);
 });
 
-test.each(cases)("a hidden member indicator immediately restores Working at $width px ($motion)", async ({ width, motion }) => {
+test.each(cases)("a hidden member indicator no longer suppresses Working at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
   const update = await renderTimeline([running("a")]);
@@ -166,16 +171,15 @@ test.each(cases)("a hidden member indicator immediately restores Working at $wid
   const status = headIcon()!.parentElement!;
   status.style.opacity = "0";
   update([running("a"), running("b")]);
-  // 组头仍显示成员文案时无法承载 Working，交给末尾兜底，不留无提示空窗。
-  expect(snapshot()).toMatchObject({ spinner: false, working: true });
-  expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+  // 看不见的转动图标不算动作：静止后由末尾活动区兜底。
+  expect(snapshot()).toMatchObject({ spinner: false });
+  await workingAfterIdle();
   status.style.opacity = "1";
   update([completed("a"), running("b")]);
   expect(snapshot()).toMatchObject({ spinner: true, working: false });
-  expect(document.querySelector(".pwa-thinking-status")).toBeNull();
 });
 
-test.each(cases)("completed to running heading is visible immediately at $width px ($motion)", async ({ width, motion }) => {
+test.each(cases)("completed to running heading suppresses Working immediately at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
   const update = await renderTimeline([running("a")]);
@@ -183,7 +187,8 @@ test.each(cases)("completed to running heading is visible immediately at $width 
   await expect.poll(() => document.querySelector(".pwa-process-details")).toBeNull();
   const runningBottom = snapshot().bottom;
   update([completed("a")]);
-  expect(snapshot()).toMatchObject({ spinner: false, working: true, bottom: runningBottom });
+  expect(snapshot()).toMatchObject({ spinner: false, bottom: runningBottom });
+  await workingAfterIdle();
   const frames = await sampleTransition(() => update([completed("a"), ...["b", "c", "d", "e"].map(running)]));
   for (const frame of frames) expect(frame).toMatchObject({ spinner: true, working: false, bottom: runningBottom });
 });

@@ -5,7 +5,8 @@ import type { TimelineViewItem } from "./timeline-runtime";
 const FALLBACK_FRAME_MS = 16;
 /** rAF 提交的最小间隔：60Hz 每帧提交，120Hz 隔帧提交，限制 Markdown 渲染频率。 */
 const MIN_FRAME_INTERVAL_MS = 12;
-type PublishDisplay = (items: TimelineViewItem[], realtime: boolean) => void;
+/** pending：显示是否仍落后于权威快照（文字未放完、新行排队或工具保持运行态）。 */
+type PublishDisplay = (items: TimelineViewItem[], realtime: boolean, pending: boolean) => void;
 type FrameHandle = { cancel(): void };
 
 /** 跟随显示刷新提交；无 rAF 的环境（Node 测试、后台 Worker）退回等间隔定时器。 */
@@ -31,11 +32,23 @@ export class StreamDisplayScheduler {
   private hidden = false;
   private dirty = false;
   private advancedAt = 0;
+  private pendingPublished = false;
 
-  constructor(private readonly buffer: StreamDisplayBuffer, private publish: PublishDisplay) {}
+  private publish: PublishDisplay;
+
+  constructor(private readonly buffer: StreamDisplayBuffer, publish: PublishDisplay) {
+    this.publish = this.tracking(publish);
+  }
 
   setPublisher(publish: PublishDisplay): void {
-    this.publish = publish;
+    this.publish = this.tracking(publish);
+  }
+
+  private tracking(publish: PublishDisplay): PublishDisplay {
+    return (items, realtime, pending) => {
+      this.pendingPublished = pending;
+      publish(items, realtime, pending);
+    };
   }
 
   update(items: readonly TimelineViewItem[], reset = false): void {
@@ -47,7 +60,7 @@ export class StreamDisplayScheduler {
     if (this.hidden) return;
     if (reset || change.urgent) {
       this.clearTimer();
-      this.publish(change.items, false);
+      this.publish(change.items, false, change.hasPending);
       this.dirty = false;
     }
     this.schedule();
@@ -57,7 +70,7 @@ export class StreamDisplayScheduler {
     if (this.hidden === hidden) return;
     this.hidden = hidden;
     this.cancel();
-    if (!hidden) this.publish(this.buffer.flush().items, true);
+    if (!hidden) this.publish(this.buffer.flush().items, true, false);
   }
 
   /** 生命周期边界同时作废已入任务队列但尚未执行的旧回调。 */
@@ -82,7 +95,8 @@ export class StreamDisplayScheduler {
       const now = performance.now();
       const change = this.buffer.advance(now - this.advancedAt);
       this.advancedAt = now;
-      if (this.dirty || change.shouldRender) this.publish(change.items, true);
+      // 内容未变但显示刚排空时也要发布一次，让依赖「显示已追上」的状态（如本轮结束呈现）及时更新。
+      if (this.dirty || change.shouldRender || change.hasPending !== this.pendingPublished) this.publish(change.items, true, change.hasPending);
       this.dirty = false;
       this.schedule();
     });

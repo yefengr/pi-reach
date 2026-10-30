@@ -20,6 +20,9 @@
 /* 入场位移只在气泡自身的静态框内绘制，不侵入下方状态行或改变滚动几何。 */
 .pwa-user-bubble-frame { display: flow-root; width: fit-content; max-width: 80%; margin-left: auto; overflow: clip; border-radius: var(--pwa-radius-md); }
 .pwa-user-bubble-frame > .pwa-message.user { width: auto; max-width: none; margin: 0; }
+/* 在线会话追加的新行（正文、过程组与组内成员）只淡入，不位移、不做高度动画；位移由跟随滚动承担。 */
+.pwa-row-enter { animation: pwa-row-enter var(--pwa-duration-message-in) var(--pwa-ease-standard); }
+@keyframes pwa-row-enter { from { opacity: 0; } to { opacity: 1; } }
 .pwa-user-message-in { animation: pwa-user-message-in var(--pwa-duration-message-in) var(--pwa-ease-enter); }
 @keyframes pwa-user-message-in {
   from { opacity: 0; transform: translateY(calc(var(--pwa-message-shift) * var(--pwa-motion-shift))); }
@@ -36,9 +39,11 @@
 /* 与过程组组头保持相同的字号、字重、高度和外边距；运行色与左侧图标一致，保持正体，不与思考标题共用斜体。 */
 .pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
-/* 图标即时反馈，文字只淡入；不移动状态行、不延迟真实运行状态。 */
-.pwa-working-label { animation: pwa-working-label-in var(--pwa-duration-fade) var(--pwa-ease-enter); }
-@keyframes pwa-working-label-in { from { opacity: 0; } to { opacity: 1; } }
+/* 本轮活动区：沿用 Working 行的高度与外边距，Working 只在界面没有可见动作时淡入；显隐只改透明度，不改变列表高度。 */
+.pwa-turn-activity-working { display: inline-flex; align-items: center; gap: var(--pwa-space-status); opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-turn-activity[data-working] .pwa-turn-activity-working { opacity: 1; }
+.pwa-turn-activity-working > svg { color: var(--pwa-running); }
+.pwa-turn-activity:not([data-working]) .pwa-spin { animation-play-state: paused; }
 /* 压缩终态是本地提示，不是会话记录；固定 44px 行高，与进行中行切换时不跳动。 */
 .pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-compaction-notice.is-error { color: var(--pwa-error); }
