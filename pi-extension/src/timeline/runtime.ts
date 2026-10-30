@@ -11,6 +11,7 @@ import { sequenceTimelineProjections, type TimelineProjection } from "./sequence
 import { SteerCorrelations } from "./steer_correlations.js";
 import { recoverToolCalls, ToolLifecycleTracker, toolPartial, toolTimelineEvent, type ToolCallDetails } from "./tool_lifecycle.js";
 import { systemTimelineEvent } from "./system_event.js";
+import { preparingCall, ToolPreparation, type PreparingCall } from "./tool_preparation.js";
 import { collectPublications } from "../files/publications.js";
 
 export const TIMELINE_MARKER = "pi-reach:timeline-v2" as const;
@@ -89,6 +90,8 @@ export class TimelineRuntime {
   };
   private readonly publications: TimelinePublications;
   private readonly toolAssociations = new ToolLifecycleTracker<Correlation>();
+  private readonly toolPreparation = new ToolPreparation(call => this.publishPreparing(call));
+  private readonly preparingContext = new Map<string, { groupId: string; correlation: Correlation }>();
   private sessionManager: SessionManager | null = null;
   private epoch = 0;
   private activeGroupId: string | null = null;
@@ -126,7 +129,7 @@ export class TimelineRuntime {
     this.pendingByRole.user = [];
     this.pendingByRole.assistant = [];
     this.pendingByRole.toolResult = [];
-    this.toolAssociations.clear();
+    this.clearPreparation();
     this.steers.clear();
   }
 
@@ -211,7 +214,13 @@ export class TimelineRuntime {
     this.pendingByRole.user = [];
     this.pendingByRole.assistant = [];
     this.pendingByRole.toolResult = [];
+    this.clearPreparation();
+  }
+
+  private clearPreparation(): void {
     this.toolAssociations.clear();
+    this.toolPreparation.clear();
+    this.preparingContext.clear();
   }
 
   onMessageStart(message: unknown, sessionManager: SessionManager): TimelineStarted | null {
@@ -261,12 +270,31 @@ export class TimelineRuntime {
       this.publishPartial(pending, "assistant", contentIndex, "delta", update.delta);
     } else if (update.type === "thinking_delta" && update.delta) {
       this.publishPartial(pending, "thinking", contentIndex, "delta", update.delta);
+    } else if (update.type === "toolcall_start" || update.type === "toolcall_delta") {
+      const call = preparingCall(update.partial.content[update.contentIndex]);
+      if (call) this.prepareTool(pending, call);
     } else if (update.type === "toolcall_end") {
       this.toolAssociations.indexAssistantContent([update.toolCall], {
         groupId: pending.marker.group_id,
         correlation: { ...pending.correlation },
       });
+      const call = preparingCall(update.toolCall);
+      if (call) this.prepareTool(pending, call, true);
     }
+  }
+
+  /** 模型仍在生成调用：以准备中 partial 提前显示工具行，执行开始后由同一 partial_id 原位转为运行。 */
+  private prepareTool(pending: PendingMessage, call: PreparingCall, final = false): void {
+    this.preparingContext.set(call.id, { groupId: pending.marker.group_id, correlation: { ...pending.correlation } });
+    this.toolPreparation.update(call, final);
+  }
+
+  private publishPreparing(call: PreparingCall): void {
+    const context = this.preparingContext.get(call.id);
+    const sessionId = this.sessionId;
+    if (!context || !sessionId) return;
+    const partial = toolPartial(call.id, { ...context, tool: call.tool, args: call.args }, { sessionId, leafId: this.leafId }, undefined, true);
+    if (partial) this.onPartial?.(partial, { ...context.correlation });
   }
 
   onMessageEnd(message: unknown, sessionManager: SessionManager): void {
@@ -277,6 +305,7 @@ export class TimelineRuntime {
     const pending = role ? this.findPending(message, role) : undefined;
     if (!pending) return;
     if (pending.role === "assistant") {
+      this.toolPreparation.settle();
       this.toolAssociations.indexAssistantContent(this.asMessageRecord(message)?.content, {
         groupId: pending.marker.group_id,
         correlation: { ...pending.correlation },
@@ -333,6 +362,7 @@ export class TimelineRuntime {
       groupId: this.activeGroupId,
       correlation: this.currentCorrelation() ?? { origin: "unknown" as const, delivery: "unknown" as const },
     } : undefined;
+    this.toolPreparation.close(event.toolCallId);
     this.toolAssociations.start(event.toolCallId, event.toolName, event.args, fallback);
     this.publishToolPartial(event.toolCallId);
   }
