@@ -1,8 +1,10 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 
-import { toolAction, toolHeaderSummary, toolIdentity, toolInlineText, toolStatus, type ToolKind, type ToolStatus, type ToolValue } from "./tool-presentation";
-import { useI18n, type Messages } from "@/lib/i18n";
+import { toolHeaderSummary, toolIdentity, toolInlineText, toolStatus, type ToolStatus, type ToolValue } from "./tool-presentation";
+import { useI18n } from "@/lib/i18n";
+import { toolGroupSummary } from "./process-group-state";
+export { toolGroupSummary } from "./process-group-state";
 import { Collapse } from "./collapse";
 import { effectiveToolStatus } from "./tool-groups";
 import { GROUP_HEAD_MIN_VISIBLE_MS, GROUP_HEAD_QUEUED_VISIBLE_MS, groupHeadTool, initialGroupHead, stepGroupHead, type GroupHeadElapsed } from "./tool-group-head";
@@ -14,6 +16,8 @@ type ToolCardProps = {
   onRead: (trigger: HTMLButtonElement) => void;
   status?: ToolStatus;
   timelineKey?: string;
+  /** 过程组内的工具以成员 key 注册可见性；省略时沿用工具身份。 */
+  indicatorKeys?: readonly string[];
 };
 
 function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: readonly string[] }) {
@@ -26,7 +30,7 @@ function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: re
 }
 
 /** 完成的工具只显示对勾，运行中、失败、中断与未知状态保留文字；各状态的可访问名称不变。 */
-export function ToolCard({ value, onRead, status: statusOverride, timelineKey }: ToolCardProps) {
+export function ToolCard({ value, onRead, status: statusOverride, timelineKey, indicatorKeys }: ToolCardProps) {
   const { t } = useI18n();
   const status = toolStatus(value, statusOverride);
   const summary = toolInlineText(toolHeaderSummary(value));
@@ -35,31 +39,10 @@ export function ToolCard({ value, onRead, status: statusOverride, timelineKey }:
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
         <span className="pwa-tool-action-copy"><strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}</span>
-        <span className={`pwa-tool-status pwa-tool-status-${status}`} role="status" aria-label={t.tools.statusLabel(value.tool, t.tools.status[status])}><ToolStatusIcon status={status} toolKeys={[toolIdentity(value)]} />{status === "complete" ? null : <span>{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>}</span>
+        <span className={`pwa-tool-status pwa-tool-status-${status}`} role="status" aria-label={t.tools.statusLabel(value.tool, t.tools.status[status])}><ToolStatusIcon status={status} toolKeys={indicatorKeys ?? [toolIdentity(value)]} />{status === "complete" ? null : <span>{status === "unknown" ? t.timeline.unknown : t.tools.status[status]}</span>}</span>
       </button>
     </div>
   </article>;
-}
-
-/** 连续工具的摘要：按类别计数、按首次出现排序；读取、修改、写入按不同路径计数；有失败或中断时末尾分别追加失败数与中断数。 */
-export function toolGroupSummary(values: readonly ToolValue[], t: Messages["tools"]): string {
-  const order: ToolKind[] = [];
-  const calls = new Map<ToolKind, number>();
-  const paths = new Map<ToolKind, Set<string>>();
-  for (const value of values) {
-    const action = toolAction(value);
-    if (!calls.has(action.kind)) order.push(action.kind);
-    calls.set(action.kind, (calls.get(action.kind) ?? 0) + 1);
-    if (!paths.has(action.kind)) paths.set(action.kind, new Set());
-    paths.get(action.kind)!.add(action.detail);
-  }
-  const label = { read: t.groupRead, command: t.groupCommand, search: t.groupSearch, edit: t.groupEdit, write: t.groupWrite, generic: t.groupGeneric } satisfies Record<ToolKind, (count: number) => string>;
-  const failed = values.filter(value => toolStatus(value) === "error").length;
-  const interrupted = values.filter(value => toolStatus(value) === "interrupted").length;
-  const parts = order.map((kind) => label[kind](kind === "read" || kind === "edit" || kind === "write" ? paths.get(kind)!.size : calls.get(kind)!));
-  if (failed > 0) parts.push(t.groupFailed(failed));
-  if (interrupted > 0) parts.push(t.groupInterrupted(interrupted));
-  return parts.join(" · ");
 }
 
 /** 组头调用文字：每次换成新的工具时从下方进入一次，组头首次出现时不播放。 */

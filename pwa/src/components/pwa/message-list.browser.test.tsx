@@ -971,7 +971,8 @@ test("images and structured output appear only in the direct reader without raw-
   const fallback = await renderMessageList([eventItem({ ...toolEvent, tool: "custom", result: { files: 3, ok: true } })]);
   await expandToolGroups();
   await userEvent.click(toolButton());
-  expect(document.querySelector(".pwa-tool-reader-scroll")?.textContent).toContain('"files": 3');
+  // 过程 Reader 先收起挂载、下一帧再打开；等真实正文出现，不依赖 rAF 与点击返回的先后。
+  await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll")?.textContent).toContain('"files": 3');
   expect(document.body.textContent).not.toContain("Raw data");
   await expect.element(fallback.getByRole("button", { name: /^View all/ })).not.toBeInTheDocument();
   await closeReader();

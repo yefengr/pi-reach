@@ -1,0 +1,92 @@
+/* 过程组：固定左状态槽、同字号单行省略，以及只出现在相邻明细之间的短竖线。
+   所有规则都限定在 .pwa-root .pwa-process-group 内，旧工具组与旧思考行保持原样。 */
+.pwa-root .pwa-process-group { min-width: 0; }
+
+/* 组头复用折叠按钮的 44px 点击区、悬停与焦点；无提示时保持三列，箭头始终贴右。 */
+.pwa-root .pwa-process-group .pwa-process-head {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui);
+}
+.pwa-root .pwa-process-group .pwa-process-head:has(.pwa-process-alert) { grid-template-columns: 16px minmax(0, 1fr) auto auto; }
+.pwa-root .pwa-process-group .pwa-process-copy { min-width: 0; display: flex; align-items: center; gap: var(--pwa-space-xs); overflow: hidden; white-space: nowrap; }
+.pwa-root .pwa-process-group .pwa-process-summary,
+.pwa-root .pwa-process-group .pwa-process-tool-detail,
+.pwa-root .pwa-process-group .pwa-process-thinking-heading {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pwa-root .pwa-process-group .pwa-process-summary { color: var(--pwa-secondary); }
+.pwa-root .pwa-process-group .pwa-process-copy strong { min-width: 0; max-width: 45%; flex: 0 1 auto; overflow: hidden; color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+.pwa-root .pwa-process-group .pwa-process-tool-detail { color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-mono); }
+/* 思考标题保持斜体与中性色，运行状态只由状态槽表达。 */
+.pwa-root .pwa-process-group .pwa-process-thinking-heading { color: var(--pwa-secondary); font-style: italic; }
+.pwa-root .pwa-process-group .pwa-process-working { flex: none; color: var(--pwa-running); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-root .pwa-process-group .pwa-process-more { flex: none; color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+
+/* 状态槽固定 16px，不随标题或计数伸缩。 */
+.pwa-root .pwa-process-group .pwa-process-status-slot { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--pwa-secondary); }
+.pwa-root .pwa-process-group .pwa-process-status-slot > svg { flex: none; }
+.pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-running { color: var(--pwa-running); }
+.pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-complete { color: var(--pwa-complete); }
+.pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-error { color: var(--pwa-error); }
+
+/* 失败、未知与中断计数固定在右侧，不参与主文案省略。 */
+.pwa-root .pwa-process-group .pwa-process-alert { flex: none; display: inline-flex; align-items: center; color: var(--pwa-secondary); }
+.pwa-root .pwa-process-group .pwa-process-alert-error { color: var(--pwa-error); }
+
+/* 单个空思考的静态痕迹：无按钮、无箭头、无明细壳；图标槽与明细同样固定 16px＋8px 间隔。 */
+.pwa-root .pwa-process-group .pwa-process-head-static { display: flex; align-items: center; gap: var(--pwa-space-xs); min-height: var(--pwa-hit-target); color: var(--pwa-secondary); font-style: italic; }
+
+/* 明细：行距统一由父级网格负责，子行不再叠加时间线外边距。 */
+.pwa-root .pwa-process-group .pwa-process-details { min-width: 0; }
+.pwa-root .pwa-process-group .pwa-process-entries { min-width: 0; display: grid; gap: var(--pwa-space-status); }
+.pwa-root .pwa-process-group .pwa-process-entry { position: relative; min-width: 0; }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-timeline-row { margin: 0; }
+/* 竖线取 44px 行与居中 16px 图标之间的断口中点，只连接相邻明细。 */
+.pwa-root .pwa-process-group .pwa-process-entry + .pwa-process-entry::before {
+  content: "";
+  position: absolute;
+  left: 7.5px;
+  top: calc((var(--pwa-space-status) + 16px) / -2);
+  width: 1px;
+  height: 16px;
+  background: var(--pwa-line);
+  pointer-events: none;
+}
+
+/* 工具明细：状态图标移到左侧图标列，状态文字留给读屏，现有 aria-label 不变。 */
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action { grid-template-columns: 16px minmax(0, 1fr); }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status { grid-area: 1 / 1; justify-content: center; min-width: 16px; }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status > span { display: none; }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action-copy { grid-area: 1 / 2; }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action-copy strong { max-width: 45%; font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action-copy span { font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-mono); }
+
+/* 思考明细：可读整行按钮与静态空行共用同一 16px 槽位与单行省略几何。 */
+.pwa-root .pwa-process-group .pwa-thinking-process-row { min-width: 0; }
+.pwa-root .pwa-process-group .pwa-thinking-process-row-action,
+.pwa-root .pwa-process-group .pwa-thinking-process-row-static {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--pwa-hit-target);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--pwa-space-xs);
+  padding: 4px 6px 4px 0;
+  border: 0;
+  border-radius: var(--pwa-radius-md);
+  color: var(--pwa-secondary);
+  background: transparent;
+  font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui);
+  text-align: left;
+}
+.pwa-root .pwa-process-group .pwa-thinking-process-row-action { cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+@media (hover: hover) { .pwa-root .pwa-process-group .pwa-thinking-process-row-action:hover { background: var(--pwa-hover); } }
+.pwa-root .pwa-process-group .pwa-thinking-process-row-action:active { background: var(--pwa-hover); }
+.pwa-root .pwa-process-group .pwa-thinking-process-row-action:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
+.pwa-root .pwa-process-group .pwa-thinking-process-row-static { cursor: default; }

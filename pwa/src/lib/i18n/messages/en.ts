@@ -434,6 +434,11 @@ export const en = {
     thinking: "Thinking…",
     thinkingTrace: "Thinking",
     thoughtProcess: "Thinking",
+    processGroup: "Thinking and tools",
+    readThinking: "Read thinking",
+    closeThinkingReader: "Close thinking",
+    copyThinking: "Copy thinking",
+    otherRunningTools: (count: number) => `${count} other running tools`,
   },
   summaryReader: {
     compactionComplete: "Context compacted",

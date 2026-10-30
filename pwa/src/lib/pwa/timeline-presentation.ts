@@ -114,10 +114,10 @@ export function isPiOutputEntry(entry: PresentationEntry): boolean {
 }
 
 /** 按同一去重投影划分缺口后的区域，再取该区域在最终展示顺序中的第一条可见条目。 */
-export function projectTimelineGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>, entries: readonly PresentationEntry[] = flatten(items)): { keys: Set<string>; toolBreakKeys: Set<string>; atEnd: boolean } {
+export function projectTimelineGaps(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>, entries: readonly PresentationEntry[] = flatten(items)): { keys: Set<string>; processBreakKeys: Set<string>; atEnd: boolean } {
   const keys = new Set<string>();
-  const toolBreakKeys = new Set<string>();
-  if (gapBefore.size === 0) return { keys, toolBreakKeys, atEnd: false };
+  const processBreakKeys = new Set<string>();
+  if (gapBefore.size === 0) return { keys, processBreakKeys, atEnd: false };
   const emptyThinkingKeys = new Set<string>();
   const regions = new Map<string, number>();
   let region = -1;
@@ -131,14 +131,16 @@ export function projectTimelineGaps(items: readonly TimelineViewItem[], gapBefor
   for (const [index, entry] of entries.entries()) {
     const candidate = regions.get(entry.key);
     const previous = entries[index - 1];
-    // 提示跟随缺口后区域的首项；工具断组另按源区域判断，不增加提示或移动已观察条目。
-    if (entry.kind === "tool" && previous?.kind === "tool" && regions.get(previous.key) !== candidate) toolBreakKeys.add(entry.key);
+    // 提示跟随缺口后区域的首项；过程断组另按源区域判断，不增加提示或移动已观察条目。
+    const process = entry.kind === "tool" || entry.kind === "thinking";
+    const previousProcess = previous?.kind === "tool" || previous?.kind === "thinking";
+    if (process && previousProcess && regions.get(previous.key) !== candidate) processBreakKeys.add(entry.key);
     if (candidate === undefined || candidate < 0 || anchored.has(candidate)
       || (entry.kind === "record" && entry.item.kind === "event" && entry.item.event.kind === "run_end")) continue;
     keys.add(entry.key);
     anchored.add(candidate);
   }
-  return { keys, toolBreakKeys, atEnd: region >= 0 && !anchored.has(region) };
+  return { keys, processBreakKeys, atEnd: region >= 0 && !anchored.has(region) };
 }
 
 /** 内容与全部展示字段一致时沿用上一份条目，浅比较的子组件才能跳过重渲染。 */
