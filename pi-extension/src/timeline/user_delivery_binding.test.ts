@@ -29,65 +29,119 @@ function user(leafId: string | null): Extract<ClientFrame, { type: "user_message
   };
 }
 
+/** 真实 Service → Binding → Queue → SDK → Runtime 发送链路；`frames` 按 PWA 实际收到的顺序记录同步回复与异步推送。 */
+function sendChain(isIdle: () => boolean) {
+  const session = SessionManager.inMemory(process.cwd());
+  const runtime = new TimelineRuntime();
+  const targets = new Map<string, UserDeliveryTarget>();
+  const frames: ServerFrame[] = [];
+  let service!: TimelineV2Service;
+  let binding!: UserDeliveryBinding;
+  const pi = {
+    sendUserMessage: vi.fn(() => {
+      const started = runtime.onMessageStart({ role: "user", content: "hello", timestamp: 1 }, session);
+      if (started) binding.onStarted(started);
+    }),
+  } as unknown as ExtensionAPI;
+
+  binding = new UserDeliveryBinding({
+    isIdle,
+    canAcceptNormal: () => true,
+    getPi: () => pi,
+    getTimeline: () => runtime,
+    getCurrentSessionId: () => session.getSessionId(),
+    getCurrentLeafId: () => service.leafId,
+    findTarget: (ownerId) => targets.get(ownerId) ?? null,
+    sendFrames: (_ownerId, sent) => frames.push(...sent),
+  });
+  service = new TimelineV2Service({
+    sessionManager: session,
+    senderRef: "owner-1",
+    extensionVersion: "1.2.3",
+    runtime,
+    onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
+      ownerId: "owner-1",
+      sessionId: session.getSessionId(),
+      leafId: service.leafId,
+      service,
+      clientRequestId: frame.client_request_id,
+    }),
+    onQueueSnapshot: () => binding.snapshot("owner-1", service),
+  });
+  targets.set("owner-1", { service, sessionId: session.getSessionId(), leafId: session.getLeafId() ?? null });
+  service.handle(hello());
+  return { pi, binding, service, frames, send: () => frames.push(...service.handle(user(service.leafId))) };
+}
+
+/** PWA 依次收到的 request-1 队列可编辑状态；true 会把消息归入输入区上方的排队区。 */
+function editableHistory(frames: readonly ServerFrame[]): boolean[] {
+  return frames.flatMap((frame) => frame.type === "queued_message_state"
+    ? frame.items.filter((item) => item.id === "request-1").map((item) => item.editable) : []);
+}
+
 describe("UserDeliveryBinding", () => {
   test("sends started/status before removing a normal in-flight item from the snapshot", async () => {
-    const session = SessionManager.inMemory(process.cwd());
-    const runtime = new TimelineRuntime();
-    const targets = new Map<string, UserDeliveryTarget>();
-    const outbound: ServerFrame[] = [];
-    let service!: TimelineV2Service;
-    let binding!: UserDeliveryBinding;
-    const pi = {
-      sendUserMessage: vi.fn(() => {
-        const started = runtime.onMessageStart({ role: "user", content: "hello", timestamp: 1 }, session);
-        if (started) binding.onStarted(started);
-      }),
-    } as unknown as ExtensionAPI;
+    const chain = sendChain(() => true);
 
-    binding = new UserDeliveryBinding({
-      isIdle: () => true,
-      canAcceptNormal: () => true,
-      getPi: () => pi,
-      getTimeline: () => runtime,
-      getCurrentSessionId: () => session.getSessionId(),
-      getCurrentLeafId: () => service.leafId,
-      findTarget: (ownerId) => targets.get(ownerId) ?? null,
-      sendFrames: (_ownerId, frames) => outbound.push(...frames),
-    });
-    service = new TimelineV2Service({
-      sessionManager: session,
-      senderRef: "owner-1",
-      extensionVersion: "1.2.3",
-      runtime,
-      onUserMessage: (frame, correlation) => binding.submit(frame, correlation, {
-        ownerId: "owner-1",
-        sessionId: session.getSessionId(),
-        leafId: service.leafId,
-        service,
-        clientRequestId: frame.client_request_id,
-      }),
-      onQueueSnapshot: () => binding.snapshot("owner-1", service),
-    });
-    targets.set("owner-1", { service, sessionId: session.getSessionId(), leafId: session.getLeafId() ?? null });
-    service.handle(hello());
-
-    expect(service.handle(user(service.leafId))).toEqual([
-      expect.objectContaining({ type: "user_message_status", status: "accepted" }),
-      expect.objectContaining({ type: "queued_message_state", items: [expect.objectContaining({ id: "request-1", editable: true })] }),
-    ]);
+    chain.send();
     await nextMacrotask();
 
-    expect(pi.sendUserMessage).toHaveBeenCalledWith("hello", undefined);
-    expect(outbound.map((frame) => frame.type)).toEqual([
+    expect(chain.pi.sendUserMessage).toHaveBeenCalledWith("hello", undefined);
+    expect(chain.frames.map((frame) => frame.type)).toEqual([
+      "user_message_status",
+      "queued_message_state",
       "queued_message_state",
       "user_message_status",
       "user_message_started",
       "queued_message_state",
     ]);
-    expect(outbound[0]).toMatchObject({ type: "queued_message_state", items: [{ id: "request-1", editable: false }] });
-    expect(outbound[1]).toMatchObject({ type: "user_message_status", status: "accepted" });
-    expect(outbound[2]).toMatchObject({ type: "user_message_started", message: { sender_ref: "owner-1" } });
-    expect(outbound[3]).toMatchObject({ type: "queued_message_state", items: [] });
+    expect(chain.frames[0]).toMatchObject({ type: "user_message_status", status: "accepted" });
+    expect(chain.frames[1]).toMatchObject({ type: "queued_message_state", items: [{ id: "request-1", editable: false }] });
+    expect(chain.frames[2]).toMatchObject({ type: "queued_message_state", items: [{ id: "request-1", editable: false }] });
+    expect(chain.frames[3]).toMatchObject({ type: "user_message_status", status: "accepted" });
+    expect(chain.frames[4]).toMatchObject({ type: "user_message_started", message: { sender_ref: "owner-1" } });
+    expect(chain.frames[5]).toMatchObject({ type: "queued_message_state", items: [] });
+  });
+
+  test("never offers an idle send as an editable queued item before it starts", async () => {
+    // 回归：空闲发送的同步回执曾带 editable:true，PWA 把气泡移入排队区一帧再移回（发送闪帧与旧正文回跳）。
+    const chain = sendChain(() => true);
+
+    chain.send();
+    expect(chain.binding.clearQueued("owner-1", chain.service, "request-1")).toEqual([]);
+    await nextMacrotask();
+
+    expect(chain.pi.sendUserMessage).toHaveBeenCalledTimes(1);
+    expect(editableHistory(chain.frames)).toEqual([false, false]);
+  });
+
+  test("keeps a busy send editable until Pi becomes idle and drains it", async () => {
+    let idle = false;
+    const chain = sendChain(() => idle);
+
+    chain.send();
+    await nextMacrotask();
+    expect(chain.pi.sendUserMessage).not.toHaveBeenCalled();
+    expect(editableHistory(chain.frames)).toEqual([true]);
+
+    idle = true;
+    chain.binding.scheduleDrain();
+    await nextMacrotask();
+    expect(chain.pi.sendUserMessage).toHaveBeenCalledTimes(1);
+    expect(editableHistory(chain.frames)).toEqual([true, false]);
+  });
+
+  test("re-offers an idle send as editable when Pi turns busy before the drain runs", async () => {
+    let idle = true;
+    const chain = sendChain(() => idle);
+
+    chain.send();
+    idle = false;
+    await nextMacrotask();
+
+    expect(chain.pi.sendUserMessage).not.toHaveBeenCalled();
+    expect(editableHistory(chain.frames)).toEqual([false, true]);
+    expect(chain.binding.clearQueued("owner-1", chain.service, "request-1")).toEqual(["request-1"]);
   });
 
   test("reports unknown after an ordinary native append before SDK start", async () => {
