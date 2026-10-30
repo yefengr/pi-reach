@@ -27,6 +27,8 @@ function setup() {
   return { runtime, buffer, view: () => view,
     ingest: (items: TimelineViewItem[]) => render(buffer.ingest(items).items),
     tick: () => render(buffer.advance().items),
+    /** 推进到显示追上权威快照：新行按间隔排队，工具保持最短运行展示。 */
+    settle: () => { while (buffer.hasPending()) render(buffer.advance().items); return view; },
   };
 }
 const labels = (view: PresentationSnapshot) => view.entries.map(entry => entry.kind === "text" ? entry.text : entry.kind === "tool" ? entry.value.tool_call_id : entry.kind);
@@ -35,8 +37,10 @@ test("same-run replies never hide earlier messages or restart after catching up"
   const h = setup();
   h.ingest(h.runtime.commit(answer("A", 1)).items);
   h.ingest(h.runtime.commit(completedTool("tool", 2)).items);
-  const first = h.ingest(h.runtime.receive(partial("B", "After the tool")).items);
-  expect(labels(first)).toEqual(["A", "tool", "Af"]);
+  h.ingest(h.runtime.receive(partial("B", "After the tool")).items);
+  // 新行在间隔后出现，从少量字素起步，不一次铺满。
+  while (labels(h.view()).length < 3) h.tick();
+  expect(labels(h.view())).toEqual(["A", "tool", "Af"]);
   while (h.buffer.hasPending()) h.tick();
   expect(labels(h.view())).toEqual(["A", "tool", "After the tool"]);
   h.ingest(h.runtime.receive(partial("B", " continued")).items);
@@ -68,11 +72,14 @@ test("reverse parallel completion, later replies and earlier history preserve ob
     h.ingest(h.runtime.commit(answer("A", 2)).items);
     h.ingest(h.runtime.receive(tool("z-first")).items);
     h.ingest(h.runtime.receive(tool("a-second")).items);
+    h.settle();
     expect(labels(h.view())).toEqual(["A", "z-first", "a-second"]);
     h.ingest(h.runtime.commit(completedTool("a-second", 3)).items);
     h.ingest(h.runtime.commit(completedTool("z-first", 4)).items);
+    h.settle();
     h.ingest(h.runtime.receive(partial("B", "B")).items);
     h.ingest(h.runtime.commit(answer("B", 5)).items);
+    h.settle();
     h.ingest(h.runtime.prependHistory([answer("history", 1)]).items);
     expect(labels(h.view())).toEqual(["history", "A", "z-first", "a-second", "B"]);
   } finally { clock.mockRestore(); }

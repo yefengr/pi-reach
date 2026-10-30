@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { rehypeStreamReveal, splitMarkdownChunks } from "./markdown-stream";
+import { closeStreamingInline, rehypeStreamReveal, splitMarkdownChunks } from "./markdown-stream";
 
 const remarkPlugins = [remarkGfm];
 
@@ -61,4 +61,32 @@ test("reveal wraps only newly shown text and keeps text content and code blocks 
   expect(render("a \\*b\\* c", [0])).toContain('data-reveal-offset="0"');
   expect(render("a \\*b\\* c", [4])).not.toContain("data-reveal-offset");
   expect(render("plain", [])).toBe("<p>plain</p>");
+});
+
+test.each([
+  ["**内容核验", "**内容核验**"],
+  // 收尾标记只到了一半：只补一个字符，不留下字面量星号。
+  ["**内容核验*", "**内容核验**"],
+  ["前文 ~~删除", "前文 ~~删除~~"],
+  ["**粗体与 ~~删除", "**粗体与 ~~删除~~**"],
+  ["运行 `pnpm", "运行 `pnpm`"],
+  ["`**` 不是加粗", "`**` 不是加粗"],
+  ["完整 **粗体** 正文", "完整 **粗体** 正文"],
+  ["看 [文档](https://exa", "看 "],
+  ["已开始 **", "已开始 "],
+  ["尾随空白 **粗体 ", "尾随空白 **粗体**"],
+  ["```\n**代码", "```\n**代码"],
+  ["第一段 **未闭合\n\n第二段", "第一段 **未闭合\n\n第二段"],
+] as const)("streaming inline closing: %s", (input, expected) => {
+  expect(closeStreamingInline(input)).toBe(expected);
+});
+
+test("streaming closing only appends or trims the end so reveal offsets stay aligned", () => {
+  const text = "已完成的正文，**加粗中";
+  const closed = closeStreamingInline(text);
+  expect(closed.startsWith(text)).toBe(true);
+  const html = render(closed, [text.indexOf("加粗")]);
+  expect(html).toContain("<strong>");
+  expect(html).toContain('data-reveal-offset="');
+  expect(html).not.toContain("**");
 });

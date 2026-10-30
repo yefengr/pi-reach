@@ -13,6 +13,7 @@ import { StreamDisplayBuffer } from "@/lib/pwa/stream-display-buffer";
 import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
 import { ThinkingProcessHeading } from "./thinking-process-row";
 import { THINKING_SUMMARY_WINDOW_MS } from "./use-thinking-heading";
+import { WORKING_IDLE_MS } from "./use-turn-activity";
 
 type ListProps = Parameters<typeof MessageList>[0];
 const toolEvent: Extract<TimelineEvent, { kind: "tool" }> = {
@@ -53,6 +54,12 @@ async function closeReader(key: "escape" | "history" = "escape") {
 const rowHeading = (index = 0) => document.querySelectorAll<HTMLElement>(".pwa-thinking-process-row .pwa-process-thinking-heading")[index] ?? null;
 const rowHeadings = () => [...document.querySelectorAll<HTMLElement>(".pwa-thinking-process-row .pwa-process-thinking-heading")];
 const listText = () => document.querySelector(".pwa-message-list")?.textContent ?? "";
+/** 时间线中除思考尾部预览外的文字：预览只显示末尾两行，其余正文仍只经 Reader 阅读。 */
+const listTextOutsidePreview = () => {
+  const list = document.querySelector(".pwa-message-list")?.cloneNode(true) as HTMLElement | undefined;
+  list?.querySelectorAll(".pwa-thinking-tail").forEach(preview => preview.remove());
+  return list?.textContent ?? "";
+};
 afterEach(async () => { await page.viewport(1280, 900); });
 
 async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProps> = {}) {
@@ -163,8 +170,8 @@ test("paced thinking parses only new characters through the real presentation an
     while (buffer.hasPending()) await update(buffer.advance().items);
     expect(scanned).toBe(target.length);
     expect(rowHeading()?.getAttribute("title")).toBe("Latest title");
-    // 思考正文只经 Reader 阅读，时间线不铺开。
-    expect(listText()).not.toContain("x".repeat(64));
+    // 思考正文只经 Reader 阅读，时间线除两行尾部预览外不铺开。
+    expect(listTextOutsidePreview()).not.toContain("x".repeat(64));
     await update(buffer.snapshot());
     expect(scanned).toBe(target.length);
     await update(buffer.ingest([eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: target }] })]).items);
@@ -197,7 +204,7 @@ test.each(["assistant", "thinking"] as const)("cumulative %s thinking blocks par
     await update(snapshot(target));
     expect(scanned).toBe(target.length);
     expect(rowHeading()?.getAttribute("title")).toBe("Latest title");
-    expect(listText()).not.toContain("x".repeat(64));
+    expect(listTextOutsidePreview()).not.toContain("x".repeat(64));
     await update(buffer.snapshot());
     expect(scanned).toBe(target.length);
     const replacement = `${"y".repeat(1024)}\n**Other title**\nBody\n**Newest title**`;
@@ -227,6 +234,8 @@ test("mixed cumulative blocks keep multiple thinking components incremental and 
   });
   try {
     const { update } = await liveList(snapshot(initial), { running: true });
+    // 后续正文出现的组按规则收起；手动展开后检查每个思考明细的增量解析。
+    await expandToolGroups();
     for (let length = 32; length <= 512; length += 32) {
       await update(snapshot(initial.map(block => ({ ...block, text: `${block.text}${"x".repeat(length)}` }))));
     }
@@ -247,7 +256,13 @@ test("mixed cumulative blocks keep multiple thinking components incremental and 
   } finally { spy.mockRestore(); }
 });
 
-test.each([1280, 390])("Working fallback hands off to current thinking and visible tools at %ipx", async width => {
+/** 活动区与其中仅在界面静止时淡入的 Working。 */
+const activitySlot = () => document.querySelector<HTMLElement>(".pwa-turn-activity");
+const workingShown = () => document.querySelector<HTMLElement>(".pwa-turn-activity[data-working]");
+/** 等待超过空闲阈值；只覆盖一次判定所需的时长。 */
+const pastIdle = () => new Promise(resolve => setTimeout(resolve, WORKING_IDLE_MS + 200));
+
+test.each([1280, 390])("Working appears only after the page stays still and never lives in a group head at %ipx", async width => {
   await page.viewport(width, 844);
   const live = { running: true, isLive: true };
   const question = eventItem({ ...assistantEvent, event_id: "before-output", blocks: [{ type: "text", text: "Before output" }] });
@@ -257,59 +272,52 @@ test.each([1280, 390])("Working fallback hands off to current thinking and visib
   };
   const thought = eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: "Inspecting the request." }] });
   const { screen, update } = await liveList([question], live);
-  const working = () => document.querySelector(".pwa-thinking-status");
   const headWorking = () => document.querySelector(".pwa-process-working");
-  expect(working()?.textContent).toBe("Working…");
-  // 与它替代的思考标题／过程组头同字号、同字重；运行色与图标一致，但保持正体。
-  const workingStyle = getComputedStyle(working()!);
+  // 活动区立即占位，Working 等界面静止后才淡入。
+  expect(activitySlot()).not.toBeNull();
+  expect(workingShown()).toBeNull();
+  const slotHeight = Math.round(activitySlot()!.getBoundingClientRect().height);
+  await expect.poll(workingShown).not.toBeNull();
+  expect(Math.round(activitySlot()!.getBoundingClientRect().height)).toBe(slotHeight);
+  // 与过程组头同字号、同字重；运行色与图标一致，但保持正体；图标与状态文字取 6px 语义档。
+  const workingStyle = getComputedStyle(activitySlot()!);
   expect(workingStyle.fontSize).toBe("16px");
   expect(workingStyle.fontWeight).toBe("600");
   expect(workingStyle.fontStyle).toBe("normal");
-  expect(workingStyle.color).toBe(getComputedStyle(working()!.querySelector("svg")!).color);
-  // 图标与状态文字统一取 6px 语义档。
-  expect(workingStyle.gap).toBe("6px");
+  const label = workingShown()!.querySelector<HTMLElement>(".pwa-turn-activity-working")!;
+  expect(getComputedStyle(label).color).toBe(getComputedStyle(label.querySelector("svg")!).color);
+  expect(getComputedStyle(label).gap).toBe("6px");
+  // 新内容出现立即隐藏 Working。
   await update([question, partialItem(thinking)]);
-  expect(working()).toBeNull();
-  expect(headWorking()).toBeNull();
+  expect(workingShown()).toBeNull();
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
   expect(document.querySelector(".pwa-thinking-process-row .pwa-process-status-running")).not.toBeNull();
-  // 思考正文只经 Reader 阅读；明细行只是阅读入口。
   expect(document.querySelector(".pwa-thinking-process-row-action")?.getAttribute("aria-haspopup")).toBe("dialog");
-  // 手动收起后组头接管当前思考的运行提示，Working 不重复出现。
-  await userEvent.click(groupButton());
-  expect(groupButton().querySelector(".pwa-process-status-running")).not.toBeNull();
-  expect(working()).toBeNull();
+  // 思考灯泡是静态图标；内容停滞后仍由 Working 兜底，且不挂到组头。
+  await expect.poll(workingShown).not.toBeNull();
   expect(headWorking()).toBeNull();
-  await userEvent.click(groupButton());
   await update([question, thought, partialItem(toolPartial)]);
-  // 正式思考不再运行；同轮工具加入同一过程组并承担运行提示。
-  expect(document.querySelector(".pwa-thinking-process-row .pwa-process-status-running")).toBeNull();
   expect(document.querySelector(".pwa-process-details .pwa-tool-spinner")).not.toBeNull();
   expect(document.querySelectorAll(".pwa-process-group")).toHaveLength(1);
   await expect.element(screen.getByRole("status", { name: "read: Running" })).toBeVisible();
-  expect(working()).toBeNull();
-  expect(headWorking()).toBeNull();
+  // 视口内转动的工具图标算持续动作，Working 一直不出现。
+  await pastIdle();
+  expect(workingShown()).toBeNull();
   await userEvent.click(groupButton());
   expect(groupButton().querySelector(".pwa-process-status-running > .pwa-spin")).not.toBeNull();
-  await expect.poll(working).toBeNull();
-  expect(headWorking()).toBeNull();
+  await pastIdle();
+  expect(workingShown()).toBeNull();
   await userEvent.click(groupButton());
-  // 工具结束但 Pi 仍 working：立即由末段组头承载 Working，不等任何停留时间。
+  // 工具结束但 Pi 仍在运行：静止后在末尾活动区兜底，组头不承载。
   await update([question, thought, eventItem({ ...toolEvent, args: toolPartial.args! })]);
-  await expect.poll(() => headWorking()?.textContent).toBe("Working…");
-  expect(working()).toBeNull();
+  await expect.poll(workingShown).not.toBeNull();
+  expect(headWorking()).toBeNull();
   const body: TimelinePartial = { ...thinking, partial_id: "body:assistant:0", kind: "assistant", delta: "Streaming body" };
   await update([question, thought, eventItem(toolEvent), partialItem(body)]);
   await expect.element(screen.getByText("Streaming body")).toBeVisible();
-  // 正文之后不能把通用 Working 挂回较早的过程组。
-  expect(headWorking()).toBeNull();
-  expect(working()?.textContent).toBe("Working…");
-  // 过程组被移除后不能留下旧报告，压制兜底。
-  await update([question]);
-  expect(document.querySelector(".pwa-process-group")).toBeNull();
-  expect(working()?.textContent).toBe("Working…");
+  expect(workingShown()).toBeNull();
   await update([question, runEndItem()]);
-  expect(working()).toBeNull();
+  expect(activitySlot()).toBeNull();
 });
 
 test.each([1280, 390])("Working stays hidden while a member still runs, even after later body, at %ipx", async width => {
@@ -317,8 +325,8 @@ test.each([1280, 390])("Working stays hidden while a member still runs, even aft
   const run = (id: string) => partialItem({ ...toolPartial, partial_id: `tool:${id}`, tool_call_id: id, args: { path: `${id}.ts` } });
   const finish = (id: string) => eventItem({ ...toolEvent, event_id: id, tool_call_id: id, args: { path: `${id}.ts` } });
   const { update } = await liveList([run("a")], { running: true });
-  const working = () => document.querySelector(".pwa-thinking-status, .pwa-process-working");
-  expect(working()).toBeNull();
+  await pastIdle();
+  expect(workingShown()).toBeNull();
   await update([finish("a"), run("b")]);
   // 手动收起后组头显示仍有效的成员，不排队补播已完成调用。
   await userEvent.click(groupButton());
@@ -326,23 +334,22 @@ test.each([1280, 390])("Working stays hidden while a member still runs, even aft
   expect(groupButton().querySelector(".pwa-process-tool-detail")?.textContent).toBe("b.ts");
   const spinner = groupButton().querySelector(".pwa-process-status-running > .pwa-spin");
   expect(spinner).not.toBeNull();
-  expect(working()).toBeNull();
   await update([run("a"), finish("b")]);
   expect(groupButton().querySelector(".pwa-process-tool-detail")?.textContent).toBe("a.ts");
   expect(groupButton().querySelector(".pwa-process-status-running > .pwa-spin")).toBe(spinner);
-  expect(working()).toBeNull();
   const after = eventItem({ ...assistantEvent, event_id: "after-tools", blocks: [{ type: "text", text: "After tools" }] });
-  // 即使后续正文已出现，较早工具还在运行时不伪造结束，也不重复显示 Working。
+  // 即使后续正文已出现，较早工具还在运行时不伪造结束，组头的转动图标继续压住 Working。
   await update([run("a"), finish("b"), after]);
   expect(groupButton().querySelector(".pwa-process-tool-detail")?.textContent).toBe("a.ts");
-  expect(working()).toBeNull();
+  await pastIdle();
+  expect(workingShown()).toBeNull();
   await update([finish("a"), finish("b"), after]);
   expect(groupButton().querySelector(".pwa-spin")).toBeNull();
   expect(document.querySelector(".pwa-process-working")).toBeNull();
-  expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+  await expect.poll(() => workingShown()?.textContent).toBe("Working…");
 });
 
-test.each([1280, 390])("Working fallback ignores old ended and idle residuals and respects run boundaries at %ipx", async width => {
+test.each([1280, 390])("the activity slot ignores old ended and idle residuals and respects run boundaries at %ipx", async width => {
   await page.viewport(width, 844);
   const thinking: TimelinePartial = {
     protocol_version: 2, type: "timeline_partial", session_id: toolPartial.session_id, leaf_id: toolPartial.leaf_id,
@@ -351,26 +358,27 @@ test.each([1280, 390])("Working fallback ignores old ended and idle residuals an
   const residuals = [partialItem(thinking), partialItem(toolPartial)];
   const user = (group: string) => eventItem({ ...assistantEvent, event_id: `user-${group}`, message_id: `user-${group}`, group_id: group, kind: "user", blocks: [{ type: "text", text: group }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" });
   const { update } = await liveList([user("group-1"), ...residuals], { running: true });
-  const working = () => document.querySelector(".pwa-thinking-status");
-  expect(working()).toBeNull();
+  expect(activitySlot()).not.toBeNull();
   await update([user("group-1"), user("group-2"), ...residuals]);
-  expect(working()?.textContent).toBe("Working…");
+  expect(activitySlot()).not.toBeNull();
   await userEvent.click(groupButton());
-  expect(working()?.textContent).toBe("Working…");
+  expect(activitySlot()).not.toBeNull();
   await update([user("group-1"), runEndItem(), user("group-2"), ...residuals]);
-  expect(working()?.textContent).toBe("Working…");
+  expect(activitySlot()).not.toBeNull();
+  // 本轮结束呈现后立即收起，不等消失宽限。
   await update([user("group-1"), runEndItem(), ...residuals]);
-  expect(working()).toBeNull();
+  expect(activitySlot()).toBeNull();
   // 空闲时看到的 partial，在新发送尚未获得 group_id 时仍是残留。
   await update([user("group-1"), ...residuals], { running: false });
-  expect(working()).toBeNull();
+  expect(activitySlot()).toBeNull();
   const fresh: TimelinePending = { ...unknownPending, id: "fresh", delivery: "pending" };
-  await update([user("group-1"), fresh, ...residuals], { running: true });
-  expect(working()?.textContent).toBe("Working…");
-  await update([user("group-1"), fresh, ...residuals], { running: true, isLive: false });
-  expect(working()).toBeNull();
+  // 刚发送、Pi 尚未报告运行时不提前占位；开始运行后为新一轮保留活动区。
   await update([user("group-1"), fresh, ...residuals], { running: false });
-  expect(working()).toBeNull();
+  expect(activitySlot()).toBeNull();
+  await update([user("group-1"), fresh, ...residuals], { running: true });
+  expect(activitySlot()).not.toBeNull();
+  await update([user("group-1"), fresh, ...residuals], { running: true, isLive: false });
+  expect(activitySlot()).toBeNull();
 });
 
 test("supplements a readonly historical user row when metadata arrives after the message", async () => {
@@ -395,9 +403,8 @@ test("a completed thinking group toggles by keyboard and only exposes its Reader
   await userEvent.keyboard("{Enter}");
   const row = screen.getByRole("button", { name: "Read thinking" });
   await expect.element(row).toBeVisible();
-  // 已结束且没有完整加粗标题时明细显示「Thinking」，正文只在 Reader 中。
-  expect(rowHeading()?.textContent).toBe("Thinking");
-  await expect.element(screen.getByText("Inspecting the request.")).not.toBeInTheDocument();
+  // 已结束且没有完整加粗标题时明细保留首行摘要，不退回占位；正文只在 Reader 中。
+  expect(rowHeading()?.textContent).toBe("Inspecting the request.");
   expect(document.querySelector(".pwa-process-details .pwa-markdown, .pwa-process-details .pwa-tool-code")).toBeNull();
   await expect.element(screen.getByText("The final answer.")).toBeVisible();
   await userEvent.keyboard(" ");
@@ -432,12 +439,12 @@ test.each([1280, 390])("empty thinking settles into one static historical trace 
   // 静态痕迹只有中性图标，没有入口、折叠或运行状态。
   expect(trace.querySelector("button, .pwa-spin, [role='status'], [aria-expanded], .pwa-collapse")).toBeNull();
   // 历史痕迹不是运行指示，不能压制本轮 Working 兜底。
-  expect(document.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
+  await expect.poll(() => workingShown()?.textContent).toBe("Working…");
   const earlier: TimelineEvent = { ...empty, event_id: "earlier-empty", timestamp: 0 };
   await update([eventItem(earlier), eventItem(empty), eventItem(later), runEndItem()], { running: false, isLive: false });
   expect(document.querySelector(".pwa-process-head-static")).toBe(trace);
   expect(document.querySelectorAll(".pwa-process-head-static")).toHaveLength(1);
-  expect(document.querySelector(".pwa-thinking-status, .pwa-process-working, .pwa-spin")).toBeNull();
+  expect(document.querySelector(".pwa-turn-activity, .pwa-process-working, .pwa-spin")).toBeNull();
   const readable: TimelineEvent = { ...assistantEvent, event_id: "readable-thinking" };
   await update([eventItem(empty), eventItem(later), eventItem(readable), runEndItem()], { running: false, isLive: false });
   // 可读思考与空痕迹相邻同轮，合入同一过程组；组头收起，展开后才出现阅读入口。
@@ -469,7 +476,9 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   expect(slot.querySelector("svg")?.getAttribute("width")).toBe("16");
   expect(getComputedStyle(heading).fontSize).toBe("16px");
   expect(getComputedStyle(heading).fontStyle).toBe("italic");
-  expect(listText()).not.toContain("B.");
+  // 正文只在两行尾部预览中出现，标题行不重复。
+  expect(listTextOutsidePreview()).not.toContain("B.");
+  expect(document.querySelector(".pwa-thinking-tail")?.textContent).not.toContain("Second step");
   expect(heading.textContent).not.toContain("Thinking…");
 });
 
@@ -599,9 +608,10 @@ test("thinking summary uses a bounded window and cancels stale work on replaceme
     update("No heading", replacementEpoch);
     update("No heading pending", replacementEpoch);
     update("No heading pending", replacementEpoch, false);
-    expect(title()).toBe("Thinking");
+    // 结束后直接显示完整首行摘要，不退回占位，也不再等待合并窗口。
+    expect(title()).toBe("No heading pending");
     await advance(THINKING_SUMMARY_WINDOW_MS * 2);
-    expect(title()).toBe("Thinking");
+    expect(title()).toBe("No heading pending");
     const unmountEpoch = {};
     update("Unmount", unmountEpoch);
     update("Unmount pending", unmountEpoch);
@@ -636,7 +646,7 @@ test.each([1280, 390])("streaming titles update in place without announcing ever
     expect(rowHeading()).toBe(heading);
     await expect.poll(() => heading.textContent).toBe(title);
     expect(heading.closest("[aria-live]:not([aria-live='off']), [role='status']")).toBeNull();
-    expect(document.querySelector(".pwa-thinking-status, .pwa-process-working")).toBeNull();
+    expect(document.querySelector(".pwa-turn-activity[data-working], .pwa-process-working")).toBeNull();
   }
   const completed = eventItem({ ...assistantEvent, blocks: [{ type: "thinking", text: updates.at(-1)!.text }] });
   await update([before, completed]);
@@ -659,7 +669,9 @@ test.each([1280, 390])("streaming thinking uses a first-line summary and a runni
   await update([partialItem({ ...thinking, delta: text })]);
   await expect.element(screen.getByText("检查 工具 分组")).toBeVisible();
   expect(rowHeading()?.getAttribute("title")).toBe("检查 工具 分组");
-  expect(listText()).not.toContain("后续原文不应显示在标题中。");
+  // 后续正文只出现在对读屏隐藏的两行尾部预览中，不进入标题。
+  expect(listTextOutsidePreview()).not.toContain("后续原文不应显示在标题中。");
+  expect(document.querySelector(".pwa-thinking-tail")?.textContent).toContain("后续原文不应显示在标题中。");
   expect(document.querySelector(".pwa-thinking-process-row-action")?.getAttribute("aria-label")).toBe("Read thinking");
 });
 

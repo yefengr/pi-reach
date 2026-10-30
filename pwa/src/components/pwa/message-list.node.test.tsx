@@ -194,7 +194,10 @@ test("keeps streaming Thinking content out of the timeline and exposes its Reade
 
   expect(html).toContain('<span class="pwa-process-thinking-heading" title="Inspecting the request.">Inspecting the request.</span>');
   expect(html.lastIndexOf("pwa-process-status-running")).toBeLessThan(html.indexOf('title="Inspecting the request."'));
-  expect(html).not.toContain("Full reasoning stays collapsed.");
+  // 运行中只在两行尾部预览中显示最新正文，对读屏隐藏；全文仍从阅读器查看。
+  const tail = html.indexOf('<div class="pwa-thinking-tail" aria-hidden="true">');
+  expect(tail).toBeGreaterThan(-1);
+  expect(html.indexOf("Full reasoning stays collapsed.")).toBeGreaterThan(tail);
   expect(html).not.toContain("pwa-tool-code");
   const row = html.match(/<button class="pwa-thinking-process-row-action"[^>]*>/)?.[0] ?? "";
   expect(row).toContain('aria-label="Read thinking"');
@@ -331,47 +334,54 @@ describe("turn presentation", () => {
     expect(html.match(/View read tool details/g)?.length ?? 0).toBe(expanded ? 2 : 0);
   });
 
-  test("a local compaction notice after the final process group keeps Working at the end", () => {
+  test("the turn activity slot stays at the end after local notices and process groups never host Working", () => {
     const live = { hasEarlier: false, running: true };
     const tool = { ...toolEvent, group_id: "g1", event_seq: 2 };
     const items = events({ ...user("u1", "g1", 1), event_seq: 1 }, tool);
-    // 没有提示时，已结束成员的末段组原位承载 Working。
-    const hosted = renderList(items, live);
-    expect(hosted).toContain("pwa-process-working");
-    expect(hosted).not.toContain("pwa-thinking-status");
-    // 本地提示落在组后即为展示边界：Working 不挂回提示上方的组头。
+    const plain = renderList(items, live);
+    expect(plain).not.toContain("pwa-process-working");
+    expect(plain.indexOf("pwa-turn-activity")).toBeGreaterThan(plain.indexOf("pwa-process-group"));
     const bounded = renderList(items, { ...live, notices: [{ id: "n1", sessionId: "session-1", afterSeq: 2, kind: "failed" }] });
-    expect(bounded).not.toContain("pwa-process-working");
-    expect(bounded).toContain("pwa-thinking-status");
-    expect(bounded.indexOf("pwa-compaction-notice")).toBeLessThan(bounded.indexOf("pwa-thinking-status"));
+    expect(bounded.indexOf("pwa-compaction-notice")).toBeLessThan(bounded.indexOf("pwa-turn-activity"));
   });
 
-  test("uses Working immediately as a fallback behind specific live indicators", () => {
+  test("keeps the activity slot for the running turn and leaves Working to the idle timer", () => {
     const live = { hasEarlier: false, running: true };
-    expect(renderList(events(user("u1", "g1", 1)), live)).toContain("Working…");
-    // 已完成摘要与正文不自带运行指示，保留 Working；思考与工具自带旋转图标。
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "event", event: { ...toolEvent, group_id: "g1" } }], live)).toContain("Working…");
-    expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), live)).toContain("Working…");
+    const slot = (html: string) => html.includes("pwa-turn-activity");
+    // 首帧不显示 Working：只有界面连续没有可见动作才由空闲计时显示。
+    const first = renderList(events(user("u1", "g1", 1)), live);
+    expect(slot(first)).toBe(true);
+    expect(first).not.toContain('data-working="true"');
+    expect(first).toContain('aria-hidden="true"><svg');
+    // 正文、思考、工具与已完成摘要期间活动区都保持，高度不随具体活动变化。
+    expect(slot(renderList([...events(user("u1", "g1", 1)), { kind: "event", event: { ...toolEvent, group_id: "g1" } }], live))).toBe(true);
+    expect(slot(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), live))).toBe(true);
     const streaming: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "g1:assistant:0", kind: "assistant", status: "delta", delta: "Partial" };
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: streaming }], live)).toContain("Working…");
+    expect(slot(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: streaming }], live))).toBe(true);
     const thinking: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "g1:thinking:0", kind: "thinking", status: "delta", delta: "Reasoning" };
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: thinking }], live)).not.toContain("Working…");
+    expect(slot(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: thinking }], live))).toBe(true);
     const tool: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "tool:t1", kind: "tool", tool_call_id: "t1", tool: "bash", args: { command: "pnpm test" }, status: "running" };
-    expect(renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: tool }], live)).not.toContain("Working…");
-    // 首次渲染即有已完成队首和后续运行调用，组级图标也须接管 Working。
     const mixed = renderList([...events(user("u1", "g1", 1), { ...toolEvent, group_id: "g1" }), { kind: "partial", createdAt: 2, partial: tool }], live);
     expect(mixed).toContain("pwa-tool-spinner");
     expect(mixed).toContain('aria-label="bash: Running"');
-    expect(mixed).not.toContain("Working…");
-    // 旧轮、已结束轮的具体指示不能压制新轮兜底。
+    expect(slot(mixed)).toBe(true);
+    // 旧轮残留不影响新轮；本轮结束呈现、Pi 空闲或断线时收起。
     const residuals = [{ kind: "partial" as const, createdAt: 2, partial: thinking }, { kind: "partial" as const, createdAt: 2, partial: tool }];
-    expect(renderList([...events(user("u1", "g1", 1), user("u2", "g2", 3)), ...residuals], live)).toContain("Working…");
-    expect(renderList([...events(user("u1", "g1", 1), runEnd("r1", "g1", 2), user("u2", "g2", 3)), ...residuals], live)).toContain("Working…");
-    expect(renderList([...events(user("u1", "g1", 1), runEnd("r1", "g1", 3)), ...residuals], live)).not.toContain("Working…");
-    // 本轮结束、Pi 空闲或断线时隐藏。
-    expect(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), runEnd("r1", "g1", 3)), live)).not.toContain("Working…");
-    expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false })).not.toContain("Working…");
-    expect(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true, isLive: false })).not.toContain("Working…");
+    expect(slot(renderList([...events(user("u1", "g1", 1), user("u2", "g2", 3)), ...residuals], live))).toBe(true);
+    expect(slot(renderList([...events(user("u1", "g1", 1), runEnd("r1", "g1", 2), user("u2", "g2", 3)), ...residuals], live))).toBe(true);
+    expect(slot(renderList([...events(user("u1", "g1", 1), runEnd("r1", "g1", 3)), ...residuals], live))).toBe(false);
+    expect(slot(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), runEnd("r1", "g1", 3)), live))).toBe(false);
+    expect(slot(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: false }))).toBe(false);
+    expect(slot(renderList(events(user("u1", "g1", 1)), { hasEarlier: false, running: true, isLive: false }))).toBe(false);
+  });
+
+  test("a tool still being generated shows as preparing and counts as in progress", () => {
+    const live = { hasEarlier: false, running: true };
+    const preparing: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: "g1", partial_id: "tool:t1", kind: "tool", tool_call_id: "t1", tool: "bash", args: { command: "pnpm" }, status: "preparing" };
+    const html = renderList([...events(user("u1", "g1", 1)), { kind: "partial", createdAt: 2, partial: preparing }], live);
+    expect(html).toContain("pwa-tool-status-preparing");
+    expect(html).toContain('aria-label="bash: Preparing"');
+    expect(html).toContain('data-viewport-live="true"');
   });
 });
 

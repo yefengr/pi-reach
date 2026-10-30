@@ -5,7 +5,7 @@ export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "vi
 export type ViewportReason = typeof VIEWPORT_REASONS[number];
 export const VIEWPORT_MODES = ["idle", "follow", "send", "activity", "latest"] as const;
 export type ViewportMode = typeof VIEWPORT_MODES[number];
-/** tailReply：末尾内容行是 Pi 回复时为其行身份与是否仍在流式输出；正式版本接管后行身份不变。 */
+/** tailReply：末尾内容行是 Pi 回复或声明为实时增长的行（如运行中的过程组）时为其行身份与是否仍在增长；正式版本接管后行身份不变。 */
 export type ViewportGeometry = { top: number; bottom: number; height: number; animate: boolean; tailSpace: number; compensation: number; tailReply: { row: string; streaming: boolean } | null };
 /**
  * target：本帧的滚动目标；提供时滚动由协调器平滑追赶，目标中途变化不在末段一次补完。
@@ -384,6 +384,8 @@ export class TimelineViewportCoordinator<C, A> {
     const anchor = preserve ? layout?.captureAnchor() : null;
     const stopLatest = this.mode === "latest";
     const motion = this.motion;
+    // 退出时仍有程序写入在途（逐帧接续、过渡或未确认的回执）。
+    const writing = this.receipt !== null || this.glide !== null || motion !== null;
     this.cancelFrame();
     this.motion = null;
     this.motionGlide = null;
@@ -403,6 +405,9 @@ export class TimelineViewportCoordinator<C, A> {
       if (anchor && layout) this.restoreAnchor(layout, anchor);
       if (stopLatest && layout) layout.scroll(layout.top(), false);
       this.lastTop = layout?.top() ?? 0;
+      // 退出前最后一次程序写入（如逐帧接续）的原生 scroll 回执仍在途；以实际落点作回执，
+      // 避免它被当作用户回看而结束跟随。真正的用户滚动落点不同，仍按回看处理。
+      if (layout && writing) this.receipt = { target: this.lastTop, last: this.lastTop, smooth: false };
     } finally { this.exiting = false; }
   }
 
@@ -639,7 +644,7 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   /**
-   * 已稳定跟随时，实时 Pi 回复向下增长的小段位移逐帧平滑接续，输入暂停期内保持不动；
+   * 已稳定跟随时，实时 Pi 回复或运行中过程组向下增长的小段位移逐帧平滑接续，输入暂停期内保持不动；
    * 其他新行、回执、首次贴底、回缩与可视高度变化仍瞬时。
    */
   private glideMode(geometry: ViewportGeometry, distance: number): "glide" | "hold" | null {

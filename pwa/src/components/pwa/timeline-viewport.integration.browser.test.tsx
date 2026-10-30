@@ -397,7 +397,7 @@ const activityCases = [1280, 390].flatMap(width => ["no-preference", "reduce"].m
 async function sampleActivityLayout(list: HTMLElement, action: () => void) {
   const snapshot = () => ({
     scrollTop: Math.round(list.scrollTop), height: list.scrollHeight,
-    working: list.querySelector(".pwa-working-label, .pwa-process-working") !== null,
+    working: list.querySelector(".pwa-turn-activity[data-working], .pwa-process-working") !== null,
     thinking: list.querySelector(".pwa-process-status-running > .lucide-lightbulb") !== null,
     tool: list.querySelector(".pwa-process-status-running > .pwa-spin, .pwa-process-details .pwa-tool-spinner") !== null,
   });
@@ -488,22 +488,24 @@ const lastRowClearance = (list: HTMLElement) => {
   return Math.round(list.getBoundingClientRect().bottom - rows.at(-1)!.getBoundingClientRect().bottom);
 };
 
-test.each(activityCases)("Working and a running Thinking group hand off without blank or doubled indicators and keep the follower in place at $width px ($motion)", async ({ width, motion }) => {
+test.each(activityCases)("a running Thinking group enters above the activity slot without hiding the follower or doubling indicators at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
-  // partial 必须属于最后正式记录所在轮次，才能接管该轮的 Working。
+  // partial 必须属于最后正式记录所在轮次，才属于当前运行轮。
   const history = answer("live-output", paragraphs("Earlier", 30));
   const { screen, list, update, viewport } = await renderTimeline([history]);
   try {
-    const working = list.querySelector<HTMLElement>(".pwa-thinking-status")!;
-    expect(Math.round(working.getBoundingClientRect().height)).toBe(44);
-    expect(getComputedStyle(working).fontSize).toBe("16px");
-    const scrollTop = Math.round(list.scrollTop);
+    // 活动区与过程组头同高同字号，运行期间一直在末尾占位。
+    const slot = list.querySelector<HTMLElement>(".pwa-turn-activity")!;
+    expect(Math.round(slot.getBoundingClientRect().height)).toBe(44);
+    expect(getComputedStyle(slot).fontSize).toBe("16px");
     for (const thinking of [true, false, true]) {
       const samples = await sampleActivityLayout(list, () => update(thinking ? [history, partial("live-output", "**Checking results**\nReasoning in progress.", "thinking")] : [history]));
-      // 每个已绘制帧恰好一种运行提示；运行中的组默认展开，多出的明细行使用已有底部留白，已稳定的正文不移动。
-      for (const sample of samples) expect(sample).toMatchObject({ scrollTop, working: !thinking, thinking, tool: false });
-      expect(new Set(samples.map(sample => sample.height)).size).toBe(1);
+      // 新内容出现时 Working 立即隐藏，过渡窗口内不重复提示；跟随中只向新底部移动。
+      for (const sample of samples) expect(sample).toMatchObject({ working: false, thinking, tool: false });
+      if (thinking) for (const [index, sample] of samples.entries()) if (index > 0) expect(sample.scrollTop).toBeGreaterThanOrEqual(samples[index - 1]!.scrollTop);
+      await settleLayout();
+      expect(list.querySelector(":scope > .pwa-turn-activity")).toBe(slot);
       expect(lastRowClearance(list)).toBeGreaterThanOrEqual(8);
       expect(viewport().followingOutput).toBe(true);
       expect(viewport().unreadOutput).toBe(0);
@@ -571,7 +573,8 @@ test.each([1280, 390])("running tool members keep following without reversal and
         requestAnimationFrame(sample);
       });
       expect(samples.length).toBeGreaterThan(1);
-      expect(list.querySelector(".pwa-thinking-status, .pwa-process-working")).toBeNull();
+      // 转动的工具图标是持续动作，Working 不出现，组头也不承载。
+      expect(list.querySelector(".pwa-turn-activity[data-working], .pwa-process-working")).toBeNull();
       return samples;
     };
     const following = await sampleUpdate(["a", "b", "c", "d", "e"]);
@@ -629,16 +632,22 @@ test("a connection banner entering and fading out above the list keeps the readi
 });
 
 /** 同轮的长过程组：16 个已完成工具在运行中默认展开，超过一屏；正式 run_end 到达时自动收起并出现完成时间。 */
-function collapsingRun(options: { reply?: boolean } = {}) {
+function collapsingRun(options: { reply?: boolean; runningLast?: boolean } = {}) {
   const history = answer("live-output", paragraphs("Earlier", 30));
   const tool = (id: string): TimelineViewItem => ({ kind: "event", event: {
     ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id,
     tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok",
   } });
   const tools = Array.from({ length: 16 }, (_, index) => tool(`t${index}`));
+  // 最后一个调用仍在运行时，后续正文已出现也不收起；它结束后才让位。
+  const runningTail: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
+    ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: "tool:t15",
+    kind: "tool", tool_call_id: "t15", tool: "read", args: { path: "t15.ts" }, status: "running",
+  } };
+  const runningTools = options.runningLast ? [...tools.slice(0, -1), runningTail] : tools;
   const reply: TimelineViewItem[] = options.reply ? [{ kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text: paragraphs("Reply", 30) }] } }] : [];
   const ended: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "end", group_id: "live-output", timestamp: 3, kind: "run_end", status: "complete" } };
-  return { running: [history, ...tools, ...reply], ended: [history, ...tools, ...reply, ended] };
+  return { running: [history, ...runningTools, ...reply], ended: [history, ...tools, ...reply, ended] };
 }
 
 /** 采样一次收起所需的窗口；每帧在该帧回调与提交完成后读取。 */
@@ -687,7 +696,7 @@ test.each(activityCases)("a long group collapsing at run_end while following mov
 test.each(activityCases)("reading below a collapsing group keeps the anchor in every frame at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
-  const run = collapsingRun({ reply: true });
+  const run = collapsingRun({ reply: true, runningLast: true });
   const { screen, list, update, readAt, viewport } = await renderTimeline(run.running);
   try {
     expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
@@ -739,22 +748,22 @@ test.each(activityCases)("an anchor inside collapsing details falls back to the 
   } finally { await screen.unmount(); }
 });
 
-test.each(activityCases)("the usual turn ending — group, reply, trailing Working, then run_end — never moves backward while following at $width px ($motion)", async ({ width, motion }) => {
+test.each(activityCases)("the usual turn ending — collapsed group, reply, activity slot, then run_end — never moves backward while following at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
   const run = collapsingRun({ reply: true });
   const { screen, list, update, viewport } = await renderTimeline(run.running);
   try {
-    // 正文之后由末尾兜底行承载 Working；同一提交里 Working 消失、组收起、完成时间出现。
-    expect(list.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
-    expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
+    // 正文出现时过程组已让位收起；本轮结束呈现时活动区收起、完成时间出现在同一提交。
+    expect(list.querySelector(".pwa-turn-activity")).not.toBeNull();
+    expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("false");
     expect(bottomGap(list)).toBeLessThanOrEqual(1);
     const before = Math.round(list.scrollTop);
     const raw = [list.scrollTop];
     const samples = [before, ...await sampleCollapse(list, () => update(run.ended), () => { raw.push(list.scrollTop); return Math.round(list.scrollTop); })];
     // 失败时附上逐帧原始 scrollTop，便于在 CI 上区分取整抖动与真实的先跟随再回落。
     for (const [index, top] of samples.entries()) if (index > 0) expect(top, `frame ${index}: ${JSON.stringify(raw)}`).toBeLessThanOrEqual(samples[index - 1]!);
-    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    expect(list.querySelector(".pwa-turn-activity")).toBeNull();
     expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("false");
     const meta = list.querySelector<HTMLElement>(".pwa-turn-meta")!;
     expect(Math.round(list.getBoundingClientRect().bottom - meta.getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(8);

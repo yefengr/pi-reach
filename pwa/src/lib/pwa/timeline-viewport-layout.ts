@@ -8,13 +8,16 @@ import type { ReplyProbe } from "./timeline-viewport-continuity";
 /** Pi 回复行的 class；流式中另有 partial，正式版本接管后保留同一行身份。 */
 const REPLY_ROW_CLASSES = ["pwa-message", "assistant"];
 const STREAMING_CLASS = "partial";
+/** 其他实时增长的末尾行（如仍有成员运行的过程组）以该属性声明，跟随时与流式回复一样平滑接续。 */
+const LIVE_ROW_ATTRIBUTE = "data-viewport-live";
 
-/** 末尾内容行（跳过状态行等非内容子元素）为 Pi 回复时返回行身份与流式状态；每次测量都会调用，只读属性与 class，不做选择器匹配。 */
+/** 末尾内容行（跳过状态行等非内容子元素）为 Pi 回复或实时行时返回行身份与流式状态；每次测量都会调用，只读属性与 class，不做选择器匹配。 */
 function tailReply(list: HTMLDivElement): { row: string; streaming: boolean } | null {
   for (let child = list.lastElementChild; child; child = child.previousElementSibling) {
     const row = child.getAttribute("data-viewport-row");
     if (row === null) continue;
-    return REPLY_ROW_CLASSES.every((name) => child.classList.contains(name)) ? { row, streaming: child.classList.contains(STREAMING_CLASS) } : null;
+    if (REPLY_ROW_CLASSES.every((name) => child.classList.contains(name))) return { row, streaming: child.classList.contains(STREAMING_CLASS) };
+    return child.hasAttribute(LIVE_ROW_ATTRIBUTE) ? { row, streaming: true } : null;
   }
   return null;
 }

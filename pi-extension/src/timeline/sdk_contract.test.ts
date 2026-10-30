@@ -529,6 +529,9 @@ describe("plan/63 SDK timeline contracts", () => {
       const runEnd = published.at(-1)!;
       expect(runEnd).toMatchObject({ kind: "run_end", status: "complete", group_id: published[0]!.group_id });
       expect(runtime.recover(sessionManager).find((event) => event.event_id === runEnd.event_id)).toEqual(runEnd);
+      // 显示队列按节奏呈现：工具保持最短运行展示、run_end 等本轮内容全部放出，推进显示时钟直到追上。
+      for (let frame = 0; frame < 200 && display.hasPending(); frame += 1) display.advance(16);
+      expect(display.hasPending()).toBe(false);
       expect(display.snapshot().filter((item) => item.kind === "partial")).toEqual([]);
       expect(display.snapshot().at(-1)).toEqual({ kind: "event", event: runEnd });
       expect(runCompletions(browser.formalEvents()).get(runEnd.group_id!)).toEqual({ timestamp: runEnd.timestamp, status: "complete" });

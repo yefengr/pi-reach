@@ -4,6 +4,7 @@ import { toolPartial, toolTimelineEvent } from "../../../../pi-extension/src/tim
 import { decodeServerFrameV2 } from "../pi-reach/protocol-v2/codec";
 import { TimelineRuntime, type TimelineScope } from "./timeline-runtime";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
+import { TOOL_MIN_RUNNING_MS } from "./stream-structure-gate";
 import { projectTimeline } from "./timeline-presentation";
 import { processGroups } from "@/components/pwa/process-groups";
 
@@ -34,7 +35,9 @@ test.each([false, true])("Extension tool snapshots reach PWA and settle independ
     ),
     event_seq: 2,
   };
-  const settled = receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: scope.leafId, event });
+  receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: scope.leafId, event });
+  // 最短运行展示期结束后正式结果接管；另一个调用的实时输出不受影响。
+  const settled = buffer.advance(TOOL_MIN_RUNNING_MS);
   expect(settled.items.filter((item) => item.kind === "partial")).toEqual([
     expect.objectContaining({ partial: expect.objectContaining({ tool_call_id: "call-b" }) }),
   ]);

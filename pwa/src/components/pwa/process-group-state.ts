@@ -12,8 +12,7 @@ export type ProcessGroupState = {
   entryStatuses: ReadonlyMap<string, ProcessStatus>;
   status: ProcessStatus;
   expanded: boolean;
-  expansionSource: "manual" | "protected" | "completed" | "running" | "retained" | "history";
-  canHostWorking: boolean;
+  expansionSource: "manual" | "protected" | "superseded" | "completed" | "running" | "retained" | "history";
 };
 
 type ProcessContext = {
@@ -24,12 +23,19 @@ type ProcessContext = {
   choices: ReadonlyMap<string, ProcessExpansion>;
   protectedReading?: boolean;
   previousExpanded?: boolean;
+  /** 组后已紧接同一轮的 Pi 正文：思考与工具告一段落。 */
+  supersededByText?: boolean;
 };
 
-function expansionState(group: ProcessGroup, context: ProcessContext, running: boolean): Pick<ProcessGroupState, "expanded" | "expansionSource"> {
+/**
+ * 展开优先级：手动 > 阅读保护 > 后续正文让位 > 本轮结束 > 运行展开 > 保持 > 历史收起。
+ * 后续正文出现时组内仍有进行中的成员则暂不收起，等其全部结束。
+ */
+function expansionState(group: ProcessGroup, context: ProcessContext, running: boolean, settled: boolean): Pick<ProcessGroupState, "expanded" | "expansionSource"> {
   const manual = processExpansion(group.entries, context.choices);
   if (manual !== undefined) return { expanded: manual.expanded, expansionSource: "manual" };
   if (context.protectedReading) return { expanded: true, expansionSource: "protected" };
+  if (context.supersededByText && settled) return { expanded: false, expansionSource: "superseded" };
   if (context.completion !== undefined) return { expanded: false, expansionSource: "completed" };
   if (running) return { expanded: true, expansionSource: "running" };
   if (context.previousExpanded !== undefined) return { expanded: context.previousExpanded, expansionSource: "retained" };
@@ -67,17 +73,14 @@ export function processGroupState(group: ProcessGroup, context: ProcessContext):
     activeOrder = order;
   }
   const running = activity.working && group.entries.some(entry => activity.currentIndicator(entry));
-  const last = entries.at(-1);
-  const canHostWorking = running && last !== undefined && activity.currentIndicator(last)
-    && group.entries.some(entry => entry.key === last.key);
   const active: ProcessEntry | null = activeEntry;
+  const settled = ![...entryStatuses.values()].includes("running");
   return {
     activeEntry: active,
     additionalRunningTools: active === null ? 0 : runningTools - (active.kind === "tool" ? 1 : 0),
     entryStatuses,
     status: active !== null || running ? "running" : settledStatus(group, entryStatuses, completion),
-    ...expansionState(group, context, running),
-    canHostWorking,
+    ...expansionState(group, context, running, settled),
   };
 }
 

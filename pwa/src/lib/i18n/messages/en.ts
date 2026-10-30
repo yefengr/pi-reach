@@ -449,6 +449,7 @@ export const en = {
   },
   tools: {
     status: { running: "Running", complete: "Complete", error: "Error", interrupted: "Interrupted", unknown: "Status unknown" },
+    preparing: "Preparing",
     viewDetails: (tool: string) => `View ${tool} tool details`,
     statusLabel: (tool: string, status: string) => `${tool}: ${status}`,
     stillArriving: "Output is still arriving.",

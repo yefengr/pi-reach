@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
+import { TOOL_MIN_RUNNING_MS } from "./stream-structure-gate";
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
 import type { TimelinePending, TimelineViewItem } from "./timeline-runtime";
 import { projectTimeline } from "./timeline-presentation";
@@ -256,9 +257,12 @@ test("keeps another tool stream visible when a tool in the same group completes"
   buffer.ingest([first, second]);
 
   const changed = buffer.ingest([toolEvent("event-a", "g", "tool-a-call"), second]);
+  // 最短运行展示期内仍显示进行中视图，到期后交接正式结果。
+  expect(changed.items).toContainEqual(expect.objectContaining({ kind: "partial", partial: expect.objectContaining({ tool_call_id: "tool-a-call" }) }));
+  const settled = buffer.advance(TOOL_MIN_RUNNING_MS);
 
-  expect(changed.items).toContainEqual(expect.objectContaining({ kind: "event", event: expect.objectContaining({ tool_call_id: "tool-a-call" }) }));
-  expect(changed.items).toContainEqual(expect.objectContaining({ kind: "partial", partial: expect.objectContaining({ tool_call_id: "tool-b-call" }) }));
+  expect(settled.items).toContainEqual(expect.objectContaining({ kind: "event", event: expect.objectContaining({ tool_call_id: "tool-a-call" }) }));
+  expect(settled.items).toContainEqual(expect.objectContaining({ kind: "partial", partial: expect.objectContaining({ tool_call_id: "tool-b-call" }) }));
 });
 
 test("same partial target does not require another render", () => {

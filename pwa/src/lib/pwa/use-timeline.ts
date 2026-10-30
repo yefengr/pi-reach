@@ -110,8 +110,11 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   }, []);
 
   const [streamDisplay] = useState(() => new StreamDisplayScheduler(new StreamDisplayBuffer(), () => undefined));
+  /** 显示仍落后于权威快照：本轮结束的呈现（完成时间、活动区收起）等它追上。 */
+  const [displayPending, setDisplayPending] = useState(false);
   useLayoutEffect(() => {
-    streamDisplay.setPublisher((next, realtime) => {
+    streamDisplay.setPublisher((next, realtime, pending) => {
+      setDisplayPending(pending);
       // 只为已经提交到排队面板的消息接管；同批瞬时入队、出队不代表界面发生过排队过渡。
       const displayedQueue = new Set([...publishedQueueRef.current].filter((id) => committedQueueRef.current.has(id)));
       const dequeued = followingNow() && leftQueueIntoTimeline(displayedQueue, next) ? captureOwnSend() : null;
@@ -542,6 +545,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
 
   return {
     items,
+    displayPending,
     reportQueueCommit,
     queueSnapshotReady,
     lastSyncedAt,

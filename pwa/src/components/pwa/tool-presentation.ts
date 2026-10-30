@@ -45,6 +45,11 @@ export function isToolPartial(value: ToolValue): value is Extract<TimelinePartia
   return "partial_id" in value;
 }
 
+/** 模型仍在生成该调用、尚未执行；状态推导按运行中处理，只在图标与读屏文案上区分。 */
+export function isToolPreparing(value: ToolValue): boolean {
+  return isToolPartial(value) && value.status === "preparing";
+}
+
 export function toolStatus(value: ToolValue, override?: ToolStatus): ToolStatus {
   if (override !== undefined) return override;
   return isToolPartial(value) ? "running" : value.status;

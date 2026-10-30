@@ -9,6 +9,8 @@
 }
 .pwa-root .pwa-process-group .pwa-process-head:has(.pwa-process-alert) { grid-template-columns: 16px minmax(0, 1fr) auto auto; }
 .pwa-root .pwa-process-group .pwa-process-copy { min-width: 0; display: flex; align-items: center; gap: var(--pwa-space-xs); overflow: hidden; white-space: nowrap; }
+/* 当前活动换人时文案淡入；组头高度不变。 */
+.pwa-root .pwa-process-group .pwa-process-copy-swap { animation: pwa-row-enter var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-process-group .pwa-process-summary,
 .pwa-root .pwa-process-group .pwa-process-tool-detail,
 .pwa-root .pwa-process-group .pwa-process-thinking-heading {
@@ -23,13 +25,14 @@
 .pwa-root .pwa-process-group .pwa-process-tool-detail { color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-mono); }
 /* 思考标题保持斜体与中性色，运行状态只由状态槽表达。 */
 .pwa-root .pwa-process-group .pwa-process-thinking-heading { color: var(--pwa-secondary); font-style: italic; }
-.pwa-root .pwa-process-group .pwa-process-working { flex: none; color: var(--pwa-running); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-root .pwa-process-group .pwa-process-more { flex: none; color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 
 /* 状态槽固定 16px，不随标题或计数伸缩。 */
 .pwa-root .pwa-process-group .pwa-process-status-slot { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--pwa-secondary); }
 .pwa-root .pwa-process-group .pwa-process-status-slot > svg { flex: none; }
 .pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-running { color: var(--pwa-running); }
+/* 准备中：模型仍在生成调用，图标保持转动但用中性色，与真正执行区分。 */
+.pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-running.pwa-process-status-preparing { color: var(--pwa-secondary); }
 .pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-complete { color: var(--pwa-complete); }
 .pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-error { color: var(--pwa-error); }
 
@@ -90,3 +93,18 @@
 .pwa-root .pwa-process-group .pwa-thinking-process-row-action:active { background: var(--pwa-hover); }
 .pwa-root .pwa-process-group .pwa-thinking-process-row-action:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-root .pwa-process-group .pwa-thinking-process-row-static { cursor: default; }
+
+/* 运行中思考的尾部预览：与标题同左缘（16px 槽＋间隔），固定两行高度，最新内容贴底、顶部渐隐；只作视觉进度。 */
+.pwa-root .pwa-process-group .pwa-thinking-tail {
+  box-sizing: border-box;
+  height: calc(var(--pwa-text-list) * var(--pwa-leading-ui) * 2);
+  margin: 0 0 4px calc(16px + var(--pwa-space-xs));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: var(--pwa-secondary);
+  font: var(--pwa-weight-regular) var(--pwa-text-list)/var(--pwa-leading-ui) var(--pwa-font-ui);
+  mask-image: linear-gradient(to bottom, transparent, black 45%);
+}
+.pwa-root .pwa-process-group .pwa-thinking-tail > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

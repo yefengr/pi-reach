@@ -452,6 +452,7 @@ export const zh: Messages = {
   },
   tools: {
     status: { running: "运行中", complete: "完成", error: "出错", interrupted: "已中断", unknown: "状态未知" },
+    preparing: "准备中",
     viewDetails: (tool) => `查看 ${tool} 工具详情`,
     statusLabel: (tool, status) => `${tool}：${status}`,
     stillArriving: "输出仍在接收中。",

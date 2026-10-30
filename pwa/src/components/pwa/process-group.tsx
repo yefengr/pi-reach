@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, type FocusEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, Lightbulb, LoaderCircle } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
@@ -8,7 +8,7 @@ import type { ProcessEntry, ProcessGroup as ProcessGroupModel } from "./process-
 import { ThinkingProcessHeading, ThinkingProcessRow } from "./thinking-process-row";
 import { ToolCard } from "./tool-card";
 import { ToolIndicatorContext, useToolIndicatorRef, useVisibleToolIndicators, type RunningToolsChange } from "./tool-indicator-visibility";
-import { toolHeaderSummary, toolInlineText, type ToolStatus } from "./tool-presentation";
+import { isToolPreparing, toolHeaderSummary, toolInlineText, type ToolStatus } from "./tool-presentation";
 import "./process-group.css";
 
 export type { ProcessGroupModel };
@@ -20,7 +20,8 @@ type ProcessGroupSummary = ReturnType<typeof processGroupSummary>;
 type ProcessGroupProps = {
   group: ProcessGroupModel;
   state: ProcessGroupState;
-  showWorking?: boolean;
+  /** 在线会话中新追加的成员 key：新组整体淡入，已有组内的新成员单独淡入。 */
+  enteredKeys?: ReadonlySet<string>;
   onToggle: (groupKey: string, expanded: boolean) => void;
   onRead: (entry: ProcessEntry, trigger: HTMLButtonElement) => void;
   onFocusWithinChange?: (groupKey: string, focused: boolean) => void;
@@ -47,7 +48,6 @@ function ProcessStatusIcon({ status, thinking, iconRef }: { status: ProcessStatu
 type ProcessGroupHeadProps = {
   group: ProcessGroupModel;
   state: ProcessGroupState;
-  showWorking: boolean;
   summary: ProcessGroupSummary;
   detailsId: string;
   onToggle: (groupKey: string, expanded: boolean) => void;
@@ -57,18 +57,19 @@ type ProcessGroupHeadProps = {
  * 组头只渲染推导好的内容：折叠时显示当前成员，展开时显示分类摘要；
  * 运行身份来自真实成员，不新增排队计时或调用轮播。
  */
-function ProcessGroupHead({ group, state, showWorking, summary, detailsId, onToggle }: ProcessGroupHeadProps) {
+function ProcessGroupHead({ group, state, summary, detailsId, onToggle }: ProcessGroupHeadProps) {
   const { t } = useI18n();
   const active = state.activeEntry;
   const activeStatus: ProcessStatus | null = active === null ? null : state.entryStatuses.get(active.key) ?? "neutral";
   const runningKeys = state.expanded
     ? group.entries.filter(entry => state.entryStatuses.get(entry.key) === "running").map(entry => entry.key)
     : active !== null && activeStatus === "running" ? [active.key] : NO_KEYS;
-  // 没有具体成员、也不承载通用 Working 时保持中性，避免给正文前的旧组挂运行状态。
-  const iconStatus: ProcessStatus = state.status === "running" && active === null && !showWorking ? "neutral" : state.status;
+  // 没有具体运行成员时保持中性，避免给正文前的旧组挂运行状态；Working 只在时间线末尾兜底。
+  const iconStatus: ProcessStatus = state.status === "running" && active === null ? "neutral" : state.status;
   const indicatorRef = useToolIndicatorRef(runningKeys);
   const thinking = active?.kind === "thinking" && activeStatus === "running";
   const activeTool = active?.kind === "tool" ? active : null;
+  const preparing = activeTool !== null && activeStatus === "running" && isToolPreparing(activeTool.value);
   const toolDetail = activeTool === null ? "" : toolInlineText(toolHeaderSummary(activeTool.value));
   const summaryAlert = summary.failureCount > 0 ? "error" : summary.unknownCount > 0 ? "unknown" : summary.interruptedCount > 0 ? "interrupted" : null;
   // 左侧状态槽已表达同一状态时不再重复右侧图标；数量仍在组头可访问名称的摘要中。
@@ -76,8 +77,11 @@ function ProcessGroupHead({ group, state, showWorking, summary, detailsId, onTog
   const alertLabel = alertKind === "error" ? t.tools.groupFailed(summary.failureCount)
     : alertKind === "unknown" ? t.tools.statusLabel(String(summary.unknownCount), t.tools.status.unknown)
       : alertKind === "interrupted" ? t.tools.groupInterrupted(summary.interruptedCount) : null;
-  const ariaSummary = [summary.fullLabel, showWorking ? t.timeline.working : null].filter(Boolean).join(" · ");
+  const ariaSummary = summary.fullLabel;
 
+  // 当前活动换人（思考、工具、摘要之间）时重新挂载并淡入；同一成员的标题与参数增长原位更新。
+  const copyKey = !state.expanded && active !== null ? active.key : "summary";
+  const [mountedCopyKey] = useState(copyKey);
   let copy: ReactNode;
   if (!state.expanded && active !== null) {
     copy = active.kind === "thinking"
@@ -87,21 +91,16 @@ function ProcessGroupHead({ group, state, showWorking, summary, detailsId, onTog
         {toolDetail ? <span className="pwa-process-tool-detail" title={toolDetail}>{toolDetail}</span> : null}
         {state.additionalRunningTools > 0 ? <span className="pwa-process-more" role="status" aria-live="off" aria-label={t.timeline.otherRunningTools(state.additionalRunningTools)}>+{state.additionalRunningTools}</span> : null}
       </>;
-  } else if (!state.expanded && showWorking) {
-    copy = <span className="pwa-process-working">{t.timeline.working}</span>;
   } else {
-    copy = <>
-      <span className="pwa-process-summary" title={summary.fullLabel}>{summary.fullLabel}</span>
-      {showWorking ? <span className="pwa-process-working">{t.timeline.working}</span> : null}
-    </>;
+    copy = <span className="pwa-process-summary" title={summary.fullLabel}>{summary.fullLabel}</span>;
   }
   if (active?.kind === "thinking" && !state.expanded && state.additionalRunningTools > 0) {
     copy = <>{copy}<span className="pwa-process-more" role="status" aria-live="off" aria-label={t.timeline.otherRunningTools(state.additionalRunningTools)}>+{state.additionalRunningTools}</span></>;
   }
 
   return <button className="pwa-process-head pwa-timeline-toggle" type="button" aria-expanded={state.expanded} aria-controls={detailsId} aria-label={t.tools.groupToggle(state.expanded, ariaSummary)} title={summary.fullLabel} onClick={() => onToggle(group.key, !state.expanded)}>
-    <span className={`pwa-process-status-slot pwa-process-status-${iconStatus}`}><ProcessStatusIcon status={iconStatus} thinking={thinking} iconRef={indicatorRef} /></span>
-    <span className="pwa-process-copy">{copy}</span>
+    <span className={`pwa-process-status-slot pwa-process-status-${iconStatus}${preparing ? " pwa-process-status-preparing" : ""}`}><ProcessStatusIcon status={iconStatus} thinking={thinking} iconRef={indicatorRef} /></span>
+    <span key={copyKey} className={`pwa-process-copy${copyKey === mountedCopyKey ? "" : " pwa-process-copy-swap"}`}>{copy}</span>
     {alertKind === null ? null : <span className={`pwa-process-alert pwa-process-alert-${alertKind}`} role="img" aria-label={alertLabel ?? undefined}>
       {alertKind === "error" ? <CircleAlert size={16} aria-hidden="true" /> : alertKind === "unknown" ? <CircleHelp size={16} aria-hidden="true" /> : <CircleStop size={16} aria-hidden="true" />}
     </span>}
@@ -116,7 +115,7 @@ const asToolStatus = (status: ProcessStatus): ToolStatus => status === "neutral"
  * 过程组：固定左侧状态槽、同字号、单层总折叠与相邻明细短竖线。
  * 展开、业务状态与阅读意图均由父级模型提供，组件只负责呈现、焦点范围通知和真实图标可见性观察。
  */
-export function ProcessGroup({ group, state, showWorking = false, onToggle, onRead, onFocusWithinChange, onRunningToolsChange, onPresentationChange }: ProcessGroupProps) {
+export function ProcessGroup({ group, state, enteredKeys, onToggle, onRead, onFocusWithinChange, onRunningToolsChange, onPresentationChange }: ProcessGroupProps) {
   const { t } = useI18n();
   const summary = processGroupSummary(group, state.entryStatuses, t.tools);
   const detailsId = `pwa-process-${useId().replace(/:/g, "")}`;
@@ -161,12 +160,14 @@ export function ProcessGroup({ group, state, showWorking = false, onToggle, onRe
   };
 
   const only = group.entries.length === 1 ? group.entries[0]! : null;
+  const groupEntering = enteredKeys?.has(group.entries[0]!.key) === true;
+  const enterClass = groupEntering ? " pwa-row-enter" : "";
   const staticTrace = only?.kind === "thinking" && !only.streaming && !only.text.trim()
-    && !showWorking && state.additionalRunningTools === 0
+    && state.additionalRunningTools === 0
     && summary.failureCount === 0 && summary.interruptedCount === 0 && summary.unknownCount === 0;
 
   if (staticTrace) {
-    return <article ref={groupRef} className="pwa-process-group pwa-timeline-row" data-timeline-key={group.key} data-viewport-row={group.key} aria-label={t.timeline.processGroup}>
+    return <article ref={groupRef} className={`pwa-process-group pwa-timeline-row${enterClass}`} data-timeline-key={group.key} data-viewport-row={group.key} aria-label={t.timeline.processGroup}>
       <div className="pwa-process-head pwa-process-head-static">
         <span className="pwa-process-status-slot"><Lightbulb size={16} aria-hidden="true" /></span>
         <span>{t.timeline.thinkingTrace}</span>
@@ -174,11 +175,12 @@ export function ProcessGroup({ group, state, showWorking = false, onToggle, onRe
     </article>;
   }
 
-  return <ToolIndicatorContext value={register}><article ref={groupRef} className="pwa-process-group pwa-timeline-row" data-timeline-key={group.key} data-viewport-row={group.key} aria-label={t.timeline.processGroup}>
-    <ProcessGroupHead group={group} state={state} showWorking={showWorking} summary={summary} detailsId={detailsId} onToggle={onToggle} />
+  // 仍有成员运行的组在末尾持续增长，声明为实时行，跟随时平滑接续。
+  return <ToolIndicatorContext value={register}><article ref={groupRef} className={`pwa-process-group pwa-timeline-row${enterClass}`} data-timeline-key={group.key} data-viewport-row={group.key} data-viewport-live={state.status === "running" ? "true" : undefined} aria-label={t.timeline.processGroup}>
+    <ProcessGroupHead group={group} state={state} summary={summary} detailsId={detailsId} onToggle={onToggle} />
     <Collapse open={state.expanded} id={detailsId} className="pwa-process-details" onPresentationChange={presentation}>
       <div ref={focusRegion} className="pwa-process-entries" onFocusCapture={() => reportFocus(true)} onBlurCapture={handleBlur}>
-        {group.entries.map(entry => <div key={entry.key} className="pwa-process-entry" data-process-entry-key={entry.key}>
+        {group.entries.map((entry, index) => <div key={entry.key} className={`pwa-process-entry${index > 0 && enteredKeys?.has(entry.key) ? " pwa-row-enter" : ""}`} data-process-entry-key={entry.key}>
           {entry.kind === "tool"
             ? <ToolCard value={entry.value} status={asToolStatus(state.entryStatuses.get(entry.key) ?? "neutral")} indicatorKeys={[entry.key]} onRead={trigger => onRead(entry, trigger)} />
             : <ThinkingProcessRow entry={entry} status={state.entryStatuses.get(entry.key) ?? "neutral"} onRead={trigger => onRead(entry, trigger)} />}

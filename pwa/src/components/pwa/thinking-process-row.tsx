@@ -4,7 +4,9 @@ import { Lightbulb } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ThinkingEntry } from "@/lib/pwa/timeline-presentation";
 import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
+import { Collapse } from "./collapse";
 import type { ProcessStatus } from "./process-group-state";
+import { ThinkingTailPreview, thinkingPreviewStart } from "./thinking-tail-preview";
 import { useToolIndicatorRef } from "./tool-indicator-visibility";
 import { useThinkingHeading } from "./use-thinking-heading";
 
@@ -39,15 +41,23 @@ type ThinkingProcessRowProps = {
   onRead: (trigger: HTMLButtonElement) => void;
 };
 
-/** 思考明细：整行打开阅读器；空文本只保留静态标题，不制造无效入口。 */
+/** 标题行之外还有正文时才显示尾部预览。 */
+function hasPreview(text: string): boolean {
+  return text.slice(thinkingPreviewStart(text)).replace(/^[ \t]*\*\*[^*\n].*\*\*[ \t]*$/gm, "").trim() !== "";
+}
+
+/** 思考明细：整行打开阅读器；空文本只保留静态标题，不制造无效入口。运行中在标题下显示两行尾部预览，结束后收起。 */
 export function ThinkingProcessRow({ entry, status, onRead }: ThinkingProcessRowProps) {
   const { t } = useI18n();
   const indicatorRef = useToolIndicatorRef(status === "running" ? [entry.key] : NO_KEYS);
+  const hasText = entry.text.trim() !== "";
   const body = <>
     <span className={`pwa-process-status-slot pwa-process-status-${status}`}><Lightbulb ref={indicatorRef} size={16} aria-hidden="true" /></span>
     <ThinkingProcessHeading entry={entry} status={status} />
   </>;
-  return <div className="pwa-thinking-process-row">{entry.text.trim()
+  return <div className="pwa-thinking-process-row">{hasText
     ? <button className="pwa-thinking-process-row-action" type="button" aria-haspopup="dialog" aria-label={t.timeline.readThinking} onClick={event => onRead(event.currentTarget)}>{body}</button>
-    : <div className="pwa-thinking-process-row-static">{body}</div>}</div>;
+    : <div className="pwa-thinking-process-row-static">{body}</div>}
+    <Collapse open={status === "running" && entry.streaming && hasPreview(entry.text)} className="pwa-thinking-tail-collapse"><ThinkingTailPreview text={entry.text} /></Collapse>
+  </div>;
 }

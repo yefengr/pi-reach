@@ -503,13 +503,16 @@ test.each(["details", "hidden", "reduce", "latest", "send", "reset"])("borrowed 
   } finally { await h.screen.unmount(); }
 });
 
-test("borrowed tail grows only as needed for a process group, then survives equal replacement and body takeover without delayed refill", async () => {
+test("borrowed tail stays put while a process group enters above the activity slot, then survives equal replacement and body takeover without delayed refill", async () => {
   const h = await harness();
   try {
     const clock = layoutClock();
     const before = h.list.scrollTop;
     h.work(true);
     clock.step(200);
+    // 运行中的过程组与流式回复同样逐帧接续：按 16ms 连续推进帧，而不是只跳一步。
+    let time = 200;
+    const run = (duration = 600) => { const end = time + duration; while (time < end) { time += 16; clock.step(time); } };
     const borrowed = gap(h.list);
     const thinking: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
       protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Checking results",
@@ -517,38 +520,41 @@ test("borrowed tail grows only as needed for a process group, then survives equa
     const tool: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
       protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "tool", kind: "tool", tool_call_id: "read", tool: "read", args: { path: "note.txt" }, status: "running",
     } };
-    // 运行中的过程组默认展开（组头＋明细），比单行 Working 高；先用借用的留白，不足时只补到保留基础间距。
+    // 运行中的过程组默认展开，新增在活动区上方；活动区保留，新内容出现时 Working 隐藏。
     h.work(true, [history, thinking]);
-    expect(h.list.querySelector(".pwa-thinking-status")).toBeNull();
-    clock.step(400);
-    const group = h.list.querySelector<HTMLElement>(":scope > .pwa-process-group")!;
-    const clearance = () => Math.round(h.list.getBoundingClientRect().bottom - group.getBoundingClientRect().bottom - (Number.parseFloat(getComputedStyle(group).marginBottom) || 0));
+    const slot = h.list.querySelector<HTMLElement>(":scope > .pwa-turn-activity")!;
+    expect(slot).not.toBeNull();
+    expect(h.list.querySelector(".pwa-turn-activity[data-working]")).toBeNull();
+    run();
+    const clearance = () => Math.round(h.list.getBoundingClientRect().bottom - slot.getBoundingClientRect().bottom - (Number.parseFloat(getComputedStyle(slot).marginBottom) || 0));
     const settledTop = Math.round(h.list.scrollTop);
     expect(settledTop).toBeGreaterThanOrEqual(Math.round(before));
-    if (settledTop > Math.round(before)) expect(Math.abs(clearance() - 8)).toBeLessThanOrEqual(1);
-    else expect(clearance()).toBeGreaterThanOrEqual(8);
-    // 多出的占高计入借用留白：间隙＝原借用＋净增高－必要位移。
-    expect(gap(h.list)).toBeGreaterThanOrEqual(borrowed);
+    // 末尾活动区完整可见并保留基础间距；已借用的留白不重新补齐。
+    expect(clearance()).toBeGreaterThanOrEqual(7);
+    expect(gap(h.list)).toBeGreaterThanOrEqual(borrowed - 1);
     const groupGap = gap(h.list);
     expect(h.viewport().followingOutput).toBe(true);
     // 同组思考与工具等高互换：不再移动，也不重新补齐借用的留白。
     for (const item of [tool, thinking]) {
       h.work(true, [history, item]);
-      expect(h.list.querySelector(".pwa-thinking-status")).toBeNull();
-      clock.step(400);
+      expect(h.list.querySelector(":scope > .pwa-turn-activity")).toBe(slot);
+      run();
       expect(Math.round(h.list.scrollTop)).toBe(settledTop);
       expect(gap(h.list)).toBe(groupGap);
       expect(h.viewport().followingOutput).toBe(true);
     }
     const reply = (text: string): TimelineViewItem => ({ ...history, event: { ...history.event, event_id: "reply", blocks: [{ type: "text", text }] } });
     h.work(false, [history, reply("First reply")]);
-    const bottom = h.list.scrollHeight - h.list.clientHeight;
-    const expected = Math.min(bottom, Math.max(settledTop, bottom - 80));
-    clock.step(600); clock.step(800);
-    expect(Math.round(h.list.scrollTop)).toBe(Math.round(expected));
+    run();
+    // 正文接管并收起活动区：不回到旧位置之上，正文完整可见并保留基础间距，仍在跟随。
+    expect(Math.round(h.list.scrollTop)).toBeGreaterThanOrEqual(Math.round(before));
+    const firstBody = h.list.querySelectorAll(".pwa-message.assistant")[1]!;
+    expect(Math.round(firstBody.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) - 8);
+    expect(h.list.querySelector(".pwa-turn-activity")).toBeNull();
+    expect(h.viewport().followingOutput).toBe(true);
     const credit = gap(h.list);
     for (const text of ["First reply\n\nMore output", "First reply\n\nMore output\n\nA complete new paragraph"]) {
-      h.update([history, reply(text)]); clock.step(1000);
+      h.update([history, reply(text)]); run();
       expect(gap(h.list)).toBe(credit);
       const body = h.list.querySelectorAll(".pwa-message.assistant")[1];
       expect(Math.round(body.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) - 8);

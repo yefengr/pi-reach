@@ -5,7 +5,7 @@ import { useI18n } from "@/lib/i18n";
 import { highlightCode, languageForFence } from "@/lib/pwa/code-highlight";
 import { CopyButton } from "./copy-button";
 import { markdownTableComponents } from "./markdown-table";
-import { rehypeStreamReveal, splitMarkdownChunks, type MarkdownChunk } from "@/lib/pwa/markdown-stream";
+import { closeStreamingInline, rehypeStreamReveal, splitMarkdownChunks, type MarkdownChunk } from "@/lib/pwa/markdown-stream";
 export { thinkingTitle, thinkingSummary } from "@/lib/pwa/thinking-text-parser";
 import "./timeline-content.css";
 
@@ -58,12 +58,15 @@ const MarkdownChunkView = memo(function MarkdownChunkView({ text, base, marks }:
   return <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={markdownComponents}>{text}</ReactMarkdown>;
 }, (a, b) => a.text === b.text && a.base === b.base && sameMarks(a.marks, b.marks));
 
-/** 历史消息正文在流式追加时保持不变；reveal 为流式新显示文字的起点，用于淡入。 */
-export const MarkdownContent = memo(function MarkdownContent({ text, reveal = NO_MARKS }: { text: string; reveal?: readonly number[] }) {
+/**
+ * 历史消息正文在流式追加时保持不变；reveal 为流式新显示文字的起点，用于淡入。
+ * streaming 时最后一块临时补闭合未完成的行内标记，避免出现字面量或误解析的闪烁。
+ */
+export const MarkdownContent = memo(function MarkdownContent({ text, reveal = NO_MARKS, streaming = false }: { text: string; reveal?: readonly number[]; streaming?: boolean }) {
   const chunks = useMemo(() => splitMarkdownChunks(text), [text]);
   // 整体解析在相邻块之间留一个换行文本节点；分块渲染保持同样的 DOM 与 textContent。
   return <div className="pwa-markdown">{chunks.map((chunk, index) => <Fragment key={index}>
     {index > 0 ? "\n" : null}
-    <MarkdownChunkView text={chunk.text} base={chunk.offset} marks={chunkMarks(reveal, chunk, text.length)} />
+    <MarkdownChunkView text={streaming && index === chunks.length - 1 ? closeStreamingInline(chunk.text) : chunk.text} base={chunk.offset} marks={chunkMarks(reveal, chunk, text.length)} />
   </Fragment>)}</div>;
 });
