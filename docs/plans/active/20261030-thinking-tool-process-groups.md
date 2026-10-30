@@ -1200,11 +1200,18 @@ P1—P5 可以交给能够消费冻结契约的实现模型；P6 的视口交接
 
 ```text
 过程展示重构：本地通过；Linux CI、Docker 远程 E2E 与真机待验收
-B 发送闪帧：未修复，根因在本方案范围外
-C 发送回跳：未修复，根因在本方案范围外
+B 发送闪帧：已修复（自动化），真机待验收
+C 发送回跳：触发机制已消除，几何回跳未覆盖，真机待验收
 ```
 
-B 和 C 的根因都定位在 Extension：`pi-extension/src/timeline/v2_service.ts` 的 `handleUserMessage` 在消息入队（`queued`）后，同步回复一份队列快照，把马上就要投递的消息标成了可编辑，PWA 因此把它短暂移进排队区。修改 Extension 超出本方案授权（17.1 第 1、6 条），修复另开分支处理。这项修复上线后，需要按 14.3 用真实发送链路复核 B、C，确认之前不宣称滚动问题已全部解决。
+B 和 C 的根因都定位在 Extension：`pi-extension/src/timeline/v2_service.ts` 的 `handleUserMessage` 在消息入队（`queued`）后，同步回复一份队列快照，把马上就要投递的消息标成了可编辑，PWA 因此把它短暂移进排队区。修改 Extension 超出本方案授权（17.1 第 1、6 条），修复在 `bugfix/261030-send-queue-snapshot` 另行完成：
+
+- 修复：`pi-extension/src/timeline/user_delivery.ts` 在 Pi 空闲、队列为空且没有在途投递时，把新入队的消息按在途报告（`editable:false`），不再提供清除或插入；若 drain 前 Pi 转忙，补发 `editable:true` 快照，让它照常进入排队区。Pi 忙时发送仍按可编辑排队，协议与 PWA 生产代码未改。
+- Extension 回归：`user_delivery_binding.test.ts` 走真实的 Service → Binding → Queue → drain → SDK → Runtime 发送链路，按 PWA 收帧顺序断言该消息的可编辑序列。修复前空闲发送为 `[true, false]`，修复后为 `[false, false]`；另覆盖忙时发送与 drain 前转忙。
+- PWA 回归：`pwa-app.browser.test.tsx` 的在途发送用例按修复后的帧序推进，空会话与有历史两种情况下逐步断言气泡始终是同一 DOM 节点、不进排队区、空会话提示不重新出现；把同步回执快照改回 `editable:true` 后该用例失败。
+- 修复前的帧序喂给 PWA 时，空会话会出现气泡移入排队区、空会话提示返回、随后以新节点重播入场，与 B 录屏一致；有历史时同样移出再重入，即 C 的触发机制。这些测试模拟了列表滚动几何，C 的反向位移本身没有测量。
+
+确认之前不宣称滚动问题已全部解决：B、C 仍需在本机 Pi 加载新 Extension 构建后按 14.3 用真实发送链路复核。
 
 ### 19.4 遗留
 
@@ -1213,4 +1220,5 @@ B 和 C 的根因都定位在 Extension：`pi-extension/src/timeline/v2_service.
   - `timeline-viewport.integration` 的「usual turn ending … 1280 px」：收起过程中某一帧落到 1708，下一帧是 1709，被判为回退。两轮 CI 都失败在这里，本地默认字体下降速也复现不了；改用 Liberation Sans、FreeSans 等字体并扫描宽度后，本地可以复现。根因是 Working 消失的交接运动（`ActivityFollowTransition.keepReachable`）为了让当前位置仍然可达，按带小数的当前位置补了一段带小数的 `padding-bottom`；而浏览器报告的 `scrollHeight` 会把带小数的高度取成整数，`measure()` 扣除这段小数补偿后，自然底部被低估了不到 1px（现场数据：(2291 − 574) − 8.815 = 1708.185，真实值是 1709）。收起刚好在这一帧结束时，目标偏低，写入后取整成 1708；下一帧补偿撤掉，又回到 1709。修复：补偿向上取整为整数。新增 `timeline-follow-motion.browser.test.tsx`，直接断言交接期间测出的自然底部和没有补偿时一致；撤掉修复后，这条测试复现出同样的 0.815px 误差。修复后在 5 种字体、8 个宽度下共跑 112 次，全部通过。
 - Docker 远程 E2E 未执行（`e2e/real/reader-helpers.ts` 的选择器已迁移）。
 - iOS／Android 真机观感待在 staging 上验收。
+- B／C 真机复核未执行：需要本机 Pi 加载 `bugfix/261030-send-queue-snapshot` 的 Extension 构建，Extension 须另行发布到 npm 后才会到达其他 Host。
 - 以上各项闭合前，方案不归档。
