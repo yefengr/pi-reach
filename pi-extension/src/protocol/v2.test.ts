@@ -159,6 +159,10 @@ describe("TimelineEvent and TimelinePartial", () => {
     expect(decodeServerFrameV2(assistant)).toEqual(assistant);
     expect(decodeServerFrameV2(thinking)).toEqual(thinking);
     expect(parseTimelinePartialV2(tool)).toEqual(tool);
+    // 准备中只属于工具调用；正文与思考 partial 不得携带。
+    expect(parseTimelinePartialV2({ ...tool, status: "preparing" }).status).toBe("preparing");
+    expectCode(() => decodeServerFrameV2({ ...assistant, status: "preparing" }), "schema");
+    expectCode(() => decodeServerFrameV2({ ...thinking, status: "preparing" }), "schema");
     expectCode(() => decodeServerFrameV2({ ...assistant, partial: assistant }), "schema");
     expectCode(() => decodeServerFrameV2({ ...assistant, event_id: "A1" }), "schema");
     expectCode(() => decodeServerFrameV2({ ...assistant, kind: "user" }), "schema");
