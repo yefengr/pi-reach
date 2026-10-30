@@ -36,9 +36,10 @@
 | [ADR-20261009](20261009-branch-staging.md) | 功能分支推送自动部署 staging | — |
 | [ADR-20261010](20261010-desktop-inset-main.md) | 桌面主区改为内嵌圆角卡片 | 收起侧栏部分由 ADR-20261011（主区贴满）取代；抽屉与页面转场圆角由 ADR-20261028 覆盖 |
 | [ADR-20261011](20261011-collapsed-sidebar-flush-main.md) | 收起侧栏后桌面主区贴满窗口 | — |
-| [ADR-20261011](20261011-live-tool-grouping.md) | 工具调用实时分组 | — |
+| [ADR-20261011](20261011-live-tool-grouping.md) | 工具调用实时分组 | Thinking 断组、默认收起、组头排队、右侧状态与 14px 明细由 ADR-20261030 取代 |
 | [ADR-20261018](20261018-reader-drawer-only.md) | 阅读器统一为右侧 Drawer | 取代宽屏分栏阅读设计 |
 | [ADR-20261028](20261028-square-navigation-and-drawers.md) | 侧栏、抽屉与页面切换表面改为直角 | 覆盖 ADR-20261010 的抽屉与页面转场圆角规则 |
+| [ADR-20261030](20261030-thinking-tool-process-groups.md) | Thinking 与工具统一为过程组 | 取代 ADR-20261011 的 Thinking 断组、默认收起、组头排队、右侧状态与 14px 明细 |
 
 ---
 
