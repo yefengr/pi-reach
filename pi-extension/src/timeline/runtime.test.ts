@@ -1,7 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { TimelinePartial } from "../protocol/v2/index.js";
 import { TimelineRuntime, TIMELINE_MARKER, type Correlation } from "./runtime.js";
+import { TOOL_PREPARATION_STRING_CHARS, TOOL_PREPARATION_THROTTLE_MS } from "./tool_preparation.js";
 
 function userMessage(text: string, timestamp = 1): Record<string, unknown> {
   return { role: "user", content: text, timestamp };
@@ -436,6 +437,19 @@ describe("TimelineRuntime", () => {
 
     expect(partials).toEqual([
       {
+        // toolcall_end 先以准备中发布完整参数，执行开始后同一 partial_id 转为运行。
+        partial: expect.objectContaining({
+          partial_id: "tool:call-live",
+          group_id: marker?.group_id,
+          kind: "tool",
+          tool_call_id: "call-live",
+          tool: "read",
+          args: { path: "README.md", limit: 20 },
+          status: "preparing",
+        }),
+        correlation,
+      },
+      {
         partial: expect.objectContaining({
           partial_id: "tool:call-live",
           group_id: marker?.group_id,
@@ -488,7 +502,7 @@ describe("TimelineRuntime", () => {
       args: {},
       partialResult: { content: [{ type: "text", text: "after reset" }] },
     } as never, otherSession);
-    expect(partials).toHaveLength(5);
+    expect(partials).toHaveLength(6);
   });
 
   test("splits oversized deltas without breaking surrogate pairs", () => {
@@ -530,6 +544,73 @@ describe("TimelineRuntime", () => {
     runtime.onMessageUpdate(delta(assistant, ""), session);
     runtime.onMessageUpdate(delta(assistant, "other session"), otherSession);
 
+    expect(partials).toEqual([]);
+  });
+
+  test("streams tool calls as throttled preparing partials before execution", () => {
+    vi.useFakeTimers();
+    try {
+      const session = SessionManager.inMemory(process.cwd());
+      const partials: TimelinePartial[] = [];
+      const runtime = new TimelineRuntime({ onPartial: partial => partials.push(partial) });
+      const assistant = assistantMessage("");
+      runtime.onAgentStart();
+      runtime.onMessageStart(assistant, session);
+      const [marker] = markerEntries(session);
+      const update = (type: "toolcall_start" | "toolcall_delta", command: string | undefined) => {
+        const message = { ...assistant, content: [{ type: "toolCall", id: "call-stream", name: "bash", arguments: command === undefined ? {} : { command } }] };
+        runtime.onMessageUpdate({ type: "message_update", message, assistantMessageEvent: { type, contentIndex: 0, ...(type === "toolcall_delta" ? { delta: "x" } : {}), partial: message } } as never, session);
+      };
+      update("toolcall_start", undefined);
+      update("toolcall_delta", "ls");
+      update("toolcall_delta", "ls -1");
+      // 首帧立即发布；窗口内的增量只保留最新一帧，窗口结束时补发。
+      expect(partials.map(partial => partial.status)).toEqual(["preparing"]);
+      vi.advanceTimersByTime(TOOL_PREPARATION_THROTTLE_MS);
+      expect(partials.at(-1)).toMatchObject({ partial_id: "tool:call-stream", group_id: marker!.group_id, status: "preparing", args: { command: "ls -1" } });
+      update("toolcall_delta", "ls -1 &&");
+      const toolCall = { type: "toolCall", id: "call-stream", name: "bash", arguments: { command: "ls -1 && pwd" } };
+      runtime.onMessageUpdate({ type: "message_update", message: { ...assistant, content: [toolCall] }, assistantMessageEvent: { type: "toolcall_end", contentIndex: 0, toolCall, partial: { ...assistant, content: [toolCall] } } } as never, session);
+      // toolcall_end 不等节流窗口，立即发布完整参数。
+      expect(partials.at(-1)).toMatchObject({ status: "preparing", args: { command: "ls -1 && pwd" } });
+      const beforeExecution = partials.length;
+      update("toolcall_delta", "late");
+      runtime.onToolExecutionStart({ type: "tool_execution_start", toolCallId: "call-stream", toolName: "bash", args: { command: "ls -1 && pwd" } } as never, session);
+      vi.advanceTimersByTime(TOOL_PREPARATION_THROTTLE_MS * 2);
+      // 执行开始丢弃尚未发出的准备帧，之后只发布运行状态。
+      expect(partials.slice(beforeExecution).map(partial => partial.status)).toEqual(["running"]);
+      update("toolcall_delta", "after execution");
+      expect(partials.slice(beforeExecution).map(partial => partial.status)).toEqual(["running"]);
+      expect(markerEntries(session)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("keeps preparing arguments short while a large write is still being generated", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const partials: TimelinePartial[] = [];
+    const runtime = new TimelineRuntime({ onPartial: partial => partials.push(partial) });
+    const assistant = assistantMessage("");
+    runtime.onAgentStart();
+    runtime.onMessageStart(assistant, session);
+    const content = "x".repeat(TOOL_PREPARATION_STRING_CHARS * 4);
+    const message = { ...assistant, content: [{ type: "toolCall", id: "call-write", name: "write", arguments: { path: "big.txt", content } }] };
+    runtime.onMessageUpdate({ type: "message_update", message, assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: message } } as never, session);
+    const args = partials[0]?.kind === "tool" ? partials[0].args as { path: string; content: string } : undefined;
+    expect(args?.path).toBe("big.txt");
+    expect(args?.content.length).toBeLessThanOrEqual(TOOL_PREPARATION_STRING_CHARS + 1);
+  });
+
+  test("waits for a tool call ID before publishing a preparing partial", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const partials: TimelinePartial[] = [];
+    const runtime = new TimelineRuntime({ onPartial: partial => partials.push(partial) });
+    const assistant = assistantMessage("");
+    runtime.onAgentStart();
+    runtime.onMessageStart(assistant, session);
+    const message = { ...assistant, content: [{ type: "toolCall", id: "", name: "bash", arguments: {} }] };
+    runtime.onMessageUpdate({ type: "message_update", message, assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: message } } as never, session);
     expect(partials).toEqual([]);
   });
 

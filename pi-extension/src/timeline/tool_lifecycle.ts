@@ -137,6 +137,7 @@ export function toolPartial<T>(
   association: ToolAssociation<T>,
   scope: { sessionId: string; leafId: string | null },
   result?: unknown,
+  preparing = false,
 ): TimelinePartial | null {
   const blocks = result === undefined ? undefined : toolResultTextBlocks(result);
   if (result !== undefined && blocks === undefined) return null;
@@ -145,7 +146,7 @@ export function toolPartial<T>(
     session_id: scope.sessionId, leaf_id: scope.leafId,
     group_id: association.groupId, partial_id: `tool:${toolCallId}`,
     kind: "tool", tool_call_id: toolCallId, tool: association.tool, args: outgoingToolArgs(association.tool, association.args),
-    status: result === undefined ? "running" : "delta",
+    status: preparing ? "preparing" : result === undefined ? "running" : "delta",
     ...(blocks === undefined ? {} : { blocks }),
   };
   const bounded = (value: unknown): TimelinePartial | null => {
