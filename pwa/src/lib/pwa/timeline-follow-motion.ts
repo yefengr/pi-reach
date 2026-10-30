@@ -67,7 +67,8 @@ export class ActivityFollowTransition {
     const applied = Number.parseFloat(getComputedStyle(this.list).paddingBottom) || 0;
     const naturalBottom = Math.max(0, this.list.scrollHeight - this.list.clientHeight - applied + padding);
     // 状态移除可能先钳制 scrollTop；仅在交接期间保留尚未收回的空间，结束必定还原。
-    const extraPadding = Math.max(0, this.top - naturalBottom);
+    // 补偿取整数：scrollHeight 已取整，小数补偿相减会把自然底部低估不到 1px，收尾时出现 1px 回退。
+    const extraPadding = Math.max(0, Math.ceil(this.top - naturalBottom));
     this.list.style.paddingBottom = extraPadding > 0 ? `${padding + extraPadding}px` : this.paddingStyle;
   }
 

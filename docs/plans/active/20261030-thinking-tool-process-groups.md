@@ -1210,7 +1210,7 @@ B 和 C 的根因都定位在 Extension：`pi-extension/src/timeline/v2_service.
 
 - PR #159 首轮 CI 有两条本方案新增或改写的几何用例失败：
   - `use-timeline` 的「same-run tool/reply cycles … 1280px」：用户滚回原位后仍在跟随。在本地 Linux 容器复跑 3 次，复现 1 次。原因是这条用例只改了 `scrollTop`，没有先派发真实回看会有的输入事件。逐帧跟随还没停时，协调器把这次偏移当成外部漂移写了回去。已改为先派发 `wheel`，和其他回看用例一致，之后本地连跑 6 次都通过。
-  - `timeline-viewport.integration` 的「usual turn ending … 1280 px」：收起过程中某一帧取整后是 1708，下一帧是 1709，被判为回退。本地在 CPU 降速 1、3、4、6、8、12、16 倍下都没复现：逐帧都单调回落到 1709，收起保持期结束时自然底部都已收回。根因未查明，断言保持严格，已在失败信息里附上逐帧原始 `scrollTop`，下次 CI 再失败时据此判断，不放宽断言。
+  - `timeline-viewport.integration` 的「usual turn ending … 1280 px」：收起过程中某一帧落到 1708，下一帧是 1709，被判为回退。两轮 CI 都失败在这里，本地默认字体下降速也复现不了；改用 Liberation Sans、FreeSans 等字体并扫描宽度后，本地可以复现。根因是 Working 消失的交接运动（`ActivityFollowTransition.keepReachable`）为了让当前位置仍然可达，按带小数的当前位置补了一段带小数的 `padding-bottom`；而浏览器报告的 `scrollHeight` 会把带小数的高度取成整数，`measure()` 扣除这段小数补偿后，自然底部被低估了不到 1px（现场数据：(2291 − 574) − 8.815 = 1708.185，真实值是 1709）。收起刚好在这一帧结束时，目标偏低，写入后取整成 1708；下一帧补偿撤掉，又回到 1709。修复：补偿向上取整为整数。新增 `timeline-follow-motion.browser.test.tsx`，直接断言交接期间测出的自然底部和没有补偿时一致；撤掉修复后，这条测试复现出同样的 0.815px 误差。修复后在 5 种字体、8 个宽度下共跑 112 次，全部通过。
 - Docker 远程 E2E 未执行（`e2e/real/reader-helpers.ts` 的选择器已迁移）。
 - iOS／Android 真机观感待在 staging 上验收。
 - 以上各项闭合前，方案不归档。
