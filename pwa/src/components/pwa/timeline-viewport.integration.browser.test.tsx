@@ -750,8 +750,10 @@ test.each(activityCases)("the usual turn ending — group, reply, trailing Worki
     expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
     expect(bottomGap(list)).toBeLessThanOrEqual(1);
     const before = Math.round(list.scrollTop);
-    const samples = [before, ...await sampleCollapse(list, () => update(run.ended), () => Math.round(list.scrollTop))];
-    for (const [index, top] of samples.entries()) if (index > 0) expect(top).toBeLessThanOrEqual(samples[index - 1]!);
+    const raw = [list.scrollTop];
+    const samples = [before, ...await sampleCollapse(list, () => update(run.ended), () => { raw.push(list.scrollTop); return Math.round(list.scrollTop); })];
+    // 失败时附上逐帧原始 scrollTop，便于在 CI 上区分取整抖动与真实的先跟随再回落。
+    for (const [index, top] of samples.entries()) if (index > 0) expect(top, `frame ${index}: ${JSON.stringify(raw)}`).toBeLessThanOrEqual(samples[index - 1]!);
     expect(list.querySelector(".pwa-thinking-status")).toBeNull();
     expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("false");
     const meta = list.querySelector<HTMLElement>(".pwa-turn-meta")!;
