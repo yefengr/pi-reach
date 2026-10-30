@@ -178,23 +178,34 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     await expect.poll(() => list.querySelector("article.partial")?.textContent?.includes("After tools. ".repeat(25).trim())).toBe(true);
     await settle();
     const reply = list.querySelector<HTMLElement>("article.partial")!;
-    // 流式正文增长由原生平滑滚动接续，先等待落点再检查可见性。
-    await expect.poll(() => list.scrollTop - activity.top).toBe(list.scrollHeight - activity.height);
-    expect(rows().slice(0, 2)).toEqual(original);
-    await expect.element(reply).toBeVisible();
-    await expect.element(page.getByText("Working…", { exact: true })).toBeVisible();
     // 正文之后不再把 Working 挂回较早的过程组，改由末尾兜底行承载。
     expect(list.querySelector(".pwa-process-working")).toBeNull();
     const tailWorking = list.querySelector<HTMLElement>(".pwa-thinking-status")!;
     expect(tailWorking).not.toBeNull();
+    // Working 的显隐独立通知视口并优先使用底部留白；按组件的同一口径测出它的净占高。
+    const workingStyle = getComputedStyle(tailWorking);
+    const previousMargin = Number.parseFloat(getComputedStyle(tailWorking.previousElementSibling!).marginBottom) || 0;
+    const workingNet = tailWorking.getBoundingClientRect().height + (Number.parseFloat(workingStyle.marginBottom) || 0)
+      + Math.max(0, (Number.parseFloat(workingStyle.marginTop) || 0) - previousMargin);
+    expect(workingNet).toBeGreaterThan(0);
+    // 流式正文增长由原生平滑滚动接续，先等待落点稳定再检查可见性。
+    let previousTop = -1;
+    await expect.poll(() => { const stable = list.scrollTop === previousTop; previousTop = list.scrollTop; return stable; }).toBe(true);
+    expect(rows().slice(0, 2)).toEqual(original);
+    await expect.element(reply).toBeVisible();
+    await expect.element(page.getByText("Working…", { exact: true })).toBeVisible();
     expectVisibleWithClearance(reply);
     expectVisibleWithClearance(tailWorking);
     expect(Math.round(reply.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(tailWorking.getBoundingClientRect().top));
-    // 正文接续有效目标：增长多少就跟进多少，不重新补齐先前借用的留白。
+    // 正文增长全部跟进；Working 先用底部留白，留白不足时只补到保留基础间距为止，不重新补齐借用的留白。
     const contentGrowth = list.scrollHeight - activity.height;
-    expect(contentGrowth).toBeGreaterThan(0);
-    expect(list.scrollTop - activity.top).toBe(contentGrowth);
-    expect(Math.abs(Math.round(tailOffset()) - Math.round(activity.tail))).toBeLessThanOrEqual(1);
+    const absorbed = contentGrowth - (list.scrollTop - activity.top);
+    expect(absorbed).toBeGreaterThan(0);
+    expect(absorbed).toBeLessThanOrEqual(workingNet);
+    // 留白不足时只补必要位移：Working 连同自身下外边距之后正好保留基础间距。
+    const workingMarginBottom = Number.parseFloat(workingStyle.marginBottom) || 0;
+    if (absorbed < workingNet) expect(Math.abs(Math.round(list.getBoundingClientRect().bottom - tailWorking.getBoundingClientRect().bottom - workingMarginBottom) - minimumTailSpace)).toBeLessThanOrEqual(1);
+    expect(Math.abs(Math.round(tailOffset()) - Math.round(activity.tail + absorbed))).toBeLessThanOrEqual(1);
     expect(api.followingOutput).toBe(true);
     expect(list.style.paddingBottom).toBe("");
     const reading = original[0].querySelectorAll("p")[5];

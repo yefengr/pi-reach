@@ -3,11 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { ToolCard } from "./tool-card";
-import { toolGroupSummary } from "./process-group-state";
+import { processGroupSummary } from "./process-group-state";
+import type { Messages } from "@/lib/i18n";
 import type { ToolStatus, ToolValue } from "./tool-presentation";
 import { en } from "@/lib/i18n/messages/en";
 import { zh } from "@/lib/i18n/messages/zh";
 
+/** 纯工具组的分类摘要：不传成员状态时按各工具自身状态统计，与生产组头同一入口。 */
+const toolSummary = (values: readonly ToolValue[], t: Messages["tools"]) => processGroupSummary(
+  { key: "summary", groupId: "summary", entries: values.map((value, index) => ({ kind: "tool" as const, key: `tool-${index}`, value })) }, new Map(), t,
+).fullLabel;
 const renderCard = (node: ReactNode) => renderToStaticMarkup(<PwaUiProvider>{node}</PwaUiProvider>);
 const base = {
   event_id: "event", session_id: "session", leaf_id: "generation", group_id: "group",
@@ -78,12 +83,12 @@ const groupFailed = { ...base, tool: "bash", args: { command: "pnpm test" }, sta
 const groupInterrupted = { ...base, tool: "bash", args: { command: "pnpm test" }, status: "interrupted" as const };
 
 test.each([[en, "1 failed", "2 failed", "1 interrupted"], [zh, "1 项失败", "2 项失败", "1 项已中断"]] as const)("group summary counts failures and interruptions separately", (messages, one, two, interrupted) => {
-  expect(toolGroupSummary([groupRead, groupRead], messages.tools)).not.toMatch(/失败|中断|failed|interrupted/);
-  expect(toolGroupSummary([groupRead, groupFailed], messages.tools).endsWith(` · ${one}`)).toBe(true);
-  expect(toolGroupSummary([groupRead, groupFailed, groupFailed], messages.tools).endsWith(` · ${two}`)).toBe(true);
-  expect(toolGroupSummary([groupRead, groupInterrupted], messages.tools).endsWith(` · ${interrupted}`)).toBe(true);
-  expect(toolGroupSummary([groupRead, groupInterrupted], messages.tools)).not.toMatch(/失败|failed/);
-  expect(toolGroupSummary([groupRead, groupFailed, groupInterrupted], messages.tools).endsWith(` · ${one} · ${interrupted}`)).toBe(true);
+  expect(toolSummary([groupRead, groupRead], messages.tools)).not.toMatch(/失败|中断|failed|interrupted/);
+  expect(toolSummary([groupRead, groupFailed], messages.tools).endsWith(` · ${one}`)).toBe(true);
+  expect(toolSummary([groupRead, groupFailed, groupFailed], messages.tools).endsWith(` · ${two}`)).toBe(true);
+  expect(toolSummary([groupRead, groupInterrupted], messages.tools).endsWith(` · ${interrupted}`)).toBe(true);
+  expect(toolSummary([groupRead, groupInterrupted], messages.tools)).not.toMatch(/失败|failed/);
+  expect(toolSummary([groupRead, groupFailed, groupInterrupted], messages.tools).endsWith(` · ${one} · ${interrupted}`)).toBe(true);
 });
 
 test("interrupted tools use a stop icon and failures use an alert", () => {

@@ -1,5 +1,5 @@
 /* 过程组：固定左状态槽、同字号单行省略，以及只出现在相邻明细之间的短竖线。
-   所有规则都限定在 .pwa-root .pwa-process-group 内，旧工具组与旧思考行保持原样。 */
+   所有规则都限定在 .pwa-root .pwa-process-group 内，不影响时间线外复用的工具行样式。 */
 .pwa-root .pwa-process-group { min-width: 0; }
 
 /* 组头复用折叠按钮的 44px 点击区、悬停与焦点；无提示时保持三列，箭头始终贴右。 */

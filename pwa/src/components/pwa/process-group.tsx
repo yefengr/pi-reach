@@ -70,7 +70,9 @@ function ProcessGroupHead({ group, state, showWorking, summary, detailsId, onTog
   const thinking = active?.kind === "thinking" && activeStatus === "running";
   const activeTool = active?.kind === "tool" ? active : null;
   const toolDetail = activeTool === null ? "" : toolInlineText(toolHeaderSummary(activeTool.value));
-  const alertKind = summary.failureCount > 0 ? "error" : summary.unknownCount > 0 ? "unknown" : summary.interruptedCount > 0 ? "interrupted" : null;
+  const summaryAlert = summary.failureCount > 0 ? "error" : summary.unknownCount > 0 ? "unknown" : summary.interruptedCount > 0 ? "interrupted" : null;
+  // 左侧状态槽已表达同一状态时不再重复右侧图标；数量仍在组头可访问名称的摘要中。
+  const alertKind = summaryAlert === iconStatus ? null : summaryAlert;
   const alertLabel = alertKind === "error" ? t.tools.groupFailed(summary.failureCount)
     : alertKind === "unknown" ? t.tools.statusLabel(String(summary.unknownCount), t.tools.status.unknown)
       : alertKind === "interrupted" ? t.tools.groupInterrupted(summary.interruptedCount) : null;

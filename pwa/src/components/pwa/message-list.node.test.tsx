@@ -141,7 +141,9 @@ test("keeps failed tool details out of the conversation with a visible error sta
   const event: TimelineEvent = { ...toolEvent, status: "error", error: "Permission denied", args: { path: "file.txt" }, result: [{ type: "text", text: "Readable text" }] };
   const html = renderList([{ kind: "event", event }]);
   expect(html).toContain("Read 1 file · 1 failed");
-  expect(html).toContain("pwa-process-alert-error");
+  // 结束后状态槽已显示失败，右侧不再重复同一错误图标；数量保留在摘要中。
+  expect(html).toContain("pwa-process-status-slot pwa-process-status-error");
+  expect(html).not.toContain("pwa-process-alert");
   expect(html).not.toContain("Permission denied");
   expect(html).not.toContain("Readable text");
   expect(html).not.toContain("Tool input");
@@ -327,6 +329,21 @@ describe("turn presentation", () => {
     expect(html.match(/class="pwa-process-group /g)).toHaveLength(1);
     expect(html).toContain(`aria-expanded="${expanded}"`);
     expect(html.match(/View read tool details/g)?.length ?? 0).toBe(expanded ? 2 : 0);
+  });
+
+  test("a local compaction notice after the final process group keeps Working at the end", () => {
+    const live = { hasEarlier: false, running: true };
+    const tool = { ...toolEvent, group_id: "g1", event_seq: 2 };
+    const items = events({ ...user("u1", "g1", 1), event_seq: 1 }, tool);
+    // 没有提示时，已结束成员的末段组原位承载 Working。
+    const hosted = renderList(items, live);
+    expect(hosted).toContain("pwa-process-working");
+    expect(hosted).not.toContain("pwa-thinking-status");
+    // 本地提示落在组后即为展示边界：Working 不挂回提示上方的组头。
+    const bounded = renderList(items, { ...live, notices: [{ id: "n1", sessionId: "session-1", afterSeq: 2, kind: "failed" }] });
+    expect(bounded).not.toContain("pwa-process-working");
+    expect(bounded).toContain("pwa-thinking-status");
+    expect(bounded.indexOf("pwa-compaction-notice")).toBeLessThan(bounded.indexOf("pwa-thinking-status"));
   });
 
   test("uses Working immediately as a fallback behind specific live indicators", () => {

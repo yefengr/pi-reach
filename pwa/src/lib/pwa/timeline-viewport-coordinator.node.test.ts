@@ -999,3 +999,113 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.writes.slice(before)).toEqual([1050]);
   });
 });
+
+describe("process group collapse hold", () => {
+  /** 跟随到底后开始收起；同一提交里新增 30（完成时间），预计收回 50。 */
+  function collapsing() {
+    const f = fixture();
+    f.core.notify("commit");
+    expect(f.layout.top()).toBe(100);
+    // 与浏览器一致：收起通知在同一提交的 DOM 已包含新增内容之后、视口处理该提交之前到达。
+    f.setBottom(130);
+    f.core.collapse(50, 190);
+    f.core.notify("commit");
+    return f;
+  }
+
+  test("does not step forward for content added in the collapsing commit and ends once the height is returned", () => {
+    const f = collapsing();
+    expect(f.writes).not.toContain(130);
+    expect(f.layout.top()).toBe(100);
+    // 收起推进：浏览器按新范围夹住位置，跟随不反向追赶。
+    f.setBottom(90); f.setTop(90); f.core.notify("resize"); f.step(16);
+    expect(f.writes).not.toContain(130);
+    f.setBottom(80); f.setTop(80); f.core.notify("resize"); f.step(32);
+    expect(f.core.state.following).toBe(true);
+    // 已收回预计高度后恢复普通跟随；之后的新内容照常贴底。
+    f.setBottom(120); f.core.notify("commit");
+    expect(f.layout.top()).toBe(120);
+  });
+
+  test("ends at its deadline and then follows only the remaining net growth", () => {
+    const f = collapsing();
+    f.step(100);
+    expect(f.layout.top()).toBe(100);
+    f.step(200);
+    expect(f.layout.top()).toBe(130);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("a clamp scroll back to the bottom keeps the hold", () => {
+    const f = collapsing();
+    f.setBottom(100); f.setTop(100);
+    f.core.scroll(true);
+    f.setBottom(140); f.core.notify("commit");
+    expect(f.writes).not.toContain(140);
+    expect(f.layout.top()).toBe(100);
+  });
+
+  test("reset clears the hold and no-animation collapses are ignored", () => {
+    const reset = collapsing();
+    reset.core.reset();
+    reset.core.notify("commit");
+    expect(reset.layout.top()).toBe(130);
+    const reduced = fixture();
+    reduced.core.notify("commit");
+    reduced.reduce();
+    reduced.core.collapse(50, 190);
+    reduced.setBottom(130); reduced.core.notify("commit");
+    expect(reduced.layout.top()).toBe(130);
+  });
+
+  // 时限设得足够长，忽略或清除只能由入口条件证明，不能靠超时自然结束。
+  const LONG = 10_000;
+
+  test("a reading viewport ignores the notice even after following resumes through scrolling back to the bottom", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.core.userRead();
+    f.core.collapse(50, LONG);
+    // 回到底部恢复跟随不会清除保持期，因此能证明回看时根本没有建立保持期。
+    // 第一次 scroll 消费此前程序写入的回执；第二次才是用户回到底部。
+    f.core.scroll(true);
+    f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    f.setBottom(130); f.core.notify("commit"); f.step(16);
+    expect(f.layout.top()).toBe(130);
+  });
+
+  test("a notice during the own-send transition is ignored after the send finishes", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.core.followOwnSend(f.core.captureOwnSend());
+    f.core.collapse(50, LONG);
+    f.step(100); f.step(300); f.step(316);
+    f.setBottom(150); f.core.notify("commit"); f.step(332);
+    expect(f.layout.top()).toBe(150);
+  });
+
+  test("a notice during an animated Latest is ignored once Latest settles", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.core.userRead();
+    f.setTop(20);
+    f.core.latest();
+    f.core.collapse(50, LONG);
+    f.step(16); f.step(32);
+    f.setBottom(150); f.core.notify("commit"); f.step(48);
+    expect(f.layout.top()).toBe(150);
+  });
+
+  test.each(["settle", "hidden", "reduce"] as const)("%s clears an active hold", reason => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.setBottom(130);
+    f.core.collapse(50, LONG);
+    f.core.notify("commit");
+    expect(f.layout.top()).toBe(100);
+    f.core.settle(reason);
+    f.setBottom(140); f.core.notify("commit"); f.step(16);
+    expect(f.layout.top()).toBe(140);
+  });
+});

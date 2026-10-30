@@ -8,7 +8,7 @@ export type GalleryState = "thinking" | "tools" | "failure" | "long" | "files"
   | "uploading" | "pending" | "history" | "summaries" | "delivery" | "flow";
 export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[] = [
   { id: "thinking", label: "运行中 · 思考", note: "展开查看思考正文；运行状态仅由本页控件改变。" },
-  { id: "tools", label: "运行中 · 工具", note: "展开工具组，再点击工具行查看真实详情。" },
+  { id: "tools", label: "运行中 · 工具", note: "运行中的过程组默认展开，点击工具行查看真实详情。" },
   { id: "failure", label: "失败与重试", note: "附件可原位重试；工具重试会替换本页演示结果。" },
   { id: "long", label: "长文字", note: "检查中英文、长路径、Markdown 与代码的阅读和复制。" },
   { id: "files", label: "文件", note: "文本与图片已就绪；获取进度由明确控件演示，不传输文件。" },

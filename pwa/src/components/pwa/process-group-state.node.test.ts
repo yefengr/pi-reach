@@ -5,7 +5,7 @@ import { en } from "@/lib/i18n/messages/en";
 import { zh } from "@/lib/i18n/messages/zh";
 import { processGroups, withProcessExpansion, type ProcessEntry, type ProcessExpansion, type ProcessGroup } from "./process-groups";
 import { observeProcessEntries, timelineActivity } from "./timeline-activity";
-import { processGroupState, processGroupSummary, toolGroupSummary, type ProcessStatus } from "./process-group-state";
+import { processGroupState, processGroupSummary, type ProcessStatus } from "./process-group-state";
 
 const scope = { session_id: "s", leaf_id: "l", group_id: "g" };
 const tool = (key: string, terminal?: "complete" | "error" | "interrupted", name = "bash", args: NonNullable<ToolEntry["value"]["args"]> = { command: key }): ToolEntry => ({ kind: "tool", key, value: terminal === undefined ? {
@@ -186,7 +186,7 @@ describe("process summaries share tool classification", () => {
     const expected = [t.groupRead(2), t.groupCommand(2), t.groupEdit(1), t.groupWrite(1), t.groupFailed(1), t.groupInterrupted(1)].join(" · ");
     const values = g.entries.filter(e => e.kind === "tool").map(e => e.value);
     const result = state(g, { completion: end });
-    expect(toolGroupSummary(values, t)).toBe(expected);
+    expect(processGroupSummary({ key: "summary", groupId: "summary", entries: values.map((value, index) => ({ kind: "tool" as const, key: `tool-${index}`, value })) }, new Map(), t).fullLabel).toBe(expected);
     expect(processGroupSummary(g, result.entryStatuses, t)).toEqual({ fullLabel: expected, compactLabel: expected, failureCount: 1, interruptedCount: 1, unknownCount: 0 });
   });
 

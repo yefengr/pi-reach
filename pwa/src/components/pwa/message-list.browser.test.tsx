@@ -1214,9 +1214,9 @@ test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width,
       assertLayout();
       expect(group.querySelector(".pwa-process-status-running")).toBeNull();
       for (const node of group.querySelectorAll<HTMLElement>(".pwa-process-copy *")) expect(getComputedStyle(node).color).not.toBe(runningColor);
-      // 组状态不反写成员：较早失败始终让组头显示错误，成员各自保留真实状态色。
+      // 组状态不反写成员：较早失败始终让组头显示错误，成员各自保留真实状态色；状态槽已表达失败时不重复右侧图标。
       expect(getComputedStyle(slot()).color).toBe(tokenColor("--pwa-error"));
-      expect(group.querySelector(".pwa-process-alert-error")).not.toBeNull();
+      expect(group.querySelector(".pwa-process-alert")).toBeNull();
       const member = document.querySelectorAll<HTMLElement>(".pwa-process-group .pwa-tool-card .pwa-tool-status")[1]!;
       expect(member.classList.contains(`pwa-tool-status-${status}`)).toBe(true);
       expect(getComputedStyle(member).color).toBe(tokenColor(token));
@@ -1355,7 +1355,8 @@ test("groups adjacent tools of one turn including failures, and marks the failur
   expect(list.querySelectorAll(":scope > .pwa-process-group")).toHaveLength(2);
   expect(list.querySelectorAll(":scope > .pwa-tool-card")).toHaveLength(0);
   expect(groupButton().textContent).toBe("Read 3 files · Ran 1 command · 1 failed");
-  expect(groupButton().querySelector(".pwa-process-alert-error")).not.toBeNull();
+  expect(groupButton().querySelector(".pwa-process-status-slot.pwa-process-status-error")).not.toBeNull();
+  expect(groupButton().querySelector(".pwa-process-alert")).toBeNull();
   expect(groupButton().getAttribute("aria-label")).toBe("Expand Read 3 files · Ran 1 command · 1 failed");
   await userEvent.click(groupButton());
   expect(groupButton().getAttribute("aria-label")).toBe("Collapse Read 3 files · Ran 1 command · 1 failed");
