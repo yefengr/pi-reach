@@ -1175,3 +1175,42 @@ CSS、图标或 token 改动执行对应样式守卫，包括适用的 `pwa-styl
 > 提交、push、PR、部署均不在本方案默认授权内。
 
 P1—P5 可以交给能够消费冻结契约的实现模型；P6 的视口交接保留独立审查和停止门槛。不能让实现者同时自行决定状态语义、滚动机制和验收标准。
+
+## 十九、实施记录
+
+### 19.1 提交
+
+| 阶段 | 提交 | 内容 |
+| --- | --- | --- |
+| P1—P4 | `1aaf852` | 分组与身份纯函数、状态推导、过程组组件、Thinking 阅读器 |
+| P5 | `d9658a2` | 时间线集成、Working 承载，删除旧组头队列与内联 Thinking 折叠 |
+| P6、P7 代码 | `2eb2e9b` | 按 10.5 实现过程组收起的视口通知与协调器收起保持期；组头右侧提示去重；删除无生产使用者的 `toolGroupSummary` |
+| P7 文档 | `d9c7ffd` | DESIGN、ARCHITECTURE、ADR-20261030 与旧 ADR 替代范围、归档旧工具分组方案、ROADMAP |
+
+以上提交已推送，并随 PR #159 部署到 staging。远端 CI、Codex 评审与 staging 结果以该 Pull Request 为准，本文不维护。
+
+### 19.2 本地验证（`d9c7ffd`）
+
+- PWA typecheck、lint（0 error）、Node 测试 1224 项、生产构建、本地 Playwright E2E 44 项、`pnpm check:docs` 与 `git diff --check` 均通过。
+- 受影响的 Browser 测试逐文件通过，包括 `message-list`、`pwa-app`、`timeline-viewport.integration`、`message-send`、`use-timeline`、新增的过程组与 Thinking 阅读器测试，以及阅读器关闭、拖动相关测试。
+- 新增的视口与协调器用例做过注入回归：撤掉修复后，对应用例会失败。
+- 视觉核对了 402px 浅色与深色、1280px 浅色下的运行中与收起状态。
+
+### 19.3 验收结论
+
+```text
+过程展示重构：本地通过；Linux CI、Docker 远程 E2E 与真机待验收
+B 发送闪帧：未修复，根因在本方案范围外
+C 发送回跳：未修复，根因在本方案范围外
+```
+
+B 和 C 的根因都定位在 Extension：`pi-extension/src/timeline/v2_service.ts` 的 `handleUserMessage` 在消息入队（`queued`）后，同步回复一份队列快照，把马上就要投递的消息标成了可编辑，PWA 因此把它短暂移进排队区。修改 Extension 超出本方案授权（17.1 第 1、6 条），修复另开分支处理。这项修复上线后，需要按 14.3 用真实发送链路复核 B、C，确认之前不宣称滚动问题已全部解决。
+
+### 19.4 遗留
+
+- PR #159 首轮 CI 有两条本方案新增或改写的几何用例失败：
+  - `use-timeline` 的「same-run tool/reply cycles … 1280px」：用户滚回原位后仍在跟随。在本地 Linux 容器复跑 3 次，复现 1 次。原因是这条用例只改了 `scrollTop`，没有先派发真实回看会有的输入事件。逐帧跟随还没停时，协调器把这次偏移当成外部漂移写了回去。已改为先派发 `wheel`，和其他回看用例一致，之后本地连跑 6 次都通过。
+  - `timeline-viewport.integration` 的「usual turn ending … 1280 px」：收起过程中某一帧取整后是 1708，下一帧是 1709，被判为回退。本地在 CPU 降速 1、3、4、6、8、12、16 倍下都没复现：逐帧都单调回落到 1709，收起保持期结束时自然底部都已收回。根因未查明，断言保持严格，已在失败信息里附上逐帧原始 `scrollTop`，下次 CI 再失败时据此判断，不放宽断言。
+- Docker 远程 E2E 未执行（`e2e/real/reader-helpers.ts` 的选择器已迁移）。
+- iOS／Android 真机观感待在 staging 上验收。
+- 以上各项闭合前，方案不归档。
