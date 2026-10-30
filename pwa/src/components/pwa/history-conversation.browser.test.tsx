@@ -36,7 +36,7 @@ function Harness({ height, modelName, thinking }: HarnessProps) {
   const timeline = useTimeline({ channelRef, reportHistoryFailure: () => {} });
   useLayoutEffect(() => { api = timeline; });
   return <main className="pwa-main" style={{ height, display: "flex", flexDirection: "column" }}>
-    <HistoryConversation items={timeline.items} savedEvents={timeline.history?.events ?? []} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} loadEarlierFailed={timeline.loadEarlierFailed} onLoadEarlier={timeline.loadEarlier} loading={timeline.history?.status === "loading"} viewport={timeline} modelName={modelName} thinking={thinking} />
+    <HistoryConversation sourceKey="history-harness" items={timeline.items} savedEvents={timeline.history?.events ?? []} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} loadEarlierFailed={timeline.loadEarlierFailed} onLoadEarlier={timeline.loadEarlier} loading={timeline.history?.status === "loading"} viewport={timeline} modelName={modelName} thinking={thinking} />
   </main>;
 }
 
@@ -216,9 +216,9 @@ test("does not group tools of one run across an unsaved gap", async () => {
   const tool = (seq: number): TimelineEvent => ({ session_id: "history", leaf_id: "generation", event_id: `s-${seq}`, event_seq: seq, group_id: "run", timestamp: seq, kind: "tool", tool_call_id: `call-${seq}`, tool: "read", args: {}, truncated: false, status: "complete", result: {} });
   const screen = await renderHistory({ saved: [tool(1), tool(2), tool(3), tool(20), tool(21), tool(22), runEnd(23, "run")] });
   try {
-    await expect.poll(() => list().querySelectorAll(".pwa-tool-group").length).toBe(2);
+    await expect.poll(() => list().querySelectorAll(".pwa-process-group").length).toBe(2);
     const gap = screen.getByText("Some records in between aren't saved in this browser").element();
-    const groups = [...list().querySelectorAll(".pwa-tool-group")];
+    const groups = [...list().querySelectorAll(".pwa-process-group")];
     // 缺口提示位于两组之间，缺口两侧的工具不合并为一组。
     expect(groups[0]!.compareDocumentPosition(gap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(gap.compareDocumentPosition(groups[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

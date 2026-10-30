@@ -94,5 +94,5 @@ export function GalleryConversationControls({ state, conversation: c, onResult }
 export function GalleryHistory({ items }: { items: Conversation["items"] }) {
   const viewport = useTimelineViewport(items);
   const savedEvents = useMemo(() => items.flatMap((item) => item.kind === "event" ? [item.event] : []), [items]);
-  return <HistoryConversation items={items} savedEvents={savedEvents} hasEarlier={false} loadingEarlier={false} loadEarlierFailed={false} onLoadEarlier={() => {}} loading={false} viewport={viewport} modelName="内存演示模型" thinking="medium" />;
+  return <HistoryConversation sourceKey="gallery-history" onReadingChange={viewport.setReadingDetails} items={items} savedEvents={savedEvents} hasEarlier={false} loadingEarlier={false} loadEarlierFailed={false} onLoadEarlier={() => {}} loading={false} viewport={viewport} modelName="内存演示模型" thinking="medium" />;
 }

@@ -24,10 +24,11 @@ type ThinkingProcessHeadingProps = {
 export function ThinkingProcessHeading({ entry, className, status }: ThinkingProcessHeadingProps) {
   const { t } = useI18n();
   const running = status === undefined ? entry.streaming : status === "running";
-  const epoch = running ? entry.thinkingTextEpoch : undefined;
+  // 解析按数据是否仍在流式增长增量进行；展示状态只决定占位文案，被取代的缓冲尾巴也不能退回整段重扫。
+  const epoch = entry.streaming ? entry.thinkingTextEpoch : undefined;
   const [parser] = useState(() => new ThinkingTextParser());
-  const parsed = parser.read(entry.text, epoch, running);
-  const heading = useThinkingHeading(parsed, running, epoch);
+  const parsed = parser.read(entry.text, epoch, entry.streaming);
+  const heading = useThinkingHeading(parsed, entry.streaming, epoch);
   const title = heading ?? (running ? t.timeline.thinking : t.timeline.thinkingTrace);
   return <span className={className ? `pwa-process-thinking-heading ${className}` : "pwa-process-thinking-heading"} title={title}>{title}</span>;
 }

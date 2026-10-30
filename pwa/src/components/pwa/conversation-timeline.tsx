@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { flushSync } from "react-dom";
-import { ThinkingContent, MarkdownContent } from "./timeline-content";
+import { MarkdownContent } from "./timeline-content";
 import { useStreamRevealAnimation, useStreamRevealMarks } from "./use-stream-reveal";
-import { initialToolGroupRunningIndicators, ToolCard, ToolGroupCard } from "./tool-card";
 import { ToolReader } from "./tool-reader";
 import { ThinkingReader } from "./thinking-reader";
-import { effectiveProcessStatus } from "./timeline-activity";
-import type { ProcessEntry } from "./process-groups";
+import { effectiveProcessStatus, isPartialEntry, observeProcessEntries, timelineActivity } from "./timeline-activity";
+import { processGroups, processNoticeBreakKeys, type ProcessEntry, type ProcessGroup as ProcessGroupModel } from "./process-groups";
+import { ProcessGroup } from "./process-group";
+import { useProcessPresentation } from "./use-process-presentation";
 import { SummaryEntry, SummaryReader } from "./summary-reader";
 import { isSummaryEvent } from "./summary-presentation";
 import { PublishedFileReader } from "./published-file-reader";
@@ -15,7 +16,6 @@ import { readerFocusable, useReaderIntent, useReaderSelection, type ProcessReade
 import type { PublishedFileRead } from "./published-file";
 import { fileKey, type FileSourceDescriptor } from "@/lib/pwa/file-source";
 import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, type PresentationEntry, type PresentationSnapshot, type TextEntry } from "@/lib/pwa/timeline-presentation";
-import { appendedTools, isPartialEntry, observeTools, segmentExpansion, timelineActivity, toolBatchClosed, toolSegments, withExpansion, type ToolExpansion, type ToolSegment } from "./tool-groups";
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
 import { LoaderCircle } from "lucide-react";
@@ -48,10 +48,10 @@ type ConversationTimelineProps = {
 const NO_GAPS: ReadonlySet<string> = new Set();
 const NO_NOTICES: readonly CompactionNotice[] = [];
 /**
- * 投影快照、工具首次被观察到的顺序（决定工具组身份，历史补齐不改变已有组），以及最近一次更新中在线新追加的工具（进入组头排队）。
- * `appended` 只保留最近一次更新的新增，不累计：组之后被拆分或合并而重新挂载时，已在组头显示过的工具不会再次排队。
+ * 投影快照、过程成员首次被观察到的顺序（决定并行活动的显示次序，不读时间戳），
+ * 以及上一份过程分组（新分组据共同成员继承身份，历史补齐与增量更新不重建已有组）。
  */
-type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string, number>; appended: ReadonlySet<string> };
+type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string, number>; groups: readonly ProcessGroupModel[] };
 
 /** Pi 回复靠左占满阅读列、无底色；不显示发送方，只为读屏保留「Pi：」。 */
 function TextRow({ entry }: { entry: TextEntry }) {
@@ -97,7 +97,7 @@ export function GapNotice() {
   return <p className="pwa-timeline-notice pwa-timeline-gap">{t.timeline.gapNotSaved}</p>;
 }
 
-function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], segmentOf: Map<string, ToolSegment>, gapKeys: ReadonlySet<string>, notices: readonly CompactionNotice[], renderSegment: (segment: ToolSegment) => ReactNode, render: (entry: PresentationEntry) => ReactNode) {
+function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], groupOf: ReadonlyMap<string, ProcessGroupModel>, gapKeys: ReadonlySet<string>, notices: readonly CompactionNotice[], renderGroup: (group: ProcessGroupModel) => ReactNode, render: (entry: PresentationEntry) => ReactNode) {
   const rows: ReactNode[] = [];
   // 终态提示是本地行，按发生时的最后一条记录插入；不持久化，也不参与分组与序号。
   const pendingNotices = [...notices].sort((left, right) => left.afterSeq - right.afterSeq);
@@ -128,9 +128,10 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
     if (isPiOutputEntry(entry)) hasOutput = true;
     if (entry.kind === "text" && entry.interrupted) interrupted = true;
     if (gapKeys.has(entry.key)) rows.push(<GapNotice key={`gap:${entry.key}`} />);
-    const segment = segmentOf.get(entry.key);
-    if (segment !== undefined) {
-      if (segment.tools[0]!.key === entry.key) rows.push(renderSegment(segment));
+    // 过程组成员相邻且以缺口、本地提示与轮次断开，组在首个成员处整体输出。
+    const group = groupOf.get(entry.key);
+    if (group !== undefined) {
+      if (group.entries[0]!.key === entry.key) rows.push(renderGroup(group));
       continue;
     }
     rows.push(render(entry));
@@ -140,25 +141,28 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
   return rows;
 }
 
-/** 投影时间线并划分工具段；工具的首次观察顺序随投影一起保存，决定工具组身份。 */
-function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>, enterInitialPending: boolean) {
+const sameGroups = (left: readonly ProcessGroupModel[], right: readonly ProcessGroupModel[]) =>
+  left.length === right.length && left.every((group, index) => group === right[index]);
+
+/** 投影时间线并划分过程组；缺口与本地提示既是展示位置也是断组边界，提示本身不移动。 */
+function useProjectedTimeline(items: readonly TimelineViewItem[], gapBefore: ReadonlySet<string>, notices: readonly CompactionNotice[], enterInitialPending: boolean) {
   const [timeline, setTimeline] = useState<TimelineState>(() => {
     const view = projectTimeline(items, enterInitialPending ? projectTimeline([]) : undefined);
-    return { view, observed: observeTools(view.entries, new Map()), appended: new Set(appendedTools(view.entries, [])) };
+    return { view, observed: observeProcessEntries(view.entries, new Map()), groups: [] };
   });
-  let { view, observed, appended } = timeline;
+  let { view, observed } = timeline;
   if (view.items !== items) {
     view = projectTimeline(items, timeline.view);
-    observed = observeTools(view.entries, timeline.observed);
-    appended = new Set(appendedTools(view.entries, timeline.view.entries));
-    setTimeline({ view, observed, appended });
+    observed = observeProcessEntries(view.entries, timeline.observed);
   }
   const projectedGaps = gapBefore.size === 0 ? { keys: NO_GAPS, processBreakKeys: NO_GAPS, atEnd: false } : projectTimelineGaps(items, gapBefore, view.entries);
   const gapKeys = projectedGaps.keys;
-  const segments = toolSegments(view.entries, new Set([...gapKeys, ...projectedGaps.processBreakKeys]), observed);
-  const segmentOf = new Map<string, ToolSegment>();
-  for (const segment of segments) for (const tool of segment.tools) segmentOf.set(tool.key, segment);
-  return { view, gapKeys, projectedGapAtEnd: projectedGaps.atEnd, segments, segmentOf, appended };
+  const noticeBreaks = notices.length === 0 ? NO_GAPS : processNoticeBreakKeys(view.entries, notices.map(notice => notice.afterSeq));
+  const groups = processGroups(view.entries, new Set([...gapKeys, ...projectedGaps.processBreakKeys, ...noticeBreaks]), timeline.groups);
+  if (view !== timeline.view || observed !== timeline.observed || !sameGroups(groups, timeline.groups)) setTimeline({ view, observed, groups });
+  const groupOf = new Map<string, ProcessGroupModel>();
+  for (const group of groups) for (const entry of group.entries) groupOf.set(entry.key, group);
+  return { view, observed, gapKeys, projectedGapAtEnd: projectedGaps.atEnd, groups, groupOf };
 }
 
 /** Pi 空闲期间仍在的 partial 不可能是正在进行的输出；记下它们，供新发送消息后识别旧轮残留。 */
@@ -170,18 +174,6 @@ function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): 
 }
 
 export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, enterInitialPending = false, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
-  const [toolChoices, setToolChoices] = useState<ReadonlyMap<string, ToolExpansion>>(() => new Map());
-  const [toolIndicators, setToolIndicators] = useState<ReadonlyMap<string, readonly string[]>>(() => new Map());
-  const reportToolIndicators = useCallback((key: string, indicators: readonly string[] | null) => {
-    setToolIndicators(previous => {
-      const known = previous.get(key);
-      if (indicators === null ? known === undefined : known?.length === indicators.length && known.every((value, index) => value === indicators[index])) return previous;
-      const next = new Map(previous);
-      if (indicators === null) next.delete(key);
-      else next.set(key, indicators);
-      return next;
-    });
-  }, []);
   const { changeSelection, acceptsSelection } = useReaderIntent();
   const process = useReaderSelection<ProcessReaderSelection>();
   const summary = useReaderSelection<{ key: string; sessionId: string; trigger: HTMLButtonElement }>();
@@ -193,22 +185,16 @@ export function ConversationTimeline({ items, live, completions, running = false
   const scopedFileReader = file.state?.selection.scopeToken === files?.scopeToken ? file.state : null;
   const currentFileReader = file.current;
 
-  const { view, gapKeys, projectedGapAtEnd, segments, segmentOf, appended } = useProjectedTimeline(items, gapBefore, enterInitialPending);
+  const { view, observed, gapKeys, projectedGapAtEnd, groups, groupOf } = useProjectedTimeline(items, gapBefore, notices, enterInitialPending);
   const readerEntry = reader ? view.entries.find((entry): entry is ProcessEntry => entry.kind === reader.selection.kind && entry.key === reader.selection.entryKey && (entry.kind !== "thinking" || !!entry.text.trim())) ?? null : null;
   const summaryItem = summaryReader ? view.entries.find(entry => entry.kind === "record" && entry.key === summaryReader.selection.key) : null;
   const summaryEvent = summaryItem?.kind === "record" && summaryItem.item.kind === "event" && summaryItem.item.event.session_id === summaryReader?.selection.sessionId && isSummaryEvent(summaryItem.item.event) ? summaryItem.item.event : null;
   const idlePartials = useIdlePartials(view.entries, live && !running);
   const runEnded = (groupId: string) => completions?.has(groupId) === true;
   const activity = timelineActivity(view.entries, live, running, runEnded, idlePartials);
-  const batchClosed = new Map(segments.map(segment => [segment.key, toolBatchClosed(view.entries, segment, runEnded)]));
-  const thinkingActive = view.entries.some(entry => entry.kind === "thinking" && activity.currentOutput(entry));
-  const toolsActive = segments.some(segment => {
-    const indicators = toolIndicators.get(segment.key) ?? initialToolGroupRunningIndicators(
-      segment.tools.map(tool => tool.value), live,
-    );
-    return segment.tools.some(tool => indicators.includes(tool.key) && activity.currentIndicator(tool));
+  const { states, workingGroupKey, workingVisible, readingInline, chooseGroup, manualReading, reportFocus, reportIndicators } = useProcessPresentation({
+    groups, entries: view.entries, activity, observed, completions, compacting, readerEntryKey: reader?.selection.entryKey,
   });
-  const workingVisible = !compacting && activity.working && !thinkingActive && !toolsActive;
   const previousWorking = useRef(workingVisible);
   useLayoutEffect(() => {
     if (previousWorking.current === workingVisible) return;
@@ -227,20 +213,18 @@ export function ConversationTimeline({ items, live, completions, running = false
     list?.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "activity", added } }));
   }, [workingVisible, listRef]);
   // 只有手动展开申请 inline 锁；所有 Reader（含退出中）各自持有锁，不能互相释放。
-  const readingInline = segments.some(segment => segmentExpansion(segment.tools, toolChoices)?.expanded === true);
   const reading = reader !== null || summaryReader !== null || scopedFileReader !== null || readingInline;
-  const latest = useRef({ segments, segmentOf, entries: view.entries, toolChoices, onReadingChange, fileReadingChange });
-  useLayoutEffect(() => { latest.current = { segments, segmentOf, entries: view.entries, toolChoices, onReadingChange, fileReadingChange }; });
+  const latest = useRef({ groups, entries: view.entries, onReadingChange, fileReadingChange });
+  useLayoutEffect(() => { latest.current = { groups, entries: view.entries, onReadingChange, fileReadingChange }; });
   const { holds: processHolds } = process;
   const { holds: summaryHolds } = summary;
   const { holds: fileHolds } = file;
   const notifyReading = useCallback(() => {
     const current = latest.current;
-    const held = processHolds() || summaryHolds() || fileHolds()
-      || current.segments.some(segment => segmentExpansion(segment.tools, current.toolChoices)?.expanded === true);
+    const held = processHolds() || summaryHolds() || fileHolds() || manualReading();
     current.onReadingChange?.(held);
     current.fileReadingChange?.(held);
-  }, [processHolds, summaryHolds, fileHolds]);
+  }, [processHolds, summaryHolds, fileHolds, manualReading]);
   useEffect(() => { notifyReading(); }, [onReadingChange, fileReadingChange, reading, notifyReading]);
   // 回调更换（如文件 provider 移除）时释放旧回调持有的锁，新回调随后由上一 effect 补发当前状态。
   useEffect(() => () => { onReadingChange?.(false); fileReadingChange?.(false); }, [onReadingChange, fileReadingChange]);
@@ -250,26 +234,18 @@ export function ConversationTimeline({ items, live, completions, running = false
     // 只补救仍留在阅读器内的焦点；上层 Modal 等其他对话框中的有效焦点保持不动。
     if (readerFocusable(active) && !active.closest(".pwa-tool-reader, .pwa-file-reader")) return;
     let target: HTMLElement | null | undefined = trigger;
-    if (selection) {
-      const current = latest.current;
-      const entry = current.entries.find(entry => entry.key === selection.entryKey && entry.kind === selection.kind);
-      const segment = current.segmentOf.get(selection.entryKey);
-      const expanded = segment && segmentExpansion(segment.tools, current.toolChoices)?.expanded === true;
-      // 历史前插可能改变 legacy 根锚点；总是按当前成员重新查组。
-      const groupKey = entry?.kind === "thinking" ? entry.key : segment ? `tools:${segment.tools[0]!.key}` : null;
-      if (!entry || (selection.kind === "tool" && !expanded) || !readerFocusable(target)) {
-        const root = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-timeline-key]") ?? [])].find(node => node.dataset.timelineKey === groupKey);
-        target = root?.querySelector<HTMLButtonElement>("button") ?? null;
-      }
+    // 原入口失效（含组已收起、明细 inert）时退回仍存在的组头；成员已移除则交给列表。
+    if (selection && !readerFocusable(target)) {
+      const group = latest.current.groups.find(candidate => candidate.entries.some(entry => entry.key === selection.entryKey));
+      const root = group === undefined ? undefined : [...(listRef.current?.querySelectorAll<HTMLElement>("[data-timeline-key]") ?? [])].find(node => node.dataset.timelineKey === group.key);
+      target = root?.querySelector<HTMLButtonElement>("button.pwa-process-head") ?? null;
     }
     if (readerFocusable(target)) target.focus({ preventScroll: true });
     else listRef.current?.focus({ preventScroll: true });
   };
   // 选择记在组内全部成员上，分组拆分后仍保留用户的阅读选择。
-  const chooseSegment = (segment: ToolSegment, expanded: boolean) => {
-    const choices = withExpansion(latest.current.toolChoices, segment.tools.map(tool => tool.key), expanded);
-    latest.current.toolChoices = choices;
-    setToolChoices(choices);
+  const toggleGroup = (groupKey: string, expanded: boolean) => {
+    chooseGroup(groupKey, expanded);
     notifyReading();
   };
   const holdsReader = () => process.holds() || summary.holds() || file.holds();
@@ -277,10 +253,9 @@ export function ConversationTimeline({ items, live, completions, running = false
     if (holdsReader()) return;
     const current = latest.current.entries.find(candidate => candidate.key === entry.key && candidate.kind === entry.kind);
     if (!current || (current.kind === "thinking" && !current.text.trim())) return;
-    const segment = latest.current.segmentOf.get(entry.key);
-    const groupKey = entry.kind === "thinking" ? entry.key : segment ? `tools:${segment.tools[0]!.key}` : null;
-    if (groupKey === null) return;
-    if (!process.open({ kind: entry.kind, entryKey: entry.key, groupKey, trigger })) return;
+    const group = latest.current.groups.find(candidate => candidate.entries.some(member => member.key === entry.key));
+    if (group === undefined) return;
+    if (!process.open({ kind: entry.kind, entryKey: entry.key, groupKey: group.key, trigger })) return;
     changeSelection();
     notifyReading();
   };
@@ -339,45 +314,28 @@ export function ConversationTimeline({ items, live, completions, running = false
     if (invalidated) { changeSelection(); notifyReading(); }
   });
   const renderEntry = (entry: PresentationEntry) => {
-      if (entry.kind === "record") {
-        if (entry.item.kind === "event" && isSummaryEvent(entry.item.event)) {
-          const event = entry.item.event;
-          return <SummaryEntry key={entry.key} timelineKey={entry.key} event={event} onRead={trigger => openSummaryReader(entry.key, event.session_id, trigger)} />;
-        }
-        return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true, entry.key)}</Fragment>;
+    if (entry.kind === "record") {
+      if (entry.item.kind === "event" && isSummaryEvent(entry.item.event)) {
+        const event = entry.item.event;
+        return <SummaryEntry key={entry.key} timelineKey={entry.key} event={event} onRead={trigger => openSummaryReader(entry.key, event.session_id, trigger)} />;
       }
-      if (entry.kind === "text") return <TextRow entry={entry} key={entry.key} />;
-      if (entry.kind === "thinking") return <ThinkingContent
-        key={entry.key}
-        timelineKey={entry.key}
-        text={entry.text}
-        streaming={entry.streaming}
-        thinkingTextEpoch={entry.thinkingTextEpoch}
-        onRead={trigger => captureProcess(entry, trigger)}
-      />;
-      return <ToolCard
-        key={entry.key}
-        timelineKey={entry.key}
-        value={entry.value}
-        status={effectiveProcessStatus(entry, view.entries, activity) as Exclude<ReturnType<typeof effectiveProcessStatus>, "neutral">}
-        onRead={trigger => captureProcess(entry, trigger)}
-      />;
+      return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true, entry.key)}</Fragment>;
+    }
+    // 思考与工具只经过程组呈现。
+    return entry.kind === "text" ? <TextRow entry={entry} key={entry.key} /> : null;
   };
-  const renderSegment = (segment: ToolSegment) => <ToolGroupCard
-    key={segment.key}
-    values={segment.tools.map(tool => tool.value)}
-    live={live}
-    appended={appended}
-    batchClosed={batchClosed.get(segment.key)}
-    // 视口锚点用它在重新挂载后找回工具组；取第一条工具，内容相同时与观察顺序无关。
-    timelineKey={`tools:${segment.tools[0]!.key}`}
-    activityKey={segment.key}
-    onRunningToolsChange={reportToolIndicators}
-    expanded={segmentExpansion(segment.tools, toolChoices)?.expanded ?? false}
-    onExpandedChange={expanded => chooseSegment(segment, expanded)}
-  >{segment.tools.map(renderEntry)}</ToolGroupCard>;
+  const renderGroup = (group: ProcessGroupModel) => <ProcessGroup
+    key={group.key}
+    group={group}
+    state={states.get(group.key)!}
+    showWorking={workingGroupKey === group.key}
+    onToggle={toggleGroup}
+    onRead={captureProcess}
+    onFocusWithinChange={reportFocus}
+    onRunningToolsChange={reportIndicators}
+  />;
   // 发布记录保留 group_id，同一轮的完成时间仍只在段末追加一次。
-  const rows = conversationRows(view.entries, completions, segmentOf, gapKeys, notices, renderSegment, renderEntry);
+  const rows = conversationRows(view.entries, completions, groupOf, gapKeys, notices, renderGroup, renderEntry);
 
   return <>
     {rows}

@@ -144,7 +144,9 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     receive(tool("a-second"));
     await settle();
     const list = api.messageListRef.current!;
-    const original = [...list.querySelectorAll("article")];
+    // 只数列表的顶层行；过程组内的工具明细不是独立消息行。
+    const rows = () => [...list.querySelectorAll(":scope > article")];
+    const original = rows();
     const minimumTailSpace = 8;
     const tailOffset = () => list.querySelector(".pwa-bottom-sentinel")!.getBoundingClientRect().top - list.getBoundingClientRect().top;
     const expectVisibleWithClearance = (element: Element) => {
@@ -156,12 +158,13 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     };
     commit(done("a-second", 2));
     const beforeWorking = { top: list.scrollTop, height: list.scrollHeight, rows: original.map(row => row.getBoundingClientRect().top) };
-    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    expect(list.querySelector(".pwa-thinking-status, .pwa-process-working")).toBeNull();
     commit(done("z-first", 3));
-    const working = list.querySelector(".pwa-thinking-status")!;
+    const working = list.querySelector<HTMLElement>(".pwa-process-working")!;
     expect(working).not.toBeNull();
-    // 最后一个工具完成后 Working 立即出现，使用已有留白，不再搬动已稳定的正文。
-    expect(list.scrollHeight).toBeGreaterThan(beforeWorking.height);
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    // 最后一个工具完成后 Working 立即由末段组头原位承载：同高替换，不增加占高，也不搬动已稳定的行。
+    expect(list.scrollHeight).toBe(beforeWorking.height);
     expect(list.scrollTop).toBe(beforeWorking.top);
     expect(original.map(row => Math.round(row.getBoundingClientRect().top))).toEqual(beforeWorking.rows.map(Math.round));
     expectVisibleWithClearance(working);
@@ -170,20 +173,23 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     const activity = { top: list.scrollTop, height: list.scrollHeight, tail: tailOffset() };
     expect(activity.height - list.clientHeight - activity.top).toBeGreaterThan(0);
     receive(text("B", "After tools. ".repeat(25)));
-    // 两条工具从第一条起即在同一个折叠组内：正文、工具组、正文。
-    await expect.poll(() => list.querySelectorAll("article").length).toBe(3);
+    // 两条工具从第一条起即在同一个过程组内：正文、过程组、正文。
+    await expect.poll(() => rows().length).toBe(3);
     await expect.poll(() => list.querySelector("article.partial")?.textContent?.includes("After tools. ".repeat(25).trim())).toBe(true);
     await settle();
     const reply = list.querySelector<HTMLElement>("article.partial")!;
     // 流式正文增长由原生平滑滚动接续，先等待落点再检查可见性。
     await expect.poll(() => list.scrollTop - activity.top).toBe(list.scrollHeight - activity.height);
-    expect([...list.querySelectorAll("article")].slice(0, 2)).toEqual(original);
+    expect(rows().slice(0, 2)).toEqual(original);
     await expect.element(reply).toBeVisible();
     await expect.element(page.getByText("Working…", { exact: true })).toBeVisible();
-    expect(list.querySelector(".pwa-thinking-status")).toBe(working);
+    // 正文之后不再把 Working 挂回较早的过程组，改由末尾兜底行承载。
+    expect(list.querySelector(".pwa-process-working")).toBeNull();
+    const tailWorking = list.querySelector<HTMLElement>(".pwa-thinking-status")!;
+    expect(tailWorking).not.toBeNull();
     expectVisibleWithClearance(reply);
-    expectVisibleWithClearance(working);
-    expect(Math.round(reply.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(working.getBoundingClientRect().top));
+    expectVisibleWithClearance(tailWorking);
+    expect(Math.round(reply.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(tailWorking.getBoundingClientRect().top));
     // 正文接续有效目标：增长多少就跟进多少，不重新补齐先前借用的留白。
     const contentGrowth = list.scrollHeight - activity.height;
     expect(contentGrowth).toBeGreaterThan(0);
@@ -205,8 +211,8 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     receive(text("C", "Final summary."));
     commit(formal("C", 6, "Final summary."));
     await settle();
-    expect([...list.querySelectorAll("article")].slice(0, 3)).toEqual([...original, reply]);
-    expect(list.querySelectorAll("article")).toHaveLength(5);
+    expect(rows().slice(0, 3)).toEqual([...original, reply]);
+    expect(rows()).toHaveLength(5);
     expect(list.querySelectorAll(".pwa-streaming")).toHaveLength(0);
     expect(Math.abs(offset() - before)).toBeLessThanOrEqual(1);
     expect(api.followingOutput).toBe(false);
@@ -231,51 +237,53 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
   try {
     flushSync(() => { expect(start(0)).toEqual([]); });
     const list = api.messageListRef.current!;
-    const current = () => list.querySelector(".pwa-tool-group-current")?.textContent ?? null;
+    const groups = () => list.querySelectorAll(".pwa-process-group");
+    const cards = () => list.querySelectorAll(".pwa-process-group .pwa-tool-card");
+    const headWorking = () => list.querySelector(".pwa-process-head .pwa-process-working");
     receive(partial("first"));
-    await expect.poll(current).toBe("readfirst.ts");
+    await expect.poll(() => cards().length).toBe(1);
     receive(partial("second"));
-    // 两条并行：second 排队，等 first 停满后显示。
-    await expect.poll(current, { timeout: 3000 }).toBe("readsecond.ts");
-    expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
-    // 组头进入动画露出具体旋转提示后，不重复显示 Working。
-    await expect.poll(() => list.querySelector(".pwa-thinking-status")).toBeNull();
+    // 并行工具从第一条起进入同一组；运行中默认展开，明细按开始顺序排列，不排队轮播。
+    await expect.poll(() => cards().length).toBe(2);
+    expect(groups()).toHaveLength(1);
+    expect([...cards()].map(card => card.querySelector(".pwa-tool-action-copy")?.textContent)).toEqual(["readfirst.ts", "readsecond.ts"]);
+    // 具体运行图标可见时不重复显示 Working。
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    expect(headWorking()).toBeNull();
 
     formal(done("first", 1));
     await expect.poll(() => api.items.some(item => item.kind === "event" && item.event.event_id === "event:first")).toBe(true);
-    expect(current()).toBe("readsecond.ts");
+    expect(headWorking()).toBeNull();
     formal(done("second", 2));
-    // 工具全部结束、Pi 仍 working：立即恢复兜底；没有闭合边界时继续保持调用展示。
-    const workingStatus = list.querySelector(".pwa-thinking-status");
+    // 工具全部结束、Pi 仍 working：Working 立即由末段组头承载；没有 run_end 不收起、不补完成时间。
+    const workingStatus = headWorking();
     expect(workingStatus?.textContent).toBe("Working…");
-    await new Promise(resolve => window.setTimeout(resolve, 1000));
-    expect(current()).toBe("readsecond.ts");
-    expect(list.querySelector(".pwa-tool-group-summary")).toBeNull();
-    expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
-    expect(list.querySelectorAll(".pwa-tool-card")).toHaveLength(0);
+    expect(list.querySelector(".pwa-thinking-status")).toBeNull();
+    expect(groups()).toHaveLength(1);
+    expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
     expect(list.querySelector(".pwa-turn-meta")).toBeNull();
 
     if (mode === "run_end with residual partial") {
       receive({ ...base, protocol_version: 2, type: "timeline_partial", partial_id: "unfinished:assistant:0", kind: "assistant", status: "delta", delta: "Still streaming" });
       await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Still streaming");
-      expect(list.querySelector(".pwa-thinking-status")).toBe(workingStatus);
-      await expect.poll(current, { timeout: 3000 }).toBeNull();
-      await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
+      // 正文出现后通用 Working 回到末尾，不挂回较早的过程组。
+      expect(headWorking()).toBeNull();
+      expect(list.querySelector(".pwa-thinking-status")?.textContent).toBe("Working…");
     }
     if (mode !== "missing run_end") {
       const timestamp = Date.UTC(2026, 0, 1, 9, 30);
       formal({ ...base, event_id: "run-end", event_seq: 3, timestamp, kind: "run_end", status: "complete" });
       await expect.poll(() => list.querySelector(".pwa-turn-meta time")?.getAttribute("datetime")).toBe(new Date(timestamp).toISOString());
       await expect.poll(() => vi.mocked(mergeTimelineEvents).mock.calls.some(([, values]) => values.some(event => event.kind === "run_end"))).toBe(true);
-      // 收到 run_end 后即使 working 尚未更新也不再显示 Working。
+      // 收到 run_end 后即使 working 尚未更新也不再显示 Working；未手动选择的组随正式结束收起。
       expect(list.querySelector(".pwa-thinking-status")).toBeNull();
-      await expect.poll(current, { timeout: 3000 }).toBeNull();
+      expect(headWorking()).toBeNull();
       await expect.element(screen.getByRole("button", { name: "Expand Read 2 files" })).toBeVisible();
     } else {
-      expect(current()).toBe("readsecond.ts");
-      expect(list.querySelector(".pwa-thinking-status")).toBe(workingStatus);
+      expect(headWorking()).toBe(workingStatus);
+      expect(list.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
     }
-    expect(list.querySelectorAll(".pwa-tool-group")).toHaveLength(1);
+    expect(groups()).toHaveLength(1);
     if (mode === "run_end") expect(api.items.some(item => item.kind === "partial")).toBe(false);
     if (mode === "run_end with residual partial") expect(api.items.some(item => item.kind === "partial" && item.partial.partial_id === "unfinished:assistant:0")).toBe(true);
     expect(api.messageListRef.current).toBe(list);

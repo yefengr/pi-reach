@@ -60,19 +60,3 @@
   transform: none;
   transition-duration: var(--pwa-duration-collapse-in);
 }
-
-/* 工具组组头与思考标题保持正文字号；只有展开内容使用较小字号。 */
-.pwa-thinking .pwa-timeline-heading { font-size: var(--pwa-text-body); }
-.pwa-root .pwa-tool-group > .pwa-tool-head .pwa-tool-action { grid-template-columns: minmax(0, 1fr); grid-auto-columns: auto; grid-auto-flow: column; font-size: var(--pwa-text-body); }
-.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-summary { display: flex; align-items: center; gap: 8px; color: var(--pwa-secondary); font: inherit; }
-.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-summary-text { flex: 0 1 auto; font: inherit; color: inherit; }
-/* 轮播调用使用组头字号；换成新工具时仅文字进入，减少动态效果时位移为 0。文字保持中性，运行状态只由右侧图标表达。 */
-.pwa-root .pwa-tool-group .pwa-tool-action-copy .pwa-tool-group-current { display: flex; align-items: center; gap: 8px; color: inherit; font: inherit; }
-.pwa-root .pwa-tool-group .pwa-tool-group-current > span { font-size: var(--pwa-text-body); }
-.pwa-root .pwa-tool-group .pwa-tool-group-status { width: 16px; height: 16px; justify-content: center; overflow: visible; }
-/* 只让文字进入，状态原位交接，避免透明图标触发 Working 短暂插入。 */
-.pwa-root .pwa-tool-group .pwa-tool-group-current[data-enter] { animation: pwa-tool-group-current-in var(--pwa-duration-content) var(--pwa-ease-standard); }
-@keyframes pwa-tool-group-current-in { from { opacity: 0; transform: translateY(calc(100% * var(--pwa-motion-shift))); } }
-.pwa-tool-group-details { min-width: 0; }
-.pwa-tool-group-details > .pwa-timeline-row:first-child { margin-top: 0; }
-.pwa-tool-group-details > .pwa-timeline-row:last-child { margin-bottom: 0; }

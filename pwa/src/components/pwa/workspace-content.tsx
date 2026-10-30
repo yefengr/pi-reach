@@ -28,6 +28,10 @@ export function TimelineWorkspace({ timeline, footer }: { timeline: ReactNode; f
 }
 
 type HistoryConversationProps = {
+  /** 只读历史的真实来源；切换历史时清理上一份展示与阅读器选择。 */
+  sourceKey: string;
+  /** 手动展开或阅读器打开期间暂停跟随，与在线会话共用阅读锁。 */
+  onReadingChange?: (reading: boolean) => void;
   /** 当前已展开的记录（运行时只读投影）。 */
   items: TimelineViewItem[];
   /** 本地保存的全部正式记录：附件元数据可能落在已展开的范围之外，缺口按全集的序号标出。 */
@@ -48,14 +52,14 @@ type HistoryConversationProps = {
  * 只读历史：与在线会话同一个时间线组件与视口，向前翻页、阅读位置与「最新」的行为一致；
  * 只换底部为只读输入区，并标出未保存在此浏览器的区间。
  */
-export function HistoryConversation({ items, savedEvents, hasEarlier, loadingEarlier, loadEarlierFailed, onLoadEarlier, loading, viewport, modelName, thinking }: HistoryConversationProps) {
+export function HistoryConversation({ sourceKey, onReadingChange, items, savedEvents, hasEarlier, loadingEarlier, loadEarlierFailed, onLoadEarlier, loading, viewport, modelName, thinking }: HistoryConversationProps) {
   const { t } = useI18n();
   const projection = useMemo(() => savedEvents.map((event): TimelineViewItem => ({ kind: "event", event })), [savedEvents]);
   const { gapBefore, missingStart } = useMemo(() => savedRangeGaps(savedEvents), [savedEvents]);
   const skeletonVisible = useDelayedVisibility(loading);
   const following = viewport.followingOutput;
   return <TimelineWorkspace
-    timeline={<MessageList items={items} projectionItems={projection} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} onLoadEarlier={onLoadEarlier} loadEarlierFailed={loadEarlierFailed} autoLoadEarlier={!following} earlierLocal gapBefore={gapBefore} topNotice={!hasEarlier && missingStart ? t.timeline.earlierNotSaved : null} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />}
+    timeline={<MessageList sourceKey={sourceKey} onReadingChange={onReadingChange} items={items} projectionItems={projection} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} onLoadEarlier={onLoadEarlier} loadEarlierFailed={loadEarlierFailed} autoLoadEarlier={!following} earlierLocal gapBefore={gapBefore} topNotice={!hasEarlier && missingStart ? t.timeline.earlierNotSaved : null} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive={false} loading={loading || skeletonVisible} skeletonVisible={skeletonVisible} />}
     footer={<>
       <PwaMessageActions show={viewport.latestEntryVisible} showRetry={false} showLatest={viewport.latestEntryVisible} unreadOutput={0} onRetry={() => {}} onLatest={viewport.showLatest} />
       <ReadOnlyComposer notice={t.workspace.readOnlyNote} modelName={modelName} thinking={thinking} />

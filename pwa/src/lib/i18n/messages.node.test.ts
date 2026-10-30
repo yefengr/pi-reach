@@ -27,9 +27,8 @@ test("the model chip describes the shared model and thinking settings in both la
 
 test("conversation thinking labels stay English in both interface languages", () => {
   expect(en.timeline.thinkingTrace).toBe("Thinking");
-  expect(en.timeline.thoughtProcess).toBe("Thinking");
   expect(en.timeline.thinking).toBe("Thinking…");
-  for (const key of ["thinkingLabel", "collapseThinking", "expandThinking", "thinking", "thinkingTrace", "thoughtProcess"] as const) {
+  for (const key of ["thinking", "thinkingTrace"] as const) {
     expect(zh.timeline[key], key).toBe(en.timeline[key]);
   }
 });

@@ -159,9 +159,9 @@ test.each([1280, 390])("Thinking pauses following without showing Latest until n
   const history = answer("history", paragraphs("Earlier"));
   const { screen, list, update, viewport } = await renderTimeline([history, partial("thinking", "Initial thought", "thinking")]);
   try {
-    const trigger = screen.getByRole("button", { name: "Expand thinking" }).element();
+    const trigger = screen.getByRole("button", { name: "Expand Thinking" }).element();
     const top = offset(trigger, list);
-    await screen.getByRole("button", { name: "Expand thinking" }).click();
+    await screen.getByRole("button", { name: "Expand Thinking" }).click();
     await settleLayout();
     expect(viewport().followingOutput).toBe(true);
     expect(viewport().unreadOutput).toBe(0);
@@ -174,7 +174,7 @@ test.each([1280, 390])("Thinking pauses following without showing Latest until n
     await expect.poll(() => bottomGap(list)).toBeLessThanOrEqual(1);
     expect(viewport().followingOutput).toBe(true);
     expect(viewport().unreadOutput).toBe(0);
-    expect(screen.getByRole("button", { name: "Collapse thinking" }).element()).toBe(trigger);
+    expect(screen.getByRole("button", { name: "Collapse Thinking" }).element()).toBe(trigger);
   } finally { await screen.unmount(); }
 });
 
@@ -212,8 +212,8 @@ test("manual scrolling while Thinking is open updates the reading position", asy
   const tail = answer("tail", paragraphs("Below", 24));
   const { screen, list, readAt, update, viewport } = await renderTimeline([partial("above", paragraphs("Above", 6)), thinking, tail]);
   try {
-    await readAt(screen.getByRole("button", { name: "Expand thinking" }).element());
-    await screen.getByRole("button", { name: "Expand thinking" }).click();
+    await readAt(screen.getByRole("button", { name: "Expand Thinking" }).element());
+    await screen.getByRole("button", { name: "Expand Thinking" }).click();
     await settleLayout();
     const target = screen.getByText("Below paragraph 4: content that stays available while reading.").element();
     await readAt(target);
@@ -247,8 +247,9 @@ test.each([1280, 390])("closing the direct reader by Escape or history preserves
   const tail = answer("tail", paragraphs("Below"));
   const { screen, list, readAt, update, viewport } = await renderTimeline([partial("above", paragraphs("Above", 5)), tool, tail]);
   try {
-    // 工具在默认收起的组内，先展开再从工具行打开阅读器。
-    await userEvent.click(list.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head .pwa-tool-action")!);
+    // 已停止的过程组默认收起，先展开再从工具行打开阅读器。
+    const head = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
+    if (head.getAttribute("aria-expanded") === "false") await userEvent.click(head);
     await settleLayout();
     const heading = list.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!;
     await readAt(heading);
@@ -373,7 +374,7 @@ test("switching back restores a reading position anchored on a collapsed tool gr
   const sessionA = [answer("a-0", paragraphs("Session A 0", 4)), tool("first"), tool("second"), ...Array.from({ length: 8 }, (_, index) => answer(`a-${index + 1}`, paragraphs(`Session A ${index + 1}`, 4)))];
   const { screen, list, readAt, replace, viewport } = await renderTimeline(sessionA);
   try {
-    const group = () => list.querySelector<HTMLElement>(".pwa-tool-group")!;
+    const group = () => list.querySelector<HTMLElement>(".pwa-process-group")!;
     await readAt(group());
     const top = offset(group(), list);
     const saved = viewport().captureSessionPosition();
@@ -396,9 +397,9 @@ const activityCases = [1280, 390].flatMap(width => ["no-preference", "reduce"].m
 async function sampleActivityLayout(list: HTMLElement, action: () => void) {
   const snapshot = () => ({
     scrollTop: Math.round(list.scrollTop), height: list.scrollHeight,
-    working: list.querySelector(".pwa-thinking-status") !== null,
-    thinking: list.querySelector(".pwa-thinking-live .pwa-spin") !== null,
-    tool: list.querySelector(".pwa-tool-group-status .pwa-tool-spinner") !== null,
+    working: list.querySelector(".pwa-working-label, .pwa-process-working") !== null,
+    thinking: list.querySelector(".pwa-process-status-running > .lucide-lightbulb") !== null,
+    tool: list.querySelector(".pwa-process-status-running > .pwa-spin, .pwa-process-details .pwa-tool-spinner") !== null,
   });
   action();
   const samples = [snapshot()];
@@ -429,7 +430,12 @@ test.each(activityCases)("expanding a live tool group preserves reading until La
   const ended: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "end", group_id: "live-output", timestamp: 2, kind: "run_end", status: "complete" } };
   const { screen, list, update, readAt, viewport } = await renderTimeline([history, tool("a")]);
   try {
-    const group = list.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head button")!;
+    const group = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
+    // 运行中的组默认展开且不暂停跟随；先手动收起，再验证一次手动展开的阅读语义。
+    expect(group.getAttribute("aria-expanded")).toBe("true");
+    flushSync(() => group.click());
+    await settleLayout();
+    expect(group.getAttribute("aria-expanded")).toBe("false");
     const top = Math.round(offset(group, list));
     const scrollTop = Math.round(list.scrollTop);
     const samples = await sampleActivityLayout(list, () => flushSync(() => group.click()));

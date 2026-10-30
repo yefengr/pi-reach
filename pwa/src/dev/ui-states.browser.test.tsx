@@ -16,7 +16,8 @@ async function choose(state: GalleryState) {
   await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe(state);
 }
 async function openTool() {
-  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-group > .pwa-tool-head > button")!);
+  // 运行中的过程组默认展开；已停止的先展开。
+  for (const head of document.querySelectorAll<HTMLButtonElement>("button.pwa-process-head[aria-expanded='false']")) await userEvent.click(head);
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!);
   await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll")).not.toBeNull();
 }
@@ -39,7 +40,7 @@ afterEach(async () => {
 test("real state fixtures expose thinking, running tools, failures and explicit tool/attachment retries", async () => {
   await render(<UiStateGalleryPage />);
   await expect.element(page.getByText("检查阅读与输入的关系", { exact: true })).toBeVisible();
-  await expect.poll(() => document.querySelector(".pwa-thinking-live .pwa-spin")).not.toBeNull();
+  await expect.poll(() => document.querySelector(".pwa-process-status-running > .lucide-lightbulb")).not.toBeNull();
   await choose("tools");
   await openTool();
   expect(document.querySelector(".pwa-tool-reader-scroll")?.textContent).toContain("此命令没有实际执行");

@@ -88,39 +88,6 @@
 .pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
-/* 思考行：进行中显示旋转图标与最新完整标题，无标题时用合并更新的首行摘要或「Thinking…」；完成态沿用最新标题或「Thinking」，图标淡出后标题滑回左缘，箭头列不动。空历史仅显示静态「Thinking」，不可展开。
-   标题与正式回复同为 16px，展开内容为 14px 次级文字，不带引用竖线与缩进；标题和正文使用斜体，代码与操作按钮保持正体。 */
-.pwa-thinking { color: var(--pwa-secondary); }
-.pwa-thinking.pwa-timeline-row .pwa-thinking-title,
-.pwa-thinking .pwa-text-plain { font-style: italic; }
-/* 代码需要直立字形才能保持等宽对齐；展开全文等操作文字不属于思考内容。 */
-.pwa-thinking :is(.pwa-code-block, .pwa-markdown code, .pwa-button) { font-style: normal; }
-.pwa-root .pwa-thinking-head { grid-template-columns: minmax(0, 1fr) auto; }
-.pwa-thinking-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pwa-thinking-heading { display: flex; align-items: center; }
-/* 思考标题保持中性文字，运行状态只由左侧旋转图标表达。 */
-/* 槽位含 16px 图标和 8px 间隔；仅状态切换改变宽度，正文增量不会重播。 */
-.pwa-thinking-icon-slot { position: relative; flex: 0 0 auto; width: 0; height: 16px; opacity: 0; visibility: hidden; transition: width var(--pwa-duration-status-slot) var(--pwa-ease-standard), opacity var(--pwa-duration-status-slot) var(--pwa-ease-standard), visibility 0s var(--pwa-duration-status-slot); }
-.pwa-thinking-icon-slot > svg { position: absolute; top: 0; left: 0; color: var(--pwa-running); }
-/* 运行图标立即可见，不因标题位移制造 Working 的反馈空档。结束后停止旋转，再淡出静态图形。 */
-.pwa-thinking-live > .pwa-thinking-icon-slot { width: 24px; opacity: 1; visibility: visible; transition-duration: var(--pwa-duration-status-slot), 0s, 0s; transition-delay: 0s; }
-.pwa-thinking-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; transition: opacity var(--pwa-duration-status-slot) var(--pwa-ease-standard); }
-/* 新挂载的运行行也从左缘进入；不支持 starting-style 时保持直接显示的安全降级。 */
-@starting-style {
-  .pwa-thinking-live > .pwa-thinking-icon-slot { width: 0; }
-  .pwa-thinking-live > span { opacity: calc(1 - var(--pwa-motion-shift)); }
-}
-.pwa-thinking-content .pwa-collapse-inner { padding-bottom: 4px; }
-.pwa-long-text { min-width: 0; }
-.pwa-text-plain { margin: 0; color: var(--pwa-soft-ink); font: var(--pwa-text-body)/var(--pwa-leading-body) var(--pwa-font-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
-.pwa-thinking .pwa-text-plain { color: var(--pwa-secondary); font-size: var(--pwa-text-list); }
-/* 思考正文与回复共用 Markdown 渲染，但块级元素保持 14px 次级文字；块间正好留一行，沿用原有纯文本的空行节奏。 */
-.pwa-thinking .pwa-text-plain .pwa-markdown > * { margin: 0; font-size: inherit; }
-.pwa-thinking .pwa-text-plain .pwa-markdown > * + * { margin-top: calc(var(--pwa-text-list) * var(--pwa-leading-body)); }
-/* 引用、列表等嵌套块里的标题与表格同样回到 14px，不能让思考正文在局部放大。 */
-.pwa-thinking .pwa-text-plain .pwa-markdown :is(h1, h2, h3, h4, h5, h6, table) { margin: 0; font-size: inherit; }
-.pwa-output-toggle { margin-top: 4px; }
-
 .pwa-chat-empty { display: grid; gap: 4px; margin: 48px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); text-align: center; }
 .pwa-chat-empty p { margin: 0; }
 /* 新会话的上下文：目录 · 模型 · 思考级别，发送前确认对象。 */

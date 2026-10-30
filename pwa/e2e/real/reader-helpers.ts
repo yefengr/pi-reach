@@ -23,17 +23,17 @@ function fileCard(page: Page): Locator {
 }
 
 function streamGroup(page: Page, saved = false): Locator {
-  const groups = page.locator(".pwa-tool-group");
+  const groups = page.locator(".pwa-process-group");
   // 新打开的只读历史默认折叠，先用可见摘要定位，再由调用方展开并验证真实输出。
   return saved
-    ? groups.filter({ has: page.locator(".pwa-tool-group-summary-text", { hasText: /^Ran 1 command$/ }) })
+    ? groups.filter({ has: page.locator(".pwa-process-summary", { hasText: /^Ran 1 command$/ }) })
     : groups.filter({ hasText: "E2E stream start" });
 }
 
 async function openStreamTool(page: Page, saved = false): Promise<Locator> {
   const group = streamGroup(page, saved);
   await expect(group).toHaveCount(1);
-  const toggle = group.locator(":scope > .pwa-tool-head > button");
+  const toggle = group.locator(":scope > button.pwa-process-head");
   if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
   const tool = group.getByRole("button", { name: "View bash tool details", exact: true });
   await expect(tool).toBeVisible();

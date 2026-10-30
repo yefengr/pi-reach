@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelinePending, TimelineViewItem } from "./timeline-runtime";
 import { projectTimelineGaps, projectTimeline } from "./timeline-presentation";
-import { observeTools, toolSegments } from "@/components/pwa/tool-groups";
+import { processGroups } from "@/components/pwa/process-groups";
 
 const base = { session_id: "s", leaf_id: "g", group_id: "group" } as const;
 
@@ -167,7 +167,7 @@ test("splits retained adjacent tools at a real gap despite reversed completion o
   const loaded = projectTimeline(items, initial);
   const gaps = projectTimelineGaps(items, new Set(["earlier", "event-a"]), loaded.entries);
   expect(gaps.keys).toEqual(new Set([initial.entries[0]!.key, initial.entries[1]!.key]));
-  expect(toolSegments(loaded.entries, new Set([...gaps.keys, ...gaps.processBreakKeys]), observeTools(loaded.entries, new Map())).map(segment => segment.tools.length)).toEqual([1, 1]);
+  expect(processGroups(loaded.entries, new Set([...gaps.keys, ...gaps.processBreakKeys])).map(group => group.entries.filter(entry => entry.kind === "tool").length)).toEqual([1, 1]);
   const separated = projectTimelineGaps(items, new Set(["event-b"]), loaded.entries);
   expect(separated.keys).toEqual(new Set([initial.entries[0]!.key]));
 });
@@ -182,7 +182,7 @@ test("splits retained adjacent tools at a single real gap despite reversed compl
   expect(gaps.processBreakKeys).toEqual(new Set([initial.entries[1]!.key]));
   expect(gaps.atEnd).toBe(false);
   const breaks = new Set([...gaps.keys, ...gaps.processBreakKeys]);
-  expect(toolSegments(loaded.entries, breaks, observeTools(loaded.entries, new Map())).map(segment => segment.tools.length)).toEqual([1, 1]);
+  expect(processGroups(loaded.entries, breaks).map(group => group.entries.filter(entry => entry.kind === "tool").length)).toEqual([1, 1]);
 });
 
 test.each([

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { PresentationEntry, ThinkingEntry, ToolEntry } from "@/lib/pwa/timeline-presentation";
-import { effectiveProcessStatus, effectiveToolStatus, isPartialEntry, observeProcessEntries, timelineActivity } from "./timeline-activity";
-import * as legacy from "./tool-groups";
+import { effectiveProcessStatus, effectiveToolStatus, observeProcessEntries, timelineActivity } from "./timeline-activity";
 
 const scope = { session_id: "s", leaf_id: "l", group_id: "g" };
 const thought = (key: string, streaming = true, groupId = "g"): ThinkingEntry => ({ kind: "thinking", key, groupId, text: key, streaming });
@@ -17,12 +16,6 @@ const status = (entry: ThinkingEntry | ToolEntry, entries: readonly Presentation
   effectiveProcessStatus(entry, entries, timelineActivity(entries, live, running, () => ended));
 
 describe("timeline activity migration", () => {
-  test("legacy consumers share exactly the same helpers", () => {
-    expect(legacy.timelineActivity).toBe(timelineActivity);
-    expect(legacy.isPartialEntry).toBe(isPartialEntry);
-    expect(legacy.effectiveToolStatus).toBe(effectiveToolStatus);
-  });
-
   test("first observation is stable across output updates and history prepends", () => {
     const a = thought("a");
     const b = tool("b");

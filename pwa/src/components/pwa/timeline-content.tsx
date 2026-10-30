@@ -1,25 +1,13 @@
-import { Fragment, isValidElement, memo, useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight, LoaderCircle } from "lucide-react";
+import { Fragment, isValidElement, memo, useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components, type Options as MarkdownOptions } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Button } from "@mantine/core";
-import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { useI18n } from "@/lib/i18n";
-import { en } from "@/lib/i18n/messages/en";
 import { highlightCode, languageForFence } from "@/lib/pwa/code-highlight";
 import { CopyButton } from "./copy-button";
-import { Collapse } from "./collapse";
 import { markdownTableComponents } from "./markdown-table";
-import { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
 import { rehypeStreamReveal, splitMarkdownChunks, type MarkdownChunk } from "@/lib/pwa/markdown-stream";
-import { useThinkingHeading } from "./use-thinking-heading";
 export { thinkingTitle, thinkingSummary } from "@/lib/pwa/thinking-text-parser";
 import "./timeline-content.css";
-
-const PREVIEW_CHARACTERS = 2400;
-const PREVIEW_LINES = 20;
-
-type AssistantBlock = Extract<TimelineEvent, { kind: "assistant" }>["blocks"][number];
 
 /** 顶部标题栏放围栏语言名与复制按钮，代码区只负责横向滚动，长行不会滚到按钮下方。 */
 // 流式追加只改变消息尾部时，闭合代码块的三个标量输入不变；memo 保留其 DOM、复制状态与高亮缓存。
@@ -81,98 +69,3 @@ export const MarkdownContent = memo(function MarkdownContent({ text, reveal = NO
 });
 
 /** 保留正文顺序，仅将相邻同类片段合并为一个阅读区域。 */
-function adjacentBlocks(blocks: readonly AssistantBlock[]): AssistantBlock[] {
-  const merged: AssistantBlock[] = [];
-  for (const block of blocks) {
-    if (!block.text.trim()) continue;
-    const previous = merged.at(-1);
-    if (previous?.type === block.type) previous.text += `\n${block.text}`;
-    else merged.push({ ...block });
-  }
-  return merged;
-}
-
-type LongTextProps = {
-  text: string;
-  label: string;
-  variant?: "code" | "prose";
-  toggleLabels?: { showFull: string; showLess: string };
-};
-
-export function LongText({ text, label, variant = "code", toggleLabels }: LongTextProps) {
-  const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
-  const id = useId();
-  const firstLines = text.split("\n", PREVIEW_LINES).join("\n");
-  let end = Math.min(firstLines.length, PREVIEW_CHARACTERS);
-  const last = text.charCodeAt(end - 1);
-  if (end < text.length && last >= 0xD800 && last <= 0xDBFF) end -= 1;
-  const long = end < text.length;
-  const shown = expanded || !long ? text : text.slice(0, end);
-  return <div className="pwa-long-text">
-    {variant === "prose"
-      // 思考正文与回复共用同一 Markdown 渲染；容器仍是 14px 次级文字，块级元素不放大。
-      ? <div id={id} className={`pwa-text-plain${expanded ? " expanded" : ""}`}><MarkdownContent text={shown} /></div>
-      : <pre id={id} className={`pwa-tool-code${expanded ? " expanded" : ""}`}>{shown}</pre>}
-    {long ? <Button variant="transparent" className="pwa-output-toggle" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded((value) => !value)}>{expanded ? toggleLabels?.showLess ?? t.timeline.showLess(label) : toggleLabels?.showFull ?? t.timeline.showFull(label)}</Button> : null}
-  </div>;
-}
-
-type ThinkingContentProps = {
-  text: string;
-  streaming?: boolean;
-  thinkingTextEpoch?: object;
-  expanded?: boolean;
-  onExpandedChange?: (expanded: boolean) => void;
-  /** P4 旧时间线桥接；统一过程组接管后移除。 */
-  onRead?: (trigger: HTMLButtonElement) => void;
-  timelineKey?: string;
-};
-
-export function ThinkingContent({ text, streaming = false, thinkingTextEpoch, expanded: controlledExpanded, onExpandedChange, onRead, timelineKey }: ThinkingContentProps) {
-  const { t } = useI18n();
-  const [parser] = useState(() => new ThinkingTextParser());
-  const parsed = parser.read(text, streaming ? thinkingTextEpoch : undefined, streaming);
-  const heading = useThinkingHeading(parsed, streaming, thinkingTextEpoch);
-  const [localExpanded, setLocalExpanded] = useState(false);
-  const [previousStreaming, setPreviousStreaming] = useState(streaming);
-  const [announcementReady, setAnnouncementReady] = useState(false);
-  if (previousStreaming !== streaming) {
-    setPreviousStreaming(streaming);
-    setAnnouncementReady(false);
-  }
-  useEffect(() => {
-    if (!streaming) return;
-    // 先让空 live region 经过一帧供辅助技术登记，再只写入一次状态；增量不重启公告。
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => setAnnouncementReady(true));
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [streaming]);
-  const expanded = controlledExpanded ?? localExpanded;
-  const id = useId();
-  const setExpanded = (next: boolean) => { setLocalExpanded(next); onExpandedChange?.(next); };
-  if (!streaming && parsed.empty) return <section className="pwa-thinking pwa-thinking-trace pwa-timeline-row" data-timeline-key={timelineKey} data-viewport-row={timelineKey}>
-    <div className="pwa-thinking-title pwa-timeline-heading">{t.timeline.thinkingTrace}</div>
-  </section>;
-  const title = heading ?? (streaming ? t.timeline.thinking : t.timeline.thoughtProcess);
-  const read = text.trim() ? onRead : undefined;
-  return <section className="pwa-thinking pwa-timeline-row" data-timeline-key={timelineKey} data-viewport-row={timelineKey}>
-    <button className="pwa-thinking-head pwa-message-toggle pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={read ? t.timeline.readThinking : expanded ? t.timeline.collapseThinking : t.timeline.expandThinking} aria-haspopup={read ? "dialog" : undefined} aria-expanded={read ? undefined : expanded} aria-controls={read ? undefined : id} onClick={event => read ? read(event.currentTarget) : setExpanded(!expanded)}>
-      <span className={`pwa-thinking-title pwa-thinking-heading${streaming ? " pwa-thinking-live" : ""}`} title={streaming ? undefined : title} aria-live={streaming ? "off" : undefined}>
-        <i className="pwa-thinking-icon-slot" aria-hidden="true"><LoaderCircle className={streaming ? "pwa-spin" : undefined} size={16} aria-hidden="true" /></i>
-        <span title={title}>{title}</span>
-      </span>
-      <ChevronRight className="pwa-timeline-chevron" size={16} aria-hidden="true" />
-    </button>
-    {/* 独立的稳定状态保留读屏提示，不随视觉标题的流式增量重复播报。 */}
-    {streaming ? <span className="pwa-sr-only" role="status">{announcementReady ? t.timeline.thinking : ""}</span> : null}
-    {read ? null : <Collapse open={expanded} id={id} className="pwa-thinking-content"><LongText text={text} label={t.timeline.thinkingLabel} variant="prose" toggleLabels={{ showFull: en.timeline.showFull(en.timeline.thinkingLabel), showLess: en.timeline.showLess(en.timeline.thinkingLabel) }} /></Collapse>}
-  </section>;
-}
-
-export function AssistantBlocks({ blocks, streaming = false }: { blocks: readonly AssistantBlock[]; streaming?: boolean }) {
-  return <div className="pwa-assistant-blocks">{adjacentBlocks(blocks).map((block, index) => block.type === "thinking"
-    ? <ThinkingContent key={index} text={block.text} streaming={streaming} />
-    : <div key={index}><MarkdownContent text={block.text} /></div>)}</div>;
-}

@@ -101,4 +101,3 @@
   /* 移动全屏阅读器四边都贴屏幕：底部与 Composer 一样取 16 与底部安全区中的较大值。 */
   .pwa-root .pwa-tool-reader-scroll { padding: 16px calc(16px + var(--pwa-safe-right)) max(16px, var(--pwa-safe-bottom)) calc(16px + var(--pwa-safe-left)); }
 }
-.pwa-root .pwa-tool-group-alert { flex: none; align-self: center; color: var(--pwa-error); }

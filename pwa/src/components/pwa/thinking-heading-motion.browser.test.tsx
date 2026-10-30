@@ -1,128 +1,85 @@
-import { useLayoutEffect, useState } from "react";
+import { useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { ThinkingContent } from "./timeline-content";
 import { setLanguagePreference } from "@/lib/i18n";
 import { getLanguageState } from "@/lib/i18n/locale";
+import type { ThinkingEntry } from "@/lib/pwa/timeline-presentation";
+import type { ProcessStatus } from "./process-group-state";
+import { ThinkingProcessRow } from "./thinking-process-row";
+import "./process-group.css";
 
 afterEach(async () => {
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await page.viewport(1280, 900);
 });
 
-async function harness(streaming = false, pauseEntry = false) {
-  let update!: (streaming: boolean, text?: string) => void;
-  let entry: Animation | undefined;
+const entryOf = (text: string, streaming: boolean): ThinkingEntry => ({ kind: "thinking", key: "thinking", groupId: "group", text, streaming });
+
+async function harness(initial: { status: ProcessStatus; text?: string; streaming?: boolean }) {
+  let update!: (status: ProcessStatus, text?: string) => void;
   function Harness() {
-    const [state, setState] = useState({ streaming, text: "**Stable title**\nReasoning." });
-    update = (next, text = state.text) => flushSync(() => setState({ streaming: next, text }));
-    useLayoutEffect(() => {
-      if (!pauseEntry) return;
-      const slot = document.querySelector(".pwa-thinking-icon-slot")!;
-      entry = slot.getAnimations().find(animation => (animation as CSSTransition).transitionProperty === "width");
-      entry?.pause();
-    }, []);
-    return <ThinkingContent text={state.text} streaming={state.streaming} expanded />;
+    const [state, setState] = useState({ status: initial.status, text: initial.text ?? "**Stable title**\nReasoning." });
+    update = (status, text = state.text) => flushSync(() => setState({ status, text }));
+    // 明细行只在过程组内出现；容器提供与生产相同的样式作用域。
+    return <article className="pwa-process-group"><ThinkingProcessRow entry={entryOf(state.text, initial.streaming ?? true)} status={state.status} onRead={() => {}} /></article>;
   }
   await renderPwa(<Harness />);
-  const heading = document.querySelector<HTMLElement>(".pwa-thinking-heading")!;
-  const slot = heading.querySelector<HTMLElement>(".pwa-thinking-icon-slot")!;
-  const text = heading.querySelector<HTMLElement>(":scope > span")!;
-  const arrow = document.querySelector<HTMLElement>(".pwa-thinking-head > .pwa-timeline-chevron")!;
-  const body = document.querySelector<HTMLElement>(".pwa-thinking-content")!;
-  const offset = () => Math.round(text.getBoundingClientRect().left - heading.getBoundingClientRect().left);
-  return { update, heading, slot, text, arrow, body, offset, entry };
-}
-
-/** 只等待有限的呈现动画，旋转自身的无限动画不参与。 */
-async function finishMotion(element: Element) {
-  const motions = element.getAnimations({ subtree: true }).filter(animation =>
+  const row = document.querySelector<HTMLElement>(".pwa-thinking-process-row")!;
+  const slot = () => row.querySelector<HTMLElement>(".pwa-process-status-slot")!;
+  const title = () => row.querySelector<HTMLElement>(".pwa-process-thinking-heading")!;
+  const offset = () => Math.round(title().getBoundingClientRect().left - row.getBoundingClientRect().left);
+  // 只看有限的呈现动画；运行图标自身的无限动画不属于槽位或标题位移。
+  const motions = () => row.getAnimations({ subtree: true }).filter(animation =>
     Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Infinity));
-  await Promise.allSettled(motions.map(animation => animation.finished));
+  return { update, row, slot, title, offset, motions };
 }
 
 const cases = [1280, 390].flatMap(width => ["no-preference", "reduce"].map(motion => ({ width, motion })));
-test.each(cases)("thinking title slides only on state changes at $width px ($motion)", async ({ width, motion }) => {
+test.each(cases)("thinking keeps a fixed status slot and never slides its title at $width px ($motion)", async ({ width, motion }) => {
   await page.viewport(width, 844);
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: motion }] });
-  const view = await harness();
-  const arrowLeft = Math.round(view.arrow.getBoundingClientRect().left);
-  const bodyLeft = Math.round(view.body.getBoundingClientRect().left);
-  expect(view.offset()).toBe(0);
-  view.update(true);
-  const spinner = view.slot.querySelector(".pwa-spin")!;
-  expect(spinner).not.toBeNull();
-  const entering = view.slot.getAnimations().find(animation => (animation as CSSTransition).transitionProperty === "width");
-  if (motion === "no-preference") {
-    expect(entering).toBeDefined();
-    entering!.pause();
-    entering!.currentTime = 80;
-    expect(view.offset()).toBeGreaterThan(0);
-    expect(view.offset()).toBeLessThan(24);
-    entering!.play();
-  } else expect(entering).toBeUndefined();
-  await finishMotion(view.heading);
-  expect(view.offset()).toBe(24);
-  view.update(true, "**Stable title**\nReasoning continues.\n**New title**");
-  expect(view.slot.querySelector(".pwa-spin")).toBe(spinner);
-  expect(view.offset()).toBe(24);
-  expect(view.slot.getAnimations().some(animation => (animation as CSSTransition).transitionProperty === "width")).toBe(false);
-  view.update(false);
-  expect(view.slot.querySelector(".pwa-spin")).toBeNull();
-  const fading = view.slot.getAnimations().find(animation => (animation as CSSTransition).transitionProperty === "opacity");
-  expect(fading).toBeDefined();
-  fading!.pause();
-  fading!.currentTime = 80;
-  expect(Number(getComputedStyle(view.slot).opacity)).toBeGreaterThan(0);
-  expect(Number(getComputedStyle(view.slot).opacity)).toBeLessThan(1);
-  fading!.play();
-  await finishMotion(view.heading);
-  expect(view.offset()).toBe(0);
-  expect(getComputedStyle(view.slot).opacity).toBe("0");
-  expect(Math.round(view.slot.getBoundingClientRect().width)).toBe(0);
-  expect(Math.round(view.arrow.getBoundingClientRect().left)).toBe(arrowLeft);
-  expect(Math.round(view.body.getBoundingClientRect().left)).toBe(bodyLeft);
+  const view = await harness({ status: "neutral", streaming: false });
+  const resting = view.offset();
+  const slotWidth = Math.round(view.slot().getBoundingClientRect().width);
+  expect(slotWidth).toBe(16);
+  expect(resting).toBeGreaterThan(slotWidth);
+  view.update("running");
+  expect(view.offset()).toBe(resting);
+  expect(Math.round(view.slot().getBoundingClientRect().width)).toBe(slotWidth);
+  expect(view.motions()).toHaveLength(0);
+  // 新的完整标题原位替换，不重播入场。
+  view.update("running", "**Stable title**\nReasoning continues.\n**New title**");
+  await expect.poll(() => view.title().textContent).toBe("New title");
+  expect(view.offset()).toBe(resting);
+  expect(view.motions()).toHaveLength(0);
+  view.update("neutral");
+  expect(view.offset()).toBe(resting);
+  expect(Math.round(view.slot().getBoundingClientRect().width)).toBe(slotWidth);
+  expect(view.motions()).toHaveLength(0);
 });
 
-test("long thinking controls stay English in a Chinese interface without translating the body", async () => {
+test("thinking placeholders stay English in a Chinese interface without translating the model heading", async () => {
   const previous = getLanguageState().preference;
   setLanguagePreference("zh");
-  const text = Array.from({ length: 25 }, (_, index) => `模型原始思考第 ${index + 1} 行`).join("\n");
   try {
-    const screen = await renderPwa(<ThinkingContent text={text} expanded />);
-    await expect.element(screen.getByRole("button", { name: "Collapse thinking" })).toBeVisible();
-    await screen.getByRole("button", { name: "Show full thinking", exact: true }).click();
-    expect(document.querySelector(".pwa-text-plain")?.textContent).toBe(text);
-    await screen.getByRole("button", { name: "Show less thinking", exact: true }).click();
-    await expect.element(screen.getByRole("button", { name: "Show full thinking", exact: true })).toBeVisible();
+    const live = await harness({ status: "running", text: "" });
+    expect(live.title().textContent).toBe("Thinking…");
+    live.update("running", "模型原始思考第 1 行\n模型原始思考第 2 行");
+    await expect.poll(() => live.title().textContent).toBe("模型原始思考第 1 行");
+    live.update("unknown", "");
+    expect(live.title().textContent).toBe("Thinking");
   } finally { setLanguagePreference(previous); }
 });
 
-test("a newly mounted live title enters once and reverses from its current position", async () => {
-  const view = await harness(true, true);
-  expect(view.entry).toBeDefined();
-  view.entry!.currentTime = 0;
-  expect(view.offset()).toBe(0);
-  expect(view.slot.querySelector(".pwa-spin")?.checkVisibility({ opacityProperty: true, visibilityProperty: true })).toBe(true);
-  view.entry!.play();
-  await finishMotion(view.heading);
-  expect(view.offset()).toBe(24);
-  view.update(false);
-  const exit = view.slot.getAnimations().find(animation => (animation as CSSTransition).transitionProperty === "width")!;
-  expect(exit).toBeDefined();
-  exit.pause();
-  exit.currentTime = 80;
-  const halfway = view.offset();
-  expect(halfway).toBeGreaterThan(0);
-  expect(halfway).toBeLessThan(24);
-  view.update(true);
-  // 反向不能先跳回完整 24px 占位，再重新播放。
-  expect(Math.abs(view.offset() - halfway)).toBeLessThanOrEqual(1);
-  await finishMotion(view.heading);
-  expect(view.offset()).toBe(24);
-  view.update(false);
-  await finishMotion(view.heading);
-  expect(view.offset()).toBe(0);
+test("a newly mounted live row starts at its resting position and quick state reversals do not move it", async () => {
+  const view = await harness({ status: "running" });
+  const resting = view.offset();
+  expect(view.motions()).toHaveLength(0);
+  view.update("neutral");
+  view.update("running");
+  view.update("neutral");
+  expect(view.offset()).toBe(resting);
+  expect(view.motions()).toHaveLength(0);
 });

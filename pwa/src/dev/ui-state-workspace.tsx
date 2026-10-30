@@ -20,7 +20,7 @@ function GalleryTimeline({ state, conversation }: { state: GalleryState; convers
   const viewport = useTimelineViewport(items);
   return <>
     {state === "failure" ? <div className="pwa-ui-states-actions"><Button variant="default" disabled={retried} onClick={() => setRetried(true)}>演示工具重试</Button></div> : null}
-    <MessageList items={items} hasEarlier={false} running={conversation.running} isLive={conversation.online}
+    <MessageList sourceKey={JSON.stringify(["gallery", state, conversation.epoch, conversation.sourceChanged])} items={items} hasEarlier={false} running={conversation.running} isLive={conversation.online}
       loading={conversation.loading} skeletonVisible={conversation.skeletonVisible}
       emptyContext={state === "empty" ? "pi-reach · 内存演示模型 · medium" : null}
       onRetryFailed={conversation.retryFailed} onCheckStatus={conversation.checkStatus} onCancelQueued={conversation.cancelQueued}
