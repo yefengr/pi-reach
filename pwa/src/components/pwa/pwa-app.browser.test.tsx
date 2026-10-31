@@ -1637,12 +1637,27 @@ test("keeps current handshake protocol feedback after the matching session_ready
   } finally { await screen.unmount(); }
 });
 
+// 连续两次采样一致才取基线：真实布局的过渡帧不能被当成发送前后的稳定几何。
+async function settledTimelineGeometry(list: HTMLDivElement) {
+  let previous = "";
+  await expect.poll(() => {
+    const current = `${list.scrollHeight}:${list.clientHeight}:${Math.round(list.scrollTop)}`;
+    const settled = current === previous;
+    previous = current;
+    return settled;
+  }, { timeout: 5000 }).toBe(true);
+  return { height: list.scrollHeight, view: list.clientHeight, top: list.scrollTop, gap: Math.round(list.scrollHeight - list.clientHeight - list.scrollTop) };
+}
+
 test.each([
   { attachment: false, accepted: true }, { attachment: true, accepted: true },
   { attachment: false, accepted: false }, { attachment: true, accepted: false },
 ])("own sends restore following only after transport accepts them (attachment=$attachment accepted=$accepted)", async ({ attachment, accepted }) => {
   const { screen, channel, list, scrollTo } = await renderReadyTimeline(renderWorkspaceApp);
   try {
+    // 固定几何夹具只验证 transport 门禁：列表自身不留可借留白，活动区出现或移除都不改变跟随目标。
+    list.style.paddingBottom = "0px";
+    list.style.scrollPaddingBottom = "0px";
     const input = screen.getByPlaceholder("Message your agent…");
     await input.fill("Follow my new message");
     if (attachment) {
@@ -1716,12 +1731,48 @@ test.each([false, true])("successful own send releases actual workspace geometry
     }
     await expect.element(input).toHaveValue("");
     await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
-    await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
+    await expect.poll(() => list.style.paddingBottom).toBe("");
     expect(document.querySelector(".pwa-composer .pwa-attachment-card")).toBeNull();
     expect(input.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    const naturalPadding = Number.parseFloat(getComputedStyle(list).scrollPaddingBottom) || 0;
+    const gap = () => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop);
+    const listBottom = () => list.getBoundingClientRect().bottom;
+    const bubble = () => list.querySelector<HTMLElement>(".pwa-message.user")!;
+    const activitySlot = () => document.querySelector<HTMLElement>(".pwa-turn-activity");
+    // 首次发送尚未收到 working 元数据或回复 partial：活动区不存在，必须精确贴底。
+    await expect.poll(activitySlot).toBeNull();
+    await expect.poll(() => Math.round(bubble().getBoundingClientRect().bottom - listBottom())).toBeLessThanOrEqual(1);
+    await expect.poll(gap).toBeLessThanOrEqual(1);
+    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).not.toBeInTheDocument();
+    // 由真实 working 状态建立稳定活动区，避免显示积压开关活动区把正文跟随检查变成通知顺序竞争。
+    relayHarness.instances[0]!.emitControl({ type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace", working: true } });
+    await expect.poll(() => activitySlot()?.dataset.working, { timeout: 5000 }).toBe("true");
+    const slot = activitySlot()!;
+    const before = await settledTimelineGeometry(list);
     channel.emit(partialFrame("layout-reply", "layout-run", "Reply after final submission"));
-    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Reply after final submission");
-    await expect.poll(() => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop)).toBeLessThanOrEqual(1);
+    await expect.poll(() => list.querySelector("article.partial")?.textContent, { timeout: 5000 }).toContain("Reply after final submission");
+    const appendedBody = [
+      "The appended body must grow the natural timeline while follow keeps the borrowed tail steady.",
+      "Each paragraph is long enough for several wrapped lines on a phone so growth clears the borrow budget.",
+      "The last line marks the settled end of this streamed reply.",
+    ].join("\n\n");
+    channel.emit(partialFrame("layout-reply", "layout-run", `\n\n${appendedBody}`));
+    await expect.poll(() => list.querySelector("article.partial")?.textContent, { timeout: 5000 }).toContain("The last line marks the settled end of this streamed reply.");
+    const after = await settledTimelineGeometry(list);
+    const growth = after.height - before.height;
+    // 正文净增高必须超过可借留白预算才能暴露停止跟随；仍在一屏内，应逐帧接续而不是瞬时贴底。
+    expect(growth).toBeGreaterThan(naturalPadding);
+    expect(growth).toBeLessThan(before.view);
+    expect(Math.abs(Math.round(after.top - before.top - growth))).toBeLessThanOrEqual(1);
+    // 有效间距就是借用的尾部预算：随正文接续保持，不要求补齐整段底部留白。
+    expect(Math.abs(after.gap - before.gap)).toBeLessThanOrEqual(1);
+    expect(after.gap).toBeLessThanOrEqual(naturalPadding);
+    expect(activitySlot()).toBe(slot);
+    const reply = list.querySelector<HTMLElement>("article.partial")!;
+    expect(Math.round(reply.getBoundingClientRect().bottom - listBottom())).toBeLessThanOrEqual(1);
+    expect(reply.getBoundingClientRect().top).toBeGreaterThanOrEqual(list.getBoundingClientRect().top);
+    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).not.toBeInTheDocument();
+    expect(list.style.paddingBottom).toBe("");
   } finally { await screen.unmount(); }
 });
 
