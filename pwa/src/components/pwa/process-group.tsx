@@ -64,10 +64,17 @@ type ProcessGroupHeadProps = {
  * 展开时明细已逐条列出标题，组头与工具组一致显示分类摘要，避免同一标题重复。
  */
 function headThinking(group: ProcessGroupModel, state: ProcessGroupState): ThinkingEntry | null {
-  const active = state.activeEntry;
-  if (active?.kind === "thinking" && state.entryStatuses.get(active.key) === "running") return active;
-  if (active !== null || state.expanded || group.entries.some(entry => entry.kind === "tool")) return null;
+  const active = runningThinking(state);
+  // 组内已有其他成员时，新思考有了文字才接管组头，不先用「Thinking…」占位替换现有摘要。
+  if (active !== null) return group.entries.length === 1 || active.text.trim() !== "" ? active : null;
+  if (state.activeEntry !== null || state.expanded || group.entries.some(entry => entry.kind === "tool")) return null;
   return group.entries.findLast((entry): entry is ThinkingEntry => entry.kind === "thinking" && entry.text.trim() !== "") ?? null;
+}
+
+/** 运行中的当前思考：它的标题归组头所有，明细中该行只保留预览（尚未接管组头时整行不占位）。 */
+function runningThinking(state: ProcessGroupState): ThinkingEntry | null {
+  const active = state.activeEntry;
+  return active?.kind === "thinking" && state.entryStatuses.get(active.key) === "running" ? active : null;
 }
 
 /**
@@ -122,7 +129,8 @@ function ProcessGroupHead({ group, state, summary, thinkingInHead, detailsId, on
   const ariaSummary = summary.fullLabel;
 
   // 当前活动换人（思考、工具、摘要之间）时重新挂载并淡入；同一成员的标题与参数增长原位更新。
-  const liveKey = thinkingInHead?.key ?? (!state.expanded && active !== null ? active.key : "summary");
+  // 收起时只有工具作为当前活动直接显示；运行中的思考只经 thinkingInHead 接管组头。
+  const liveKey = thinkingInHead?.key ?? (!state.expanded && active?.kind === "tool" ? active.key : "summary");
   const copyKey = useSettleHeldKey(liveKey, state.expanded, isSettleCollapse(state));
   const [mountedCopyKey] = useState(copyKey);
   const shown = copyKey === "summary" ? null : group.entries.find(entry => entry.key === copyKey) ?? null;
@@ -228,6 +236,7 @@ export function ProcessGroup({ group, state, enteredKeys, onToggle, onRead, onFo
   }
 
   const thinkingInHead = headThinking(group, state);
+  const thinkingActive = runningThinking(state);
   // 仍有成员运行的组在末尾持续增长，声明为实时行，跟随时平滑接续。
   return <ThinkingParserContext value={parsers}><ToolIndicatorContext value={register}><article ref={groupRef} className={`pwa-process-group pwa-timeline-row${enterClass}`} data-timeline-key={group.key} data-viewport-row={group.key} data-viewport-live={state.status === "running" ? "true" : undefined} aria-label={t.timeline.processGroup}>
     <ProcessGroupHead group={group} state={state} summary={summary} thinkingInHead={thinkingInHead} detailsId={detailsId} onToggle={onToggle} />
@@ -236,7 +245,7 @@ export function ProcessGroup({ group, state, enteredKeys, onToggle, onRead, onFo
         {group.entries.map((entry, index) => <div key={entry.key} className={`pwa-process-entry${index > 0 && enteredKeys?.has(entry.key) ? " pwa-row-enter" : ""}`} data-process-entry-key={entry.key}>
           {entry.kind === "tool"
             ? <ToolCard value={entry.value} status={asToolStatus(state.entryStatuses.get(entry.key) ?? "neutral")} indicatorKeys={[entry.key]} onRead={trigger => onRead(entry, trigger)} />
-            : <ThinkingProcessRow entry={entry} status={state.entryStatuses.get(entry.key) ?? "neutral"} headingInHead={entry === thinkingInHead && state.entryStatuses.get(entry.key) === "running"} onRead={trigger => onRead(entry, trigger)} />}
+            : <ThinkingProcessRow entry={entry} status={state.entryStatuses.get(entry.key) ?? "neutral"} headingInHead={entry === thinkingActive} onRead={trigger => onRead(entry, trigger)} />}
         </div>)}
       </div>
     </Collapse>

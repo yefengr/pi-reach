@@ -11,7 +11,7 @@ export const PWA_MOTION_FALLBACK_MS = {
   "--pwa-duration-status-slot": 160,
   "--pwa-duration-collapse-in": 180,
   "--pwa-duration-collapse-out": 140,
-  "--pwa-duration-collapse-settle": 260,
+  "--pwa-duration-collapse-settle": 320,
   "--pwa-duration-image-in": 260,
   "--pwa-duration-image-out": 220,
   "--pwa-duration-toast": 180,

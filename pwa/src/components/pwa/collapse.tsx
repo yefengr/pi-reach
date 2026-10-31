@@ -21,7 +21,7 @@ type CollapseProps = {
  * - 退出期间内容 inert，并冻结为收起前最后一次展开时呈现的内容：与收起同一提交到达的变化（如思考结束后标题回到明细）
  *   不在退出中出现，新到的输出也不再渲染。
  * - 退出动画结束后卸载；过渡结束事件缺失时以时长加 50ms 兜底。中途反向时从当前位置继续。
- * - 自动收起（settle）以 260ms 播放：透明度与高度同用对称曲线，内容边淡出边被收拢的高度裁切，不留空白。
+ * - 自动收起（settle）以 320ms 播放：透明度与高度同用对称曲线，内容边淡出边被收拢的高度裁切，不留空白。
  * 减少动态效果由全局规则处理：高度与位移不过渡，只保留透明度淡化。
  */
 export function Collapse({ open, id, className, onPresentationChange, settle = false, children }: CollapseProps) {

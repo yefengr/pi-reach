@@ -225,7 +225,7 @@
   --pwa-duration-collapse-in: 180ms;
   --pwa-duration-collapse-out: 140ms;
   /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
-  --pwa-duration-collapse-settle: 260ms;
+  --pwa-duration-collapse-settle: 320ms;
   --pwa-duration-image-in: 260ms;
   --pwa-duration-image-out: 220ms;
   --pwa-duration-toast: 180ms;

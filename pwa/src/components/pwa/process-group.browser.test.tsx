@@ -256,6 +256,28 @@ test("a running Thinking title moves into the expanded head; its row keeps only 
   expect(row().querySelector(".pwa-thinking-tail-action")).toBeNull();
 });
 
+test("a new Thinking in a group with tools takes over the head only once it has text", async () => {
+  const view = await harness({ entries: [tool("check", "complete"), thinking("")] });
+  // 尚无文字：组头保持工具摘要，不先换成「Thinking…」；该行也不占位。
+  expect(view.head().textContent).toContain(en.tools.groupCommand(1));
+  expect(view.head().textContent).not.toContain(en.timeline.thinking);
+  const entry = () => view.root().querySelector<HTMLElement>(".pwa-process-entry:has(> .pwa-thinking-process-row)")!;
+  expect(getComputedStyle(entry()).display).toBe("none");
+  view.update({ entries: [tool("check", "complete"), thinking("**Round two**\nDetails.")] });
+  expect(view.head().textContent).toContain("Round two");
+  expect(view.head().textContent).not.toContain(en.tools.groupCommand(1));
+  // 收起后同样不以占位替换摘要。
+  view.update({ entries: [tool("check", "complete"), thinking("**Round two**\nDetails.", false), tool("next"), thinking("", true)].map((entry, index) => index === 3 ? { ...entry, key: "thought-2" } : entry) });
+  await page.elementLocator(view.head()).click();
+  expect(view.head().getAttribute("aria-expanded")).toBe("false");
+  expect(view.head().textContent).not.toContain(en.timeline.thinking);
+});
+
+test("a Thinking-only group still shows the running placeholder before text arrives", async () => {
+  const view = await harness({ entries: [thinking("")] });
+  expect(view.head().textContent).toContain(en.timeline.thinking);
+});
+
 test("a running Thinking without preview text hides its empty row instead of leaving a gap", async () => {
   const view = await harness({ entries: [tool("check", "complete"), thinking("**Only a title**")] });
   expect(view.head().textContent).toContain("Only a title");
@@ -272,7 +294,7 @@ test("a finished Thinking-only group keeps its last title and settles with the s
   expect(view.head().textContent).not.toBe(en.timeline.thinkingTrace);
   const details = view.root().querySelector<HTMLElement>(".pwa-process-details")!;
   expect(details.dataset.exit).toBe("settle");
-  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.26s");
+  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.32s");
   await expect.poll(() => view.root().querySelector(".pwa-process-details")).toBeNull();
 });
 
