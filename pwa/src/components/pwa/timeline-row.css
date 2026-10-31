@@ -60,10 +60,10 @@
   transform: none;
   transition-duration: var(--pwa-duration-collapse-in);
 }
-/* 自动收起：时长拉长到 settle，透明度用进入曲线先行淡出，高度与位移用对称曲线平缓收拢，三者同时结束后卸载。 */
+/* 自动收起：时长拉长到 settle，高度、透明度与位移同用对称曲线，内容边淡出边被裁切，不先留出空白；三者同时结束后卸载。 */
 .pwa-collapse[data-exit="settle"] {
   transition-duration: var(--pwa-duration-collapse-settle);
-  transition-timing-function: var(--pwa-ease-settle), var(--pwa-ease-enter);
+  transition-timing-function: var(--pwa-ease-settle);
 }
 .pwa-collapse[data-exit="settle"] > .pwa-collapse-inner {
   transition-duration: var(--pwa-duration-collapse-settle);

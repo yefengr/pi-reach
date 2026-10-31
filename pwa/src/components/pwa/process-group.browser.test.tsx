@@ -282,6 +282,10 @@ test("an automatic collapse holds the head copy until the height settles, then s
   view.update({ entries: [tool("check", "complete"), thinking("**Reviewing Pi Reach**\nDetails.", false)], ended: true });
   expect(view.head().getAttribute("aria-expanded")).toBe("false");
   expect(view.head().textContent).toContain("Reviewing Pi Reach");
+  // 退出中的明细保持收起前的样子：标题仍在组头，不在淡出内容里重新出现。
+  const details = view.root().querySelector<HTMLElement>(".pwa-process-details")!;
+  expect(details.querySelector(".pwa-thinking-process-row[data-heading-in-head]")).not.toBeNull();
+  expect(details.querySelector(".pwa-thinking-process-row-action")).toBeNull();
   await expect.poll(() => view.head().textContent).toContain(en.tools.groupCommand(1));
   expect(view.head().textContent).not.toContain("Reviewing Pi Reach");
 });

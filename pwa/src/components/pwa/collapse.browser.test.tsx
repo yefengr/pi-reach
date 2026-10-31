@@ -62,6 +62,35 @@ test("manual entry uses collapse tokens and closing freezes inert output until u
   expect(view.changed.mock.calls.length).toBeGreaterThanOrEqual(4);
 });
 
+test("closing freezes the last shown content, even when the same commit changes it", async () => {
+  const view = await harness();
+  const node = view.node()!;
+  view.update(false, "changed while closing");
+  expect(node.inert).toBe(true);
+  expect(node.textContent).toBe("initial output");
+  await expect.poll(view.node).toBeNull();
+});
+
+test("an automatic settle exit slows height, opacity and shift together on one symmetric curve", async () => {
+  let close!: () => void;
+  function Harness() {
+    const [open, setOpen] = useState(true);
+    close = () => flushSync(() => setOpen(false));
+    return <Collapse open={open} settle><button>settling output</button></Collapse>;
+  }
+  await renderPwa(<Harness />);
+  const node = document.querySelector<HTMLElement>(".pwa-collapse")!;
+  close();
+  expect(node.dataset.exit).toBe("settle");
+  const style = getComputedStyle(node);
+  expect(style.transitionDuration).toBe("0.26s");
+  expect(style.transitionTimingFunction).toBe("cubic-bezier(0.4, 0, 0.2, 1)");
+  const inner = getComputedStyle(node.querySelector(".pwa-collapse-inner")!);
+  expect(inner.transitionDuration).toBe("0.26s");
+  expect(inner.transitionTimingFunction).toBe("cubic-bezier(0.4, 0, 0.2, 1)");
+  await expect.poll(() => document.querySelector(".pwa-collapse")).toBeNull();
+});
+
 test("reopening reverses from the current presentation and cancels stale exit fallback", async () => {
   const timeout = vi.spyOn(window, "setTimeout");
   const clear = vi.spyOn(window, "clearTimeout");
