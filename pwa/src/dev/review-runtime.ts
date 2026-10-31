@@ -23,17 +23,13 @@ const MANAGED_PROPERTIES = [...DURATION_TOKENS, ...REVIEW_SHIFT_TOKENS, "--pwa-e
  * 慢放只缩放时长，不改曲线、位移距离与业务时序；历史对照的完成态停留与复制确认等业务时钟不参与缩放。
  * 对比参数在主题值之上替换「内容与空间变化」的时长、位移与曲线。
  * 每次先清除全部覆盖再按主题计算值重算；默认参数且不慢放时回到主题值。调用方在减少动态效果时传默认值。
- * 评估期风格只写根节点 data-pwa-motion、不写存储，展厅不读取也不改变正式应用保存的选择。
  */
 export function applyReviewMotion({ scale = 1, preset = "current" }: { scale?: number; preset?: ReviewMotionPresetId }) {
   const root = document.documentElement;
   for (const property of MANAGED_PROPERTIES) root.style.removeProperty(property);
   delete root.dataset.reviewMotion;
-  delete root.dataset.pwaMotion;
   const values = preset === "current" ? null : REVIEW_MOTION_PRESETS[preset];
-  if (values?.profile) root.dataset.pwaMotion = values.profile;
   if (scale === 1 && !values) return;
-  // 风格属性先生效，慢放按该风格的计算值缩放。
   const style = getComputedStyle(root);
   for (const token of DURATION_TOKENS) {
     const override = values?.durations[token];
