@@ -515,7 +515,7 @@ test("borrowed tail stays put while a process group enters above the activity sl
     const run = (duration = 600) => { const end = time + duration; while (time < end) { time += 16; clock.step(time); } };
     const borrowed = gap(h.list);
     const thinking: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
-      protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Checking results",
+      protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "thinking", kind: "thinking", status: "delta", delta: "Checking results\nReading note.txt",
     } };
     const tool: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
       protocol_version: 2, type: "timeline_partial", session_id: "send-session", leaf_id: "leaf", group_id: "old", partial_id: "tool", kind: "tool", tool_call_id: "read", tool: "read", args: { path: "note.txt" }, status: "running",
@@ -534,7 +534,7 @@ test("borrowed tail stays put while a process group enters above the activity sl
     expect(gap(h.list)).toBeGreaterThanOrEqual(borrowed - 1);
     const groupGap = gap(h.list);
     expect(h.viewport().followingOutput).toBe(true);
-    // 同组思考与工具等高互换：不再移动，也不重新补齐借用的留白。
+    // 同组思考与工具等高互换：思考标题在组头、预览入口与工具行同为 44px；不再移动，也不重新补齐借用的留白。
     for (const item of [tool, thinking]) {
       h.work(true, [history, item]);
       expect(h.list.querySelector(":scope > .pwa-turn-activity")).toBe(slot);
