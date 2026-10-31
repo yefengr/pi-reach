@@ -10,7 +10,7 @@ export const PWA_CONFIRM_DIALOG_SIZE = 400;
  * 退出期间不接收指针；焦点由 Mantine 在关闭开始时交还来源控件。减少动态效果时位移为 0，只保留淡化。
  */
 export const pwaModalTransition = {
-  in: { opacity: 1, transform: "translateY(0)", "--pwa-modal-ease": "var(--pwa-ease-enter)" },
+  in: { opacity: 1, transform: "translateY(0)", "--pwa-modal-ease": "var(--pwa-ease-content)" },
   out: { opacity: 0, transform: "translateY(calc(var(--pwa-overlay-shift) * var(--pwa-motion-shift, 1)))", pointerEvents: "none", "--pwa-modal-ease": "var(--pwa-ease-exit)" },
   transitionProperty: "opacity, transform",
 } as MantineTransition;
@@ -84,7 +84,7 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
         centered: true,
         size: PWA_DIALOG_SIZE,
         overlayProps: { className: "pwa-scrim" },
-        transitionProps: { transition: pwaModalTransition, duration: modalInDuration, exitDuration: modalOutDuration, timingFunction: "var(--pwa-modal-ease, var(--pwa-ease-enter))" },
+        transitionProps: { transition: pwaModalTransition, duration: modalInDuration, exitDuration: modalOutDuration, timingFunction: "var(--pwa-modal-ease, var(--pwa-ease-content))" },
       },
     }),
     Badge: Badge.extend({ defaultProps: { size: "xs", variant: "light", radius: "xs" } }),

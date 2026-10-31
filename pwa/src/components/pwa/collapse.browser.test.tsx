@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { cdp } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { Collapse } from "./collapse";
@@ -51,11 +52,11 @@ test("manual entry uses collapse tokens and closing freezes inert output until u
   await expect.poll(() => view.node()?.hasAttribute("data-open")).toBe(true);
   const node = view.node()!;
   expect(node.getAnimations().some(animation => (animation as CSSTransition).transitionProperty === "opacity")).toBe(true);
-  expect(getComputedStyle(node).transitionDuration).toBe("0.18s");
+  expect(getComputedStyle(node).transitionDuration).toBe("0.5s");
   await finish(node);
   view.update(false);
   expect(node.inert).toBe(true);
-  expect(getComputedStyle(node).transitionDuration).toBe("0.14s, 0.14s");
+  expect(getComputedStyle(node).transitionDuration).toBe("0.35s, 0.35s");
   view.update(false, "new output after closing");
   expect(node.textContent).toBe("initial output");
   await expect.poll(view.node).toBeNull();
@@ -71,7 +72,7 @@ test("closing freezes the last shown content, even when the same commit changes 
   await expect.poll(view.node).toBeNull();
 });
 
-test("an automatic settle exit slows height, opacity and shift together on one symmetric curve", async () => {
+test("an automatic settle exit slows height, opacity and shift together on the content spring", async () => {
   let close!: () => void;
   function Harness() {
     const [open, setOpen] = useState(true);
@@ -83,11 +84,11 @@ test("an automatic settle exit slows height, opacity and shift together on one s
   close();
   expect(node.dataset.exit).toBe("settle");
   const style = getComputedStyle(node);
-  expect(style.transitionDuration).toBe("0.32s");
-  expect(style.transitionTimingFunction).toBe("cubic-bezier(0.4, 0, 0.2, 1)");
+  expect(style.transitionDuration).toBe("0.5s");
+  expect(style.transitionTimingFunction).toMatch(/^linear\(/);
   const inner = getComputedStyle(node.querySelector(".pwa-collapse-inner")!);
-  expect(inner.transitionDuration).toBe("0.32s");
-  expect(inner.transitionTimingFunction).toBe("cubic-bezier(0.4, 0, 0.2, 1)");
+  expect(inner.transitionDuration).toBe("0.5s");
+  expect(inner.transitionTimingFunction).toMatch(/^linear\(/);
   await expect.poll(() => document.querySelector(".pwa-collapse")).toBeNull();
 });
 
@@ -98,7 +99,7 @@ test("reopening reverses from the current presentation and cancels stale exit fa
   const node = view.node()!;
   expect(getComputedStyle(node).opacity).toBe("1");
   view.update(false);
-  const fallbackIndex = timeout.mock.calls.findIndex(([, duration]) => duration === 190);
+  const fallbackIndex = timeout.mock.calls.findIndex(([, duration]) => duration === readPwaMotionDuration("--pwa-duration-collapse-out") + 50);
   expect(fallbackIndex).toBeGreaterThanOrEqual(0);
   const fallback = timeout.mock.results[fallbackIndex].value;
   const exit = node.getAnimations().find(animation => (animation as CSSTransition).transitionProperty === "opacity")!;

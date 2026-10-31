@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
-import { pwaStandardEasing } from "@/lib/ui/motion";
+import { pwaContentEasing } from "@/lib/ui/motion";
 import { STREAM_REVEAL_CLASS } from "@/lib/pwa/markdown-stream";
 
 const NO_MARKS: readonly number[] = [];
@@ -41,7 +41,7 @@ export function useStreamRevealAnimation(root: RefObject<HTMLElement | null>, ma
     const spans = element.querySelectorAll<HTMLElement>(`.${STREAM_REVEAL_CLASS}`);
     if (spans.length === 0 || typeof spans[0].animate !== "function") return;
     const duration = readPwaMotionDuration("--pwa-duration-content");
-    const easing = pwaStandardEasing(element);
+    const easing = pwaContentEasing(element);
     for (const span of spans) {
       const start = known.get(Number(span.dataset.revealOffset));
       if (start === undefined) continue;

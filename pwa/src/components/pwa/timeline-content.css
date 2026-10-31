@@ -21,9 +21,9 @@
 .pwa-user-bubble-frame { display: flow-root; width: fit-content; max-width: 80%; margin-left: auto; overflow: clip; border-radius: var(--pwa-radius-md); }
 .pwa-user-bubble-frame > .pwa-message.user { width: auto; max-width: none; margin: 0; }
 /* 在线会话追加的新行（正文、过程组与组内成员）只淡入，不位移、不做高度动画；位移由跟随滚动承担。 */
-.pwa-row-enter { animation: pwa-row-enter var(--pwa-duration-message-in) var(--pwa-ease-standard); }
+.pwa-row-enter { animation: pwa-row-enter var(--pwa-duration-message-in) var(--pwa-ease-content); }
 @keyframes pwa-row-enter { from { opacity: 0; } to { opacity: 1; } }
-.pwa-user-message-in { animation: pwa-user-message-in var(--pwa-duration-message-in) var(--pwa-ease-enter); }
+.pwa-user-message-in { animation: pwa-user-message-in var(--pwa-duration-message-in) var(--pwa-ease-content); }
 @keyframes pwa-user-message-in {
   from { opacity: 0; transform: translateY(calc(var(--pwa-message-shift) * var(--pwa-motion-shift))); }
   to { opacity: 1; transform: translateY(0); }

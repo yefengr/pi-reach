@@ -294,7 +294,7 @@ test("a finished Thinking-only group keeps its last title and settles with the s
   expect(view.head().textContent).not.toBe(en.timeline.thinkingTrace);
   const details = view.root().querySelector<HTMLElement>(".pwa-process-details")!;
   expect(details.dataset.exit).toBe("settle");
-  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.32s");
+  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.5s");
   await expect.poll(() => view.root().querySelector(".pwa-process-details")).toBeNull();
 });
 
@@ -317,7 +317,7 @@ test("a manual collapse keeps the short exit and switches the head copy immediat
   await page.elementLocator(view.head()).click();
   const details = view.root().querySelector<HTMLElement>(".pwa-process-details")!;
   expect(details.dataset.exit).toBeUndefined();
-  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.14s");
+  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.35s");
   // 收起后当前活动仍是运行中的思考，组头保持其标题。
   expect(view.head().textContent).toContain("Reviewing Pi Reach");
 });

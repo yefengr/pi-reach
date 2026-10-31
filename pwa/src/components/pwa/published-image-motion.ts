@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { useReducedMotion } from "@mantine/hooks";
-import { pwaMotionShiftDisabled, pwaStandardEasing } from "./use-pwa-motion";
+import { pwaContentEasing, pwaMotionShiftDisabled } from "./use-pwa-motion";
 
 export type ImageBounds = { left: number; top: number; width: number; height: number };
 type ImageMotion = { cancel: () => void; bounds: () => ImageBounds | null; readonly active: boolean };
@@ -84,7 +84,7 @@ export function animatePublishedImage({ image, source, sourceUrl, root, directio
     portal.append(clone);
     thumbnail.style.visibility = "hidden";
     image.style.visibility = "hidden";
-    animation = clone.animate(direction === "in" ? [geometry(small), geometry(large)] : [geometry(from ?? large), geometry(small)], { duration, easing: pwaStandardEasing(root), fill: "both" });
+    animation = clone.animate(direction === "in" ? [geometry(small), geometry(large)] : [geometry(from ?? large), geometry(small)], { duration, easing: pwaContentEasing(root), fill: "both" });
     animation.finished.then(cleanup, cleanup);
     timer = window.setTimeout(cleanup, duration + 50);
     window.addEventListener("resize", cleanup);

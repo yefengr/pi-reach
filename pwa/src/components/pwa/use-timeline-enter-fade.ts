@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
-import { pwaStandardEasing, usePwaMotionDuration } from "./use-pwa-motion";
+import { pwaContentEasing, usePwaMotionDuration } from "./use-pwa-motion";
 
 /** 内容接管骨架时的起始可见度：骨架在同一帧卸载，从 0 起步会出现完全空白的一帧。 */
 const CONTENT_ENTER_OPACITY = 0.35;
@@ -21,6 +21,6 @@ export function useTimelineEnterFade(listRef: RefObject<HTMLElement | null>, emp
     awaitingRef.current = false;
     const list = listRef.current;
     if (!list || typeof list.animate !== "function") return;
-    list.animate([{ opacity: CONTENT_ENTER_OPACITY }, { opacity: 1 }], { duration, easing: pwaStandardEasing(list) });
+    list.animate([{ opacity: CONTENT_ENTER_OPACITY }, { opacity: 1 }], { duration, easing: pwaContentEasing(list) });
   }, [duration, empty, listRef, loading]);
 }

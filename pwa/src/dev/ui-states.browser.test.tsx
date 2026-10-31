@@ -193,8 +193,8 @@ test("live reduced-motion preference pauses actual running icons and takes prece
   const screen = await render(<UiStateGalleryPage />);
   await page.getByRole("button", { name: "动画速度 · 1×", exact: true }).click();
   await expect.poll(() => document.documentElement.style.getPropertyValue("--pwa-duration-drawer")).not.toBe("");
-  expect(document.documentElement.style.getPropertyValue("--pwa-duration-collapse-in")).toBe("720ms");
-  expect(document.documentElement.style.getPropertyValue("--pwa-duration-image-in")).toBe("1040ms");
+  expect(document.documentElement.style.getPropertyValue("--pwa-duration-collapse-in")).toBe("2000ms");
+  expect(document.documentElement.style.getPropertyValue("--pwa-duration-image-in")).toBe("2000ms");
   expect(document.documentElement.style.getPropertyValue("--pwa-duration-fetch-settle")).toBe("");
   reduced = true;
   media.dispatchEvent(new MediaQueryListEvent("change", { matches: true, media: query.media }));

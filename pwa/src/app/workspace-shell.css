@@ -31,7 +31,7 @@
   --pwa-main-inset-end: calc(var(--pwa-gutter) + var(--pwa-main-safe-right));
   /* 主屏 PWA 状态栏背景条的颜色，与状态栏下方的顶栏一致：侧栏展开时为 panel，主区贴顶与设置页为 bg。 */
   --pwa-status-backdrop: var(--pwa-panel);
-  transition: --pwa-main-flush var(--pwa-sidebar-motion) var(--pwa-ease-standard);
+  transition: --pwa-main-flush var(--pwa-sidebar-motion) var(--pwa-ease-content);
 }
 .pwa-root[data-sidebar-collapsed] { --pwa-main-flush: 1; --pwa-status-backdrop: var(--pwa-bg); }
 
@@ -71,7 +71,7 @@
   grid-template-columns: var(--pwa-sidebar-span) minmax(0, 1fr);
   overflow: hidden;
   background: var(--pwa-panel);
-  transition: grid-template-columns var(--pwa-sidebar-motion) var(--pwa-ease-standard);
+  transition: grid-template-columns var(--pwa-sidebar-motion) var(--pwa-ease-content);
 }
 .pwa-root[data-sidebar-collapsed] .pwa-layout { grid-template-columns: 0px minmax(0, 1fr); }
 
@@ -81,7 +81,7 @@
   min-height: 0;
   overflow: hidden;
   /* 展开时立即可见；只在收起时延迟到过渡结束再隐藏，避免从设置页返回时继承的隐藏状态被过渡拖住而无法聚焦。 */
-  transition: transform var(--pwa-sidebar-motion) var(--pwa-ease-standard), opacity var(--pwa-sidebar-motion) var(--pwa-ease-standard), visibility 0s;
+  transition: transform var(--pwa-sidebar-motion) var(--pwa-ease-content), opacity var(--pwa-sidebar-motion) var(--pwa-ease-content), visibility 0s;
 }
 /* 系统报告状态栏安全区时，桌面断点（如 iPad）同样避让，侧栏底色延伸到状态栏下方。 */
 .pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: var(--pwa-safe-top); padding-left: calc(8px + var(--pwa-safe-left)); }
@@ -93,7 +93,7 @@
   z-index: var(--pwa-z-sidebar-toggle);
   top: calc((var(--pwa-topbar-height) - var(--pwa-hit-target)) / 2 + var(--pwa-safe-top));
   left: calc(var(--pwa-sidebar-span) - 52px);
-  transition: left var(--pwa-sidebar-motion) var(--pwa-ease-standard), top var(--pwa-sidebar-motion) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard);
+  transition: left var(--pwa-sidebar-motion) var(--pwa-ease-content), top var(--pwa-sidebar-motion) var(--pwa-ease-content), color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 .pwa-ui-scope .pwa-root[data-sidebar-collapsed] .pwa-icon-button.pwa-sidebar-toggle { left: calc(8px + var(--pwa-safe-left)); }
 
@@ -161,7 +161,7 @@
 .pwa-ui-scope .pwa-root .pwa-topbar > .pwa-topbar-back { flex: none; }
 
 /* 主区与会话标题区。 */
-.pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: var(--pwa-main-card-top) var(--pwa-main-card-right) var(--pwa-main-card-bottom) 0; border-radius: var(--pwa-radius-lg); background: var(--pwa-bg); transition: border-radius var(--pwa-sidebar-motion) var(--pwa-ease-standard); }
+.pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: var(--pwa-main-card-top) var(--pwa-main-card-right) var(--pwa-main-card-bottom) 0; border-radius: var(--pwa-radius-lg); background: var(--pwa-bg); transition: border-radius var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root[data-sidebar-collapsed] .pwa-main { border-radius: 0; }
 /* 会话列：外层消费主区左右安全区，内层为消息列表与输入区提供独立滚动上下文。 */
 .pwa-root .pwa-workspace-body { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }

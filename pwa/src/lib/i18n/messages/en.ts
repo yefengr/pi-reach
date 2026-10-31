@@ -199,6 +199,13 @@ export const en = {
     notConnected: "Not connected",
     noOnlinePi: "No online Pi selected",
     copyVersionInfo: "Copy version information",
+    motionProfile: {
+      title: "Motion style (evaluation)",
+      hint: "Temporary option for comparing transitions of sent messages, process groups, toasts, dialogs, the sidebar and images. Saved in this browser only. Press, hover and menu feedback is unchanged; Reduce Motion still takes precedence.",
+      spring: "iOS spring", springHint: "Gentle start with a long soft settle (default)",
+      symmetric: "Relaxed", symmetricHint: "Ease in and out, 300 ms",
+      decelerate: "Decelerate", decelerateHint: "Quick start that slows down, 300 ms",
+    },
     viewportDiagnostics: {
       title: "Scroll diagnostics",
       hint: "Off by default. When Pi is idle and the queue is empty, prepare, return to the conversation and send once within 60 seconds. Records up to 1.5 seconds or 256 samples after a valid send. Only local timing, state and geometry are recorded, never messages, attachments, names, addresses or credentials. Nothing is uploaded. Returning here does not cancel sampling; hiding the app does. Entry resource names are not a commit SHA; callback times do not prove a screen paint.",

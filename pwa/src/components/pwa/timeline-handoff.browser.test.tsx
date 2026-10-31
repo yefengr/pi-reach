@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { flushSync } from "react-dom";
 import { cdp, page } from "vitest/browser";
 import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
@@ -123,11 +124,14 @@ function synchronousJumps(samples: Recording["samples"]) {
 }
 
 beforeEach(async () => {
+  // 交接时序按 160ms 发送时钟逐帧断言，固定机制时钟。
+  pinMechanismMotion();
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  unpinMechanismMotion();
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await page.viewport(1280, 900);
 });

@@ -6,6 +6,7 @@ import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { renderPwa } from "@/test/browser/render";
+import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
 import { encodeBase64 } from "@/lib/pi-reach/encoding";
 import type { ClientFrame } from "@/lib/pi-reach/protocol-v2";
@@ -283,6 +284,7 @@ const fixtureMetadata = document.createElement("meta");
 fixtureMetadata.name = "pi-reach-default-relay-url";
 
 afterEach(() => {
+  unpinMechanismMotion();
   fixtureMetadata.remove();
   // 设置页写入 history state；组件测试 URL 不变也必须清理，避免下一例被当作已打开设置。
   window.history.replaceState(null, "");
@@ -4918,6 +4920,8 @@ function queueCommitReplies(channel: QueueCommitChannel, sent: QueueCommitReques
 }
 
 test.each([false, true])("queue display commit: follows only a displayed queue departure (queued=%s)", async (queued) => {
+  // 按帧断言发送过渡在 180ms 前已结束，固定机制时钟。
+  pinMechanismMotion();
   const { screen, channel, list, input, old } = await prepareQueueCommitCase(queued);
   const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
   const header = document.querySelector<HTMLElement>(".pwa-main header")!;

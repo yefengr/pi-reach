@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useReducedMotion } from "@mantine/hooks";
 import type { MantineTransition } from "@mantine/core";
 import { readPwaMotionDuration, type PwaMotionDurationToken } from "@/lib/ui/motion-duration";
+import { getMotionProfile, subscribeMotionProfile } from "@/lib/ui/motion-profile";
 
 /** Mantine 的过渡需要数字时长；订阅偏好变化，取全局媒体查询计算出的时长 token。 */
 export function usePwaMotionDuration(variable: PwaMotionDurationToken): number {
   useReducedMotion(); // 触发 React 重渲染，数值仍以 CSS 中的规则为准。
+  useSyncExternalStore(subscribeMotionProfile, getMotionProfile, getMotionProfile); // 动效风格切换后同样重读。
   return readPwaMotionDuration(variable);
 }
 
 // 读取计算样式的公共函数在 lib/ui/motion，lib/pwa 也要用；组件侧沿用本入口。
-export { pwaMotionShiftDisabled, pwaStandardEasing } from "@/lib/ui/motion";
+export { pwaContentEasing, pwaMotionShiftDisabled, pwaStandardEasing } from "@/lib/ui/motion";
 
 // Mantine 在 transitionProps.timingFunction 之上合并 in/out；reduce 的 CSS !important 会统一覆盖为 standard。
 export const pwaFadeTransition = {
