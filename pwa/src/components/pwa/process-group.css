@@ -60,6 +60,27 @@
   pointer-events: none;
 }
 
+/* 标题已并入组头的运行中思考：本行只有尾部预览，不再连接上一行的图标列；预览尚未出现时整行不占位。 */
+.pwa-root .pwa-process-group .pwa-process-entry:has(> .pwa-thinking-process-row[data-heading-in-head])::before { content: none; }
+.pwa-root .pwa-process-group .pwa-process-entry:has(> .pwa-thinking-process-row:empty) { display: none; }
+/* 预览作为阅读入口：整块可点，保持 44px 命中高度，反馈与思考行一致。 */
+.pwa-root .pwa-process-group .pwa-thinking-tail-action {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: var(--pwa-hit-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--pwa-radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard);
+}
+@media (hover: hover) { .pwa-root .pwa-process-group .pwa-thinking-tail-action:hover { background: var(--pwa-hover); } }
+.pwa-root .pwa-process-group .pwa-thinking-tail-action:active { background: var(--pwa-hover); }
+.pwa-root .pwa-process-group .pwa-thinking-tail-action:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
+
 /* 工具明细：状态图标移到左侧图标列，状态文字留给读屏，现有 aria-label 不变。 */
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action { grid-template-columns: 16px minmax(0, 1fr); }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status { grid-area: 1 / 1; justify-content: center; min-width: 16px; }

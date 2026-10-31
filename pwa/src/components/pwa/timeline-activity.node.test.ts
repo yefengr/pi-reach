@@ -35,17 +35,17 @@ describe("timeline activity migration", () => {
     const a = thought("a");
     const entries = [a, later];
     const activity = timelineActivity(entries, true, true, () => false);
-    // 旧 UI 的 currentOutput 保持不变，新组路径单独排除缓冲尾巴。
+    // 旧 UI 的 currentOutput 保持不变，新组路径单独排除缓冲尾巴；被取代的思考已结束，按中性而非未知显示。
     expect(activity.currentOutput(a)).toBe(true);
-    expect(effectiveProcessStatus(a, entries, activity)).toBe("unknown");
-    expect(status(a, [{ ...a, text: "late buffered text" }, later])).toBe("unknown");
+    expect(effectiveProcessStatus(a, entries, activity)).toBe("neutral");
+    expect(status(a, [{ ...a, text: "late buffered text" }, later])).toBe("neutral");
   });
 
   test("S13 later Thinking/text never ends an effective parallel tool", () => {
     const a = tool("a");
     const b = thought("b");
     expect(status(a, [a, b, text("body")])).toBe("running");
-    expect(status(b, [a, b, text("body")])).toBe("unknown");
+    expect(status(b, [a, b, text("body")])).toBe("neutral");
     expect(status(b, [a, b])).toBe("running");
   });
 

@@ -51,8 +51,14 @@ async function closeReader(key: "escape" | "history" = "escape") {
   await expect.poll(() => window.history.state?.piReachToolReader === true).toBe(false);
 }
 /** 思考明细行的标题；运行中的过程组默认展开，标题与阅读入口都在明细行。 */
-const rowHeading = (index = 0) => document.querySelectorAll<HTMLElement>(".pwa-thinking-process-row .pwa-process-thinking-heading")[index] ?? null;
-const rowHeadings = () => [...document.querySelectorAll<HTMLElement>(".pwa-thinking-process-row .pwa-process-thinking-heading")];
+// 每条思考按明细顺序的标题：运行中标题已并入组头的条目取所在组头的标题。
+const rowHeadings = () => [...document.querySelectorAll<HTMLElement>(".pwa-thinking-process-row")].flatMap(row => {
+  const heading = row.hasAttribute("data-heading-in-head")
+    ? row.closest(".pwa-process-group")?.querySelector<HTMLElement>(".pwa-process-head .pwa-process-thinking-heading")
+    : row.querySelector<HTMLElement>(".pwa-process-thinking-heading");
+  return heading ? [heading] : [];
+});
+const rowHeading = (index = 0) => rowHeadings()[index] ?? null;
 const listText = () => document.querySelector(".pwa-message-list")?.textContent ?? "";
 /** 时间线中除思考尾部预览外的文字：预览只显示末尾两行，其余正文仍只经 Reader 阅读。 */
 const listTextOutsidePreview = () => {
@@ -291,8 +297,9 @@ test.each([1280, 390])("Working appears only after the page stays still and neve
   await update([question, partialItem(thinking)]);
   expect(workingShown()).toBeNull();
   await expect.element(screen.getByText("Inspecting the request.")).toBeVisible();
-  expect(document.querySelector(".pwa-thinking-process-row .pwa-process-status-running")).not.toBeNull();
-  expect(document.querySelector(".pwa-thinking-process-row-action")?.getAttribute("aria-haspopup")).toBe("dialog");
+  expect(document.querySelector(".pwa-process-head .pwa-process-status-running")).not.toBeNull();
+  // 只有首行摘要、尚无预览时，标题全文已在组头，本行不占位；结束后标题回到本行并提供阅读入口。
+  expect(document.querySelector(".pwa-thinking-process-row[data-heading-in-head]:empty")).not.toBeNull();
   // 思考灯泡是静态图标；内容停滞后仍由 Working 兜底，且不挂到组头。
   await expect.poll(workingShown).not.toBeNull();
   expect(headWorking()).toBeNull();
@@ -466,7 +473,8 @@ test.each([1280, 390])("streaming thinking advances only to complete headings be
   await expect.element(screen.getByText("Second step")).toBeVisible();
   await expect.element(screen.getByText("First step")).not.toBeInTheDocument();
   const heading = rowHeading()!;
-  const row = heading.closest<HTMLElement>(".pwa-thinking-process-row-action")!;
+  // 运行中标题位于组头：组头与明细行共用 16px 状态槽＋标题的几何。
+  const row = heading.closest<HTMLElement>(".pwa-process-head")!;
   expect(heading.getAttribute("title")).toBe("Second step");
   // 固定 16px 状态槽在前，标题紧随其后；运行状态只由图标表达。
   const slot = row.firstElementChild as HTMLElement;
@@ -672,7 +680,9 @@ test.each([1280, 390])("streaming thinking uses a first-line summary and a runni
   // 后续正文只出现在对读屏隐藏的两行尾部预览中，不进入标题。
   expect(listTextOutsidePreview()).not.toContain("后续原文不应显示在标题中。");
   expect(document.querySelector(".pwa-thinking-tail")?.textContent).toContain("后续原文不应显示在标题中。");
-  expect(document.querySelector(".pwa-thinking-process-row-action")?.getAttribute("aria-label")).toBe("Read thinking");
+  // 标题在组头时，尾部预览本身是阅读入口。
+  expect(document.querySelector(".pwa-thinking-tail-action")?.getAttribute("aria-label")).toBe("Read thinking");
+  expect(document.querySelector(".pwa-thinking-tail-action")?.getAttribute("aria-haspopup")).toBe("dialog");
 });
 
 test.each([1280, 390])("a long live thinking heading stays on one line beside a fixed slot and chevron across completion at %ipx", async width => {

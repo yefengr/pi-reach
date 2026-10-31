@@ -97,7 +97,8 @@ async function harness(options: Partial<Config> = {}) {
   return { screen, update, setTop, completeFile, reading, fileReading, pin, unpin };
 }
 
-const thoughtButton = () => document.querySelector<HTMLButtonElement>(".pwa-thinking-process-row-action")!;
+// 运行中的思考标题在组头，入口是尾部预览；结束后回到明细行。两者共用同一可访问名称。
+const thoughtButton = () => document.querySelector<HTMLButtonElement>(".pwa-process-entry button[aria-label='Read thinking']")!;
 const groupHeads = () => [...document.querySelectorAll<HTMLButtonElement>("button.pwa-process-head")];
 async function openThought() {
   const trigger = thoughtButton();

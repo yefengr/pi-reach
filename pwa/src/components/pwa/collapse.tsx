@@ -10,6 +10,8 @@ type CollapseProps = {
   className?: string;
   /** 通知呈现目标或挂载状态变化，供运行提示观察实际过渡，不代表内容已经可见。 */
   onPresentationChange?: () => void;
+  /** 本次收起由系统自动触发：改用 collapse-settle，内容先淡出、高度平缓收拢。只在 open 转为 false 的那次提交读取。 */
+  settle?: boolean;
   children: ReactNode;
 };
 
@@ -18,21 +20,26 @@ type CollapseProps = {
  * - 只在 open 变化时播放；已展开内容的流式增长直接跟随，不重播动画。
  * - 退出期间内容 inert，并冻结为收起那一刻的内容，不再渲染新到的输出。
  * - 退出动画结束后卸载；过渡结束事件缺失时以时长加 50ms 兜底。中途反向时从当前位置继续。
+ * - 自动收起（settle）以 260ms 播放：透明度用进入曲线先行淡出，高度用对称曲线收拢，两者同时结束。
  * 减少动态效果由全局规则处理：高度与位移不过渡，只保留透明度淡化。
  */
-export function Collapse({ open, id, className, onPresentationChange, children }: CollapseProps) {
-  const exitDuration = usePwaMotionDuration("--pwa-duration-collapse-out");
+export function Collapse({ open, id, className, onPresentationChange, settle = false, children }: CollapseProps) {
+  const standardExit = usePwaMotionDuration("--pwa-duration-collapse-out");
+  const settleExit = usePwaMotionDuration("--pwa-duration-collapse-settle");
   const [previousOpen, setPreviousOpen] = useState(open);
   const [entered, setEntered] = useState(open);
   const [exiting, setExiting] = useState(false);
+  const [settling, setSettling] = useState(false);
   const [frozen, setFrozen] = useState<ReactNode>(null);
   if (previousOpen !== open) {
     setPreviousOpen(open);
     // 退出中重开直接反向；只有从已卸载状态打开才需要先提交收起帧。
     setEntered(open && exiting);
     setExiting(!open);
+    setSettling(!open && settle);
     if (!open) setFrozen(children);
   }
+  const exitDuration = settling ? settleExit : standardExit;
 
   useEffect(() => {
     if (!open || entered) return;
@@ -57,6 +64,7 @@ export function Collapse({ open, id, className, onPresentationChange, children }
     id={id}
     className={`pwa-collapse${className ? ` ${className}` : ""}`}
     data-open={open && entered ? "" : undefined}
+    data-exit={!open && settling ? "settle" : undefined}
     inert={!open || undefined}
     onTransitionEnd={finishExit}
   >
