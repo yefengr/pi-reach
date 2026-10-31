@@ -7,6 +7,7 @@ import { ThinkingReader } from "./thinking-reader";
 import { effectiveProcessStatus, isPartialEntry, observeProcessEntries, timelineActivity } from "./timeline-activity";
 import { processGroups, processNoticeBreakKeys, type ProcessEntry, type ProcessGroup as ProcessGroupModel } from "./process-groups";
 import { ProcessGroup } from "./process-group";
+import { isSettleCollapse } from "./process-group-state";
 import { useProcessPresentation } from "./use-process-presentation";
 import { useEnteredKeys, useIdleWorking } from "./use-turn-activity";
 import { COLLAPSE_EXIT_FALLBACK_MARGIN_MS } from "./collapse";
@@ -214,6 +215,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   // 组由展开转为收起的同一提交里报告预计收回的高度，视口据此按净布局处理，不为同一提交的新增内容先向下追。
   // 必须先于下方活动区显隐通知：同一提交里协调器先得知收起，再处理活动区等新增或移除。
   const collapseDuration = usePwaMotionDuration("--pwa-duration-collapse-out");
+  const settleDuration = usePwaMotionDuration("--pwa-duration-collapse-settle");
   const presentedExpansion = useRef<ReadonlyMap<string, boolean>>(new Map());
   useLayoutEffect(() => {
     const previous = presentedExpansion.current;
@@ -222,12 +224,15 @@ export function ConversationTimeline({ items, live, completions, running = false
     const list = listRef.current;
     if (!list) return;
     let removed = 0;
+    let duration = 0;
     for (const [key, expanded] of next) {
       if (expanded || previous.get(key) !== true) continue;
       const root = [...list.querySelectorAll<HTMLElement>(":scope > [data-timeline-key]")].find(node => node.dataset.timelineKey === key);
       removed += root?.querySelector<HTMLElement>(":scope > .pwa-process-details")?.getBoundingClientRect().height ?? 0;
+      // 保持期覆盖同一提交里最长的退出：自动收起比手动收起慢。
+      duration = Math.max(duration, isSettleCollapse(states.get(key)!) ? settleDuration : collapseDuration);
     }
-    if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: collapseDuration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS } }));
+    if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: duration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS } }));
   });
   // 只有活动区的出现与收起改变高度；其中 Working 的显隐只改透明度，不通知视口。
   const previousSlot = useRef(slotPresent);

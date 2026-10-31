@@ -42,6 +42,11 @@ function expansionState(group: ProcessGroup, context: ProcessContext, running: b
   return { expanded: false, expansionSource: "history" };
 }
 
+/** 系统自动收起（正文接续或本轮结束）：以 collapse-settle 平缓播放；手动收起保持 collapse-out 的直接反馈。 */
+export function isSettleCollapse(state: Pick<ProcessGroupState, "expanded" | "expansionSource">): boolean {
+  return !state.expanded && (state.expansionSource === "superseded" || state.expansionSource === "completed");
+}
+
 /** 组状态不反写成员：真实错误优先于中断，再保留未知；缺 run_end 不宣告全成功。 */
 function settledStatus(group: ProcessGroup, statuses: ReadonlyMap<string, ProcessStatus>, completion?: RunCompletion): ProcessStatus {
   const values = new Set(statuses.values());

@@ -231,6 +231,71 @@ test.each(sizes)("short connectors, fixed left status slots and single-line rows
   }
 });
 
+test("a running Thinking title moves into the expanded head; its row keeps only the readable tail until it ends", async () => {
+  const view = await harness({ entries: [tool("check", "complete"), thinking("**Reviewing Pi Reach**\nFirst detail line.\nSecond detail line.")] });
+  expect(view.head().getAttribute("aria-expanded")).toBe("true");
+  expect(view.head().textContent).toContain("Reviewing Pi Reach");
+  expect(view.head().textContent).not.toContain("+");
+  const row = () => view.root().querySelector<HTMLElement>(".pwa-thinking-process-row")!;
+  expect(row().hasAttribute("data-heading-in-head")).toBe(true);
+  expect(row().querySelector(".pwa-process-thinking-heading, .pwa-process-status-slot")).toBeNull();
+  const tail = row().querySelector<HTMLButtonElement>("button.pwa-thinking-tail-action")!;
+  expect(tail.getAttribute("aria-label")).toBe(en.timeline.readThinking);
+  expect(round(rect(tail).height)).toBeGreaterThanOrEqual(44);
+  await page.elementLocator(tail).click();
+  expect(view.read).toHaveBeenCalledTimes(1);
+  // 思考结束、本轮仍在运行：组头回到分类摘要，标题回到本行并淡入，预览收起。
+  view.update({ entries: [tool("check", "complete"), thinking("**Reviewing Pi Reach**\nFirst detail line.\nSecond detail line.", false)] });
+  expect(view.head().getAttribute("aria-expanded")).toBe("true");
+  expect(view.head().textContent).not.toContain("Reviewing Pi Reach");
+  expect(view.head().textContent).toContain(en.tools.groupCommand(1));
+  expect(row().hasAttribute("data-heading-in-head")).toBe(false);
+  const action = row().querySelector<HTMLElement>(".pwa-thinking-process-row-action")!;
+  expect(action.textContent).toContain("Reviewing Pi Reach");
+  expect(action.classList.contains("pwa-row-enter")).toBe(true);
+  expect(row().querySelector(".pwa-thinking-tail-action")).toBeNull();
+});
+
+test("a running Thinking without preview text hides its empty row instead of leaving a gap", async () => {
+  const view = await harness({ entries: [tool("check", "complete"), thinking("**Only a title**")] });
+  expect(view.head().textContent).toContain("Only a title");
+  const entry = view.root().querySelector<HTMLElement>(".pwa-process-entry:has(> .pwa-thinking-process-row)")!;
+  expect(getComputedStyle(entry).display).toBe("none");
+});
+
+test("a finished Thinking-only group keeps its last title and settles with the slower automatic collapse", async () => {
+  const view = await harness({ entries: [thinking()] });
+  expect(view.head().textContent).toContain("Reviewing Pi Reach");
+  view.update({ entries: [thinking("**Reviewing Pi Reach**\nDetails.", false)], ended: true });
+  expect(view.head().getAttribute("aria-expanded")).toBe("false");
+  expect(view.head().textContent).toContain("Reviewing Pi Reach");
+  expect(view.head().textContent).not.toBe(en.timeline.thinkingTrace);
+  const details = view.root().querySelector<HTMLElement>(".pwa-process-details")!;
+  expect(details.dataset.exit).toBe("settle");
+  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.26s");
+  await expect.poll(() => view.root().querySelector(".pwa-process-details")).toBeNull();
+});
+
+test("an automatic collapse holds the head copy until the height settles, then shows the summary", async () => {
+  const view = await harness({ entries: [tool("check", "complete"), thinking()] });
+  expect(view.head().textContent).toContain("Reviewing Pi Reach");
+  view.update({ entries: [tool("check", "complete"), thinking("**Reviewing Pi Reach**\nDetails.", false)], ended: true });
+  expect(view.head().getAttribute("aria-expanded")).toBe("false");
+  expect(view.head().textContent).toContain("Reviewing Pi Reach");
+  await expect.poll(() => view.head().textContent).toContain(en.tools.groupCommand(1));
+  expect(view.head().textContent).not.toContain("Reviewing Pi Reach");
+});
+
+test("a manual collapse keeps the short exit and switches the head copy immediately", async () => {
+  const view = await harness({ entries: [tool("check", "complete"), thinking()] });
+  await page.elementLocator(view.head()).click();
+  const details = view.root().querySelector<HTMLElement>(".pwa-process-details")!;
+  expect(details.dataset.exit).toBeUndefined();
+  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.14s");
+  // 收起后当前活动仍是运行中的思考，组头保持其标题。
+  expect(view.head().textContent).toContain("Reviewing Pi Reach");
+});
+
 test("large text and reduced motion retain icon alignment without geometric title transitions", async () => {
   await page.viewport(320, 900);
   document.documentElement.style.setProperty("--pwa-text-body", "24px");
@@ -238,10 +303,11 @@ test("large text and reduced motion retain icon alignment without geometric titl
   const view = await harness({ entries: [thinking()] });
   const title = () => view.root().querySelector<HTMLElement>(".pwa-process-thinking-heading")!;
   const left = round(rect(title()).left);
-  const slot = view.root().querySelector<HTMLElement>(".pwa-thinking-process-row .pwa-process-status-slot")!;
+  // 运行中与结束后的纯思考组都由组头显示标题，图标槽与标题左缘保持不动。
+  const slot = view.head().querySelector<HTMLElement>(".pwa-process-status-slot")!;
   expect(round(rect(slot).width)).toBe(16);
   expect(getComputedStyle(title()).fontSize).toBe("24px");
-  view.update({ entries: [thinking("**Finished title**\nDetails.", false)], ended: true, choices: withProcessExpansion(new Map(), ["thought"], true) });
+  view.update({ entries: [thinking("**Finished title**\nDetails.", false)], ended: true });
   expect(round(rect(title()).left)).toBe(left);
   expect(round(rect(slot).width)).toBe(16);
   expect(title().getAnimations({ subtree: true })).toHaveLength(0);

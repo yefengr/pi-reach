@@ -2,13 +2,16 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, Lightbulb, LoaderCircle } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
+import type { ThinkingEntry } from "@/lib/pwa/timeline-presentation";
+import type { ThinkingTextParser } from "@/lib/pwa/thinking-text-parser";
 import { Collapse } from "./collapse";
-import { processGroupSummary, type ProcessGroupState, type ProcessStatus } from "./process-group-state";
+import { isSettleCollapse, processGroupSummary, type ProcessGroupState, type ProcessStatus } from "./process-group-state";
 import type { ProcessEntry, ProcessGroup as ProcessGroupModel } from "./process-groups";
-import { ThinkingProcessHeading, ThinkingProcessRow } from "./thinking-process-row";
+import { ThinkingParserContext, ThinkingProcessHeading, ThinkingProcessRow } from "./thinking-process-row";
 import { ToolCard } from "./tool-card";
 import { ToolIndicatorContext, useToolIndicatorRef, useVisibleToolIndicators, type RunningToolsChange } from "./tool-indicator-visibility";
 import { isToolPreparing, toolHeaderSummary, toolInlineText, type ToolStatus } from "./tool-presentation";
+import { usePwaMotionDuration } from "./use-pwa-motion";
 import "./process-group.css";
 
 export type { ProcessGroupModel };
@@ -49,15 +52,56 @@ type ProcessGroupHeadProps = {
   group: ProcessGroupModel;
   state: ProcessGroupState;
   summary: ProcessGroupSummary;
+  /** 并入组头的思考；为空时按当前活动或分类摘要显示。 */
+  thinkingInHead: ThinkingEntry | null;
   detailsId: string;
   onToggle: (groupKey: string, expanded: boolean) => void;
 };
 
 /**
- * 组头只渲染推导好的内容：折叠时显示当前成员，展开时显示分类摘要；
+ * 组头承载的思考：运行中的当前思考无论展开与否都并入组头；
+ * 没有工具的组结束并收起后保留最后一个有正文的思考标题，不退回固定的「Thinking」；
+ * 展开时明细已逐条列出标题，组头与工具组一致显示分类摘要，避免同一标题重复。
+ */
+function headThinking(group: ProcessGroupModel, state: ProcessGroupState): ThinkingEntry | null {
+  const active = state.activeEntry;
+  if (active?.kind === "thinking" && state.entryStatuses.get(active.key) === "running") return active;
+  if (active !== null || state.expanded || group.entries.some(entry => entry.kind === "tool")) return null;
+  return group.entries.findLast((entry): entry is ThinkingEntry => entry.kind === "thinking" && entry.text.trim() !== "") ?? null;
+}
+
+/**
+ * 自动收起播放期间冻结组头文案，等高度收拢后再换成新文案，避免与明细淡出、正文出现挤在同一帧。
+ * 只在展开转为自动收起的那次提交开始冻结；冻结期间文案再变化直接采用最新值。
+ */
+function useSettleHeldKey(copyKey: string, expanded: boolean, settle: boolean): string {
+  const duration = usePwaMotionDuration("--pwa-duration-collapse-settle");
+  const [previousExpanded, setPreviousExpanded] = useState(expanded);
+  const [lastKey, setLastKey] = useState(copyKey);
+  const [held, setHeld] = useState<string | null>(null);
+  let current = held;
+  if (previousExpanded !== expanded) {
+    setPreviousExpanded(expanded);
+    current = !expanded && settle && lastKey !== copyKey ? lastKey : null;
+    setHeld(current);
+  } else if (held !== null && lastKey !== copyKey) {
+    current = null;
+    setHeld(null);
+  }
+  if (lastKey !== copyKey) setLastKey(copyKey);
+  useEffect(() => {
+    if (held === null) return;
+    const timer = window.setTimeout(() => setHeld(null), duration);
+    return () => window.clearTimeout(timer);
+  }, [held, duration]);
+  return current ?? copyKey;
+}
+
+/**
+ * 组头只渲染推导好的内容：运行中的思考并入组头；其余收起时显示当前成员，展开时显示分类摘要；
  * 运行身份来自真实成员，不新增排队计时或调用轮播。
  */
-function ProcessGroupHead({ group, state, summary, detailsId, onToggle }: ProcessGroupHeadProps) {
+function ProcessGroupHead({ group, state, summary, thinkingInHead, detailsId, onToggle }: ProcessGroupHeadProps) {
   const { t } = useI18n();
   const active = state.activeEntry;
   const activeStatus: ProcessStatus | null = active === null ? null : state.entryStatuses.get(active.key) ?? "neutral";
@@ -68,9 +112,7 @@ function ProcessGroupHead({ group, state, summary, detailsId, onToggle }: Proces
   const iconStatus: ProcessStatus = state.status === "running" && active === null ? "neutral" : state.status;
   const indicatorRef = useToolIndicatorRef(runningKeys);
   const thinking = active?.kind === "thinking" && activeStatus === "running";
-  const activeTool = active?.kind === "tool" ? active : null;
-  const preparing = activeTool !== null && activeStatus === "running" && isToolPreparing(activeTool.value);
-  const toolDetail = activeTool === null ? "" : toolInlineText(toolHeaderSummary(activeTool.value));
+  const preparing = active?.kind === "tool" && activeStatus === "running" && isToolPreparing(active.value);
   const summaryAlert = summary.failureCount > 0 ? "error" : summary.unknownCount > 0 ? "unknown" : summary.interruptedCount > 0 ? "interrupted" : null;
   // 左侧状态槽已表达同一状态时不再重复右侧图标；数量仍在组头可访问名称的摘要中。
   const alertKind = summaryAlert === iconStatus ? null : summaryAlert;
@@ -80,21 +122,24 @@ function ProcessGroupHead({ group, state, summary, detailsId, onToggle }: Proces
   const ariaSummary = summary.fullLabel;
 
   // 当前活动换人（思考、工具、摘要之间）时重新挂载并淡入；同一成员的标题与参数增长原位更新。
-  const copyKey = !state.expanded && active !== null ? active.key : "summary";
+  const liveKey = thinkingInHead?.key ?? (!state.expanded && active !== null ? active.key : "summary");
+  const copyKey = useSettleHeldKey(liveKey, state.expanded, isSettleCollapse(state));
   const [mountedCopyKey] = useState(copyKey);
+  const shown = copyKey === "summary" ? null : group.entries.find(entry => entry.key === copyKey) ?? null;
   let copy: ReactNode;
-  if (!state.expanded && active !== null) {
-    copy = active.kind === "thinking"
-      ? <ThinkingProcessHeading key={active.key} entry={active} status={activeStatus ?? "neutral"} />
-      : <>
-        <strong title={active.value.tool}>{active.value.tool}</strong>
-        {toolDetail ? <span className="pwa-process-tool-detail" title={toolDetail}>{toolDetail}</span> : null}
-        {state.additionalRunningTools > 0 ? <span className="pwa-process-more" role="status" aria-live="off" aria-label={t.timeline.otherRunningTools(state.additionalRunningTools)}>+{state.additionalRunningTools}</span> : null}
-      </>;
+  if (shown?.kind === "thinking") {
+    copy = <ThinkingProcessHeading key={shown.key} entry={shown} status={state.entryStatuses.get(shown.key) ?? "neutral"} />;
+  } else if (shown?.kind === "tool") {
+    const toolDetail = toolInlineText(toolHeaderSummary(shown.value));
+    copy = <>
+      <strong title={shown.value.tool}>{shown.value.tool}</strong>
+      {toolDetail ? <span className="pwa-process-tool-detail" title={toolDetail}>{toolDetail}</span> : null}
+    </>;
   } else {
     copy = <span className="pwa-process-summary" title={summary.fullLabel}>{summary.fullLabel}</span>;
   }
-  if (active?.kind === "thinking" && !state.expanded && state.additionalRunningTools > 0) {
+  // 「+N」只在收起时补足看不到的并行工具；展开时明细已列出，冻结中的旧文案也不追加。
+  if (!state.expanded && shown !== null && shown === active && state.additionalRunningTools > 0) {
     copy = <>{copy}<span className="pwa-process-more" role="status" aria-live="off" aria-label={t.timeline.otherRunningTools(state.additionalRunningTools)}>+{state.additionalRunningTools}</span></>;
   }
 
@@ -131,6 +176,13 @@ export function ProcessGroup({ group, state, enteredKeys, onToggle, onRead, onFo
     observeRef.current();
     presentationRef.current?.();
   }, []);
+
+  const [parsers] = useState(() => new Map<string, ThinkingTextParser>());
+  // 成员离开本组后释放其解析器；仍在的成员保留增量进度。
+  useEffect(() => {
+    const keys = new Set(group.entries.map(entry => entry.key));
+    for (const key of parsers.keys()) if (!keys.has(key)) parsers.delete(key);
+  });
 
   const focusRegion = useRef<HTMLDivElement>(null);
   const focusReported = useRef(false);
@@ -175,17 +227,18 @@ export function ProcessGroup({ group, state, enteredKeys, onToggle, onRead, onFo
     </article>;
   }
 
+  const thinkingInHead = headThinking(group, state);
   // 仍有成员运行的组在末尾持续增长，声明为实时行，跟随时平滑接续。
-  return <ToolIndicatorContext value={register}><article ref={groupRef} className={`pwa-process-group pwa-timeline-row${enterClass}`} data-timeline-key={group.key} data-viewport-row={group.key} data-viewport-live={state.status === "running" ? "true" : undefined} aria-label={t.timeline.processGroup}>
-    <ProcessGroupHead group={group} state={state} summary={summary} detailsId={detailsId} onToggle={onToggle} />
-    <Collapse open={state.expanded} id={detailsId} className="pwa-process-details" onPresentationChange={presentation}>
+  return <ThinkingParserContext value={parsers}><ToolIndicatorContext value={register}><article ref={groupRef} className={`pwa-process-group pwa-timeline-row${enterClass}`} data-timeline-key={group.key} data-viewport-row={group.key} data-viewport-live={state.status === "running" ? "true" : undefined} aria-label={t.timeline.processGroup}>
+    <ProcessGroupHead group={group} state={state} summary={summary} thinkingInHead={thinkingInHead} detailsId={detailsId} onToggle={onToggle} />
+    <Collapse open={state.expanded} id={detailsId} className="pwa-process-details" settle={isSettleCollapse(state)} onPresentationChange={presentation}>
       <div ref={focusRegion} className="pwa-process-entries" onFocusCapture={() => reportFocus(true)} onBlurCapture={handleBlur}>
         {group.entries.map((entry, index) => <div key={entry.key} className={`pwa-process-entry${index > 0 && enteredKeys?.has(entry.key) ? " pwa-row-enter" : ""}`} data-process-entry-key={entry.key}>
           {entry.kind === "tool"
             ? <ToolCard value={entry.value} status={asToolStatus(state.entryStatuses.get(entry.key) ?? "neutral")} indicatorKeys={[entry.key]} onRead={trigger => onRead(entry, trigger)} />
-            : <ThinkingProcessRow entry={entry} status={state.entryStatuses.get(entry.key) ?? "neutral"} onRead={trigger => onRead(entry, trigger)} />}
+            : <ThinkingProcessRow entry={entry} status={state.entryStatuses.get(entry.key) ?? "neutral"} headingInHead={entry === thinkingInHead && state.entryStatuses.get(entry.key) === "running"} onRead={trigger => onRead(entry, trigger)} />}
         </div>)}
       </div>
     </Collapse>
-  </article></ToolIndicatorContext>;
+  </article></ToolIndicatorContext></ThinkingParserContext>;
 }

@@ -86,5 +86,6 @@ export function effectiveProcessStatus(entry: ProcessEntry, entries: readonly Pr
   const superseded = entries.slice(index + 1).some(candidate =>
     entryGroupId(candidate) === entry.groupId && isPiOutputEntry(candidate),
   );
-  return superseded ? "unknown" : "running";
+  // 同一条流式消息里，思考块要到整条消息结束才转正式；同轮已有后续输出即说明思考已结束，按中性显示，不计入未知。
+  return superseded ? "neutral" : "running";
 }

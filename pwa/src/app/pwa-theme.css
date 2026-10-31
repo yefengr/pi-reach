@@ -213,6 +213,8 @@
   --pwa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --pwa-ease-enter: cubic-bezier(0, 0, 0, 1);
   --pwa-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  /* 对称缓入缓出：自动收起的高度回落起止都平缓，避免标准曲线前段过陡造成的一帧塌陷。 */
+  --pwa-ease-settle: cubic-bezier(0.4, 0, 0.2, 1);
   --pwa-duration-sidebar: 220ms;
   --pwa-duration-page: 200ms;
   --pwa-duration-drawer: 200ms;
@@ -222,6 +224,8 @@
   --pwa-duration-status-slot: 160ms;
   --pwa-duration-collapse-in: 180ms;
   --pwa-duration-collapse-out: 140ms;
+  /* 过程组自动收起（正文接续或本轮结束）：内容先淡出，高度随后平缓收拢；手动收起仍用 collapse-out。 */
+  --pwa-duration-collapse-settle: 260ms;
   --pwa-duration-image-in: 260ms;
   --pwa-duration-image-out: 220ms;
   --pwa-duration-toast: 180ms;
@@ -312,6 +316,7 @@
     --pwa-duration-status-slot: var(--pwa-duration-reduced);
     --pwa-duration-collapse-in: var(--pwa-duration-reduced);
     --pwa-duration-collapse-out: var(--pwa-duration-reduced);
+    --pwa-duration-collapse-settle: var(--pwa-duration-reduced);
     --pwa-duration-image-in: var(--pwa-duration-reduced);
     --pwa-duration-image-out: var(--pwa-duration-reduced);
     --pwa-duration-toast: var(--pwa-duration-reduced);

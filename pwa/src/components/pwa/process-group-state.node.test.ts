@@ -146,7 +146,9 @@ describe("process group state transitions", () => {
     expect(state(g)).toMatchObject({ activeEntry: thinking, additionalRunningTools: 2 });
     const after = state(g, { entries: [...g.entries, body] });
     expect(after).toMatchObject({ activeEntry: b, additionalRunningTools: 1 });
-    expect(after.entryStatuses.get(thinking.key)).toBe("unknown");
+    // 同轮后续输出说明思考已结束：按中性显示，不在组摘要里计为状态未知。
+    expect(after.entryStatuses.get(thinking.key)).toBe("neutral");
+    expect(processGroupSummary(g, after.entryStatuses, en.tools).unknownCount).toBe(0);
     const finished = group(tool("a", "complete"), tool("b", "complete"), thinking);
     expect(state(finished, { entries: [...finished.entries, body] }).activeEntry).toBeNull();
   });
