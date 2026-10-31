@@ -13,7 +13,7 @@ async function openMotion() {
   await page.getByLabelText("展示区域", { exact: true }).selectOptions("motion");
   await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-region")).toBe("motion");
 }
-async function choosePreset(value: "current" | "previous" | "symmetric" | "decelerate") {
+async function choosePreset(value: "current" | "previous") {
   await page.getByLabelText("动效参数 · 仅本页", { exact: true }).selectOptions(value);
 }
 
@@ -25,17 +25,9 @@ test("comparison presets override only the content and space layer and restore o
   await openMotion();
   expect(computed(root(), "--pwa-duration-message-in")).toBe("500ms");
   expect(computed(root(), "--pwa-ease-content")).toMatch(/^linear\(0, /);
-
-  // P2／P3 只写评估期风格属性，不写入存储；按压与菜单的曲线不变。
-  await choosePreset("symmetric");
-  expect(root().dataset.pwaMotion).toBe("symmetric");
-  expect(computed(root(), "--pwa-ease-content")).toBe("cubic-bezier(0.2, 0, 0.2, 1)");
-  expect(computed(root(), "--pwa-duration-message-in")).toBe("300ms");
+  // 操作反馈层的曲线不属于对比范围。
   expect(computed(root(), "--pwa-ease-enter")).toBe("cubic-bezier(0, 0, 0, 1)");
   expect(computed(root(), "--pwa-ease-standard")).toBe("cubic-bezier(0.2, 0, 0, 1)");
-  await choosePreset("decelerate");
-  expect(computed(root(), "--pwa-ease-content")).toBe("cubic-bezier(0.2, 0, 0, 1)");
-  expect(localStorage.getItem("pi-reach-motion-profile")).toBeNull();
 
   await choosePreset("previous");
   expect(inline("--pwa-duration-message-in")).toBe("160ms");
@@ -43,7 +35,6 @@ test("comparison presets override only the content and space layer and restore o
   expect(inline("--pwa-duration-collapse-settle")).toBe("320ms");
   expect(inline("--pwa-duration-menu-in")).toBe("");
   expect(inline("--pwa-message-shift")).toBe("6px");
-  expect(root().dataset.pwaMotion).toBeUndefined();
   expect(inline("--pwa-ease-content")).toBe("cubic-bezier(0.2, 0, 0, 1)");
   // 旧规范：Modal 与 Toast 还原为陡峭的进入曲线，折叠仍用与现行同值的曲线。
   await page.getByRole("button", { name: "操作确认", exact: true }).click();
@@ -61,7 +52,6 @@ test("comparison presets override only the content and space layer and restore o
   expect(inline("--pwa-message-shift")).toBe("");
   expect(inline("--pwa-ease-content")).toBe("");
   expect(root().dataset.reviewMotion).toBeUndefined();
-  expect(root().dataset.pwaMotion).toBeUndefined();
   await screen.unmount();
 });
 

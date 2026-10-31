@@ -6,7 +6,7 @@ import { PwaMessageActions } from "@/components/pwa/pwa-app-actions";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelinePending, TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { UI_REVIEW_MODELS } from "./ui-review-fixtures";
-import { REVIEW_CURRENT_CURVE, REVIEW_MOTION_OPTIONS, REVIEW_MOTION_PRESETS, reviewPresetDuration, type ReviewMotionPresetId } from "./review-motion-presets";
+import { REVIEW_CURRENT_CURVE, REVIEW_MOTION_OPTIONS, REVIEW_MOTION_PRESETS, type ReviewMotionPresetId } from "./review-motion-presets";
 import { PWA_MOTION_FALLBACK_MS, type PwaMotionDurationToken } from "@/lib/ui/motion-duration";
 
 const base = { session_id: "ui-motion", leaf_id: "leaf", timestamp: 1 };
@@ -59,7 +59,7 @@ const CURRENT_SHIFTS = "12 / 12 / 8px";
 
 export function UiStateMotionParams({ preset }: { preset: ReviewMotionPresetId }) {
   const columns = REVIEW_MOTION_OPTIONS;
-  const durationOf = (id: ReviewMotionPresetId, token: PwaMotionDurationToken) => (id === "current" ? undefined : reviewPresetDuration(id, token)) ?? PWA_MOTION_FALLBACK_MS[token];
+  const durationOf = (id: ReviewMotionPresetId, token: PwaMotionDurationToken) => (id === "current" ? undefined : REVIEW_MOTION_PRESETS[id].durations[token]) ?? PWA_MOTION_FALLBACK_MS[token];
   const shiftsOf = (id: ReviewMotionPresetId) => {
     const shifts = id === "current" ? {} : REVIEW_MOTION_PRESETS[id].shifts;
     return Object.keys(shifts).length === 0 ? CURRENT_SHIFTS : `${Object.values(shifts).join(" / ")}px`;
@@ -75,7 +75,7 @@ export function UiStateMotionParams({ preset }: { preset: ReviewMotionPresetId }
         <tr><td>位移 overlay / message / collapse</td>{columns.map(column => cell(column.value, shiftsOf(column.value)))}</tr>
       </tbody>
     </table>
-    <p>退出曲线与操作反馈（按压、菜单、复制）在各列保持现行值；P2／P3 的自动收起使用对称缓入缓出曲线。</p>
+    <p>退出曲线与操作反馈（按压、菜单、复制）在各列保持现行值。</p>
   </details>;
 }
 

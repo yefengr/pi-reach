@@ -305,32 +305,6 @@
 }
 
 /*
- * 评估期临时开关（合并前删除，见设置页「动效风格」）：默认取上方 :root 的 iOS 弹簧（P4）；
- * 舒缓（P2）与减速（P3）共用时长，只改内容曲线，自动收起回到 320ms 对称缓入缓出。
- * 写在 no-preference 内，系统减少动态效果时始终以下方规则为准。
- */
-@media (prefers-reduced-motion: no-preference) {
-  :root[data-pwa-motion="symmetric"],
-  :root[data-pwa-motion="decelerate"] {
-    --pwa-ease-settle: cubic-bezier(0.4, 0, 0.2, 1);
-    --pwa-duration-sidebar: 220ms;
-    --pwa-duration-modal-in: 280ms;
-    --pwa-duration-modal-out: 200ms;
-    --pwa-duration-collapse-in: 300ms;
-    --pwa-duration-collapse-out: 240ms;
-    --pwa-duration-collapse-settle: 320ms;
-    --pwa-duration-image-in: 260ms;
-    --pwa-duration-image-out: 220ms;
-    --pwa-duration-toast: 300ms;
-    --pwa-duration-toast-out: 220ms;
-    --pwa-duration-message-in: 300ms;
-    --pwa-duration-content: 240ms;
-  }
-  :root[data-pwa-motion="symmetric"] { --pwa-ease-content: cubic-bezier(0.2, 0, 0.2, 1); }
-  :root[data-pwa-motion="decelerate"] { --pwa-ease-content: cubic-bezier(0.2, 0, 0, 1); }
-}
-
-/*
  * 减少动态效果只跟随系统设置：取消位移、缩放与尺寸过渡，颜色与透明度改为短淡化；
  * 加载与运行状态保留静态图标和文字，持续循环由活动可见性规则暂停。
  */
