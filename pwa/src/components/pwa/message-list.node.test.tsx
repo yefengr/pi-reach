@@ -126,12 +126,13 @@ test("disables status checks while querying and explains offline recovery", () =
 test("keeps final answers visible while Thinking content stays in its Reader and skips empty assistant cards", () => {
   const base = { event_id: "answer", session_id: "s", leaf_id: "g", timestamp: 0, group_id: "group", kind: "assistant" as const, status: "complete" as const };
   const html = renderList([
-    { kind: "event", event: { ...base, blocks: [{ type: "thinking", text: "private preview" }, { type: "text", text: "**Visible answer**" }] } },
+    { kind: "event", event: { ...base, blocks: [{ type: "thinking", text: "Opening line\nprivate preview" }, { type: "text", text: "**Visible answer**" }] } },
     { kind: "event", event: { ...base, event_id: "empty", blocks: [] } },
   ]);
-  // 已停止的历史过程组默认收起，正文只经 Reader 阅读，不在时间线铺开。
+  // 已停止的历史过程组默认收起，组头只保留思考标题（此处为首行摘要），正文只经 Reader 阅读，不在时间线铺开。
   expect(html.match(/class="pwa-process-group /g)).toHaveLength(1);
   expect(html).toContain('aria-label="Expand Thinking"');
+  expect(html).toContain('<span class="pwa-process-thinking-heading" title="Opening line">Opening line</span>');
   expect(html).not.toContain("private preview");
   expect(html).toContain("<strong>Visible answer</strong>");
   expect(html.match(/class="pwa-message assistant"/g)).toHaveLength(1);
@@ -199,7 +200,8 @@ test("keeps streaming Thinking content out of the timeline and exposes its Reade
   expect(tail).toBeGreaterThan(-1);
   expect(html.indexOf("Full reasoning stays collapsed.")).toBeGreaterThan(tail);
   expect(html).not.toContain("pwa-tool-code");
-  const row = html.match(/<button class="pwa-thinking-process-row-action"[^>]*>/)?.[0] ?? "";
+  // 标题已并入组头，运行中的阅读入口是尾部预览本身。
+  const row = html.match(/<button class="pwa-thinking-tail-action"[^>]*>/)?.[0] ?? "";
   expect(row).toContain('aria-label="Read thinking"');
   expect(row).toContain('aria-haspopup="dialog"');
   expect(row).not.toContain("aria-expanded=");
@@ -385,25 +387,26 @@ describe("turn presentation", () => {
   });
 });
 
+// 运行中的标题在组头；只有标题之外还有正文时，本行才显示预览并作为阅读入口，否则本行为空、不占位。
 test.each([
-  { text: "**First step**\nBody.\n**Latest step**\n**Unfinished", title: "Latest step" },
-  { text: "\n \t\n  检查   工具\t分组  \nHidden body", title: "检查 工具 分组" },
-  { text: "**", title: "Thinking…" },
-  { text: "**Unfinished heading", title: "Thinking…" },
-  { text: "*", title: "Thinking…" },
-  { text: "", title: "Thinking…" },
-  { text: "\n \t\n", title: "Thinking…" },
-])("renders the live thinking title or running fallback in SSR ($title)", ({ text, title }) => {
+  { text: "**First step**\nBody.\n**Latest step**\n**Unfinished", title: "Latest step", preview: true },
+  { text: "\n \t\n  检查   工具\t分组  \nHidden body", title: "检查 工具 分组", preview: true },
+  { text: "**", title: "Thinking…", preview: false },
+  { text: "**Unfinished heading", title: "Thinking…", preview: false },
+  { text: "*", title: "Thinking…", preview: false },
+  { text: "", title: "Thinking…", preview: false },
+  { text: "\n \t\n", title: "Thinking…", preview: false },
+])("renders the live thinking title or running fallback in SSR ($title)", ({ text, title, preview }) => {
   const partial: TimelinePartial = {
     protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1",
     group_id: "group-1", partial_id: "thinking", kind: "thinking", status: "delta", delta: text,
   };
   const html = renderList([{ kind: "partial", createdAt: 0, partial }], { running: true });
   expect(html).toContain(`<span class="pwa-process-thinking-heading" title="${title}">${title}</span>`);
-  const readable = !!text.trim();
-  expect(html.includes('aria-haspopup="dialog"')).toBe(readable);
-  expect(html.includes('aria-label="Read thinking"')).toBe(readable);
-  expect(html.includes("pwa-thinking-process-row-static")).toBe(!readable);
+  expect(html).toContain("data-heading-in-head");
+  expect(html.includes('aria-haspopup="dialog"')).toBe(preview);
+  expect(html.includes('aria-label="Read thinking"')).toBe(preview);
+  expect(html.includes("pwa-thinking-process-row-static")).toBe(false);
 });
 
 test.each([
@@ -418,8 +421,8 @@ test.each([
   };
   const html = renderList([{ kind: "event", event }], { isLive: false, running: false });
   expect(html).toContain("Visible answer.");
-  expect(html).toContain(">Thinking<");
-  // 空痕迹只是静态行；有正文的历史思考是收起的过程组，正文经 Reader 打开。
+  // 空痕迹只是静态「Thinking」行；有正文的历史思考是收起的过程组，组头保留其标题，正文经 Reader 打开。
+  expect(html).toContain(visible ? `>${text}<` : ">Thinking<");
   expect(html.includes('title="Thinking"')).toBe(visible);
   expect(html.includes("pwa-process-head-static")).toBe(!visible);
   expect(html.includes('aria-expanded="false"')).toBe(visible);
