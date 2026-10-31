@@ -1,6 +1,7 @@
 import { createRef, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { MessageList } from "./message-list";
@@ -703,6 +704,8 @@ test.each([1280, 390])("a long live thinking heading stays on one line beside a 
       const toggle = groupButton(1);
       if (toggle.getAttribute("aria-expanded") === "true") await userEvent.click(toggle);
       await expect.poll(() => toggle.getAttribute("aria-expanded")).toBe("false");
+      // 箭头旋转结束后再量几何，不受折叠时长取值影响。
+      await Promise.all(toggle.getAnimations({ subtree: true }).map(animation => animation.finished));
       const title = toggle.querySelector<HTMLElement>(".pwa-process-thinking-heading")!;
       expect(title.textContent).toBe(longTitle.trim());
       expect(title.title).toBe(longTitle.trim());
@@ -1415,9 +1418,9 @@ test("fades in content that arrives in a loading list, without replaying for upd
     expect(document.querySelector(".pwa-earlier-button")).toBeNull();
     flushSync(() => setState({ items: [first], loading: false }));
     expect(fades()).toBe(1);
-    // 内容淡入取 --pwa-duration-content（240ms），比通用淡化长，肉眼能看到渐入过程。
+    // 内容淡入取 --pwa-duration-content，比通用淡化长，肉眼能看到渐入过程。
     const fadeIndex = animate.mock.contexts.findIndex((element) => (element as Element).classList.contains("pwa-message-list"));
-    expect(animate.mock.calls[fadeIndex]![1]).toMatchObject({ duration: 240 });
+    expect(animate.mock.calls[fadeIndex]![1]).toMatchObject({ duration: readPwaMotionDuration("--pwa-duration-content") });
     // 骨架与内容在同一帧交接，淡入从约 1/3 可见度起始，不留全空帧。
     expect(animate.mock.calls[fadeIndex]![0]).toEqual([{ opacity: 0.35 }, { opacity: 1 }]);
     expect(document.querySelector(".pwa-earlier-button")).not.toBeNull();

@@ -6,7 +6,7 @@ import { PwaMessageActions } from "@/components/pwa/pwa-app-actions";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelinePending, TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { UI_REVIEW_MODELS } from "./ui-review-fixtures";
-import { REVIEW_MOTION_OPTIONS, REVIEW_MOTION_PRESETS, type ReviewMotionPresetId } from "./review-motion-presets";
+import { REVIEW_CURRENT_CURVE, REVIEW_MOTION_OPTIONS, REVIEW_MOTION_PRESETS, reviewPresetDuration, type ReviewMotionPresetId } from "./review-motion-presets";
 import { PWA_MOTION_FALLBACK_MS, type PwaMotionDurationToken } from "@/lib/ui/motion-duration";
 
 const base = { session_id: "ui-motion", leaf_id: "leaf", timestamp: 1 };
@@ -53,23 +53,29 @@ function advance(items: TimelineViewItem[], group: string, phase: number): Timel
   return [...items, runEnd(group)];
 }
 
-/** 当前参数一览；只列出候选覆盖的 token，其余保持主题值。 */
+/** 当前参数一览；只列出对比项覆盖的 token，其余保持主题值。 */
+const COMPARED_TOKENS = Object.keys(REVIEW_MOTION_PRESETS.previous.durations) as PwaMotionDurationToken[];
+const CURRENT_SHIFTS = "12 / 12 / 8px";
+
 export function UiStateMotionParams({ preset }: { preset: ReviewMotionPresetId }) {
-  const tokens = Object.keys(REVIEW_MOTION_PRESETS.moderate.durations) as PwaMotionDurationToken[];
   const columns = REVIEW_MOTION_OPTIONS;
-  const durationOf = (id: ReviewMotionPresetId, token: PwaMotionDurationToken) => id === "current" ? PWA_MOTION_FALLBACK_MS[token] : REVIEW_MOTION_PRESETS[id].durations[token];
+  const durationOf = (id: ReviewMotionPresetId, token: PwaMotionDurationToken) => (id === "current" ? undefined : reviewPresetDuration(id, token)) ?? PWA_MOTION_FALLBACK_MS[token];
+  const shiftsOf = (id: ReviewMotionPresetId) => {
+    const shifts = id === "current" ? {} : REVIEW_MOTION_PRESETS[id].shifts;
+    return Object.keys(shifts).length === 0 ? CURRENT_SHIFTS : `${Object.values(shifts).join(" / ")}px`;
+  };
+  const cell = (id: ReviewMotionPresetId, value: string) => <td key={id} data-active={id === preset || undefined}>{value}</td>;
   return <details className="pwa-ui-states-coverage pwa-ui-states-motion-scroll">
     <summary>参数对照</summary>
     <table className="pwa-ui-states-motion-params">
       <thead><tr><th>token</th>{columns.map(column => <th key={column.value} data-active={column.value === preset || undefined}>{column.label}</th>)}</tr></thead>
       <tbody>
-        {tokens.map(token => <tr key={token}><td>{token.replace("--pwa-duration-", "")}</td>{columns.map(column => <td key={column.value} data-active={column.value === preset || undefined}>{durationOf(column.value, token)}ms</td>)}</tr>)}
-        <tr><td>进入曲线</td>{columns.map(column => <td key={column.value} data-active={column.value === preset || undefined}>{column.value === "current" ? "(0, 0, 0, 1)" : REVIEW_MOTION_PRESETS[column.value].easeEnter.replace("cubic-bezier", "")}</td>)}</tr>
-        <tr><td>标准曲线</td>{columns.map(column => <td key={column.value} data-active={column.value === preset || undefined}>{column.value === "current" ? "(0.2, 0, 0, 1)" : REVIEW_MOTION_PRESETS[column.value].easeStandard.replace("cubic-bezier", "")}</td>)}</tr>
-        <tr><td>位移 overlay / message / collapse</td>{columns.map(column => <td key={column.value} data-active={column.value === preset || undefined}>{column.value === "current" ? "8 / 6 / 4px" : `${Object.values(REVIEW_MOTION_PRESETS[column.value].shifts).join(" / ")}px`}</td>)}</tr>
+        {COMPARED_TOKENS.map(token => <tr key={token}><td>{token.replace("--pwa-duration-", "")}</td>{columns.map(column => cell(column.value, `${durationOf(column.value, token)}ms`))}</tr>)}
+        <tr><td>内容曲线</td>{columns.map(column => cell(column.value, column.value === "current" ? REVIEW_CURRENT_CURVE : REVIEW_MOTION_PRESETS[column.value].curve))}</tr>
+        <tr><td>位移 overlay / message / collapse</td>{columns.map(column => cell(column.value, shiftsOf(column.value)))}</tr>
       </tbody>
     </table>
-    <p>自动收起（collapse-settle 320ms）、退出曲线、会话切换淡入与操作反馈（按压、菜单、复制）在各列保持现行值。</p>
+    <p>退出曲线与操作反馈（按压、菜单、复制）在各列保持现行值；P2／P3 的自动收起使用对称缓入缓出曲线。</p>
   </details>;
 }
 

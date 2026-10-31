@@ -1,8 +1,10 @@
 import { useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { TIMELINE_GEOMETRY_EVENT, useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { TimelineViewportLayout } from "@/lib/pwa/timeline-viewport-layout";
 import { TimelineRuntime, type TimelinePending, type TimelineRuntimeChange, type TimelineScope, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -84,8 +86,10 @@ async function harness({ width = 390, compact = false, working = false, draft = 
     read: async () => { list.scrollTop -= 300; flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true }))); await frames(); },
   };
 }
+beforeEach(pinMechanismMotion);
 afterEach(async () => {
   vi.restoreAllMocks();
+  unpinMechanismMotion();
   document.documentElement.removeAttribute("data-pwa-text-size");
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await page.viewport(1280, 900);
@@ -157,6 +161,30 @@ test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width,
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     expect(h.viewport().followingOutput).toBe(true);
     clock.step(340);
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("own send runs on the theme spring and settles within message-in", async () => {
+  unpinMechanismMotion();
+  const h = await harness({ draft: "Line one\nLine two\nLine three" });
+  try {
+    const duration = readPwaMotionDuration("--pwa-duration-message-in");
+    expect(getComputedStyle(h.list).getPropertyValue("--pwa-ease-content").trim()).toMatch(/^linear\(/);
+    const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
+    const before = { input: input.getBoundingClientRect().height, scroll: h.list.scrollTop };
+    const clock = layoutClock();
+    h.send();
+    clock.step(0);
+    clock.step(Math.round(duration * 0.2));
+    // 弹簧起步平缓：已开始回缩与追赶，但远未完成。
+    expect(input.getBoundingClientRect().height).toBeLessThan(before.input);
+    expect(h.list.scrollTop).toBeGreaterThan(before.scroll);
+    expect(gap(h.list)).toBeGreaterThan(1);
+    stepFrames(clock, Math.round(duration * 0.2) + 16, duration + 160);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.viewport().followingOutput).toBe(true);
+    clock.step(duration + 180);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
 });
@@ -1085,7 +1113,7 @@ test.each([false, true])("only new local bubbles animate once through receipt an
     expect(animation.effect!.getTiming().duration).toBe(reduced ? 120 : 160);
     const keyframes = (animation.effect as KeyframeEffect).getKeyframes();
     expect(keyframes[0].opacity).toBe("0");
-    expect(keyframes[0].transform).toBe(reduced ? "translateY(0px)" : "translateY(6px)");
+    expect(keyframes[0].transform).toBe(reduced ? "translateY(0px)" : `translateY(${getComputedStyle(document.documentElement).getPropertyValue("--pwa-message-shift").trim()})`);
     h.sent().delivery = "received";
     h.update([history, old, h.sent()]);
     expect(h.list.querySelectorAll(".pwa-message.user")[1]).toBe(bubble);

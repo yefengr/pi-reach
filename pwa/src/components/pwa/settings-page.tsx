@@ -6,6 +6,7 @@ import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
 import type { PwaTextSize } from "@/lib/ui/text-size";
 import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
+import { MotionProfileSettings } from "./motion-profile-settings";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
@@ -153,6 +154,8 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
           <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
       </section>
+      {/* 评估期临时项，与诊断一样只在正式应用中显示。 */}
+      {viewportDiagnostics ? <MotionProfileSettings /> : null}
       {viewportDiagnostics ? <ViewportDiagnosticsSettings online={viewportDiagnosticsOnline} /> : null}
       <section className="pwa-settings-section" aria-labelledby="pwa-about-heading">
         <div className="pwa-settings-about-heading">

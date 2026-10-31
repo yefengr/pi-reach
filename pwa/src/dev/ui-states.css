@@ -67,10 +67,9 @@
   .pwa-root.pwa-ui-states .pwa-ui-states-frame .pwa-desktop-navigation,
   .pwa-ui-states-sidebar-control { display: none; }
 }
-/* 动效对比：候选曲线只改写内容与空间变化的范围；菜单 Portal 与其他操作反馈仍读取根元素上的现行曲线。 */
-html[data-review-motion] :is(.pwa-message-list, .pwa-chat-footer, .mantine-Modal-root, .pwa-operation-notifications) {
-  --pwa-ease-enter: var(--review-ease-enter);
-  --pwa-ease-standard: var(--review-ease-standard);
+/* 动效对比·旧规范：气泡、浮动入口、Modal 与 Toast 的进入原为陡峭的进入曲线，折叠与跟随沿用标准曲线（与现行内容曲线同值）。 */
+html[data-review-motion="previous"] :is(.pwa-user-message-in, .pwa-presence, .mantine-Modal-root, .pwa-operation-notifications) {
+  --pwa-ease-content: cubic-bezier(0, 0, 0, 1);
 }
 .pwa-ui-states-motion-params { width: 100%; border-collapse: collapse; font-size: var(--pwa-text-meta); line-height: 1.5; }
 .pwa-ui-states-motion-params th, .pwa-ui-states-motion-params td { padding: var(--pwa-space-2xs) var(--pwa-space-xs); border-bottom: 1px solid var(--pwa-line); text-align: left; vertical-align: top; }

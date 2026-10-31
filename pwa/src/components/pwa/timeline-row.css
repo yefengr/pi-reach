@@ -34,7 +34,7 @@
 @media (hover: hover) { .pwa-timeline-toggle:hover { background: var(--pwa-hover); } }
 .pwa-timeline-toggle:active { background: var(--pwa-hover); }
 .pwa-timeline-toggle:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
-.pwa-timeline-chevron { width: 16px; height: 16px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-standard); }
+.pwa-timeline-chevron { width: 16px; height: 16px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-content); }
 .pwa-timeline-toggle[aria-expanded="true"] > .pwa-timeline-chevron { transform: rotate(90deg); transition-duration: var(--pwa-duration-collapse-in); }
 
 /* 展开：进入 180ms、退出 140ms；内容略微位移并淡入淡出。减少动态效果时只保留透明度。 */
@@ -42,7 +42,7 @@
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows var(--pwa-duration-collapse-out) var(--pwa-ease-standard), opacity var(--pwa-duration-collapse-out) var(--pwa-ease-standard);
+  transition: grid-template-rows var(--pwa-duration-collapse-out) var(--pwa-ease-content), opacity var(--pwa-duration-collapse-out) var(--pwa-ease-content);
 }
 .pwa-collapse[data-open] {
   grid-template-rows: 1fr;
@@ -54,7 +54,7 @@
   min-height: 0;
   overflow: hidden;
   transform: translateY(calc(-1 * var(--pwa-collapse-shift) * var(--pwa-motion-shift)));
-  transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-standard);
+  transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-content);
 }
 .pwa-collapse[data-open] > .pwa-collapse-inner {
   transform: none;

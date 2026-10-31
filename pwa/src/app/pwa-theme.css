@@ -213,26 +213,29 @@
   --pwa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --pwa-ease-enter: cubic-bezier(0, 0, 0, 1);
   --pwa-ease-exit: cubic-bezier(0.3, 0, 1, 1);
-  /* 对称缓入缓出：自动收起的高度回落起止都平缓，避免标准曲线前段过陡造成的一帧塌陷。 */
-  --pwa-ease-settle: cubic-bezier(0.4, 0, 0.2, 1);
-  --pwa-duration-sidebar: 220ms;
+  /* 内容与空间变化（气泡与新行进入、折叠展开收起、Toast、Modal、浮动入口、侧栏、图片几何、发送跟随与内容淡入）的出现与移动。
+     参照 iOS 无回弹弹簧（体感时长等于过渡时长、临界阻尼），按 33 个等距采样点归一化到终点；操作反馈层（按压、悬停、菜单）不随之改变。 */
+  --pwa-ease-content: linear(0, 0.017, 0.06, 0.12, 0.189, 0.261, 0.334, 0.405, 0.472, 0.535, 0.592, 0.644, 0.691, 0.733, 0.771, 0.803, 0.832, 0.858, 0.88, 0.899, 0.915, 0.93, 0.942, 0.953, 0.962, 0.97, 0.976, 0.982, 0.987, 0.991, 0.994, 0.997, 1);
+  /* 自动收起：弹簧起步平缓，不会出现标准曲线前段过陡造成的一帧塌陷，与内容曲线统一。 */
+  --pwa-ease-settle: var(--pwa-ease-content);
+  --pwa-duration-sidebar: 450ms;
   --pwa-duration-page: 200ms;
   --pwa-duration-drawer: 200ms;
-  --pwa-duration-modal-in: 180ms;
-  --pwa-duration-modal-out: 140ms;
+  --pwa-duration-modal-in: 500ms;
+  --pwa-duration-modal-out: 250ms;
   /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
   --pwa-duration-status-slot: 160ms;
-  --pwa-duration-collapse-in: 180ms;
-  --pwa-duration-collapse-out: 140ms;
+  --pwa-duration-collapse-in: 500ms;
+  --pwa-duration-collapse-out: 350ms;
   /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
-  --pwa-duration-collapse-settle: 320ms;
-  --pwa-duration-image-in: 260ms;
-  --pwa-duration-image-out: 220ms;
-  --pwa-duration-toast: 180ms;
+  --pwa-duration-collapse-settle: 500ms;
+  --pwa-duration-image-in: 500ms;
+  --pwa-duration-image-out: 350ms;
+  --pwa-duration-toast: 500ms;
   /* 只用于 Toast 离开；toast 同时是浮动入口与局部提示的出现时长，不随之改变。 */
-  --pwa-duration-toast-out: 140ms;
+  --pwa-duration-toast-out: 250ms;
   --pwa-duration-fade: 120ms;
-  --pwa-duration-message-in: 160ms;
+  --pwa-duration-message-in: 500ms;
   --pwa-duration-press-in: 90ms;
   --pwa-duration-press-out: 120ms;
   --pwa-duration-menu-in: 160ms;
@@ -245,16 +248,16 @@
   --pwa-press-button-scale: 0.98;
   --pwa-menu-offset: 4px;
   /* 居中 Modal、Toast 与浮动入口进出时的位移距离，乘以 --pwa-motion-shift。 */
-  --pwa-overlay-shift: 8px;
+  --pwa-overlay-shift: 12px;
   /* 新发送气泡从下方进入、折叠内容收起时上移的距离，乘以 --pwa-motion-shift。 */
-  --pwa-message-shift: 6px;
-  --pwa-collapse-shift: 4px;
+  --pwa-message-shift: 12px;
+  --pwa-collapse-shift: 8px;
   /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;
   --pwa-menu-visual-inset: 0px;
-  /* 切换会话后新内容的淡入；标准曲线前段很快，需要比通用淡化长才看得出渐入过程。 */
-  --pwa-duration-content: 240ms;
+  /* 切换会话后新内容与流式新文字的淡入。 */
+  --pwa-duration-content: 400ms;
   /* 无限循环：旋转一圈与骨架呼吸一个周期，配 linear；减少动态效果时循环直接暂停，不替换时长。 */
   --pwa-duration-spin: 1.3s;
   --pwa-duration-breathe: 2s;
@@ -299,6 +302,32 @@
  */
 @media (display-mode: standalone) {
   :root { --pwa-app-height: 100lvh; }
+}
+
+/*
+ * 评估期临时开关（合并前删除，见设置页「动效风格」）：默认取上方 :root 的 iOS 弹簧（P4）；
+ * 舒缓（P2）与减速（P3）共用时长，只改内容曲线，自动收起回到 320ms 对称缓入缓出。
+ * 写在 no-preference 内，系统减少动态效果时始终以下方规则为准。
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-pwa-motion="symmetric"],
+  :root[data-pwa-motion="decelerate"] {
+    --pwa-ease-settle: cubic-bezier(0.4, 0, 0.2, 1);
+    --pwa-duration-sidebar: 220ms;
+    --pwa-duration-modal-in: 280ms;
+    --pwa-duration-modal-out: 200ms;
+    --pwa-duration-collapse-in: 300ms;
+    --pwa-duration-collapse-out: 240ms;
+    --pwa-duration-collapse-settle: 320ms;
+    --pwa-duration-image-in: 260ms;
+    --pwa-duration-image-out: 220ms;
+    --pwa-duration-toast: 300ms;
+    --pwa-duration-toast-out: 220ms;
+    --pwa-duration-message-in: 300ms;
+    --pwa-duration-content: 240ms;
+  }
+  :root[data-pwa-motion="symmetric"] { --pwa-ease-content: cubic-bezier(0.2, 0, 0.2, 1); }
+  :root[data-pwa-motion="decelerate"] { --pwa-ease-content: cubic-bezier(0.2, 0, 0, 1); }
 }
 
 /*

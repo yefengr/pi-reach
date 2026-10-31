@@ -14,7 +14,8 @@ const tool: ToolValue = {
   kind: "tool", tool_call_id: "call", tool: "read", args: { path: "notes.txt" }, status: "complete", truncated: false,
   result: "First line\nSecond line",
 };
-const enterEase = "cubic-bezier(0, 0, 0, 1)";
+// 内容与空间层的弹簧以 linear() 表达；浏览器序列化的采样点格式不固定，只核对函数类型。
+const contentEase = /^linear\(/;
 const exitEase = "cubic-bezier(0.3, 0, 1, 1)";
 const standardEase = "cubic-bezier(0.2, 0, 0, 1)";
 const duration = (node: Element) => parseFloat(getComputedStyle(node).transitionDuration) * 1000;
@@ -72,13 +73,13 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
     await expect.poll(() => document.querySelector(selector)).not.toBeNull();
     const card = document.querySelector<HTMLElement>(selector)!;
     await expect.poll(() => getComputedStyle(card).opacity).toBe("1");
-    expect(duration(card), card.outerHTML.slice(0, 800)).toBe(reduce ? 120 : 180);
-    expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : enterEase);
+    expect(duration(card), card.outerHTML.slice(0, 800)).toBe(reduce ? 120 : 500);
+    expect(getComputedStyle(card).transitionTimingFunction).toMatch(reduce ? standardEase : contentEase);
     const overlay = document.querySelector<HTMLElement>(".mantine-Modal-overlay")!;
-    expect(duration(overlay)).toBe(reduce ? 120 : 180);
+    expect(duration(overlay)).toBe(reduce ? 120 : 500);
     flushSync(() => setOpened(false));
     await expect.poll(() => card.style.opacity).toBe("0");
-    expect(duration(card)).toBe(reduce ? 120 : 140);
+    expect(duration(card)).toBe(reduce ? 120 : 250);
     expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : exitEase);
     expect(getComputedStyle(overlay).transitionTimingFunction).toBe(reduce ? standardEase : exitEase);
     if (reduce) expectNoShift(card);
@@ -140,14 +141,14 @@ test.each([false, true])("uses token timing and distinct Toast exit easing (redu
     await expect.poll(() => document.querySelector(".pwa-operation-notification")).not.toBeNull();
     const card = document.querySelector<HTMLElement>(".pwa-operation-notification")!;
     await expect.poll(() => getComputedStyle(card).opacity).toBe("1");
-    expect(duration(card)).toBe(reduce ? 120 : 180);
+    expect(duration(card)).toBe(reduce ? 120 : 500);
     expect(getComputedStyle(card).fontSize).toBe("16px");
-    expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : enterEase);
+    expect(getComputedStyle(card).transitionTimingFunction).toMatch(reduce ? standardEase : contentEase);
     (screen.getByRole("button", { name: "Dismiss operation notification" }).element() as HTMLElement).click();
     await expect.poll(() => card.style.getPropertyValue("--notifications-state-opacity")).toBe("0");
     expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : exitEase);
     // 离开时长由 CSS 覆盖 Mantine 的内联时长；Mantine 改变离开状态的写法时这里会失败。
-    expect(duration(card)).toBe(reduce ? 120 : 140);
+    expect(duration(card)).toBe(reduce ? 120 : 250);
     if (reduce) expectNoShift(card);
     await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
   } finally { await screen.unmount(); }
