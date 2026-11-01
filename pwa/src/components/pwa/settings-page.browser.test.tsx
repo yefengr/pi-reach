@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { SettingsPage } from "./settings-page";
 import { setLanguagePreference } from "@/lib/i18n";
@@ -97,8 +97,13 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   const sections = [...document.querySelectorAll<HTMLElement>(".pwa-settings-section")];
   expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Text size", "Language", "Keyboard", "Connection", "Browser data", "About"]);
   expect(sections[1]!.getBoundingClientRect().top - sections[0]!.getBoundingClientRect().bottom).toBeCloseTo(32, 0);
-  // 相邻独立按钮 8，横排与纵向同值（DESIGN「间距」）。
-  expect(getComputedStyle(document.querySelector<HTMLElement>(".pwa-settings-actions")!).gap).toBe("8px");
+  // 分组列表：标题到分组 8，分组到说明 6，行高不低于 44（DESIGN「设置页」）。
+  const appearance = sections[0]!;
+  const group = appearance.querySelector<HTMLElement>(".pwa-settings-group")!;
+  expect(Math.round(group.getBoundingClientRect().top - appearance.querySelector("h2")!.getBoundingClientRect().bottom)).toBe(8);
+  expect(Math.round(appearance.querySelector(".pwa-settings-footnote")!.getBoundingClientRect().top - group.getBoundingClientRect().bottom)).toBe(6);
+  expect(getComputedStyle(group).borderRadius).toBe("12px");
+  for (const row of document.querySelectorAll<HTMLElement>(".pwa-settings-row")) expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   const back = screen.getByRole("button", { name: "Back to workspace" }).element();
   const title = screen.getByRole("heading", { level: 1, name: "Settings" }).element();
   if (width < 768) {
@@ -265,8 +270,8 @@ test("the settings layer insets side safe areas once around the 640px column", a
     const inner = document.querySelector<HTMLElement>(".pwa-settings-inner")!.getBoundingClientRect();
     expect(Math.round(inner.left)).toBe(47);
     expect(Math.round(inner.right)).toBe(600 - 47);
-    const title = document.querySelector(".pwa-appearance-options")!.getBoundingClientRect();
-    expect(Math.round(title.left)).toBe(47 + 16);
+    const group = document.querySelector(".pwa-settings-group")!.getBoundingClientRect();
+    expect(Math.round(group.left)).toBe(47 + 16);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-left");
     document.documentElement.style.removeProperty("--pwa-safe-right");
@@ -329,4 +334,41 @@ test("the relay form keeps 8px from label to input and 16px before the primary a
   // 输入框下方的说明属于输入项本身，主操作从说明下方起算 16。
   const field = document.querySelector(".pwa-settings-form .pwa-field")!.getBoundingClientRect();
   expect(Math.round(submit.top - field.bottom)).toBe(16);
+});
+
+test("single-choice rows keep radio semantics, select from anywhere in the row and mark the choice with a trailing check", async () => {
+  const screen = await renderPwa(<SettingsHarness />);
+  const standard = screen.getByRole("radio", { name: /Standard/ });
+  const large = screen.getByRole("radio", { name: /Large/ }).first();
+  await expect.element(standard).toBeChecked();
+  const rows = [...document.querySelectorAll<HTMLElement>('[aria-labelledby="pwa-text-size-heading"] .pwa-settings-choice')];
+  const checks = () => rows.map((row) => getComputedStyle(row.querySelector(".pwa-settings-check")!).visibility);
+  expect(checks()).toEqual(["visible", "hidden", "hidden"]);
+  // 原生 radio 视觉隐藏并铺满整行：点击行尾空白处也会选中。
+  const box = rows[1]!.getBoundingClientRect();
+  const input = large.element().getBoundingClientRect();
+  expect([Math.round(input.width), Math.round(input.height)]).toEqual([Math.round(box.width), Math.round(box.height)]);
+  expect(getComputedStyle(large.element()).opacity).toBe("0");
+  await userEvent.click(rows[1]!, { position: { x: Math.round(box.width) - 24, y: Math.round(box.height / 2) } });
+  await expect.element(large).toBeChecked();
+  expect(checks()).toEqual(["hidden", "visible", "hidden"]);
+  // 方向键仍在同组内切换。
+  large.element().focus();
+  await userEvent.keyboard("{ArrowDown}");
+  await expect.element(screen.getByRole("radio", { name: /Extra large/ })).toBeChecked();
+  expect(getComputedStyle(rows[2]!).outlineStyle).toBe("solid");
+});
+
+test("rows in a group are divided by hairlines that start at the text and reach the trailing edge", async () => {
+  await renderPwa(<SettingsHarness />);
+  const iconRows = [...document.querySelectorAll<HTMLElement>('[aria-labelledby="pwa-appearance-heading"] .pwa-settings-row')];
+  expect(getComputedStyle(iconRows[0]!, "::before").content).toBe("none");
+  const divider = getComputedStyle(iconRows[1]!, "::before");
+  const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
+  expect([divider.left, divider.right, divider.borderTopWidth]).toEqual(["46px", "0px", hairline]);
+  // 图标与文字对齐：分隔线起点正好是文字左缘。
+  const text = iconRows[1]!.querySelector(".pwa-settings-choice-text")!.getBoundingClientRect();
+  expect(Math.round(text.left - iconRows[1]!.getBoundingClientRect().left)).toBe(46);
+  const versionRows = [...document.querySelectorAll<HTMLElement>(".pwa-settings-versions > .pwa-settings-row")];
+  expect(getComputedStyle(versionRows[1]!, "::before").left).toBe("16px");
 });

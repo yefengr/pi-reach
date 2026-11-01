@@ -151,18 +151,18 @@ test("Composer owns its radius and light elevation without changing the shared r
   await screen.getByRole("button", { name: "Light fixture" }).click();
   const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
   await expect.poll(() => getComputedStyle(card).boxShadow).not.toBe("none");
-  expect(getComputedStyle(card).borderRadius).toBe("16px");
+  expect(getComputedStyle(card).borderRadius).toBe("32px");
   expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-radius-lg").trim()).toBe("12px");
   const notice = screen.getByText("Attachment limit fixture").element();
   expect(card.contains(notice)).toBe(false);
   expect(notice.getBoundingClientRect().bottom).toBeLessThanOrEqual(card.getBoundingClientRect().top);
   await screen.getByRole("button", { name: "Dark fixture" }).click();
   await expect.poll(() => getComputedStyle(card).boxShadow).toBe("none");
-  expect(getComputedStyle(card).borderRadius).toBe("16px");
-  expect(getComputedStyle(card).borderTopWidth).toBe("1px");
+  expect(getComputedStyle(card).borderRadius).toBe("32px");
+  expect(getComputedStyle(card).borderTopWidth).toBe(getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim());
 });
 
-test.each([1280, 390])("shared radii stay 4/8/12 with a 16px Composer across appearances at width %s", async width => {
+test.each([1280, 390])("shared radii stay 4/8/12 with a concentric 32px Composer and 12px panels across appearances at width %s", async width => {
   await page.viewport(width, 900);
   const screen = await renderPwa(<>
     <Button data-testid="radius-button">Radius fixture</Button>
@@ -180,13 +180,13 @@ test.each([1280, 390])("shared radii stay 4/8/12 with a 16px Composer across app
     [screen.getByTestId("radius-presence").element(), "4px"],
     [screen.getByTestId("radius-current").element(), "4px"],
     [document.querySelector(".pwa-nav-session")!, "8px"],
-    [document.querySelector(".pwa-composer-card")!, "16px"],
+    [document.querySelector(".pwa-composer-card")!, "32px"],
   ] as const;
   for (const appearance of ["Light fixture", "Dark fixture"]) {
     await screen.getByRole("button", { name: appearance }).click();
     for (const [element, radius] of radii) expect(getComputedStyle(element).borderRadius).toBe(radius);
     const root = getComputedStyle(document.documentElement);
-    for (const [token, value] of [["xs", "4px"], ["md", "8px"], ["lg", "12px"], ["composer", "16px"]]) {
+    for (const [token, value] of [["xs", "4px"], ["md", "8px"], ["lg", "12px"], ["composer", "32px"]]) {
       expect(root.getPropertyValue(`--pwa-radius-${token}`).trim()).toBe(value);
     }
     const icon = document.querySelector(".pwa-composer-send")!;
@@ -197,7 +197,9 @@ test.each([1280, 390])("shared radii stay 4/8/12 with a 16px Composer across app
     trigger.focus();
     await screen.getByRole("button", { name: "Menu fixture" }).click();
     const row = screen.getByRole("menuitem", { name: "One line fixture" }).element();
-    expect(getComputedStyle(document.querySelector(".pwa-menu-motion")!).borderRadius).toBe("8px");
+    // 面板与菜单行同心：面板圆角 12 = 菜单行 8 + 面板内边距 4。
+    const panel = getComputedStyle(document.querySelector(".pwa-menu-motion")!);
+    expect([panel.borderRadius, panel.paddingTop, panel.paddingLeft]).toEqual(["12px", "4px", "4px"]);
     expect(getComputedStyle(row).borderRadius).toBe("8px");
     expect(getComputedStyle(row, "::before").borderRadius).toBe("8px");
     await userEvent.keyboard("{Escape}");

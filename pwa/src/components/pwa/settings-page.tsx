@@ -1,6 +1,6 @@
-import { useRef, useState, type Ref } from "react";
-import { Button, Radio, Stack, Switch, TextInput } from "@mantine/core";
-import { ALargeSmall, ArrowLeft, CaseSensitive, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
+import { useRef, useState, type ReactNode, type Ref } from "react";
+import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
+import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
@@ -42,7 +42,7 @@ type SettingsPageProps = {
 };
 
 /**
- * 独立设置页：不保留工作区侧栏，内容最大宽 640，分区间距 32。
+ * 独立设置页：不保留工作区侧栏，内容最大宽 640，分区间距 32；各分区为 iOS 式分组列表（标题、分组、说明）。
  * 移动端返回箭头与标题同一行；桌面返回为带文字的按钮，标题在其下方。
  */
 export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
@@ -95,63 +95,70 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </header>
       <section className="pwa-settings-section" aria-labelledby="pwa-appearance-heading">
         <h2 id="pwa-appearance-heading" className="pwa-settings-section-title">{s.appearance}</h2>
-        <p className="pwa-settings-section-description">{s.appearanceHint}</p>
-        <Radio.Group aria-label={s.appearance} className="pwa-appearance-options" name="pwa-appearance" value={appearance} onChange={(next) => setAppearance(next as PwaAppearance)}>
-          <Stack gap="xs">
-            <Radio className="pwa-appearance-option" value="system" label={<span className="pwa-appearance-copy"><Monitor size={20} /><span><strong>{s.system}</strong><small>{s.systemHint}</small></span></span>} />
-            <Radio className="pwa-appearance-option" value="light" label={<span className="pwa-appearance-copy"><Sun size={20} /><span><strong>{s.light}</strong><small>{s.lightHint}</small></span></span>} />
-            <Radio className="pwa-appearance-option" value="dark" label={<span className="pwa-appearance-copy"><Moon size={20} /><span><strong>{s.dark}</strong><small>{s.darkHint}</small></span></span>} />
-          </Stack>
+        <Radio.Group aria-label={s.appearance} name="pwa-appearance" value={appearance} onChange={(next) => setAppearance(next as PwaAppearance)}>
+          <div className="pwa-settings-group pwa-settings-group-icons">
+            <SettingsChoice value="system" icon={<Monitor size={20} />} title={s.system} hint={s.systemHint} />
+            <SettingsChoice value="light" icon={<Sun size={20} />} title={s.light} hint={s.lightHint} />
+            <SettingsChoice value="dark" icon={<Moon size={20} />} title={s.dark} hint={s.darkHint} />
+          </div>
         </Radio.Group>
+        <p className="pwa-settings-section-description pwa-settings-footnote">{s.appearanceHint}</p>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-text-size-heading">
         <h2 id="pwa-text-size-heading" className="pwa-settings-section-title">{s.textSize}</h2>
-        <p className="pwa-settings-section-description">{s.textSizeHint}</p>
-        <Radio.Group aria-label={s.textSize} className="pwa-appearance-options" name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSize)}>
-          <Stack gap="xs">
-            <Radio className="pwa-appearance-option" value="standard" label={<span className="pwa-appearance-copy"><Type size={20} /><span><strong>{s.textSizeStandard}</strong><small>{s.textSizeStandardHint}</small></span></span>} />
-            <Radio className="pwa-appearance-option" value="large" label={<span className="pwa-appearance-copy"><ALargeSmall size={20} /><span><strong>{s.textSizeLarge}</strong><small>{s.textSizeLargeHint}</small></span></span>} />
-            <Radio className="pwa-appearance-option" value="xlarge" label={<span className="pwa-appearance-copy"><CaseSensitive size={20} /><span><strong>{s.textSizeXLarge}</strong><small>{s.textSizeXLargeHint}</small></span></span>} />
-          </Stack>
+        <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSize)}>
+          <div className="pwa-settings-group pwa-settings-group-icons">
+            <SettingsChoice value="standard" icon={<Type size={20} />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
+            <SettingsChoice value="large" icon={<ALargeSmall size={20} />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
+            <SettingsChoice value="xlarge" icon={<CaseSensitive size={20} />} title={s.textSizeXLarge} hint={s.textSizeXLargeHint} />
+          </div>
         </Radio.Group>
+        <p className="pwa-settings-section-description pwa-settings-footnote">{s.textSizeHint}</p>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
-        <p className="pwa-settings-section-description">{s.languageHint}</p>
-        <Radio.Group aria-label={s.language} className="pwa-appearance-options" name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
-          <Stack gap="xs">
-            <Radio className="pwa-appearance-option" value="system" label={<span className="pwa-appearance-copy"><Globe size={20} /><span><strong>{s.followBrowser}</strong><small>{s.followBrowserHint}</small></span></span>} />
-            <Radio className="pwa-appearance-option" value="zh" label={<span className="pwa-appearance-copy"><Languages size={20} /><span><strong lang="zh-CN">{s.chinese}</strong><small>{s.chineseHint}</small></span></span>} />
-            <Radio className="pwa-appearance-option" value="en" label={<span className="pwa-appearance-copy"><Languages size={20} /><span><strong lang="en">{s.english}</strong><small>{s.englishHint}</small></span></span>} />
-          </Stack>
+        <Radio.Group aria-label={s.language} name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
+          <div className="pwa-settings-group pwa-settings-group-icons">
+            <SettingsChoice value="system" icon={<Globe size={20} />} title={s.followBrowser} hint={s.followBrowserHint} />
+            <SettingsChoice value="zh" icon={<Languages size={20} />} title={s.chinese} hint={s.chineseHint} lang="zh-CN" />
+            <SettingsChoice value="en" icon={<Languages size={20} />} title={s.english} hint={s.englishHint} lang="en" />
+          </div>
         </Radio.Group>
+        <p className="pwa-settings-section-description pwa-settings-footnote">{s.languageHint}</p>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-keyboard-heading">
         <h2 id="pwa-keyboard-heading" className="pwa-settings-section-title">{s.keyboard}</h2>
-        <p className="pwa-settings-section-description">{s.keyboardHint}</p>
-        <div className="pwa-settings-actions">
-          <Switch className="pwa-keyboard-setting" size="md" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
-          <Button variant="default" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>{t.shortcuts.title}</Button>
+        <div className="pwa-settings-group">
+          <Switch className="pwa-settings-row pwa-keyboard-setting" size="md" labelPosition="left" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
+          <UnstyledButton className="pwa-settings-row pwa-settings-row-button" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>
+            <span className="pwa-settings-row-label">{t.shortcuts.title}</span>
+            <ChevronRight className="pwa-settings-row-chevron" size={16} aria-hidden="true" />
+          </UnstyledButton>
         </div>
+        <p className="pwa-settings-section-description pwa-settings-footnote">{s.keyboardHint}</p>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-connection-heading">
         <h2 id="pwa-connection-heading" className="pwa-settings-section-title">{s.connection}</h2>
-        <p className="pwa-settings-section-description">{s.relayUrlHint}</p>
-        <form className="pwa-settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <form className="pwa-settings-group pwa-settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <TextInput className="pwa-input pwa-field" label={s.relayUrl} value={value} onChange={(event) => setValue(event.target.value)} placeholder={defaultRelayUrl} spellCheck={false} autoCapitalize="none" autoCorrect="off" inputMode="url" />
           <Button type="submit" loading={saving}>{s.save}</Button>
         </form>
+        <p className="pwa-settings-section-description pwa-settings-footnote">{s.relayUrlHint}</p>
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-browser-data-heading">
         <h2 id="pwa-browser-data-heading" className="pwa-settings-section-title">{s.browserData}</h2>
-        <p className="pwa-settings-section-description">{s.localOnlyNote}</p>
-        <div className="pwa-settings-actions">
-          <div>
-            <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
-            <p className="pwa-layout-reset-note">{s.resetLayoutNote}</p>
-          </div>
-          <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
+        <div className="pwa-settings-group pwa-settings-group-icons">
+          <UnstyledButton className="pwa-settings-row pwa-settings-row-button pwa-settings-row-action pwa-layout-reset-button" type="button" onClick={onResetLayout}>
+            <RotateCcw size={20} aria-hidden="true" />
+            <span className="pwa-settings-row-label">{s.resetLayout}</span>
+          </UnstyledButton>
+          <UnstyledButton className="pwa-settings-row pwa-settings-row-button pwa-settings-row-danger" type="button" onClick={onClearData}>
+            <Trash2 size={20} aria-hidden="true" />
+            <span className="pwa-settings-row-label">{s.clearData}</span>
+          </UnstyledButton>
         </div>
+        <p className="pwa-settings-section-description pwa-settings-footnote">{s.localOnlyNote}</p>
+        <p className="pwa-settings-section-description pwa-settings-footnote">{s.resetLayoutNote}</p>
       </section>
       {viewportDiagnostics ? <ViewportDiagnosticsSettings online={viewportDiagnosticsOnline} /> : null}
       <section className="pwa-settings-section" aria-labelledby="pwa-about-heading">
@@ -159,13 +166,25 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
           <h2 id="pwa-about-heading" className="pwa-settings-section-title">{s.about}</h2>
           <CopyButton text={versionInfo} label={s.copyVersionInfo} />
         </div>
-        <dl className="pwa-settings-versions">
-          <div><dt>PWA</dt><dd data-version="pwa">{pwaVersion}</dd></div>
-          <div><dt>Relay</dt><dd data-version="relay">{relayVersionText}</dd></div>
-          <div><dt>{s.extension}</dt><dd data-version="extension">{extensionVersionText}</dd></div>
+        <dl className="pwa-settings-group pwa-settings-versions">
+          <div className="pwa-settings-row"><dt>PWA</dt><dd data-version="pwa">{pwaVersion}</dd></div>
+          <div className="pwa-settings-row"><dt>Relay</dt><dd data-version="relay">{relayVersionText}</dd></div>
+          <div className="pwa-settings-row"><dt>{s.extension}</dt><dd data-version="extension">{extensionVersionText}</dd></div>
         </dl>
-        {extensionTarget ? <p className="pwa-settings-section-description pwa-settings-version-target">{s.currentPi(extensionTarget)}</p> : null}
+        {extensionTarget ? <p className="pwa-settings-section-description pwa-settings-footnote">{s.currentPi(extensionTarget)}</p> : null}
       </section>
     </div>
   </div>;
+}
+
+/**
+ * 分组列表中的单选行：保留原生 radio 的语义与方向键切换，圆点在视觉上隐藏、铺满整行接收点击，
+ * 选中项在行尾显示强调色对勾（DESIGN「设置页」）。
+ */
+function SettingsChoice({ value, icon, title, hint, lang }: { value: string; icon: ReactNode; title: string; hint: string; lang?: string }) {
+  return <Radio className="pwa-settings-row pwa-settings-choice" value={value} label={<span className="pwa-settings-choice-copy">
+    {icon}
+    <span className="pwa-settings-choice-text"><strong lang={lang}>{title}</strong><small>{hint}</small></span>
+    <Check className="pwa-settings-check" size={20} aria-hidden="true" />
+  </span>} />;
 }

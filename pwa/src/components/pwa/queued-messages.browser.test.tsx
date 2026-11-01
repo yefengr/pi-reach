@@ -307,8 +307,14 @@ test("queued rows share one panel with dividers and keep the message text at the
   try {
     const list = document.querySelector<HTMLElement>(".pwa-queued-message-list")!;
     const rows = [...list.querySelectorAll<HTMLElement>(".pwa-queued-message")];
-    expect(getComputedStyle(list).borderTopWidth).toBe("1px");
-    expect(rows.map((row) => getComputedStyle(row).borderTopWidth)).toEqual(["0px", "1px"]);
+    // 外框与行间分隔都是发丝线；行间分隔画在伪元素上，左右各缩进 12，不碰外框。
+    const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
+    expect(getComputedStyle(list).borderTopWidth).toBe(hairline);
+    expect(rows.map((row) => getComputedStyle(row).borderTopWidth)).toEqual(["0px", "0px"]);
+    expect(rows.map((row) => getComputedStyle(row, "::before").borderTopWidth)).toEqual(["0px", hairline]);
+    const divider = getComputedStyle(rows[1]!, "::before");
+    expect([divider.left, divider.right]).toEqual(["12px", "12px"]);
+    expect(divider.borderTopColor).toBe(getComputedStyle(list).borderTopColor);
     expect(rows.map((row) => getComputedStyle(row).borderRadius)).toEqual(["0px", "0px"]);
     const offsets = rows.map((row) => Math.round(row.querySelector<HTMLElement>(".pwa-queued-message-text")!.getBoundingClientRect().top - row.getBoundingClientRect().top));
     expect(Math.abs(offsets[0]! - offsets[1]!)).toBeLessThanOrEqual(1);

@@ -72,11 +72,11 @@
 .pwa-markdown a { color: var(--pwa-accent); text-decoration: underline; text-underline-offset: 2px; }
 .pwa-markdown blockquote { margin: 8px 0; padding-left: 12px; border-left: 2px solid var(--pwa-control-line); color: var(--pwa-soft-ink); }
 .pwa-markdown code { padding: 1px 4px; border-radius: var(--pwa-radius-xs); color: var(--pwa-soft-ink); background: var(--pwa-panel); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
-.pwa-markdown hr { margin: 16px 0; border: 0; border-top: 1px solid var(--pwa-line); }
+.pwa-markdown hr { margin: 16px 0; border: 0; border-top: var(--pwa-hairline) solid var(--pwa-separator); }
 .pwa-markdown img { max-width: 100%; height: auto; border-radius: var(--pwa-radius-md); }
 .pwa-markdown-table { max-width: 100%; margin: 8px 0; overflow-x: auto; }
 .pwa-markdown table { border-collapse: collapse; font-size: var(--pwa-text-body); }
-.pwa-markdown th, .pwa-markdown td { padding: 6px 10px; border-bottom: 1px solid var(--pwa-line); text-align: left; vertical-align: top; }
+.pwa-markdown th, .pwa-markdown td { padding: 6px 10px; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); text-align: left; vertical-align: top; }
 .pwa-markdown th { font-weight: var(--pwa-weight-strong); }
 /* 每列至少 8em；长内容由 markdown-table.tsx 加宽到最多两行，列宽之和超出容器时横向滚动，不截断。 */
 .pwa-markdown-cell { --pwa-markdown-cell-min: 8em; min-width: var(--pwa-markdown-cell-min); overflow-wrap: break-word; }

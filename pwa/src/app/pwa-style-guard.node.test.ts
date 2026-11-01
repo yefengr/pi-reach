@@ -25,12 +25,12 @@ const SPACING_TOKENS = new Map([
   ["--pwa-space-menu-pad", 10],
   ["--pwa-space-composer", 10],
 ]);
-/** 通用圆角三档；主要输入表面独立使用 16px。 */
+/** 通用圆角三档；主要输入表面独立使用 32px（与内部圆形按钮同心）。 */
 const RADIUS_TOKENS = new Map([
   ["--pwa-radius-xs", "4px"],
   ["--pwa-radius-md", "8px"],
   ["--pwa-radius-lg", "12px"],
-  ["--pwa-radius-composer", "16px"],
+  ["--pwa-radius-composer", "32px"],
 ]);
 const RADIUS_VALUE = /^(?:0|50%|inherit|var\(--pwa-radius-(?:xs|md|lg)\))$/;
 /** 边框与轮廓宽度只用细线。 */
@@ -314,6 +314,30 @@ describe("CSS static guard", () => {
   test("border and outline widths stay hairline", () => {
     const offenders = all.filter((entry) => BORDER_WIDTH_PROPERTY.test(entry.property))
       .filter((entry) => pxValues(entry.value).some((value) => !BORDER_WIDTHS.has(value))).map(keyOf);
+    expect(offenders).toEqual([]);
+  });
+
+  test("the hairline is 1px by default and 0.5px only under the measured flag, defined only in the theme", () => {
+    // 0.5px 不按屏幕密度媒体查询启用：Chromium 会把它画成 1px，只有 lib/ui/hairline.ts 实测通过时才打标记。
+    const definitions = all.filter((entry) => entry.property === "--pwa-hairline");
+    expect(definitions.map((entry) => `${entry.file} | ${entry.selector} | ${entry.value}`).sort()).toEqual([
+      `${THEME_FILE} | :root | 1px`,
+      `${THEME_FILE} | :root[data-pwa-hairline] | 0.5px`,
+    ]);
+    const separators = all.filter((entry) => entry.property === "--pwa-separator");
+    expect(separators.map((entry) => `${entry.file} | ${entry.selector} | ${entry.value}`).sort()).toEqual([
+      `${THEME_FILE} | :root | var(--pwa-separator-regular)`,
+      `${THEME_FILE} | :root[data-pwa-hairline] | var(--pwa-separator-hairline)`,
+    ]);
+  });
+
+  test("production decorative separators pair the hairline width with the separator color", () => {
+    // 发丝线只配分隔色；控件轮廓、选中描边与状态边框仍用 1px，不借用发丝线。
+    // 运行时提示经 Mantine Alert 的 --alert-bd 取分隔色。
+    const offenders = all.filter((entry) => !entry.file.startsWith("dev/") && entry.file !== THEME_FILE
+      && /^border(?:-(?:top|right|bottom|left))?$/.test(entry.property) && entry.value.includes("var(--pwa-hairline)")
+      && !/var\(--(?:pwa-separator|alert-bd)\)/.test(entry.value))
+      .map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });
 });

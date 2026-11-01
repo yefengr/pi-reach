@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "vitest";
 import { useState } from "react";
+import { page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { SCROLL_HIDE_DELAY_MS, SCROLL_HINTS_ATTRIBUTE, SCROLL_HOST_ATTRIBUTE, SCROLLING_ATTRIBUTE, useScrollIndicator } from "./scroll-indicator";
+import { SCROLL_EDGE_ATTRIBUTE, SCROLL_HIDE_DELAY_MS, SCROLL_HINTS_ATTRIBUTE, SCROLL_HOST_ATTRIBUTE, SCROLLING_ATTRIBUTE, useScrollIndicator } from "./scroll-indicator";
 // 与生产一致：时间线样式加载在全局样式之后，列表自身的 transition 声明会覆盖 [data-scroll-host]。
 import "@/components/pwa/timeline-reconnect.css";
 
@@ -228,4 +229,68 @@ test("continuous scrolling writes the scrolling flag once", async () => {
     observer.takeRecords().forEach((record) => { if (record.attributeName === SCROLLING_ATTRIBUTE) writes.push(record.attributeName); });
     expect(writes).toHaveLength(1);
   } finally { observer.disconnect(); }
+});
+
+/** 会话主区与移动设置页的最小结构：固定顶栏在上，滚动容器在下。 */
+function EdgeFixture() {
+  useScrollIndicator();
+  return <>
+    <main className="pwa-main" style={{ height: 240 }}>
+      <header className="pwa-topbar pwa-title-bar">Session</header>
+      <div className="pwa-message-list" data-scroller="messages" style={{ flex: "1 1 0", overflowY: "auto" }}>
+        <div style={{ height: 1200 }} />
+      </div>
+    </main>
+    <div className="pwa-settings-view" data-scroller="settings" style={{ position: "relative", height: 240 }}>
+      <div className="pwa-settings-page"><div className="pwa-settings-inner">
+        <header className="pwa-settings-header">Settings</header>
+        <div style={{ height: 1200 }} />
+      </div></div>
+    </div>
+  </>;
+}
+
+const edgeStyle = (selector: string) => getComputedStyle(document.querySelector(selector)!, "::after");
+
+test("a fixed top bar shows its hairline only while the scroller below has left the top", async () => {
+  await page.viewport(390, 844);
+  await renderPwa(<EdgeFixture />);
+  const list = scroller("messages");
+  const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
+  expect(list.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(false);
+  expect(edgeStyle(".pwa-title-bar").opacity).toBe("0");
+  expect(edgeStyle(".pwa-title-bar").borderBottomWidth).toBe(hairline);
+  const barHeight = document.querySelector(".pwa-title-bar")!.getBoundingClientRect().height;
+
+  list.scrollTop = 120;
+  await expect.poll(() => list.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(true);
+  await expect.poll(() => edgeStyle(".pwa-title-bar").opacity).toBe("1");
+  // 分隔画在伪元素上，顶栏高度不变。
+  expect(document.querySelector(".pwa-title-bar")!.getBoundingClientRect().height).toBe(barHeight);
+
+  list.scrollTop = 0;
+  await expect.poll(() => list.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(false);
+  await expect.poll(() => edgeStyle(".pwa-title-bar").opacity).toBe("0");
+
+  const settings = scroller("settings");
+  expect(edgeStyle(".pwa-settings-header").opacity).toBe("0");
+  settings.scrollTop = 80;
+  await expect.poll(() => edgeStyle(".pwa-settings-header").opacity).toBe("1");
+});
+
+test("the desktop settings header scrolls away without a scroll-edge hairline", async () => {
+  await page.viewport(1280, 900);
+  await renderPwa(<EdgeFixture />);
+  const settings = scroller("settings");
+  settings.scrollTop = 80;
+  await expect.poll(() => settings.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(true);
+  expect(edgeStyle(".pwa-settings-header").content).toBe("none");
+});
+
+test("horizontal scrolling does not mark the scroll edge", async () => {
+  await renderPwa(<Scrollers />);
+  const table = scroller("table");
+  table.scrollLeft = 80;
+  await expect.poll(() => table.hasAttribute(SCROLLING_ATTRIBUTE)).toBe(true);
+  expect(table.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(false);
 });

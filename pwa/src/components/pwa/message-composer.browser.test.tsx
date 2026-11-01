@@ -392,10 +392,10 @@ test.each([[1280, 900], [390, 844]])("keeps a single Composer surface, frameless
     const surface = getComputedStyle(paletteProbe).backgroundColor;
     paletteProbe.remove();
     expect(cardStyle.backgroundColor).toBe(surface);
-    expect(cardStyle.borderTopWidth).toBe("1px");
+    expect(cardStyle.borderTopWidth).toBe(getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim());
     expect(cardStyle.paddingTop).toBe("10px");
     expect(cardStyle.paddingLeft).toBe("12px");
-    expect(cardStyle.borderRadius).toBe("16px");
+    expect(cardStyle.borderRadius).toBe("32px");
     expect(inputStyle.borderTopWidth).toBe("0px");
     expect(inputStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(inputStyle.paddingLeft).toBe("0px");

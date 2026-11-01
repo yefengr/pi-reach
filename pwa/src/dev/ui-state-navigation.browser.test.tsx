@@ -103,7 +103,7 @@ test("settings and its nested help isolate all background surface controls until
     await userEvent.keyboard("{Tab}");
     expect(controls.contains(document.activeElement)).toBe(false);
   }
-  const help = [...document.querySelectorAll<HTMLButtonElement>(".pwa-settings-actions button")].find(button => button.textContent?.includes("Keyboard shortcuts"))!;
+  const help = [...document.querySelectorAll<HTMLButtonElement>(".pwa-settings-row-button")].find(button => button.textContent?.includes("Keyboard shortcuts"))!;
   await userEvent.click(help);
   await expect.poll(() => document.querySelector(".pwa-keyboard-dialog")).not.toBeNull();
   expect(controls.hasAttribute("inert")).toBe(true);
