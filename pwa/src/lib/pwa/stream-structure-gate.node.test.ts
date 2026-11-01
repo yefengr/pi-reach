@@ -301,15 +301,19 @@ test("a dequeued message stays in the queue as sending until the previous turn i
   shown = buffer.ingest([user("g1"), assistant("m1", "g1", body), runEnd("g1"), nextUser("g2", "message-q")]).items;
   expect(pendingOf(shown)).toEqual([expect.objectContaining({ id: "pending:q", queued: true, cancelable: false })]);
   let elapsed = 0;
-  while (!ids(shown).includes("user-g2") && elapsed < 3000) {
+  while (pendingOf(shown)[0]?.queued === true && elapsed < 3000) {
     shown = buffer.advance(16).items;
     elapsed += 16;
-    if (!ids(shown).includes("user-g2")) expect(pendingOf(shown)[0]?.queued).toBe(true);
   }
-  // 与用户消息同一快照以已出队状态交接一次（按消息 ID 与用户消息合并为同一气泡），下一次重建后不再保留。
+  expect(elapsed).toBeGreaterThan(0);
+  // 交接结束的快照里先以已出队副本代替用户消息，同一快照不并存两者（否则显示为两个气泡）。
   expect(pendingOf(shown)).toEqual([expect.objectContaining({ id: "pending:q", queued: false, messageId: "message-q" })]);
-  const next = buffer.ingest([user("g1"), assistant("m1", "g1", body), runEnd("g1"), nextUser("g2", "message-q"), text("m2", "g2", "Repeating")]);
-  expect(pendingOf(next.items)).toEqual([]);
+  expect(ids(shown).filter(id => id === "user-g2" || id === "pending:q")).toEqual(["pending:q"]);
+  expect(buffer.hasPending()).toBe(true);
+  // 下一帧换回用户消息，展示层按消息 ID 沿用同一气泡。
+  const next = buffer.advance(16).items;
+  expect(pendingOf(next)).toEqual([]);
+  expect(ids(next)).toContain("user-g2");
 });
 
 test("a message delivered within the same turn is not held", () => {

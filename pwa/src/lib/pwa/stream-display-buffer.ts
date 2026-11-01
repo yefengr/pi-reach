@@ -245,6 +245,8 @@ export class StreamDisplayBuffer {
   private queuedShown: ReadonlyMap<string, TimelinePending> = new Map();
   /** 上次构建快照时是否处于轮次交接；结束时即使没有新条目放出也要重建，让暂缓的出队进入对话区。 */
   private builtHandoff = false;
+  /** 上次快照以出队副本代替了正式用户消息：下一次必须重建，换回用户消息并沿用同一气泡。 */
+  private ghostHandoff = false;
 
   ingest(authoritative: readonly TimelineViewItem[]): StreamDisplayBufferChange {
     const previous = this.displayed;
@@ -279,7 +281,7 @@ export class StreamDisplayBuffer {
       }
     }
     if (this.gate.plan(this.authoritative, this.laneBusy)) needsSnapshot = true;
-    if (this.gate.holdsTurnHandoff() !== this.builtHandoff) needsSnapshot = true;
+    if (this.gate.holdsTurnHandoff() !== this.builtHandoff || this.ghostHandoff) needsSnapshot = true;
 
     if (!needsSnapshot) return this.unchanged();
     return { ...this.rebuild(previous, true), urgent };
@@ -448,7 +450,7 @@ export class StreamDisplayBuffer {
     if (this.completeFinished()) changed = true;
     if (this.gate.plan(this.authoritative, this.laneBusy)) changed = true;
     if (this.gate.holdsExpired()) changed = true;
-    if (this.gate.holdsTurnHandoff() !== this.builtHandoff) changed = true;
+    if (this.gate.holdsTurnHandoff() !== this.builtHandoff || this.ghostHandoff) changed = true;
     if (!changed) return this.unchanged();
     return this.rebuild(previous, true);
   }
@@ -494,7 +496,7 @@ export class StreamDisplayBuffer {
 
   hasPending(): boolean {
     return [...this.streams.values()].some((state) => !isDrained(state))
-      || this.gate.waiting(this.authoritative) || this.gate.holdingTools() || this.gate.holdsTurnHandoff();
+      || this.gate.waiting(this.authoritative) || this.gate.holdingTools() || this.gate.holdsTurnHandoff() || this.ghostHandoff;
   }
 
   /** 已显示的条目是否仍在放文字（含收尾 lane），供结构门控判断后续新行能否放出。 */
@@ -522,7 +524,7 @@ export class StreamDisplayBuffer {
     const handoff = this.gate.holdsTurnHandoff();
     this.builtHandoff = handoff;
     // 保留运行态顺序；主机 timestamp 和浏览器 createdAt 不能用于跨端比较。排队中的新行暂不显示。
-    const items = this.authoritative.flatMap((item): TimelineViewItem[] => {
+    const visible = this.authoritative.flatMap((item): TimelineViewItem[] => {
       if (item.kind === "pending" && handoff && this.queuedShown.has(item.id) && !isQueuedMessage(item)) return [heldInQueue(item)];
       if (!this.gate.visible(item)) return [];
       if (item.kind === "event") {
@@ -535,27 +537,34 @@ export class StreamDisplayBuffer {
       const state = this.streams.get(item.partial.partial_id);
       return state && state.finishing === null ? [this.gate.toolView(projectedPartial(state))] : [];
     });
-    items.push(...this.dequeuedGhosts(items, handoff));
+    const items = this.withDequeuedGhosts(visible, handoff);
     const latest = new Map(this.authoritative.flatMap(item => item.kind === "pending" ? [[item.id, item] as const] : []));
     this.queuedShown = new Map(items.filter(isQueuedMessage).map(item => [item.id, latest.get(item.id) ?? this.queuedShown.get(item.id)!]));
     return items;
   }
 
   /**
-   * 已被正式用户消息接管而从权威快照移除的排队消息：交接期间仍以发送中留在排队区；
-   * 交接结束、用户消息放出的那次快照里再以已出队状态出现一次，与用户消息按消息 ID 合并为同一气泡，
-   * 出队跟随照常识别。之后不再保留。
+   * 已被正式用户消息接管而从权威快照移除的排队消息：交接期间仍以发送中留在排队区。
+   * 交接结束、用户消息放出的那次快照里，先以已出队副本代替该用户消息（出队跟随照常识别）；
+   * 下一次快照再换回用户消息，展示层按消息 ID 沿用同一气泡。同一快照里两者并存会显示为两个气泡。
    */
-  private dequeuedGhosts(items: readonly TimelineViewItem[], handoff: boolean): TimelinePending[] {
+  private withDequeuedGhosts(items: readonly TimelineViewItem[], handoff: boolean): TimelineViewItem[] {
+    this.ghostHandoff = false;
     const present = new Set(this.authoritative.flatMap(item => item.kind === "pending" ? [item.id] : []));
-    const users = new Set(items.flatMap(item => item.kind === "event" && item.event.kind === "user" ? [item.event.message_id] : []));
-    const ghosts: TimelinePending[] = [];
+    const held: TimelinePending[] = [];
+    const released = new Map<string, TimelinePending>();
     for (const [id, original] of this.queuedShown) {
       if (present.has(id)) continue;
-      if (handoff) ghosts.push(heldInQueue(original));
-      else if (original.messageId !== undefined && users.has(original.messageId)) ghosts.push({ ...original, queued: false, queueInFlight: true });
+      if (handoff) held.push(heldInQueue(original));
+      else if (original.messageId !== undefined) released.set(original.messageId, { ...original, queued: false, queueInFlight: true });
     }
-    return ghosts;
+    const result = items.map(item => {
+      const ghost = item.kind === "event" && item.event.kind === "user" ? released.get(item.event.message_id) : undefined;
+      if (ghost === undefined) return item;
+      this.ghostHandoff = true;
+      return ghost;
+    });
+    return [...result, ...held];
   }
 
   private rebuild(previous: readonly TimelineViewItem[], forceRender: boolean): StreamDisplayBufferChange {
