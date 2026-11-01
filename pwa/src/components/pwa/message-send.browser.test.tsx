@@ -181,7 +181,10 @@ test("own send runs on the theme spring and settles within message-in", async ()
     expect(input.getBoundingClientRect().height).toBeLessThan(before.input);
     expect(h.list.scrollTop).toBeGreaterThan(before.scroll);
     expect(gap(h.list)).toBeGreaterThan(1);
-    stepFrames(clock, Math.round(duration * 0.2) + 16, duration + 160);
+    // 滚动与输入区回缩同一时钟：40% 时仍在追赶，不先跳到底部。
+    stepFrames(clock, Math.round(duration * 0.2) + 16, Math.round(duration * 0.4));
+    expect(gap(h.list)).toBeGreaterThan(1);
+    stepFrames(clock, Math.round(duration * 0.4) + 16, duration + 160);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     expect(h.viewport().followingOutput).toBe(true);
     clock.step(duration + 180);
@@ -1113,7 +1116,8 @@ test.each([false, true])("only new local bubbles animate once through receipt an
     expect(animation.effect!.getTiming().duration).toBe(reduced ? 120 : 160);
     const keyframes = (animation.effect as KeyframeEffect).getKeyframes();
     expect(keyframes[0].opacity).toBe("0");
-    expect(keyframes[0].transform).toBe(reduced ? "translateY(0px)" : `translateY(${getComputedStyle(document.documentElement).getPropertyValue("--pwa-message-shift").trim()})`);
+    // 位移由同一时钟的跟随滚动承担，气泡只淡入。
+    expect(keyframes[0].transform).toBeUndefined();
     h.sent().delivery = "received";
     h.update([history, old, h.sent()]);
     expect(h.list.querySelectorAll(".pwa-message.user")[1]).toBe(bubble);

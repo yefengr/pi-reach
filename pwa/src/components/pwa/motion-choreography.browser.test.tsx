@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { expect, test } from "vitest";
+import { beforeEach, expect, test } from "vitest";
+import { page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelinePending, TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -15,6 +16,14 @@ const toolDone: TimelineViewItem = { kind: "event", event: { ...base, event_id: 
 const reply = (id: string, text: string): TimelineViewItem => ({ kind: "event", event: { ...base, event_id: id, timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text }] } });
 const runEnd: TimelineViewItem = { kind: "event", event: { ...base, event_id: "run-end", timestamp: 10, kind: "run_end", status: "complete" } };
 const pending = (id: string): TimelinePending => ({ kind: "pending", id, clientRequestId: id, requestId: id, text: `Message ${id}`, createdAt: 1, delivery: "pending" });
+
+/** 列表内容坐标中的位置：跟随滚动会整体移动内容，按内容坐标比较才能判断元素本身是否移动。 */
+function contentTop(element: Element): number {
+  const list = element.closest(".pwa-message-list")!;
+  return Math.round(element.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop);
+}
+
+beforeEach(async () => { await page.viewport(1280, 900); });
 
 async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProps> = {}) {
   let setItems!: (items: TimelineViewItem[]) => void;
@@ -33,9 +42,20 @@ async function liveList(initial: TimelineViewItem[], overrides: Partial<ListProp
 }
 
 test("S1: the empty hint fades out in place before the first bubble enters, without moving the new content", async () => {
-  const { screen, update } = await liveList([], { emptyContext: "pi-reach · model" });
+  // 上方有带外边距的提示行时，离开状态截断外边距也不能让提示下移。
+  const { screen, update } = await liveList([], { emptyContext: "pi-reach · model", topNotice: "Pi switched to a new session" });
   expect(document.querySelector(".pwa-chat-empty-slot[data-leaving]")).toBeNull();
   update([pending("first")]);
+  // 原位：离开中的位置等于同一时刻去掉离开标记与补偿后的自然位置。
+  const hint = document.querySelector<HTMLElement>(".pwa-chat-empty")!;
+  const leavingTop = contentTop(hint);
+  const compensation = hint.style.translate;
+  hint.parentElement!.removeAttribute("data-leaving");
+  hint.style.translate = "";
+  const settledTop = contentTop(hint);
+  hint.parentElement!.setAttribute("data-leaving", "");
+  hint.style.translate = compensation;
+  expect(leavingTop).toBe(settledTop);
   const slot = document.querySelector<HTMLElement>(".pwa-chat-empty-slot")!;
   expect(slot.hasAttribute("data-leaving")).toBe(true);
   expect(slot.inert).toBe(true);
@@ -44,17 +64,20 @@ test("S1: the empty hint fades out in place before the first bubble enters, with
   const bubble = document.querySelector<HTMLElement>(".pwa-message.user")!;
   expect(bubble.classList.contains("pwa-user-message-in")).toBe(true);
   expect(bubble.classList.contains("pwa-user-message-after-empty")).toBe(true);
+  // 空会话的第一条消息没有跟随滚动，保留上移；之后的气泡只淡入。
+  expect(getComputedStyle(bubble).animationName).toBe("pwa-user-message-in");
   expect(getComputedStyle(bubble).animationDelay).toBe(getComputedStyle(document.documentElement).getPropertyValue("--pwa-duration-fade").trim().replace(/^(\d+)ms$/, (_, ms: string) => `${Number(ms) / 1000}s`));
   // 气泡本身在做位移动画，量外层行的布局位置。
   const row = bubble.closest<HTMLElement>(".pwa-user-row")!;
-  const rowTop = Math.round(row.getBoundingClientRect().top);
+  const rowTop = contentTop(row);
   await expect.poll(() => document.querySelector(".pwa-chat-empty-slot")).toBeNull();
   // 提示移除时新内容不跳动；之后的气泡按普通节奏进入。
-  expect(Math.round(row.getBoundingClientRect().top)).toBe(rowTop);
+  expect(contentTop(row)).toBe(rowTop);
   update([pending("first"), pending("second")]);
   const second = document.querySelectorAll<HTMLElement>(".pwa-message.user")[1]!;
   expect(second.classList.contains("pwa-user-message-in")).toBe(true);
   expect(second.classList.contains("pwa-user-message-after-empty")).toBe(false);
+  expect(getComputedStyle(second).animationName).toBe("pwa-row-enter");
   await screen.unmount();
 });
 

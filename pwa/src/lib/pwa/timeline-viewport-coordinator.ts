@@ -1,4 +1,5 @@
-import { FollowGlide, TRANSITION_GLIDE_OMEGA } from "./timeline-follow-glide";
+import { FollowGlide, transitionGlideOmega } from "./timeline-follow-glide";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { ReplyContinuity, type ReplyProbe } from "./timeline-viewport-continuity";
 
 export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "viewport-resize", "hidden", "reduce", "output", "frame", "send", "latest", "input", "user", "details", "reset", "bind", "settle", "scroll"] as const;
@@ -638,7 +639,7 @@ export class TimelineViewportCoordinator<C, A> {
   /** 过程报告目标时以阻尼运动追赶，否则直接采用过程给出的位置。 */
   private trackMotion(step: ViewportMotionStep, time: number): { top: number; settled: boolean } {
     if (step.target === undefined) return { top: step.top, settled: true };
-    if (!this.motionGlide) this.motionGlide = new FollowGlide(step.top, TRANSITION_GLIDE_OMEGA);
+    if (!this.motionGlide) this.motionGlide = new FollowGlide(step.top, transitionGlideOmega(readPwaMotionDuration("--pwa-duration-message-in")));
     else if (step.shift) this.motionGlide.shift(step.shift);
     return this.motionGlide.advance(time, step.target);
   }

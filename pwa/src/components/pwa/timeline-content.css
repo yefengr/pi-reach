@@ -27,9 +27,10 @@
 .pwa-turn-meta-in { animation: pwa-row-enter var(--pwa-duration-content) var(--pwa-ease-content); }
 /* 编排：前一过程组自动收起时，同一提交里新进入的正文与完成时间等收起结束再出现，期间保持起始帧。 */
 .pwa-enter-after-settle { animation-delay: var(--pwa-duration-collapse-settle); animation-fill-mode: backwards; }
-.pwa-user-message-in { animation: pwa-user-message-in var(--pwa-duration-message-in) var(--pwa-ease-content); }
-/* 空会话的第一条消息：等空态提示淡出（fade）后再进入，期间保持起始帧，不与提示并列变化。 */
-.pwa-user-message-in.pwa-user-message-after-empty { animation-delay: var(--pwa-duration-fade); animation-fill-mode: backwards; }
+/* 本端气泡只淡入，位移由同一时钟的跟随滚动承担，不叠加第二种位移。 */
+.pwa-user-message-in { animation: pwa-row-enter var(--pwa-duration-message-in) var(--pwa-ease-content); }
+/* 空会话的第一条消息没有跟随滚动：等空态提示淡出（fade）后再从下方上移并淡入，期间保持起始帧。 */
+.pwa-user-message-in.pwa-user-message-after-empty { animation-name: pwa-user-message-in; animation-delay: var(--pwa-duration-fade); animation-fill-mode: backwards; }
 @keyframes pwa-user-message-in {
   from { opacity: 0; transform: translateY(calc(var(--pwa-message-shift) * var(--pwa-motion-shift))); }
   to { opacity: 1; transform: translateY(0); }
@@ -99,9 +100,15 @@
 .pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
-/* 首条消息出现后空态提示原位淡出：外层容器高度归零并截断外边距，新内容从原位置开始排布。 */
-.pwa-chat-empty-slot[data-leaving] { display: flow-root; height: 0; }
-.pwa-chat-empty-slot[data-leaving] > .pwa-chat-empty { opacity: 0; }
+/*
+ * 首条消息出现后空态提示原位淡出：提示改为绝对定位，外层容器高度为零且没有文档流内容，
+ * 外边距可穿过它，后续内容与提示移除后的位置一致，移除时不跳动。
+ */
+.pwa-chat-empty-slot[data-leaving] { position: relative; height: 0; }
+.pwa-chat-empty-slot[data-leaving] > .pwa-chat-empty { position: absolute; top: 0; inset-inline: 0; opacity: 0; }
+/* 穿过后容器位于前一行下外边距之后，提示不再与它合并：按前一行的下外边距（提示行 16、更早记录 12）扣回，保持原位。 */
+.pwa-timeline-notice + .pwa-chat-empty-slot[data-leaving] > .pwa-chat-empty { margin-top: calc(48px - 16px); }
+.pwa-earlier + .pwa-chat-empty-slot[data-leaving] > .pwa-chat-empty { margin-top: calc(48px - 12px); }
 .pwa-chat-empty { transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit); display: grid; gap: 4px; margin: 48px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); text-align: center; }
 .pwa-chat-empty p { margin: 0; }
 /* 新会话的上下文：目录 · 模型 · 思考级别，发送前确认对象。 */

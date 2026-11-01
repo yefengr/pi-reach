@@ -5,8 +5,16 @@
  */
 /** 跟随回复增长的角频率（1/ms）：约 180ms 收敛；以 200px/s 匀速增长时稳定滞后约 18px，留在底部留白内。 */
 export const FOLLOW_GLIDE_OMEGA = 0.022;
-/** 本端发送等短期过渡的角频率：约 150ms 到位，起步速度接近标准曲线，与 160ms 的输入区回缩同步。 */
-export const TRANSITION_GLIDE_OMEGA = 0.05;
+/** 短期过渡在时钟结束时的收敛深度：(1 + x)·e^(-x) ≈ 0.4%，常见位移下剩余不足 1px。 */
+const TRANSITION_SETTLE_PHASE = 7.8;
+
+/**
+ * 本端发送等短期过渡的角频率：取 7.8／`message-in` 时长。与内容曲线（iOS 无回弹弹簧）同为临界阻尼，
+ * 在时钟结束时已收敛，滚动与输入区回缩、气泡进入一起到位，不先跳到底部再等其他变化完成。160ms 时约为 0.049。
+ */
+export function transitionGlideOmega(durationMs: number): number {
+  return TRANSITION_SETTLE_PHASE / Math.max(1, durationMs);
+}
 /** 积分子步长，保证长帧下仍稳定。 */
 const GLIDE_SUBSTEP_MS = 4;
 /** 跟随时单帧最多推进的时长；页面卡顿或后台恢复后不一次跳过整段。短期过渡与输入区回缩同一时钟，只防止长时间卡顿后的子步失控。 */
