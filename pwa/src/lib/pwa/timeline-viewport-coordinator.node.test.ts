@@ -54,6 +54,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
       },
       finish() { finishes += 1; reach = 0; },
       release() { record.released = true; },
+      track(top: number) { current = top; if (bottom >= top) { reach = 0; return true; } reach = top; return false; },
       extend(reserve: number, nextDuration: number, live: boolean) {
         record.extends += 1; record.reserve += reserve; record.released = !live;
         start = null; duration = nextDuration;
@@ -1147,6 +1148,22 @@ describe("process group collapse hold", () => {
     f.core.details(true);
     f.core.userRead();
     expect(f.finishes).toBe(1);
+  });
+
+  test("an own send during the hold hands the space to the send glide instead of dropping it at once", () => {
+    const f = collapsing(true);
+    f.setBottom(50); f.step(16); f.step(220); f.step(236);
+    expect(f.layout.top()).toBe(100);
+    f.core.followOwnSend(f.core.captureOwnSend());
+    // 发送接管时不立刻撤掉空白：位置仍可达，随发送滚动逐帧回到自然底部。
+    expect(f.finishes).toBe(0);
+    expect(f.layout.top()).toBe(100);
+    const tops: number[] = [];
+    for (let time = 252; time <= 700; time += 16) { f.step(time); tops.push(f.layout.top()); }
+    for (let index = 1; index < tops.length; index += 1) expect(tops[index]!).toBeLessThanOrEqual(tops[index - 1]!);
+    expect(tops[0]).toBeGreaterThan(50);
+    expect(f.layout.top()).toBe(50);
+    expect(f.finishes).toBeGreaterThanOrEqual(2);
   });
 
   test("an upward user input ends the hold and keeps reading", () => {
