@@ -26,6 +26,7 @@ export const REVIEW_MOTION_PRESETS: Record<Exclude<ReviewMotionPresetId, "curren
       "--pwa-duration-message-in": 160, "--pwa-duration-collapse-in": 180, "--pwa-duration-collapse-out": 140, "--pwa-duration-collapse-settle": 320,
       "--pwa-duration-toast": 180, "--pwa-duration-toast-out": 140, "--pwa-duration-modal-in": 180, "--pwa-duration-modal-out": 140,
       "--pwa-duration-sidebar": 220, "--pwa-duration-image-in": 260, "--pwa-duration-image-out": 220, "--pwa-duration-content": 240,
+      "--pwa-duration-drawer": 200, "--pwa-duration-drawer-out": 200, "--pwa-duration-page": 200, "--pwa-duration-page-out": 200, "--pwa-duration-switch-out": 120,
     },
     shifts: { "--pwa-overlay-shift": 8, "--pwa-message-shift": 6, "--pwa-collapse-shift": 4 },
     easeContent: "cubic-bezier(0.2, 0, 0, 1)",

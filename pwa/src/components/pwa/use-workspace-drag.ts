@@ -32,6 +32,7 @@ type WorkspaceDragOptions = {
  */
 export function useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settingsRef, scrimRef, pageTransition, onSettingsBack, beginNavigationPreview, endNavigationPreview }: WorkspaceDragOptions) {
   const pageDuration = usePwaMotionDuration("--pwa-duration-page");
+  const pageExitDuration = usePwaMotionDuration("--pwa-duration-page-out");
   const [dragging, setDragging] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [seenChange, setSeenChange] = useState(settingsRoute.change);
@@ -41,10 +42,10 @@ export function useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settin
     setDragging(false);
     setPreviewing(false);
   }
-  const latest = useRef({ routeOpen: settingsRoute.open, origin: settingsRoute.origin, transitioning, onSettingsBack, beginNavigationPreview, endNavigationPreview, pageDuration, pageTransition });
+  const latest = useRef({ routeOpen: settingsRoute.open, origin: settingsRoute.origin, transitioning, onSettingsBack, beginNavigationPreview, endNavigationPreview, pageDuration, pageExitDuration, pageTransition });
   // 须声明在 useSwipe 之前：同一次提交里 useSwipe 的 disabled 取消要读到最新路由。
   useLayoutEffect(() => {
-    latest.current = { routeOpen: settingsRoute.open, origin: settingsRoute.origin, transitioning, onSettingsBack, beginNavigationPreview, endNavigationPreview, pageDuration, pageTransition };
+    latest.current = { routeOpen: settingsRoute.open, origin: settingsRoute.origin, transitioning, onSettingsBack, beginNavigationPreview, endNavigationPreview, pageDuration, pageExitDuration, pageTransition };
   });
   const dragRef = useRef<SwipeDrag | null>(null);
   const phaseRef = useRef<Phase>("idle");
@@ -95,7 +96,7 @@ export function useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settin
       const scrim = scrimRef.current;
       if (!routeOpen || busy || phaseRef.current !== "idle" || !root || !settings || pwaMotionShiftDisabled(root)) return false;
       const width = () => root.clientWidth;
-      const full = latest.current.pageDuration;
+      const { pageDuration: enter, pageExitDuration: exit } = latest.current;
       // 拖动开始就揭示工作区层，暂停动画在同一任务内创建，首帧遮罩仍完全覆盖工作区。
       const navigationScrollTop = origin?.kind === "navigation" && window.matchMedia(MOBILE_LAYOUT_QUERY).matches ? origin.scrollTop : null;
       flushSync(() => {
@@ -111,7 +112,8 @@ export function useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settin
           ...(scrim ? [{ element: scrim, frame: (progress: number) => ({ opacity: 1 - progress }) }] : []),
         ],
         extent: width,
-        duration: () => full,
+        // 终点是返回工作区：走完用离开时长，回弹回到设置页用进入时长。
+        duration: (toEnd) => toEnd ? exit : enter,
       });
       dragRef.current = drag;
       phaseRef.current = "dragging";

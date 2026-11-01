@@ -1,12 +1,10 @@
-import { pwaStandardEasing } from "./use-pwa-motion";
+import { pwaReleaseEasing } from "./use-pwa-motion";
 
 /** 存续期间标记在目标元素上，样式表据此关闭 CSS 过渡，使 WAAPI 动画不被 Mantine 的过渡盖过。 */
 export const SWIPE_DRAG_ACTIVE_ATTRIBUTE = "data-swipe-drag-active";
 
 /** 暂停动画的虚拟时长；currentTime = progress × 该值，线性映射不受曲线影响。 */
 const DRAG_SPAN_MS = 1000;
-const SETTLE_MIN_MS = 80;
-const SETTLE_MIN_VELOCITY = 0.3;
 
 export type SwipeDragTarget = {
   element: HTMLElement;
@@ -18,13 +16,16 @@ type SwipeDragOptions = {
   targets: SwipeDragTarget[];
   /** 全程位移像素，取目标元素的实际宽度。 */
   extent: () => number;
-  /** 全程时长 token（毫秒）。 */
-  duration: () => number;
+  /** 收尾时长 token（毫秒）：toEnd 为走到 keyframes 终点，否则回到起点；由调用方按进入或离开取值。 */
+  duration: (toEnd: boolean) => number;
 };
 
 export type SwipeDrag = {
   setDistance(px: number): void;
-  /** toEnd 只表示 keyframes 的终点或起点；被 dispose 或新的 settle 中止时 resolve(false)，不抛出。 */
+  /**
+   * toEnd 只表示 keyframes 的终点或起点；velocity 为朝向目标的松手速度（像素／毫秒）。
+   * 被 dispose 或新的 settle 中止时 resolve(false)，不抛出。
+   */
   settle(toEnd: boolean, velocity?: number): Promise<boolean>;
   settling(): boolean;
   progress(): number;
@@ -32,10 +33,6 @@ export type SwipeDrag = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-export function settleDuration(remaining: number, velocity: number, full: number): number {
-  return Math.min(full, Math.max(SETTLE_MIN_MS, remaining / Math.max(velocity, SETTLE_MIN_VELOCITY)));
-}
 
 export function createSwipeDrag({ targets, extent, duration }: SwipeDragOptions): SwipeDrag {
   targets.forEach(({ element }) => element.setAttribute(SWIPE_DRAG_ACTIVE_ATTRIBUTE, ""));
@@ -73,8 +70,10 @@ export function createSwipeDrag({ targets, extent, duration }: SwipeDragOptions)
       progress = from;
       settleTarget = to;
       settling = true;
-      const easing = pwaStandardEasing(targets[0].element);
-      const time = settleDuration(Math.abs(to - from) * extent(), velocity, duration());
+      // 参照 iOS：时长固定为 token，不随剩余距离缩短；松手速度作为弹簧初速度接续。
+      const time = duration(toEnd);
+      const remaining = Math.abs(to - from) * extent();
+      const easing = pwaReleaseEasing(targets[0].element, remaining > 0 ? velocity / remaining : 0, time);
       animations.forEach((animation) => animation.cancel());
       animations = targets.map(({ element, frame }) => element.animate([frame(from), frame(to)], { duration: time, easing, fill: "forwards" }));
       const current = animations;

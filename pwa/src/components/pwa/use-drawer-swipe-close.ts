@@ -28,7 +28,8 @@ type DrawerSwipeCloseOptions = {
  */
 export function useDrawerSwipeClose({ surface, opened, direction, requestClose, skipExit, resetSkipExit }: DrawerSwipeCloseOptions): { drag: SwipeDragHandlers; canSwipe: () => boolean } {
   const duration = usePwaMotionDuration("--pwa-duration-drawer");
-  const latest = useRef({ surface, opened, requestClose, skipExit, resetSkipExit, duration });
+  const exitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
+  const latest = useRef({ surface, opened, requestClose, skipExit, resetSkipExit, duration, exitDuration });
   const dragRef = useRef<SwipeDrag | null>(null);
   const draggedSurfaceRef = useRef<HTMLElement | null>(null);
   const phaseRef = useRef<Phase>("idle");
@@ -37,7 +38,7 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
   const previousOpenedRef = useRef(opened);
   const [requestSeq, setRequestSeq] = useState(0);
   useLayoutEffect(() => {
-    latest.current = { surface, opened, requestClose, skipExit, resetSkipExit, duration };
+    latest.current = { surface, opened, requestClose, skipExit, resetSkipExit, duration, exitDuration };
   });
 
   const release = useCallback((drag: SwipeDrag) => {
@@ -101,7 +102,7 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
 
   const handlers = useMemo<SwipeDragHandlers>(() => ({
     start() {
-      const { surface: element, opened: isOpen, duration: full } = latest.current;
+      const { surface: element, opened: isOpen, duration: enter, exitDuration: exit } = latest.current;
       if (!element || !isOpen || dragRef.current || phaseRef.current !== "idle" || pwaMotionShiftDisabled(element)) return false;
       const overlay = element.closest(".mantine-Drawer-root")?.querySelector<HTMLElement>(".pwa-scrim");
       const width = () => element.offsetWidth;
@@ -111,7 +112,8 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
           ...(overlay ? [{ element: overlay, frame: (progress: number) => ({ opacity: 1 - progress }) }] : []),
         ],
         extent: width,
-        duration: () => full,
+        // 终点是关闭：走完用离开时长，回弹回到打开用进入时长。
+        duration: (toEnd) => toEnd ? exit : enter,
       });
       element.setAttribute(DRAWER_DRAGGING_ATTRIBUTE, "");
       draggedSurfaceRef.current = element;

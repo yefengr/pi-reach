@@ -235,5 +235,6 @@ test.each(["inside", "outside"])("CDP second touch %s the surface cancels captur
   await touch("touchStart", [first, second]);
   await touch("touchMove", [{ ...first, x: origin.x + 110 }, second]);
   await touch("touchEnd", []);
-  expect(navigationOpen()).toBe(false);
+  // 取消后以离开时长回弹到关闭，时长不随剩余距离缩短。
+  await expect.poll(navigationOpen).toBe(false);
 });

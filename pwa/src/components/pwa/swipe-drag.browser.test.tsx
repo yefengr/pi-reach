@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createSwipeDrag, settleDuration, type SwipeDrag } from "./swipe-drag";
+import { pwaReleaseEasing } from "@/lib/ui/motion";
+import { createSwipeDrag, type SwipeDrag } from "./swipe-drag";
 
 const EASE = "cubic-bezier(0.1, 0.2, 0.3, 1)";
 let host: HTMLElement;
@@ -8,17 +9,17 @@ let scrim: HTMLElement;
 let drag: SwipeDrag | undefined;
 
 const frame = (progress: number): Keyframe => ({ transform: `translateX(${progress * 200}px)` });
-const create = (full = 120) => {
+const create = (toEndDuration = 120, backDuration = toEndDuration) => {
   drag = createSwipeDrag({
     targets: [{ element: panel, frame }, { element: scrim, frame: (progress) => ({ opacity: 1 - progress }) }],
     extent: () => 200,
-    duration: () => full,
+    duration: (toEnd) => toEnd ? toEndDuration : backDuration,
   });
   return drag;
 };
 
 beforeEach(() => {
-  document.documentElement.style.setProperty("--pwa-ease-standard", EASE);
+  document.documentElement.style.setProperty("--pwa-ease-content", EASE);
   host = document.body.appendChild(document.createElement("div"));
   panel = host.appendChild(document.createElement("div"));
   scrim = host.appendChild(document.createElement("div"));
@@ -27,17 +28,40 @@ afterEach(() => {
   drag?.dispose();
   drag = undefined;
   host.remove();
-  document.documentElement.style.removeProperty("--pwa-ease-standard");
+  document.documentElement.style.removeProperty("--pwa-ease-content");
 });
 
-test("settleDuration scales with remaining distance and clamps to 80ms and the full duration", () => {
-  expect(settleDuration(100, 1, 200)).toBe(100);
-  expect(settleDuration(10, 2, 200)).toBe(80);
-  expect(settleDuration(300, 0.1, 200)).toBe(200);
-  expect(settleDuration(60, 0, 200)).toBe(200);
-  expect(settleDuration(20, 0, 200)).toBe(80);
-  // 全程 token 比下限更短时以全程为准，减少动态效果的 0ms 不被撑长。
-  expect(settleDuration(100, 1, 0)).toBe(0);
+const samples = (easing: string) => easing.replace(/^linear\(|\)$/g, "").split(",").map(Number);
+
+test("release easing carries the finger velocity without overshoot and matches the content curve at rest", () => {
+  expect(pwaReleaseEasing(panel, 0, 350)).toBe(EASE);
+  const slow = samples(pwaReleaseEasing(panel, 0.002, 350));
+  const fast = samples(pwaReleaseEasing(panel, 0.01, 350));
+  const capped = samples(pwaReleaseEasing(panel, 1, 350));
+  for (const curve of [slow, fast, capped]) {
+    expect(curve).toHaveLength(33);
+    expect(curve[0]).toBe(0);
+    expect(curve.at(-1)).toBe(1);
+    // 单调且不越过终点：面板不会冲出边缘再弹回。
+    curve.forEach((value, index) => { if (index > 0) expect(value).toBeGreaterThanOrEqual(curve[index - 1]); });
+    expect(Math.max(...curve)).toBeLessThanOrEqual(1);
+  }
+  // 松手越快，前段走得越远。
+  expect(fast[1]).toBeGreaterThan(slow[1]);
+  expect(capped[1]).toBeGreaterThanOrEqual(fast[1]);
+});
+
+test("settle keeps the token duration for its direction instead of shortening it by distance or velocity", () => {
+  const swipe = create(350, 450);
+  swipe.setDistance(190);
+  void swipe.settle(true, 3);
+  const forward = panel.getAnimations()[0];
+  expect(forward.effect?.getTiming().duration).toBe(350);
+  expect(String(forward.effect?.getTiming().easing)).toMatch(/^linear\(/);
+  void swipe.settle(false);
+  const back = panel.getAnimations()[0];
+  expect(back.effect?.getTiming().duration).toBe(450);
+  expect(back.effect?.getTiming().easing).toBe(EASE);
 });
 
 test("setDistance drives paused linear animations by progress and clamps to the extent", () => {
@@ -54,10 +78,10 @@ test("setDistance drives paused linear animations by progress and clamps to the 
   expect(swipe.progress()).toBe(0);
 });
 
-test("settle uses the computed standard easing instead of var() and keeps the final frame", async () => {
+test("settle uses the computed content easing instead of var() and keeps the final frame", async () => {
   const swipe = create();
   swipe.setDistance(80);
-  const finished = swipe.settle(true, 1);
+  const finished = swipe.settle(true);
   const settling = panel.getAnimations()[0];
   expect(settling.effect?.getTiming().easing).toBe(EASE);
   expect(swipe.settling()).toBe(true);

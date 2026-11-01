@@ -30,6 +30,7 @@ type ReaderShellProps = {
  */
 export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTransitionEnd, title, closeLabel, historyKey, className = "", describedBy, actions, children }: ReaderShellProps) {
   const duration = usePwaMotionDuration("--pwa-duration-drawer");
+  const exitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   const requestClose = () => { if (!readerHasOverlay(surface)) onClose(); };
@@ -44,7 +45,7 @@ export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTrans
   return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={enter} onExitTransitionEnd={onExitTransitionEnd}
       position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"}
       withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-reader)" trapFocus returnFocus={false}
-      transitionProps={{ transition: pwaDrawerTransitions.right, duration, exitDuration: instant ? 0 : duration, timingFunction: PWA_DRAWER_EASE }}>
+      transitionProps={{ transition: pwaDrawerTransitions.right, duration, exitDuration: instant ? 0 : exitDuration, timingFunction: PWA_DRAWER_EASE }}>
       <Drawer.Overlay className="pwa-scrim" />
       <Drawer.Content ref={setSurface} classNames={{ content: `pwa-tool-reader ${className}`.trim() }} data-pwa-moving={motion.moving || undefined} aria-describedby={describedBy}>
         <header className={`pwa-topbar pwa-tool-reader-header${className === "pwa-file-reader" ? " pwa-file-reader-header" : ""}`}>

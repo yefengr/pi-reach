@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
-import { settleDuration, type SwipeDrag } from "./swipe-drag";
-import { pwaMotionShiftDisabled, pwaStandardEasing, usePwaMotionDuration } from "./use-pwa-motion";
+import type { SwipeDrag } from "./swipe-drag";
+import { pwaContentEasing, pwaMotionShiftDisabled, pwaReleaseEasing, usePwaMotionDuration } from "./use-pwa-motion";
 
 export { usePwaMotionDuration } from "./use-pwa-motion";
 
@@ -21,16 +21,17 @@ type PageTransitionOptions = {
 /* 已由 --pwa-motion-shift 全局 token 判定，不再单独读取媒体查询。 */
 
 /**
- * 设置页覆盖滑入／滑出（200ms，标准曲线），与右侧 Drawer 同一模型：工作区保持原位，
+ * 设置页覆盖滑入／滑出（page／page-out，内容曲线），与右侧 Drawer 同一模型：工作区保持原位，
  * 设置层从右滑入并盖住工作区，遮罩同步淡入；返回时反向。
  * 中途再次切换从设置层与遮罩的当前状态继续，不从头重播。减少动态效果时改为交叉淡化。
  */
 export function usePageTransition({ open, change, animate, rootRef, workspaceRef, settingsRef, scrimRef, onSettled }: PageTransitionOptions) {
-  const duration = usePwaMotionDuration("--pwa-duration-page");
+  const enterDuration = usePwaMotionDuration("--pwa-duration-page");
+  const exitDuration = usePwaMotionDuration("--pwa-duration-page-out");
   const animationsRef = useRef<Animation[]>([]);
   // 跟手拖动中的暂停动画：路由变化时与 animationsRef 同样被接管，从当前位置续播。
   const dragRef = useRef<SwipeDrag | null>(null);
-  // 拖动松手后的一次性交接：续播时长按剩余位移与松手速度缩短，其余来源保持全程时长。
+  // 拖动松手后的一次性交接：松手速度作为弹簧初速度，时长与其他来源相同。
   const handOffRef = useRef<{ velocity: number } | null>(null);
   const settledRef = useRef<{ animations: Animation[]; change: number; open: boolean; settings: HTMLElement } | null>(null);
   const onSettledRef = useRef(onSettled);
@@ -60,13 +61,13 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
       return;
     }
     let animations: Animation[];
-    const easing = pwaStandardEasing(root);
+    const duration = open ? enterDuration : exitDuration;
     // 全局媒体查询同时控制时长与位移；这里仅选择设置页必需的交叉淡化轨迹。
     if (pwaMotionShiftDisabled(root)) {
       const workspaceStart = inFlight ? Number(getComputedStyle(workspace).opacity) : open ? 1 : 0;
       const settingsStart = inFlight ? Number(getComputedStyle(settings).opacity) : open ? 0 : 1;
       cancelInFlight();
-      const timing = { duration, easing, fill: "forwards" as const };
+      const timing = { duration, easing: pwaContentEasing(root), fill: "forwards" as const };
       animations = [
         workspace.animate([{ opacity: workspaceStart }, { opacity: open ? 0 : 1 }], timing),
         settings.animate([{ opacity: settingsStart }, { opacity: open ? 1 : 0 }], timing),
@@ -77,7 +78,9 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
       const scrimStart = scrim && inFlight ? Number(getComputedStyle(scrim).opacity) : open ? 0 : 1;
       cancelInFlight();
       const settingsEnd = open ? 0 : width;
-      const timing = { duration: handOff ? settleDuration(Math.abs(settingsEnd - settingsStart), handOff.velocity, duration) : duration, easing, fill: "forwards" as const };
+      const remaining = Math.abs(settingsEnd - settingsStart);
+      const velocity = handOff && remaining > 0 ? handOff.velocity / remaining : 0;
+      const timing = { duration, easing: pwaReleaseEasing(root, velocity, duration), fill: "forwards" as const };
       animations = [settings.animate([{ transform: `translateX(${settingsStart}px)` }, { transform: `translateX(${settingsEnd}px)` }], timing)];
       if (scrim) animations.push(scrim.animate([{ opacity: scrimStart }, { opacity: open ? 1 : 0 }], timing));
     }
@@ -88,7 +91,7 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
       settledRef.current = { animations, change, open, settings };
       onSettledRef.current(change);
     }, () => {});
-  }, [animate, change, duration, open, rootRef, scrimRef, settingsRef, workspaceRef]);
+  }, [animate, change, enterDuration, exitDuration, open, rootRef, scrimRef, settingsRef, workspaceRef]);
 
   useLayoutEffect(() => {
     const settled = settledRef.current;
