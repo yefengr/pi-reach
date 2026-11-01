@@ -38,9 +38,11 @@ test("same-run replies never hide earlier messages or restart after catching up"
   h.ingest(h.runtime.commit(answer("A", 1)).items);
   h.ingest(h.runtime.commit(completedTool("tool", 2)).items);
   h.ingest(h.runtime.receive(partial("B", "After the tool")).items);
-  // 新行在间隔后出现，从少量字素起步，不一次铺满。
+  // 接在工具后的正文先以等待项出现，让过程组先收起；收起结束后从少量字素起步，不一次铺满。
   while (labels(h.view()).length < 3) h.tick();
-  expect(labels(h.view())).toEqual(["A", "tool", "Af"]);
+  expect(labels(h.view())).toEqual(["A", "tool", ""]);
+  while (labels(h.view())[2] === "") h.tick();
+  expect(labels(h.view())[2]).toBe("Af");
   while (h.buffer.hasPending()) h.tick();
   expect(labels(h.view())).toEqual(["A", "tool", "After the tool"]);
   h.ingest(h.runtime.receive(partial("B", " continued")).items);

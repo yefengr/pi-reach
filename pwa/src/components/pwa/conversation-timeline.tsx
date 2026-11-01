@@ -9,7 +9,7 @@ import { processGroups, processNoticeBreakKeys, type ProcessEntry, type ProcessG
 import { ProcessGroup } from "./process-group";
 import { isSettleCollapse } from "./process-group-state";
 import { useProcessPresentation } from "./use-process-presentation";
-import { useEnteredKeys, useIdleWorking, useSettlingTurns } from "./use-turn-activity";
+import { useAwaitedTexts, useEnteredKeys, useIdleWorking, useSettlingTurns } from "./use-turn-activity";
 import { COLLAPSE_EXIT_FALLBACK_MARGIN_MS } from "./collapse";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import { SummaryEntry, SummaryReader } from "./summary-reader";
@@ -61,7 +61,8 @@ type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string,
 function TextRow({ entry, entering, afterSettle }: { entry: TextEntry; entering: boolean; afterSettle: boolean }) {
   const { t } = useI18n();
   const row = useRef<HTMLElement | null>(null);
-  // 前一过程组正在自动收起时，入场等收起结束；只在行创建时确定，收起结束后不改变已开始的动画。
+  // 前一过程组正在自动收起、而正文未经显示队列等待（如正式版本直接到达）时，入场等收起结束；
+  // 只在行创建时确定，收起结束后不改变已开始的动画。
   const [delayed] = useState(() => entering && afterSettle);
   // 流式新显示的文字淡入；正式版本接管后不再新增片段，已开始的淡入原位完成。
   const reveal = useStreamRevealMarks(entry.text, entry.streaming);
@@ -217,6 +218,7 @@ export function ConversationTimeline({ items, live, completions, running = false
   const workingVisible = useIdleWorking(view.entries, slotPresent, toolMotionVisible);
   const entered = useEnteredKeys(view.entries, live);
   const settlingTurns = useSettlingTurns(view.entries, groups, states);
+  const awaitedTexts = useAwaitedTexts(view.entries);
   // 挂载时已有的完成时间（初次载入、重新挂载）不播放入场。
   const [mountedCompletions] = useState(() => new Set(completions?.keys() ?? []));
   // 组由展开转为收起的同一提交里报告预计收回的高度，视口据此按净布局处理，不为同一提交的新增内容先向下追。
@@ -239,7 +241,8 @@ export function ConversationTimeline({ items, live, completions, running = false
       // 保持期覆盖同一提交里最长的退出：自动收起比手动收起慢。
       duration = Math.max(duration, isSettleCollapse(states.get(key)!) ? settleDuration : collapseDuration);
     }
-    if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: duration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS } }));
+    // live：本轮仍在运行（活动区在），收起后让出的空白留给随后的输出填入。
+    if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: duration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS, live: slotPresent } }));
   });
   // 只有活动区的出现与收起改变高度；其中 Working 的显隐只改透明度，不通知视口。
   const previousSlot = useRef(slotPresent);
@@ -368,8 +371,9 @@ export function ConversationTimeline({ items, live, completions, running = false
       }
       return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true, entry.key)}</Fragment>;
     }
-    // 思考与工具只经过程组呈现。
-    return entry.kind === "text" ? <TextRow entry={entry} entering={entered.has(entry.key)} afterSettle={settlingTurns.has(entry.groupId)} key={entry.key} /> : null;
+    // 思考与工具只经过程组呈现；等待过程组收起的正文尚无文字，不占行。
+    if (entry.kind !== "text" || entry.awaitingSettle) return null;
+    return <TextRow entry={entry} entering={entered.has(entry.key)} afterSettle={settlingTurns.has(entry.groupId) && !awaitedTexts.has(entry.key)} key={entry.key} />;
   };
   const renderGroup = (group: ProcessGroupModel) => <ProcessGroup
     key={group.key}

@@ -51,6 +51,19 @@ export function useEnteredKeys(entries: readonly PresentationEntry[], live: bool
 }
 
 /**
+ * 曾以「等待过程组收起」出现的正文 key：显示队列已让它等过收起，出现时不再叠加收起延迟。
+ * 只增不减，随组件卸载释放。
+ */
+export function useAwaitedTexts(entries: readonly PresentationEntry[]): ReadonlySet<string> {
+  const [keys, setKeys] = useState<ReadonlySet<string>>(() => NO_KEYS);
+  const additions = entries.filter(entry => entry.kind === "text" && entry.awaitingSettle === true && !keys.has(entry.key));
+  if (additions.length === 0) return keys;
+  const next = new Set([...keys, ...additions.map(entry => entry.key)]) as ReadonlySet<string>;
+  setKeys(next);
+  return next;
+}
+
+/**
  * 刚由展开转为自动收起的过程组所属轮次（DESIGN「动效」的编排）：同一提交里新进入的正文与完成时间
  * 等收起结束后再出现，同一时刻只有一个主动作。渲染期派生并存入 state（React 重放渲染时仍可取到）；
  * 条目再变化而展开状态未变时清空，之后新进入的行不受影响。调用方只在行创建时读取一次。

@@ -99,6 +99,26 @@ test("S2: a reply that ends a running group waits for the automatic collapse bef
   await screen.unmount();
 });
 
+test("S2b: a reply the display queue holds back collapses the group first, then appears without another delay", async () => {
+  const replyPartial = (delta: string, awaitingSettle?: true): TimelineViewItem => ({ kind: "partial", createdAt: 2, ...(awaitingSettle ? { awaitingSettle } : {}), partial: {
+    protocol_version: 2, type: "timeline_partial", ...base, kind: "assistant", partial_id: "reply-1:assistant:0", status: "delta", delta,
+  } satisfies TimelinePartial });
+  const { screen, update } = await liveList([toolRunning], { running: true });
+  expect(document.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("true");
+  // 正文已到、正在等待：组以自动收起播放，正文还不占行。
+  update([toolDone, replyPartial("", true)]);
+  expect(document.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("false");
+  expect(document.querySelector<HTMLElement>(".pwa-process-details")?.dataset.exit).toBe("settle");
+  expect(document.querySelector(".pwa-message.assistant")).toBeNull();
+  // 等待结束后正文出现：组保持收起，正文只淡入，不再叠加收起延迟。
+  update([toolDone, replyPartial("Af")]);
+  expect(document.querySelector("button.pwa-process-head")?.getAttribute("aria-expanded")).toBe("false");
+  const row = document.querySelector<HTMLElement>(".pwa-message.assistant")!;
+  expect(row.classList.contains("pwa-row-enter")).toBe(true);
+  expect(row.classList.contains("pwa-enter-after-settle")).toBe(false);
+  await screen.unmount();
+});
+
 test("S3: the completion time fades in after a group without reply settles, and loaded turns do not replay", async () => {
   const { screen, update } = await liveList([toolRunning], { running: true });
   update([toolDone, runEnd], { running: false });

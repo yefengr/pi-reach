@@ -193,6 +193,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; }
 .pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-timeline-pad-bottom) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: 88px; -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
 .pwa-bottom-sentinel { width: 1px; height: 1px; }
+/* 过程组收起保持期间的临时空间：位于哨兵之后，高度由视口协调层写入；不用底部内边距，避免撑高滚动容器。 */
+.pwa-message-list[data-timeline-hold]::after { content: ""; display: block; height: var(--pwa-timeline-hold, 0px); }
 /* 发送过渡只改变高度，不在结束时切换格式化上下文，避免滚动合成层重新定位。 */
 .pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; position: relative; z-index: var(--pwa-z-composer); }
 /*

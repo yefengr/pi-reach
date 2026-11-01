@@ -7,7 +7,8 @@ type Grouped = { session_id: string; leaf_id: string | null; group_id: string };
 export type TimelineToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }>;
 export type ToolEntry = { kind: "tool"; key: string; value: TimelineToolValue; seq?: number };
 export type ThinkingEntry = { kind: "thinking"; key: string; groupId: string; text: string; streaming: boolean; seq?: number; thinkingTextEpoch?: object };
-export type TextEntry = { kind: "text"; key: string; groupId: string; text: string; streaming: boolean; interrupted: boolean; seq?: number; timestamp?: number };
+/** awaitingSettle：正文已到、等待前面的过程组收起，尚未显示文字；不渲染为行，但算作组后的正文。 */
+export type TextEntry = { kind: "text"; key: string; groupId: string; text: string; streaming: boolean; interrupted: boolean; seq?: number; timestamp?: number; awaitingSettle?: true };
 export type RecordEntry = { kind: "record"; key: string; item: TimelineViewItem; seq?: number; userMessageIn?: boolean };
 export type PresentationEntry = ToolEntry | ThinkingEntry | TextEntry | RecordEntry;
 export type PresentationSnapshot = { items: readonly TimelineViewItem[]; entries: PresentationEntry[] };
@@ -41,8 +42,9 @@ function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>):
   const seq = item.kind === "event" ? item.event.event_seq : undefined;
   const startIndex = identity?.contentIndex ?? 0;
   const blocks = value.blocks ?? [{ type: value.kind === "thinking" ? "thinking" as const : "text" as const, text: "delta" in value ? value.delta ?? "" : "" }];
+  const awaitingSettle = item.kind === "partial" && item.awaitingSettle === true;
   return blocks.flatMap((block, index): PresentationEntry[] => {
-    if (block.type !== "thinking" && !block.text.trim()) return [];
+    if (block.type !== "thinking" && !block.text.trim() && !awaitingSettle) return [];
     const key = !streaming && block.type === "thinking" && !block.text.trim()
       ? emptyThinkingKey(value) : blockKey(groupKey, sourceId, block.type, startIndex + index);
     if (block.type === "thinking") return [{ kind: "thinking", key, groupId: value.group_id, text: block.text, streaming, ...(seq === undefined ? {} : { seq }),
@@ -51,6 +53,7 @@ function assistantEntries(item: Exclude<TimelineViewItem, { kind: "pending" }>):
     return [{ kind: "text", key, groupId: value.group_id, text: block.text, streaming, ...(seq === undefined ? {} : { seq }),
       interrupted: "event_id" in value && value.status === "interrupted",
       ...("timestamp" in value ? { timestamp: value.timestamp } : {}),
+      ...(awaitingSettle ? { awaitingSettle: true as const } : {}),
     }];
   });
 }
@@ -149,7 +152,8 @@ function sameEntry(previous: PresentationEntry, next: PresentationEntry): boolea
   switch (next.kind) {
     case "text":
       return previous.kind === "text" && previous.text === next.text && previous.streaming === next.streaming
-        && previous.interrupted === next.interrupted && previous.groupId === next.groupId && previous.timestamp === next.timestamp;
+        && previous.interrupted === next.interrupted && previous.groupId === next.groupId && previous.timestamp === next.timestamp
+        && previous.awaitingSettle === next.awaitingSettle;
     case "thinking":
       return previous.kind === "thinking" && previous.text === next.text && previous.streaming === next.streaming
         && previous.groupId === next.groupId && previous.thinkingTextEpoch === next.thinkingTextEpoch;

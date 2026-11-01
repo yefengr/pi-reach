@@ -2,7 +2,8 @@ import { expect, test } from "vitest";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import { STRUCTURE_BULK_LIMIT, STRUCTURE_GAP_MS, STRUCTURE_MAX_LAG_MS, TOOL_MIN_RUNNING_MS } from "./stream-structure-gate";
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
-import type { TimelinePending, TimelineViewItem } from "./timeline-runtime";
+import type { TimelinePartialView, TimelinePending, TimelineViewItem } from "./timeline-runtime";
+import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 
 const scope = { session_id: "s", leaf_id: "l" } as const;
 
@@ -151,4 +152,99 @@ test("a message expected to queue does not flush the running reply", () => {
   const queued: TimelinePending = { kind: "pending", id: "pending:q", clientRequestId: "q", requestId: "a", text: "later", createdAt: 2, delivery: "pending", queueExpected: true };
   const reply = buffer.ingest([user("g"), text("m1", "g", long), queued]).items.find(item => item.kind === "partial");
   expect(reply?.kind === "partial" ? reply.partial.delta?.length : 0).toBeLessThan(long.length);
+});
+
+const SETTLE_MS = PWA_MOTION_FALLBACK_MS["--pwa-duration-collapse-settle"];
+
+function thinking(id: string, group: string, delta: string): TimelineViewItem {
+  const partial: TimelinePartial = { protocol_version: 2, type: "timeline_partial", ...scope, group_id: group, partial_id: `${id}:thinking:0`, kind: "thinking", status: "delta", delta };
+  return { kind: "partial", partial, createdAt: 1 };
+}
+
+function reply(items: readonly TimelineViewItem[]): TimelinePartialView | undefined {
+  return items.find((item): item is TimelinePartialView => item.kind === "partial" && item.partial.kind === "assistant");
+}
+
+/** 逐帧推进到正文结束等待，返回等待期间经过的时长与结束后的第一份正文。 */
+function untilRevealed(buffer: StreamDisplayBuffer): { waited: number; view: TimelinePartialView | undefined } {
+  let waited = 0;
+  let view = reply(buffer.snapshot());
+  while (view?.awaitingSettle && waited < SETTLE_MS * 4) {
+    waited += 16;
+    view = reply(buffer.advance(16).items);
+  }
+  return { waited, view };
+}
+
+test("text right after a process row waits for the group to collapse, then reveals from the first grapheme", () => {
+  const buffer = watching();
+  buffer.ingest([user("g"), toolDone("a", "g")]);
+  buffer.advance(STRUCTURE_GAP_MS);
+  buffer.ingest([user("g"), toolDone("a", "g"), text("m1", "g", "Hello world, this is the reply")]);
+  const waiting = reply(buffer.advance(STRUCTURE_GAP_MS).items);
+  // 等待期间正文已到达但不显示文字，投影带等待标记供过程组先收起。
+  expect(waiting).toMatchObject({ awaitingSettle: true });
+  expect(waiting?.partial.delta).toBe("");
+  expect(buffer.hasPending()).toBe(true);
+  const { waited, view } = untilRevealed(buffer);
+  expect(waited).toBeGreaterThanOrEqual(SETTLE_MS - 16);
+  expect(waited).toBeLessThanOrEqual(SETTLE_MS + 16);
+  expect(view?.awaitingSettle).toBeUndefined();
+  // 等待标记与首批字素在同一快照交接，正文不会短暂消失。
+  expect(view?.partial.delta).toBe("He");
+});
+
+test("text after a thinking block of the same message also waits", () => {
+  const buffer = watching();
+  buffer.ingest([user("g"), thinking("m1", "g", "plan")]);
+  for (let frame = 0; frame < 20; frame += 1) buffer.advance(16);
+  buffer.ingest([user("g"), thinking("m1", "g", "plan"), text("m1", "g", "Answer")]);
+  let view = reply(buffer.snapshot());
+  for (let frame = 0; frame < 20 && !view?.awaitingSettle; frame += 1) view = reply(buffer.advance(16).items);
+  expect(view).toMatchObject({ awaitingSettle: true });
+});
+
+test("text that opens a turn or follows other text does not wait", () => {
+  const buffer = watching();
+  buffer.ingest([user("g"), text("m1", "g", "First reply")]);
+  const first = reply(buffer.advance(16).items);
+  expect(first?.awaitingSettle).toBeUndefined();
+  expect(first?.partial.delta).not.toBe("");
+});
+
+test("leading whitespace does not start the wait; the first visible character does", () => {
+  const buffer = watching();
+  buffer.ingest([user("g"), toolDone("a", "g")]);
+  buffer.advance(STRUCTURE_GAP_MS);
+  buffer.ingest([user("g"), toolDone("a", "g"), text("m1", "g", "\n")]);
+  for (let frame = 0; frame < 10; frame += 1) expect(reply(buffer.advance(16).items)?.awaitingSettle).toBeUndefined();
+  buffer.ingest([user("g"), toolDone("a", "g"), text("m1", "g", "\nVisible")]);
+  expect(reply(buffer.advance(16).items)).toMatchObject({ awaitingSettle: true });
+  // 等待结束时越过前导空白，首个可见字随交接一起出现。
+  expect(untilRevealed(buffer).view?.partial.delta).toBe("\nVi");
+});
+
+test("run_end waits until the settled text has been revealed", () => {
+  const buffer = watching();
+  buffer.ingest([user("g"), toolDone("a", "g")]);
+  buffer.advance(STRUCTURE_GAP_MS);
+  buffer.ingest([user("g"), toolDone("a", "g"), text("m1", "g", "Done")]);
+  buffer.advance(STRUCTURE_GAP_MS);
+  const ended = buffer.ingest([user("g"), toolDone("a", "g"), text("m1", "g", "Done"), runEnd("g")]);
+  expect(ids(ended.items)).not.toContain("end-g");
+  let items = ended.items;
+  for (let frame = 0; frame < 80 && !ids(items).includes("end-g"); frame += 1) items = buffer.advance(16).items;
+  expect(reply(items)?.partial.delta).toBe("Done");
+  expect(ids(items)).toContain("end-g");
+});
+
+test("reset and foreground flush reveal waiting text at once", () => {
+  const buffer = watching();
+  buffer.ingest([user("g"), toolDone("a", "g")]);
+  buffer.advance(STRUCTURE_GAP_MS);
+  buffer.ingest([user("g"), toolDone("a", "g"), text("m1", "g", "Hello")]);
+  expect(reply(buffer.advance(STRUCTURE_GAP_MS).items)).toMatchObject({ awaitingSettle: true });
+  const flushed = reply(buffer.flush().items);
+  expect(flushed?.awaitingSettle).toBeUndefined();
+  expect(flushed?.partial.delta).toBe("Hello");
 });
