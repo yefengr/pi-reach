@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { ActionIcon, Button } from "@mantine/core";
 import { RefreshCw } from "lucide-react";
 import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
@@ -8,6 +8,7 @@ import { useI18n, type Messages } from "@/lib/i18n";
 import { AttachmentCards, readonlyAttachmentItems } from "./attachment-cards";
 import type { PublishedFileRead } from "./published-file";
 import { SentAttachmentCards } from "./sent-attachment-cards";
+import { EmptyHintExitContext } from "./empty-hint-exit";
 
 type UserEvent = Extract<TimelineEvent, { kind: "user" }>;
 type Props = {
@@ -33,6 +34,9 @@ export function UserMessage({ value, metadata, entering, timelineKey, onRetryFai
   const { t, format } = useI18n();
   // 入场资格仅在气泡创建时确定，离线／重连不能撤下再添加动画 class。
   const [animateEntrance] = useState(entering);
+  // 空会话提示仍在淡出时，入场推迟到淡出结束；同样只在创建时确定，提示移除后不改变已开始的动画。
+  const emptyHintExiting = useContext(EmptyHintExitContext);
+  const [afterEmptyHint] = useState(() => entering && emptyHintExiting);
   const pending = value.kind === "pending" ? value : null;
   const event = value.kind === "user" ? value : null;
   const failure = pending?.delivery === "failed" ? pending.deliveryFailure : undefined;
@@ -57,7 +61,7 @@ export function UserMessage({ value, metadata, entering, timelineKey, onRetryFai
   const label = event?.origin === "extension" ? t.timeline.srRemote : t.timeline.srYou;
   return <div className={`pwa-user-row${pending ? " pwa-pending" : ""}`} data-viewport-row={timelineKey}>
     <div className="pwa-user-bubble-frame">
-    <article className={`pwa-message user${pending ? " pending" : ""}${animateEntrance ? " pwa-user-message-in" : ""}`}>
+    <article className={`pwa-message user${pending ? " pending" : ""}${animateEntrance ? " pwa-user-message-in" : ""}${afterEmptyHint ? " pwa-user-message-after-empty" : ""}`}>
       <span className="pwa-sr-only">{label}</span>
       <div className="pwa-user-blocks">
         {pending || metadata ? <>

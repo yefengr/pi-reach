@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PresentationEntry } from "@/lib/pwa/timeline-presentation";
+import { isSettleCollapse, type ProcessGroupState } from "./process-group-state";
 
 /** 界面连续这么久没有可见变化才显示 Working；任何变化立即隐藏。 */
 export const WORKING_IDLE_MS = 400;
@@ -47,4 +48,29 @@ export function useEnteredKeys(entries: readonly PresentationEntry[], live: bool
   };
   setState(next);
   return next.entered;
+}
+
+/**
+ * 刚由展开转为自动收起的过程组所属轮次（DESIGN「动效」的编排）：同一提交里新进入的正文与完成时间
+ * 等收起结束后再出现，同一时刻只有一个主动作。渲染期派生并存入 state（React 重放渲染时仍可取到）；
+ * 条目再变化而展开状态未变时清空，之后新进入的行不受影响。调用方只在行创建时读取一次。
+ */
+export function useSettlingTurns(entries: readonly PresentationEntry[], groups: readonly { key: string; groupId: string }[], states: ReadonlyMap<string, Pick<ProcessGroupState, "expanded" | "expansionSource">>): ReadonlySet<string> {
+  const expansion = new Map(groups.map(group => [group.key, states.get(group.key)?.expanded === true]));
+  const [state, setState] = useState<{ entries: readonly PresentationEntry[]; expansion: ReadonlyMap<string, boolean>; settling: ReadonlySet<string> }>(() => ({ entries, expansion, settling: NO_KEYS }));
+  const changed = expansion.size !== state.expansion.size || [...expansion].some(([key, expanded]) => state.expansion.get(key) !== expanded);
+  if (changed) {
+    const turns = groups.filter(group => {
+      const current = states.get(group.key);
+      return state.expansion.get(group.key) === true && current !== undefined && isSettleCollapse(current);
+    }).map(group => group.groupId);
+    const settling = turns.length ? new Set(turns) : NO_KEYS;
+    setState({ entries, expansion, settling });
+    return settling;
+  }
+  if (state.entries !== entries) {
+    setState({ entries, expansion, settling: NO_KEYS });
+    return NO_KEYS;
+  }
+  return state.settling;
 }

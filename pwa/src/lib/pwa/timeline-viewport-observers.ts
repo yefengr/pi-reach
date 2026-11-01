@@ -1,5 +1,5 @@
 export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
-const EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty";
+const EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty-slot";
 const TOUCH_READ_THRESHOLD = 4;
 type Events = {
   geometry(activity: boolean, added?: number): void;

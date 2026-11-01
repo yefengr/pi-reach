@@ -23,7 +23,13 @@
 /* 在线会话追加的新行（正文、过程组与组内成员）只淡入，不位移、不做高度动画；位移由跟随滚动承担。 */
 .pwa-row-enter { animation: pwa-row-enter var(--pwa-duration-message-in) var(--pwa-ease-content); }
 @keyframes pwa-row-enter { from { opacity: 0; } to { opacity: 1; } }
+/* 在线会话新结束一轮时完成时间淡入，只改透明度、不改高度。 */
+.pwa-turn-meta-in { animation: pwa-row-enter var(--pwa-duration-content) var(--pwa-ease-content); }
+/* 编排：前一过程组自动收起时，同一提交里新进入的正文与完成时间等收起结束再出现，期间保持起始帧。 */
+.pwa-enter-after-settle { animation-delay: var(--pwa-duration-collapse-settle); animation-fill-mode: backwards; }
 .pwa-user-message-in { animation: pwa-user-message-in var(--pwa-duration-message-in) var(--pwa-ease-content); }
+/* 空会话的第一条消息：等空态提示淡出（fade）后再进入，期间保持起始帧，不与提示并列变化。 */
+.pwa-user-message-in.pwa-user-message-after-empty { animation-delay: var(--pwa-duration-fade); animation-fill-mode: backwards; }
 @keyframes pwa-user-message-in {
   from { opacity: 0; transform: translateY(calc(var(--pwa-message-shift) * var(--pwa-motion-shift))); }
   to { opacity: 1; transform: translateY(0); }
@@ -93,7 +99,10 @@
 .pwa-code-block .hljs-strong { font-weight: var(--pwa-weight-strong); }
 .pwa-code-block .hljs-emphasis { font-style: italic; }
 
-.pwa-chat-empty { display: grid; gap: 4px; margin: 48px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); text-align: center; }
+/* 首条消息出现后空态提示原位淡出：外层容器高度归零并截断外边距，新内容从原位置开始排布。 */
+.pwa-chat-empty-slot[data-leaving] { display: flow-root; height: 0; }
+.pwa-chat-empty-slot[data-leaving] > .pwa-chat-empty { opacity: 0; }
+.pwa-chat-empty { transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit); display: grid; gap: 4px; margin: 48px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); text-align: center; }
 .pwa-chat-empty p { margin: 0; }
 /* 新会话的上下文：目录 · 模型 · 思考级别，发送前确认对象。 */
 .pwa-chat-empty .pwa-chat-empty-context { font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
