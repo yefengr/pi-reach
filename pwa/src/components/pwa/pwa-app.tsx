@@ -970,7 +970,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const stopCurrentTask = useCallback(() => {
     const scope = timelineRuntimeRef.current.currentScope; const channel = channelRef.current;
     if (!scope || !channel || stopRequestRef.current || connectionRef.current !== "online") return;
-    const groupId = currentRunGroup(timelineItemsRef.current);
+    // 以权威条目确定当前轮：显示队列交接期间，显示快照可能仍停在上一轮。
+    const groupId = currentRunGroup(timelineRuntimeRef.current.currentItems());
     if (!groupId || timelineRuntimeRef.current.formalEvents().some((event) => event.kind === "run_end" && event.group_id === groupId)) return;
     const requestId = id();
     setStopRequest({ id: requestId, groupId, sessionId: scope.sessionId, leafId: scope.leafId, startedAt: Date.now(), unknown: false });
