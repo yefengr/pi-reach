@@ -256,6 +256,41 @@ test("a running Thinking title moves into the expanded head; its row keeps only 
   expect(row().querySelector(".pwa-thinking-tail-action")).toBeNull();
 });
 
+test("detail rows sit flush with no gap and the connector stays centered between their icons", async () => {
+  const view = await harness({ entries: [tool("one", "complete"), tool("two", "complete"), tool("three")] });
+  const entries = [...view.root().querySelectorAll<HTMLElement>(".pwa-process-entry")];
+  expect(entries).toHaveLength(3);
+  for (let index = 1; index < entries.length; index += 1) {
+    expect(round(rect(entries[index]!).top - rect(entries[index - 1]!).bottom)).toBe(0);
+    const above = rect(entries[index - 1]!.querySelector(".pwa-tool-status svg")!);
+    const below = rect(entries[index]!.querySelector(".pwa-tool-status svg")!);
+    const line = getComputedStyle(entries[index]!, "::before");
+    const top = rect(entries[index]!).top + Number.parseFloat(line.top);
+    // 竖线中点与两图标断口的中点对齐（整像素比较）。
+    expect(round(top + Number.parseFloat(line.height) / 2)).toBe(round((above.bottom + below.top) / 2));
+    expect(top).toBeGreaterThan(above.bottom);
+    expect(top + Number.parseFloat(line.height)).toBeLessThan(below.top);
+  }
+});
+
+test("the running Thinking tail is one line: short text stays left without a fade, long text keeps the newest words at the right", async () => {
+  const view = await harness({ entries: [tool("check", "complete"), thinking("**Reviewing Pi Reach**\nShort note.")] });
+  const preview = () => view.root().querySelector<HTMLElement>(".pwa-thinking-tail")!;
+  const line = () => preview().querySelector<HTMLElement>("p")!;
+  const lineHeight = Number.parseFloat(getComputedStyle(preview()).lineHeight);
+  expect(round(rect(preview()).height)).toBe(round(lineHeight));
+  expect(round(rect(line()).left)).toBe(round(rect(preview()).left));
+  expect(preview().hasAttribute("data-overflow")).toBe(false);
+  const long = Array.from({ length: 30 }, (_, index) => `step ${index}`).join("\nthen ");
+  view.update({ entries: [tool("check", "complete"), thinking(`**Reviewing Pi Reach**\n${long} newest`)] });
+  // 换行合并为单行；溢出时最新内容贴右，左缘渐隐。
+  expect(line().textContent).not.toContain("\n");
+  expect(round(rect(preview()).height)).toBe(round(lineHeight));
+  expect(preview().hasAttribute("data-overflow")).toBe(true);
+  expect(round(rect(line()).right)).toBe(round(rect(preview()).right));
+  expect(getComputedStyle(preview()).maskImage).toContain("linear-gradient");
+});
+
 test("a new Thinking in a group with tools takes over the head only once it has text", async () => {
   const view = await harness({ entries: [tool("check", "complete"), thinking("")] });
   // 尚无文字：组头保持工具摘要，不先换成「Thinking…」；该行也不占位。
