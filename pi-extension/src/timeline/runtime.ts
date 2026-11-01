@@ -61,6 +61,12 @@ type PendingMessage = {
 type SessionEntry = ReturnType<SessionManager["getBranch"]>[number];
 type MessageEntry = Extract<SessionEntry, { type: "message" }>;
 
+/** 共享扫描结果：目标已出现、已扫描到当前尾部仍可能追加、或已被不可跨越边界终止。 */
+type MarkerScan =
+  | { status: "matched"; entry: MessageEntry }
+  | { status: "waiting" }
+  | { status: "orphaned" };
+
 export type TimelineStarted = {
   eventId: string;
   groupId: string;
@@ -335,18 +341,34 @@ export class TimelineRuntime {
     return id;
   }
 
+  /**
+   * 只对仍可能补齐目标的 marker 保留 cutoff：被下一 marker、硬边界或角色不符终止的 marker
+   * 不会再补齐，继续挡住后续正式事件只会让已可见内容永久滞后。
+   */
   private recoverForPublication(manager: SessionManager): TimelineEvent[] {
     const events = this.recover(manager);
     const visible = new Set(events.map((event) => event.event_id));
     const branch = manager.getBranch();
-    const cutoff = branch.findIndex((entry) => entry.type === "custom" && entry.customType === TIMELINE_MARKER
-      && !visible.has(entry.id) && this.parseMarker(entry.data) !== null);
+    const cutoff = this.publicationCutoff(branch, visible);
     if (cutoff < 0) return events;
     const before = new Set(branch.slice(0, cutoff).map((entry) => entry.id));
     const files = collectPublications(manager);
     return events.filter((event) => files.has(event.event_id)
       ? files.get(event.event_id)!.branchPosition < cutoff
       : before.has(event.event_id));
+  }
+
+  private publicationCutoff(branch: readonly SessionEntry[], visible: ReadonlySet<string>): number {
+    for (let index = 0; index < branch.length; index += 1) {
+      const entry = branch[index]!;
+      if (entry.type !== "custom" || entry.customType !== TIMELINE_MARKER) continue;
+      const marker = this.parseMarker(entry.data);
+      if (!marker || !isMessageMarker(marker) || visible.has(entry.id)) continue;
+      const scan = this.scanTargetAfterMarker(branch, index, this.roleForMarker(marker));
+      // 扫描到目标却未能投影时同样保留门槛：不能把“未恢复”一律当成可放行。
+      if (scan.status !== "orphaned") return index;
+    }
+    return -1;
   }
 
   private publishWhenVisible(sessionManager: SessionManager, markerId: string, correlation: Correlation): void {
@@ -407,8 +429,9 @@ export class TimelineRuntime {
       }
       if (!markerData || !isMessageMarker(markerData)) continue;
       const marker: MessageMarker = { ...markerData, event_id: entry.id };
-      const target = this.scanTargetAfterMarker(branch, index, this.roleForMarker(marker));
-      if (!target) continue;
+      const scan = this.scanTargetAfterMarker(branch, index, this.roleForMarker(marker));
+      if (scan.status !== "matched") continue;
+      const target = scan.entry;
       matched.add(target.id);
       const event = this.toTimelineEvent(target, marker, this.correlationFromMarker(marker), sessionManager, recoveryTools.get(target.id), attachmentMessages.get(marker.event_id));
       if (event) recovered.push({ event, branchPosition: positions.get(target.id)! });
@@ -528,15 +551,17 @@ export class TimelineRuntime {
     return marker.kind === "assistant" ? "assistant" : "toolResult";
   }
 
-  private scanTargetAfterMarker(branch: readonly SessionEntry[], markerIndex: number, role: MessageRole): MessageEntry | undefined {
+  /** recover 与发布门槛共用同一判定；只跨过透明 custom。 */
+  private scanTargetAfterMarker(branch: readonly SessionEntry[], markerIndex: number, role: MessageRole): MarkerScan {
     for (let index = markerIndex + 1; index < branch.length; index += 1) {
       const entry = branch[index]!;
-      if (entry.type === "custom" && entry.customType === TIMELINE_MARKER) return undefined;
+      if (entry.type === "custom" && entry.customType === TIMELINE_MARKER) return { status: "orphaned" };
       if (entry.type === "custom") continue;
-      if (entry.type !== "message") return undefined;
-      return this.messageRole(entry.message) === role ? entry : undefined;
+      if (entry.type !== "message") return { status: "orphaned" };
+      return this.messageRole(entry.message) === role ? { status: "matched", entry } : { status: "orphaned" };
     }
-    return undefined;
+    // 已扫描到当前尾部：后续仍可能在 marker 后追加目标，不能视为遗弃。
+    return { status: "waiting" };
   }
 
   private toTimelineEvent(
