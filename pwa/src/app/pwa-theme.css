@@ -16,6 +16,10 @@
   --pwa-selected: #E5E5E5;
   --pwa-neutral-active: #DEDEDE;
   --pwa-disabled-bg: #F0F0F0;
+  /* 色调填充：次级按钮与状态标签的无边框底色，依次为常态、悬停、按下。 */
+  --pwa-tonal: #EBEBEB;
+  --pwa-tonal-hover: #E0E0E0;
+  --pwa-tonal-active: #D6D6D6;
   --pwa-ink: #2A2A2A;
   --pwa-secondary: #606060;
   --pwa-soft-ink: #4A4A4A;
@@ -66,6 +70,9 @@
   --pwa-selected: #3A3A3A;
   --pwa-neutral-active: #404040;
   --pwa-disabled-bg: #2A2A2A;
+  --pwa-tonal: #404040;
+  --pwa-tonal-hover: #4A4A4A;
+  --pwa-tonal-active: #545454;
   --pwa-ink: #F0F0F0;
   --pwa-secondary: #BCBCBC;
   --pwa-soft-ink: #D4D4D4;
@@ -118,6 +125,9 @@
     --pwa-selected: #3A3A3A;
     --pwa-neutral-active: #404040;
     --pwa-disabled-bg: #2A2A2A;
+    --pwa-tonal: #404040;
+    --pwa-tonal-hover: #4A4A4A;
+    --pwa-tonal-active: #545454;
     --pwa-ink: #F0F0F0;
     --pwa-secondary: #BCBCBC;
     --pwa-soft-ink: #D4D4D4;
@@ -165,6 +175,8 @@
   /* 带状态色的装饰边框：在 :root 上按当前主题的状态色与 line 计算，只辅助识别。 */
   --pwa-running-line: color-mix(in srgb, var(--pwa-running) 40%, var(--pwa-line));
   --pwa-error-line: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line));
+  /* 色调危险入口的悬停底：错误轻底再混入 10% 错误色，错误色文字仍 ≥ 4.5:1。 */
+  --pwa-error-wash-hover: color-mix(in srgb, var(--pwa-error) 10%, var(--pwa-error-wash));
 
   /*
    * 装饰分隔的线宽与颜色，组件只引用 --pwa-hairline 与 --pwa-separator。
@@ -206,6 +218,12 @@
   --pwa-radius-xs: 4px;
   --pwa-radius-md: 8px;
   --pwa-radius-lg: 12px;
+  /* 用户消息气泡与底部弹出面板上沿。 */
+  --pwa-radius-xl: 16px;
+  /* Toast：单行高 44 的一半，与其 36 圆形关闭按钮同心（18 + 视觉内缩 4）；多行时仍是大圆角而非椭圆两端。 */
+  --pwa-radius-toast: 22px;
+  /* 胶囊：只用于单行的状态标签与浮动入口。 */
+  --pwa-radius-pill: 999px;
   /* 主要输入操作表面独立于 Modal、Drawer 与贴边主区的圆角；与底部半径 18 的附件、发送圆形同心（18 + 内边距 10 + 视觉内缩 4）。 */
   --pwa-radius-composer: 32px;
 

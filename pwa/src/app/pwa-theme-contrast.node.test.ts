@@ -39,9 +39,11 @@ function ratio(theme: Theme, foreground: string, background: string): number {
   return (high! + 0.05) / (low! + 0.05);
 }
 
-const neutralSurfaces = ["bg", "surface", "panel", "message", "hover", "selected", "neutral-active", "disabled-bg"];
+const neutralSurfaces = ["bg", "surface", "panel", "message", "hover", "selected", "neutral-active", "disabled-bg", "tonal"];
+// 色调底的悬停与按下只承载按钮的 ink 文字，状态标签不会进入这两档。
+const tonalStates = ["tonal-hover", "tonal-active"];
 // 中性角色不带色相，颜色只出现在主色、状态色与语法色上。
-const neutralRoles = [...neutralSurfaces, "ink", "secondary", "soft-ink", "line", "control-line", "code-bg", "code-muted", "code-ink"];
+const neutralRoles = [...neutralSurfaces, ...tonalStates, "ink", "secondary", "soft-ink", "line", "control-line", "code-bg", "code-muted", "code-ink"];
 
 describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_name, theme) => {
   test("keeps every neutral role achromatic", () => {
@@ -77,6 +79,7 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
     for (const surface of ["bg", "surface", "panel", "message"]) {
       expect(ratio(theme, "soft-ink", surface), `soft-ink on ${surface}`).toBeGreaterThanOrEqual(4.5);
     }
+    for (const state of tonalStates) expect(ratio(theme, "ink", state), `ink on ${state}`).toBeGreaterThanOrEqual(4.5);
   });
 
   test("keeps neutral interaction layers distinguishable", () => {
@@ -145,6 +148,11 @@ test("components read one separator token that switches tier with the measured h
   expect(shared["--pwa-hairline"]).toBe("1px");
   expect(shared["--pwa-separator"]).toBe("var(--pwa-separator-regular)");
   expect(declarations(":root[data-pwa-hairline] {")).toEqual({ "--pwa-hairline": "0.5px", "--pwa-separator": "var(--pwa-separator-hairline)" });
+});
+
+test("the tonal danger hover mixes a little error into its wash", () => {
+  // 10% 时错误色文字在悬停底上浅色约 4.8:1、深色约 5:1；加深前须重新核算。
+  expect(shared["--pwa-error-wash-hover"]).toBe("color-mix(in srgb, var(--pwa-error) 10%, var(--pwa-error-wash))");
 });
 
 test("status edges mix each status color with line at one shared ratio", () => {

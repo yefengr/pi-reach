@@ -248,3 +248,16 @@ DESIGN「嵌套不递减」改为：
 - 手势起点排除从所有 `input` 收窄为不含 radio 与 checkbox：铺满整行的 radio 原会让设置页无法从单选行拖动返回（`settings-drag` 7 项因此失败后修正）。
 
 验证：`settings-page` 21 项（新增单选行整行点击、对勾、方向键与焦点轮廓，以及分隔缩进 46／16 两项）；`settings-drag`、`mobile-swipe`（新增 radio、checkbox 起点可拖动两项）、`confirm-action-dialog`、`viewport-diagnostics-settings`、`settings-page-isolation`、`ui-state-surfaces`、`ui-state-navigation`、`navigation-swipe`、`ui-controls` 全文件通过；`pwa-workspace-layout` 与 `pwa-app` 中涉及设置页的定向用例通过；Node 守卫通过。未覆盖：读屏实机朗读、iOS 真机手势与 Safari 下的对勾与分隔观感。
+
+### 8.6 最终对照与调整
+
+评审确认 Pi Reach 是网页应用，借鉴平台规则而不照搬外观，并允许推翻不合理的现有规则。最终对照原型见 [`final.html`](../../prototypes/20261101-ios-borders-spacing/final.html)（PR 之前的 main 与最新建议并排）。在 8.1–8.5 的基础上：
+
+| 类别 | 调整 |
+| --- | --- |
+| 撤回 | 设置页单选恢复行首可见圆点，取消行尾对勾与隐藏铺满整行的 radio；浏览器数据恢复为按钮（放在内边距 16 的分组中）；手势起点排除规则恢复 `main` 原样 |
+| 新增 | 次级按钮（`default`）为无边框 `tonal` 底；危险入口（`outline`）为无边框 `error-wash` 底与错误色文字；状态标签为 `tonal` 胶囊；「最新」入口为胶囊；Toast 圆角 22；用户消息气泡与骨架 16；底部电脑选择面板上沿 16 |
+| token | `--pwa-tonal`／`-hover`／`-active`、`--pwa-error-wash-hover`、`--pwa-radius-xl`（16）、`--pwa-radius-toast`（22）、`--pwa-radius-pill` |
+| 不采纳 | 毛玻璃、连续曲率圆角、顶栏渐隐、所有按钮胶囊、设置分组加大到 20 以上（理由见 ADR-20261101 补充决策） |
+
+验证：Node 守卫与对比度 53 项通过（专用圆角按选择器登记并检查登记失效；`tonal` 上的 `ink`、`secondary` 与悬停、按下档上的 `ink` ≥ 4.5:1；危险悬停混色比例固定）；Browser Mode `settings-page`、`pwa-controls`、`ui-controls`、`pwa-operation-notifications`、`copy-button`、`pwa-notice-layout`、`settings-drag`、`mobile-swipe`、`workspace-device-control`、`confirm-action-dialog`、`ui-state-surfaces`、`ui-state-navigation`、`navigation-swipe`、`queue-turn-handoff` 共 168 项，`pwa-workspace-layout` 全文件 78 项，`message-send`、`queued-messages`、`hairline`、`scroll-indicator` 共 120 项通过。未覆盖：深色 `tonal` 与危险悬停底的目测、iOS 真机与 Safari 观感。

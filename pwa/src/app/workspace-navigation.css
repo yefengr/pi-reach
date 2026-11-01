@@ -197,12 +197,12 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  padding: 2px 6px;
-  border: 1px solid var(--pwa-line);
-  border-radius: var(--pwa-radius-xs);
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--pwa-radius-pill);
   color: var(--pwa-secondary);
-  /* 状态标签只用描边与文字，不继承 Mantine 浅色变体的底色；运行中另用状态轻底。 */
-  background: transparent;
+  /* 状态标签为无边框的 tonal 胶囊，不继承 Mantine 浅色变体的底色；部分在线另用运行轻底。 */
+  background: var(--pwa-tonal);
   font-size: var(--pwa-text-meta);
   font-weight: var(--pwa-weight-strong);
 }
@@ -213,7 +213,6 @@
 
 .pwa-root .pwa-presence-label.partial {
   color: var(--pwa-running);
-  border-color: var(--pwa-running-line);
   background: var(--pwa-running-wash);
 }
 
@@ -300,7 +299,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 0;
+  /* 底部弹出、不占满屏幕的面板上沿圆角；侧边 Drawer 与全屏页面仍为直角。 */
+  border-radius: var(--pwa-radius-xl) var(--pwa-radius-xl) 0 0;
   color: var(--pwa-ink);
   background: var(--pwa-surface);
 }

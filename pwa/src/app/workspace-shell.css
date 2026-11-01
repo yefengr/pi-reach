@@ -216,7 +216,7 @@
 /* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }
 .pwa-skeleton { display: block; height: 14px; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); animation: pwa-breathe var(--pwa-duration-breathe) linear infinite; }
-.pwa-root .pwa-skeleton-user { justify-self: end; width: 45%; height: 40px; border-radius: var(--pwa-radius-md); }
+.pwa-root .pwa-skeleton-user { justify-self: end; width: 45%; height: 40px; border-radius: var(--pwa-radius-xl); }
 .pwa-root .pwa-skeleton-short { width: 60%; }
 .pwa-root .pwa-nav-skeleton { display: grid; gap: 10px; padding: 8px; }
 .pwa-root .pwa-nav-skeleton .pwa-skeleton:last-child { width: 70%; }

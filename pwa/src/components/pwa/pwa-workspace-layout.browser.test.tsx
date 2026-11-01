@@ -673,7 +673,8 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         // 模态 Drawer 靠遮罩与模态阴影分离，不额外描边。
         const drawer = getComputedStyle(document.querySelector<HTMLElement>(".pwa-device-drawer")!);
         expect([drawer.borderTopWidth, drawer.borderLeftWidth, drawer.borderRightWidth]).toEqual(["0px", "0px", "0px"]);
-        expect(drawer.borderRadius).toBe("0px");
+        // 底部弹出、不占满屏幕的面板上沿圆角 16，贴屏幕的下沿为直角。
+        expect(drawer.borderRadius).toBe("16px 16px 0px 0px");
         expect(drawer.boxShadow).not.toBe("none");
       } else {
         await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
@@ -715,14 +716,15 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(button.querySelector(".pwa-peer-presence")?.textContent).toContain(["2 Pis running", "0 Pis running", "1 Pi running", "Checking"][index]);
         expect(button.querySelector(".pwa-peer-icon")?.classList.contains("online")).toBe(index === 0 || index === 2);
         if (index === 0 || index === 2) {
-          // 在线电脑的图标与标签只用正文色，不铺主色底。
+          // 在线电脑的图标与标签只用正文色，标签为中性色调底，不铺主色底。
           const probe = document.createElement("span");
           probe.style.color = "var(--pwa-ink)";
+          probe.style.background = "var(--pwa-tonal)";
           row.append(probe);
           expect(getComputedStyle(button.querySelector(".pwa-peer-icon")!).color).toBe(getComputedStyle(probe).color);
           if (index === 0) {
             expect(getComputedStyle(button.querySelector(".pwa-presence-label")!).color).toBe(getComputedStyle(probe).color);
-            expect(getComputedStyle(button.querySelector(".pwa-presence-label")!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+            expect(getComputedStyle(button.querySelector(".pwa-presence-label")!).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
           }
           probe.remove();
         }

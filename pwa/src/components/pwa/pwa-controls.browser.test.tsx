@@ -177,8 +177,9 @@ test.each([1280, 390])("shared radii stay 4/8/12 with a concentric 32px Composer
     [screen.getByTestId("radius-button").element(), "8px"],
     [screen.getByRole("textbox", { name: "Radius input fixture" }).element(), "8px"],
     [screen.getByTestId("radius-badge").element(), "4px"],
-    [screen.getByTestId("radius-presence").element(), "4px"],
-    [screen.getByTestId("radius-current").element(), "4px"],
+    // 状态标签为胶囊（DESIGN「圆角」）。
+    [screen.getByTestId("radius-presence").element(), "999px"],
+    [screen.getByTestId("radius-current").element(), "999px"],
     [document.querySelector(".pwa-nav-session")!, "8px"],
     [document.querySelector(".pwa-composer-card")!, "32px"],
   ] as const;
@@ -186,7 +187,7 @@ test.each([1280, 390])("shared radii stay 4/8/12 with a concentric 32px Composer
     await screen.getByRole("button", { name: appearance }).click();
     for (const [element, radius] of radii) expect(getComputedStyle(element).borderRadius).toBe(radius);
     const root = getComputedStyle(document.documentElement);
-    for (const [token, value] of [["xs", "4px"], ["md", "8px"], ["lg", "12px"], ["composer", "32px"]]) {
+    for (const [token, value] of [["xs", "4px"], ["md", "8px"], ["lg", "12px"], ["xl", "16px"], ["composer", "32px"], ["toast", "22px"], ["pill", "999px"]]) {
       expect(root.getPropertyValue(`--pwa-radius-${token}`).trim()).toBe(value);
     }
     const icon = document.querySelector(".pwa-composer-send")!;
