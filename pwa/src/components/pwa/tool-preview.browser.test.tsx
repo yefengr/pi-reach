@@ -164,16 +164,16 @@ test("the reader shows the call as the first body block on the main background",
     expect(call.scrollHeight).toBeLessThanOrEqual(call.clientHeight);
     expect(body.textContent).not.toContain("$ pnpm");
     expect(body.textContent).toContain("3 passed");
-    // 顶栏与正文同用主界面底色，状态栏与主界面一致；调用行与输出之间是 1px line 分割线。
+    // 顶栏与正文同用主界面底色，状态栏与主界面一致；调用行与输出之间是发丝线分隔。
     const probe = document.createElement("div");
     probe.style.background = "var(--pwa-bg)";
-    probe.style.borderColor = "var(--pwa-line)";
+    probe.style.borderTop = "var(--pwa-hairline) solid var(--pwa-separator)";
     document.querySelector(".pwa-root")!.append(probe);
     const main = getComputedStyle(probe).backgroundColor;
-    const line = getComputedStyle(probe).borderTopColor;
+    const [hairline, separator] = [getComputedStyle(probe).borderTopWidth, getComputedStyle(probe).borderTopColor];
     probe.remove();
-    expect(getComputedStyle(call).borderBottomWidth).toBe("1px");
-    expect(getComputedStyle(call).borderBottomColor).toBe(line);
+    expect(getComputedStyle(call).borderBottomWidth).toBe(hairline);
+    expect(getComputedStyle(call).borderBottomColor).toBe(separator);
     const output = call.nextElementSibling!.getBoundingClientRect();
     expect(output.top).toBeGreaterThan(call.getBoundingClientRect().bottom);
     for (const element of [header, body, document.querySelector<HTMLElement>(".pwa-tool-reader")!]) {

@@ -1,4 +1,8 @@
-const EXCLUDED_START = "input, textarea, select, [contenteditable], .pwa-composer, [data-swipe-ignore]";
+/**
+ * 起点在可编辑或可拖动的控件上时不接管手势。单选与复选框和按钮一样只响应轻点，不排除：
+ * 设置页单选行把视觉隐藏的 radio 铺满整行，排除后整行都无法拖动返回。
+ */
+const EXCLUDED_START = "input:not([type=\"radio\"], [type=\"checkbox\"]), textarea, select, [contenteditable], .pwa-composer, [data-swipe-ignore]";
 /** Safari 标签页左缘属于浏览器后退手势；起点落在此宽度内时不跟手，退回触发式。 */
 export const SWIPE_EDGE_EXCLUSION_PX = 24;
 const STANDALONE_QUERY = "(display-mode: standalone)";

@@ -27,7 +27,7 @@
   min-width: 24px;
   height: 24px;
   padding: 0 6px;
-  border: 1px solid var(--pwa-line);
+  border: var(--pwa-hairline) solid var(--pwa-separator);
   border-radius: var(--pwa-radius-md);
   color: var(--pwa-secondary);
   background: var(--pwa-panel);
@@ -40,7 +40,7 @@
 .pwa-queued-message-list {
   display: grid;
   max-height: min(220px, 25dvh);
-  border: 1px solid var(--pwa-line);
+  border: var(--pwa-hairline) solid var(--pwa-separator);
   border-radius: var(--pwa-radius-md);
   background: var(--pwa-panel);
   overflow-x: hidden;
@@ -51,6 +51,7 @@
 
 /* 每条一行：序号、状态、单行正文、操作图标按钮；有投递提示时在下方补一行说明。 */
 .pwa-queued-message {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -59,8 +60,15 @@
   padding: 0 0 0 12px;
 }
 
-.pwa-queued-message + .pwa-queued-message {
-  border-top: 1px solid var(--pwa-line);
+/* 行间分隔左右各缩进 12（与行左内边距一致），不碰列表外框；绘制在伪元素上，行高不变。 */
+.pwa-queued-message + .pwa-queued-message::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 12px;
+  left: 12px;
+  border-top: var(--pwa-hairline) solid var(--pwa-separator);
+  pointer-events: none;
 }
 
 .pwa-queued-message-index {
@@ -144,7 +152,7 @@
   display: block;
   width: 24px;
   height: 24px;
-  border: 1px solid var(--pwa-line);
+  border: var(--pwa-hairline) solid var(--pwa-separator);
   border-radius: var(--pwa-radius-xs);
   object-fit: cover;
   background: var(--pwa-code-bg);

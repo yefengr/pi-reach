@@ -49,6 +49,9 @@ function Harness({ clicks, empty = false }: { clicks: () => void; empty?: boolea
     <div className="pwa-composer"><input aria-label="Draft" /><span data-testid="composer-copy">Composer controls</span></div>
     <span contentEditable suppressContentEditableWarning data-testid="editable">Editable</span>
     <span data-swipe-ignore data-testid="ignored">Ignored</span>
+    <input aria-label="Search" />
+    <input type="radio" name="swipe-probe" aria-label="Choice" />
+    <input type="checkbox" aria-label="Toggle" />
   </PwaWorkspaceLayout></PwaAppShell></PwaUiProvider>;
 }
 async function setup(synthetic = true, empty = false) {
@@ -97,7 +100,7 @@ test.each([
 
 test("G1 excludes inputs, composer descendants, contenteditable, opt-out and selected text", async () => {
   const { screen, child } = await setup();
-  for (const target of [screen.getByRole("textbox", { name: "Draft" }).element(), ...["composer-copy", "editable", "ignored"].map((id) => screen.getByTestId(id).element())]) {
+  for (const target of [screen.getByRole("textbox", { name: "Draft" }).element(), screen.getByRole("textbox", { name: "Search" }).element(), ...["composer-copy", "editable", "ignored"].map((id) => screen.getByTestId(id).element())]) {
     syntheticSwipe(target);
     expect(navigationOpen()).toBe(false);
   }
@@ -105,6 +108,12 @@ test("G1 excludes inputs, composer descendants, contenteditable, opt-out and sel
   window.getSelection()!.addRange(range);
   syntheticSwipe(child);
   expect(navigationOpen()).toBe(false);
+});
+
+test.each(["Choice", "Toggle"])("G1 starts from a %s input, which only responds to taps like a button", async (name) => {
+  const { screen } = await setup();
+  syntheticSwipe(screen.getByRole(name === "Choice" ? "radio" : "checkbox", { name }).element());
+  await expect.poll(navigationOpen).toBe(true);
 });
 
 test("G1 excludes real overflowing Markdown code, table and tool diff without changing their touch action", async () => {

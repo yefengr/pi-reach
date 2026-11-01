@@ -36,12 +36,23 @@
 
 .pwa-keyboard-list dd { margin: 0; }
 .pwa-keyboard-list kbd { font-family: var(--pwa-font-mono); white-space: nowrap; }
-.pwa-keyboard-setting .mantine-Switch-label {
-  display: flex;
+/* 设置分组中的开关行：文字在左、开关在行尾，行高由 .pwa-settings-row 保证。 */
+.pwa-keyboard-setting .mantine-Switch-body {
+  flex: 1;
   align-items: center;
-  min-height: var(--pwa-hit-target);
+  justify-content: space-between;
+  gap: 12px;
+}
+.pwa-keyboard-setting .mantine-Switch-labelWrapper {
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+}
+.pwa-keyboard-setting .mantine-Switch-label {
+  padding: 0;
   color: var(--pwa-ink);
   font-size: var(--pwa-text-body);
+  line-height: var(--pwa-leading-ui);
 }
 .pwa-keyboard-setting .mantine-Switch-track { border-color: var(--pwa-control-line); }
 .pwa-keyboard-setting .mantine-Switch-description {

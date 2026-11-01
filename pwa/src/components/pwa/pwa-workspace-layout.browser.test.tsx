@@ -534,7 +534,7 @@ test("standalone status bar backdrop is a top-layer fixed element that only expo
     await screen.getByRole("button", { name: "Open navigation" }).click();
     await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
     expect(style().backgroundColor).toBe(color(".pwa-session-sheet-head"));
-    // 设置层盖在导航之上时取设置页顶栏的 bg。
+    // 设置层盖在导航之上时取设置页顶栏的 grouped-bg。
     await screen.getByRole("button", { name: "Open settings" }).click();
     await expect.element(screen.getByRole("main", { name: "Settings" })).toBeVisible();
     await expect.poll(() => style().backgroundColor).toBe(color(".pwa-settings-header"));

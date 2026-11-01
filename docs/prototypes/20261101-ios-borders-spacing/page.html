@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>边框与圆角对比 · Pi Reach</title>
+<link rel="stylesheet" href="./shared.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  <symbol id="i-fold" viewBox="0 0 24 24"><path d="m7 20 5-5 5 5M7 4l5 5 5-5"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">PWA · 边框、分隔与圆角 · 评审中</p>
+      <h1>参照 iOS 的边框调整</h1>
+      <p class="lede">每组左侧为当前实现，右侧为方案候选。只有该组讨论的属性不同，其余保持当前规范。</p>
+    </div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="外观">
+        <button type="button" data-theme-set="light" aria-pressed="true">浅色</button>
+        <button type="button" data-theme-set="dark" aria-pressed="false">深色</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="guides" checked> 同心辅助线</label>
+      <span class="dpr" id="dpr"></span>
+    </div>
+  </header>
+
+  <!-- 1. 发丝线 -->
+  <section class="block" aria-labelledby="h-hairline">
+    <h2 id="h-hairline">1 · 发丝线与半透明分隔色</h2>
+    <p class="q">评审：<b>发丝线档（0.5px 加 <code>#00000033</code>／<code>#FFFFFF3D</code>）在各种底色上是否清楚，且比现在更轻？</b>只有 Safari 等画得出 0.5px 的浏览器显示发丝线档；Chrome 显示常规档（1px，与现在同深）。右侧排队消息的行间分隔从序号起，不再贯穿整行。</p>
+
+    <div class="pane" style="margin-bottom:16px">
+      <table class="swatches" aria-label="分隔线样本">
+        <thead><tr><th scope="col">底色</th><th scope="col">调整前 · 1px <code>line</code></th><th scope="col">调整后 · 发丝线 <code>separator</code></th></tr></thead>
+        <tbody>
+          <tr><td>bg</td><td><div class="sw before on-bg"></div></td><td><div class="sw after on-bg"></div></td></tr>
+          <tr><td>panel</td><td><div class="sw before on-panel"></div></td><td><div class="sw after on-panel"></div></td></tr>
+          <tr><td>message</td><td><div class="sw before on-message"></div></td><td><div class="sw after on-message"></div></td></tr>
+          <tr><td>放大 4×</td><td><div class="zoom before"><i></i></div></td><td><div class="zoom after"><i></i></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cmp">
+      <div class="pane v-before">
+        <p class="tag">调整前</p>
+        <div class="stage">
+          <div class="queued" aria-label="排队的消息">
+            <div class="queued-head">排队的消息 <span class="queued-count">3</span></div>
+            <div class="queued-list">
+              <div class="queued-row"><span class="queued-idx">1</span><span class="queued-text">顺便把 README 的端口说明也更新一下</span><button class="icon-btn" type="button" aria-label="编辑"><svg class="i s16"><use href="#i-pencil"/></svg></button><button class="icon-btn" type="button" aria-label="移除"><svg class="i s16"><use href="#i-x"/></svg></button></div>
+              <div class="queued-row"><span class="queued-idx">2</span><span class="queued-text">跑完测试后告诉我失败的用例</span><button class="icon-btn" type="button" aria-label="编辑"><svg class="i s16"><use href="#i-pencil"/></svg></button><button class="icon-btn" type="button" aria-label="移除"><svg class="i s16"><use href="#i-x"/></svg></button></div>
+              <div class="queued-row"><span class="queued-idx">3</span><span class="queued-text">最后整理一份变更摘要</span><button class="icon-btn" type="button" aria-label="编辑"><svg class="i s16"><use href="#i-pencil"/></svg></button><button class="icon-btn" type="button" aria-label="移除"><svg class="i s16"><use href="#i-x"/></svg></button></div>
+            </div>
+          </div>
+          <div class="md">
+            <p>本轮改动涉及三个文件：</p>
+            <table><thead><tr><th>文件</th><th>改动</th></tr></thead><tbody><tr><td><code>relay.ts</code></td><td>重连退避</td></tr><tr><td><code>pair.ts</code></td><td>配对码校验</td></tr></tbody></table>
+            <hr>
+            <p>测试全部通过。</p>
+          </div>
+        </div>
+        <ul class="spec"><li><code>border: 1px solid var(--pwa-line)</code></li><li>行间分隔贯穿整行</li></ul>
+      </div>
+      <div class="pane v-after">
+        <p class="tag after">调整后</p>
+        <div class="stage">
+          <div class="queued" aria-label="排队的消息">
+            <div class="queued-head">排队的消息 <span class="queued-count">3</span></div>
+            <div class="queued-list">
+              <div class="queued-row"><span class="queued-idx">1</span><span class="queued-text">顺便把 README 的端口说明也更新一下</span><button class="icon-btn" type="button" aria-label="编辑"><svg class="i s16"><use href="#i-pencil"/></svg></button><button class="icon-btn" type="button" aria-label="移除"><svg class="i s16"><use href="#i-x"/></svg></button></div>
+              <div class="queued-row"><span class="queued-idx">2</span><span class="queued-text">跑完测试后告诉我失败的用例</span><button class="icon-btn" type="button" aria-label="编辑"><svg class="i s16"><use href="#i-pencil"/></svg></button><button class="icon-btn" type="button" aria-label="移除"><svg class="i s16"><use href="#i-x"/></svg></button></div>
+              <div class="queued-row"><span class="queued-idx">3</span><span class="queued-text">最后整理一份变更摘要</span><button class="icon-btn" type="button" aria-label="编辑"><svg class="i s16"><use href="#i-pencil"/></svg></button><button class="icon-btn" type="button" aria-label="移除"><svg class="i s16"><use href="#i-x"/></svg></button></div>
+            </div>
+          </div>
+          <div class="md">
+            <p>本轮改动涉及三个文件：</p>
+            <table><thead><tr><th>文件</th><th>改动</th></tr></thead><tbody><tr><td><code>relay.ts</code></td><td>重连退避</td></tr><tr><td><code>pair.ts</code></td><td>配对码校验</td></tr></tbody></table>
+            <hr>
+            <p>测试全部通过。</p>
+          </div>
+        </div>
+        <ul class="spec"><li><code>border: var(--pwa-hairline) solid var(--pwa-separator)</code></li><li>实测画得出 0.5px 时用发丝线档，否则 1px 常规档</li><li>排队消息有外框，行间分隔左右各缩进 12，不碰外框</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 滚动边缘 -->
+  <section class="block" aria-labelledby="h-edge">
+    <h2 id="h-edge">2 · 滚动边缘分隔</h2>
+    <p class="q">评审：<b>顶栏只在内容滚到下方时显示一条发丝线。</b>两侧都可以滚动；右侧滚到顶部时分隔会淡出。设置页、电脑 Drawer 与阅读器头部按同一规则。</p>
+    <div class="cmp">
+      <div class="pane">
+        <p class="tag">调整前</p>
+        <div class="phone js-scroll-root">
+          <div class="bar"><button class="icon-btn" type="button" aria-label="打开导航"><svg class="i"><use href="#i-menu"/></svg></button><span class="bar-title">修复 Relay 重连退避</span><button class="icon-btn" type="button" aria-label="会话操作"><svg class="i"><use href="#i-more"/></svg></button></div>
+          <div class="scroll js-scroll js-chat"><div class="chat" data-chat></div></div>
+        </div>
+        <ul class="spec"><li>顶栏实色、无分隔，内容在栏下被硬切</li></ul>
+      </div>
+      <div class="pane">
+        <p class="tag after">调整后</p>
+        <div class="phone edge-aware js-scroll-root">
+          <div class="bar"><button class="icon-btn" type="button" aria-label="打开导航"><svg class="i"><use href="#i-menu"/></svg></button><span class="bar-title">修复 Relay 重连退避</span><button class="icon-btn" type="button" aria-label="会话操作"><svg class="i"><use href="#i-more"/></svg></button></div>
+          <div class="scroll js-scroll js-chat"><div class="chat" data-chat></div></div>
+        </div>
+        <ul class="spec"><li>滚动距离 &gt; 0 时写入 <code>data-scroll-edge</code></li><li>发丝线经 <code>--pwa-duration-fade</code>（120ms）淡入淡出，不改变布局</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 同心圆角 -->
+  <section class="block" aria-labelledby="h-concentric">
+    <h2 id="h-concentric">3 · 同心圆角</h2>
+    <p class="q">评审：<b>外圆角 = 内圆角 + 内边距。</b>红色虚线是由外框圆角推出的同心轮廓：同心时会正好贴住内部圆形或菜单行。附件按钮固定显示悬停底，便于对照。</p>
+    <div class="cmp">
+      <div class="pane v-before">
+        <p class="tag">调整前</p>
+        <div class="stage panel">
+          <div class="composer">
+            <span class="guide" aria-hidden="true"></span>
+            <div class="composer-input">向 Pi 发送消息…</div>
+            <div class="composer-foot">
+              <button class="icon-btn show-hover" type="button" aria-label="添加附件"><svg class="i"><use href="#i-clip"/></svg></button>
+              <div class="composer-actions"><span class="model">Fable 5.1 · 高 <svg class="i s16"><use href="#i-down"/></svg></span><button class="send" type="button" aria-label="发送消息"><svg class="i"><use href="#i-up"/></svg></button></div>
+            </div>
+          </div>
+          <div class="composer focus">
+            <span class="guide" aria-hidden="true"></span>
+            <div class="composer-input" style="color:var(--ink)">把重连上限改成 30 秒</div>
+            <div class="composer-foot">
+              <button class="icon-btn show-hover" type="button" aria-label="添加附件"><svg class="i"><use href="#i-clip"/></svg></button>
+              <div class="composer-actions"><span class="model">Fable 5.1 · 高 <svg class="i s16"><use href="#i-down"/></svg></span><button class="send" type="button" aria-label="发送消息"><svg class="i"><use href="#i-up"/></svg></button></div>
+            </div>
+          </div>
+          <p class="cap">下：聚焦态</p>
+          <div class="menu" role="menu" aria-label="会话操作">
+            <span class="guide" aria-hidden="true"></span>
+            <div class="menu-item hover" role="menuitem"><svg class="i s16"><use href="#i-info"/></svg>会话信息</div>
+            <div class="menu-item" role="menuitem"><svg class="i s16"><use href="#i-plus"/></svg>新会话</div>
+            <div class="menu-item" role="menuitem"><svg class="i s16"><use href="#i-fold"/></svg>压缩上下文</div>
+            <div class="menu-divider" role="separator"></div>
+            <div class="menu-item" role="menuitem"><svg class="i s16"><use href="#i-key"/></svg>键盘快捷键</div>
+          </div>
+        </div>
+        <ul class="spec"><li>Composer 圆角 16；圆形底距底边 14、侧边 16 → 同心需 32</li><li>浮层圆角 8、内边距 6、菜单行 8 → 同心需 14</li><li>边框均为 1px <code>line</code></li></ul>
+      </div>
+      <div class="pane v-after">
+        <p class="tag after">调整后</p>
+        <div class="stage panel">
+          <div class="composer">
+            <span class="guide" aria-hidden="true"></span>
+            <div class="composer-input">向 Pi 发送消息…</div>
+            <div class="composer-foot">
+              <button class="icon-btn show-hover" type="button" aria-label="添加附件"><svg class="i"><use href="#i-clip"/></svg></button>
+              <div class="composer-actions"><span class="model">Fable 5.1 · 高 <svg class="i s16"><use href="#i-down"/></svg></span><button class="send" type="button" aria-label="发送消息"><svg class="i"><use href="#i-up"/></svg></button></div>
+            </div>
+          </div>
+          <div class="composer focus">
+            <span class="guide" aria-hidden="true"></span>
+            <div class="composer-input" style="color:var(--ink)">把重连上限改成 30 秒</div>
+            <div class="composer-foot">
+              <button class="icon-btn show-hover" type="button" aria-label="添加附件"><svg class="i"><use href="#i-clip"/></svg></button>
+              <div class="composer-actions"><span class="model">Fable 5.1 · 高 <svg class="i s16"><use href="#i-down"/></svg></span><button class="send" type="button" aria-label="发送消息"><svg class="i"><use href="#i-up"/></svg></button></div>
+            </div>
+          </div>
+          <p class="cap">下：聚焦态（同宽，只换强调色）</p>
+          <div class="menu" role="menu" aria-label="会话操作">
+            <span class="guide" aria-hidden="true"></span>
+            <div class="menu-item hover" role="menuitem"><svg class="i s16"><use href="#i-info"/></svg>会话信息</div>
+            <div class="menu-item" role="menuitem"><svg class="i s16"><use href="#i-plus"/></svg>新会话</div>
+            <div class="menu-item" role="menuitem"><svg class="i s16"><use href="#i-fold"/></svg>压缩上下文</div>
+            <div class="menu-divider" role="separator"></div>
+            <div class="menu-item" role="menuitem"><svg class="i s16"><use href="#i-key"/></svg>键盘快捷键</div>
+          </div>
+        </div>
+        <ul class="spec"><li>Composer 圆角 32（18 + 14），内边距不变</li><li>浮层圆角 12、内边距 4、菜单行 8（8 + 4）</li><li>边框改为发丝线</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. 设置页 -->
+  <section class="block" aria-labelledby="h-settings">
+    <h2 id="h-settings">4 · 设置页分组列表（可选）</h2>
+    <p class="q">评审：<b>是否改为 iOS 式分组列表。</b>单选从整卡描边改为行尾对勾，说明移到分组下方，行间发丝线从文字起。只演示四个分区；右侧顶栏同样带滚动边缘分隔。</p>
+    <div class="cmp">
+      <div class="pane">
+        <p class="tag">调整前</p>
+        <div class="phone tall settings v1 js-scroll-root">
+          <div class="bar"><button class="icon-btn" type="button" aria-label="返回"><svg class="i"><use href="#i-left"/></svg></button><span class="bar-title">设置</span></div>
+          <div class="scroll js-scroll">
+            <div class="set-inner">
+              <section>
+                <h3 class="set-title">外观</h3>
+                <p class="set-desc">选择 Pi Reach 在此浏览器中的外观。</p>
+                <div class="opts" role="radiogroup" aria-label="外观">
+                  <div class="opt on" role="radio" aria-checked="true"><span class="radio"></span><span class="opt-copy"><svg class="i"><use href="#i-monitor"/></svg><span class="opt-text"><strong>跟随系统</strong><small>与设备外观一致</small></span></span></div>
+                  <div class="opt" role="radio" aria-checked="false"><span class="radio"></span><span class="opt-copy"><svg class="i"><use href="#i-sun"/></svg><span class="opt-text"><strong>浅色</strong><small>明亮的工作区</small></span></span></div>
+                  <div class="opt" role="radio" aria-checked="false"><span class="radio"></span><span class="opt-copy"><svg class="i"><use href="#i-moon"/></svg><span class="opt-text"><strong>深色</strong><small>更柔和的夜间工作区</small></span></span></div>
+                </div>
+              </section>
+              <section>
+                <h3 class="set-title">字体大小</h3>
+                <p class="set-desc">调整界面与消息文字的大小，只保存在此浏览器中。</p>
+                <div class="opts" role="radiogroup" aria-label="字体大小">
+                  <div class="opt on" role="radio" aria-checked="true"><span class="radio"></span><span class="opt-copy"><svg class="i"><use href="#i-type"/></svg><span class="opt-text"><strong>标准</strong><small>默认字号</small></span></span></div>
+                  <div class="opt" role="radio" aria-checked="false"><span class="radio"></span><span class="opt-copy"><svg class="i"><use href="#i-type"/></svg><span class="opt-text"><strong>大</strong><small>更易阅读</small></span></span></div>
+                  <div class="opt" role="radio" aria-checked="false"><span class="radio"></span><span class="opt-copy"><svg class="i"><use href="#i-type"/></svg><span class="opt-text"><strong>特大</strong><small>最大字号</small></span></span></div>
+                </div>
+              </section>
+              <section>
+                <h3 class="set-title">键盘</h3>
+                <p class="set-desc">桌面端快捷键。发送偏好只保存在当前浏览器中。</p>
+                <div class="sw-row"><span class="switch" aria-hidden="true"></span><span class="opt-text"><strong>Enter 发送消息</strong><small>关闭后 Enter 换行，Ctrl / ⌘ + Enter 仍可发送。手机输入方式不变。</small></span></div>
+                <span class="btn">键盘快捷键</span>
+              </section>
+              <section>
+                <div class="about-head"><h3 class="set-title">关于</h3><button class="icon-btn" type="button" aria-label="复制版本信息"><svg class="i s16"><use href="#i-copy"/></svg></button></div>
+                <dl><div><dt>PWA</dt><dd>0.0.33</dd></div><div><dt>Relay</dt><dd>0.0.7</dd></div><div><dt>扩展</dt><dd>0.0.19</dd></div></dl>
+                <p class="set-desc" style="margin-top:12px">当前 Pi：pi-reach</p>
+              </section>
+            </div>
+          </div>
+        </div>
+        <ul class="spec"><li>页面底 <code>bg</code>；未选中卡片无描边，选中项 1px <code>ink</code> 描边</li><li>说明在标题下方，控件距说明 16</li></ul>
+      </div>
+      <div class="pane">
+        <p class="tag after">调整后</p>
+        <div class="phone tall settings v2 edge-aware js-scroll-root">
+          <div class="bar"><button class="icon-btn" type="button" aria-label="返回"><svg class="i"><use href="#i-left"/></svg></button><span class="bar-title">设置</span></div>
+          <div class="scroll js-scroll">
+            <div class="set-inner">
+              <section>
+                <h3 class="set-title">外观</h3>
+                <div class="group with-icons" role="radiogroup" aria-label="外观">
+                  <div class="row on" role="radio" aria-checked="true"><span class="opt-copy"><svg class="i"><use href="#i-monitor"/></svg><span class="opt-text"><strong>跟随系统</strong><small>与设备外观一致</small></span></span><svg class="i check"><use href="#i-check"/></svg></div>
+                  <div class="row" role="radio" aria-checked="false"><span class="opt-copy"><svg class="i"><use href="#i-sun"/></svg><span class="opt-text"><strong>浅色</strong><small>明亮的工作区</small></span></span><svg class="i check"><use href="#i-check"/></svg></div>
+                  <div class="row" role="radio" aria-checked="false"><span class="opt-copy"><svg class="i"><use href="#i-moon"/></svg><span class="opt-text"><strong>深色</strong><small>更柔和的夜间工作区</small></span></span><svg class="i check"><use href="#i-check"/></svg></div>
+                </div>
+                <p class="foot-note">选择 Pi Reach 在此浏览器中的外观。</p>
+              </section>
+              <section>
+                <h3 class="set-title">字体大小</h3>
+                <div class="group with-icons" role="radiogroup" aria-label="字体大小">
+                  <div class="row on" role="radio" aria-checked="true"><span class="opt-copy"><svg class="i"><use href="#i-type"/></svg><span class="opt-text"><strong>标准</strong><small>默认字号</small></span></span><svg class="i check"><use href="#i-check"/></svg></div>
+                  <div class="row" role="radio" aria-checked="false"><span class="opt-copy"><svg class="i"><use href="#i-type"/></svg><span class="opt-text"><strong>大</strong><small>更易阅读</small></span></span><svg class="i check"><use href="#i-check"/></svg></div>
+                  <div class="row" role="radio" aria-checked="false"><span class="opt-copy"><svg class="i"><use href="#i-type"/></svg><span class="opt-text"><strong>特大</strong><small>最大字号</small></span></span><svg class="i check"><use href="#i-check"/></svg></div>
+                </div>
+                <p class="foot-note">调整界面与消息文字的大小，只保存在此浏览器中。</p>
+              </section>
+              <section>
+                <h3 class="set-title">键盘</h3>
+                <div class="group">
+                  <div class="row"><span class="opt-text grow"><strong>Enter 发送消息</strong><small>关闭后 Enter 换行，Ctrl / ⌘ + Enter 仍可发送。手机输入方式不变。</small></span><span class="switch" aria-hidden="true"></span></div>
+                  <div class="row"><span class="grow">键盘快捷键</span><svg class="i chev"><use href="#i-chev"/></svg></div>
+                </div>
+                <p class="foot-note">桌面端快捷键。发送偏好只保存在当前浏览器中。</p>
+              </section>
+              <section>
+                <h3 class="set-title">关于</h3>
+                <div class="group">
+                  <div class="row"><span class="grow">PWA</span><span class="value">0.0.33</span></div>
+                  <div class="row"><span class="grow">Relay</span><span class="value">0.0.7</span></div>
+                  <div class="row"><span class="grow">扩展</span><span class="value">0.0.19</span></div>
+                  <div class="row action"><span class="grow">复制版本信息</span></div>
+                </div>
+                <p class="foot-note">当前 Pi：pi-reach</p>
+              </section>
+            </div>
+          </div>
+        </div>
+        <ul class="spec"><li>页面底 <code>--pwa-grouped-bg</code>（浅色 panel、深色 bg），分组 <code>surface</code>、圆角 12</li><li>行高 ≥ 44、左右 16；带图标分组分隔线左缩进 46</li><li>标题到分组 8，分组到说明 6，分区 32</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>静态评审稿：不连接 Relay 或 Pi；除外观切换、辅助线与滚动边缘外没有交互。产品取值来自 <code>pwa-theme.css</code>（main 8c94c87），分隔色、发丝线、Composer 32 与浮层 12／4 为候选值。不在本稿范围：</p>
+    <ul>
+      <li>间距档位、阅读列宽与点击区不变（已与 iOS 对齐）。</li>
+      <li>按钮、输入控件、选中描边、焦点轮廓与状态色边框保持 1px。</li>
+      <li>Modal、Toast、消息气泡、代码块与图片圆角不变。</li>
+    </ul>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const themeButtons = document.querySelectorAll("[data-theme-set]");
+  themeButtons.forEach((button) => button.addEventListener("click", () => {
+    root.dataset.theme = button.dataset.themeSet;
+    themeButtons.forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+  }));
+
+  const guides = document.getElementById("guides");
+  const syncGuides = () => document.body.toggleAttribute("data-guides", guides.checked);
+  guides.addEventListener("change", syncGuides);
+  syncGuides();
+
+  // 与正式实现相同：只有实际画得出 0.5px 时才启用发丝线档（Chromium 会画成 1px）。
+  const probe = document.createElement("div");
+  probe.style.cssText = "position: absolute; visibility: hidden; box-sizing: content-box; height: 0; border-top: 0.5px solid transparent";
+  document.body.append(probe);
+  const hairline = probe.getBoundingClientRect().height < 1;
+  probe.remove();
+  root.toggleAttribute("data-hairline", hairline);
+  const dpr = window.devicePixelRatio || 1;
+  document.getElementById("dpr").textContent = `当前屏幕 ${Math.round(dpr * 100) / 100}× · ${hairline ? "发丝线档 0.5px" : "常规档 1px（浏览器画不出 0.5px）"}`;
+
+  // 演示对话：两侧共用同一段内容
+  const chat = [
+    ["user", "Relay 断线后重连太频繁，帮我看看退避逻辑"],
+    ["pi", "<p>重连在 <code>relay.ts</code> 里固定 1 秒重试，没有退避上限。</p><p>我改成指数退避：1、2、4、8 秒，最长 15 秒，成功后重置。</p>"],
+    ["done", "完成 · 42 秒"],
+    ["user", "把上限改成 30 秒，再补一条测试"],
+    ["pi", "<p>已把上限改为 30 秒，并在 <code>relay.test.ts</code> 增加用例：连续失败 6 次后间隔停在 30 秒。</p><p>本地运行 <code>pnpm --filter @pi-reach/relay test</code>，全部通过。</p>"],
+    ["done", "完成 · 1 分 8 秒"],
+    ["user", "配对码校验也顺便看一下"],
+    ["pi", "<p>配对码在 <code>pair.ts</code> 中只检查长度，没有校验字符集。我补上了只允许大写字母与数字的检查，非法输入会提示「配对码格式不正确」。</p>"],
+    ["done", "完成 · 36 秒"],
+  ];
+  const html = chat.map(([kind, body]) => kind === "user" ? `<div class="user">${body}</div>` : kind === "pi" ? `<div class="pi">${body}</div>` : `<div class="done">${body}</div>`).join("");
+  document.querySelectorAll("[data-chat]").forEach((node) => { node.innerHTML = html; });
+
+  // 滚动边缘：滚动距离大于 0 时在外层写入 data-scroll-edge
+  document.querySelectorAll(".js-scroll").forEach((scroller) => {
+    const host = scroller.closest(".js-scroll-root");
+    const sync = () => host.toggleAttribute("data-scroll-edge", scroller.scrollTop > 0);
+    scroller.addEventListener("scroll", sync, { passive: true });
+    if (scroller.classList.contains("js-chat")) scroller.scrollTop = scroller.scrollHeight;
+    sync();
+  });
+})();
+</script>
+</body>
+</html>

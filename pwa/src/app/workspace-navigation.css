@@ -47,10 +47,10 @@
 .pwa-root .pwa-device-popover {
   max-width: calc(100vw - max(12px, var(--pwa-safe-left)) - max(12px, var(--pwa-safe-right)));
   max-height: min(65dvh, 480px);
-  padding: 6px;
+  padding: 4px;
   overflow: hidden;
-  border: 1px solid var(--pwa-line);
-  border-radius: var(--pwa-radius-md);
+  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border-radius: var(--pwa-radius-lg);
   color: var(--pwa-ink);
   background: var(--pwa-surface);
   box-shadow: var(--pwa-shadow-float);
@@ -250,9 +250,9 @@
 
 .pwa-root .pwa-peer-menu-panel {
   min-width: 190px;
-  padding: 6px;
-  border: 1px solid var(--pwa-line);
-  border-radius: var(--pwa-radius-md);
+  padding: 4px;
+  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border-radius: var(--pwa-radius-lg);
   color: var(--pwa-ink);
   background: var(--pwa-surface);
   box-shadow: var(--pwa-shadow-float);
@@ -309,7 +309,6 @@
   min-height: 56px;
   flex: 0 0 auto;
   padding: 8px calc(12px + var(--pwa-safe-right)) 8px calc(16px + var(--pwa-safe-left));
-  border-bottom: 1px solid var(--pwa-line);
 }
 
 .pwa-root .pwa-device-drawer-body {

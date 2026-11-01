@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { ActionIcon, Badge, Button, Radio, Select, Stack, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Badge, Button, Select, Stack, Text, TextInput, Title } from "@mantine/core";
 import { DesktopSidebar } from "./workspace-view";
 import { ChoosePiWorkspace, UnpairedWorkspace } from "./workspace-content";
 import { StartupErrorView } from "./pwa-startup";
@@ -198,23 +198,16 @@ test("Mantine spacing follows the spacing tokens, including button icon sections
   } finally { await screen.unmount(); }
 });
 
-test.each(["light", "dark"] as const)("form labels sit 8px above inputs and unchecked radios use the control outline in %s mode", async (scheme) => {
+test.each(["light", "dark"] as const)("form labels sit 8px above inputs in %s mode", async (scheme) => {
   const originalScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
   const screen = await renderPwa(<>
     <TextInput className="pwa-input" label="Relay URL" />
-    <Radio.Group name="probe" value="a" className="pwa-appearance-options">
-      <Radio className="pwa-appearance-option" value="a" label="Selected" />
-      <Radio className="pwa-appearance-option" value="b" label="Unselected" />
-    </Radio.Group>
   </>);
   try {
     document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
     const label = document.querySelector(".pwa-input .mantine-InputWrapper-label")!.getBoundingClientRect();
     const input = screen.getByRole("textbox", { name: "Relay URL" }).element().getBoundingClientRect();
     expect(Math.round(input.top - label.bottom)).toBe(8);
-    const unchecked = screen.getByRole("radio", { name: "Unselected" }).element();
-    // 切换外观后边框颜色有过渡，等过渡结束再比较。
-    await expect.poll(() => getComputedStyle(unchecked).borderTopColor).toBe(resolvedColor("--pwa-control-line"));
   } finally {
     if (originalScheme === null) document.documentElement.removeAttribute("data-mantine-color-scheme");
     else document.documentElement.setAttribute("data-mantine-color-scheme", originalScheme);

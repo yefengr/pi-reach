@@ -40,7 +40,7 @@
 .pwa-root { position: relative; }
 .pwa-root .pwa-workspace-view { position: relative; isolation: isolate; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .pwa-root .pwa-page-scrim { position: absolute; z-index: var(--pwa-z-page); inset: 0; background: var(--pwa-scrim); opacity: 0; pointer-events: none; }
-.pwa-root .pwa-settings-view { position: absolute; z-index: var(--pwa-z-page); inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--pwa-surface); }
+.pwa-root .pwa-settings-view { position: absolute; z-index: var(--pwa-z-page); inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--pwa-grouped-bg); }
 /* 转场与跟手拖动期间保留阴影，页面表面始终为直角。 */
 .pwa-root[data-view-transition] .pwa-settings-view { border-radius: 0; box-shadow: var(--pwa-shadow-modal); }
 .pwa-root[data-view="settings"]:not([data-view-transition]) .pwa-workspace-view { visibility: hidden; }
@@ -53,9 +53,9 @@
 @media (display-mode: standalone) {
   .pwa-root .pwa-status-backdrop { position: fixed; z-index: var(--pwa-z-status-backdrop); top: 0; right: 0; left: 0; display: block; height: 12px; padding-top: 12px; background-color: var(--pwa-status-backdrop); background-clip: content-box; pointer-events: none; }
 }
-/* 移动导航打开时状态栏下方是 panel 头部；设置层在其上时仍按设置页取 bg，所以设置规则放在后面。 */
+/* 移动导航打开时状态栏下方是 panel 头部；设置层在其上时仍按设置页顶栏取 grouped-bg，所以设置规则放在后面。 */
 .pwa-root:has(.pwa-navigation-drawer) { --pwa-status-backdrop: var(--pwa-panel); }
-.pwa-root[data-view="settings"] { --pwa-status-backdrop: var(--pwa-bg); }
+.pwa-root[data-view="settings"] { --pwa-status-backdrop: var(--pwa-grouped-bg); }
 /* 主屏 PWA 不设 viewport-fit=cover，iOS 不再报告底部安全区；移动输入区与只读说明条的底部下限由 16 提到 24，给 Home 指示条留白。
    软键盘仍交给浏览器：键盘弹出时这段留白不变。 */
 @media (display-mode: standalone) {
@@ -222,6 +222,24 @@
 .pwa-root .pwa-nav-skeleton .pwa-skeleton:last-child { width: 70%; }
 @keyframes pwa-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 @media (prefers-reduced-motion: reduce) { .pwa-skeleton { animation: none; } }
+
+/*
+ * 滚动边缘分隔：顶栏平时不画分隔，下方滚动容器离开顶部（data-scroll-edge，由 useScrollIndicator 写入）时淡入一条发丝线。
+ * 分隔画在伪元素上，不改变顶栏高度；电脑 Drawer 头部由 Mantine 设为 sticky，本身即可作定位容器。
+ */
+.pwa-root .pwa-title-bar,
+.pwa-root .pwa-tool-reader-header { position: relative; }
+.pwa-root .pwa-title-bar::after,
+.pwa-root .pwa-tool-reader-header::after,
+.pwa-root .pwa-device-drawer-head::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-main:has(.pwa-message-list[data-scroll-edge]) .pwa-title-bar::after,
+.pwa-root .pwa-tool-reader:has(.pwa-tool-reader-body [data-scroll-edge]) .pwa-tool-reader-header::after,
+.pwa-root .pwa-device-drawer:has(.pwa-device-drawer-body[data-scroll-edge]) .pwa-device-drawer-head::after { opacity: 1; }
+/* 桌面设置页的标题随内容滚走，只有移动端固定（sticky）顶栏需要分隔。 */
+@media (max-width: 767.98px) {
+  .pwa-root .pwa-settings-header::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+  .pwa-root .pwa-settings-view[data-scroll-edge] .pwa-settings-header::after { opacity: 1; }
+}
 
 @media (max-width: 767.98px) {
   :root { --pwa-gutter: 16px; }
