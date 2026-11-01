@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { FollowGlide, TRANSITION_GLIDE_OMEGA } from "./timeline-follow-glide";
+import { FollowGlide, transitionGlideOmega } from "./timeline-follow-glide";
 
 function run(glide: FollowGlide, target: (time: number) => number, from: number, frames: number): number[] {
   const tops: number[] = [];
@@ -42,7 +42,7 @@ test("handoff retains velocity while rebasing actual position and frame time", (
 });
 
 test("moves upward as smoothly as downward and applies layout shifts without changing speed", () => {
-  const glide = new FollowGlide(200, TRANSITION_GLIDE_OMEGA);
+  const glide = new FollowGlide(200, transitionGlideOmega(160));
   const tops = run(glide, () => 120, 0, 30);
   tops.slice(1).forEach((top, index) => expect(top).toBeLessThanOrEqual(tops[index]!));
   expect(tops[1]! - 120).toBeGreaterThan(40);
