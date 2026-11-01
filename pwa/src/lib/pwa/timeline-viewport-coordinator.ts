@@ -23,7 +23,8 @@ export interface ViewportLayout<C, A> {
   captureSend(): C | null;
   captureReply?(): ReplyProbe | null;
   send(capture: C): ViewportMotion;
-  activity(from: number, target: (geometry: ViewportGeometry) => number): ViewportMotion;
+  /** duration 缺省为 `message-in`；reserve 为过渡期间固定保留的额外空间。 */
+  activity(from: number, target: (geometry: ViewportGeometry) => number, duration?: number, reserve?: number): ViewportMotion;
   captureAnchor(fallback?: boolean): A | null;
   restoreAnchor(anchor: A, migrate?: boolean): boolean;
 }
@@ -347,7 +348,19 @@ export class TimelineViewportCoordinator<C, A> {
     if (!layout || removed <= EPSILON || !this.following || this.paused || this.mode === "send" || this.mode === "latest") return;
     const geometry = layout.measure();
     if (!geometry.animate) return;
-    this.collapseHold = { from: this.naturalBottom(geometry), removed, until: this.scheduler.now() + duration };
+    const bottom = this.naturalBottom(geometry);
+    this.collapseHold = { from: bottom, removed, until: this.scheduler.now() + duration };
+    // 收起后内容不足一屏：自然回落会在中途把滚动压到 0 并急停。改为保留尚未收回的空间，
+    // 以收起时长与同一曲线平滑移到收起后的位置，上方内容随收起一起下移、同时停稳。
+    if (removed > bottom + EPSILON && geometry.top > EPSILON && !this.motion) {
+      this.glide = null;
+      // 与保持期一致：只向收起后的位置移动，不为同一提交新增的内容先向下追。
+      const from = geometry.top;
+      this.motion = layout.activity(from, (value) => Math.min(from, this.followTarget(value)), duration, Math.ceil(removed));
+      this.mode = "activity";
+      this.lastTop = from;
+      this.schedule();
+    }
   }
 
   /** added 是 Working 提交时的净占高；0 表示状态行移除或未测量。 */
