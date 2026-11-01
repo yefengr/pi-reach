@@ -161,3 +161,9 @@ P1 已随 PR #149 合并。
 - 与方案的差异：离开时长断言放在已有的 `pwa-motion` 测试「uses token timing and distinct Toast exit easing」中（原断言 180 改为 140，减少动态效果仍为 120），不另在 `pwa-operation-notifications` 测试中重复。
 - 验证：守卫 5 个文件 / 46 项通过；Browser Mode `pwa-motion`、`pwa-operation-notifications`、`ui-state-surfaces`、`ui-states` 共 4 个文件 / 33 项通过；`pnpm typecheck` 通过，`pnpm lint` 0 错误（4 条警告都在本次未改动的文件中）。
 - 未覆盖：180 与 140 两种离开时长的观感对照需要人工在状态展厅（可用 0.25× 慢放）与 staging 真机上复核；不合适时按 4.4 回退为 180ms，并在规范中注明 Toast 是对称的例外。
+
+## 9. 结束记录（2026-10-31）
+
+- 交付：P1 随 PR #149（`9ac8b8c`）、P2 随 PR #150（`7dbb3b5`）合并，随 `pwa-v0.0.30` 发布到生产。规范结构、位移与 `reduced` token、公共取值函数与守卫仍是当前基础。
+- 被取代：P2 的 Toast 离开 140ms 已由 [ADR-20261031](../../adr/20261031-motion-layers-ios-spring.md) 改为 200ms；该 ADR 同时把内容与空间变化改为 iOS 弹簧曲线并加长时长。当前取值以 [DESIGN「动效时长」](../../DESIGN.md#动效时长)为准。
+- 未覆盖：P2 的状态展厅对照与 staging 真机复核没有单独进行；取值被取代后不再单独验收，观感验收并入[内容与空间过渡复核](../active/20261031-motion-content-space.md)的发布候选真机验收。

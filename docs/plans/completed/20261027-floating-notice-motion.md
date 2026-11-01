@@ -108,3 +108,9 @@ DESIGN 的进入／退出曲线与位移只点名 Modal、Popover、Menu、Toast
 - 受影响文件通过：`pwa-app`、`pwa-workspace-layout`、`pwa-notice-layout`、`connection-retry`、`ui-controls`、`composer-autosize`、`history-conversation`、`service-worker-register`（含 production 专项）、`ui-states`。
 
 未覆盖：全量 Browser Mode 与 Linux CI 以 Pull Request 结果为准；P3 真机观感与 iOS 17.5 以前的 `@starting-style` 降级待 staging 验收。
+
+## 9. 结束记录（2026-10-31）
+
+- 交付：P1、P2 随 PR #148（`a819b6c`）合并，随 `pwa-v0.0.30` 发布到生产。`usePresence` 与 `.pwa-presence` 的进出机制、占布局提示条按 B1 只淡化、离开期间不可点击且不播报，这些规则仍是当前实现。
+- 被取代：出现时长与曲线已由 [ADR-20261031](../../adr/20261031-motion-layers-ios-spring.md) 改为 `toast` 时长配内容曲线，浮动入口位移改为 12px；消失仍为 `fade` 与退出曲线。当前取值以 [DESIGN「动效」](../../DESIGN.md#动效)为准。
+- 未覆盖：P3 真机验收没有单独进行，观感验收并入[内容与空间过渡复核](../active/20261031-motion-content-space.md)的发布候选真机验收；iOS 17.5 以前的 `@starting-style` 降级仍未实测。
