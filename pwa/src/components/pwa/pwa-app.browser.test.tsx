@@ -661,7 +661,8 @@ test.each([[1280, false], [390, false], [1280, true]] as const)("keeps a just-se
       await painted();
       expect(document.querySelector(".pwa-queued-messages")).toBeNull();
       expect(list.querySelector(".pwa-message.user")).toBe(bubble);
-      expect(screen.getByText("Send a message to Pi to begin.").query()).toBeNull();
+      // 空态提示可能仍在原位淡出（inert、aria-hidden），只要求不再显示为当前状态。
+      expect(document.querySelector(".pwa-chat-empty-slot:not([data-leaving])")).toBeNull();
     };
     const inFlight = (snapshotId: string) => ({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "generation-session-1", snapshot_id: snapshotId, chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
     // 按 Extension 空闲发送的实际帧序：同步回执 accepted + 在途快照，随后 drain 再推一次在途快照。
@@ -1484,6 +1485,8 @@ test("model metadata refresh preserves the live message list and session channel
     const event = numberedEvents(1)[0]!;
     channel.emit({ protocol_version: 2, type: "timeline_event", session_id: "session-1", leaf_id: "generation-session-1", event });
     await expect.poll(() => list.textContent).toContain("Record 1");
+    // 首条内容出现后空态提示原位淡出，等它移除再记录列表内容。
+    await expect.poll(() => list.querySelector(".pwa-chat-empty-slot")).toBeNull();
     const content = list.textContent;
     expect(content).not.toBe("");
     const helloCount = channel.frames.filter((frame) => frame.type === "session_hello").length;

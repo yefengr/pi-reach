@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type RefObject } from "react";
 import { Button } from "@mantine/core";
 import { LoaderCircle } from "lucide-react";
 import { CompactionNoticeRow, CompactionStatus, ConversationTimeline, GapNotice } from "./conversation-timeline";
@@ -15,6 +15,8 @@ import { PublishedFile, type PublishedFileRead } from "./published-file";
 import { UserMessage } from "./user-message";
 import { useAutoLoadEarlier } from "./use-auto-load-earlier";
 import { useDelayedVisibility } from "./use-delayed-visibility";
+import { EmptyHintExitContext } from "./empty-hint-exit";
+import { usePwaMotionDuration } from "./use-pwa-motion";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
 import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
@@ -128,12 +130,24 @@ export function MessageList({ items, sourceKey, hasEarlier, loadingEarlier = fal
   // 必须读取完整集合，不能在隐藏 custom 后丢失历史附件关联。
   const attachmentProjection = useMemo(() => projectAttachmentMetadata(projectionItems), [projectionItems]);
   const visibleItems = items.filter(isVisibleItem);
-  const [visibility, setVisibility] = useState(() => ({ items, empty: visibleItems.length === 0, enterInitialPending: false }));
+  const loadingEmpty = visibleItems.length === 0 && loading;
+  const emptyHint = visibleItems.length === 0 && !loadingEmpty ? { live: isLive, context: isLive ? emptyContext ?? null : null } : null;
+  const [visibility, setVisibility] = useState(() => ({ items, empty: visibleItems.length === 0, enterInitialPending: false, hint: emptyHint, exitingHint: null as typeof emptyHint }));
   let enterInitialPending = visibility.enterInitialPending;
+  let exitingHint = visibility.exitingHint;
   if (visibility.items !== items) {
     enterInitialPending = visibility.empty && visibleItems.length > 0;
-    setVisibility({ items, empty: visibleItems.length === 0, enterInitialPending });
+    // 在线会话的空态提示确实显示着、随后出现第一条内容时，保留它原位淡出；只读历史直接换上内容，再次变空时直接显示新的提示。
+    exitingHint = emptyHint ? null : visibility.hint?.live ? visibility.hint : visibility.exitingHint;
+    setVisibility({ items, empty: visibleItems.length === 0, enterInitialPending, hint: emptyHint, exitingHint });
   }
+  const hintExitMs = usePwaMotionDuration("--pwa-duration-fade");
+  useEffect(() => {
+    if (!exitingHint) return;
+    const timer = window.setTimeout(() => setVisibility((current) => current.exitingHint === exitingHint ? { ...current, exitingHint: null } : current), hintExitMs);
+    return () => window.clearTimeout(timer);
+  }, [exitingHint, hintExitMs]);
+  const shownHint = emptyHint ?? exitingHint;
   const gaps = useMemo(() => visibleGaps(items, gapBefore), [items, gapBefore]);
   const liveRunning = isLive && running;
   const liveCompacting = isLive && compacting;
@@ -143,7 +157,6 @@ export function MessageList({ items, sourceKey, hasEarlier, loadingEarlier = fal
   useLayoutEffect(() => {
     listRef.current?.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
   }, [liveCompacting, noticeKey, listRef]);
-  const loadingEmpty = visibleItems.length === 0 && loading;
   useTimelineEnterFade(listRef, visibleItems.length === 0, loading);
   const completions = useMemo(() => runCompletions(
     items.flatMap((item) => item.kind === "event" ? [item.event] : []),
@@ -164,7 +177,7 @@ export function MessageList({ items, sourceKey, hasEarlier, loadingEarlier = fal
   }}>
     {showEarlier ? <EarlierRecords loading={loadingEarlier} failed={loadEarlierFailed} offline={earlierOffline} onLoad={() => onLoadEarlier?.()} /> : null}
     {topNotice ? <p className="pwa-timeline-notice" role="status">{topNotice}</p> : null}
-    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : visibleItems.length === 0 ? <><div className="pwa-chat-empty"><p>{isLive ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{isLive && emptyContext ? <p className="pwa-chat-empty-context">{emptyContext}</p> : null}</div>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline key={sourceKey} items={visibleItems} live={isLive} enterInitialPending={enterInitialPending} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead, userMessageIn, timelineKey) => renderItem(item, isLive ? onRetryFailed : undefined, isLive ? onCheckStatus : undefined, isLive ? onCancelQueued : undefined, canCheckStatus && isLive, attachmentProjection, fileSourceCurrent, onRead, userMessageIn, timelineKey)} />}
+    {loadingEmpty ? <div className="pwa-skeleton-rows" aria-busy="true"><span className="pwa-sr-only" role="status">{t.workspace.loading}</span>{skeletonVisible ? <><span className="pwa-skeleton pwa-skeleton-user" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line" aria-hidden="true" /><span className="pwa-skeleton pwa-skeleton-line pwa-skeleton-short" aria-hidden="true" /></> : null}</div> : <>{shownHint ? <div className="pwa-chat-empty-slot" data-leaving={emptyHint ? undefined : ""} inert={!emptyHint || undefined} aria-hidden={!emptyHint || undefined}><div className="pwa-chat-empty"><p>{shownHint.live ? t.workspace.newSessionHint : t.timeline.emptyHistory}</p>{shownHint.context ? <p className="pwa-chat-empty-context">{shownHint.context}</p> : null}</div></div> : null}<EmptyHintExitContext.Provider value={exitingHint !== null}>{visibleItems.length === 0 ? <>{gaps.atEnd ? <GapNotice /> : null}{notices.map((notice) => <CompactionNoticeRow key={notice.id} notice={notice} />)}{liveCompacting ? <CompactionStatus /> : null}</> : <ConversationTimeline key={sourceKey} items={visibleItems} live={isLive} enterInitialPending={enterInitialPending} gapBefore={gaps.before} gapAtEnd={gaps.atEnd} completions={completions} running={liveRunning} compacting={liveCompacting} notices={notices} listRef={listRef} onReadingChange={onReadingChange} renderRecord={(item, onRead, userMessageIn, timelineKey) => renderItem(item, isLive ? onRetryFailed : undefined, isLive ? onCheckStatus : undefined, isLive ? onCancelQueued : undefined, canCheckStatus && isLive, attachmentProjection, fileSourceCurrent, onRead, userMessageIn, timelineKey)} />}</EmptyHintExitContext.Provider></>}
     <div ref={bottomSentinelRef} aria-hidden="true" className="pwa-bottom-sentinel" />
   </div>;
 }

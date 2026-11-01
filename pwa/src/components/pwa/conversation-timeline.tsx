@@ -9,7 +9,7 @@ import { processGroups, processNoticeBreakKeys, type ProcessEntry, type ProcessG
 import { ProcessGroup } from "./process-group";
 import { isSettleCollapse } from "./process-group-state";
 import { useProcessPresentation } from "./use-process-presentation";
-import { useEnteredKeys, useIdleWorking } from "./use-turn-activity";
+import { useEnteredKeys, useIdleWorking, useSettlingTurns } from "./use-turn-activity";
 import { COLLAPSE_EXIT_FALLBACK_MARGIN_MS } from "./collapse";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import { SummaryEntry, SummaryReader } from "./summary-reader";
@@ -58,23 +58,27 @@ const NO_NOTICES: readonly CompactionNotice[] = [];
 type TimelineState = { view: PresentationSnapshot; observed: ReadonlyMap<string, number>; groups: readonly ProcessGroupModel[] };
 
 /** Pi 回复靠左占满阅读列、无底色；不显示发送方，只为读屏保留「Pi：」。 */
-function TextRow({ entry, entering }: { entry: TextEntry; entering: boolean }) {
+function TextRow({ entry, entering, afterSettle }: { entry: TextEntry; entering: boolean; afterSettle: boolean }) {
   const { t } = useI18n();
   const row = useRef<HTMLElement | null>(null);
+  // 前一过程组正在自动收起时，入场等收起结束；只在行创建时确定，收起结束后不改变已开始的动画。
+  const [delayed] = useState(() => entering && afterSettle);
   // 流式新显示的文字淡入；正式版本接管后不再新增片段，已开始的淡入原位完成。
   const reveal = useStreamRevealMarks(entry.text, entry.streaming);
   useStreamRevealAnimation(row, reveal);
-  return <article ref={row} className={`pwa-message assistant${entry.streaming ? " partial" : ""}${entering ? " pwa-row-enter" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key} data-viewport-turn={entry.groupId}>
+  return <article ref={row} className={`pwa-message assistant${entry.streaming ? " partial" : ""}${entering ? " pwa-row-enter" : ""}${delayed ? " pwa-enter-after-settle" : ""}`} data-timeline-key={entry.key} data-viewport-row={entry.key} data-viewport-turn={entry.groupId}>
     <span className="pwa-sr-only">{t.timeline.srPi}</span>
     <MarkdownContent text={entry.text} reveal={reveal} streaming={entry.streaming} />
   </article>;
 }
 
 /** 一轮结束后在末尾显示一次完成时间；中断或出错时附状态。 */
-function TurnMeta({ completion, interrupted, groupId }: { completion: RunCompletion; interrupted: boolean; groupId: string }) {
+function TurnMeta({ completion, interrupted, groupId, entering, afterSettle }: { completion: RunCompletion; interrupted: boolean; groupId: string; entering: boolean; afterSettle: boolean }) {
   const { t, format } = useI18n();
+  // 在线会话新结束的一轮淡入完成时间；没有正文的组同时自动收起时等收起结束再出现。挂载时已有的不播放。
+  const [motion] = useState(() => entering ? afterSettle ? " pwa-turn-meta-in pwa-enter-after-settle" : " pwa-turn-meta-in" : "");
   const status = completion.status === "error" ? t.timeline.turnError : completion.status === "interrupted" || interrupted ? t.timeline.turnInterrupted : null;
-  return <p className="pwa-turn-meta" data-viewport-completion={groupId}><time className="pwa-tabular" dateTime={new Date(completion.timestamp).toISOString()}>{format.time(completion.timestamp)}</time>{status ? <span className={completion.status === "error" ? "pwa-turn-status-error" : "pwa-turn-status"}> · {status}</span> : null}</p>;
+  return <p className={`pwa-turn-meta${motion}`} data-viewport-completion={groupId}><time className="pwa-tabular" dateTime={new Date(completion.timestamp).toISOString()}>{format.time(completion.timestamp)}</time>{status ? <span className={completion.status === "error" ? "pwa-turn-status-error" : "pwa-turn-status"}> · {status}</span> : null}</p>;
 }
 
 /**
@@ -109,7 +113,7 @@ export function GapNotice() {
   return <p className="pwa-timeline-notice pwa-timeline-gap">{t.timeline.gapNotSaved}</p>;
 }
 
-function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], groupOf: ReadonlyMap<string, ProcessGroupModel>, gapKeys: ReadonlySet<string>, notices: readonly CompactionNotice[], renderGroup: (group: ProcessGroupModel) => ReactNode, render: (entry: PresentationEntry) => ReactNode) {
+function conversationRows(entries: readonly PresentationEntry[], completions: ConversationTimelineProps["completions"], groupOf: ReadonlyMap<string, ProcessGroupModel>, gapKeys: ReadonlySet<string>, notices: readonly CompactionNotice[], renderGroup: (group: ProcessGroupModel) => ReactNode, render: (entry: PresentationEntry) => ReactNode, meta: { entering: (groupId: string) => boolean; afterSettle: (groupId: string) => boolean }) {
   const rows: ReactNode[] = [];
   // 终态提示是本地行，按发生时的最后一条记录插入；不持久化，也不参与分组与序号。
   const pendingNotices = [...notices].sort((left, right) => left.afterSeq - right.afterSeq);
@@ -125,7 +129,7 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
   let interrupted = false;
   const closeSegment = () => {
     const completion = segmentGroup === undefined ? undefined : completions?.get(segmentGroup);
-    if (segmentGroup !== undefined && completion && hasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={interrupted} groupId={segmentGroup} />);
+    if (segmentGroup !== undefined && completion && hasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={interrupted} groupId={segmentGroup} entering={meta.entering(segmentGroup)} afterSettle={meta.afterSettle(segmentGroup)} />);
   };
   for (const entry of entries) {
     const groupId = entryGroupId(entry);
@@ -212,6 +216,9 @@ export function ConversationTimeline({ items, live, completions, running = false
   const slotPresent = !compacting && activity.working;
   const workingVisible = useIdleWorking(view.entries, slotPresent, toolMotionVisible);
   const entered = useEnteredKeys(view.entries, live);
+  const settlingTurns = useSettlingTurns(view.entries, groups, states);
+  // 挂载时已有的完成时间（初次载入、重新挂载）不播放入场。
+  const [mountedCompletions] = useState(() => new Set(completions?.keys() ?? []));
   // 组由展开转为收起的同一提交里报告预计收回的高度，视口据此按净布局处理，不为同一提交的新增内容先向下追。
   // 必须先于下方活动区显隐通知：同一提交里协调器先得知收起，再处理活动区等新增或移除。
   const collapseDuration = usePwaMotionDuration("--pwa-duration-collapse-out");
@@ -362,7 +369,7 @@ export function ConversationTimeline({ items, live, completions, running = false
       return <Fragment key={entry.key}>{renderRecord(entry.item, openFileReader, live && entry.userMessageIn === true, entry.key)}</Fragment>;
     }
     // 思考与工具只经过程组呈现。
-    return entry.kind === "text" ? <TextRow entry={entry} entering={entered.has(entry.key)} key={entry.key} /> : null;
+    return entry.kind === "text" ? <TextRow entry={entry} entering={entered.has(entry.key)} afterSettle={settlingTurns.has(entry.groupId)} key={entry.key} /> : null;
   };
   const renderGroup = (group: ProcessGroupModel) => <ProcessGroup
     key={group.key}
@@ -375,7 +382,10 @@ export function ConversationTimeline({ items, live, completions, running = false
     onRunningToolsChange={reportIndicators}
   />;
   // 发布记录保留 group_id，同一轮的完成时间仍只在段末追加一次。
-  const rows = conversationRows(view.entries, completions, groupOf, gapKeys, notices, renderGroup, renderEntry);
+  const rows = conversationRows(view.entries, completions, groupOf, gapKeys, notices, renderGroup, renderEntry, {
+    entering: (groupId) => live && !mountedCompletions.has(groupId),
+    afterSettle: (groupId) => settlingTurns.has(groupId),
+  });
 
   return <>
     {rows}
