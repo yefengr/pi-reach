@@ -322,3 +322,21 @@ test("a message delivered within the same turn is not held", () => {
   const shown = buffer.ingest([user("g1"), text("m1", "g1", "streaming reply"), queuedMessage({ queued: false, messageId: "message-q", delivery: "committed" })]).items;
   expect(pendingOf(shown)).toEqual([expect.objectContaining({ queued: false, messageId: "message-q" })]);
 });
+
+test("an own message taken over while its user message waits for the previous turn stays in place, then hands over directly", () => {
+  const { buffer, body } = handoffRun();
+  const own: TimelinePending = { kind: "pending", id: "pending:own", clientRequestId: "own", requestId: "b", text: "again", createdAt: 3, delivery: "committed", messageId: "message-own" };
+  buffer.ingest([user("g1"), text("m1", "g1", body.slice(0, 40)), own]);
+  // 正式用户消息到达，Runtime 删除 pending；该用户消息属于下一轮，仍在等上一轮呈现。
+  let shown = buffer.ingest([user("g1"), assistant("m1", "g1", body), runEnd("g1"), nextUser("g2", "message-own")]).items;
+  expect(pendingOf(shown)).toEqual([expect.objectContaining({ id: "pending:own", messageId: "message-own" })]);
+  expect(ids(shown)).not.toContain("user-g2");
+  let elapsed = 0;
+  while (!ids(shown).includes("user-g2") && elapsed < 3000) {
+    shown = buffer.advance(16).items;
+    elapsed += 16;
+    // 等待期间气泡一直在，且不与用户消息并存。
+    expect(pendingOf(shown).length + (ids(shown).includes("user-g2") ? 1 : 0)).toBe(1);
+  }
+  expect(pendingOf(shown)).toEqual([]);
+});
