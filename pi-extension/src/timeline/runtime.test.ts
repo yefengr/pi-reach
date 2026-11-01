@@ -890,4 +890,112 @@ describe("TimelineRuntime", () => {
       group_id: `legacy:${session.getSessionId()}`,
     });
   });
+
+  test("publishes a later message after a marker that can never reach a target", async () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    runtime.onAgentStart();
+    const orphan = runtime.onMessageStart(userMessage("never persisted", 1), session)!;
+    const user = userMessage("visible after the orphan", 2);
+    const started = runtime.onMessageStart(user, session)!;
+    session.appendMessage(user as never);
+    runtime.onMessageEnd(user, session);
+    await nextMacrotask();
+
+    expect(runtime.getPublishedEvents().map((event) => event.event_id)).toEqual([started.eventId]);
+    expect(runtime.recover(session).some((event) => event.event_id === orphan.eventId)).toBe(false);
+    expect(runtime.getPublishedEvents()[0]).toEqual(
+      runtime.recover(session).find((event) => event.event_id === started.eventId),
+    );
+  });
+
+  test("waits for a trailing marker's target instead of publishing later deferred customs", async () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    runtime.onAgentStart();
+    const user = userMessage("late target", 7);
+    const started = runtime.onMessageStart(user, session)!;
+    const customId = runtime.appendDeferredCustom(session, "third-party:metadata", { visible: false });
+    // 目标尚未落盘：marker 位于尾部，仍可能在后续追加补齐。
+    runtime.onMessageEnd(user, session);
+    runtime.onTurnEnd(session);
+    await nextMacrotask();
+    expect(runtime.getPublishedEvents()).toEqual([]);
+
+    session.appendMessage(user as never);
+    runtime.onTurnEnd(session);
+    await nextMacrotask();
+    const recovered = runtime.recover(session).map((event) => event.event_id);
+    expect(recovered).toEqual([customId, started.eventId]);
+    expect(runtime.getPublishedEvents().map((event) => event.event_id)).toEqual([customId, started.eventId]);
+  });
+
+  const orphanBoundaries: ReadonlyArray<readonly [string, (session: SessionManager) => void]> = [
+    ["a following marker", (session) => {
+      session.appendCustomEntry(TIMELINE_MARKER, {
+        version: 2,
+        group_id: "other-group",
+        kind: "user",
+        origin: "unknown",
+        delivery: "unknown",
+      });
+    }],
+    ["a hard boundary", (session) => { session.appendThinkingLevelChange("low"); }],
+    ["a mismatched role", (session) => { session.appendMessage(assistantMessage("other role", 6) as never); }],
+  ];
+  for (const [label, appendBoundary] of orphanBoundaries) {
+    test(`does not let a marker orphaned by ${label} suppress later publications`, async () => {
+      const session = SessionManager.inMemory(process.cwd());
+      const runtime = new TimelineRuntime();
+      runtime.onAgentStart();
+      const orphan = runtime.onMessageStart(userMessage("orphan", 1), session)!;
+      appendBoundary(session);
+      const user = userMessage("visible after the boundary", 9);
+      const started = runtime.onMessageStart(user, session)!;
+      session.appendMessage(user as never);
+      runtime.onMessageEnd(user, session);
+      await nextMacrotask();
+
+      expect(runtime.getPublishedEvents().map((event) => event.event_id)).toEqual([started.eventId]);
+      // 不跨边界错误归属：孤立的 marker 不能拿到界限另一侧的消息。
+      expect(runtime.recover(session).some((event) => event.event_id === orphan.eventId)).toBe(false);
+    });
+  }
+
+  test("re-evaluates a marker orphaned on the previous branch after switching branches", async () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    runtime.onAgentStart();
+    const user = userMessage("branch target", 5);
+    const started = runtime.onMessageStart(user, session)!;
+    const anchor = session.getLeafId()!;
+    session.appendMessage(assistantMessage("other role", 6) as never);
+    runtime.onMessageEnd(user, session);
+    runtime.onTurnEnd(session);
+    await nextMacrotask();
+    expect(runtime.getPublishedEvents()).toEqual([]);
+
+    // 切回 marker 后追加目标：同一 marker 在新分支上重新可投影。
+    session.branch(anchor);
+    session.appendMessage(user as never);
+    runtime.onTurnEnd(session);
+    await nextMacrotask();
+    expect(runtime.getPublishedEvents().map((event) => event.event_id)).toEqual([started.eventId]);
+  });
+
+  test("a fresh defer after resetting the same session is not affected by the old batch", async () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const runtime = new TimelineRuntime();
+    const stale = toolMessage({ timestamp: 3 });
+    runtime.onMessageStart(stale, session);
+    runtime.onMessageEnd(stale, session);
+    runtime.resetSession(session);
+
+    const user = userMessage("after reset", 4);
+    const started = runtime.onMessageStart(user, session)!;
+    session.appendMessage(user as never);
+    runtime.onMessageEnd(user, session);
+    await nextMacrotask();
+    expect(runtime.getPublishedEvents().map((event) => event.event_id)).toEqual([started.eventId]);
+  });
 });

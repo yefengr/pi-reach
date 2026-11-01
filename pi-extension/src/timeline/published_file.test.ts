@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { PUBLISHED_FILE_TYPE } from "@pi-reach/protocol/session";
 import { afterEach, expect, test } from "vitest";
-import { TimelineRuntime } from "./runtime.js";
+import { TimelineRuntime, TIMELINE_MARKER } from "./runtime.js";
 import type { TimelineEvent, TimelinePartial } from "../protocol/v2/index.js";
 
 const directories: string[] = [];
@@ -23,14 +23,14 @@ async function fixture() {
   manager.appendMessage(assistant as never);
   return { path, manager, runtime, published, partials };
 }
-function addCustom(manager: SessionManager, path: string, groupId: string | null) {
+function addCustom(manager: SessionManager, path: string, groupId: string | null, toolCallId = "call-file") {
   return manager.appendCustomEntry(PUBLISHED_FILE_TYPE, {
     source_path: join(path, "成果.txt"), file_name: "成果.txt", mime_type: "text/plain", byte_length: 0,
-    tool_call_id: "call-file", ...(groupId ? { group_id: groupId } : {}),
+    tool_call_id: toolCallId, ...(groupId ? { group_id: groupId } : {}),
   });
 }
-function result(id: string, isError = false) {
-  return { role: "toolResult", toolCallId: "call-file", toolName: "publish_file", content: [{ type: "text", text: isError ? "Failed" : "Published" }], isError, details: { publication_id: id }, timestamp: 2 };
+function result(id: string, isError = false, toolCallId = "call-file") {
+  return { role: "toolResult", toolCallId, toolName: "publish_file", content: [{ type: "text", text: isError ? "Failed" : "Published" }], isError, details: { publication_id: id }, timestamp: 2 };
 }
 const task = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -117,4 +117,36 @@ test("a failed tool leaves its internal custom hidden in real-time and after reo
   expect(published.some((event) => event.event_id === id)).toBe(false);
   const reloaded = SessionManager.open(manager.getSessionFile()!);
   expect(new TimelineRuntime().recover(reloaded).some((event) => event.event_id === id)).toBe(false);
+});
+
+test("an orphaned marker does not delay a batch of durable file confirmations", async () => {
+  const { path, manager, runtime, published } = await fixture();
+  const groupId = runtime.currentGroupId;
+  // 合法 marker 后直接遇到 toolResult：它在该分支上不可能再拿到用户消息。
+  const orphan = manager.appendCustomEntry(TIMELINE_MARKER, {
+    version: 2, group_id: groupId, kind: "user", origin: "unknown", delivery: "unknown",
+  });
+  const first = addCustom(manager, path, groupId, "call-file");
+  const second = addCustom(manager, path, groupId, "call-file-2");
+  manager.appendMessage(result(first, false, "call-file") as never);
+  manager.appendMessage(result(second, false, "call-file-2") as never);
+  runtime.onTurnEnd(manager);
+  await task();
+
+  const fileIds = [first, second];
+  const recovered = runtime.recover(manager);
+  const recoveredFiles = recovered.filter((event) => fileIds.includes(event.event_id));
+  expect(recoveredFiles.map((event) => event.event_id)).toEqual(fileIds);
+  const publishedFiles = published.filter((event) => fileIds.includes(event.event_id));
+  expect(publishedFiles).toEqual(recoveredFiles);
+  expect(recovered.some((event) => event.event_id === orphan)).toBe(false);
+
+  const reloaded = SessionManager.open(manager.getSessionFile()!);
+  const reloadedEvents = new TimelineRuntime().recover(reloaded);
+  expect(reloadedEvents.filter((event) => fileIds.includes(event.event_id))).toEqual(recoveredFiles);
+  expect(reloadedEvents.some((event) => event.event_id === orphan)).toBe(false);
+
+  runtime.onTurnEnd(manager);
+  await task();
+  expect(published.filter((event) => fileIds.includes(event.event_id))).toHaveLength(2);
 });
