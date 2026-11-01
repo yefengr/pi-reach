@@ -23,7 +23,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 test("comparison presets override only the content and space layer and restore on switch back", async () => {
   const screen = await render(<UiStateGalleryPage />);
   await openMotion();
-  expect(computed(root(), "--pwa-duration-message-in")).toBe("500ms");
+  expect(computed(root(), "--pwa-duration-message-in")).toBe("400ms");
   expect(computed(root(), "--pwa-ease-content")).toMatch(/^linear\(0, /);
   // 操作反馈层的曲线不属于对比范围。
   expect(computed(root(), "--pwa-ease-enter")).toBe("cubic-bezier(0, 0, 0, 1)");

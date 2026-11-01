@@ -218,29 +218,29 @@
   --pwa-ease-content: linear(0, 0.017, 0.06, 0.12, 0.189, 0.261, 0.334, 0.405, 0.472, 0.535, 0.592, 0.644, 0.691, 0.733, 0.771, 0.803, 0.832, 0.858, 0.88, 0.899, 0.915, 0.93, 0.942, 0.953, 0.962, 0.97, 0.976, 0.982, 0.987, 0.991, 0.994, 0.997, 1);
   /* 自动收起：弹簧起步平缓，不会出现标准曲线前段过陡造成的一帧塌陷，与内容曲线统一。 */
   --pwa-ease-settle: var(--pwa-ease-content);
-  --pwa-duration-sidebar: 450ms;
+  --pwa-duration-sidebar: 360ms;
   /* 设置页与 Drawer 的进入／离开（含松手收尾与遮罩），内容曲线；离开更快。 */
-  --pwa-duration-page: 450ms;
-  --pwa-duration-page-out: 350ms;
-  --pwa-duration-drawer: 450ms;
-  --pwa-duration-drawer-out: 350ms;
+  --pwa-duration-page: 360ms;
+  --pwa-duration-page-out: 280ms;
+  --pwa-duration-drawer: 360ms;
+  --pwa-duration-drawer-out: 280ms;
   /* 桌面等没有导航退出的入口切换会话前的淡出；移动导航中的选择随 drawer-out 淡出。 */
-  --pwa-duration-switch-out: 250ms;
-  --pwa-duration-modal-in: 500ms;
-  --pwa-duration-modal-out: 250ms;
+  --pwa-duration-switch-out: 200ms;
+  --pwa-duration-modal-in: 400ms;
+  --pwa-duration-modal-out: 200ms;
   /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
   --pwa-duration-status-slot: 160ms;
-  --pwa-duration-collapse-in: 500ms;
-  --pwa-duration-collapse-out: 350ms;
+  --pwa-duration-collapse-in: 400ms;
+  --pwa-duration-collapse-out: 280ms;
   /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
-  --pwa-duration-collapse-settle: 500ms;
-  --pwa-duration-image-in: 500ms;
-  --pwa-duration-image-out: 350ms;
-  --pwa-duration-toast: 500ms;
+  --pwa-duration-collapse-settle: 400ms;
+  --pwa-duration-image-in: 400ms;
+  --pwa-duration-image-out: 280ms;
+  --pwa-duration-toast: 400ms;
   /* 只用于 Toast 离开；toast 同时是浮动入口与局部提示的出现时长，不随之改变。 */
-  --pwa-duration-toast-out: 250ms;
+  --pwa-duration-toast-out: 200ms;
   --pwa-duration-fade: 120ms;
-  --pwa-duration-message-in: 500ms;
+  --pwa-duration-message-in: 400ms;
   --pwa-duration-press-in: 90ms;
   --pwa-duration-press-out: 120ms;
   --pwa-duration-menu-in: 160ms;
@@ -262,7 +262,7 @@
   --pwa-navigation-row-padding: 6px;
   --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容与流式新文字的淡入。 */
-  --pwa-duration-content: 400ms;
+  --pwa-duration-content: 320ms;
   /* 无限循环：旋转一圈与骨架呼吸一个周期，配 linear；减少动态效果时循环直接暂停，不替换时长。 */
   --pwa-duration-spin: 1.3s;
   --pwa-duration-breathe: 2s;

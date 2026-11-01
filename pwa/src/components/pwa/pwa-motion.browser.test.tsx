@@ -73,13 +73,13 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
     await expect.poll(() => document.querySelector(selector)).not.toBeNull();
     const card = document.querySelector<HTMLElement>(selector)!;
     await expect.poll(() => getComputedStyle(card).opacity).toBe("1");
-    expect(duration(card), card.outerHTML.slice(0, 800)).toBe(reduce ? 120 : 500);
+    expect(duration(card), card.outerHTML.slice(0, 800)).toBe(reduce ? 120 : 400);
     expect(getComputedStyle(card).transitionTimingFunction).toMatch(reduce ? standardEase : contentEase);
     const overlay = document.querySelector<HTMLElement>(".mantine-Modal-overlay")!;
-    expect(duration(overlay)).toBe(reduce ? 120 : 500);
+    expect(duration(overlay)).toBe(reduce ? 120 : 400);
     flushSync(() => setOpened(false));
     await expect.poll(() => card.style.opacity).toBe("0");
-    expect(duration(card)).toBe(reduce ? 120 : 250);
+    expect(duration(card)).toBe(reduce ? 120 : 200);
     expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : exitEase);
     expect(getComputedStyle(overlay).transitionTimingFunction).toBe(reduce ? standardEase : exitEase);
     if (reduce) expectNoShift(card);
@@ -103,7 +103,7 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
     flushSync(() => setOpened(true));
     await expect.poll(() => document.querySelector(selector)).not.toBeNull();
     const overlay = document.querySelector<HTMLElement>(".mantine-Drawer-overlay")!;
-    expect(duration(overlay)).toBe(reduce ? 120 : 450);
+    expect(duration(overlay)).toBe(reduce ? 120 : 360);
     expect(getComputedStyle(overlay).transitionTimingFunction).toMatch(reduce ? standardEase : contentEase);
     const enter = await entering;
     const card = document.querySelector<HTMLElement>(selector)!;
@@ -119,7 +119,7 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
     const exit = await exiting;
 
     // 退出采样从关闭前一帧开始，可能先读到进入时长；只要求退出阶段落在离开时长上。
-    for (const [phase, full, allowed] of [[enter, 450, [450]], [exit, 350, [450, 350]]] as const) {
+    for (const [phase, full, allowed] of [[enter, 360, [360]], [exit, 280, [360, 280]]] as const) {
       const durations = [...phase.durations];
       if (reduce) expect(durations).toEqual([120]);
       else {
@@ -148,14 +148,14 @@ test.each([false, true])("uses token timing and distinct Toast exit easing (redu
     await expect.poll(() => document.querySelector(".pwa-operation-notification")).not.toBeNull();
     const card = document.querySelector<HTMLElement>(".pwa-operation-notification")!;
     await expect.poll(() => getComputedStyle(card).opacity).toBe("1");
-    expect(duration(card)).toBe(reduce ? 120 : 500);
+    expect(duration(card)).toBe(reduce ? 120 : 400);
     expect(getComputedStyle(card).fontSize).toBe("16px");
     expect(getComputedStyle(card).transitionTimingFunction).toMatch(reduce ? standardEase : contentEase);
     (screen.getByRole("button", { name: "Dismiss operation notification" }).element() as HTMLElement).click();
     await expect.poll(() => card.style.getPropertyValue("--notifications-state-opacity")).toBe("0");
     expect(getComputedStyle(card).transitionTimingFunction).toBe(reduce ? standardEase : exitEase);
     // 离开时长由 CSS 覆盖 Mantine 的内联时长；Mantine 改变离开状态的写法时这里会失败。
-    expect(duration(card)).toBe(reduce ? 120 : 250);
+    expect(duration(card)).toBe(reduce ? 120 : 200);
     if (reduce) expectNoShift(card);
     await expect.poll(() => document.querySelector(".pwa-operation-notification")).toBeNull();
   } finally { await screen.unmount(); }

@@ -917,16 +917,16 @@ test.each([false, true])("restores native navigation back without page animation
     nativePopstate(null);
     await expect.element(sheet.getByRole("button", { name: "Open settings" })).toHaveFocus();
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.35s");
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.28s");
     await expect.element(sheet).not.toBeInTheDocument();
     await expect.element(trigger).toHaveFocus();
     await trigger.click();
-    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.45s");
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.36s");
     await settleAnimations();
     await sheet.getByRole("button", { name: "Open settings" }).click();
     const animations = document.querySelector(".pwa-settings-view")!.getAnimations();
     expect(animations).toHaveLength(1);
-    expect(animations[0].effect!.getTiming().duration).toBe(reduced ? 120 : 450);
+    expect(animations[0].effect!.getTiming().duration).toBe(reduced ? 120 : 360);
     await settleAnimations();
   } finally {
     await screen.unmount();
@@ -1002,7 +1002,7 @@ test.each([
     await expect.element(close).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     // 静止的 entered 状态可为 0s；验证真正退出阶段仍使用正常导航时长。
-    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.35s");
+    await expect.poll(() => getComputedStyle(sheet.element()).transitionDuration).toBe(reduced ? "0.12s" : "0.28s");
     await expect.element(sheet).not.toBeInTheDocument();
   } finally {
     await screen.unmount();

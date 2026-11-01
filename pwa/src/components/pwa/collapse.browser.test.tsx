@@ -52,11 +52,11 @@ test("manual entry uses collapse tokens and closing freezes inert output until u
   await expect.poll(() => view.node()?.hasAttribute("data-open")).toBe(true);
   const node = view.node()!;
   expect(node.getAnimations().some(animation => (animation as CSSTransition).transitionProperty === "opacity")).toBe(true);
-  expect(getComputedStyle(node).transitionDuration).toBe("0.5s");
+  expect(getComputedStyle(node).transitionDuration).toBe("0.4s");
   await finish(node);
   view.update(false);
   expect(node.inert).toBe(true);
-  expect(getComputedStyle(node).transitionDuration).toBe("0.35s, 0.35s");
+  expect(getComputedStyle(node).transitionDuration).toBe("0.28s, 0.28s");
   view.update(false, "new output after closing");
   expect(node.textContent).toBe("initial output");
   await expect.poll(view.node).toBeNull();
@@ -84,10 +84,10 @@ test("an automatic settle exit slows height, opacity and shift together on the c
   close();
   expect(node.dataset.exit).toBe("settle");
   const style = getComputedStyle(node);
-  expect(style.transitionDuration).toBe("0.5s");
+  expect(style.transitionDuration).toBe("0.4s");
   expect(style.transitionTimingFunction).toMatch(/^linear\(/);
   const inner = getComputedStyle(node.querySelector(".pwa-collapse-inner")!);
-  expect(inner.transitionDuration).toBe("0.5s");
+  expect(inner.transitionDuration).toBe("0.4s");
   expect(inner.transitionTimingFunction).toMatch(/^linear\(/);
   await expect.poll(() => document.querySelector(".pwa-collapse")).toBeNull();
 });
