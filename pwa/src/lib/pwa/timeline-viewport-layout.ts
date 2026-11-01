@@ -75,8 +75,8 @@ export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCaptu
     } };
   }
   send(capture: OwnSendLayoutCapture) { return new OwnSendTransition(capture); }
-  activity(from: number, target: (geometry: ViewportGeometry) => number) {
-    return new ActivityFollowTransition(this.list, from, () => target(this.measure()));
+  activity(from: number, target: (geometry: ViewportGeometry) => number, duration?: number, reserve?: number) {
+    return new ActivityFollowTransition(this.list, from, () => target(this.measure()), duration, reserve);
   }
   captureAnchor(fallback = false) { return captureTimelineViewportAnchor(this.list, fallback); }
   restoreAnchor(anchor: TimelineViewportAnchor, migrate = false) {

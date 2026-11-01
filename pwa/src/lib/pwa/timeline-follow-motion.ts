@@ -8,8 +8,9 @@ export class FollowMotionClock {
   private startedAt: number | null = null;
   private progress = 0;
 
-  constructor(list: HTMLElement) {
-    this.duration = readPwaMotionDuration("--pwa-duration-message-in");
+  /** duration 缺省为 `message-in`；过程组收起的滚动交接传入收起时长，与收起同一时钟。 */
+  constructor(list: HTMLElement, duration = readPwaMotionDuration("--pwa-duration-message-in")) {
+    this.duration = duration;
     this.timing = new Animation(new KeyframeEffect(null, [], { duration: this.duration, easing: pwaContentEasing(list), fill: "both" }));
     this.timing.currentTime = 0;
   }
@@ -40,16 +41,20 @@ export function activityFollowSpace(list: HTMLDivElement): { tailSpace: number; 
   return { tailSpace: Math.max(0, padding - MINIMUM_TAIL_SPACE), compensation: owner ? applied - padding : 0 };
 }
 
-/** Working 的局部滚动交接；不拥有输入框，不用于正文增量或普通回执。 */
+/** Working 与过程组收起的局部滚动交接；不拥有输入框，不用于正文增量或普通回执。 */
 export class ActivityFollowTransition {
   readonly list: HTMLDivElement;
   private readonly clock: FollowMotionClock;
   private readonly paddingStyle: string;
   private top: number;
 
-  constructor(list: HTMLDivElement, fromTop: number, private readonly target: () => number) {
+  /**
+   * reserve：过渡期间固定保留的额外空间。过程组收起是持续的 CSS 过渡，逐帧补足会落后一帧被浏览器钳制，
+   * 因此开始时一次预留全部待收回高度，结束时滚动已到终点再释放。
+   */
+  constructor(list: HTMLDivElement, fromTop: number, private readonly target: () => number, duration?: number, private readonly reserve = 0) {
     this.list = list;
-    this.clock = new FollowMotionClock(list);
+    this.clock = new FollowMotionClock(list, duration);
     this.paddingStyle = list.style.paddingBottom;
     this.top = fromTop;
     activityOwners.set(list, this);
@@ -68,7 +73,7 @@ export class ActivityFollowTransition {
     const naturalBottom = Math.max(0, this.list.scrollHeight - this.list.clientHeight - applied + padding);
     // 状态移除可能先钳制 scrollTop；仅在交接期间保留尚未收回的空间，结束必定还原。
     // 补偿取整数：scrollHeight 已取整，小数补偿相减会把自然底部低估不到 1px，收尾时出现 1px 回退。
-    const extraPadding = Math.max(0, Math.ceil(this.top - naturalBottom));
+    const extraPadding = Math.max(this.reserve, Math.ceil(this.top - naturalBottom));
     this.list.style.paddingBottom = extraPadding > 0 ? `${padding + extraPadding}px` : this.paddingStyle;
   }
 

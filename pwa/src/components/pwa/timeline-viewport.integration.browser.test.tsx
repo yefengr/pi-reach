@@ -774,3 +774,26 @@ test.each(activityCases)("the usual turn ending — collapsed group, reply, acti
     expect(viewport().followingOutput).toBe(true);
   } finally { await screen.unmount(); }
 });
+
+test("a collapse that leaves less than a screen glides the content down with the collapse instead of stopping abruptly", async () => {
+  const history = answer("live-output", paragraphs("Earlier", 4));
+  const tool = (id: string, running: boolean): TimelineViewItem => running
+    ? { kind: "partial", createdAt: 1, partial: { ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${id}`, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running" } }
+    : { kind: "event", event: { ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok" } };
+  const ids = ["a", "b", "c", "d", "e", "f"];
+  const { screen, list, update } = await renderTimeline([history, ...ids.slice(0, -1).map(id => tool(id, false)), tool("f", true)]);
+  try {
+    // 前提：跟随在底部且有少量滚动，收起后内容不足一屏。
+    expect(list.scrollTop).toBeGreaterThan(20);
+    const first = () => list.querySelector<HTMLElement>(":scope > *")!.getBoundingClientRect().top;
+    const reply: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text: "Reply after tools." }] } };
+    const samples = await sampleCollapse(list, () => update([history, ...ids.map(id => tool(id, false)), reply]), first);
+    await expect.poll(() => list.scrollTop).toBe(0);
+    // 上方内容随收起单调下移，没有一帧的大跳或到顶时的急停。
+    for (let index = 1; index < samples.length; index += 1) {
+      expect(samples[index]!).toBeGreaterThanOrEqual(samples[index - 1]! - 1);
+      expect(samples[index]! - samples[index - 1]!).toBeLessThanOrEqual(15);
+    }
+    await expect.poll(() => list.style.paddingBottom).toBe("");
+  } finally { await screen.unmount(); }
+});
