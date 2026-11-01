@@ -54,6 +54,7 @@ function recordHandoff(h: HandoffHarness) {
     footer: Math.round(h.footer.getBoundingClientRect().height),
     partial: h.timeline().items.some(item => item.kind === "partial"),
     queued: document.querySelector(".pwa-queued-messages") !== null,
+    meta: h.list.querySelector(".pwa-turn-meta") !== null,
   });
   type Geometry = ReturnType<typeof geometry>;
   type Write = { reason: string; mode: string; top: number; actual: number; requested: number | null };
@@ -94,6 +95,7 @@ function prepareFinishingReply(h: HandoffHarness, clock: Clock, recording: Recor
   return body + suffix;
 }
 
+/** 出队在上一轮回复与完成时间呈现后才进入对话区；推进到出队过渡真正开始，返回此时的时钟。 */
 function startQueuedFinish(h: HandoffHarness, clock: Clock, recording: Recording) {
   h.receive(queue(true));
   const text = prepareFinishingReply(h, clock, recording);
@@ -102,10 +104,13 @@ function startQueuedFinish(h: HandoffHarness, clock: Clock, recording: Recording
   h.commit({ event_id: "handoff-run-end", event_seq: 3, session_id: HANDOFF_SCOPE.sessionId,
     leaf_id: event.leaf_id, group_id: "handoff-turn", timestamp: 3, kind: "run_end", status: "complete" });
   h.receive(queue(false));
-  clock.step(FORMAL_AT_MS + FRAME_MS);
-  clock.step(FORMAL_AT_MS + FRAME_MS * 2);
+  let time = FORMAL_AT_MS;
+  while (h.footer.style.height === "" && time < SETTLED_AT_MS) {
+    time += FRAME_MS;
+    clock.step(time);
+  }
   expect(h.footer.style.height).not.toBe("");
-  return event;
+  return { event, time };
 }
 
 function assertSettled(h: HandoffHarness, clock: Clock, event: TimelineEvent) {
@@ -117,10 +122,19 @@ function assertSettled(h: HandoffHarness, clock: Clock, event: TimelineEvent) {
   expect(clock.pending()).toBe(0);
 }
 
+/**
+ * 非帧回调的同步写入相对上一次已设定位置的跳变。同一提交里的布局收缩可能先让浏览器钳制位置、
+ * 再在绘制前由写入恢复，测量值会短暂偏离，因此以上一次设定的位置（样本起点或前一次写入落点）为基准。
+ */
 function synchronousJumps(samples: Recording["samples"]) {
-  return samples.flatMap(sample => sample.writes
-    .filter(write => write.reason !== "frame" && Math.abs(write.actual - write.top) > PIXEL_TOLERANCE)
-    .map(write => ({ phase: sample.phase, time: sample.time, ...write })));
+  return samples.flatMap(sample => {
+    let last = sample.before.top;
+    return sample.writes.flatMap(write => {
+      const jump = write.reason !== "frame" && Math.abs(write.actual - last) > PIXEL_TOLERANCE;
+      last = write.actual;
+      return jump ? [{ phase: sample.phase, time: sample.time, ...write }] : [];
+    });
+  });
 }
 
 beforeEach(async () => {
@@ -175,7 +189,7 @@ test.each(replayCases.flatMap(replay => [false, true].map(advanceLeaf => ({ ...r
 });
 
 test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...replay, delay }))))(
-  "queue drain joins the finishing reply without body jumps (width=$width frame=$frameMs delay=$delay)", async ({ width, frameMs, delay }) => {
+  "queue drain waits for the finishing reply and its completion time, then joins without body jumps (width=$width frame=$frameMs delay=$delay)", async ({ width, frameMs, delay }) => {
   const h = await renderHandoffHarness({ width, initialEvents: [initialEvent] });
   const clock = installHandoffClock();
   const recording = recordHandoff(h);
@@ -199,20 +213,23 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
       if (delay === frameMs && time === FORMAL_AT_MS + frameMs) drain();
     }
     assertSettled(h, clock, event);
-    const transition = recording.samples.find(sample => sample.phase === "queue starts")!;
-    expect(transition.before.queued).toBe(true);
-    expect(transition.after.queued).toBe(false);
-    expect(transition.after.partial).toBe(true);
+    // 出队到达时上一条回复仍在放尾巴：消息先留在排队区，回复放完、完成时间出现后才进入对话区。
+    const started = recording.samples.find(sample => sample.phase === "queue starts")!;
+    expect(started.before.partial).toBe(true);
+    expect(started.after.queued).toBe(true);
+    const transition = recording.samples.find(sample => sample.time >= started.time && sample.before.queued && !sample.after.queued)!;
+    expect(transition).toBeDefined();
+    expect(transition.time).toBeGreaterThan(started.time);
+    expect(transition.before.partial).toBe(false);
+    expect(transition.before.meta).toBe(true);
     expect(h.list.textContent).toContain("The queued follow-up");
     expect(transition.before.top).toBeLessThanOrEqual(transition.after.bottom);
     expect(transition.after.header).toBe(transition.before.header);
     expect(transition.after.input).toBe(transition.before.input);
     expect.soft(send).toHaveBeenCalledOnce();
     expect.soft(Math.abs(transition.after.old - transition.before.old)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
-    // 出队后尾部已是用户行，仍须平滑承接上一条回复尚未放完的文字。
-    const finishing = recording.samples.filter(sample => sample.time >= transition.time && sample.before.partial && sample.after.partial);
-    expect(finishing.length).toBeGreaterThan(0);
-    expect(synchronousJumps(finishing)).toEqual([]);
+    // 等待期间回复照常收尾，出队前后都没有同步跳动。
+    expect(synchronousJumps(recording.samples.filter(sample => sample.time >= started.time))).toEqual([]);
   } finally {
     send.mockRestore();
     recording.close();
@@ -275,7 +292,7 @@ test.each(["read", "reset"] as const)("queue continuity releases control on %s",
   const clock = installHandoffClock();
   const recording = recordHandoff(h);
   try {
-    startQueuedFinish(h, clock, recording);
+    const { time: started } = startQueuedFinish(h, clock, recording);
     if (action === "reset") {
       flushSync(() => h.timeline().clearTimeline());
       expect(h.timeline().items).toHaveLength(0);
@@ -289,7 +306,7 @@ test.each(["read", "reset"] as const)("queue continuity releases control on %s",
     }
     const afterInput = Math.round(h.list.scrollTop);
     expect(h.footer.style.height).toBe("");
-    for (let time = FORMAL_AT_MS + FRAME_MS * 3; time <= SETTLED_AT_MS; time += FRAME_MS) clock.step(time);
+    for (let time = started + FRAME_MS; time <= SETTLED_AT_MS; time += FRAME_MS) clock.step(time);
     expect(Math.round(h.list.scrollTop)).toBe(afterInput);
     expect(h.footer.style.height).toBe("");
     expect(clock.pending()).toBe(0);
@@ -462,14 +479,14 @@ test("Reduced Motion immediately releases queue dimensions and skips the inherit
   const clock = installHandoffClock();
   const recording = recordHandoff(h);
   try {
-    const event = startQueuedFinish(h, clock, recording);
+    const { event, time: started } = startQueuedFinish(h, clock, recording);
     await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
     // 媒体查询值可能先于 change 事件更新；等待真实处理完成，不把 CDP 响应当作事件已交付。
     await vi.waitFor(() => {
       expect(new TimelineViewportLayout(h.list).measure().animate).toBe(false);
       expect(h.footer.style.height).toBe("");
     });
-    for (let time = FORMAL_AT_MS + FRAME_MS * 3; time <= SETTLED_AT_MS; time += FRAME_MS) clock.step(time);
+    for (let time = started + FRAME_MS; time <= SETTLED_AT_MS; time += FRAME_MS) clock.step(time);
     assertSettled(h, clock, event);
     expect(Math.round(h.list.scrollHeight - h.list.clientHeight - h.list.scrollTop)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
   } finally {
