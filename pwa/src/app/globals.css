@@ -212,26 +212,26 @@ body:has(.pwa-root) { overflow: hidden; }
 }
 .pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: var(--pwa-hit-target); display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-main-inset-end) 12px var(--pwa-main-inset-start); pointer-events: none; }
 
-/* 按钮层级：主操作实心强调色；次级为表面＋边线；文字按钮无底无框；危险入口为错误色轮廓。 */
+/* 按钮层级：主操作实心强调色；次级为无边框色调底；文字按钮无底无框；危险入口为错误色轻底与文字。 */
 .pwa-ui-scope .pwa-button { min-height: var(--pwa-hit-target); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-md); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
-/* 次级按钮只用 default 变体：surface 底、1px line 边框、ink 文字。 */
-.pwa-ui-scope .pwa-button[data-variant="default"] { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-surface); }
-@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
-.pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
+/* 次级按钮只用 default 变体：无边框的 tonal 色调底、ink 文字；浅色下 surface 与 bg 同为白色，不能靠细边识别。 */
+.pwa-ui-scope .pwa-button[data-variant="default"] { border-color: transparent; color: var(--pwa-ink); background: var(--pwa-tonal); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-tonal-hover); } }
+.pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-tonal-active); }
 .pwa-ui-scope .pwa-button[data-variant="transparent"] { padding: 0 10px; border-color: transparent; color: var(--pwa-accent); background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="transparent"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
-/* outline 变体只用于危险入口（会弹出确认的操作），不作普通次级按钮。 */
-.pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: var(--pwa-error); color: var(--pwa-error); background: transparent; }
-@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash); } }
+/* outline 变体只用于危险入口（会弹出确认的操作），不作普通次级按钮；外观为无边框的错误色轻底与错误色文字。 */
+.pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: transparent; color: var(--pwa-error); background: var(--pwa-error-wash); }
+@media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash-hover); } }
 .pwa-ui-scope .pwa-button:disabled,
 .pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: not-allowed; }
 .pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
 .pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
 .pwa-message-action { display: inline-flex; }
-.pwa-ui-scope .pwa-button.pwa-latest-button { min-height: var(--pwa-hit-target); padding: 0 12px; border: var(--pwa-hairline) solid var(--pwa-separator); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
+.pwa-ui-scope .pwa-button.pwa-latest-button { min-height: var(--pwa-hit-target); padding: 0 16px; border: var(--pwa-hairline) solid var(--pwa-separator); border-radius: var(--pwa-radius-pill); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-separator); color: var(--pwa-accent); background: var(--pwa-hover); } }
 
 .pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(var(--pwa-composer-bottom, 16px), var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); container: pwa-composer / inline-size; }
@@ -345,17 +345,15 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-group { margin: 0; overflow: hidden; border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); }
 .pwa-root .pwa-settings-row { position: relative; box-sizing: border-box; width: 100%; min-height: var(--pwa-hit-target); margin: 0; padding: 8px 16px; display: flex; align-items: center; gap: 10px; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-root .pwa-settings-row + .pwa-settings-row::before { content: ""; position: absolute; top: 0; right: 0; left: 16px; border-top: var(--pwa-hairline) solid var(--pwa-separator); pointer-events: none; }
-/* 带 20 图标的分组：分隔从图标后的文字起（16 + 20 + 10）。 */
-.pwa-root .pwa-settings-group-icons > .pwa-settings-row + .pwa-settings-row::before { left: 46px; }
-/* 单选行：原生 radio 视觉隐藏并铺满整行接收点击，读屏与方向键语义不变；选中项在行尾显示强调色对勾。 */
+/* 单选分组：行首 20 圆点、10、20 图标、10 之后才是文字，分隔从文字起（16 + 20 + 10 + 20 + 10）。 */
+.pwa-root .pwa-settings-group-choices > .pwa-settings-row + .pwa-settings-row::before { left: 76px; }
+/* 单选行：行首可见的单选圆点（未选中 control-line 轮廓，选中 accent），整行悬停与按下有中性底。 */
 .pwa-root .pwa-settings-choice { display: block; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-choice:hover { background: var(--pwa-hover); } }
 .pwa-root .pwa-settings-choice:active { background: var(--pwa-neutral-active); }
-.pwa-root .pwa-settings-choice:has(.mantine-Radio-radio:focus-visible) { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
-.pwa-root .pwa-settings-choice .mantine-Radio-body { display: flex; align-items: center; }
-.pwa-root .pwa-settings-choice .mantine-Radio-inner { position: absolute; inset: 0; width: auto; height: auto; }
-.pwa-root .pwa-settings-choice .mantine-Radio-radio { width: 100%; height: 100%; margin: 0; border: 0; border-radius: 0; opacity: 0; cursor: pointer; }
-.pwa-root .pwa-settings-choice .mantine-Radio-icon { display: none; }
+.pwa-root .pwa-settings-choice .mantine-Radio-body { display: flex; align-items: center; gap: 10px; }
+.pwa-root .pwa-settings-choice .mantine-Radio-radio { border-color: var(--pwa-control-line); cursor: pointer; }
+.pwa-root .pwa-settings-choice .mantine-Radio-radio:checked { border-color: var(--pwa-accent); background: var(--pwa-accent); }
 .pwa-root .pwa-settings-choice .mantine-Radio-labelWrapper { min-width: 0; flex: 1; }
 .pwa-root .pwa-settings-choice .mantine-Radio-label { display: block; padding: 0; color: var(--pwa-ink); line-height: var(--pwa-leading-ui); cursor: pointer; }
 .pwa-settings-choice-copy { display: flex; align-items: center; gap: 10px; }
@@ -363,18 +361,15 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-settings-choice-text { min-width: 0; flex: 1; display: grid; gap: var(--pwa-space-pair); }
 .pwa-settings-choice-text strong { font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
 .pwa-settings-choice-text small { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
-.pwa-settings-choice-copy > .pwa-settings-check { color: var(--pwa-accent); visibility: hidden; }
-.pwa-settings-choice:has(.mantine-Radio-radio:checked) .pwa-settings-check { visibility: visible; }
-/* 操作行与跳转行：整行是按钮；操作用强调色文字，危险操作用错误色，跳转行右侧为 secondary 箭头。 */
+/* 跳转行：整行是按钮，右侧为 secondary 箭头。 */
 .pwa-root .pwa-settings-row-button { text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-row-button:hover { background: var(--pwa-hover); } }
 .pwa-root .pwa-settings-row-button:active { background: var(--pwa-neutral-active); }
 .pwa-root .pwa-settings-row-button:focus-visible { outline-offset: -2px; }
-.pwa-root .pwa-settings-row-button > svg { flex: 0 0 auto; }
 .pwa-root .pwa-settings-row-label { min-width: 0; flex: 1; }
-.pwa-root .pwa-settings-row-chevron { color: var(--pwa-secondary); }
-.pwa-root .pwa-settings-row-action { color: var(--pwa-accent); }
-.pwa-root .pwa-settings-row-danger { color: var(--pwa-error); }
+.pwa-root .pwa-settings-row-chevron { flex: 0 0 auto; color: var(--pwa-secondary); }
+/* 操作分组：内边距 16，按钮纵向排列、相距 8（相邻独立按钮）。 */
+.pwa-root .pwa-settings-group-actions { padding: 16px; display: grid; justify-items: start; gap: 8px; }
 /* 表单分组：内边距 16，标签到输入框 8（输入组件自带），输入项到主操作 16。 */
 .pwa-root .pwa-settings-form { padding: 16px; display: grid; justify-items: start; gap: var(--pwa-space-md); }
 .pwa-root .pwa-settings-form .pwa-field { width: 100%; }
@@ -531,7 +526,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* Toast：顶部居中、会话标题区与主区提示（连接提示条等）下方的最顶层浮层；surface 底、浮层阴影＋line 边框、圆角 8、最大宽 400。 */
 .pwa-operation-notifications { display: none; }
 .pwa-operation-notifications[data-position="top-center"]:has(.pwa-operation-notification) { display: block; position: absolute; top: max(calc(var(--pwa-safe-top) + var(--pwa-topbar-height) + 8px), calc(var(--pwa-main-notices-bottom, 0px) + 8px)); left: var(--pwa-main-center, 50%); right: auto; bottom: auto; width: min(400px, calc(var(--pwa-main-width, 100%) - 32px)); max-width: 400px; margin: 0; padding: 0; transform: translateX(-50%); pointer-events: none; }
-.pwa-operation-notifications .pwa-operation-notification { min-height: var(--pwa-hit-target); padding: 4px 4px 4px 12px; border: var(--pwa-hairline) solid var(--pwa-separator); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: auto; }
+.pwa-operation-notifications .pwa-operation-notification { min-height: var(--pwa-hit-target); padding: 4px 4px 4px 12px; border: var(--pwa-hairline) solid var(--pwa-separator); border-radius: var(--pwa-radius-toast); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: auto; }
 .pwa-operation-notifications .pwa-operation-notification::before { display: none; }
 /* 进出只做轻微位移＋淡化；Mantine 通知状态变量区分退出，不使用整段滑入与回弹。
  * Mantine 只接受一个 transitionDuration（取 toast，决定卸载时机），离开时长在此覆盖；离开短于卸载时机，只会更早结束。 */

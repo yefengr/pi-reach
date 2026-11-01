@@ -38,9 +38,9 @@
 | [ADR-20261011](20261011-collapsed-sidebar-flush-main.md) | 收起侧栏后桌面主区贴满窗口 | — |
 | [ADR-20261011](20261011-live-tool-grouping.md) | 工具调用实时分组 | Thinking 断组、默认收起、组头排队、右侧状态与 14px 明细由 ADR-20261030 取代 |
 | [ADR-20261018](20261018-reader-drawer-only.md) | 阅读器统一为右侧 Drawer | 取代宽屏分栏阅读设计 |
-| [ADR-20261028](20261028-square-navigation-and-drawers.md) | 侧栏、抽屉与页面切换表面改为直角 | 覆盖 ADR-20261010 的抽屉与页面转场圆角规则 |
+| [ADR-20261028](20261028-square-navigation-and-drawers.md) | 侧栏、抽屉与页面切换表面改为直角 | 覆盖 ADR-20261010 的抽屉与页面转场圆角规则；底部电脑选择面板的上沿圆角由 ADR-20261101 调整 |
 | [ADR-20261030](20261030-thinking-tool-process-groups.md) | Thinking 与工具统一为过程组 | 取代 ADR-20261011 的 Thinking 断组、默认收起、组头排队、右侧状态与 14px 明细；2026-10-31 修订组头思考标题与自动收起节奏 |
-| [ADR-20261101](20261101-hairline-concentric-radii.md) | 发丝线分隔、滚动边缘、同心圆角与设置页分组列表 | 覆盖 DESIGN 原「嵌套不递减」规则与设置页单选卡片 |
+| [ADR-20261101](20261101-hairline-concentric-radii.md) | 发丝线分隔、滚动边缘、同心圆角、色调按钮与设置页分组列表 | 覆盖 DESIGN 原「嵌套不递减」、次级按钮与危险入口描边、标签描边规则；调整 ADR-20261028 的底部面板 |
 
 ---
 

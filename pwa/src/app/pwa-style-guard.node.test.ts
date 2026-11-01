@@ -25,14 +25,26 @@ const SPACING_TOKENS = new Map([
   ["--pwa-space-menu-pad", 10],
   ["--pwa-space-composer", 10],
 ]);
-/** 通用圆角三档；主要输入表面独立使用 32px（与内部圆形按钮同心）。 */
+/** 通用圆角四档；Composer、Toast 与胶囊是专用圆角，只允许各自登记的选择器使用。 */
 const RADIUS_TOKENS = new Map([
   ["--pwa-radius-xs", "4px"],
   ["--pwa-radius-md", "8px"],
   ["--pwa-radius-lg", "12px"],
+  ["--pwa-radius-xl", "16px"],
   ["--pwa-radius-composer", "32px"],
+  ["--pwa-radius-toast", "22px"],
+  ["--pwa-radius-pill", "999px"],
 ]);
-const RADIUS_VALUE = /^(?:0|50%|inherit|var\(--pwa-radius-(?:xs|md|lg)\))$/;
+const RADIUS_VALUE = /^(?:0|50%|inherit|var\(--pwa-radius-(?:xs|md|lg|xl)\))$/;
+/** 专用圆角 token → 允许使用的「文件 | 选择器」。 */
+const DEDICATED_RADII = new Map([
+  ["var(--pwa-radius-composer)", ["app/globals.css | .pwa-composer-card"]],
+  ["var(--pwa-radius-toast)", ["app/globals.css | .pwa-operation-notifications .pwa-operation-notification"]],
+  ["var(--pwa-radius-pill)", [
+    "app/globals.css | .pwa-ui-scope .pwa-button.pwa-latest-button",
+    "app/workspace-navigation.css | .pwa-root .pwa-presence-label, .pwa-root .pwa-current-label",
+  ]],
+]);
 /** 边框与轮廓宽度只用细线。 */
 const BORDER_WIDTHS = new Set([0, 1, 2, 3]);
 const SPACING_PROPERTY = /^(?:(?:scroll-)?(?:margin|padding)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|(?:row-|column-)?gap)$/;
@@ -261,7 +273,7 @@ describe("CSS static guard", () => {
     expect(new Set(definitions.map((entry) => entry.property)).size).toBe(SPACING_TOKENS.size);
   });
 
-  test("radius tokens are defined once with the three shared sizes and the Composer size", () => {
+  test("radius tokens are defined once with the shared sizes and the dedicated Composer, Toast and pill sizes", () => {
     const definitions = all.filter((entry) => entry.property.startsWith("--pwa-radius-"));
     const offenders = definitions.filter((entry) => entry.file !== THEME_FILE
       || RADIUS_TOKENS.get(entry.property) !== entry.value).map(keyOf);
@@ -271,16 +283,21 @@ describe("CSS static guard", () => {
     }
   });
 
-  test("production radii use shared tokens, edge or circle geometry, with Composer isolated", () => {
+  test("production radii use shared tokens, edge or circle geometry, with dedicated radii isolated", () => {
     const offenders = all.filter((entry) => !entry.file.startsWith("dev/")
       && entry.property.includes("radius") && !entry.property.startsWith("--pwa-radius-")).filter((entry) => {
       const value = entry.value.replace(/\s*!important$/, "");
-      if (value === "var(--pwa-radius-composer)") {
-        return entry.file !== "app/globals.css" || entry.selector !== ".pwa-composer-card" || entry.property !== "border-radius";
-      }
+      const dedicated = DEDICATED_RADII.get(value);
+      if (dedicated) return entry.property !== "border-radius" || !dedicated.includes(`${entry.file} | ${entry.selector}`);
       return !value.split(/\s+/).every((part) => RADIUS_VALUE.test(part));
     }).map(keyOf);
     expect(offenders).toEqual([]);
+    // 登记失效（选择器改名或不再使用）同样失败。
+    for (const [value, selectors] of DEDICATED_RADII) {
+      for (const selector of selectors) {
+        expect(all.some((entry) => `${entry.file} | ${entry.selector}` === selector && entry.property === "border-radius" && entry.value === value), `${value} ${selector}`).toBe(true);
+      }
+    }
   });
 
   test("image radii follow display roles rather than their content source", () => {

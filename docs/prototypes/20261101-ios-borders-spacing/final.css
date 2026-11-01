@@ -1,0 +1,122 @@
+/*
+ * 最终对照：PR 之前（main 8c94c87）与最新建议。
+ * 复用 shared.css 的产品 token 与组件骨架；这里只补充按钮、标签、浮动控件、底部面板与设置页最新建议用到的 token 与样式。
+ */
+:root {
+  --error: #AE463E;
+  --error-wash: #F8ECEA;
+  --complete: #347953;
+  --on-status: #FFFFFF;
+  /* 候选：色调填充（次级按钮与标签），取代 surface + 1px line 的描边识别 */
+  --tonal: #EBEBEB;
+  --tonal-hover: #DEDEDE;
+  --scrim: #00000047;
+  --shadow-modal: 0 12px 32px var(--shadow-color);
+}
+:root[data-theme="dark"] {
+  --error: #EFA39B;
+  --error-wash: #422F30;
+  --complete: #95CBA8;
+  --on-status: #1E1E1E;
+  --tonal: #404040;
+  --tonal-hover: #4A4A4A;
+  --scrim: #0000008C;
+  --shadow-modal: 0 12px 32px var(--shadow-color);
+}
+
+/* ---------- 总表 ---------- */
+.summary { width: 100%; border-collapse: collapse; font-size: 14px; }
+.summary th, .summary td { padding: 10px 12px; border-bottom: 1px solid var(--wb-border); text-align: left; vertical-align: top; }
+.summary th { color: var(--wb-muted); font-size: 13px; font-weight: 600; }
+.summary td:first-child { font-weight: 600; white-space: nowrap; }
+.state { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.state.keep { background: color-mix(in srgb, var(--wb-after) 16%, transparent); color: var(--wb-after); }
+.state.revert { background: color-mix(in srgb, #C77700 18%, transparent); color: #B06A00; }
+.state.add { background: color-mix(in srgb, #3B6FC4 16%, transparent); color: #3B6FC4; }
+.state.rule { background: color-mix(in srgb, var(--wb-guide) 14%, transparent); color: var(--wb-guide); }
+:root[data-theme="dark"] .state.revert { color: #F0B35A; }
+:root[data-theme="dark"] .state.add { color: #9CBCF0; }
+.table-wrap { overflow-x: auto; }
+.nogo { margin: 8px 0 0; padding-left: 20px; color: var(--wb-muted); font-size: 14px; }
+.nogo li + li { margin-top: 4px; }
+.nogo b { color: var(--wb-ink); }
+
+/* ---------- 气泡：最新建议 16 ---------- */
+.bubble16 .chat .user { border-radius: 16px; }
+
+/* ---------- 按钮 ---------- */
+.btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.b { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--hit); padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-md); font: 600 var(--text-body)/1.4 var(--font-ui); cursor: pointer; }
+.b.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.b.danger-confirm { border-color: var(--error); background: var(--error); color: var(--on-status); }
+/* PR 之前：次级为 surface + 1px line，危险入口为红色描边 */
+.v-before .b.secondary { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.v-before .b.danger { border-color: var(--error); background: transparent; color: var(--error); }
+/* 最新建议：次级与危险入口都改为无边框的色调填充 */
+.v-after .b.secondary { background: var(--tonal); color: var(--ink); }
+.v-after .b.secondary:hover { background: var(--tonal-hover); }
+.v-after .b.danger { background: var(--error-wash); color: var(--error); }
+
+.modal { width: min(100%, 340px); padding: 16px; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-modal); text-align: left; }
+.modal h4 { margin: 0; font-size: var(--text-title); font-weight: 600; line-height: 1.4; }
+.modal p { margin: 8px 0 16px; color: var(--secondary); font-size: var(--text-body); line-height: 1.65; }
+
+/* ---------- 标签 ---------- */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px; color: var(--secondary); font-size: var(--text-meta); font-weight: 600; line-height: 1.4; }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.v-before .chip { border: 1px solid var(--line); border-radius: var(--radius-xs); }
+.v-after .chip { padding: 2px 10px; border-radius: 999px; background: var(--tonal); }
+
+/* ---------- 浮动控件：Toast 与「最新」入口 ---------- */
+.toast { display: flex; align-items: center; gap: 8px; width: min(100%, 340px); min-height: var(--hit); padding: 4px 4px 4px 12px; background: var(--surface); box-shadow: var(--shadow-float); color: var(--ink); font-size: var(--text-body); line-height: 1.4; }
+.toast > svg { color: var(--complete); }
+.toast > span { flex: 1; }
+.latest { display: inline-flex; align-items: center; gap: 6px; min-height: var(--hit); padding: 0 16px; background: var(--surface); box-shadow: var(--shadow-float); color: var(--accent); font-size: var(--text-body); font-weight: 600; }
+.v-before .toast, .v-before .latest { border: 1px solid var(--line); border-radius: var(--radius-md); }
+/* 最新建议：Toast 圆角 22 = 关闭按钮圆形 18 + 内缩 4，同心；单行入口为胶囊 */
+.v-after .toast { border: var(--hairline) solid var(--separator); border-radius: 22px; }
+.v-after .latest { border: var(--hairline) solid var(--separator); border-radius: 999px; }
+
+/* ---------- 底部电脑选择面板 ---------- */
+.sheet-phone { position: relative; }
+.sheet-phone .scrim { position: absolute; inset: 0; z-index: 3; background: var(--scrim); }
+.sheet { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; max-height: 70%; background: var(--surface); box-shadow: var(--shadow-modal); }
+.sheet-head { display: flex; align-items: center; gap: 4px; min-height: 56px; padding: 8px 12px 8px 16px; }
+.sheet-head h4 { flex: 1; margin: 0; font-size: var(--text-title); font-weight: 600; }
+.sheet-body { display: grid; gap: 4px; padding: 8px 8px 24px; overflow: auto; }
+.pc { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--radius-md); }
+.pc.on { border-color: var(--line); background: var(--selected); }
+.pc-icon { display: grid; place-items: center; width: 31px; height: 31px; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--secondary); }
+.pc-text { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.pc-text strong { font-size: var(--text-list); }
+.pc-text small { color: var(--secondary); font-size: var(--text-meta); }
+.v-before .sheet { border-radius: 0; }
+.v-before .sheet-head { border-bottom: 1px solid var(--line); }
+/* 最新建议：只有底部弹出的面板上沿圆角 16，侧边 Drawer 与全屏页面仍为直角 */
+.v-after .sheet { border-radius: 16px 16px 0 0; }
+
+/* ---------- 设置页最新建议：分组结构 + 行首可见单选圆点 + 色调按钮 ---------- */
+.settings.v3 { background: var(--grouped-bg); }
+.settings.v3 .bar { background: var(--grouped-bg); }
+.v3 .set-title { margin-bottom: 8px; }
+.v3 .group { overflow: hidden; border-radius: var(--radius-lg); background: var(--surface); }
+.v3 .row { position: relative; display: flex; align-items: center; gap: 10px; min-height: var(--hit); padding: 8px 16px; font-size: var(--text-body); line-height: 1.4; }
+.v3 .row + .row::before { content: ""; position: absolute; top: 0; left: var(--sep-inset, 16px); right: 0; border-top: var(--hairline) solid var(--separator); }
+/* 单选：圆点 20 + 间隔 10 + 图标 20 + 间隔 10，分隔从文字起 */
+.v3 .group.choices { --sep-inset: 76px; }
+.v3 .radio { flex: none; width: 20px; height: 20px; border: 1px solid var(--control-line); border-radius: 50%; }
+.v3 .row.on .radio { border: 6px solid var(--accent); }
+.v3 .row > svg { color: var(--secondary); }
+.v3 .grow { flex: 1; min-width: 0; }
+.v3 .value { color: var(--secondary); }
+.v3 .chev { color: var(--secondary); }
+.v3 .group.padded { display: grid; justify-items: start; gap: 8px; padding: 16px; }
+.v3 .foot-note { margin: 6px 16px 0; color: var(--secondary); font-size: var(--text-meta); line-height: 1.4; }
+.v3 .about-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.v3 .about-head .set-title { margin: 0; }
+.v1 .danger-entry { display: inline-flex; margin-top: 8px; }
+
+@media (max-width: 799.98px) {
+  .summary td:first-child { white-space: normal; }
+}

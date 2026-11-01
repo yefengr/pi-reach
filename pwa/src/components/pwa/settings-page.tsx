@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
-import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
+import { ALargeSmall, ArrowLeft, CaseSensitive, ChevronRight, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
@@ -96,7 +96,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-appearance-heading">
         <h2 id="pwa-appearance-heading" className="pwa-settings-section-title">{s.appearance}</h2>
         <Radio.Group aria-label={s.appearance} name="pwa-appearance" value={appearance} onChange={(next) => setAppearance(next as PwaAppearance)}>
-          <div className="pwa-settings-group pwa-settings-group-icons">
+          <div className="pwa-settings-group pwa-settings-group-choices">
             <SettingsChoice value="system" icon={<Monitor size={20} />} title={s.system} hint={s.systemHint} />
             <SettingsChoice value="light" icon={<Sun size={20} />} title={s.light} hint={s.lightHint} />
             <SettingsChoice value="dark" icon={<Moon size={20} />} title={s.dark} hint={s.darkHint} />
@@ -107,7 +107,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-text-size-heading">
         <h2 id="pwa-text-size-heading" className="pwa-settings-section-title">{s.textSize}</h2>
         <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSize)}>
-          <div className="pwa-settings-group pwa-settings-group-icons">
+          <div className="pwa-settings-group pwa-settings-group-choices">
             <SettingsChoice value="standard" icon={<Type size={20} />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
             <SettingsChoice value="large" icon={<ALargeSmall size={20} />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
             <SettingsChoice value="xlarge" icon={<CaseSensitive size={20} />} title={s.textSizeXLarge} hint={s.textSizeXLargeHint} />
@@ -118,7 +118,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
         <Radio.Group aria-label={s.language} name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
-          <div className="pwa-settings-group pwa-settings-group-icons">
+          <div className="pwa-settings-group pwa-settings-group-choices">
             <SettingsChoice value="system" icon={<Globe size={20} />} title={s.followBrowser} hint={s.followBrowserHint} />
             <SettingsChoice value="zh" icon={<Languages size={20} />} title={s.chinese} hint={s.chineseHint} lang="zh-CN" />
             <SettingsChoice value="en" icon={<Languages size={20} />} title={s.english} hint={s.englishHint} lang="en" />
@@ -147,15 +147,9 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-browser-data-heading">
         <h2 id="pwa-browser-data-heading" className="pwa-settings-section-title">{s.browserData}</h2>
-        <div className="pwa-settings-group pwa-settings-group-icons">
-          <UnstyledButton className="pwa-settings-row pwa-settings-row-button pwa-settings-row-action pwa-layout-reset-button" type="button" onClick={onResetLayout}>
-            <RotateCcw size={20} aria-hidden="true" />
-            <span className="pwa-settings-row-label">{s.resetLayout}</span>
-          </UnstyledButton>
-          <UnstyledButton className="pwa-settings-row pwa-settings-row-button pwa-settings-row-danger" type="button" onClick={onClearData}>
-            <Trash2 size={20} aria-hidden="true" />
-            <span className="pwa-settings-row-label">{s.clearData}</span>
-          </UnstyledButton>
+        <div className="pwa-settings-group pwa-settings-group-actions">
+          <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
+          <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.localOnlyNote}</p>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.resetLayoutNote}</p>
@@ -177,14 +171,10 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
   </div>;
 }
 
-/**
- * 分组列表中的单选行：保留原生 radio 的语义与方向键切换，圆点在视觉上隐藏、铺满整行接收点击，
- * 选中项在行尾显示强调色对勾（DESIGN「设置页」）。
- */
+/** 分组列表中的单选行：行首为可见的单选圆点，其后为图标与主副文字（DESIGN「设置页」）。 */
 function SettingsChoice({ value, icon, title, hint, lang }: { value: string; icon: ReactNode; title: string; hint: string; lang?: string }) {
   return <Radio className="pwa-settings-row pwa-settings-choice" value={value} label={<span className="pwa-settings-choice-copy">
     {icon}
     <span className="pwa-settings-choice-text"><strong lang={lang}>{title}</strong><small>{hint}</small></span>
-    <Check className="pwa-settings-check" size={20} aria-hidden="true" />
   </span>} />;
 }

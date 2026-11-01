@@ -336,27 +336,22 @@ test("the relay form keeps 8px from label to input and 16px before the primary a
   expect(Math.round(submit.top - field.bottom)).toBe(16);
 });
 
-test("single-choice rows keep radio semantics, select from anywhere in the row and mark the choice with a trailing check", async () => {
+test("single-choice rows show a leading radio dot, select from the label and keep arrow-key switching", async () => {
   const screen = await renderPwa(<SettingsHarness />);
   const standard = screen.getByRole("radio", { name: /Standard/ });
   const large = screen.getByRole("radio", { name: /Large/ }).first();
   await expect.element(standard).toBeChecked();
   const rows = [...document.querySelectorAll<HTMLElement>('[aria-labelledby="pwa-text-size-heading"] .pwa-settings-choice')];
-  const checks = () => rows.map((row) => getComputedStyle(row.querySelector(".pwa-settings-check")!).visibility);
-  expect(checks()).toEqual(["visible", "hidden", "hidden"]);
-  // 原生 radio 视觉隐藏并铺满整行：点击行尾空白处也会选中。
-  const box = rows[1]!.getBoundingClientRect();
-  const input = large.element().getBoundingClientRect();
-  expect([Math.round(input.width), Math.round(input.height)]).toEqual([Math.round(box.width), Math.round(box.height)]);
-  expect(getComputedStyle(large.element()).opacity).toBe("0");
-  await userEvent.click(rows[1]!, { position: { x: Math.round(box.width) - 24, y: Math.round(box.height / 2) } });
+  // 圆点可见、位于行首：未选中用 control-line 轮廓。
+  const dot = large.element().getBoundingClientRect();
+  expect([Math.round(dot.width), Math.round(dot.height)]).toEqual([20, 20]);
+  expect(Math.round(dot.left - rows[1]!.getBoundingClientRect().left)).toBe(16);
+  expect(getComputedStyle(large.element()).opacity).toBe("1");
+  await userEvent.click(rows[1]!.querySelector<HTMLElement>(".pwa-settings-choice-text")!);
   await expect.element(large).toBeChecked();
-  expect(checks()).toEqual(["hidden", "visible", "hidden"]);
-  // 方向键仍在同组内切换。
   large.element().focus();
   await userEvent.keyboard("{ArrowDown}");
   await expect.element(screen.getByRole("radio", { name: /Extra large/ })).toBeChecked();
-  expect(getComputedStyle(rows[2]!).outlineStyle).toBe("solid");
 });
 
 test("rows in a group are divided by hairlines that start at the text and reach the trailing edge", async () => {
@@ -365,10 +360,10 @@ test("rows in a group are divided by hairlines that start at the text and reach 
   expect(getComputedStyle(iconRows[0]!, "::before").content).toBe("none");
   const divider = getComputedStyle(iconRows[1]!, "::before");
   const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
-  expect([divider.left, divider.right, divider.borderTopWidth]).toEqual(["46px", "0px", hairline]);
-  // 图标与文字对齐：分隔线起点正好是文字左缘。
+  expect([divider.left, divider.right, divider.borderTopWidth]).toEqual(["76px", "0px", hairline]);
+  // 圆点、图标之后才是文字：分隔线起点正好是文字左缘。
   const text = iconRows[1]!.querySelector(".pwa-settings-choice-text")!.getBoundingClientRect();
-  expect(Math.round(text.left - iconRows[1]!.getBoundingClientRect().left)).toBe(46);
+  expect(Math.round(text.left - iconRows[1]!.getBoundingClientRect().left)).toBe(76);
   const versionRows = [...document.querySelectorAll<HTMLElement>(".pwa-settings-versions > .pwa-settings-row")];
   expect(getComputedStyle(versionRows[1]!, "::before").left).toBe("16px");
 });

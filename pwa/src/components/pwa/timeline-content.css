@@ -4,7 +4,7 @@
 .pwa-message { min-width: 0; margin: 12px 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); overflow-wrap: anywhere; }
 .pwa-message > p, .pwa-user-blocks p { margin: 0; white-space: pre-wrap; }
 .pwa-user-blocks { display: grid; gap: 8px; }
-.pwa-message.user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-message); }
+.pwa-message.user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: var(--pwa-radius-xl); background: var(--pwa-message); }
 .pwa-message.assistant { padding: 0; }
 .pwa-message-status { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 4px; font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-message.provider_error { padding: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-error-wash); }
@@ -18,7 +18,7 @@
 /* 待发送消息与正式记录同样式；仅异常投递状态在气泡下方占一行 12px 文字。 */
 .pwa-user-row { position: relative; min-width: 0; margin: 12px 0; }
 /* 入场位移只在气泡自身的静态框内绘制，不侵入下方状态行或改变滚动几何。 */
-.pwa-user-bubble-frame { display: flow-root; width: fit-content; max-width: 80%; margin-left: auto; overflow: clip; border-radius: var(--pwa-radius-md); }
+.pwa-user-bubble-frame { display: flow-root; width: fit-content; max-width: 80%; margin-left: auto; overflow: clip; border-radius: var(--pwa-radius-xl); }
 .pwa-user-bubble-frame > .pwa-message.user { width: auto; max-width: none; margin: 0; }
 /* 在线会话追加的新行（正文、过程组与组内成员）只淡入，不位移、不做高度动画；位移由跟随滚动承担。 */
 .pwa-row-enter { animation: pwa-row-enter var(--pwa-duration-message-in) var(--pwa-ease-content); }
