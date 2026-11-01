@@ -14,8 +14,11 @@ export type ViewportGeometry = { top: number; bottom: number; height: number; an
  */
 export type ViewportMotionStep = { top: number; finished: boolean; target?: number; shift?: number };
 export type ViewportMotion = { advance(now: number): ViewportMotionStep; finish(settleInput?: boolean): void };
-/** 过程组收起保持：release 表示没有后续内容会填入，收起结束后平滑收回空间；extend 在保持期间叠加新的收起。 */
-export type ViewportHoldMotion = ViewportMotion & { release(): void; extend(reserve: number, duration: number, live: boolean): void };
+/**
+ * 过程组收起保持：release 表示没有后续内容会填入，收起结束后平滑收回空间；extend 在保持期间叠加新的收起；
+ * track 交由其他过程拥有滚动时，按实际位置只缩减空间，用完返回 true。
+ */
+export type ViewportHoldMotion = ViewportMotion & { release(): void; extend(reserve: number, duration: number, live: boolean): void; track(top: number): boolean };
 export type ViewportCapture<C> = Readonly<{ generation: number; binding: object; value: C }>;
 export type ViewportPosition<A> = { following: true } | { following: false; anchor: A };
 export interface ViewportLayout<C, A> {
@@ -92,6 +95,8 @@ export class TimelineViewportCoordinator<C, A> {
   private collapseHold: { from: number; removed: number; until: number } | null = null;
   /** 当前的过程组收起保持（同时也是 motion）；活动区撤下时通知它不再等待后续内容。 */
   private holdMotion: ViewportHoldMotion | null = null;
+  /** 发送接管时尚未用完的收起保持：随发送滚动按实际位置缩减，避免一次撤掉空白被浏览器钳制。 */
+  private sendHold: ViewportHoldMotion | null = null;
   private sendFloor: number | null = null;
   private processing = false;
   private exiting = false;
@@ -154,7 +159,11 @@ export class TimelineViewportCoordinator<C, A> {
     // 连续成功发送从捕获的可见尺寸接续，不先写上一次输入的终点。
     const inherited = this.motionGlide ?? this.glide;
     this.collapseHold = null;
+    const hold = this.holdMotion;
+    this.holdMotion = null;
+    if (hold !== null && this.motion === hold) this.motion = null;
     this.exit(false, false);
+    this.sendHold = hold;
     this.motionGlide = inherited;
     this.motionGlide?.handoff(this.layout.top(), null);
     const probe = this.layout.captureReply?.();
@@ -167,6 +176,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.unread.clear();
     this.tailCredit = 0;
     this.motion = this.layout.measure().animate ? this.layout.send(capture.value) : null;
+    if (!this.motion) this.finishSendHold();
     this.mode = this.motion ? "send" : "follow";
     this.publish("send");
     // owner 立即固定捕获尺寸；首个已提交布局（或无提交时的后继帧）才消费动画时间。
@@ -429,8 +439,10 @@ export class TimelineViewportCoordinator<C, A> {
     this.cancelFrame();
     // 阅读暂停期间保留的收起保持不是当前 motion，退出时一并结束。
     const pausedHold = this.holdMotion !== motion ? this.holdMotion : null;
+    const sendHold = this.sendHold;
     this.motion = null;
     this.holdMotion = null;
+    this.sendHold = null;
     this.motionGlide = null;
     this.motionTime = null;
     this.receipt = null;
@@ -446,6 +458,7 @@ export class TimelineViewportCoordinator<C, A> {
     try {
       motion?.finish(settleInput);
       pausedHold?.finish();
+      sendHold?.finish();
       if (anchor && layout) this.restoreAnchor(layout, anchor);
       if (stopLatest && layout) layout.scroll(layout.top(), false);
       this.lastTop = layout?.top() ?? 0;
@@ -526,6 +539,7 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   private advance(layout: ViewportLayout<C, A>, reason: ViewportReason, frameTime?: number): void {
+    if (this.sendHold?.track(layout.top())) this.finishSendHold();
     this.diagnosticCallbackTime = frameTime ?? null;
     this.diagnosticMotionTime = null;
     if (this.pendingAnchor) {
@@ -598,6 +612,8 @@ export class TimelineViewportCoordinator<C, A> {
         const step = this.motion.advance(time);
         if (epoch !== this.frameEpoch || this.layout !== layout) return;
         if (this.mode === "send" && step.target !== undefined) {
+          // 发送过程按物理底部报告目标；仍保留的收起空白不是要滚入的内容。
+          if (this.sendHold) step.target = Math.max(0, step.target - geometry.compensation);
           this.sendFloor ??= Math.max(0, step.target - this.tailCredit);
           if (step.shift) this.sendFloor += step.shift;
           this.tailCredit = Math.min(this.tailCredit, geometry.tailSpace, Math.max(0, step.target - this.sendFloor));
@@ -662,6 +678,14 @@ export class TimelineViewportCoordinator<C, A> {
     }
     this.ready = true;
     this.record(reason, geometry, requested, target);
+  }
+
+  private finishSendHold(): void {
+    const hold = this.sendHold;
+    if (hold === null) return;
+    this.sendHold = null;
+    this.exiting = true;
+    try { hold.finish(); } finally { this.exiting = false; }
   }
 
   /** 阅读暂停期间的收起保持只随内容增长缩减空白，不写入滚动位置；空白用完即结束。 */

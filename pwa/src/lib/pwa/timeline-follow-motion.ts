@@ -180,6 +180,12 @@ export class CollapseHoldTransition {
     if (this.phase === "hold") this.startRelease();
   }
 
+  /** 发送等其他过程接管滚动后：以实际位置为准只缩减空间，空间用完返回 true。 */
+  track(top: number): boolean {
+    this.top = top;
+    return this.keepReachable() <= 0;
+  }
+
   private startRelease() {
     this.clock.cancel();
     this.clock = new FollowMotionClock(this.list, this.duration);
