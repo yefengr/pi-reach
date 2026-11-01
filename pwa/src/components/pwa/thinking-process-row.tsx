@@ -67,7 +67,7 @@ function hasPreview(text: string): boolean {
 }
 
 /**
- * 思考明细：整行打开阅读器；空文本只保留静态标题，不制造无效入口。运行中在标题下显示两行尾部预览，结束后收起。
+ * 思考明细：整行打开阅读器；空文本只保留静态标题，不制造无效入口。运行中在标题下显示单行尾部预览，结束后收起。
  * 标题并入组头时本行只保留预览，两者都没有时整行隐藏（见 process-group.css）。
  */
 export function ThinkingProcessRow({ entry, status, headingInHead = false, onRead }: ThinkingProcessRowProps) {

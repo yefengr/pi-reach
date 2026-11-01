@@ -1,8 +1,8 @@
-import { useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { STREAM_REVEAL_CLASS } from "@/lib/pwa/markdown-stream";
 import { useStreamRevealAnimation, useStreamRevealMarks } from "./use-stream-reveal";
 
-/** 只取正文末尾这么多字符：两行预览之外的内容由顶部渐隐裁掉，不为长思考重复排版全文。 */
+/** 只取正文末尾这么多字符：单行预览只显示最新的一段，左侧溢出部分被裁掉，不为长思考重复排版全文。 */
 const TAIL_CHARS = 320;
 
 /** 整行加粗标题：已作为思考标题显示。 */
@@ -10,9 +10,9 @@ const HEADING_LINE = /^[ \t]*\*\*[^*\n].*\*\*[ \t]*$/gm;
 /** 判断是否存在标题行；不带 g 标志，避免 test 的 lastIndex 状态影响下一次调用。 */
 const HAS_HEADING_LINE = /^[ \t]*\*\*[^*\n].*\*\*[ \t]*$/m;
 
-/** 预览是纯文本：去掉加粗与行内代码标记，合并空行，不解析 Markdown。 */
+/** 预览是单行纯文本：去掉加粗与行内代码标记，换行与空白合并为一个空格，不解析 Markdown。 */
 function plain(text: string): string {
-  return text.replace(/\*\*|`/g, "").replace(/\n{2,}/g, "\n");
+  return text.replace(/\*\*|`/g, "").replace(/\s+/g, " ");
 }
 
 /**
@@ -26,13 +26,20 @@ export function thinkingPreviewStart(text: string): number {
 }
 
 /**
- * 运行中思考的尾部预览：固定两行高度、最新内容贴底，新放出的文字按流式片段淡入。
+ * 运行中思考的尾部预览：单行、最新内容贴右，放不下时左侧渐隐，新放出的文字按流式片段淡入。
  * 只作视觉进度，对读屏隐藏；全文仍从思考阅读器查看。
  */
 export function ThinkingTailPreview({ text }: { text: string }) {
   const root = useRef<HTMLDivElement>(null);
   const marks = useStreamRevealMarks(text, true);
   useStreamRevealAnimation(root, marks);
+  // 只在溢出时渐隐左缘：短文本左对齐，不能被渐隐吃掉开头。
+  useLayoutEffect(() => {
+    const node = root.current;
+    const line = node?.firstElementChild;
+    if (!node || !(line instanceof HTMLElement)) return;
+    node.toggleAttribute("data-overflow", line.offsetWidth > node.clientWidth);
+  });
   const start = Math.max(thinkingPreviewStart(text), text.length - TAIL_CHARS);
   // 标题行按全文定位后整段跳过；淡入片段可能切开标题行，不能在片段内各自匹配。
   const headings = [...text.matchAll(HEADING_LINE)].map(match => [match.index, match.index + match[0].length] as const);

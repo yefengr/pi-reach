@@ -43,17 +43,17 @@
 /* 单个空思考的静态痕迹：无按钮、无箭头、无明细壳；图标槽与明细同样固定 16px＋8px 间隔。 */
 .pwa-root .pwa-process-group .pwa-process-head-static { display: flex; align-items: center; gap: var(--pwa-space-xs); min-height: var(--pwa-hit-target); color: var(--pwa-secondary); font-style: italic; }
 
-/* 明细：行距统一由父级网格负责，子行不再叠加时间线外边距。 */
+/* 明细：44px 行紧邻排列、行间不留空隙，子行不再叠加时间线外边距。 */
 .pwa-root .pwa-process-group .pwa-process-details { min-width: 0; }
-.pwa-root .pwa-process-group .pwa-process-entries { min-width: 0; display: grid; gap: var(--pwa-space-status); }
+.pwa-root .pwa-process-group .pwa-process-entries { min-width: 0; display: grid; gap: 0; }
 .pwa-root .pwa-process-group .pwa-process-entry { position: relative; min-width: 0; }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-timeline-row { margin: 0; }
-/* 竖线取 44px 行与居中 16px 图标之间的断口中点，只连接相邻明细。 */
+/* 竖线居中于相邻两行图标之间的 28px 断口（44px 行内居中 16px 图标，行间无空隙），只连接相邻明细。 */
 .pwa-root .pwa-process-group .pwa-process-entry + .pwa-process-entry::before {
   content: "";
   position: absolute;
   left: 7.5px;
-  top: calc((var(--pwa-space-status) + 16px) / -2);
+  top: -8px;
   width: 1px;
   height: 16px;
   background: var(--pwa-line);
@@ -115,17 +115,20 @@
 .pwa-root .pwa-process-group .pwa-thinking-process-row-action:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-root .pwa-process-group .pwa-thinking-process-row-static { cursor: default; }
 
-/* 运行中思考的尾部预览：与标题同左缘（16px 槽＋间隔），固定两行高度，最新内容贴底、顶部渐隐；只作视觉进度。 */
+/*
+ * 运行中思考的尾部预览：与标题同左缘（16px 槽＋间隔），单行；放得下时左对齐，放不下时从左侧溢出、最新内容贴右，
+ * 溢出时左缘渐隐（data-overflow 由组件测量）。末尾伪元素只吸收剩余空间：有余量时把文字留在左侧，溢出时宽度为 0。
+ */
 .pwa-root .pwa-process-group .pwa-thinking-tail {
   box-sizing: border-box;
-  height: calc(var(--pwa-text-list) * var(--pwa-leading-ui) * 2);
+  height: calc(var(--pwa-text-list) * var(--pwa-leading-ui));
   margin: 0 0 4px calc(16px + var(--pwa-space-xs));
   overflow: hidden;
   display: flex;
-  flex-direction: column;
   justify-content: flex-end;
   color: var(--pwa-secondary);
   font: var(--pwa-weight-regular) var(--pwa-text-list)/var(--pwa-leading-ui) var(--pwa-font-ui);
-  mask-image: linear-gradient(to bottom, transparent, black 45%);
 }
-.pwa-root .pwa-process-group .pwa-thinking-tail > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pwa-root .pwa-process-group .pwa-thinking-tail::after { content: ""; flex: 1 0 0; }
+.pwa-root .pwa-process-group .pwa-thinking-tail[data-overflow] { mask-image: linear-gradient(to right, transparent, black 2em); }
+.pwa-root .pwa-process-group .pwa-thinking-tail > p { flex: none; margin: 0; white-space: pre; }

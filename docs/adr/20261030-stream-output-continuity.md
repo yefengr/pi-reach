@@ -3,6 +3,7 @@
 - 状态：已接受
 - 日期：2026-10-30
 - 覆盖：[ADR-20261030 过程组](20261030-thinking-tool-process-groups.md) 决策 2 的自动收起时机与决策 6（Working 承载）；[ADR-20261011](20261011-live-tool-grouping.md) 的「Working 提示修订（2026-10-12）」
+- 部分被覆盖：决策 5 的两行尾部预览由 [ADR-20261030 过程组](20261030-thinking-tool-process-groups.md#明细行距与单行思考预览修订2026-11-01)的单行预览替代
 
 ## 背景
 
