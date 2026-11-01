@@ -165,12 +165,12 @@ test("slow motion scales only duration tokens and restores them", async () => {
   const screen = await render(<UiReviewStageAPage />);
   const read = (token: string) => getComputedStyle(document.documentElement).getPropertyValue(token).trim();
   expect(read("--pwa-duration-fade")).toBe("120ms");
-  expect(read("--pwa-duration-modal-in")).toBe("180ms");
+  expect(read("--pwa-duration-modal-in")).toBe("400ms");
   expect(read("--pwa-duration-menu-in")).toBe("160ms");
   expect(read("--pwa-duration-press-in")).toBe("90ms");
   await screen.getByRole("button", { name: "0.25× 慢放", exact: true }).click();
   await expect.poll(() => read("--pwa-duration-fade")).toBe("480ms");
-  expect(read("--pwa-duration-modal-in")).toBe("720ms");
+  expect(read("--pwa-duration-modal-in")).toBe("1600ms");
   expect(read("--pwa-duration-menu-in")).toBe("640ms");
   expect(read("--pwa-duration-press-in")).toBe("360ms");
   expect(read("--pwa-duration-feedback")).toBe("480ms");
@@ -185,7 +185,7 @@ test("slow motion scales only duration tokens and restores them", async () => {
   await expect.poll(() => read("--pwa-duration-menu-in")).toBe("640ms");
   await screen.getByRole("button", { name: "1×", exact: true }).click();
   await expect.poll(() => read("--pwa-duration-fade")).toBe("120ms");
-  expect(read("--pwa-duration-modal-in")).toBe("180ms");
+  expect(read("--pwa-duration-modal-in")).toBe("400ms");
   expect(read("--pwa-duration-menu-in")).toBe("160ms");
   expect(getMessages().common.back.length).toBeGreaterThan(0);
 });

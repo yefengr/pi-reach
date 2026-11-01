@@ -1,13 +1,17 @@
 import { useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
 
+// 折叠过渡按固定窗口逐帧采样，固定机制时钟。
+beforeEach(pinMechanismMotion);
 afterEach(async () => {
+  unpinMechanismMotion();
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await page.viewport(1280, 900);
 });

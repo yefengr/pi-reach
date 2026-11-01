@@ -189,7 +189,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 
 - **分层**：动效分两层。「操作反馈」是对手指或指针的即时回应（按压、悬停、复制反馈、菜单与 Popover），保持短时长与原有曲线；「内容与空间」是内容出现、移动或改变尺寸（发送气泡与新行、过程组与工具展开收起、Toast、Modal、浮动入口与局部提示、侧栏收展、图片阅读器几何、Drawer 与设置页进出及跟手收尾、发送跟随、会话切换的淡出与淡入），参照 iOS 无回弹弹簧，起步平缓、收尾柔和（见 [ADR-20261031](adr/20261031-motion-layers-ios-spring.md)）。
 
-- **曲线**：内容与空间层用 `--pwa-ease-content`：临界阻尼弹簧（体感时长等于过渡时长、无回弹），以 `linear()` 的 33 个等距采样点表达并归一化到终点，500ms 时第一帧约完成 2%、约 300ms 完成 90%；过程组自动收起的 `--pwa-ease-settle` 取同一曲线。跟手拖动松手后的收尾以松手速度作为初速度，现场生成同族弹簧（`pwaReleaseEasing`），初速度上限使曲线单调、不越过终点。操作反馈层用标准 `cubic-bezier(0.2, 0, 0, 1)`（按压、局部图标反馈）与进入 `cubic-bezier(0, 0, 0, 1)`（Popover、Menu 出现）。离开用退出 `cubic-bezier(0.3, 0, 1, 1)`（Modal、Popover、Menu、Toast 以及浮动入口与局部提示离开）。脚本经 `pwaContentEasing` 读取内容曲线，浏览器不支持 `linear()` 时回退到标准曲线。`linear` 关键字只用于无限循环（旋转、骨架呼吸）。
+- **曲线**：内容与空间层用 `--pwa-ease-content`：临界阻尼弹簧（体感时长等于过渡时长、无回弹），以 `linear()` 的 33 个等距采样点表达并归一化到终点，400ms 时第一帧约完成 3%、约 240ms 完成 90%；过程组自动收起的 `--pwa-ease-settle` 取同一曲线。跟手拖动松手后的收尾以松手速度作为初速度，现场生成同族弹簧（`pwaReleaseEasing`），初速度上限使曲线单调、不越过终点。操作反馈层用标准 `cubic-bezier(0.2, 0, 0, 1)`（按压、局部图标反馈）与进入 `cubic-bezier(0, 0, 0, 1)`（Popover、Menu 出现）。离开用退出 `cubic-bezier(0.3, 0, 1, 1)`（Modal、Popover、Menu、Toast 以及浮动入口与局部提示离开）。脚本经 `pwaContentEasing` 读取内容曲线，浏览器不支持 `linear()` 时回退到标准曲线。`linear` 关键字只用于无限循环（旋转、骨架呼吸）。
 - **时长**：只引用 `--pwa-duration-*`；同一元素的出现与离开分设时长时，离开更快。
 - **位移**：距离只引用下表 token，或按元素自身尺寸取百分比，并乘以 `--pwa-motion-shift`；正式 CSS 的 `translate` 不写非零 px 字面量。
 
@@ -217,19 +217,19 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 
 | token | 时长 | 用途 |
 | --- | --- | --- |
-| `sidebar` | 450ms | 桌面侧栏收展，主区外边距、圆角与收展入口同步 |
-| `page` / `page-out` | 450 / 350ms | 设置页滑入／滑出，跟手拖动收尾按去向取值 |
-| `drawer` / `drawer-out` | 450 / 350ms | 移动导航、电脑选择、工具与文件阅读器 Drawer 进出及其遮罩，跟手拖动收尾按去向取值；移动导航中切换会话随 `drawer-out` 淡出 |
-| `switch-out` | 250ms | 没有导航退出的入口切换会话前的淡出 |
-| `modal-in` / `modal-out` | 500 / 250ms | 居中 Modal 进出 |
+| `sidebar` | 360ms | 桌面侧栏收展，主区外边距、圆角与收展入口同步 |
+| `page` / `page-out` | 360 / 280ms | 设置页滑入／滑出，跟手拖动收尾按去向取值 |
+| `drawer` / `drawer-out` | 360 / 280ms | 移动导航、电脑选择、工具与文件阅读器 Drawer 进出及其遮罩，跟手拖动收尾按去向取值；移动导航中切换会话随 `drawer-out` 淡出 |
+| `switch-out` | 200ms | 没有导航退出的入口切换会话前的淡出 |
+| `modal-in` / `modal-out` | 400 / 200ms | 居中 Modal 进出 |
 | `menu-in` / `menu-out` | 160 / 120ms | 附件、命令、模型与电脑动作菜单进出 |
-| `toast` / `toast-out` | 500 / 250ms | Toast 出现与离开；`toast` 同时是浮动入口与局部提示的出现时长，`toast-out` 只用于 Toast |
-| `collapse-in` / `collapse-out` | 500 / 350ms | 过程组与工具手动折叠展开、折叠箭头旋转 |
-| `collapse-settle` | 500ms | 过程组自动收起（正文接续或本轮结束）：高度、透明度与位移同用 `--pwa-ease-settle`，内容边淡出边被裁切，组头文案在收拢后再切换 |
+| `toast` / `toast-out` | 400 / 200ms | Toast 出现与离开；`toast` 同时是浮动入口与局部提示的出现时长，`toast-out` 只用于 Toast |
+| `collapse-in` / `collapse-out` | 400 / 280ms | 过程组与工具手动折叠展开、折叠箭头旋转 |
+| `collapse-settle` | 400ms | 过程组自动收起（正文接续或本轮结束）：高度、透明度与位移同用 `--pwa-ease-settle`，内容边淡出边被裁切，组头文案在收拢后再切换 |
 | `status-slot` | 160ms | 仅历史评审页（`/app/ui-review`）沿用；生产时间线的状态槽固定 16px，不伸缩、不位移 |
-| `message-in` | 500ms | 新发送气泡与在线新行进入、提交后输入区回缩与贴底 |
-| `content` | 400ms | 会话内容切换后的淡入、流式回复新显示文字的淡入 |
-| `image-in` / `image-out` | 500 / 350ms | 图片阅读器的局部几何过渡 |
+| `message-in` | 400ms | 新发送气泡与在线新行进入、提交后输入区回缩与贴底 |
+| `content` | 320ms | 会话内容切换后的淡入、流式回复新显示文字的淡入 |
+| `image-in` / `image-out` | 400 / 280ms | 图片阅读器的局部几何过渡 |
 | `press-in` / `press-out` | 90 / 120ms | `Button` 与 `ActionIcon` 内部绘制层按压缩放 |
 | `feedback` | 120ms | 复制成功等原位图标交叉淡化 |
 | `fade` | 120ms | 通用淡化（Popover、会话操作菜单、重连后消息区、浮动入口与局部提示消失） |
