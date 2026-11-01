@@ -42,6 +42,10 @@ export class StreamStructureGate {
   private readonly toolShown = new Map<string, { at: number; view: TimelinePartialView }>();
   /** 上次构建快照时仍在保持期、由进行中视图代替正式结果的工具。 */
   private readonly held = new Set<string>();
+  /** 上次规划时，正在观看的一轮尚未呈现完而有后续轮次在等待，或其 run_end 已到达尚未放出。 */
+  private turnHandoffPending = false;
+  /** 最近一次放出 run_end 的时刻：其后 STRUCTURE_GAP_MS 内仍算交接，下一轮与出队不与完成时间同帧出现。 */
+  private runEndAt = -Infinity;
 
   now(): number {
     return this.clock;
@@ -59,8 +63,10 @@ export class StreamStructureGate {
     this.arrivedAt.clear();
     this.toolShown.clear();
     this.held.clear();
+    this.turnHandoffPending = false;
     this.lastStructureAt = -Infinity;
     for (const item of items) this.release(item);
+    this.runEndAt = -Infinity;
   }
 
   visible(item: TimelineViewItem): boolean {
@@ -74,6 +80,14 @@ export class StreamStructureGate {
   /** 是否仍有排队的新行；`run_end` 等待也算，调度需继续推进。 */
   waiting(items: readonly TimelineViewItem[]): boolean {
     return items.some(item => !this.released.has(itemId(item)));
+  }
+
+  /**
+   * 正在观看的一轮已在权威上结束或已有下一轮到达，但显示尚未呈现完：
+   * 期间排队消息的出队在显示上暂缓，等上一轮（含完成时间）呈现后再进入对话区。
+   */
+  holdsTurnHandoff(): boolean {
+    return this.turnHandoffPending;
   }
 
   /** 上次构建快照时是否有工具处于最短运行展示期。 */
@@ -125,22 +139,31 @@ export class StreamStructureGate {
    * `busy` 由 lane 所有者提供：已放出条目仍在放文字时，其后的新行等待。
    */
   plan(items: readonly TimelineViewItem[], busy: LaneBusy): boolean {
+    const changed = this.planReleases(items, busy);
+    // 按放出后的状态记录交接：同一次规划里放出 run_end 或下一轮后立即结束，不依赖之后还有帧推进。
+    this.turnHandoffPending = this.handoffPending(items);
+    return changed;
+  }
+
+  private planReleases(items: readonly TimelineViewItem[], busy: LaneBusy): boolean {
     this.prune(items);
     if (!this.seeded) {
       this.reset(items);
       return items.length > 0;
     }
-    const live = items.findLast(item => groupOf(item) !== undefined);
-    const liveGroup = live === undefined ? undefined : groupOf(live);
-    // 只排队追加在本轮已显示条目之后的新行；插在其前的（历史前插、补齐）直接显示。
-    const lastShown = items.findLastIndex(item => groupOf(item) === liveGroup && this.released.has(itemId(item)));
+    const held = (item: TimelineViewItem) => busy(item) || this.toolHeld(item);
+    const { liveGroup, appendFrom, waiting } = this.watch(items, held);
     let changed = false;
     const candidates: TimelineViewItem[] = [];
     let arrivals = 0;
     for (const [index, item] of items.entries()) {
       const id = itemId(item);
       if (this.released.has(id)) continue;
-      if (!this.gated(item, liveGroup, lastShown >= 0 && (index > lastShown || isRunEnd(item)))) {
+      // 后续轮次等正在观看的一轮呈现完，包括其用户消息。
+      const group = groupOf(item);
+      if (group !== undefined && waiting.has(group)) continue;
+      // 只排队追加在本轮已显示条目之后的新行；插在其前的（历史前插、补齐）直接显示。
+      if (!this.gated(item, liveGroup, index >= appendFrom || (appendFrom !== Infinity && isRunEnd(item)))) {
         this.release(item);
         changed = true;
         continue;
@@ -157,7 +180,6 @@ export class StreamStructureGate {
       return true;
     }
     const pending = new Set(candidates);
-    const held = (item: TimelineViewItem) => busy(item) || this.toolHeld(item);
     for (const item of items) {
       if (!pending.has(item)) {
         // 已放出的同轮条目仍在放文字或保持运行态：其后的新行等待，保证出现顺序与事件顺序一致。
@@ -181,6 +203,65 @@ export class StreamStructureGate {
     return changed;
   }
 
+  /**
+   * 正在观看的一轮：已有条目放出的最后一轮（按各轮首次出现的顺序）。其后的轮次须等它全部呈现
+   * （全部放出、文字放完、工具最短运行展示结束），并在最后一次结构放出后间隔 STRUCTURE_GAP_MS，
+   * 下一轮才成为正在观看的一轮，其条目从第一条起按追加排队。
+   * 返回正在观看的一轮、按追加处理的起始下标与仍需等待的后续轮次。
+   */
+  private watch(items: readonly TimelineViewItem[], held: (item: TimelineViewItem) => boolean): { liveGroup: string | undefined; appendFrom: number; waiting: ReadonlySet<string> } {
+    const order: string[] = [];
+    const position = new Map<string, number>();
+    let watchedAt = -1;
+    for (const item of items) {
+      const group = groupOf(item);
+      if (group === undefined) continue;
+      let at = position.get(group);
+      if (at === undefined) {
+        at = order.length;
+        position.set(group, at);
+        order.push(group);
+      }
+      if (this.released.has(itemId(item))) watchedAt = Math.max(watchedAt, at);
+    }
+    const lastShownIn = (group: string | undefined) => items.findLastIndex(item => groupOf(item) === group && this.released.has(itemId(item)));
+    const appendAfter = (index: number) => index >= 0 ? index + 1 : Infinity;
+    if (watchedAt < 0) {
+      const liveGroup = order.at(-1);
+      return { liveGroup, appendFrom: appendAfter(lastShownIn(liveGroup)), waiting: new Set() };
+    }
+    const watched = order[watchedAt]!;
+    const next = order[watchedAt + 1];
+    const settled = items.every(item => groupOf(item) !== watched || (this.released.has(itemId(item)) && !held(item)));
+    if (next === undefined) return { liveGroup: watched, appendFrom: appendAfter(lastShownIn(watched)), waiting: new Set() };
+    if (!settled || this.clock - this.lastStructureAt < STRUCTURE_GAP_MS) {
+      return { liveGroup: watched, appendFrom: appendAfter(lastShownIn(watched)), waiting: new Set(order.slice(watchedAt + 1)) };
+    }
+    // 上一轮已全部呈现：下一轮成为正在观看的一轮，从它的第一条起按追加处理；再后面的轮次继续等待。
+    const first = items.findIndex(item => groupOf(item) === next);
+    return { liveGroup: next, appendFrom: first, waiting: new Set(order.slice(watchedAt + 2)) };
+  }
+
+  /** 正在观看的一轮（已有条目放出的最后一轮）的 run_end 已到达未放出，或其后还有未放出的轮次。 */
+  private handoffPending(items: readonly TimelineViewItem[]): boolean {
+    const position = new Map<string, number>();
+    let watchedAt = -1;
+    for (const item of items) {
+      const group = groupOf(item);
+      if (group === undefined) continue;
+      if (!position.has(group)) position.set(group, position.size);
+      if (this.released.has(itemId(item))) watchedAt = Math.max(watchedAt, position.get(group)!);
+    }
+    if (watchedAt < 0) return false;
+    if (this.clock - this.runEndAt < STRUCTURE_GAP_MS) return true;
+    return items.some(item => {
+      const group = groupOf(item);
+      if (group === undefined || this.released.has(itemId(item))) return false;
+      const at = position.get(group)!;
+      return at > watchedAt || (at === watchedAt && isRunEnd(item));
+    });
+  }
+
   /** 正在观看的一轮里追加的、不属于原位接管的新条目才排队；本端 pending 与用户消息立即显示。 */
   private gated(item: TimelineViewItem, liveGroup: string | undefined, appended: boolean): boolean {
     if (item.kind === "pending" || !appended) return false;
@@ -198,6 +279,7 @@ export class StreamStructureGate {
 
   private release(item: TimelineViewItem): void {
     const id = itemId(item);
+    if (isRunEnd(item)) this.runEndAt = this.clock;
     this.released.add(id);
     this.arrivedAt.delete(id);
     if (item.kind === "partial") this.releasedPartials.set(item.partial.partial_id, item.partial);

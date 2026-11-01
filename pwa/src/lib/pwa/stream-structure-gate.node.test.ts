@@ -94,6 +94,8 @@ test("run_end waits for every row and tool hold of its turn", () => {
   let items = settled.items;
   for (let frame = 0; frame < 20 && !ids(items).includes("end-g"); frame += 1) items = buffer.advance(16).items;
   expect(ids(items)).toEqual(["user-g", "event-a", "end-g"]);
+  // 完成标记放出后再留一个结构间隔的交接期，之后不再有待处理内容。
+  buffer.advance(STRUCTURE_GAP_MS);
   expect(buffer.hasPending()).toBe(false);
 });
 
@@ -247,4 +249,72 @@ test("reset and foreground flush reveal waiting text at once", () => {
   const flushed = reply(buffer.flush().items);
   expect(flushed?.awaitingSettle).toBeUndefined();
   expect(flushed?.partial.delta).toBe("Hello");
+});
+
+function assistant(id: string, group: string, body: string): TimelineViewItem {
+  const event: TimelineEvent = { ...scope, event_id: id, timestamp: 2, group_id: group, kind: "assistant", status: "complete", blocks: [{ type: "text", text: body }] };
+  return { kind: "event", event };
+}
+
+function nextUser(group: string, messageId: string): TimelineViewItem {
+  const event: TimelineEvent = { ...scope, event_id: `user-${group}`, timestamp: 4, group_id: group, kind: "user", message_id: messageId, blocks: [{ type: "text", text: "again" }], origin: "extension", delivery: "normal", status: "committed" };
+  return { kind: "event", event };
+}
+
+function queuedMessage(patch: Partial<TimelinePending> = {}): TimelinePending {
+  return { kind: "pending", id: "pending:q", clientRequestId: "q", requestId: "a", text: "again", createdAt: 2, delivery: "accepted", queued: true, cancelable: true, ...patch };
+}
+
+/** 上一轮回复仍在放尾巴时，权威快照里同时到达正式回复、run_end 与下一轮（排队消息出队）。 */
+function handoffRun() {
+  const buffer = watching("g1");
+  const body = "a long reply whose tail is still being revealed when the next turn starts ".repeat(4);
+  buffer.ingest([user("g1"), text("m1", "g1", body.slice(0, 40)), queuedMessage()]);
+  for (let frame = 0; frame < 3; frame += 1) buffer.advance(16);
+  return { buffer, body };
+}
+
+const pendingOf = (items: readonly TimelineViewItem[]) => items.filter((item): item is TimelinePending => item.kind === "pending");
+
+test("the next turn waits until the previous reply and its run_end are presented, then follows after the structure gap", () => {
+  const { buffer, body } = handoffRun();
+  const items = [user("g1"), assistant("m1", "g1", body), runEnd("g1"), nextUser("g2", "message-q")];
+  const arrived = buffer.ingest(items);
+  // 上一轮尾巴未放完：完成标记与下一轮用户消息都不提前出现。
+  expect(ids(arrived.items)).not.toContain("end-g1");
+  expect(ids(arrived.items)).not.toContain("user-g2");
+  let shown = arrived.items;
+  let elapsed = 0;
+  while (!ids(shown).includes("end-g1") && elapsed < 2000) { shown = buffer.advance(16).items; elapsed += 16; }
+  expect(ids(shown)).not.toContain("user-g2");
+  const endedAt = elapsed;
+  while (!ids(shown).includes("user-g2") && elapsed < 3000) { shown = buffer.advance(16).items; elapsed += 16; }
+  expect(elapsed - endedAt).toBeGreaterThanOrEqual(STRUCTURE_GAP_MS);
+  expect(elapsed - endedAt).toBeLessThanOrEqual(STRUCTURE_GAP_MS + 32);
+});
+
+test("a dequeued message stays in the queue as sending until the previous turn is presented, then enters once with its user message", () => {
+  const { buffer, body } = handoffRun();
+  // 出队：Runtime 先记下消息 ID，随后正式用户消息到达时删除 pending。
+  let shown = buffer.ingest([user("g1"), assistant("m1", "g1", body), runEnd("g1"), queuedMessage({ queued: false, messageId: "message-q", delivery: "committed" })]).items;
+  expect(pendingOf(shown)).toEqual([expect.objectContaining({ id: "pending:q", queued: true, cancelable: false, messageId: undefined })]);
+  shown = buffer.ingest([user("g1"), assistant("m1", "g1", body), runEnd("g1"), nextUser("g2", "message-q")]).items;
+  expect(pendingOf(shown)).toEqual([expect.objectContaining({ id: "pending:q", queued: true, cancelable: false })]);
+  let elapsed = 0;
+  while (!ids(shown).includes("user-g2") && elapsed < 3000) {
+    shown = buffer.advance(16).items;
+    elapsed += 16;
+    if (!ids(shown).includes("user-g2")) expect(pendingOf(shown)[0]?.queued).toBe(true);
+  }
+  // 与用户消息同一快照以已出队状态交接一次（按消息 ID 与用户消息合并为同一气泡），下一次重建后不再保留。
+  expect(pendingOf(shown)).toEqual([expect.objectContaining({ id: "pending:q", queued: false, messageId: "message-q" })]);
+  const next = buffer.ingest([user("g1"), assistant("m1", "g1", body), runEnd("g1"), nextUser("g2", "message-q"), text("m2", "g2", "Repeating")]);
+  expect(pendingOf(next.items)).toEqual([]);
+});
+
+test("a message delivered within the same turn is not held", () => {
+  const buffer = watching("g1");
+  buffer.ingest([user("g1"), text("m1", "g1", "streaming reply"), queuedMessage()]);
+  const shown = buffer.ingest([user("g1"), text("m1", "g1", "streaming reply"), queuedMessage({ queued: false, messageId: "message-q", delivery: "committed" })]).items;
+  expect(pendingOf(shown)).toEqual([expect.objectContaining({ queued: false, messageId: "message-q" })]);
 });
