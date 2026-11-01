@@ -1,5 +1,5 @@
 import { captureOwnSendLayout, OwnSendTransition, type OwnSendLayoutCapture } from "./own-send-transition";
-import { ActivityFollowTransition, activityFollowSpace } from "./timeline-follow-motion";
+import { ActivityFollowTransition, activityFollowSpace, CollapseHoldTransition } from "./timeline-follow-motion";
 import { captureTimelineViewportAnchor, restoreTimelineViewportAnchor, type TimelineViewportAnchor } from "./timeline-viewport-anchor";
 import type { ViewportGeometry, ViewportLayout } from "./timeline-viewport-coordinator";
 import type { ViewportDiagnosticGeometry } from "./timeline-viewport-diagnostics";
@@ -75,8 +75,11 @@ export class TimelineViewportLayout implements ViewportLayout<OwnSendLayoutCaptu
     } };
   }
   send(capture: OwnSendLayoutCapture) { return new OwnSendTransition(capture); }
-  activity(from: number, target: (geometry: ViewportGeometry) => number, duration?: number, reserve?: number) {
-    return new ActivityFollowTransition(this.list, from, () => target(this.measure()), duration, reserve);
+  activity(from: number, target: (geometry: ViewportGeometry) => number) {
+    return new ActivityFollowTransition(this.list, from, () => target(this.measure()));
+  }
+  hold(from: number, target: (geometry: ViewportGeometry) => number, duration: number, reserve: number) {
+    return new CollapseHoldTransition(this.list, from, () => target(this.measure()), duration, reserve);
   }
   captureAnchor(fallback = false) { return captureTimelineViewportAnchor(this.list, fallback); }
   restoreAnchor(anchor: TimelineViewportAnchor, migrate = false) {

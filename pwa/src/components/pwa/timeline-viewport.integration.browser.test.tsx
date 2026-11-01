@@ -654,15 +654,19 @@ function collapsingRun(options: { reply?: boolean; runningLast?: boolean } = {})
   return { running: [history, ...runningTools, ...reply], ended: [history, ...tools, ...reply, ended] };
 }
 
-/** 采样一次收起所需的窗口；每帧在该帧回调与提交完成后读取。 */
-async function sampleCollapse(list: HTMLElement, action: () => void, read: () => number) {
+/**
+ * 采样一次收起所需的窗口；每帧在该帧回调与提交完成后读取。
+ * 跟随中没有后续输出的收起先保持组头、再收回空白，窗口需覆盖两段（固定时钟下各约 370ms）。
+ */
+const HOLD_AND_RETURN_MS = 800;
+async function sampleCollapse(list: HTMLElement, action: () => void, read: () => number, windowMs = 400, holding = false) {
   action();
   const samples = [read()];
   const start = performance.now();
   await new Promise<void>(resolve => {
     const sample = () => window.setTimeout(() => {
       samples.push(read());
-      if (performance.now() - start >= 400) resolve();
+      if (performance.now() - start >= windowMs) resolve();
       else requestAnimationFrame(sample);
     }, 0);
     requestAnimationFrame(sample);
@@ -670,6 +674,8 @@ async function sampleCollapse(list: HTMLElement, action: () => void, read: () =>
   await settleLayout();
   expect(samples.length).toBeGreaterThan(2);
   expect(list.style.paddingBottom).toBe("");
+  // 保持中的收起仍保留末尾临时空白，由调用方另行断言释放。
+  if (!holding) expect(list.hasAttribute("data-timeline-hold")).toBe(false);
   return samples;
 }
 
@@ -682,11 +688,12 @@ test.each(activityCases)("a long group collapsing at run_end while following mov
     const head = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
     expect(head.getAttribute("aria-expanded")).toBe("true");
     expect(bottomGap(list)).toBeLessThanOrEqual(1);
-    // 收起与完成时间出现在同一提交：按净高度处理，不先为完成时间向下追、再随收起回落。
+    // 收起与完成时间出现在同一提交：收起期间组头不动，不为完成时间向下追；收起结束后才平滑收回空白。
     // 先行一步发生在同步提交内，因此与更新前的位置一起比较。
     const before = Math.round(list.scrollTop);
-    const samples = [before, ...await sampleCollapse(list, () => update(run.ended), () => Math.round(list.scrollTop))];
+    const samples = [before, ...await sampleCollapse(list, () => update(run.ended), () => Math.round(list.scrollTop), HOLD_AND_RETURN_MS)];
     for (const [index, top] of samples.entries()) if (index > 0) expect(top).toBeLessThanOrEqual(samples[index - 1]!);
+    if (motion === "no-preference") expect(samples[1]).toBe(before);
     expect(head.getAttribute("aria-expanded")).toBe("false");
     const meta = list.querySelector<HTMLElement>(".pwa-turn-meta")!;
     expect(meta).not.toBeNull();
@@ -775,25 +782,61 @@ test.each(activityCases)("the usual turn ending — collapsed group, reply, acti
   } finally { await screen.unmount(); }
 });
 
-test("a collapse that leaves less than a screen glides the content down with the collapse instead of stopping abruptly", async () => {
+/** 跟随在底部、有少量历史的运行中过程组；完成全部工具后由短回复接续。 */
+function shortRun() {
   const history = answer("live-output", paragraphs("Earlier", 4));
   const tool = (id: string, running: boolean): TimelineViewItem => running
     ? { kind: "partial", createdAt: 1, partial: { ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${id}`, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running" } }
     : { kind: "event", event: { ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok" } };
   const ids = ["a", "b", "c", "d", "e", "f"];
-  const { screen, list, update } = await renderTimeline([history, ...ids.slice(0, -1).map(id => tool(id, false)), tool("f", true)]);
+  const reply = (text: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text }] } });
+  const ended: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "end", group_id: "live-output", timestamp: 3, kind: "run_end", status: "complete" } };
+  const done = [history, ...ids.map(id => tool(id, false))];
+  return { running: [history, ...ids.slice(0, -1).map(id => tool(id, false)), tool("f", true)], done, reply, ended };
+}
+
+test("a following collapse keeps the group head in place while the space waits for the reply, then returns it smoothly when the turn ends", async () => {
+  const run = shortRun();
+  const { screen, list, update } = await renderTimeline(run.running);
   try {
     // 前提：跟随在底部且有少量滚动，收起后内容不足一屏。
     expect(list.scrollTop).toBeGreaterThan(20);
+    const head = () => Math.round(list.querySelector<HTMLElement>("button.pwa-process-head")!.getBoundingClientRect().top);
+    const start = head();
+    const held = await sampleCollapse(list, () => update([...run.done, run.reply("Reply after tools.")]), head, 400, true);
+    // 收起期间与之后组头都留在原处，收回的高度暂留为底部空白。
+    for (const top of held) expect(Math.abs(top - start)).toBeLessThanOrEqual(1);
+    expect(list.hasAttribute("data-timeline-hold")).toBe(true);
+    // 本轮结束：没有输出再填入，空白以收起时长平滑收回，上方内容单调下移、没有一帧大跳。
     const first = () => list.querySelector<HTMLElement>(":scope > *")!.getBoundingClientRect().top;
-    const reply: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text: "Reply after tools." }] } };
-    const samples = await sampleCollapse(list, () => update([history, ...ids.map(id => tool(id, false)), reply]), first);
-    await expect.poll(() => list.scrollTop).toBe(0);
-    // 上方内容随收起单调下移，没有一帧的大跳或到顶时的急停。
+    const samples = await sampleCollapse(list, () => update([...run.done, run.reply("Reply after tools."), run.ended]), first);
     for (let index = 1; index < samples.length; index += 1) {
       expect(samples[index]!).toBeGreaterThanOrEqual(samples[index - 1]! - 1);
       expect(samples[index]! - samples[index - 1]!).toBeLessThanOrEqual(15);
     }
-    await expect.poll(() => list.style.paddingBottom).toBe("");
+    await expect.poll(() => list.scrollTop).toBe(0);
+    await expect.poll(() => list.hasAttribute("data-timeline-hold")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("in a long conversation the group head stays put in every frame of the collapse and the reply fills the space below", async () => {
+  await page.viewport(390, 844);
+  const run = collapsingRun({ runningLast: true });
+  const { screen, list, update, viewport } = await renderTimeline(run.running);
+  try {
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    const headButton = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
+    const head = () => Math.round(headButton.getBoundingClientRect().top);
+    const start = head();
+    const done = run.ended.filter(item => item.kind !== "event" || item.event.kind !== "run_end");
+    const reply = (text: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text }] } });
+    const held = await sampleCollapse(list, () => update([...done, reply("Short start.")]), head, 400, true);
+    expect(headButton.getAttribute("aria-expanded")).toBe("false");
+    for (const top of held) expect(Math.abs(top - start)).toBeLessThanOrEqual(1);
+    // 正文越过让出的空间后恢复普通跟随，临时空白随之释放。
+    update([...done, reply(paragraphs("Reply", 30))]);
+    await expect.poll(() => list.hasAttribute("data-timeline-hold")).toBe(false);
+    await expect.poll(() => bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(true);
   } finally { await screen.unmount(); }
 });

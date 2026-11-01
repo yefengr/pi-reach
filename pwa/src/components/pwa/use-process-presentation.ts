@@ -19,12 +19,12 @@ type ProcessPresentationOptions = {
 const sameKeys = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-/** 组之后紧接同一轮已显示文字的 Pi 正文：思考与工具告一段落，组让位给正文。 */
+/** 组之后紧接同一轮的 Pi 正文（已显示文字，或已到达、正在等待本组收起）：思考与工具告一段落，组让位给正文。 */
 function followedByText(group: ProcessGroup, entries: readonly PresentationEntry[]): boolean {
   const last = group.entries.at(-1)!;
   const index = entries.findIndex(entry => entry.key === last.key);
   const next = index < 0 ? undefined : entries[index + 1];
-  return next?.kind === "text" && next.groupId === group.groupId && next.text.trim() !== "";
+  return next?.kind === "text" && next.groupId === group.groupId && (next.awaitingSettle === true || next.text.trim() !== "");
 }
 
 /** 组件尚未上报可见性前，按组头与明细会实际绘制的运行图标估计。 */

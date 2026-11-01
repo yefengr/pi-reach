@@ -68,7 +68,7 @@ function sameItem(a: TimelineViewItem, b: TimelineViewItem): boolean {
       && a.insertionNoticeDismissed === b.insertionNoticeDismissed
       && a.images === b.images;
   }
-  if (a.kind === "partial" && b.kind === "partial") return partialText(a.partial) === partialText(b.partial);
+  if (a.kind === "partial" && b.kind === "partial") return partialText(a.partial) === partialText(b.partial) && a.awaitingSettle === b.awaitingSettle;
   return false;
 }
 

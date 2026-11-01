@@ -3,6 +3,7 @@ import { matchesFormalMessage, partialMessageIdentity } from "./timeline-identit
 import { nonStreamTokens, partialText, sameItems, sameNonStreamTokens, type NonStreamToken } from "./stream-display-items";
 import { StreamStructureGate } from "./stream-structure-gate";
 import type { TimelinePartialView, TimelineViewItem } from "./timeline-runtime";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 
 const BASE_TICK_MS = 16;
 /** 目标显示延迟：积压按此时长换算成放出速率，吸收上游 chunk 的到达抖动，不再放完即停。 */
@@ -45,6 +46,11 @@ type StreamState = {
   /** 正在收尾时为对应正式事件 ID：正式版本暂缓显示，由本 lane 在其位置放完尾巴。 */
   finishing: string | null;
   seen: boolean;
+  /**
+   * 紧接过程组（思考或工具）的正文先让过程组收起，再开始逐字显示：
+   * pending 尚未出现可见文字；waiting 已有文字、等待到 until；done 正常放出。
+   */
+  settle: { phase: "pending" } | { phase: "waiting"; until: number } | { phase: "done" };
 };
 
 export type StreamDisplayBufferChange = {
@@ -127,7 +133,33 @@ function projectedPartial(state: StreamState): TimelinePartialView {
     && (partial.blocks === undefined ? partial.kind === "thinking" : partial.blocks.some(block => block.type === "thinking"));
   return { kind: "partial", createdAt: state.partial.createdAt, partial,
     ...(presentsThinking ? { thinkingTextEpoch: state.thinkingTextEpoch } : {}),
+    ...(state.settle.phase === "waiting" ? { awaitingSettle: true as const } : {}),
   };
+}
+
+/** 只呈现思考或工具的条目：其后的正文要先等过程组收起。 */
+function presentsProcess(item: TimelineViewItem): boolean {
+  if (item.kind === "pending") return false;
+  const value = item.kind === "event" ? item.event : item.partial;
+  if (value.kind === "tool" || value.kind === "thinking") return true;
+  if (value.kind !== "assistant") return false;
+  const blocks = value.blocks;
+  // 只有思考块的消息属于过程组；含非空正文的消息本身就是正文。
+  return blocks !== undefined && blocks.length > 0 && blocks.every(block => block.type === "thinking" || !block.text.trim());
+}
+
+/** 正文 partial 在权威顺序中是否紧接同一轮的过程条目；轮次开头或接在正文、记录之后的不等待。 */
+function followsProcess(items: readonly TimelineViewItem[], partial: TimelinePartial): boolean {
+  if (partial.kind !== "assistant" || hasBlocks(partial)) return false;
+  const index = items.findIndex(item => item.kind === "partial" && item.partial.partial_id === partial.partial_id);
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const item = items[cursor]!;
+    if (item.kind === "pending") continue;
+    const groupId = item.kind === "event" ? item.event.group_id : item.partial.group_id;
+    if (groupId !== partial.group_id) return false;
+    return presentsProcess(item);
+  }
+  return false;
 }
 
 function isDrained(state: StreamState): boolean {
@@ -276,10 +308,14 @@ export class StreamDisplayBuffer {
     const immediate = streamsImmediately(partial.partial);
     if (!existing) {
       const cursor = immediate ? null : initialCursor(targetText);
+      const settles = cursor !== null && followsProcess(this.authoritative, partial.partial);
+      // 等待收起的正文不预先放出起步字素，等待结束后从第一个字开始。
+      if (settles) cursor.visibleCount = 0;
       this.streams.set(id, {
         thinkingTextEpoch: {}, partial, targetText, cursor,
         visibleText: cursor === null ? targetText : cursorText(cursor),
         rate: 0, credit: 0, elapsedMs: 0, finishWindowMs: FINISH_MIN_MS, finishing: null, seen: true,
+        settle: { phase: settles ? "pending" : "done" },
       });
       return { needsSnapshot: true, urgent: true };
     }
@@ -300,11 +336,13 @@ export class StreamDisplayBuffer {
       existing.cursor = null;
       existing.visibleText = targetText;
       existing.elapsedMs = 0;
+      existing.settle = { phase: "done" };
       needsSnapshot = true;
     } else if (targetChanged && textExtends) {
       appendLaneText(existing, targetText);
     } else if (targetChanged) {
       const cursor = initialCursor(targetText);
+      if (existing.settle.phase !== "done") cursor.visibleCount = 0;
       existing.cursor = cursor;
       existing.visibleText = cursorText(cursor);
       existing.elapsedMs = 0;
@@ -313,6 +351,7 @@ export class StreamDisplayBuffer {
       existing.cursor = null;
       existing.visibleText = targetText;
       existing.elapsedMs = 0;
+      existing.settle = { phase: "done" };
       needsSnapshot = true;
     }
     existing.targetText = targetText;
@@ -342,6 +381,7 @@ export class StreamDisplayBuffer {
         finishWindowMs: FINISH_MIN_MS,
         finishing: null,
         seen: true,
+        settle: { phase: "done" },
       });
     }
     const formalEvents = this.formalEvents();
@@ -369,6 +409,9 @@ export class StreamDisplayBuffer {
       const cursor = state.cursor;
       // 排队中的新行尚未显示，不提前消耗其文字。
       if (cursor === null || !this.laneReleased(state)) continue;
+      const settle = this.settleLane(state);
+      if (settle === "start" || settle === "end") changed = true;
+      if (settle !== "release") continue;
       const backlog = cursor.graphemes.length - cursor.visibleCount;
       if (backlog > 0) {
         const release = state.finishing === null ? paceRelease(state, backlog, elapsed) : finishRelease(state, backlog, elapsed);
@@ -390,6 +433,30 @@ export class StreamDisplayBuffer {
     if (this.gate.holdsExpired()) changed = true;
     if (!changed) return this.unchanged();
     return this.rebuild(previous, true);
+  }
+
+  /**
+   * 紧接过程组的正文：首个非空白字到达时进入等待，期间不放出文字，投影带等待标记让过程组先自动收起；
+   * 等待时长取 `--pwa-duration-collapse-settle`；结束时放出到第一个可见字（含起步字素），
+   * 正文行与等待标记在同一快照交接，过程组不会因正文短暂消失而重新展开。
+   * 返回 start／end（等待开始或结束，投影需要更新）、hold（等待中，本次不放出）或 release（照常放出）。
+   */
+  private settleLane(state: StreamState): "start" | "hold" | "end" | "release" {
+    const settle = state.settle;
+    if (settle.phase === "done") return "release";
+    if (settle.phase === "waiting") {
+      if (this.gate.now() < settle.until) return "hold";
+      state.settle = { phase: "done" };
+      const cursor = state.cursor!;
+      const firstVisible = cursor.graphemes.findIndex(grapheme => grapheme.trim() !== "");
+      cursor.visibleCount = Math.max(cursor.visibleCount, Math.min(cursor.graphemes.length, Math.max(0, firstVisible) + INITIAL_BURST));
+      state.visibleText = cursorText(cursor);
+      return "end";
+    }
+    // 只有空白时照常放出：空白不形成正文行，也不触发收起。
+    if (!state.targetText.trim()) return "release";
+    state.settle = { phase: "waiting", until: this.gate.now() + readPwaMotionDuration("--pwa-duration-collapse-settle") };
+    return "start";
   }
 
   /** 同一正式事件的全部 lane 放完后一起交接。 */

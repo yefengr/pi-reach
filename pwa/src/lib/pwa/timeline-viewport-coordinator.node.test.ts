@@ -20,6 +20,9 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   let anchorAvailable = true;
   let anchorShift = 0;
   let finishShift = 0;
+  /** 收起保持期间保留的可达位置：模拟临时补偿让该位置在自然范围之外仍可滚到。 */
+  let reach = 0;
+  const holds: { from: number; reserve: number; extends: number; released: boolean }[] = [];
   const restored: number[] = [];
   const activityOrigins: number[] = [];
   const writes: number[] = [];
@@ -32,11 +35,41 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     let start: number | null = null;
     return { advance(now) { advances += 1; samples.push(now); start ??= now; return { top: now - start >= 160 ? target() : (top + target()) / 2, finished: now - start >= 160 }; }, finish() { finishes += 1; anchorShift += finishShift; } };
   };
+  /** 与真实保持过渡同构：收起期间原位不动；release 后平滑移到目标，否则等内容填满。 */
+  const holdMotion = (from: number, target: () => number, duration: number, record: (typeof holds)[number]) => {
+    starts += 1;
+    reach = from;
+    let start: number | null = null;
+    let releaseAt: number | null = null;
+    let current = from;
+    return {
+      advance(time: number) {
+        advances += 1; samples.push(time); start ??= time;
+        if (time - start < duration) return { top: current, finished: false };
+        if (!record.released) return { top: current, finished: bottom >= current };
+        releaseAt ??= time;
+        const finished = time - releaseAt >= 160;
+        current = finished ? target() : (current + target()) / 2;
+        return { top: current, finished };
+      },
+      finish() { finishes += 1; reach = 0; },
+      release() { record.released = true; },
+      extend(reserve: number, nextDuration: number, live: boolean) {
+        record.extends += 1; record.reserve += reserve; record.released = !live;
+        start = null; duration = nextDuration;
+      },
+    };
+  };
   const layout: ViewportLayout<number, number> = {
     measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate, tailSpace, compensation: 0, tailReply: reply }; }, top: () => top,
-    scroll(value, smooth) { writes.push(value); smooths.push(smooth); top = Math.min(bottom, value); reenter?.(); },
+    scroll(value, smooth) { writes.push(value); smooths.push(smooth); top = Math.min(Math.max(bottom, reach), value); reenter?.(); },
     captureSend: () => top, send: () => motion(), activity: (from, target) => {
       activityOrigins.push(from); return motion(() => target(layout.measure()));
+    },
+    hold: (from, target, duration, reserve) => {
+      const record = { from, reserve, extends: 0, released: false };
+      holds.push(record);
+      return holdMotion(from, () => target(layout.measure()), duration, record);
     },
     captureAnchor: () => top - anchorShift, restoreAnchor: (anchor) => {
       if (!anchorAvailable) return false;
@@ -49,7 +82,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     cancel(id) { frames.delete(id); },
   }, () => {}, trace, tracing);
   core.bind(layout);
-  return { core, layout, writes, smooths, frames, late, restored, activityOrigins, samples,
+  return { core, layout, writes, smooths, frames, late, restored, activityOrigins, samples, holds,
     setNow(value: number) { now = value; },
     setAnchorAvailable(value: boolean) { anchorAvailable = value; },
     shiftAnchor(value: number) { anchorShift = value; },
@@ -1019,61 +1052,121 @@ describe("TimelineViewportCoordinator", () => {
 });
 
 describe("process group collapse hold", () => {
-  /** 跟随到底后开始收起；同一提交里新增 30（完成时间），预计收回 50。 */
-  function collapsing() {
+  /** 跟随到底后开始收起，预计收回 50；live 表示本轮仍在运行，随后的输出会填入让出的空间。 */
+  function collapsing(live: boolean) {
     const f = fixture();
     f.core.notify("commit");
     expect(f.layout.top()).toBe(100);
-    // 与浏览器一致：收起通知在同一提交的 DOM 已包含新增内容之后、视口处理该提交之前到达。
-    f.setBottom(130);
-    f.core.collapse(50, 190);
-    f.core.notify("commit");
+    f.core.collapse(50, 190, live);
     return f;
   }
 
-  test("does not step forward for content added in the collapsing commit and ends once the height is returned", () => {
-    const f = collapsing();
-    expect(f.writes).not.toContain(130);
+  test("keeps the head in place through the collapse and resumes following once later output fills the space", () => {
+    const f = collapsing(true);
+    expect(f.holds).toEqual([{ from: 100, reserve: 50, extends: 0, released: false }]);
+    // 收起推进：自然范围缩小，但位置保持不动。
+    f.setBottom(50); f.step(16); f.step(100); f.step(220);
     expect(f.layout.top()).toBe(100);
-    // 收起推进：浏览器按新范围夹住位置，跟随不反向追赶。
-    f.setBottom(90); f.setTop(90); f.core.notify("resize"); f.step(16);
-    expect(f.writes).not.toContain(130);
-    f.setBottom(80); f.setTop(80); f.core.notify("resize"); f.step(32);
+    expect(f.core.state).toMatchObject({ following: true, mode: "activity" });
+    // 收起结束后仍等待：正文尚未填满让出的空间。
+    f.setBottom(80); f.core.notify("commit"); f.step(300);
+    expect(f.layout.top()).toBe(100);
+    // 正文越过保持位置后交回普通跟随，平滑追到底部。
+    f.setBottom(150); f.core.notify("commit");
+    for (let time = 316; time <= 1300; time += 16) f.step(time);
+    expect(f.layout.top()).toBe(150);
     expect(f.core.state.following).toBe(true);
-    // 已收回预计高度后恢复普通跟随；之后的新内容照常贴底。
-    f.setBottom(120); f.core.notify("commit");
-    expect(f.layout.top()).toBe(120);
+    expect(f.finishes).toBe(1);
   });
 
-  test("ends at its deadline and then follows only the remaining net growth", () => {
-    const f = collapsing();
-    f.step(100);
+  test("content added in the collapsing commit does not move the head before the collapse ends", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    // 与浏览器一致：收起通知在同一提交的 DOM 已包含新增内容之后、视口处理该提交之前到达。
+    f.setBottom(130);
+    f.core.collapse(50, 190, true);
+    f.core.notify("commit"); f.step(16); f.step(100);
+    expect(f.writes).not.toContain(130);
     expect(f.layout.top()).toBe(100);
-    f.step(200);
+    for (let time = 220; time <= 1200; time += 16) f.step(time);
     expect(f.layout.top()).toBe(130);
+  });
+
+  test("without later output the space is returned smoothly after the collapse", () => {
+    const f = collapsing(false);
+    f.setBottom(50); f.step(16); f.step(150);
+    expect(f.layout.top()).toBe(100);
+    f.step(220); f.step(260);
+    const midway = f.layout.top();
+    expect(midway).toBeLessThan(100);
+    expect(midway).toBeGreaterThan(50);
+    f.step(400); f.step(416);
+    expect(f.layout.top()).toBe(50);
     expect(f.core.state.following).toBe(true);
   });
 
-  test("a clamp scroll back to the bottom keeps the hold", () => {
-    const f = collapsing();
-    f.setBottom(100); f.setTop(100);
-    f.core.scroll(true);
-    f.setBottom(140); f.core.notify("commit");
-    expect(f.writes).not.toContain(140);
+  test("the activity slot leaving releases a live hold", () => {
+    const f = collapsing(true);
+    f.setBottom(80); f.step(16); f.step(220); f.step(300);
+    expect(f.layout.top()).toBe(100);
+    f.core.notify("activity", true, 0);
+    expect(f.holds[0]!.released).toBe(true);
+    f.step(316); f.step(500); f.step(516);
+    expect(f.layout.top()).toBe(80);
+  });
+
+  test("a second collapse during the hold extends it in place", () => {
+    const f = collapsing(true);
+    f.step(16);
+    f.core.collapse(30, 190, true);
+    expect(f.holds).toHaveLength(1);
+    expect(f.holds[0]).toMatchObject({ extends: 1, reserve: 80, released: false });
+    f.setBottom(40); f.step(150); f.step(220);
     expect(f.layout.top()).toBe(100);
   });
 
-  test("reset clears the hold and no-animation collapses are ignored", () => {
-    const reset = collapsing();
+  test("a manual expansion during the hold keeps the space until the details fill it, and following resumes it", () => {
+    const f = collapsing(true);
+    f.setBottom(50); f.step(16); f.step(220);
+    f.core.details(true);
+    // 暂停期间不结束保持：展开的明细重新填入让出的空间前，空白仍在。
+    expect(f.finishes).toBe(0);
+    f.step(300);
+    expect(f.finishes).toBe(0);
+    f.core.details(false);
+    expect(f.core.state.mode).toBe("activity");
+    f.setBottom(150); f.core.notify("commit");
+    for (let time = 316; time <= 1300; time += 16) f.step(time);
+    expect(f.finishes).toBe(1);
+    expect(f.layout.top()).toBe(150);
+  });
+
+  test("a hold kept across a reading pause ends with the next exit", () => {
+    const f = collapsing(true);
+    f.setBottom(50); f.step(16);
+    f.core.details(true);
+    f.core.userRead();
+    expect(f.finishes).toBe(1);
+  });
+
+  test("an upward user input ends the hold and keeps reading", () => {
+    const f = collapsing(true);
+    f.step(16);
+    f.core.interrupt();
+    expect(f.finishes).toBe(1);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test("reset ends the hold and no-animation collapses are ignored", () => {
+    const reset = collapsing(true);
     reset.core.reset();
-    reset.core.notify("commit");
+    reset.setBottom(130); reset.core.notify("commit");
     expect(reset.layout.top()).toBe(130);
     const reduced = fixture();
     reduced.core.notify("commit");
     reduced.reduce();
-    reduced.core.collapse(50, 190);
-    reduced.setBottom(130); reduced.core.notify("commit");
-    expect(reduced.layout.top()).toBe(130);
+    reduced.core.collapse(50, 190, true);
+    expect(reduced.holds).toHaveLength(0);
   });
 
   // 时限设得足够长，忽略或清除只能由入口条件证明，不能靠超时自然结束。
@@ -1083,8 +1176,8 @@ describe("process group collapse hold", () => {
     const f = fixture();
     f.core.notify("commit");
     f.core.userRead();
-    f.core.collapse(50, LONG);
-    // 回到底部恢复跟随不会清除保持期，因此能证明回看时根本没有建立保持期。
+    f.core.collapse(50, LONG, true);
+    expect(f.holds).toHaveLength(0);
     // 第一次 scroll 消费此前程序写入的回执；第二次才是用户回到底部。
     f.core.scroll(true);
     f.core.scroll(true);
@@ -1097,7 +1190,8 @@ describe("process group collapse hold", () => {
     const f = fixture();
     f.core.notify("commit");
     f.core.followOwnSend(f.core.captureOwnSend());
-    f.core.collapse(50, LONG);
+    f.core.collapse(50, LONG, true);
+    expect(f.holds).toHaveLength(0);
     f.step(100); f.step(300); f.step(316);
     f.setBottom(150); f.core.notify("commit"); f.step(332);
     expect(f.layout.top()).toBe(150);
@@ -1109,21 +1203,20 @@ describe("process group collapse hold", () => {
     f.core.userRead();
     f.setTop(20);
     f.core.latest();
-    f.core.collapse(50, LONG);
+    f.core.collapse(50, LONG, true);
+    expect(f.holds).toHaveLength(0);
     f.step(16); f.step(32);
     f.setBottom(150); f.core.notify("commit"); f.step(48);
     expect(f.layout.top()).toBe(150);
   });
 
-  test.each(["settle", "hidden", "reduce"] as const)("%s clears an active hold", reason => {
-    const f = fixture();
-    f.core.notify("commit");
-    f.setBottom(130);
-    f.core.collapse(50, LONG);
-    f.core.notify("commit");
+  test.each(["settle", "hidden", "reduce"] as const)("%s ends an active hold", reason => {
+    const f = collapsing(true);
+    f.step(16);
     expect(f.layout.top()).toBe(100);
     f.core.settle(reason);
-    f.setBottom(140); f.core.notify("commit"); f.step(16);
+    expect(f.finishes).toBe(1);
+    f.setBottom(140); f.core.notify("commit"); f.step(32);
     expect(f.layout.top()).toBe(140);
   });
 });
