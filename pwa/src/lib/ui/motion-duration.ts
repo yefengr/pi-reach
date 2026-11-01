@@ -4,8 +4,11 @@
  */
 export const PWA_MOTION_FALLBACK_MS = {
   "--pwa-duration-sidebar": 450,
-  "--pwa-duration-page": 200,
-  "--pwa-duration-drawer": 200,
+  "--pwa-duration-page": 450,
+  "--pwa-duration-page-out": 350,
+  "--pwa-duration-drawer": 450,
+  "--pwa-duration-drawer-out": 350,
+  "--pwa-duration-switch-out": 250,
   "--pwa-duration-modal-in": 500,
   "--pwa-duration-modal-out": 250,
   "--pwa-duration-status-slot": 160,

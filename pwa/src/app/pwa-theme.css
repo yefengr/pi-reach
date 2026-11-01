@@ -219,8 +219,13 @@
   /* 自动收起：弹簧起步平缓，不会出现标准曲线前段过陡造成的一帧塌陷，与内容曲线统一。 */
   --pwa-ease-settle: var(--pwa-ease-content);
   --pwa-duration-sidebar: 450ms;
-  --pwa-duration-page: 200ms;
-  --pwa-duration-drawer: 200ms;
+  /* 设置页与 Drawer 的进入／离开（含松手收尾与遮罩），内容曲线；离开更快。 */
+  --pwa-duration-page: 450ms;
+  --pwa-duration-page-out: 350ms;
+  --pwa-duration-drawer: 450ms;
+  --pwa-duration-drawer-out: 350ms;
+  /* 桌面等没有导航退出的入口切换会话前的淡出；移动导航中的选择随 drawer-out 淡出。 */
+  --pwa-duration-switch-out: 250ms;
   --pwa-duration-modal-in: 500ms;
   --pwa-duration-modal-out: 250ms;
   /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
@@ -311,9 +316,14 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --pwa-motion-shift: 0;
+    /* 只剩短淡化：脚本动画与 CSS 过渡一样退回标准曲线（CSS 过渡另由下方 !important 规则统一）。 */
+    --pwa-ease-content: var(--pwa-ease-standard);
     --pwa-duration-sidebar: var(--pwa-duration-reduced);
     --pwa-duration-page: var(--pwa-duration-reduced);
+    --pwa-duration-page-out: var(--pwa-duration-reduced);
     --pwa-duration-drawer: var(--pwa-duration-reduced);
+    --pwa-duration-drawer-out: var(--pwa-duration-reduced);
+    --pwa-duration-switch-out: var(--pwa-duration-reduced);
     --pwa-duration-modal-in: var(--pwa-duration-reduced);
     --pwa-duration-modal-out: var(--pwa-duration-reduced);
     --pwa-duration-status-slot: var(--pwa-duration-reduced);

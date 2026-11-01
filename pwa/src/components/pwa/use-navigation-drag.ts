@@ -32,10 +32,11 @@ type NavigationDragOptions = {
  */
 export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation }: NavigationDragOptions) {
   const duration = usePwaMotionDuration("--pwa-duration-drawer");
+  const exitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const [gesture, setGesture] = useState<NavigationGesture | null>(null);
-  const latest = useRef({ sheetOpen, setSheetOpen, openNavigation, mainElement, duration });
+  const latest = useRef({ sheetOpen, setSheetOpen, openNavigation, mainElement, duration, exitDuration });
   useLayoutEffect(() => {
-    latest.current = { sheetOpen, setSheetOpen, openNavigation, mainElement, duration };
+    latest.current = { sheetOpen, setSheetOpen, openNavigation, mainElement, duration, exitDuration };
   });
   const dragRef = useRef<SwipeDrag | null>(null);
   const phaseRef = useRef<Phase>("idle");
@@ -96,7 +97,7 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
   const handlers = useMemo<SwipeDragHandlers>(() => ({
     start() {
       const root = rootRef.current;
-      const { sheetOpen: isOpen, mainElement: main, openNavigation: open, duration: full } = latest.current;
+      const { sheetOpen: isOpen, mainElement: main, openNavigation: open, duration: enter, exitDuration: exit } = latest.current;
       if (!root || !main || isOpen || phaseRef.current !== "idle" || pwaMotionShiftDisabled(root)) return false;
       // 上一次关闭的退出过渡尚未结束时不抢占，退回触发式。
       if (document.querySelector(SHEET_SELECTOR)) return false;
@@ -120,7 +121,8 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
           ...(scrim ? [{ element: scrim, frame: (progress: number) => ({ opacity: progress }) }] : []),
         ],
         extent: width,
-        duration: () => full,
+        // 终点是打开：走完用进入时长，回弹回到关闭用离开时长。
+        duration: (toEnd) => toEnd ? enter : exit,
       });
       phaseRef.current = "dragging";
       voidRef.current = false;

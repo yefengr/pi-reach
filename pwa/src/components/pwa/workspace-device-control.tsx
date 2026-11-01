@@ -121,6 +121,7 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
 
 export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresence = {}, onPair, onSelectDevice, onRename, onRemove, variant = "desktop", purpose = "choose", onOverlayChange }: WorkspaceDeviceControlProps) {
   const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer");
+  const chooserExitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const floatingMiddlewares = useFloatingSafeMiddlewares();
   const popoverDuration = usePwaMotionDuration("--pwa-duration-fade");
   const { t } = useI18n();
@@ -211,7 +212,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
         event.stopPropagation();
         dismissPanel();
       }}
-      transitionProps={{ transition: pwaDrawerTransitions.bottom, duration: chooserDuration, timingFunction: PWA_DRAWER_EASE }}
+      transitionProps={{ transition: pwaDrawerTransitions.bottom, duration: chooserDuration, exitDuration: chooserExitDuration, timingFunction: PWA_DRAWER_EASE }}
     >{panel}</Drawer>
   </>;
 

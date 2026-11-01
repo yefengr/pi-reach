@@ -103,8 +103,8 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
     flushSync(() => setOpened(true));
     await expect.poll(() => document.querySelector(selector)).not.toBeNull();
     const overlay = document.querySelector<HTMLElement>(".mantine-Drawer-overlay")!;
-    expect(duration(overlay)).toBe(reduce ? 120 : 200);
-    expect(getComputedStyle(overlay).transitionTimingFunction).toBe(standardEase);
+    expect(duration(overlay)).toBe(reduce ? 120 : 450);
+    expect(getComputedStyle(overlay).transitionTimingFunction).toMatch(reduce ? standardEase : contentEase);
     const enter = await entering;
     const card = document.querySelector<HTMLElement>(selector)!;
     await expect.poll(() => getComputedStyle(card).opacity).toBe("1");
@@ -114,13 +114,20 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
 
     const exiting = sampleMotion(selector, SAMPLE_WINDOW_MS);
     flushSync(() => setOpened(false));
-    expect(getComputedStyle(overlay).transitionTimingFunction).toBe(standardEase);
+    expect(getComputedStyle(overlay).transitionTimingFunction).toMatch(reduce ? standardEase : contentEase);
     await expect.poll(() => document.querySelector(selector)).toBeNull();
     const exit = await exiting;
 
-    for (const phase of [enter, exit]) {
-      expect([...phase.durations]).toEqual([reduce ? 120 : 200]);
-      expect([...phase.eases]).toEqual([standardEase]);
+    // 退出采样从关闭前一帧开始，可能先读到进入时长；只要求退出阶段落在离开时长上。
+    for (const [phase, full, allowed] of [[enter, 450, [450]], [exit, 350, [450, 350]]] as const) {
+      const durations = [...phase.durations];
+      if (reduce) expect(durations).toEqual([120]);
+      else {
+        expect(durations.at(-1)).toBe(full);
+        durations.forEach((value) => expect(allowed).toContain(value));
+      }
+      expect([...phase.eases]).toHaveLength(1);
+      expect([...phase.eases][0]).toMatch(reduce ? standardEase : contentEase);
       if (reduce) {
         expect(phase.maxShift).toBe(0);
         expect(phase.minOpacity).toBeLessThan(1);

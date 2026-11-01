@@ -113,6 +113,7 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
   const headingId = useId();
   const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
   const drawerDuration = usePwaMotionDuration("--pwa-duration-drawer");
+  const drawerExitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const fadeDuration = usePwaMotionDuration("--pwa-duration-fade");
   const imageIn = usePwaMotionDuration("--pwa-duration-image-in");
   const imageOut = usePwaMotionDuration("--pwa-duration-image-out");
@@ -160,7 +161,7 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
     if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
     return () => observer.disconnect();
   }, [scroll, preview, mobile]);
-  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => { setEntered(true); motion.onEnterTransitionEnd(); }} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-reader)" trapFocus returnFocus={false} transitionProps={{ transition: imageReader ? pwaFadeTransition : pwaDrawerTransitions.right, duration: imageReader ? allowImageEnter ? imageIn : fadeDuration : drawerDuration, exitDuration: instant ? 0 : imageReader ? imageOut : drawerDuration, timingFunction: PWA_DRAWER_EASE }}>
+  return <Drawer.Root opened={opened} onClose={requestClose} onEnterTransitionEnd={() => { setEntered(true); motion.onEnterTransitionEnd(); }} onExitTransitionEnd={onExitTransitionEnd} position="right" size={mobile ? "100%" : "var(--pwa-reader-drawer-width)"} withinPortal portalProps={{ target: ".pwa-root" }} zIndex="var(--pwa-z-reader)" trapFocus returnFocus={false} transitionProps={{ transition: imageReader ? pwaFadeTransition : pwaDrawerTransitions.right, duration: imageReader ? allowImageEnter ? imageIn : fadeDuration : drawerDuration, exitDuration: instant ? 0 : imageReader ? imageOut : drawerExitDuration, timingFunction: PWA_DRAWER_EASE }}>
     <Drawer.Overlay className="pwa-scrim pwa-file-reader-overlay" data-image-reader={imageReader || undefined} />
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }} data-pwa-moving={motion.moving || undefined} data-image-reader={imageReader || undefined} data-publication-id={isAttachmentFile(file) ? undefined : file.publication_id} data-attachment-id={isAttachmentFile(file) ? file.attachment_id : undefined}>
       <Drawer.Header className="pwa-topbar pwa-file-reader-header">

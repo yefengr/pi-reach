@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
@@ -55,7 +56,10 @@ async function renderTimeline(initialItems: TimelineViewItem[]) {
 const bottomGap = (list: HTMLElement) => list.scrollHeight - list.clientHeight - list.scrollTop;
 const offset = (element: Element, list: Element) => element.getBoundingClientRect().top - list.getBoundingClientRect().top;
 
+// 跟随与折叠按固定时钟逐帧采样，固定机制时钟。
+beforeEach(pinMechanismMotion);
 afterEach(async () => {
+  unpinMechanismMotion();
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await page.viewport(1280, 900);
 });

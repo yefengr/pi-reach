@@ -305,7 +305,7 @@ test("keeps navigation behind pairing confirmation and returns to its management
   await expect.poll(() => document.activeElement).toBe(document.querySelector(".pwa-session-sheet .pwa-device-trigger"));
 });
 
-test("uses the shared 180/140ms modal motion, blocks pointers while exiting and keeps a single scrim over navigation", async () => {
+test("uses the shared modal-in/modal-out motion, blocks pointers while exiting and keeps a single scrim over navigation", async () => {
   const screen = await renderPwa(<SessionConfirmHarness />);
   await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
   await screen.getByRole("button", { name: "Choose computer, current office" }).click();
@@ -314,7 +314,7 @@ test("uses the shared 180/140ms modal motion, blocks pointers while exiting and 
   const dialog = screen.getByRole("dialog", { name: /Delete pairing for/ });
   await expect.element(dialog).toBeVisible();
   const content = dialog.element() as HTMLElement;
-  expect(getComputedStyle(content).transitionDuration).toContain("0.18s");
+  expect(getComputedStyle(content).transitionDuration).toContain("0.5s");
   await expect.poll(() => getComputedStyle(content).opacity).toBe("1");
   // 只保留最上层遮罩：导航的遮罩在确认弹窗期间隐去，弹窗遮罩使用 scrim token。
   const drawerOverlay = document.querySelector<HTMLElement>(".mantine-Drawer-overlay")!;
@@ -325,7 +325,7 @@ test("uses the shared 180/140ms modal motion, blocks pointers while exiting and 
 
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => getComputedStyle(content).pointerEvents).toBe("none");
-  expect(getComputedStyle(content).transitionDuration).toContain("0.14s");
+  expect(getComputedStyle(content).transitionDuration).toContain("0.25s");
   await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
   await expect.poll(() => getComputedStyle(document.querySelector<HTMLElement>(".mantine-Drawer-overlay")!).opacity).not.toBe("0");
 });

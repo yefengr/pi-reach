@@ -75,7 +75,7 @@ export function UiStateMotionParams({ preset }: { preset: ReviewMotionPresetId }
         <tr><td>位移 overlay / message / collapse</td>{columns.map(column => cell(column.value, shiftsOf(column.value)))}</tr>
       </tbody>
     </table>
-    <p>退出曲线与操作反馈（按压、菜单、复制）在各列保持现行值。</p>
+    <p>退出曲线与操作反馈（按压、菜单、复制）在各列保持现行值；旧规范不还原松手收尾按速度缩短时长的做法，各列均为带初速度的弹簧收尾。</p>
   </details>;
 }
 

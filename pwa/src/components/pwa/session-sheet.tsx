@@ -75,6 +75,7 @@ function useNavigationSettingsFocus(opened: boolean, requested: boolean, content
 
 export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true, opened = true, onExitTransitionEnd, instant = false, restoreScrollTop, focusSettings = false, preview = false, gesture = null, portalTarget = ".pwa-root", ...navigation }: SessionSheetProps) {
   const navigationDuration = usePwaMotionDuration("--pwa-duration-drawer");
+  const navigationExitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const { t } = useI18n();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
@@ -127,6 +128,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
   }, []);
   const activeDevice = getActiveDevice(navigation.devices, navigation.activeDeviceId);
   const duration = instant ? 0 : navigationDuration;
+  const exitDuration = instant ? 0 : navigationExitDuration;
   // 跟手关闭收尾到终点后只让本次退出即时；现有 instant 同时作用于进入和退出，不能复用。重新打开时复位。
   const skipExit = useCallback(() => setExitInstant(true), [setExitInstant]);
   const resetSkipExit = useCallback(() => setExitInstant(false), [setExitInstant]);
@@ -233,7 +235,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
       if (pendingActionRef.current !== action || !lifecycle.active || lifecycle.opened) return;
       pendingActionRef.current = null;
       action();
-    }, duration);
+    }, exitDuration);
   };
   const handleDeviceOverlayChange = (nextOpened: boolean) => {
     chooserOpenRef.current = nextOpened;
@@ -276,7 +278,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
       event.stopPropagation();
       requestClose();
     }}
-    transitionProps={{ transition: pwaDrawerTransitions.left, duration: gestureActive ? 0 : duration, exitDuration: exitInstant || gesture === "rollback" ? 0 : duration, timingFunction: PWA_DRAWER_EASE }}
+    transitionProps={{ transition: pwaDrawerTransitions.left, duration: gestureActive ? 0 : duration, exitDuration: exitInstant || gesture === "rollback" ? 0 : exitDuration, timingFunction: PWA_DRAWER_EASE }}
     classNames={{ content: "pwa-session-sheet pwa-navigation-drawer", header: "pwa-topbar pwa-session-sheet-head", body: "pwa-session-sheet-body", close: "pwa-icon-button" }}
     styles={{ content: { width: "min(calc(320px + var(--pwa-safe-left)), 85vw)", height: "var(--pwa-app-height)", maxWidth: "85vw", maxHeight: "var(--pwa-app-height)", display: "flex", flexDirection: "column" } }}
   >

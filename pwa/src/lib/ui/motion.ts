@@ -19,3 +19,25 @@ export function pwaContentEasing(element: Element): string {
 export function pwaMotionShiftDisabled(element: Element): boolean {
   return getComputedStyle(element).getPropertyValue("--pwa-motion-shift").trim() === "0";
 }
+
+/** 与主题内容曲线相同的采样密度：33 个等距采样点。 */
+const SPRING_SAMPLES = 32;
+
+/**
+ * 松手收尾的弹簧曲线：临界阻尼、体感时长等于 duration，带入手指的初速度，按终点归一化后以 linear() 采样。
+ * velocity 为朝向终点的进度速度（每毫秒完成的比例，即像素速度除以剩余距离）；上限取角频率，使曲线单调、不越过终点。
+ * 没有初速度时与主题内容曲线相同；浏览器不支持 linear() 时回退到标准曲线。
+ */
+export function pwaReleaseEasing(element: Element, velocity: number, duration: number): string {
+  if (!(velocity > 0) || !(duration > 0)) return pwaContentEasing(element);
+  const omega = (2 * Math.PI) / duration;
+  const initial = Math.min(velocity, omega);
+  const position = (time: number) => 1 - (1 + (omega - initial) * time) * Math.exp(-omega * time);
+  const end = position(duration);
+  const points = Array.from({ length: SPRING_SAMPLES + 1 }, (_, index) => {
+    if (index === SPRING_SAMPLES) return "1";
+    return String(Number((position((index / SPRING_SAMPLES) * duration) / end).toFixed(3)));
+  });
+  const easing = `linear(${points.join(", ")})`;
+  return typeof CSS === "undefined" || CSS.supports("transition-timing-function", easing) ? easing : EASE_STANDARD_FALLBACK;
+}

@@ -10,7 +10,7 @@ export function usePwaMotionDuration(variable: PwaMotionDurationToken): number {
 }
 
 // 读取计算样式的公共函数在 lib/ui/motion，lib/pwa 也要用；组件侧沿用本入口。
-export { pwaContentEasing, pwaMotionShiftDisabled, pwaStandardEasing } from "@/lib/ui/motion";
+export { pwaContentEasing, pwaMotionShiftDisabled, pwaReleaseEasing, pwaStandardEasing } from "@/lib/ui/motion";
 
 // Mantine 在 transitionProps.timingFunction 之上合并 in/out；reduce 的 CSS !important 会统一覆盖为 standard。
 export const pwaFadeTransition = {
@@ -46,14 +46,14 @@ const drawerSlide = (axis: "X" | "Y", sign: "" | "-"): MantineTransition => ({
   transitionProperty: "transform, opacity",
 } as MantineTransition);
 
-/** 曲线与时长由 Drawer 的 transitionProps 统一提供（标准曲线、--pwa-duration-drawer），遮罩沿用同一组值。 */
+/** 曲线与时长由 Drawer 的 transitionProps 统一提供（内容曲线、--pwa-duration-drawer／drawer-out），遮罩沿用同一组值。 */
 export const pwaDrawerTransitions = {
   left: drawerSlide("X", "-"),
   right: drawerSlide("X", ""),
   bottom: drawerSlide("Y", ""),
 } satisfies Record<"left" | "right" | "bottom", MantineTransition>;
 
-export const PWA_DRAWER_EASE = "var(--pwa-ease-standard)";
+export const PWA_DRAWER_EASE = "var(--pwa-ease-content)";
 
 /**
  * Drawer 是否正在进出：打开后到进入转场结束、以及关闭到卸载之间为 true。
