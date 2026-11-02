@@ -250,6 +250,10 @@
   --pwa-radius-pill: 999px;
   /* 主要输入操作表面独立于 Modal、Drawer 与贴边主区的圆角；与底部半径 18 的附件、发送圆形同心（18 + 内边距 10 + 视觉内缩 4）。 */
   --pwa-radius-composer: 32px;
+  /* 消息列表在输入区上方的渐隐高度：正文在此距离内淡出到底色（DESIGN「Composer」）。 */
+  --pwa-composer-fade: 24px;
+  /* 渐隐先慢后快（约 ease-in）：线性渐变的起点会显出一条淡边；各段不透明度取透明度刻度。 */
+  --pwa-composer-fade-gradient: linear-gradient(transparent, color-mix(in srgb, var(--pwa-bg) 16%, transparent) 25%, color-mix(in srgb, var(--pwa-bg) 48%, transparent) 50%, color-mix(in srgb, var(--pwa-bg) 80%, transparent) 75%, var(--pwa-bg));
 
   /* 通用间距档位，按内容关系选用（见 DESIGN「间距」）；Mantine spacing 2xs–2xl 依次引用 4／8／12／16／24／32／48。
      页面 gutter（桌面 20、移动 16）不是通用档位，由布局层单独定义。 */

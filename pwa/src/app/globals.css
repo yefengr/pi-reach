@@ -191,12 +191,31 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-session-actions-secondary-item { min-height: var(--pwa-hit-target); }
 .pwa-session-title { min-width: 0; max-width: 100%; display: inline-flex; align-items: baseline; vertical-align: bottom; white-space: nowrap; }
 .pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; }
-.pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-timeline-pad-bottom) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: 88px; -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
+.pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) calc(var(--pwa-timeline-pad-bottom) + var(--pwa-composer-overlap, 0px)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: calc(88px + var(--pwa-composer-overlap, 0px)); -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
 .pwa-bottom-sentinel { width: 1px; height: 1px; }
 /* 过程组收起保持期间的临时空间：位于哨兵之后，高度由视口协调层写入；不用底部内边距，避免撑高滚动容器。 */
 .pwa-message-list[data-timeline-hold]::after { content: ""; display: block; height: var(--pwa-timeline-hold, 0px); }
 /* 发送过渡只改变高度，不在结束时切换格式化上下文，避免滚动合成层重新定位。 */
-.pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; position: relative; z-index: var(--pwa-z-composer); }
+.pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; margin-top: calc(-1 * var(--pwa-composer-overlap, 0px)); position: relative; z-index: var(--pwa-z-composer); pointer-events: none; }
+/*
+ * 消息列表与输入区之间不硬切。输入框卡片位于输入区最上方（没有排队面板、提示行与附件）时，footer 上提 overlap，
+ * 列表延伸到卡片上沿以下一个 Composer 圆角高度；footer 上沿起画「透明 → 底色」渐变（卡片之下、列表之上），
+ * 正文在卡片上方 --pwa-composer-fade 内开始淡出，从圆角两侧滑到卡片下方。列表底部留白同步加 overlap，停在底部时内容不进入渐隐。
+ * 卡片上方另有内容时不重叠：提示文字没有底色、附件卡片之间有空隙，重叠会透出正文；改为在 footer 上方挂同样高度的渐隐。
+ * footer 与表单自身不接收指针，渐隐区内仍可滚动与选中列表。紧凑高度与输入框预算受限（data-composer-budget）时底部留白只有 8，
+ * 两者都不加，避免淡化最后一行；这两种状态写进启用条件，不靠后续规则覆盖（:has 选择器的优先级更高）。
+ */
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-queued-messages, .pwa-composer-hint, .pwa-attachment-cards)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-composer)); --pwa-composer-lead: var(--pwa-composer-fade); }
+.pwa-chat-footer::before { content: ""; position: absolute; z-index: -1; right: 0; bottom: 100%; left: 0; height: var(--pwa-composer-fade); background: var(--pwa-composer-fade-gradient); pointer-events: none; }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-queued-messages, .pwa-composer-hint, .pwa-attachment-cards)) .pwa-chat-footer::before { top: 0; bottom: auto; height: var(--pwa-composer-overlap); }
+.pwa-app-shell[data-compact-height] .pwa-chat-footer::before,
+.pwa-main[data-composer-budget] .pwa-chat-footer::before { content: none; }
+/* 重叠时卡片上方留出整段渐隐高度（--pwa-composer-lead）；「最新」入口按原位置（卡片上沿以上 space-composer）补偿 footer 上沿的上移。 */
+.pwa-chat-footer .pwa-composer { padding-top: var(--pwa-composer-lead, var(--pwa-space-composer)); }
+.pwa-chat-footer .pwa-message-actions { bottom: calc(100% - var(--pwa-composer-lead, var(--pwa-space-composer)) + var(--pwa-space-composer)); }
+.pwa-chat-footer > * { pointer-events: auto; }
+.pwa-chat-footer > .pwa-composer { pointer-events: none; }
+.pwa-composer > * { pointer-events: auto; }
 /*
  * 浮动入口与局部提示的进出（DESIGN「动效」）：出现淡入（toast 时长、进入曲线），离开淡出（fade 时长、退出曲线），
  * 离开期间由 usePresence 设置 inert 与 aria-hidden。占布局的提示条只淡化、高度一次到位；
