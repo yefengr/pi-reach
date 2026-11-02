@@ -222,10 +222,12 @@ test("browser theme color literals match the bg token", () => {
   const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
   const hex = (text: string, pattern: RegExp) => pattern.exec(text)?.[1]?.toUpperCase();
   const [lightBg, darkBg] = [light["--pwa-bg"]!.toUpperCase(), dark["--pwa-bg"]!.toUpperCase()];
-  expect(hex(source("../../index.html"), /<meta name="theme-color" content="(#[0-9a-f]{6})"/i)).toBe(lightBg);
+  const metaColors = [...source("../../index.html").matchAll(/<meta name="theme-color" content="(#[0-9a-f]{6})" media="\(prefers-color-scheme: (light|dark)\)"/gi)]
+    .map((match) => [match[2], match[1].toUpperCase()]);
+  expect(metaColors).toEqual([["light", lightBg], ["dark", darkBg]]);
   const manifest = JSON.parse(source("../../public/manifest.webmanifest")) as { theme_color: string; background_color: string };
   expect([manifest.theme_color.toUpperCase(), manifest.background_color.toUpperCase()]).toEqual([lightBg, lightBg]);
-  const appearance = source("../components/pwa/pwa-appearance.tsx");
+  const appearance = source("../lib/ui/appearance.ts");
   expect(hex(appearance, /LIGHT_THEME_COLOR = "(#[0-9a-f]{6})"/i)).toBe(lightBg);
   expect(hex(appearance, /DARK_THEME_COLOR = "(#[0-9a-f]{6})"/i)).toBe(darkBg);
 });

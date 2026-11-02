@@ -6,7 +6,15 @@ import react from "@vitejs/plugin-react";
 import { serwist } from "@serwist/vite";
 import { defineConfig } from "vite";
 import { pwaRoutingPlugin } from "./scripts/pwa-routing.mjs";
-import { APPEARANCE_STORAGE_KEY } from "./src/lib/ui/appearance.ts";
+import { APPEARANCE_STORAGE_KEY, DARK_SCHEME_QUERY, DARK_THEME_COLOR, LIGHT_THEME_COLOR } from "./src/lib/ui/appearance.ts";
+
+// 复用 Mantine 已恢复的外观；存储不可用时与 CSS 一样退回系统偏好。
+const themeColorScript = `(() => {
+  const scheme = document.documentElement.getAttribute("data-mantine-color-scheme");
+  const dark = scheme === "dark" || (scheme !== "light" && window.matchMedia(${JSON.stringify(DARK_SCHEME_QUERY)}).matches);
+  const color = dark ? ${JSON.stringify(DARK_THEME_COLOR)} : ${JSON.stringify(LIGHT_THEME_COLOR)};
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => { meta.content = color; });
+})();`;
 
 export default defineConfig(({ command }) => ({
   base: "/",
@@ -19,10 +27,11 @@ export default defineConfig(({ command }) => ({
       name: "pwa-appearance-boot",
       transformIndexHtml(html) {
         // 使用 Mantine 原生脚本和同一存储键，在首屏绘制前恢复外观。
-        return html.replace("<!-- color-scheme -->", renderToStaticMarkup(createElement(ColorSchemeScript, {
+        const colorSchemeScript = renderToStaticMarkup(createElement(ColorSchemeScript, {
           defaultColorScheme: "auto",
           localStorageKey: APPEARANCE_STORAGE_KEY,
-        })));
+        }));
+        return html.replace("<!-- color-scheme -->", `${colorSchemeScript}<script>${themeColorScript}</script>`);
       },
     },
     serwist({
