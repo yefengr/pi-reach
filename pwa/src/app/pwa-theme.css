@@ -36,7 +36,8 @@
   --pwa-on-accent: #FFFFFF;
   --pwa-scrim: #00000047;
   --pwa-shadow-color: #00000014;
-  --pwa-shadow-composer: 0 2px 12px var(--pwa-shadow-color);
+  --pwa-shadow-contact-color: #0000001F;
+  --pwa-shadow-composer: 0 1px 2px var(--pwa-shadow-contact-color), 0 6px 20px var(--pwa-shadow-color);
   /* 文字选区：主色 20%，半透明以随气泡、代码块等底色变化，文字保持原色。 */
   --pwa-selection: #44639633;
   --pwa-complete: #347953;
@@ -93,6 +94,7 @@
   --pwa-on-accent: #142237;
   --pwa-scrim: #0000008F;
   --pwa-shadow-color: #00000047;
+  --pwa-shadow-contact-color: #00000052;
   --pwa-shadow-composer: none;
   --pwa-selection: #98B8E63D;
   --pwa-complete: #95CBA8;
@@ -151,6 +153,7 @@
     --pwa-on-accent: #142237;
     --pwa-scrim: #0000008F;
     --pwa-shadow-color: #00000047;
+    --pwa-shadow-contact-color: #00000052;
     --pwa-shadow-composer: none;
     --pwa-selection: #98B8E63D;
     --pwa-complete: #95CBA8;
@@ -264,7 +267,8 @@
   --pwa-space-menu-pad: 10px;
   --pwa-space-composer: 10px;
 
-  --pwa-shadow-float: 0 4px 16px var(--pwa-shadow-color);
+  /* 浮起两层：贴边接触层（shadow-contact-color）勾出下缘，大范围淡投影提供高度；Composer 同理（深色 Composer 不用阴影）。 */
+  --pwa-shadow-float: 0 1px 2px var(--pwa-shadow-contact-color), 0 4px 16px var(--pwa-shadow-color);
   --pwa-shadow-modal: 0 12px 32px var(--pwa-shadow-color);
 
   --pwa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
