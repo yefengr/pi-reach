@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { pwaContentEasing, usePwaMotionDuration } from "./use-pwa-motion";
 
-/** 内容接管骨架时的起始可见度：骨架在同一帧卸载，从 0 起步会出现完全空白的一帧。 */
-const CONTENT_ENTER_OPACITY = 0.35;
+/** 内容接管骨架时的起始可见度（与 --pwa-opacity-enter 同值）：骨架在同一帧卸载，从 0 起步会出现完全空白的一帧。 */
+export const CONTENT_ENTER_OPACITY = 0.32;
 
 /**
  * 会话内容在加载中的空列表里首次出现时整体淡入，切换 Pi 后新内容不再硬切；

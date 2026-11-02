@@ -54,6 +54,10 @@ const BORDER_WIDTH_PROPERTY = /^(?:border|outline)(?:-(?:top|right|bottom|left|b
 const HEX_COLOR = /#[0-9a-f]{3,8}\b/i;
 /** 派生色只在主题文件定义成 token（如 --pwa-running-line）。 */
 const COLOR_MIX = /color-mix\(/i;
+/** 函数写法的颜色（rgb、hsl 等）同 hex 一样只在主题文件出现。 */
+const FUNCTIONAL_COLOR = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i;
+/** opacity 只写动效端点 0／1 或引用 --pwa-opacity-* token。 */
+const OPACITY_VALUE = /^(?:0|1|var\(--pwa-opacity-[a-z]+\))(?:\s*!important)?$/;
 const MOTION_PROPERTY = /^(?:transition|animation)(?:-(?:duration|delay|timing-function))?$/;
 /** 非零时长字面量；时长只引用 --pwa-duration-*（DESIGN「动效时长」）。 */
 const DURATION_LITERAL = /(?<![\w.-])(\d*\.?\d+)m?s\b/g;
@@ -193,6 +197,13 @@ describe("CSS static guard", () => {
   test("production derived colors are defined once as theme tokens", () => {
     // 历史开发评审样式保留当时的对照取色，与圆角守卫同样不受限制。
     const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && COLOR_MIX.test(entry.value)).map(keyOf);
+    expect(offenders).toEqual([]);
+  });
+
+  test("production functional colors and element opacities come from theme tokens", () => {
+    // 半透明色与中间透明度只在主题文件按透明度刻度定义（DESIGN「透明度」）；动效端点 0／1 可直接写。
+    const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/")).filter(({ property, value }) =>
+      FUNCTIONAL_COLOR.test(value) || (property === "opacity" && !OPACITY_VALUE.test(value))).map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });
 

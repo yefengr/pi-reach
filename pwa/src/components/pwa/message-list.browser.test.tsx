@@ -1422,7 +1422,7 @@ test("fades in content that arrives in a loading list, without replaying for upd
     const fadeIndex = animate.mock.contexts.findIndex((element) => (element as Element).classList.contains("pwa-message-list"));
     expect(animate.mock.calls[fadeIndex]![1]).toMatchObject({ duration: readPwaMotionDuration("--pwa-duration-content") });
     // 骨架与内容在同一帧交接，淡入从约 1/3 可见度起始，不留全空帧。
-    expect(animate.mock.calls[fadeIndex]![0]).toEqual([{ opacity: 0.35 }, { opacity: 1 }]);
+    expect(animate.mock.calls[fadeIndex]![0]).toEqual([{ opacity: 0.32 }, { opacity: 1 }]);
     expect(document.querySelector(".pwa-earlier-button")).not.toBeNull();
     flushSync(() => setState({ items: [first, second], loading: false }));
     expect(fades()).toBe(1);
