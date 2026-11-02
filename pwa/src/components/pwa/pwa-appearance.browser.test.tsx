@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { renderPwa } from "@/test/browser/render";
 import { usePwaAppearance } from "./pwa-appearance";
 
@@ -12,10 +12,26 @@ function AppearanceHarness() {
   </div>;
 }
 
+let themeColorMetas: HTMLMetaElement[];
+
 beforeEach(() => {
   window.localStorage.removeItem("pi-reach-appearance");
   document.documentElement.removeAttribute("data-mantine-color-scheme");
+  themeColorMetas = ["light", "dark"].map((scheme) => {
+    const meta = document.createElement("meta");
+    meta.name = "theme-color";
+    meta.media = `(prefers-color-scheme: ${scheme})`;
+    meta.content = scheme === "light" ? "#FFFFFF" : "#1E1E1E";
+    document.head.append(meta);
+    return meta;
+  });
 });
+
+afterEach(() => themeColorMetas.forEach((meta) => meta.remove()));
+
+function expectThemeColor(color: string) {
+  expect(themeColorMetas.map((meta) => meta.content)).toEqual([color, color]);
+}
 
 test("supports a persisted light/dark override and returning to System", async () => {
   const screen = await renderPwa(<AppearanceHarness />);
@@ -24,13 +40,16 @@ test("supports a persisted light/dark override and returning to System", async (
   expect(document.documentElement.getAttribute("data-mantine-color-scheme")).toBe("dark");
   expect(window.localStorage.getItem("pi-reach-appearance")).toBe("dark");
   expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-bg").trim().toUpperCase()).toBe("#1E1E1E");
+  expectThemeColor("#1E1E1E");
 
   await screen.getByRole("button", { name: "Light" }).click();
   expect(document.documentElement.getAttribute("data-mantine-color-scheme")).toBe("light");
   expect(window.localStorage.getItem("pi-reach-appearance")).toBe("light");
+  expectThemeColor("#FFFFFF");
 
   await screen.getByRole("button", { name: "System" }).click();
   expect(document.documentElement.getAttribute("data-mantine-color-scheme")).toBe("light");
   expect(window.localStorage.getItem("pi-reach-appearance")).toBe("auto");
+  expectThemeColor("#FFFFFF");
   await screen.unmount();
 });
