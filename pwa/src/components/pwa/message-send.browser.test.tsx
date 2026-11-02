@@ -606,7 +606,8 @@ test("natural tail padding matches scroll clearance in normal, compact and budge
       if (mode === "compact") shell.dataset.compactHeight = "short";
       else if (mode !== "normal") main.dataset.composerBudget = mode === "conflict" ? "conflict" : "constrained";
       const style = getComputedStyle(h.list);
-      expect(style.paddingBottom).toBe(mode === "normal" ? "88px" : "8px");
+      // 正常布局下列表延伸到输入框卡片圆角之后：88 加上重叠的 24 渐隐与 32 圆角；紧凑与预算受限时不重叠。
+      expect(style.paddingBottom).toBe(mode === "normal" ? "144px" : "8px");
       expect(style.scrollPaddingBottom).toBe(style.paddingBottom);
     }
   } finally { await h.screen.unmount(); }
