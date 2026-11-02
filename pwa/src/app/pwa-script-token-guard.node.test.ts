@@ -1,9 +1,10 @@
-// 脚本侧 token 守卫：TS 必须保留的数值副本（动效回退、Mantine 色值、断点）与 pwa-theme.css 同值，
+// 脚本侧 token 守卫：TS 必须保留的数值副本（动效回退、淡入起点透明度、Mantine 色值、断点）与 pwa-theme.css 同值，
 // TSX 中的 Lucide 图标尺寸限定在 DESIGN「基础层」的取值。只检查直接写出的字面量，展开对象需在评审中核对。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+import { CONTENT_ENTER_OPACITY } from "@/components/pwa/use-timeline-enter-fade";
 import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 import { piReachTheme } from "@/lib/ui/pi-reach-theme";
 import { ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
@@ -81,6 +82,10 @@ function iconAttributes(text: string, attribute: string): { value: string; index
 describe("script token guard", () => {
   test("motion fallbacks match every millisecond duration token in the theme", () => {
     expect(PWA_MOTION_FALLBACK_MS).toEqual(themeDurations());
+  });
+
+  test("the content enter fade starts at the theme opacity token", () => {
+    expect(CONTENT_ENTER_OPACITY).toBe(Number(declarations("\n:root {")["--pwa-opacity-enter"]));
   });
 
   test("scripts read motion durations and easings only through the shared helpers", () => {

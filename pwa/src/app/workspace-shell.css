@@ -220,7 +220,7 @@
 .pwa-root .pwa-skeleton-short { width: 60%; }
 .pwa-root .pwa-nav-skeleton { display: grid; gap: 10px; padding: 8px; }
 .pwa-root .pwa-nav-skeleton .pwa-skeleton:last-child { width: 70%; }
-@keyframes pwa-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
+@keyframes pwa-breathe { 0%, 100% { opacity: 1; } 50% { opacity: var(--pwa-opacity-breathe); } }
 @media (prefers-reduced-motion: reduce) { .pwa-skeleton { animation: none; } }
 
 /*

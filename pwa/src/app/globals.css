@@ -50,7 +50,7 @@ textarea:focus-visible,
   outline-offset: 0;
 }
 
-::selection { background: var(--pwa-accent); color: var(--pwa-on-accent); }
+::selection { background: var(--pwa-selection); }
 
 /* 时间、计数等数字等宽，避免刷新时抖动。 */
 time,
@@ -276,7 +276,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-icon-button.pwa-composer-send:disabled,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-disabled],
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop:disabled,
-.pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-disabled] { color: var(--pwa-on-accent); opacity: 0.5; }
+.pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-disabled] { color: var(--pwa-on-accent); opacity: var(--pwa-opacity-disabled); }
 .pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-variant="filled"]:disabled::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-variant="filled"][data-disabled]::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"]:disabled::before,

@@ -29,14 +29,30 @@ function luminance(hex: string): number {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }
 
-function ratio(theme: Theme, foreground: string, background: string): number {
-  const read = (name: string): string => {
-    const value = theme[`--pwa-${name}`] ?? (() => { throw new Error(`missing --pwa-${name}`); })();
-    const reference = /^var\(--pwa-([a-z-]+)\)$/.exec(value);
-    return reference ? read(reference[1]!) : value;
-  };
-  const [high, low] = [luminance(read(foreground)), luminance(read(background))].sort((left, right) => right - left);
+/** 取 token 的颜色值，沿 var(--pwa-*) 别名解析到字面量。 */
+function color(theme: Theme, name: string): string {
+  const value = theme[`--pwa-${name}`] ?? (() => { throw new Error(`missing --pwa-${name}`); })();
+  const reference = /^var\(--pwa-([a-z-]+)\)$/.exec(value);
+  return reference ? color(theme, reference[1]!) : value;
+}
+
+function hexRatio(foreground: string, background: string): number {
+  const [high, low] = [luminance(foreground), luminance(background)].sort((left, right) => right - left);
   return (high! + 0.05) / (low! + 0.05);
+}
+
+function ratio(theme: Theme, foreground: string, background: string): number {
+  return hexRatio(color(theme, foreground), color(theme, background));
+}
+
+/** 透明度刻度（DESIGN「透明度」）：32% 以内步长 4%，以上步长 8%，单位为百分比。 */
+const OPACITY_SCALE = Array.from({ length: 99 }, (_, index) => index + 1).filter((percent) => percent % 4 === 0 && (percent <= 32 || percent % 8 === 0));
+
+/** 半透明色按 alpha 叠在不透明底色上的结果。 */
+function composite(color: string, background: string): string {
+  const alpha = parseInt(color.slice(7, 9), 16) / 255;
+  const channels = [1, 3, 5].map((offset) => Math.round(parseInt(color.slice(offset, offset + 2), 16) * alpha + parseInt(background.slice(offset, offset + 2), 16) * (1 - alpha)));
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 const neutralSurfaces = ["bg", "surface", "panel", "message", "hover", "selected", "neutral-active", "disabled-bg", "tonal"];
@@ -53,7 +69,7 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
     }
   });
 
-  test("keeps both separator tiers translucent neutrals, with the 1px tier as deep as line on bg", () => {
+  test("keeps both separator tiers translucent neutrals, with the 1px tier the scale step nearest line on bg", () => {
     // 半透明才能在 bg、panel、message 等不同底色上保持同样轻重；只辅助分区，不设对比度下限。
     const alpha = (name: string) => {
       const value = theme[`--pwa-${name}`] ?? "";
@@ -62,10 +78,12 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
     };
     const regular = alpha("separator-regular");
     const hairline = alpha("separator-hairline");
-    // 画不出 0.5px 的浏览器仍是 1px：叠在 bg 上与原 line 同深，观感不变。
+    // 画不出 0.5px 的浏览器仍是 1px：在透明度刻度中取叠在 bg 上最接近原 line 的一档，观感基本不变。
     const bg = parseInt(theme["--pwa-bg"]!.slice(1, 3), 16);
-    const blended = Math.round(regular.channel * regular.alpha + bg * (1 - regular.alpha));
-    expect(Math.abs(blended - parseInt(theme["--pwa-line"]!.slice(1, 3), 16))).toBeLessThanOrEqual(1);
+    const line = parseInt(theme["--pwa-line"]!.slice(1, 3), 16);
+    const distance = (percent: number) => Math.abs(regular.channel * percent / 100 + bg * (1 - percent / 100) - line);
+    const nearest = OPACITY_SCALE.reduce((best, percent) => (distance(percent) < distance(best) ? percent : best));
+    expect(Math.round(regular.alpha * 100)).toBe(nearest);
     // 线宽减半时颜色加深补偿。
     expect(hairline.alpha).toBeGreaterThan(regular.alpha);
     expect(hairline.alpha).toBeLessThan(1);
@@ -105,6 +123,21 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
     }
   });
 
+  test("keeps text readable on the translucent accent selection over every reading surface", () => {
+    // 选区只着底色、不改文字色：正文级文字 ≥ 4.5:1；次级文字与链接只在选中期间落在选区上，≥ 3:1。
+    const selection = color(theme, "selection");
+    expect(selection.slice(0, 7).toUpperCase(), "selection hue").toBe(color(theme, "accent").toUpperCase());
+    expect(selection, "selection alpha").toMatch(/^#[0-9a-f]{8}$/i);
+    const surfaces = [["bg", ["ink", "soft-ink"], ["secondary", "accent"]], ["surface", ["ink", "soft-ink"], ["secondary", "accent"]],
+      ["panel", ["ink", "soft-ink"], ["secondary", "accent"]], ["message", ["ink"], ["secondary", "accent"]],
+      ["code-surface", ["code-text"], ["code-dim"]]] as const;
+    for (const [surface, primary, minor] of surfaces) {
+      const selected = composite(selection, color(theme, surface));
+      for (const text of primary) expect(hexRatio(color(theme, text), selected), `${text} on selection over ${surface}`).toBeGreaterThanOrEqual(4.5);
+      for (const text of minor) expect(hexRatio(color(theme, text), selected), `${text} on selection over ${surface}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   test("keeps status colors readable on their washes and solid fills", () => {
     for (const status of ["complete", "running", "error"]) {
       expect(ratio(theme, status, `${status}-wash`), `${status} on its wash`).toBeGreaterThanOrEqual(4.5);
@@ -140,6 +173,22 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
   });
 });
 
+test("every translucent color, color-mix ratio and element opacity in the theme sits on the opacity scale", () => {
+  const percents = [
+    ...[...css.matchAll(/#[0-9a-f]{6}([0-9a-f]{2})\b/gi)].map((match) => [match[0], parseInt(match[1]!, 16) / 255 * 100] as const),
+    ...[...css.matchAll(/color-mix\([^;]*?(\d+)%/g)].map((match) => [match[0], Number(match[1])] as const),
+    ...[...css.matchAll(/(--pwa-opacity-[a-z-]+):\s*([\d.]+);/g)].map((match) => [match[1]!, Number(match[2]) * 100] as const),
+  ];
+  expect(percents.length).toBeGreaterThan(0);
+  // 8 位 hex 的 alpha 字节按 round(百分比 × 255) 写出，读回取整后必须正好是刻度档位。
+  expect(percents.filter(([, percent]) => !OPACITY_SCALE.includes(Math.round(percent))).map(([source]) => source)).toEqual([]);
+  expect([...css.matchAll(/(--pwa-opacity-[a-z-]+):/g)].map((match) => match[1])).toEqual(["--pwa-opacity-disabled", "--pwa-opacity-breathe", "--pwa-opacity-enter"]);
+});
+
+test("the opacity scale steps by 4% up to 32% and by 8% above", () => {
+  expect(OPACITY_SCALE).toEqual([4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64, 72, 80, 88, 96]);
+});
+
 test("the pre-hydration system dark fallback matches the dark theme", () => {
   expect(systemDark).toEqual(declarations(':root[data-mantine-color-scheme="dark"] {'));
 });
@@ -150,9 +199,14 @@ test("components read one separator token that switches tier with the measured h
   expect(declarations(":root[data-pwa-hairline] {")).toEqual({ "--pwa-hairline": "0.5px", "--pwa-separator": "var(--pwa-separator-hairline)" });
 });
 
-test("the tonal danger hover mixes a little error into its wash", () => {
-  // 10% 时错误色文字在悬停底上浅色约 4.8:1、深色约 5:1；加深前须重新核算。
-  expect(shared["--pwa-error-wash-hover"]).toBe("color-mix(in srgb, var(--pwa-error) 10%, var(--pwa-error-wash))");
+test("the tonal danger hover mixes a little error into its wash and keeps error text readable", () => {
+  const mix = /^color-mix\(in srgb, var\(--pwa-error\) (\d+)%, var\(--pwa-error-wash\)\)$/.exec(shared["--pwa-error-wash-hover"] ?? "");
+  expect(mix, "error-wash-hover").not.toBeNull();
+  const alpha = Math.round(Number(mix![1]) / 100 * 255).toString(16).padStart(2, "0");
+  for (const [name, theme] of [["light", light], ["dark", dark]] as const) {
+    const hover = composite(`${color(theme, "error")}${alpha}`, color(theme, "error-wash"));
+    expect(hexRatio(color(theme, "error"), hover), `${name} error on error-wash-hover`).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 test("status edges mix each status color with line at one shared ratio", () => {

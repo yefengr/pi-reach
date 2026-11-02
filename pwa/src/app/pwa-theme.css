@@ -2,6 +2,7 @@
  * Pi Reach 设计 token：颜色角色、字体、圆角、层级与动效。
  * 中性角色均为无彩灰（R=G=B）；主色只用于操作、链接、焦点与在线圆点，选中态用中性 selected。
  * 取值与约束见 docs/DESIGN.md；颜色对比度约束由 pwa-theme-contrast 测试按本文件计算。
+ * 半透明色、color-mix 比例与元素透明度都取透明度刻度：32% 以内步长 4%，以上步长 8%（DESIGN「透明度」）。
  */
 :root,
 :root[data-mantine-color-scheme="light"] {
@@ -32,8 +33,10 @@
   --pwa-accent-active: #2E4A78;
   --pwa-on-accent: #FFFFFF;
   --pwa-scrim: #00000047;
-  --pwa-shadow-color: #0000001A;
+  --pwa-shadow-color: #00000014;
   --pwa-shadow-composer: 0 2px 12px var(--pwa-shadow-color);
+  /* 文字选区：主色 20%，半透明以随气泡、代码块等底色变化，文字保持原色。 */
+  --pwa-selection: #44639633;
   --pwa-complete: #347953;
   --pwa-complete-wash: #EAF3EC;
   --pwa-running: #90611F;
@@ -77,16 +80,17 @@
   --pwa-secondary: #BCBCBC;
   --pwa-soft-ink: #D4D4D4;
   --pwa-line: #464646;
-  --pwa-separator-regular: #FFFFFF2E;
+  --pwa-separator-regular: #FFFFFF29;
   --pwa-separator-hairline: #FFFFFF3D;
   --pwa-control-line: #848484;
   --pwa-accent: #98B8E6;
   --pwa-accent-hover: #A6C3ED;
   --pwa-accent-active: #B4CEF4;
   --pwa-on-accent: #142237;
-  --pwa-scrim: #0000008C;
-  --pwa-shadow-color: #0000004D;
+  --pwa-scrim: #0000008F;
+  --pwa-shadow-color: #00000047;
   --pwa-shadow-composer: none;
+  --pwa-selection: #98B8E63D;
   --pwa-complete: #95CBA8;
   --pwa-complete-wash: #26392E;
   --pwa-running: #DFBA77;
@@ -132,16 +136,17 @@
     --pwa-secondary: #BCBCBC;
     --pwa-soft-ink: #D4D4D4;
     --pwa-line: #464646;
-    --pwa-separator-regular: #FFFFFF2E;
+    --pwa-separator-regular: #FFFFFF29;
     --pwa-separator-hairline: #FFFFFF3D;
     --pwa-control-line: #848484;
     --pwa-accent: #98B8E6;
     --pwa-accent-hover: #A6C3ED;
     --pwa-accent-active: #B4CEF4;
     --pwa-on-accent: #142237;
-    --pwa-scrim: #0000008C;
-    --pwa-shadow-color: #0000004D;
+    --pwa-scrim: #0000008F;
+    --pwa-shadow-color: #00000047;
     --pwa-shadow-composer: none;
+    --pwa-selection: #98B8E63D;
     --pwa-complete: #95CBA8;
     --pwa-complete-wash: #26392E;
     --pwa-running: #DFBA77;
@@ -175,8 +180,16 @@
   /* 带状态色的装饰边框：在 :root 上按当前主题的状态色与 line 计算，只辅助识别。 */
   --pwa-running-line: color-mix(in srgb, var(--pwa-running) 40%, var(--pwa-line));
   --pwa-error-line: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line));
-  /* 色调危险入口的悬停底：错误轻底再混入 10% 错误色，错误色文字仍 ≥ 4.5:1。 */
-  --pwa-error-wash-hover: color-mix(in srgb, var(--pwa-error) 10%, var(--pwa-error-wash));
+  /* 色调危险入口的悬停底：错误轻底再混入 4% 错误色，浅色错误色文字约 4.6:1，再加深即低于 4.5:1。 */
+  --pwa-error-wash-hover: color-mix(in srgb, var(--pwa-error) 4%, var(--pwa-error-wash));
+
+  /* 元素透明度（DESIGN「透明度」）：动效端点只用 0 与 1，中间值只取这里的具名 token，均落在透明度刻度上。 */
+  /* 发送／停止按钮禁用；其余禁用态改用 disabled-bg 与 secondary，不靠透明度。 */
+  --pwa-opacity-disabled: 0.48;
+  /* 骨架屏呼吸的最暗点。 */
+  --pwa-opacity-breathe: 0.72;
+  /* 会话内容接管骨架时的淡入起点；脚本副本 CONTENT_ENTER_OPACITY 由 pwa-script-token-guard 校验同值。 */
+  --pwa-opacity-enter: 0.32;
 
   /*
    * 装饰分隔的线宽与颜色，组件只引用 --pwa-hairline 与 --pwa-separator。
