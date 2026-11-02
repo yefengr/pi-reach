@@ -424,7 +424,7 @@ test.each([1280, 390])("focuses only a new empty desktop session, without openin
   const screen = await renderOnlineApp(() => renderPwa(<PwaApp />));
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: "Session details" });
+    const action = screen.getByRole("button", { name: width === 1280 ? "Refresh app" : "Session details" });
     action.element().focus();
     channel.emit(readyFrame(channel, "empty-session"));
     const input = screen.getByRole("textbox", { name: /Message your agent/i });
@@ -439,7 +439,7 @@ test("does not focus the composer when opening a session with saved records", as
   const screen = await renderOnlineApp();
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: "Session details" });
+    const action = screen.getByRole("button", { name: "Refresh app" });
     action.element().focus();
     channel.emit(readyFrame(channel, "existing-session", 2));
     await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeVisible();
@@ -1149,7 +1149,7 @@ test("operation feedback empty target ready before result keeps creation unconfi
     await expect.poll(() => next.frames.some((frame) => frame.type === "list_models")).toBe(true);
     await expect.element(screen.getByRole("button", { name: "Add attachments", exact: true })).toBeDisabled();
     await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
-    screen.getByRole("button", { name: "Session details", exact: true }).element().focus();
+    screen.getByRole("button", { name: "Refresh app", exact: true }).element().focus();
     next.emit({ protocol_version: 2, type: "action_ok", target_channel_id: next.channelId, in_reply_to: request.id, action: "session_new", session_id: "empty-target" });
     await expect.poll(() => document.querySelector(".pwa-composer-hint")).toBeNull();
     await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toHaveFocus();
@@ -3296,14 +3296,10 @@ test("routes session actions through the live channel with current model and thi
     const initialModelRequest = channel.frames.findLast((frame) => frame.type === "list_models");
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [model], current: model, thinking_level: "off" });
 
-    const actions = screen.getByRole("button", { name: "Session details" });
-    await actions.click();
-    // 「更多」只展示只读信息，不再请求模型列表或提供操作。
-    await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+    // 桌面标题区只保留状态和刷新；命令仍走输入区，不新增桌面替代信息入口。
+    await expect.element(screen.getByRole("button", { name: "Session details" })).not.toBeInTheDocument();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(1);
-    await userEvent.keyboard("{Escape}");
-    await expect.element(screen.getByRole("dialog", { name: "Session details" })).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Pi commands" }).click();
     await screen.getByRole("menuitem", { name: /\/compact/ }).click();
     await vi.waitFor(() => expect(channel.frames.at(-1)).toMatchObject({ type: "session_compact", leaf_id: "generation-session-1" }));
@@ -3886,13 +3882,10 @@ test("keeps a stable session channel across reset and session replacement, with 
   expect(channelHarness.channels).toHaveLength(3);
   await expect.element(screen.getByLabelText("Offline")).toBeVisible();
   const modelRequestsBeforeRetry = thirdChannel?.frames.filter((frame) => frame.type === "list_models").length ?? 0;
-  await screen.getByRole("button", { name: "Session details" }).click();
-  // 「更多」只展示只读信息，不请求模型列表，也不提供重试；离线重试走既有输入区操作条。
-  await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+  // 桌面没有信息入口；离线重试仍走既有输入区操作条，不额外请求模型列表。
+  await expect.element(screen.getByRole("button", { name: "Session details" })).not.toBeInTheDocument();
   expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   expect(thirdChannel?.frames.filter((frame) => frame.type === "list_models")).toHaveLength(modelRequestsBeforeRetry);
-  await userEvent.keyboard("{Escape}");
-  await expect.element(screen.getByRole("dialog", { name: "Session details" })).not.toBeInTheDocument();
   await screen.getByRole("button", { name: "Try again" }).click();
   await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(4));
   expect(channelHarness.channels[3]?.channelId).toBe(firstChannel?.channelId);

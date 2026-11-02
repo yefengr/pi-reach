@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { ActionIcon, UnstyledButton } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 import { Menu, RefreshCw } from "lucide-react";
 import { refreshPwaApp } from "@/lib/pwa/service-worker-update";
 import { useI18n } from "@/lib/i18n";
@@ -26,6 +28,8 @@ export type WorkspaceTitleBarProps = {
  */
 export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, navigationNotice = false, navigationExpanded, onOpenNavigation, onRefresh = refreshPwaApp }: WorkspaceTitleBarProps) {
   const { t } = useI18n();
+  // 按断点卸载入口及其 Portal，避免桌面留下隐藏焦点或重现已打开的信息层。
+  const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY);
   return <header className="pwa-topbar pwa-title-bar">
     <UnstyledButton
       className="pwa-session-trigger"
@@ -49,7 +53,7 @@ export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, 
       <ActionIcon className="pwa-title-bar-refresh" type="button" onClick={() => { void onRefresh(); }} aria-label={t.navigation.refreshApp} title={t.navigation.refreshApp}>
         <RefreshCw size={20} />
       </ActionIcon>
-      {moreMenu}
+      {mobile ? moreMenu : null}
     </div>
   </header>;
 }

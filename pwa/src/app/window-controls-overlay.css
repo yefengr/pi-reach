@@ -1,0 +1,39 @@
+/* 仅真实 WCO 激活时消费几何。env 与 API 取保守边界；普通浏览器和移动端不改变布局或拖拽语义。 */
+.pwa-root[data-wco] {
+  --pwa-wco-left: max(var(--pwa-wco-x), env(titlebar-area-x, var(--pwa-wco-x)));
+  --pwa-wco-reserved-right: max(var(--pwa-wco-right), calc(100vw - env(titlebar-area-x, var(--pwa-wco-x)) - env(titlebar-area-width, var(--pwa-wco-width))));
+  --pwa-wco-top: max(var(--pwa-wco-y), env(titlebar-area-y, var(--pwa-wco-y)));
+  --pwa-wco-band-height: max(var(--pwa-wco-height), env(titlebar-area-height, var(--pwa-wco-height)));
+  --pwa-wco-bottom: calc(var(--pwa-wco-top) + var(--pwa-wco-band-height));
+  --pwa-wco-row: max(var(--pwa-topbar-height), var(--pwa-wco-band-height));
+  --pwa-wco-sidebar-top: max(var(--pwa-safe-top), var(--pwa-wco-top));
+  --pwa-wco-main-top: max(var(--pwa-safe-top), var(--pwa-wco-top));
+  --pwa-wco-sidebar-left: max(var(--pwa-safe-left), var(--pwa-wco-left));
+  --pwa-wco-main-left: max(0px, calc(var(--pwa-wco-left) - var(--pwa-sidebar-span)));
+  --pwa-wco-main-right: max(var(--pwa-safe-right), var(--pwa-wco-reserved-right));
+}
+.pwa-root[data-wco][data-sidebar-collapsed] { --pwa-wco-main-left: max(var(--pwa-safe-left), var(--pwa-wco-left)); }
+.pwa-root[data-wco][data-wco-sidebar-below] { --pwa-wco-sidebar-top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); --pwa-wco-sidebar-left: var(--pwa-safe-left); }
+.pwa-root[data-wco][data-wco-main-below] { --pwa-wco-main-top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); --pwa-wco-main-left: var(--pwa-main-safe-left); --pwa-wco-main-right: var(--pwa-safe-right); }
+
+.pwa-root[data-wco] .pwa-desktop-navigation .pwa-sidebar { padding-top: var(--pwa-wco-sidebar-top); }
+.pwa-root[data-wco] .pwa-desktop-navigation .pwa-sidebar-brand { min-height: var(--pwa-wco-row); margin-left: calc(var(--pwa-wco-sidebar-left) - var(--pwa-safe-left)); padding-right: calc(var(--pwa-hit-target) + 8px); white-space: nowrap; }
+.pwa-root[data-wco] .pwa-sidebar-brand > * { flex-shrink: 0; }
+.pwa-ui-scope .pwa-root[data-wco] .pwa-icon-button.pwa-sidebar-toggle { top: calc(var(--pwa-wco-sidebar-top) + (var(--pwa-wco-row) - var(--pwa-hit-target)) / 2); transition: none; }
+.pwa-ui-scope .pwa-root[data-wco][data-sidebar-collapsed] .pwa-icon-button.pwa-sidebar-toggle { top: calc(var(--pwa-wco-main-top) + (var(--pwa-wco-row) - var(--pwa-hit-target)) / 2); left: calc(var(--pwa-wco-main-left) + 8px); }
+.pwa-root[data-wco] .pwa-title-bar { min-height: calc(64px + var(--pwa-wco-main-top) + var(--pwa-wco-row) - var(--pwa-topbar-height)); padding-top: var(--pwa-wco-main-top); padding-left: calc(var(--pwa-gutter) + var(--pwa-wco-main-left)); padding-right: calc(8px + var(--pwa-wco-main-right)); }
+.pwa-root[data-wco][data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(var(--pwa-wco-main-left) + 8px + var(--pwa-hit-target) + 4px); }
+.pwa-root[data-wco] .pwa-title-bar-heading { padding-top: calc((var(--pwa-wco-row) - var(--pwa-text-title) * var(--pwa-leading-ui)) / 2); }
+.pwa-root[data-wco] .pwa-title-bar-actions { min-height: var(--pwa-wco-row); }
+
+/* 设置页和顶边 Drawer 不跨列重排，单独预留完整系统带；滚动正文也不能进入控件带。 */
+.pwa-root[data-wco] .pwa-settings-view { top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); }
+.pwa-root[data-wco] :is(.pwa-tool-reader-header, .pwa-file-reader-header, .pwa-device-drawer-head) { padding-top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); min-height: calc(var(--pwa-topbar-height) + max(var(--pwa-safe-top), var(--pwa-wco-bottom))); }
+
+.pwa-root[data-wco] .mantine-Modal-inner { padding-top: max(var(--modal-inner-y-offset, var(--modal-y-offset)), var(--pwa-wco-bottom)); }
+.pwa-root[data-wco] .mantine-Modal-content { max-height: calc(100dvh - max(var(--modal-inner-y-offset, var(--modal-y-offset)), var(--pwa-wco-bottom)) - var(--modal-inner-y-offset, var(--modal-y-offset))); }
+
+/* 只把工作区品牌/标题的空白设为拖拽区；文字选择与所有交互区域明确退出 drag。 */
+.pwa-root[data-wco] :is(.pwa-sidebar-brand, .pwa-title-bar) { -webkit-app-region: drag; app-region: drag; }
+.pwa-root[data-wco] :is(button, a, input, textarea, select, [role="button"], [tabindex], .pwa-title-bar-name, .pwa-title-bar-project, .pwa-title-bar-actions, .pwa-sidebar-brand > *) { -webkit-app-region: no-drag; app-region: no-drag; }
+.pwa-root[data-wco] :is(.pwa-title-bar-name, .pwa-title-bar-project, .pwa-sidebar-brand > span) { user-select: text; }

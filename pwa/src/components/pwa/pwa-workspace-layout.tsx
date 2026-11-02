@@ -9,6 +9,7 @@ import { PwaMobileNavigation } from "@/components/pwa/pwa-mobile-chrome";
 import { PwaRuntimeNoticeSlot } from "@/components/pwa/pwa-app-shell";
 import { WorkspaceTitleBar, type WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-bar";
 import { usePageTransition } from "@/components/pwa/use-page-transition";
+import { useWindowControlsOverlay } from "./use-window-controls-overlay";
 import { useWorkspaceDrag } from "@/components/pwa/use-workspace-drag";
 import { useNavigationDrag } from "@/components/pwa/use-navigation-drag";
 import { useSwipe } from "@/components/pwa/use-swipe";
@@ -56,6 +57,7 @@ export function PwaWorkspaceLayout({
 }: PwaWorkspaceLayoutProps) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  useWindowControlsOverlay(rootRef);
   const noticesRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
