@@ -268,10 +268,12 @@ DESIGN「嵌套不递减」改为：
 
 | 位置 | 实现 |
 | --- | --- |
-| 会话主区顶部 | 消息列表 `::before` sticky 钉在列表顶端，上外边距抵消自身高度；不挂在标题区下，避免盖住提示区 |
+| 会话主区顶部 | 提示区末尾的流内 `::after`，下外边距抵消自身高度，伸进下方列表顶端；提示区内操作通知以 `.pwa-main` 为定位基准，提示区本身不定位。初版用消息列表 sticky `::before`，staging 真机录屏发现 sticky 偏移从列表 24px 顶部留白之下算起，紧贴顶栏的一行被硬切，已改 |
 | 会话主区底部 | `.pwa-chat-footer::before` 向上挂出常驻渐变；「最新」入口按文档顺序画在其上；紧凑高度下不加 |
 | 阅读器、电脑 Drawer、移动设置页 | 原发丝线伪元素改为 `top: 100%` 向下挂出渐变，仍读 `data-scroll-edge`；阅读器头部取局部层级 1 |
 | token | 新增 `--pwa-scroll-fade`（24px） |
 | 顺带修正 | 电脑选择 Drawer 头部底色改为 `surface`：原取 Mantine `body`（`bg`），深色下与面板不同色，渐变无法无缝接出 |
 
 验证：Node 样式、层级与对比度守卫 45 项通过；`scroll-indicator` 21 项（重写顶栏用例：四处离开顶部淡入、回到顶部淡出、不画线；首条消息不被推开；浅色与深色下渐变起点色等于顶栏底色；紧凑高度不加底部渐隐；桌面设置页不生成）；`use-timeline-viewport`、`message-send`、`pwa-notice-layout` 126 项通过。Playwright 截取 ui-states「长文字」桌面 1280 与移动 390、浅色与深色，渐隐无灰带、不横穿留白。未覆盖：iOS Safari 真机长会话滚动流畅度与观感，全量浏览器回归以 Pull Request CI 为准。
+
+修正后补充验证：`scroll-indicator` 新增像素用例，截图读取列表可视区上沿以下 1、12、30px 的颜色，断言依次为底色、过渡、内容；在初版 sticky 实现上该用例失败（上沿为纯黑），修正后通过，全文件 21 项。`pwa-notice-layout`、`pwa-operation-notifications`、`pwa-workspace-layout` 95 项通过，提示区高度与通知定位不变。

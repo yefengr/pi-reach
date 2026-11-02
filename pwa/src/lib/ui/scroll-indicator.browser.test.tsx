@@ -242,7 +242,7 @@ function EdgeFixture() {
       <header className="pwa-topbar pwa-title-bar">Session</header>
       <div className="pwa-main-notices"><div style={{ height: 40 }}>Reconnecting</div></div>
       <div className="pwa-message-list" data-scroller="messages" style={{ flex: "1 1 0", overflowY: "auto" }}>
-        <div data-testid="first-message" style={{ height: 1200 }} />
+        <div data-testid="first-message" style={{ height: 1200, background: "rgb(0, 0, 0)" }} />
       </div>
       <div className="pwa-chat-footer"><div style={{ height: 60 }}>Composer</div></div>
     </main>
@@ -252,7 +252,7 @@ function EdgeFixture() {
         <div className="pwa-tool-reader-scroll" data-scroller="reader"><div style={{ height: 1200 }} /></div>
       </div>
     </section>
-    <Drawer opened onClose={() => undefined} position="bottom" withinPortal={false} padding={0} title="Computers" transitionProps={{ duration: 0 }}
+    <Drawer opened onClose={() => undefined} position="bottom" withinPortal={false} withOverlay={false} padding={0} title="Computers" transitionProps={{ duration: 0 }}
       classNames={{ content: "pwa-device-drawer", header: "pwa-device-drawer-head", body: "pwa-device-drawer-body" }} styles={{ content: { maxHeight: 240 } }}>
       <div style={{ height: 1200 }} />
     </Drawer>
@@ -271,7 +271,7 @@ const gradientStart = (style: CSSStyleDeclaration) => /linear-gradient\((rgba?\(
 
 /** 按滚动容器与挂渐变的元素逐一核对：离开顶部淡入、回到顶部淡出，不画分隔线。 */
 const topEdges = [
-  { name: "messages", host: ".pwa-message-list", which: "::before" },
+  { name: "messages", host: ".pwa-main-notices", which: "::after" },
   { name: "reader", host: ".pwa-tool-reader-header", which: "::after" },
   { name: "settings", host: ".pwa-settings-header", which: "::after" },
 ] as const;
@@ -294,15 +294,42 @@ test("a fixed top bar fades the content below it while the scroller has left the
   }
 });
 
-test("the message list fade is pinned inside the list without pushing the first message", async () => {
+/** 截取元素并按 CSS 像素读取若干点的 RGB。 */
+async function samplePixels(element: HTMLElement, points: ReadonlyArray<readonly [number, number]>) {
+  const base64 = await page.screenshot({ element, save: false });
+  const image = new Image();
+  image.src = `data:image/png;base64,${base64}`;
+  await image.decode();
+  const scale = image.width / element.getBoundingClientRect().width;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  return points.map(([x, y]) => Array.from(context.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data).slice(0, 3));
+}
+
+test("the message list fade starts at the top of the visible list, below the notices", async () => {
   await page.viewport(390, 844);
   await renderPwa(<EdgeFixture />);
+  const main = document.querySelector<HTMLElement>(".pwa-main")!;
+  const notices = document.querySelector<HTMLElement>(".pwa-main-notices")!;
   const list = scroller("messages");
-  const fade = pseudo(".pwa-message-list", "::before");
-  expect(fade.position).toBe("sticky");
-  // 渐变由列表自身挂出、落在顶部留白内：首条消息仍从 24px 留白之后开始。
+  // 渐变是流内伪元素，但不改变提示区高度：提示区仍只有提示条的 40px，首条消息仍从 24px 留白之后开始。
+  expect(Math.round(notices.getBoundingClientRect().height)).toBe(40);
   const first = document.querySelector("[data-testid='first-message']")!.getBoundingClientRect().top;
   expect(Math.round(first - list.getBoundingClientRect().top)).toBe(24);
+
+  // 黑色内容滚到顶栏下：列表可视区最上沿应是底色，向下逐渐露出内容（sticky 实现会从 24px 留白之下才开始淡化）。
+  list.scrollTop = 120;
+  await expect.poll(() => pseudo(".pwa-main-notices", "::after").opacity).toBe("1");
+  const top = list.getBoundingClientRect().top - main.getBoundingClientRect().top;
+  const x = main.getBoundingClientRect().width / 2;
+  const [edge, middle, below] = await samplePixels(main, [[x, top + 1], [x, top + 12], [x, top + 30]]);
+  expect(Math.min(...edge)).toBeGreaterThan(220);
+  expect(Math.max(...middle)).toBeLessThan(220);
+  expect(Math.min(...middle)).toBeGreaterThan(20);
+  expect(Math.max(...below)).toBeLessThan(20);
 });
 
 test.each(["light", "dark"] as const)("scroll-edge fades start from the bar background in %s mode", async (theme) => {
@@ -310,7 +337,7 @@ test.each(["light", "dark"] as const)("scroll-edge fades start from the bar back
   await renderPwa(<EdgeFixture />);
   document.documentElement.setAttribute("data-mantine-color-scheme", theme);
   const background = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor;
-  expect(gradientStart(pseudo(".pwa-message-list", "::before"))).toBe(background(".pwa-main"));
+  expect(gradientStart(pseudo(".pwa-main-notices", "::after"))).toBe(background(".pwa-main"));
   expect(gradientStart(pseudo(".pwa-tool-reader-header", "::after"))).toBe(background(".pwa-tool-reader-header"));
   expect(gradientStart(pseudo(".pwa-device-drawer-head", "::after"))).toBe(background(".pwa-device-drawer-head"));
   expect(gradientStart(pseudo(".pwa-settings-header", "::after"))).toBe(background(".pwa-settings-header"));

@@ -234,11 +234,13 @@
 .pwa-root .pwa-tool-reader-header::after,
 .pwa-root .pwa-device-drawer-head::after { content: ""; position: absolute; top: 100%; right: 0; left: 0; height: var(--pwa-scroll-fade); background: linear-gradient(var(--pwa-edge-fade-color), transparent); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
 /*
- * 会话标题区与消息列表之间还有提示区（连接提示条等），渐变不挂在标题区下方，改由消息列表自身的 sticky 首个伪元素钉在滚动区顶端：
- * 上外边距抵消自身高度，平时落在列表顶部留白内、不推开内容；只覆盖阅读列宽度，两侧本就没有内容。
+ * 会话主区：标题区与消息列表之间还有提示区（连接提示条等，无提示时高度为 0），渐变挂在提示区下沿，
+ * 有无提示条都紧贴列表可视区顶端。提示区内的操作通知以 .pwa-main 为定位基准，提示区本身不能定位，
+ * 因此渐变是提示区末尾的流内伪元素：下外边距抵消自身高度，不改变提示区高度，伸进下方列表；自身相对定位取局部层级盖住内容。
+ * 不用列表内的 sticky 伪元素：sticky 偏移从列表顶部留白之下算起，渐变会离开顶栏下沿。
  */
-.pwa-root .pwa-message-list::before { content: ""; position: sticky; z-index: 1; top: 0; display: block; height: var(--pwa-scroll-fade); margin-top: calc(-1 * var(--pwa-scroll-fade)); background: linear-gradient(var(--pwa-bg), transparent); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
-.pwa-root .pwa-message-list[data-scroll-edge]::before,
+.pwa-root .pwa-main-notices::after { content: ""; position: relative; z-index: 1; flex: 0 0 auto; height: var(--pwa-scroll-fade); margin: 0 calc(-1 * var(--pwa-main-safe-right)) calc(-1 * var(--pwa-scroll-fade)) calc(-1 * var(--pwa-main-safe-left)); background: linear-gradient(var(--pwa-bg), transparent); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-main:has(.pwa-message-list[data-scroll-edge]) .pwa-main-notices::after,
 .pwa-root .pwa-tool-reader:has(.pwa-tool-reader-body [data-scroll-edge]) .pwa-tool-reader-header::after,
 .pwa-root .pwa-device-drawer:has(.pwa-device-drawer-body[data-scroll-edge]) .pwa-device-drawer-head::after { opacity: 1; }
 /* 桌面设置页的标题随内容滚走，只有移动端固定（sticky）顶栏需要渐隐。 */
