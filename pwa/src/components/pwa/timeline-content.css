@@ -75,7 +75,8 @@
 .pwa-markdown hr { margin: 16px 0; border: 0; border-top: var(--pwa-hairline) solid var(--pwa-separator); }
 .pwa-markdown img { max-width: 100%; height: auto; border-radius: var(--pwa-radius-md); }
 .pwa-markdown-table { max-width: 100%; margin: 8px 0; overflow-x: auto; }
-.pwa-markdown table { border-collapse: collapse; font-size: var(--pwa-text-body); }
+/* 分离边框模型：WebKit 在 collapse 模式下画不出 0.5px 发丝线，iOS 上格线会整行消失；border-spacing 0 保持原外观。 */
+.pwa-markdown table { border-collapse: separate; border-spacing: 0; font-size: var(--pwa-text-body); }
 .pwa-markdown th, .pwa-markdown td { padding: 6px 10px; border-bottom: var(--pwa-hairline) solid var(--pwa-edge); text-align: left; vertical-align: top; }
 .pwa-markdown th { font-weight: var(--pwa-weight-strong); }
 /* 每列至少 8em；长内容由 markdown-table.tsx 加宽到最多两行，列宽之和超出容器时横向滚动，不截断。 */
