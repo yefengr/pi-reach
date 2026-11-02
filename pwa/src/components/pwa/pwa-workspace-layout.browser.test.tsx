@@ -151,12 +151,12 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
     const center = (element: Element) => { const rect = element.getBoundingClientRect(); return rect.top + rect.height / 2; };
     const brand = document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!;
     const titleBar = document.querySelector(".pwa-title-bar")!;
-    // 安全区内只留 panel 底色：品牌行下移，主区卡片上边距取 max(8, 安全区)，卡片内标题区保持 48。
+    // 安全区内只留 panel 底色：品牌行下移，主区卡片上边距取 max(8, 安全区)，卡片内标题区保持两行 64。
     expect(Math.round(brand.getBoundingClientRect().top)).toBe(safeTop);
     expect(Math.round(toggle.element().getBoundingClientRect().top)).toBeGreaterThanOrEqual(safeTop);
     expect(Math.round(document.querySelector(".pwa-main")!.getBoundingClientRect().top)).toBe(safeTop);
     expect(Math.round(titleBar.getBoundingClientRect().top)).toBe(safeTop);
-    expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(48);
+    expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(64);
     const visible = [...titleBar.children].filter(child => child.getBoundingClientRect().height > 0);
     expect(visible.length).toBeGreaterThan(0);
     for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
@@ -165,9 +165,9 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
     const expand = screen.getByRole("button", { name: "Expand sidebar" });
     await expect.element(expand).toBeVisible();
     expect(Math.abs(center(expand.element()) - (safeTop + 24))).toBeLessThanOrEqual(1);
-    // 收起后主区贴到顶边，标题区按顶栏规格把状态栏高度计入自身。
+    // 收起后主区贴到顶边，标题区按顶栏规格把状态栏高度计入自身，两行最小高仍为 64。
     await expect.poll(() => Math.round(document.querySelector(".pwa-main")!.getBoundingClientRect().top)).toBe(0);
-    await expect.poll(() => Math.round(titleBar.getBoundingClientRect().height)).toBe(48 + safeTop);
+    await expect.poll(() => Math.round(titleBar.getBoundingClientRect().height)).toBe(64 + safeTop);
     for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-top");
@@ -277,7 +277,7 @@ test("keeps the toggle in the header band and on top throughout both sidebar tra
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       frames += 1;
       const box = toggle.getBoundingClientRect();
-      // 品牌行与收起后的贴边标题区同高，过渡中入口只水平移动。
+      // 品牌行与顶栏入口仍在首行 48 带内，标题区改为两行后入口也不下移，过渡中只水平移动。
       expect(Math.round(box.top)).toBe(Math.round(start.top));
       expect(box.bottom).toBeLessThanOrEqual(48);
       expect(toggle.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);

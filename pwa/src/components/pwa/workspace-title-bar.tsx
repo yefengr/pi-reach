@@ -9,7 +9,7 @@ export type WorkspaceTitleBarProps = {
   title: string;
   /** 桌面标题区是否显示会话名；没有打开会话时只保留状态与操作。 */
   showTitle: boolean;
-  /** 会话名前的工作目录最后一级。 */
+  /** 会话名下方显示的工作目录最后一级（项目名）。 */
   prefix?: string | null;
   status?: ReactNode;
   moreMenu?: ReactNode;
@@ -21,7 +21,8 @@ export type WorkspaceTitleBarProps = {
 };
 
 /**
- * 会话标题区：桌面为主区顶部 48px 的一行，移动端即工作区顶栏（菜单图标与会话名共同构成导航入口）。
+ * 会话标题区：桌面首行沿用 48px 顶栏带并对齐右侧操作，会话名下方是项目名一行；
+ * 移动端即工作区顶栏（菜单图标与会话名共同构成导航入口），不显示项目行。
  */
 export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, navigationNotice = false, navigationExpanded, onOpenNavigation, onRefresh = refreshPwaApp }: WorkspaceTitleBarProps) {
   const { t } = useI18n();
@@ -39,10 +40,8 @@ export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, 
     </UnstyledButton>
     <div className="pwa-title-bar-heading">
       {showTitle ? <>
-        <h1 className="pwa-title-bar-name" title={prefix ? `${prefix} · ${title}` : title}>
-          {prefix ? <span className="pwa-title-bar-prefix">{prefix}<span aria-hidden="true"> · </span></span> : null}
-          <span className="pwa-title-bar-title">{title}</span>
-        </h1>
+        <h1 className="pwa-title-bar-name" title={title}>{title}</h1>
+        {prefix ? <div className="pwa-title-bar-project" title={prefix}>{prefix}</div> : null}
       </> : null}
     </div>
     <div className="pwa-title-bar-actions">

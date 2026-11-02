@@ -3970,8 +3970,11 @@ test("synchronizes live session titles from registry metadata without replacing 
 
     await page.viewport(1280, 900);
     const desktopTitle = document.querySelector<HTMLElement>(".pwa-title-bar-name")!;
-    await expect.poll(() => desktopTitle.querySelector(".pwa-title-bar-title")?.textContent).toBe("Renamed session");
-    expect(desktopTitle.querySelector(".pwa-title-bar-prefix")?.textContent).toBe("project · ");
+    await expect.poll(() => desktopTitle.textContent).toBe("Renamed session");
+    const desktopProject = document.querySelector<HTMLElement>(".pwa-title-bar-heading .pwa-title-bar-project")!;
+    expect(desktopProject.textContent).toBe("project");
+    expect(desktopProject.getAttribute("title")).toBe("project");
+    expect(desktopTitle.textContent).not.toContain("project");
     expect(getComputedStyle(desktopTitle).display).not.toBe("none");
 
     await page.viewport(390, 844);

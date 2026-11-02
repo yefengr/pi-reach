@@ -7,6 +7,7 @@ import { MessageComposer } from "./message-composer";
 import { PwaAppShell, PwaRuntimeNoticeSlot } from "./pwa-app-shell";
 import { PwaConnectionBanner, PwaStatusError } from "./pwa-app-actions";
 import { ServiceWorkerNotice } from "./service-worker-register";
+import { WorkspaceTitleBar } from "./workspace-title-bar";
 
 function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; initialDraft: string }) {
   const [draft, setDraft] = useState(initialDraft);
@@ -15,7 +16,7 @@ function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; ini
   return <PwaAppShell runtimeNotice={notice && <ServiceWorkerNotice installPrompt unsupported={false} onInstall={() => {}} onDismiss={() => setNotice(false)} />}>
     <div className="pwa-root">
       <div className="pwa-layout"><div className="pwa-desktop-navigation"><aside className="pwa-sidebar">Sessions</aside></div><main className="pwa-main">
-        <header className="pwa-title-bar">Pi Reach</header>
+        <WorkspaceTitleBar title="Pi Reach" prefix="pi-reach" showTitle navigationExpanded={false} onOpenNavigation={() => {}} onRefresh={() => {}} />
         <div className="pwa-main-notices">
           <PwaConnectionBanner kind="relay" connection="retrying" onRetry={() => {}} />
           <PwaStatusError message={error} onDismiss={() => setError(null)} />
@@ -55,6 +56,26 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   const slot = document.querySelector<HTMLElement>(".pwa-runtime-notice-slot")!;
   expect(runtimeNotice.parentElement).toBe(slot);
   expect(document.querySelector(".pwa-runtime-notice-fallback")!.getBoundingClientRect().height).toBe(0);
+  // 正式标题区：桌面两行最小 64，移动端单行 48；矮密度只由外壳实际高度决定。
+  const titleBar = document.querySelector<HTMLElement>(".pwa-title-bar")!;
+  expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(width >= 768 ? 64 : 48);
+  const shell = document.querySelector<HTMLElement>(".pwa-app-shell")!;
+  const compactHeight = shell.dataset.compactHeight;
+  const runtimeStyle = getComputedStyle(runtimeNotice);
+  if (width >= 768 && compactHeight === "very-short" && document.querySelector(".pwa-main-notices > .pwa-status-error")) {
+    // 桌面极矮窗口且主区有局部错误：提示条把上下留白从 4/6 收到 0/4，把省下的 8px 还给消息列表。
+    expect(runtimeStyle.marginTop).toBe("0px");
+    expect(runtimeStyle.paddingTop).toBe("4px");
+    expect(runtimeStyle.paddingBottom).toBe("4px");
+  } else if (compactHeight) {
+    // 移动端与普通矮窗口保持原密度。
+    expect(runtimeStyle.marginTop).toBe("4px");
+    expect(runtimeStyle.paddingTop).toBe("6px");
+    expect(runtimeStyle.paddingBottom).toBe("6px");
+  } else {
+    // 正常高度不套用矮窗口密度：桌面 8px、移动端 6px 上间距。
+    expect(runtimeStyle.marginTop).toBe(width >= 768 ? "8px" : "6px");
+  }
   const composer = document.querySelector(".pwa-composer-card")!;
   const input = screen.getByPlaceholder("Message your agent…");
   const send = screen.getByRole("button", { name: "Send message", exact: true });
@@ -87,7 +108,12 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
   const listBox = list.getBoundingClientRect();
-  expect(listBox.height).toBeGreaterThanOrEqual(40);
+  // 消息列表必须容得下正文一行加上下各 8px 内边距；当前 token 下 floor 为 ceil(26.4 + 16) = 43。
+  const listStyle = getComputedStyle(list);
+  const bodyLine = parseFloat(listStyle.getPropertyValue("--pwa-text-body")) * parseFloat(listStyle.getPropertyValue("--pwa-leading-body"));
+  const readingFloor = Math.ceil(bodyLine + 8 * 2);
+  expect(readingFloor).toBe(43);
+  expect(Math.round(listBox.height)).toBeGreaterThanOrEqual(readingFloor);
   expect(document.querySelector("[data-composer-budget='conflict']")).toBeNull();
   const contentRange = document.createRange();
   contentRange.selectNodeContents(list);
