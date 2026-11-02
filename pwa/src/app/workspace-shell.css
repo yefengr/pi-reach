@@ -166,13 +166,16 @@
 /* 会话列：外层消费主区左右安全区，内层为消息列表与输入区提供独立滚动上下文。 */
 .pwa-root .pwa-workspace-body { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
 .pwa-root .pwa-workspace-column { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-/* 侧栏展开时标题区位于卡片内，不贴屏幕顶边，状态栏安全区已由卡片上边距承担；收起后主区贴边，标题区按顶栏规格自行避让状态栏。 */
-.pwa-root .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-main-safe-top)); padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-left: var(--pwa-main-inset-start); }
+/* 侧栏展开时标题区位于卡片内，不贴屏幕顶边，状态栏安全区已由卡片上边距承担；收起后主区贴边，标题区按顶栏规格自行避让状态栏。
+   桌面标题区为会话名与项目两行：首行对齐共享 48px 顶栏带，最小高 64px；字号档位变大时由内容自然撑高，不裁切。 */
+.pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }
-.pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; }
+/* 首行文字的中心落在 48px 顶栏带中央；行距按 2px，第二行是普通项目文本。 */
+.pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; align-content: start; gap: var(--pwa-space-pair); padding-top: calc((var(--pwa-topbar-height) - var(--pwa-text-title) * var(--pwa-leading-ui)) / 2); }
 .pwa-root .pwa-title-bar-name { min-width: 0; margin: 0; overflow: hidden; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); text-overflow: ellipsis; white-space: nowrap; }
-.pwa-root .pwa-title-bar-prefix { color: var(--pwa-secondary); font-weight: var(--pwa-weight-regular); }
-.pwa-root .pwa-title-bar-actions { flex: 0 0 auto; display: flex; align-items: center; }
+.pwa-root .pwa-title-bar-project { min-width: 0; overflow: hidden; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-regular); line-height: var(--pwa-leading-ui); text-overflow: ellipsis; white-space: nowrap; }
+/* 右侧操作按首行 48px 带垂直居中，不随两行整体高度下移。 */
+.pwa-root .pwa-title-bar-actions { flex: 0 0 auto; display: flex; align-items: center; min-height: var(--pwa-topbar-height); }
 .pwa-root .pwa-session-trigger { display: none; }
 /* 提示区自身避让主区贴边一侧的安全区，内部提示条仍按 gutter 居中。 */
 .pwa-root .pwa-main-notices { flex: 0 0 auto; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
@@ -182,6 +185,10 @@
 /* 工作区内的运行时提示条 Portal 到提示区槽位，提示区已避让安全区，这里只留 gutter；
    启动与故障态挂在应用壳顶层的备用槽位，仍按 globals.css 自行扣除左右安全区。 */
 .pwa-root .pwa-main-notices .pwa-runtime-notice { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); }
+/* 桌面极矮窗口（高度 ≤ 450）且主区同时有局部错误时，两行标题区与输入区已占满高度：
+   同一张运行时提示条把上下留白从 4/6 收到 0/4，回收 8px 给消息列表的正文阅读空间。
+   移动端（主布局断点以内）不套用这条桌面收紧，在下方媒体块里恢复原密度；提示内容、按钮与生命周期不变。 */
+.pwa-app-shell[data-compact-height="very-short"] .pwa-main-notices:has(> .pwa-status-error) .pwa-runtime-notice { margin-top: 0; padding-block: 4px; }
 /* 输入约束与操作状态共用一行；进行中只由旋转图标表达，文字保持中性色。 */
 .pwa-root .pwa-composer-hint { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-hint > svg { flex: 0 0 auto; }
@@ -252,8 +259,9 @@
   .pwa-root .pwa-desktop-navigation,
   .pwa-ui-scope .pwa-root .pwa-icon-button.pwa-sidebar-toggle { display: none; }
   /* 移动顶栏：菜单图标与会话名共同构成导航入口，不显示 Logo；避开状态栏。 */
+  /* 移动端回到单行 48px 顶栏，项目行随标题区隐藏；安全区叠加在上内边距，内容垂直居中。 */
   .pwa-root .pwa-title-bar,
-  .pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); padding-top: var(--pwa-safe-top); padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
+  .pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); align-items: center; padding-top: var(--pwa-safe-top); padding-bottom: 0; padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
   .pwa-root .pwa-title-bar-heading { display: none; }
   /* 已连接时只显示圆点，把宽度留给会话名；文字仍供读屏，其他状态照常显示。 */
   .pwa-root .pwa-title-bar .pwa-connection.online .pwa-connection-label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -268,6 +276,8 @@
   .pwa-root .pwa-session-trigger-copy { min-width: 0; display: grid; text-align: left; }
   .pwa-root .pwa-session-trigger-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pwa-root .pwa-read-only-bar { font-size: var(--pwa-text-body); }
+  /* 桌面极矮窗口的提示条留白收紧只服务桌面两行标题区；移动单行顶栏保持 4/6。 */
+  .pwa-app-shell[data-compact-height="very-short"] .pwa-main-notices:has(> .pwa-status-error) .pwa-runtime-notice { margin-top: 4px; padding-block: 6px; }
   /* 移动顶栏只保留导航入口、连接状态与「更多」，把宽度留给会话名。 */
   .pwa-root .pwa-title-bar .pwa-title-bar-refresh { display: none; }
 }
