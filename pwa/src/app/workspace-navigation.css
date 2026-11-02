@@ -309,8 +309,6 @@
   min-height: 56px;
   flex: 0 0 auto;
   padding: 8px calc(12px + var(--pwa-safe-right)) 8px calc(16px + var(--pwa-safe-left));
-  /* Mantine 头部默认取 body（bg），深色下比面板 surface 深一档；与面板同色，滚动边缘渐隐才能从头部无缝接出。 */
-  background: var(--pwa-surface);
 }
 
 .pwa-root .pwa-device-drawer-body {
