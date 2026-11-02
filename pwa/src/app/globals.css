@@ -341,23 +341,26 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-section-description { margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 /* 分组下方的补充说明：与分组相距 6（附属说明），左右与行内文字同缩进 16。 */
 .pwa-root .pwa-settings-footnote { margin-top: 6px; padding-inline: 16px; overflow-wrap: anywhere; }
-/* iOS 式分组：surface 底、圆角 12，无边框与阴影；行间发丝线从文字起、右端到分组边缘（无外框分组只缩进左侧）。 */
+/* 分组：surface 底、圆角 12，无边框与阴影；行间发丝线左右各缩进 16，不碰分组边缘。 */
 .pwa-root .pwa-settings-group { margin: 0; overflow: hidden; border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); }
 .pwa-root .pwa-settings-row { position: relative; box-sizing: border-box; width: 100%; min-height: var(--pwa-hit-target); margin: 0; padding: 8px 16px; display: flex; align-items: center; gap: 10px; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
-.pwa-root .pwa-settings-row + .pwa-settings-row::before { content: ""; position: absolute; top: 0; right: 0; left: 16px; border-top: var(--pwa-hairline) solid var(--pwa-separator); pointer-events: none; }
-/* 单选分组：行首 20 圆点、10、20 图标、10 之后才是文字，分隔从文字起（16 + 20 + 10 + 20 + 10）。 */
-.pwa-root .pwa-settings-group-choices > .pwa-settings-row + .pwa-settings-row::before { left: 76px; }
-/* 单选行：行首可见的单选圆点（未选中 control-line 轮廓，选中 accent），整行悬停与按下有中性底。 */
+.pwa-root .pwa-settings-row + .pwa-settings-row::before { content: ""; position: absolute; top: 0; right: 16px; left: 16px; border-top: var(--pwa-hairline) solid var(--pwa-separator); pointer-events: none; }
+/* 单选行：行首图标、主副文字，选中项行尾为 accent 对勾；原生 radio 只在视觉上隐藏，读屏、方向键与表单语义不变，键盘聚焦时整行显示焦点轮廓。 */
 .pwa-root .pwa-settings-choice { display: block; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-choice:hover { background: var(--pwa-hover); } }
 .pwa-root .pwa-settings-choice:active { background: var(--pwa-neutral-active); }
+.pwa-root .pwa-settings-choice:has(.mantine-Radio-radio:focus-visible) { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
 .pwa-root .pwa-settings-choice .mantine-Radio-body { display: flex; align-items: center; gap: 10px; }
-.pwa-root .pwa-settings-choice .mantine-Radio-radio { border-color: var(--pwa-control-line); cursor: pointer; }
-.pwa-root .pwa-settings-choice .mantine-Radio-radio:checked { border-color: var(--pwa-accent); background: var(--pwa-accent); }
+.pwa-root .pwa-settings-choice .mantine-Radio-inner { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; }
+.pwa-root .pwa-settings-choice .mantine-Radio-radio { width: 100%; height: 100%; margin: 0; border-radius: 0; cursor: pointer; }
 .pwa-root .pwa-settings-choice .mantine-Radio-labelWrapper { min-width: 0; flex: 1; }
 .pwa-root .pwa-settings-choice .mantine-Radio-label { display: block; padding: 0; color: var(--pwa-ink); line-height: var(--pwa-leading-ui); cursor: pointer; }
 .pwa-settings-choice-copy { display: flex; align-items: center; gap: 10px; }
 .pwa-settings-choice-copy > svg { flex: 0 0 auto; color: var(--pwa-secondary); }
+.pwa-settings-choice-copy > .pwa-settings-choice-check { color: var(--pwa-accent); visibility: hidden; }
+/* 语言选项用该语言的文字作行首标记，与 20 图标同宽同色。 */
+.pwa-settings-choice-glyph { flex: 0 0 auto; width: 20px; height: 20px; display: inline-grid; place-items: center; color: var(--pwa-secondary); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: 1; }
+.pwa-root .pwa-settings-choice:has(.mantine-Radio-radio:checked) .pwa-settings-choice-check { visibility: visible; }
 .pwa-settings-choice-text { min-width: 0; flex: 1; display: grid; gap: var(--pwa-space-pair); }
 .pwa-settings-choice-text strong { font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
 .pwa-settings-choice-text small { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
