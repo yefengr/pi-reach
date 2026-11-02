@@ -49,7 +49,7 @@
   max-height: min(65dvh, 480px);
   padding: 4px;
   overflow: hidden;
-  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border: var(--pwa-hairline) solid var(--pwa-edge);
   border-radius: var(--pwa-radius-lg);
   color: var(--pwa-ink);
   background: var(--pwa-surface);
@@ -250,7 +250,7 @@
 .pwa-root .pwa-peer-menu-panel {
   min-width: 190px;
   padding: 4px;
-  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border: var(--pwa-hairline) solid var(--pwa-edge);
   border-radius: var(--pwa-radius-lg);
   color: var(--pwa-ink);
   background: var(--pwa-surface);

@@ -69,24 +69,22 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
     }
   });
 
-  test("keeps both separator tiers translucent neutrals, with the 1px tier the scale step nearest line on bg", () => {
+  test("keeps separator and edge tiers translucent neutrals, with edges a step deeper than separators", () => {
     // 半透明才能在 bg、panel、message 等不同底色上保持同样轻重；只辅助分区，不设对比度下限。
     const alpha = (name: string) => {
       const value = theme[`--pwa-${name}`] ?? "";
       expect(value, name).toMatch(/^#(00|FF)\1\1[0-9a-f]{2}$/i);
-      return { channel: parseInt(value.slice(1, 3), 16), alpha: parseInt(value.slice(7), 16) / 255 };
+      return parseInt(value.slice(7), 16) / 255;
     };
-    const regular = alpha("separator-regular");
-    const hairline = alpha("separator-hairline");
-    // 画不出 0.5px 的浏览器仍是 1px：在透明度刻度中取叠在 bg 上最接近原 line 的一档，观感基本不变。
-    const bg = parseInt(theme["--pwa-bg"]!.slice(1, 3), 16);
-    const line = parseInt(theme["--pwa-line"]!.slice(1, 3), 16);
-    const distance = (percent: number) => Math.abs(regular.channel * percent / 100 + bg * (1 - percent / 100) - line);
-    const nearest = OPACITY_SCALE.reduce((best, percent) => (distance(percent) < distance(best) ? percent : best));
-    expect(Math.round(regular.alpha * 100)).toBe(nearest);
-    // 线宽减半时颜色加深补偿。
-    expect(hairline.alpha).toBeGreaterThan(regular.alpha);
-    expect(hairline.alpha).toBeLessThan(1);
+    for (const role of ["separator", "edge"]) {
+      // 线宽减半时颜色加深补偿。
+      expect(alpha(`${role}-hairline`), role).toBeGreaterThan(alpha(`${role}-regular`));
+      expect(alpha(`${role}-hairline`), role).toBeLessThan(1);
+    }
+    // 行间分隔参照 iOS 27 调淡；浮层外框与表格格线在同一档位上更清楚。
+    for (const tier of ["regular", "hairline"]) {
+      expect(alpha(`edge-${tier}`), tier).toBeGreaterThan(alpha(`separator-${tier}`));
+    }
   });
 
   test("keeps every text level readable on every neutral surface", () => {
@@ -193,10 +191,15 @@ test("the pre-hydration system dark fallback matches the dark theme", () => {
   expect(systemDark).toEqual(declarations(':root[data-mantine-color-scheme="dark"] {'));
 });
 
-test("components read one separator token that switches tier with the measured hairline flag", () => {
+test("components read separator and edge tokens that switch tier with the measured hairline flag", () => {
   expect(shared["--pwa-hairline"]).toBe("1px");
   expect(shared["--pwa-separator"]).toBe("var(--pwa-separator-regular)");
-  expect(declarations(":root[data-pwa-hairline] {")).toEqual({ "--pwa-hairline": "0.5px", "--pwa-separator": "var(--pwa-separator-hairline)" });
+  expect(shared["--pwa-edge"]).toBe("var(--pwa-edge-regular)");
+  expect(declarations(":root[data-pwa-hairline] {")).toEqual({
+    "--pwa-hairline": "0.5px",
+    "--pwa-separator": "var(--pwa-separator-hairline)",
+    "--pwa-edge": "var(--pwa-edge-hairline)",
+  });
 });
 
 test("the tonal danger hover mixes a little error into its wash and keeps error text readable", () => {

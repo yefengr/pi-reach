@@ -27,7 +27,7 @@
   min-width: 24px;
   height: 24px;
   padding: 0 6px;
-  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border: var(--pwa-hairline) solid var(--pwa-edge);
   border-radius: var(--pwa-radius-md);
   color: var(--pwa-secondary);
   background: var(--pwa-panel);
@@ -40,7 +40,7 @@
 .pwa-queued-message-list {
   display: grid;
   max-height: min(220px, 25dvh);
-  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border: var(--pwa-hairline) solid var(--pwa-edge);
   border-radius: var(--pwa-radius-md);
   background: var(--pwa-panel);
   overflow-x: hidden;
@@ -152,7 +152,7 @@
   display: block;
   width: 24px;
   height: 24px;
-  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border: var(--pwa-hairline) solid var(--pwa-edge);
   border-radius: var(--pwa-radius-xs);
   object-fit: cover;
   background: var(--pwa-code-bg);
