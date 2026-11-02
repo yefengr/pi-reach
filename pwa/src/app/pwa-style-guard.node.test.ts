@@ -361,6 +361,13 @@ describe("CSS static guard", () => {
     }
   });
 
+  test("production tables keep the separate border model so hairlines survive WebKit", () => {
+    // WebKit 在 border-collapse: collapse 下画不出 0.5px 边框，iOS 上表格格线会整行消失。
+    const offenders = all.filter((entry) => !entry.file.startsWith("dev/") && entry.property === "border-collapse" && entry.value !== "separate")
+      .map((entry) => `${keyOf(entry)}: ${entry.value}`);
+    expect(offenders).toEqual([]);
+  });
+
   test("production hairlines pair the hairline width with the separator or edge color", () => {
     // 发丝线只配行间分隔色或浮层外框色；控件轮廓、选中描边与状态边框仍用 1px，不借用发丝线。
     // 运行时提示经 Mantine Alert 的 --alert-bd 取外框色。
