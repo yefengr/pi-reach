@@ -2386,7 +2386,9 @@ test("published files: verified ready result survives a short disconnect without
     await screen.getByRole("button", { name: "Close file reader", exact: true }).click();
     await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
     const relay = relayHarness.instances[0]!;
-    relay.emitState("open");
+    // 直接模拟 open 会留下自动重连计时器，随后重建通道并作废本次握手。
+    await expect.poll(() => relay.connectCalls, { timeout: 5000 }).toBe(2);
+    await expect.poll(() => relay.state).toBe("open");
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
     await expect.poll(() => channelHarness.channels.length).toBe(2);
     const resumed = channelHarness.channels[1]!;
@@ -2396,6 +2398,9 @@ test("published files: verified ready result survives a short disconnect without
     expect(save.element().getAttribute("href")).toBe(url);
     expect(resumed.frames.some(frame => frame.type === "file_open" || frame.type === "file_read")).toBe(false);
     expect(anchorClick).not.toHaveBeenCalled();
+    expect(relay.connectCalls).toBe(2);
+    expect(channelHarness.channels).toHaveLength(2);
+    expect(resumed.closeCalls).toBe(0);
   } finally { anchorClick.mockRestore(); await screen.unmount(); }
 });
 
