@@ -8,7 +8,7 @@
 .pwa-copy-error {
   max-width: calc(100vw - max(var(--pwa-space-md), var(--pwa-safe-left, 0px)) - max(var(--pwa-space-md), var(--pwa-safe-right, 0px)));
   padding: var(--pwa-space-xs) var(--pwa-space-sm);
-  border: var(--pwa-hairline) solid var(--pwa-separator);
+  border: var(--pwa-hairline) solid var(--pwa-edge);
   border-radius: var(--pwa-radius-md);
   color: var(--pwa-error);
   background: var(--pwa-surface);

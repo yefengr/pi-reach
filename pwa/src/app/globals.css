@@ -231,12 +231,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
 .pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
 .pwa-message-action { display: inline-flex; }
-.pwa-ui-scope .pwa-button.pwa-latest-button { min-height: var(--pwa-hit-target); padding: 0 16px; border: var(--pwa-hairline) solid var(--pwa-separator); border-radius: var(--pwa-radius-pill); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
-@media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-separator); color: var(--pwa-accent); background: var(--pwa-hover); } }
+.pwa-ui-scope .pwa-button.pwa-latest-button { min-height: var(--pwa-hit-target); padding: 0 16px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-pill); color: var(--pwa-accent); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); pointer-events: auto; }
+@media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-latest-button:hover:not(:disabled) { border-color: var(--pwa-edge); color: var(--pwa-accent); background: var(--pwa-hover); } }
 
 .pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(var(--pwa-composer-bottom, 16px), var(--pwa-main-safe-bottom, var(--pwa-safe-bottom))) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); container: pwa-composer / inline-size; }
 .pwa-image-input { display: none; }
-.pwa-composer-card { min-width: 0; padding: var(--pwa-space-composer) 12px; border: var(--pwa-hairline) solid var(--pwa-separator); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-composer-card { min-width: 0; padding: var(--pwa-space-composer) 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
 .pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
@@ -284,7 +284,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-menu,
 .pwa-composer-command { position: relative; flex: 0 0 auto; }
 .pwa-root .pwa-composer-menu-panel,
-.pwa-root .pwa-command-menu-dropdown { border: var(--pwa-hairline) solid var(--pwa-separator); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); }
+.pwa-root .pwa-command-menu-dropdown { border: var(--pwa-hairline) solid var(--pwa-edge); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); }
 /* 浮层面板与菜单行同心：面板圆角 12 = 菜单行 8 + 内边距 4。 */
 .pwa-root .pwa-composer-menu-panel { min-width: 190px; padding: 4px; border-radius: var(--pwa-radius-lg); }
 .pwa-composer-menu-panel { bottom: calc(100% + 8px); left: 0; }
@@ -495,7 +495,7 @@ body:has(.pwa-root) { overflow: hidden; }
   --alert-radius: var(--pwa-radius-md) !important;
   --alert-bg: var(--pwa-panel) !important;
   --alert-color: var(--pwa-ink) !important;
-  --alert-bd: var(--pwa-separator) !important;
+  --alert-bd: var(--pwa-edge) !important;
   /* 位于应用壳顶层、横跨全宽：两侧 gutter 加各侧安全区。 */
   width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter) - var(--pwa-safe-left) - var(--pwa-safe-right)));
   max-width: var(--pwa-reading-width);
@@ -523,10 +523,10 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-status-error-dismiss { flex: 0 0 var(--pwa-hit-target); width: var(--pwa-hit-target); min-width: var(--pwa-hit-target); height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); margin: -6px -8px -6px 0; padding: 0; border: 1px solid transparent; border-radius: var(--pwa-radius-md); color: inherit; background: transparent; cursor: pointer; }
 @media (hover: hover) { .pwa-ui-scope .pwa-status-error-dismiss:hover:not(:disabled) { border-color: var(--pwa-error-line); background: var(--pwa-error-wash); } }
 
-/* Toast：顶部居中、会话标题区与主区提示（连接提示条等）下方的最顶层浮层；surface 底、浮层阴影＋line 边框、圆角 8、最大宽 400。 */
+/* Toast：顶部居中、会话标题区与主区提示（连接提示条等）下方的最顶层浮层；surface 底、浮层阴影＋edge 发丝线外框、圆角 8、最大宽 400。 */
 .pwa-operation-notifications { display: none; }
 .pwa-operation-notifications[data-position="top-center"]:has(.pwa-operation-notification) { display: block; position: absolute; top: max(calc(var(--pwa-safe-top) + var(--pwa-topbar-height) + 8px), calc(var(--pwa-main-notices-bottom, 0px) + 8px)); left: var(--pwa-main-center, 50%); right: auto; bottom: auto; width: min(400px, calc(var(--pwa-main-width, 100%) - 32px)); max-width: 400px; margin: 0; padding: 0; transform: translateX(-50%); pointer-events: none; }
-.pwa-operation-notifications .pwa-operation-notification { min-height: var(--pwa-hit-target); padding: 4px 4px 4px 12px; border: var(--pwa-hairline) solid var(--pwa-separator); border-radius: var(--pwa-radius-toast); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: auto; }
+.pwa-operation-notifications .pwa-operation-notification { min-height: var(--pwa-hit-target); padding: 4px 4px 4px 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-toast); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: auto; }
 .pwa-operation-notifications .pwa-operation-notification::before { display: none; }
 /* 进出只做轻微位移＋淡化；Mantine 通知状态变量区分退出，不使用整段滑入与回弹。
  * Mantine 只接受一个 transitionDuration（取 toast，决定卸载时机），离开时长在此覆盖；离开短于卸载时机，只会更早结束。 */

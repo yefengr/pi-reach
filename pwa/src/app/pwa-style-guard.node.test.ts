@@ -352,19 +352,21 @@ describe("CSS static guard", () => {
       `${THEME_FILE} | :root | 1px`,
       `${THEME_FILE} | :root[data-pwa-hairline] | 0.5px`,
     ]);
-    const separators = all.filter((entry) => entry.property === "--pwa-separator");
-    expect(separators.map((entry) => `${entry.file} | ${entry.selector} | ${entry.value}`).sort()).toEqual([
-      `${THEME_FILE} | :root | var(--pwa-separator-regular)`,
-      `${THEME_FILE} | :root[data-pwa-hairline] | var(--pwa-separator-hairline)`,
-    ]);
+    for (const role of ["separator", "edge"]) {
+      const tiers = all.filter((entry) => entry.property === `--pwa-${role}`);
+      expect(tiers.map((entry) => `${entry.file} | ${entry.selector} | ${entry.value}`).sort()).toEqual([
+        `${THEME_FILE} | :root | var(--pwa-${role}-regular)`,
+        `${THEME_FILE} | :root[data-pwa-hairline] | var(--pwa-${role}-hairline)`,
+      ]);
+    }
   });
 
-  test("production decorative separators pair the hairline width with the separator color", () => {
-    // 发丝线只配分隔色；控件轮廓、选中描边与状态边框仍用 1px，不借用发丝线。
-    // 运行时提示经 Mantine Alert 的 --alert-bd 取分隔色。
+  test("production hairlines pair the hairline width with the separator or edge color", () => {
+    // 发丝线只配行间分隔色或浮层外框色；控件轮廓、选中描边与状态边框仍用 1px，不借用发丝线。
+    // 运行时提示经 Mantine Alert 的 --alert-bd 取外框色。
     const offenders = all.filter((entry) => !entry.file.startsWith("dev/") && entry.file !== THEME_FILE
       && /^border(?:-(?:top|right|bottom|left))?$/.test(entry.property) && entry.value.includes("var(--pwa-hairline)")
-      && !/var\(--(?:pwa-separator|alert-bd)\)/.test(entry.value))
+      && !/var\(--(?:pwa-separator|pwa-edge|alert-bd)\)/.test(entry.value))
       .map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });

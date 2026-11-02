@@ -25,8 +25,10 @@
   --pwa-secondary: #606060;
   --pwa-soft-ink: #4A4A4A;
   --pwa-line: #E0E0E0;
-  --pwa-separator-regular: #0000001F;
-  --pwa-separator-hairline: #00000033;
+  --pwa-separator-regular: #00000014;
+  --pwa-separator-hairline: #0000001F;
+  --pwa-edge-regular: #0000001F;
+  --pwa-edge-hairline: #00000033;
   --pwa-control-line: #878787;
   --pwa-accent: #446396;
   --pwa-accent-hover: #395687;
@@ -80,8 +82,10 @@
   --pwa-secondary: #BCBCBC;
   --pwa-soft-ink: #D4D4D4;
   --pwa-line: #464646;
-  --pwa-separator-regular: #FFFFFF29;
-  --pwa-separator-hairline: #FFFFFF3D;
+  --pwa-separator-regular: #FFFFFF1F;
+  --pwa-separator-hairline: #FFFFFF29;
+  --pwa-edge-regular: #FFFFFF29;
+  --pwa-edge-hairline: #FFFFFF3D;
   --pwa-control-line: #848484;
   --pwa-accent: #98B8E6;
   --pwa-accent-hover: #A6C3ED;
@@ -136,8 +140,10 @@
     --pwa-secondary: #BCBCBC;
     --pwa-soft-ink: #D4D4D4;
     --pwa-line: #464646;
-    --pwa-separator-regular: #FFFFFF29;
-    --pwa-separator-hairline: #FFFFFF3D;
+    --pwa-separator-regular: #FFFFFF1F;
+    --pwa-separator-hairline: #FFFFFF29;
+    --pwa-edge-regular: #FFFFFF29;
+    --pwa-edge-hairline: #FFFFFF3D;
     --pwa-control-line: #848484;
     --pwa-accent: #98B8E6;
     --pwa-accent-hover: #A6C3ED;
@@ -192,12 +198,14 @@
   --pwa-opacity-enter: 0.32;
 
   /*
-   * 装饰分隔的线宽与颜色，组件只引用 --pwa-hairline 与 --pwa-separator。
-   * 默认 1px 配常规分隔色（叠在 bg 上与 line 同深）；浏览器实际画得出 0.5px 时（根元素 data-pwa-hairline，见 lib/ui/hairline.ts）
-   * 改为 0.5px 配较深的分隔色，补偿线宽减半。
+   * 发丝线的线宽与颜色，组件只引用 --pwa-hairline 与 --pwa-separator／--pwa-edge。
+   * separator 是行间与分区分隔，参照 iOS 27 调淡；edge 是浮层外框与内容格线，保持更清楚的边缘。
+   * 默认 1px 配常规档；浏览器实际画得出 0.5px 时（根元素 data-pwa-hairline，见 lib/ui/hairline.ts）
+   * 改为 0.5px 配较深一档，补偿线宽减半。
    */
   --pwa-hairline: 1px;
   --pwa-separator: var(--pwa-separator-regular);
+  --pwa-edge: var(--pwa-edge-regular);
 
   --pwa-font-ui: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
   --pwa-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Noto Sans Mono", "DejaVu Sans Mono", monospace;
@@ -354,6 +362,7 @@
 :root[data-pwa-hairline] {
   --pwa-hairline: 0.5px;
   --pwa-separator: var(--pwa-separator-hairline);
+  --pwa-edge: var(--pwa-edge-hairline);
 }
 
 /*
