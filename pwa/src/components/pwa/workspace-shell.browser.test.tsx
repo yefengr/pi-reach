@@ -58,7 +58,7 @@ test("moves the toggle from the sidebar brand row to the title bar start, preser
   const after = buttonNode.getBoundingClientRect();
   // 展开时位于侧栏品牌行右端，收起后停在贴边主区标题区左端（距窗口 8），与品牌行同高、与标题同一行。
   const brand = document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!.getBoundingClientRect();
-  expect(before.right).toBe(252);
+  expect(Math.round(before.right)).toBe(272);
   expect(before.top).toBeGreaterThanOrEqual(brand.top);
   expect(before.bottom).toBeLessThanOrEqual(brand.bottom);
   expect(after.x).toBe(8);

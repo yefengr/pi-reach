@@ -47,7 +47,6 @@
 .pwa-root.pwa-ui-states .pwa-ui-states-frame:not([data-navigation]) .pwa-main { margin: 0; border-radius: 0; }
 .pwa-root.pwa-ui-states .pwa-ui-states-frame:not([data-navigation]) .pwa-desktop-navigation { display: none; }
 .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation] .pwa-layout { grid-template-columns: var(--pwa-sidebar-span) minmax(0, 1fr); }
-.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation][data-collapsed] { --pwa-main-flush: 1; }
 .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation][data-collapsed] .pwa-layout { grid-template-columns: 0px minmax(0, 1fr); }
 .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-desktop-navigation { visibility: hidden; }
 .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-main { border-radius: 0; }

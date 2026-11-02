@@ -18,6 +18,10 @@
 
 [侧栏与抽屉直角 ADR](20261028-square-navigation-and-drawers.md) 覆盖 ADR-20261010 第 7 条的抽屉与页面转场圆角规则；侧栏展开时的桌面主区圆角保留。
 
+## 当前覆盖 — ADR-20261102
+
+[桌面平铺与窗口控件融合 ADR](20261102-desktop-flat-window-controls.md) 覆盖 ADR-20261010／20261011 的桌面主区外壳规则：主区无论侧栏收展均直角贴边，侧栏交界使用现有发丝线，支持的安装窗口可启用 Window Controls Overlay；消息与输入框圆角保留。
+
 本块是当前决策入口；下方各节记录仍然有效的已关闭决策。
 
 ## 决策记录索引
@@ -34,8 +38,8 @@
 | [ADR-20261001](20261001-neutral-surfaces-mist-blue.md) | 中性底色与雾蓝主色 | — |
 | [ADR-20261006](20261006-staging-promotion.md) | 同机 staging 验收与同 digest 晋升 | 第 1、7 条的 staging 来源由 ADR-20261009 调整 |
 | [ADR-20261009](20261009-branch-staging.md) | 功能分支推送自动部署 staging | — |
-| [ADR-20261010](20261010-desktop-inset-main.md) | 桌面主区改为内嵌圆角卡片 | 收起侧栏部分由 ADR-20261011（主区贴满）取代；抽屉与页面转场圆角由 ADR-20261028 覆盖 |
-| [ADR-20261011](20261011-collapsed-sidebar-flush-main.md) | 收起侧栏后桌面主区贴满窗口 | — |
+| [ADR-20261010](20261010-desktop-inset-main.md) | 桌面主区改为内嵌圆角卡片 | 桌面主区外壳由 ADR-20261102 取代；抽屉与页面转场圆角由 ADR-20261028 覆盖 |
+| [ADR-20261011](20261011-collapsed-sidebar-flush-main.md) | 收起侧栏后桌面主区贴满窗口 | 仅收起时贴边及外壳插值由 ADR-20261102 取代 |
 | [ADR-20261011](20261011-live-tool-grouping.md) | 工具调用实时分组 | Thinking 断组、默认收起、组头排队、右侧状态与 14px 明细由 ADR-20261030 取代 |
 | [ADR-20261018](20261018-reader-drawer-only.md) | 阅读器统一为右侧 Drawer | 取代宽屏分栏阅读设计 |
 | [ADR-20261028](20261028-square-navigation-and-drawers.md) | 侧栏、抽屉与页面切换表面改为直角 | 覆盖 ADR-20261010 的抽屉与页面转场圆角规则；底部电脑选择面板的上沿圆角由 ADR-20261101 调整 |
@@ -43,6 +47,7 @@
 | [ADR-20261101](20261101-hairline-concentric-radii.md) | 发丝线分隔、滚动边缘、同心圆角、色调按钮与设置页分组列表 | 覆盖 DESIGN 原「嵌套不递减」、次级按钮与危险入口描边、标签描边规则；调整 ADR-20261028 的底部面板；设置页单选圆点与「只缩进左侧」由其后补充决策改为行尾对勾与对称缩进；输入区上沿改为与输入框圆角重叠的渐隐 |
 | [ADR-20261101](20261101-opacity-scale.md) | 透明度刻度、半透明文字选区，按 iOS 27 拆分行间分隔与浮层外框 | 调整 ADR-20261101（发丝线）的分隔色取值与「常规档与 line 同深」 |
 | [ADR-20261101](20261101-ios-reference-structure-not-material.md) | 参照 iOS 时跟随结构与度量，不跟随 Liquid Glass 材质 | — |
+| [ADR-20261102](20261102-desktop-flat-window-controls.md) | 桌面平铺工作区与窗口控件融合 | 取代 ADR-20261010／20261011 的桌面主区外壳规则 |
 
 ---
 
