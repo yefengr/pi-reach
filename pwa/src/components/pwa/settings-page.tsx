@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
-import { ALargeSmall, ArrowLeft, CaseSensitive, ChevronRight, Globe, Languages, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
+import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Globe, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
@@ -96,7 +96,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-appearance-heading">
         <h2 id="pwa-appearance-heading" className="pwa-settings-section-title">{s.appearance}</h2>
         <Radio.Group aria-label={s.appearance} name="pwa-appearance" value={appearance} onChange={(next) => setAppearance(next as PwaAppearance)}>
-          <div className="pwa-settings-group pwa-settings-group-choices">
+          <div className="pwa-settings-group">
             <SettingsChoice value="system" icon={<Monitor size={20} />} title={s.system} hint={s.systemHint} />
             <SettingsChoice value="light" icon={<Sun size={20} />} title={s.light} hint={s.lightHint} />
             <SettingsChoice value="dark" icon={<Moon size={20} />} title={s.dark} hint={s.darkHint} />
@@ -107,7 +107,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-text-size-heading">
         <h2 id="pwa-text-size-heading" className="pwa-settings-section-title">{s.textSize}</h2>
         <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSize)}>
-          <div className="pwa-settings-group pwa-settings-group-choices">
+          <div className="pwa-settings-group">
             <SettingsChoice value="standard" icon={<Type size={20} />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
             <SettingsChoice value="large" icon={<ALargeSmall size={20} />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
             <SettingsChoice value="xlarge" icon={<CaseSensitive size={20} />} title={s.textSizeXLarge} hint={s.textSizeXLargeHint} />
@@ -118,10 +118,10 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
         <Radio.Group aria-label={s.language} name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
-          <div className="pwa-settings-group pwa-settings-group-choices">
+          <div className="pwa-settings-group">
             <SettingsChoice value="system" icon={<Globe size={20} />} title={s.followBrowser} hint={s.followBrowserHint} />
-            <SettingsChoice value="zh" icon={<Languages size={20} />} title={s.chinese} hint={s.chineseHint} lang="zh-CN" />
-            <SettingsChoice value="en" icon={<Languages size={20} />} title={s.english} hint={s.englishHint} lang="en" />
+            <SettingsChoice value="zh" icon={<LanguageGlyph lang="zh-CN">中</LanguageGlyph>} title={s.chinese} hint={s.chineseHint} lang="zh-CN" />
+            <SettingsChoice value="en" icon={<LanguageGlyph lang="en">En</LanguageGlyph>} title={s.english} hint={s.englishHint} lang="en" />
           </div>
         </Radio.Group>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.languageHint}</p>
@@ -176,5 +176,11 @@ function SettingsChoice({ value, icon, title, hint, lang }: { value: string; ico
   return <Radio className="pwa-settings-row pwa-settings-choice" value={value} label={<span className="pwa-settings-choice-copy">
     {icon}
     <span className="pwa-settings-choice-text"><strong lang={lang}>{title}</strong><small>{hint}</small></span>
+    <Check className="pwa-settings-choice-check" size={20} aria-hidden="true" />
   </span>} />;
+}
+
+/** 语言选项的行首标记：Lucide 没有区分具体语言的图标，用该语言的文字代替，与图标同占 20 × 20。 */
+function LanguageGlyph({ lang, children }: { lang: string; children: string }) {
+  return <span className="pwa-settings-choice-glyph" lang={lang} aria-hidden="true">{children}</span>;
 }
