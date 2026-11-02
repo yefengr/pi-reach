@@ -6,7 +6,7 @@ export const SCROLLING_ATTRIBUTE = "data-scrolling";
 export const SCROLL_HOST_ATTRIBUTE = "data-scroll-host";
 /** 根元素上的开关：脚本就绪后才隐藏静止滚动条，脚本失败时滚动条保持可见。 */
 export const SCROLL_HINTS_ATTRIBUTE = "data-scroll-hints";
-/** 已离开顶部的滚动容器：上方的固定顶栏据此显示发丝线分隔（DESIGN「滚动边缘分隔」）。 */
+/** 已离开顶部的滚动容器：上方的固定顶栏据此淡入内容渐隐（DESIGN「滚动边缘渐隐」）。 */
 export const SCROLL_EDGE_ATTRIBUTE = "data-scroll-edge";
 /** 停止滚动到隐藏的延迟；覆盖惯性滚动与连续滚动，并按用户要求延长到 3 秒。 */
 export const SCROLL_HIDE_DELAY_MS = 3000;

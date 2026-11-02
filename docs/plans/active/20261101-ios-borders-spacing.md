@@ -261,3 +261,17 @@ DESIGN「嵌套不递减」改为：
 | 不采纳 | 毛玻璃、连续曲率圆角、顶栏渐隐、所有按钮胶囊、设置分组加大到 20 以上（理由见 ADR-20261101 补充决策） |
 
 验证：Node 守卫与对比度 53 项通过（专用圆角按选择器登记并检查登记失效；`tonal` 上的 `ink`、`secondary` 与悬停、按下档上的 `ink` ≥ 4.5:1；危险悬停混色比例固定）；Browser Mode `settings-page`、`pwa-controls`、`ui-controls`、`pwa-operation-notifications`、`copy-button`、`pwa-notice-layout`、`settings-drag`、`mobile-swipe`、`workspace-device-control`、`confirm-action-dialog`、`ui-state-surfaces`、`ui-state-navigation`、`navigation-swipe`、`queue-turn-handoff` 共 168 项，`pwa-workspace-layout` 全文件 78 项，`message-send`、`queued-messages`、`hairline`、`scroll-indicator` 共 120 项通过。未覆盖：深色 `tonal` 与危险悬停底的目测、iOS 真机与 Safari 观感。
+
+### 8.7 滚动边缘改为内容渐隐
+
+桌面评审认为会话标题区下的发丝线横穿主区卡片、长会话中几乎常亮，用户确认两端统一改为内容渐隐，并覆盖输入区上沿与 4.3 的全部顶栏位置。取代 4.3 的发丝线分隔，以及 4.3 中「iOS 26 渐隐边缘……本轮只做发丝线」的取舍，决策见 [ADR-20261101 补充决策](../../adr/20261101-hairline-concentric-radii.md#补充决策滚动边缘改为内容渐隐2026-11-01)。
+
+| 位置 | 实现 |
+| --- | --- |
+| 会话主区顶部 | 消息列表 `::before` sticky 钉在列表顶端，上外边距抵消自身高度；不挂在标题区下，避免盖住提示区 |
+| 会话主区底部 | `.pwa-chat-footer::before` 向上挂出常驻渐变；「最新」入口按文档顺序画在其上；紧凑高度下不加 |
+| 阅读器、电脑 Drawer、移动设置页 | 原发丝线伪元素改为 `top: 100%` 向下挂出渐变，仍读 `data-scroll-edge`；阅读器头部取局部层级 1 |
+| token | 新增 `--pwa-scroll-fade`（24px） |
+| 顺带修正 | 电脑选择 Drawer 头部底色改为 `surface`：原取 Mantine `body`（`bg`），深色下与面板不同色，渐变无法无缝接出 |
+
+验证：Node 样式、层级与对比度守卫 45 项通过；`scroll-indicator` 21 项（重写顶栏用例：四处离开顶部淡入、回到顶部淡出、不画线；首条消息不被推开；浅色与深色下渐变起点色等于顶栏底色；紧凑高度不加底部渐隐；桌面设置页不生成）；`use-timeline-viewport`、`message-send`、`pwa-notice-layout` 126 项通过。Playwright 截取 ui-states「长文字」桌面 1280 与移动 390、浅色与深色，渐隐无灰带、不横穿留白。未覆盖：iOS Safari 真机长会话滚动流畅度与观感，全量浏览器回归以 Pull Request CI 为准。

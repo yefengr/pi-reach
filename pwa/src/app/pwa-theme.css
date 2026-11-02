@@ -308,6 +308,8 @@
   --pwa-safe-top: env(safe-area-inset-top, 0px);
   /* 顶栏首行高度，不含安全区；会话标题区、导航、阅读器与移动设置页共用。 */
   --pwa-topbar-height: 48px;
+  /* 滚动边缘渐隐高度：顶栏下沿与消息列表底部，内容在此距离内淡出到底色；不大于消息列表上下留白（24／88）。 */
+  --pwa-scroll-fade: 24px;
   /* 最小点击区（DESIGN「按钮尺寸」）；同高的行、输入框与操作槽共用，不随字号档位缩放。 */
   --pwa-hit-target: 44px;
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);

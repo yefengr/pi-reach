@@ -224,22 +224,36 @@
 @media (prefers-reduced-motion: reduce) { .pwa-skeleton { animation: none; } }
 
 /*
- * 滚动边缘分隔：顶栏平时不画分隔，下方滚动容器离开顶部（data-scroll-edge，由 useScrollIndicator 写入）时淡入一条发丝线。
- * 分隔画在伪元素上，不改变顶栏高度；电脑 Drawer 头部由 Mantine 设为 sticky，本身即可作定位容器。
+ * 滚动边缘渐隐：顶栏平时不加处理，下方滚动容器离开顶部（data-scroll-edge，由 useScrollIndicator 写入）时，
+ * 从顶栏下沿向内容挂出一段「顶栏底色 → 透明」的渐变，内容在顶栏下淡出，不画分隔线。
+ * 渐变画在伪元素上，不改变顶栏高度、不拦截点击；顶栏要盖在其后的滚动内容（含定位元素）之上：
+ * 阅读器头部取局部层级，电脑 Drawer 头部（Mantine sticky）与移动设置页 sticky 顶栏自带层级。
  */
-.pwa-root .pwa-title-bar,
-.pwa-root .pwa-tool-reader-header { position: relative; }
-.pwa-root .pwa-title-bar::after,
+.pwa-root .pwa-tool-reader-header { position: relative; z-index: 1; --pwa-edge-fade-color: var(--pwa-bg); }
+.pwa-root .pwa-device-drawer-head { --pwa-edge-fade-color: var(--pwa-surface); }
 .pwa-root .pwa-tool-reader-header::after,
-.pwa-root .pwa-device-drawer-head::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
-.pwa-root .pwa-main:has(.pwa-message-list[data-scroll-edge]) .pwa-title-bar::after,
+.pwa-root .pwa-device-drawer-head::after { content: ""; position: absolute; top: 100%; right: 0; left: 0; height: var(--pwa-scroll-fade); background: linear-gradient(var(--pwa-edge-fade-color), transparent); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+/*
+ * 会话标题区与消息列表之间还有提示区（连接提示条等），渐变不挂在标题区下方，改由消息列表自身的 sticky 首个伪元素钉在滚动区顶端：
+ * 上外边距抵消自身高度，平时落在列表顶部留白内、不推开内容；只覆盖阅读列宽度，两侧本就没有内容。
+ */
+.pwa-root .pwa-message-list::before { content: ""; position: sticky; z-index: 1; top: 0; display: block; height: var(--pwa-scroll-fade); margin-top: calc(-1 * var(--pwa-scroll-fade)); background: linear-gradient(var(--pwa-bg), transparent); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-message-list[data-scroll-edge]::before,
 .pwa-root .pwa-tool-reader:has(.pwa-tool-reader-body [data-scroll-edge]) .pwa-tool-reader-header::after,
 .pwa-root .pwa-device-drawer:has(.pwa-device-drawer-body[data-scroll-edge]) .pwa-device-drawer-head::after { opacity: 1; }
-/* 桌面设置页的标题随内容滚走，只有移动端固定（sticky）顶栏需要分隔。 */
+/* 桌面设置页的标题随内容滚走，只有移动端固定（sticky）顶栏需要渐隐。 */
 @media (max-width: 767.98px) {
-  .pwa-root .pwa-settings-header::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+  .pwa-root .pwa-settings-header { --pwa-edge-fade-color: var(--pwa-grouped-bg); }
+  .pwa-root .pwa-settings-header::after { content: ""; position: absolute; top: 100%; right: 0; left: 0; height: var(--pwa-scroll-fade); background: linear-gradient(var(--pwa-edge-fade-color), transparent); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
   .pwa-root .pwa-settings-view[data-scroll-edge] .pwa-settings-header::after { opacity: 1; }
 }
+/*
+ * 消息列表底部渐隐：在输入区上沿向上挂出「透明 → 底色」的渐变，内容在输入区上方淡出。常驻、不读滚动状态：
+ * 列表底部留白 88 大于渐隐高度，停在底部时只盖住留白；流式输出不经滚动事件改变高度，常驻也不会漏更新。
+ * 「最新」入口在 footer 内、按文档顺序画在渐变之上。紧凑高度下底部留白只有 8，不加，避免淡化最后一行。
+ */
+.pwa-root .pwa-chat-footer::before { content: ""; position: absolute; right: 0; bottom: 100%; left: 0; height: var(--pwa-scroll-fade); background: linear-gradient(transparent, var(--pwa-bg)); pointer-events: none; }
+.pwa-app-shell[data-compact-height] .pwa-chat-footer::before { content: none; }
 
 @media (max-width: 767.98px) {
   :root { --pwa-gutter: 16px; }

@@ -1,10 +1,13 @@
 import { afterEach, expect, test } from "vitest";
 import { useState } from "react";
 import { page } from "vitest/browser";
+import { Drawer } from "@mantine/core";
 import { renderPwa } from "@/test/browser/render";
 import { SCROLL_EDGE_ATTRIBUTE, SCROLL_HIDE_DELAY_MS, SCROLL_HINTS_ATTRIBUTE, SCROLL_HOST_ATTRIBUTE, SCROLLING_ATTRIBUTE, useScrollIndicator } from "./scroll-indicator";
 // 与生产一致：时间线样式加载在全局样式之后，列表自身的 transition 声明会覆盖 [data-scroll-host]。
 import "@/components/pwa/timeline-reconnect.css";
+// 阅读器的滚动容器与头部底色由组件样式提供。
+import "@/components/pwa/tool-reader.css";
 
 /** 两个可横滚容器：验证显隐只作用于被滚动的那一个。 */
 function Scrollers() {
@@ -231,16 +234,28 @@ test("continuous scrolling writes the scrolling flag once", async () => {
   } finally { observer.disconnect(); }
 });
 
-/** 会话主区与移动设置页的最小结构：固定顶栏在上，滚动容器在下。 */
+/** 会话主区、阅读器、电脑选择 Drawer 与移动设置页的最小结构：固定顶栏在上，滚动容器在下；会话主区在两者之间夹着提示区。 */
 function EdgeFixture() {
   useScrollIndicator();
   return <>
     <main className="pwa-main" style={{ height: 240 }}>
       <header className="pwa-topbar pwa-title-bar">Session</header>
+      <div className="pwa-main-notices"><div style={{ height: 40 }}>Reconnecting</div></div>
       <div className="pwa-message-list" data-scroller="messages" style={{ flex: "1 1 0", overflowY: "auto" }}>
-        <div style={{ height: 1200 }} />
+        <div data-testid="first-message" style={{ height: 1200 }} />
       </div>
+      <div className="pwa-chat-footer"><div style={{ height: 60 }}>Composer</div></div>
     </main>
+    <section className="pwa-tool-reader" style={{ height: 240 }}>
+      <header className="pwa-topbar pwa-tool-reader-header">Reader</header>
+      <div className="pwa-tool-reader-body">
+        <div className="pwa-tool-reader-scroll" data-scroller="reader"><div style={{ height: 1200 }} /></div>
+      </div>
+    </section>
+    <Drawer opened onClose={() => undefined} position="bottom" withinPortal={false} padding={0} title="Computers" transitionProps={{ duration: 0 }}
+      classNames={{ content: "pwa-device-drawer", header: "pwa-device-drawer-head", body: "pwa-device-drawer-body" }} styles={{ content: { maxHeight: 240 } }}>
+      <div style={{ height: 1200 }} />
+    </Drawer>
     <div className="pwa-settings-view" data-scroller="settings" style={{ position: "relative", height: 240 }}>
       <div className="pwa-settings-page"><div className="pwa-settings-inner">
         <header className="pwa-settings-header">Settings</header>
@@ -250,41 +265,86 @@ function EdgeFixture() {
   </>;
 }
 
-const edgeStyle = (selector: string) => getComputedStyle(document.querySelector(selector)!, "::after");
+const pseudo = (selector: string, which: "::before" | "::after") => getComputedStyle(document.querySelector(selector)!, which);
+/** 渐变第一个色标：必须与顶栏底色一致，渐变才能从顶栏无缝接出。 */
+const gradientStart = (style: CSSStyleDeclaration) => /linear-gradient\((rgba?\([^)]*\))/.exec(style.backgroundImage)?.[1];
 
-test("a fixed top bar shows its hairline only while the scroller below has left the top", async () => {
+/** 按滚动容器与挂渐变的元素逐一核对：离开顶部淡入、回到顶部淡出，不画分隔线。 */
+const topEdges = [
+  { name: "messages", host: ".pwa-message-list", which: "::before" },
+  { name: "reader", host: ".pwa-tool-reader-header", which: "::after" },
+  { name: "settings", host: ".pwa-settings-header", which: "::after" },
+] as const;
+
+test("a fixed top bar fades the content below it while the scroller has left the top, without a hairline", async () => {
+  await page.viewport(390, 844);
+  await renderPwa(<EdgeFixture />);
+  // 会话标题区不再挂分隔或渐变。
+  expect(pseudo(".pwa-title-bar", "::after").content).toBe("none");
+  for (const { name, host, which } of topEdges) {
+    const target = scroller(name);
+    expect(target.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(false);
+    expect(pseudo(host, which).opacity).toBe("0");
+    expect(pseudo(host, which).backgroundImage).toContain("linear-gradient");
+    expect(pseudo(host, which).borderBottomWidth).toBe("0px");
+    target.scrollTop = 120;
+    await expect.poll(() => pseudo(host, which).opacity, { message: name }).toBe("1");
+    target.scrollTop = 0;
+    await expect.poll(() => pseudo(host, which).opacity, { message: name }).toBe("0");
+  }
+});
+
+test("the message list fade is pinned inside the list without pushing the first message", async () => {
   await page.viewport(390, 844);
   await renderPwa(<EdgeFixture />);
   const list = scroller("messages");
-  const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
-  expect(list.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(false);
-  expect(edgeStyle(".pwa-title-bar").opacity).toBe("0");
-  expect(edgeStyle(".pwa-title-bar").borderBottomWidth).toBe(hairline);
-  const barHeight = document.querySelector(".pwa-title-bar")!.getBoundingClientRect().height;
-
-  list.scrollTop = 120;
-  await expect.poll(() => list.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(true);
-  await expect.poll(() => edgeStyle(".pwa-title-bar").opacity).toBe("1");
-  // 分隔画在伪元素上，顶栏高度不变。
-  expect(document.querySelector(".pwa-title-bar")!.getBoundingClientRect().height).toBe(barHeight);
-
-  list.scrollTop = 0;
-  await expect.poll(() => list.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(false);
-  await expect.poll(() => edgeStyle(".pwa-title-bar").opacity).toBe("0");
-
-  const settings = scroller("settings");
-  expect(edgeStyle(".pwa-settings-header").opacity).toBe("0");
-  settings.scrollTop = 80;
-  await expect.poll(() => edgeStyle(".pwa-settings-header").opacity).toBe("1");
+  const fade = pseudo(".pwa-message-list", "::before");
+  expect(fade.position).toBe("sticky");
+  // 渐变由列表自身挂出、落在顶部留白内：首条消息仍从 24px 留白之后开始。
+  const first = document.querySelector("[data-testid='first-message']")!.getBoundingClientRect().top;
+  expect(Math.round(first - list.getBoundingClientRect().top)).toBe(24);
 });
 
-test("the desktop settings header scrolls away without a scroll-edge hairline", async () => {
+test.each(["light", "dark"] as const)("scroll-edge fades start from the bar background in %s mode", async (theme) => {
+  await page.viewport(390, 844);
+  await renderPwa(<EdgeFixture />);
+  document.documentElement.setAttribute("data-mantine-color-scheme", theme);
+  const background = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor;
+  expect(gradientStart(pseudo(".pwa-message-list", "::before"))).toBe(background(".pwa-main"));
+  expect(gradientStart(pseudo(".pwa-tool-reader-header", "::after"))).toBe(background(".pwa-tool-reader-header"));
+  expect(gradientStart(pseudo(".pwa-device-drawer-head", "::after"))).toBe(background(".pwa-device-drawer-head"));
+  expect(gradientStart(pseudo(".pwa-settings-header", "::after"))).toBe(background(".pwa-settings-header"));
+});
+
+test("the device drawer head fades its body while the list has left the top", async () => {
+  await page.viewport(390, 844);
+  await renderPwa(<EdgeFixture />);
+  const body = document.querySelector<HTMLElement>(".pwa-device-drawer-body")!;
+  await expect.poll(() => body.scrollHeight > body.clientHeight).toBe(true);
+  expect(pseudo(".pwa-device-drawer-head", "::after").opacity).toBe("0");
+  body.scrollTop = 120;
+  await expect.poll(() => pseudo(".pwa-device-drawer-head", "::after").opacity).toBe("1");
+});
+
+test("the message list fades into the composer except at compact height", async () => {
+  await page.viewport(390, 844);
+  const screen = await renderPwa(<EdgeFixture />);
+  const fade = () => pseudo(".pwa-chat-footer", "::before");
+  expect(fade().backgroundImage).toContain("linear-gradient");
+  expect(fade().pointerEvents).toBe("none");
+  const shell = screen.container.querySelector(".pwa-root")!;
+  shell.classList.add("pwa-app-shell");
+  shell.setAttribute("data-compact-height", "");
+  expect(fade().content).toBe("none");
+});
+
+test("the desktop settings header scrolls away without a scroll-edge fade", async () => {
   await page.viewport(1280, 900);
   await renderPwa(<EdgeFixture />);
   const settings = scroller("settings");
   settings.scrollTop = 80;
   await expect.poll(() => settings.hasAttribute(SCROLL_EDGE_ATTRIBUTE)).toBe(true);
-  expect(edgeStyle(".pwa-settings-header").content).toBe("none");
+  expect(pseudo(".pwa-settings-header", "::after").content).toBe("none");
 });
 
 test("horizontal scrolling does not mark the scroll edge", async () => {
