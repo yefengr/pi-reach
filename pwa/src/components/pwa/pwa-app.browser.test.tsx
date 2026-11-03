@@ -298,6 +298,7 @@ beforeEach(async () => {
   vi.mocked(loadTimeline).mockClear();
   vi.mocked(useComposerAutosize).mockClear();
   window.localStorage.removeItem("pi-reach-sidebar-collapsed");
+  window.localStorage.removeItem("pi-reach-sidebar-width");
   await page.viewport(1280, 900);
   relayHarness.instances.length = 0;
   relayHarness.nextConnectRejects = 0;

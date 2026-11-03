@@ -103,6 +103,7 @@ export const zh: Messages = {
     currentComputer: "当前电脑",
     expandSidebar: "展开侧栏",
     collapseSidebar: "收起侧栏",
+    resizeSidebar: "调整侧栏宽度",
     refreshApp: "刷新应用",
   },
   devices: {

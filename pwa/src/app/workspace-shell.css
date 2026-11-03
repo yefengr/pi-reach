@@ -7,10 +7,10 @@
   --pwa-reader-drawer-width: calc(720px + var(--pwa-safe-right));
 }
 
-/* 侧栏内容宽 280 不含左安全区；主区始终平铺贴边，安全区由内部内容承担。 */
+/* 悬浮侧栏偏好宽度由 hook 注入；主区平铺全高，安全区只由实际贴边层承担。 */
 .pwa-root {
   --pwa-sidebar-width: 280px;
-  --pwa-sidebar-span: calc(var(--pwa-sidebar-width) + var(--pwa-safe-left));
+  --pwa-sidebar-span: calc(var(--pwa-sidebar-width) + 12px + var(--pwa-safe-left));
   --pwa-sidebar-motion: var(--pwa-duration-sidebar);
   --pwa-main-safe-top: var(--pwa-safe-top);
   --pwa-main-safe-left: 0px;
@@ -18,8 +18,8 @@
   --pwa-main-safe-bottom: var(--pwa-safe-bottom);
   --pwa-main-inset-start: calc(var(--pwa-gutter) + var(--pwa-main-safe-left));
   --pwa-main-inset-end: calc(var(--pwa-gutter) + var(--pwa-main-safe-right));
-  /* 主屏 PWA 状态栏背景条的颜色，与状态栏下方的顶栏一致：侧栏展开时为 panel，主区贴顶与设置页为 bg。 */
-  --pwa-status-backdrop: var(--pwa-panel);
+  /* 工作区页面以 bg 承载；悬浮侧栏不再给整条状态区铺 panel，移动导航与设置层另行覆盖。 */
+  --pwa-status-backdrop: var(--pwa-bg);
 }
 .pwa-root[data-sidebar-collapsed] { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-status-backdrop: var(--pwa-bg); }
 
@@ -58,22 +58,36 @@
   display: grid;
   grid-template-columns: var(--pwa-sidebar-span) minmax(0, 1fr);
   overflow: hidden;
-  background: var(--pwa-panel);
+  background: var(--pwa-bg);
   transition: grid-template-columns var(--pwa-sidebar-motion) var(--pwa-ease-content);
 }
 .pwa-root[data-sidebar-collapsed] .pwa-layout { grid-template-columns: 0px minmax(0, 1fr); }
 
 .pwa-root .pwa-desktop-navigation {
-  width: var(--pwa-sidebar-span);
-  height: 100%;
+  width: var(--pwa-sidebar-width);
   min-height: 0;
+  margin-top: var(--pwa-safe-top);
+  margin-bottom: calc(38px + var(--pwa-safe-bottom));
+  margin-left: calc(12px + var(--pwa-safe-left));
   overflow: hidden;
-  border-right: var(--pwa-hairline) solid var(--pwa-separator);
+  border: var(--pwa-hairline) solid var(--pwa-edge);
+  border-radius: var(--pwa-radius-lg);
+  background: var(--pwa-panel);
+  box-shadow: var(--pwa-shadow-float);
   /* 展开时立即可见；只在收起时延迟到过渡结束再隐藏，避免从设置页返回时继承的隐藏状态被过渡拖住而无法聚焦。 */
   transition: transform var(--pwa-sidebar-motion) var(--pwa-ease-content), opacity var(--pwa-sidebar-motion) var(--pwa-ease-content), visibility 0s;
 }
-/* 系统报告状态栏安全区时，桌面断点（如 iPad）同样避让，侧栏底色延伸到状态栏下方。 */
-.pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: var(--pwa-safe-top); padding-left: calc(8px + var(--pwa-safe-left)); }
+/* 外框已消费普通安全区，内部不重复叠加。 */
+.pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: 0; padding-left: 8px; }
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-brand { padding-right: calc(var(--pwa-hit-target) + 8px); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-regular); white-space: nowrap; }
+/* 命中区完全在侧栏右侧，避开品牌行按钮和列表滚动条。 */
+.pwa-root .pwa-sidebar-resizer { position: absolute; z-index: var(--pwa-z-sidebar-toggle); top: calc(var(--pwa-safe-top) + var(--pwa-topbar-height)); bottom: calc(38px + var(--pwa-safe-bottom)); left: var(--pwa-sidebar-span); width: 8px; cursor: col-resize; touch-action: none; }
+.pwa-root .pwa-sidebar-resizer::before { content: ""; position: absolute; inset: 8px 2px; border-radius: var(--pwa-radius-xs); background: transparent; pointer-events: none; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+@media (hover: hover) { .pwa-root .pwa-sidebar-resizer:hover::before { background: var(--pwa-hover); } }
+.pwa-root .pwa-sidebar-resizer:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
+.pwa-root[data-sidebar-collapsed] .pwa-sidebar-resizer { display: none; }
+.pwa-root[data-sidebar-resizing] .pwa-layout,
+.pwa-ui-scope .pwa-root[data-sidebar-resizing] .pwa-icon-button.pwa-sidebar-toggle { transition: none; }
 .pwa-root[data-sidebar-collapsed] .pwa-desktop-navigation { transform: translateX(calc(-100% * var(--pwa-motion-shift))); opacity: 0; visibility: hidden; transition-delay: 0s, 0s, var(--pwa-sidebar-motion); }
 
 /* 收展入口：展开时位于侧栏品牌行右端，收起后停在贴边主区标题区左端，两处同高，收展时只水平移动；与导航列表不重叠。 */
@@ -86,7 +100,7 @@
 }
 .pwa-ui-scope .pwa-root[data-sidebar-collapsed] .pwa-icon-button.pwa-sidebar-toggle { left: calc(8px + var(--pwa-safe-left)); }
 
-/* 侧栏：贯通全高，panel 承载；仅桌面导航外框与主区之间画分隔。 */
+/* 侧栏内部复用导航结构；浮动边界由桌面外框承担。 */
 .pwa-root .pwa-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 0 8px; background: var(--pwa-panel); }
 .pwa-root .pwa-navigation-content { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; }
 .pwa-root .pwa-sidebar-brand { min-height: var(--pwa-topbar-height); flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
@@ -129,7 +143,12 @@
 .pwa-root .pwa-pi-status-running { color: var(--pwa-running); }
 .pwa-notice-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-accent); }
 
-/* 底部两个导航式按钮沿用导航行的 2px 行距，不按表单的独立按钮间距。 */
+/* 移动导航保留既有两个文字入口；桌面当前电脑与独立设置固定底部。 */
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot { display: flex; align-items: center; gap: 4px; padding: 8px 0; }
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot .pwa-device-trigger,
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot .pwa-nav-pair { width: auto; min-width: 0; flex: 1 1 auto; }
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot .pwa-nav-settings { flex: 0 0 var(--pwa-hit-target); }
+
 .pwa-root .pwa-sidebar-foot,
 .pwa-root .pwa-session-sheet-foot { min-width: 0; flex: 0 0 auto; display: grid; gap: var(--pwa-space-pair); padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
 .pwa-root .pwa-sidebar-foot .pwa-button,
@@ -244,6 +263,7 @@
   .pwa-root .pwa-workspace-state { touch-action: pan-y; }
   .pwa-root .pwa-settings-view { touch-action: pan-y; }
   .pwa-root .pwa-desktop-navigation,
+  .pwa-root .pwa-sidebar-resizer,
   .pwa-ui-scope .pwa-root .pwa-icon-button.pwa-sidebar-toggle { display: none; }
   /* 移动顶栏：菜单图标与会话名共同构成导航入口，不显示 Logo；避开状态栏。 */
   /* 移动端回到单行 48px 顶栏，项目行随标题区隐藏；安全区叠加在上内边距，内容垂直居中。 */

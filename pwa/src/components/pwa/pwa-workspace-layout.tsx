@@ -2,14 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { flushSync } from "react-dom";
 import { ActionIcon } from "@mantine/core";
 import { useLocalStorage } from "@mantine/hooks";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { PwaDesktopNavigation } from "@/components/pwa/pwa-desktop-chrome";
 import { PwaMobileNavigation } from "@/components/pwa/pwa-mobile-chrome";
 import { PwaRuntimeNoticeSlot } from "@/components/pwa/pwa-app-shell";
 import { WorkspaceTitleBar, type WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-bar";
 import { usePageTransition } from "@/components/pwa/use-page-transition";
-import { useWindowControlsOverlay } from "./use-window-controls-overlay";
+import { useSidebarWidth } from "./use-sidebar-width";
+import { SIDEBAR_MIN_WIDTH } from "@/lib/ui/sidebar-width";
 import { useWorkspaceDrag } from "@/components/pwa/use-workspace-drag";
 import { useNavigationDrag } from "@/components/pwa/use-navigation-drag";
 import { useSwipe } from "@/components/pwa/use-swipe";
@@ -57,7 +58,6 @@ export function PwaWorkspaceLayout({
 }: PwaWorkspaceLayoutProps) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
-  useWindowControlsOverlay(rootRef);
   const noticesRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
@@ -78,6 +78,7 @@ export function PwaWorkspaceLayout({
   const [sheetRestore, setSheetRestore] = useState<{ scrollTop: number } | null>(null);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage<boolean>({ key: "pi-reach-sidebar-collapsed", defaultValue: false });
+  const sidebarWidth = useSidebarWidth(rootRef, !sidebarCollapsed && !settingsRoute.open && !transitioning);
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const sheetOpenRef = useRef(sheetOpen);
@@ -299,14 +300,15 @@ export function PwaWorkspaceLayout({
   const backLabel = settingsRoute.origin?.kind === "navigation" ? t.settings.backToNavigation : t.settings.backToWorkspace;
   const settingsView = settingsRoute.open ? "settings" : "workspace";
 
-  return <div ref={rootRef} className="pwa-root" data-view={settingsView} data-view-transition={transitioning || workspaceDrag.dragging || undefined} data-sidebar-collapsed={sidebarCollapsed || undefined}>
+  return <div ref={rootRef} className="pwa-root" style={{ "--pwa-sidebar-width": `${sidebarWidth.width}px` } as React.CSSProperties} data-sidebar-resizing={sidebarWidth.dragging || undefined} data-view={settingsView} data-view-transition={transitioning || workspaceDrag.dragging || undefined} data-sidebar-collapsed={sidebarCollapsed || undefined}>
     <div className="pwa-status-backdrop" aria-hidden="true" />
     <div ref={workspaceRef} className="pwa-workspace-view" inert={settingsRoute.open || undefined}>
     <div className="pwa-layout">
       <div id="pwa-desktop-navigation" className="pwa-desktop-navigation" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed || undefined}><PwaDesktopNavigation navigation={desktopNavigation} collapsed={sidebarCollapsed} /></div>
+      <div className="pwa-sidebar-resizer" role="separator" aria-label={t.navigation.resizeSidebar} aria-orientation="vertical" aria-controls="pwa-desktop-navigation" aria-valuemin={SIDEBAR_MIN_WIDTH} aria-valuemax={sidebarWidth.cap} aria-valuenow={sidebarWidth.width} tabIndex={sidebarWidth.enabled ? 0 : -1} aria-hidden={!sidebarWidth.enabled || undefined} onPointerDown={sidebarWidth.onPointerDown} onKeyDown={sidebarWidth.onKeyDown} onDoubleClick={sidebarWidth.onDoubleClick} />
       {/* 收展入口展开时在侧栏品牌行右端，收起后在会话标题区左端。 */}
       <ActionIcon ref={sidebarToggleRef} className="pwa-sidebar-toggle" type="button" aria-label={toggleLabel} title={`${toggleLabel} (${shortcutLabel("toggleSidebar")})`} aria-keyshortcuts={shortcutLabel("toggleSidebar").replaceAll(" ", "").replace("⌘", "Meta").replace("Ctrl", "Control")} aria-expanded={!sidebarCollapsed} aria-controls="pwa-desktop-navigation" onPointerDown={(event) => { if (event.pointerType === "mouse") event.preventDefault(); }} onClick={toggleSidebar}>
-        {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+        {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
       </ActionIcon>
       <main ref={setMainElement} className="pwa-main">
         <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={presentNavigation} />

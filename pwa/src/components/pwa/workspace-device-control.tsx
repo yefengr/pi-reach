@@ -133,7 +133,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
   const activeDevice = devices.find((device) => device.id === activeDeviceId) ?? null;
   const label = activeDevice ? displayDevice(activeDevice) : devices.length > 0 ? t.devices.chooseComputer : t.devices.noComputerPaired;
   // 只配对一台电脑时收成一行：在线圆点＋电脑名＋展开箭头，不显示图标框与副标题。
-  const compact = devices.length === 1 && activeDevice !== null;
+  const compact = variant === "desktop" || (devices.length === 1 && activeDevice !== null);
   const activeOnline = activeDevice !== null && (pairingPresence[activeDevice.id]?.onlineEndpoints ?? 0) > 0;
   const title = purpose === "manage" ? t.devices.computers : t.devices.chooseTitle;
 
@@ -169,6 +169,8 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     onRename={(device) => runAfterClose(() => onRename(device))}
     onRemove={(device) => runAfterClose(() => onRemove(device))}
   />;
+  if (variant === "desktop" && purpose === "choose" && devices.length === 0) return <Button className="pwa-nav-pair" variant="transparent" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>;
+
   const trigger: ReactNode = purpose === "manage" ? <Button
     ref={triggerRef}
     className="pwa-manage-computers"
@@ -222,7 +224,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     onChange={(nextOpened) => { if (nextOpened) setPanelOpened(true); else dismissPanel(); }}
     onExitTransitionEnd={finishClose}
     width="target"
-    position="bottom-start"
+    position="top-start"
     offset={8}
     withinPortal
     portalProps={{ target: ".pwa-root" }}

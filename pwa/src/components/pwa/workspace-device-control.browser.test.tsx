@@ -25,7 +25,7 @@ function DeviceControlHarness({ variant, purpose = "choose", events }: { variant
   const targetRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => { targetRef.current?.focus(); }, [target]);
   const finish = (event: string) => { events.push(event); setTarget(event); };
-  return <div style={{ width: 286 }}>
+  return <div style={variant === "desktop" ? { width: 286, position: "absolute", left: 12, bottom: 38 } : { width: 286 }}>
     <WorkspaceDeviceControl
       devices={[currentDevice, nextDevice]}
       activeDeviceId={currentDevice.id}
@@ -50,10 +50,21 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   const events: string[] = [];
   const screen = await renderPwa(<DeviceControlHarness variant="desktop" events={events} />);
   const trigger = screen.getByRole("button", { name: /Choose computer, current Current computer/ });
+  const triggerNode = trigger.element();
+  expect(triggerNode.classList.contains("pwa-device-trigger-compact")).toBe(true);
+  expect(triggerNode.querySelector(".pwa-device-trigger-copy small")).toBeNull();
+  expect(Math.round(triggerNode.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  const copy = triggerNode.querySelector<HTMLElement>(".pwa-device-trigger-copy strong")!;
+  expect(getComputedStyle(copy).whiteSpace).toBe("nowrap");
+  expect(getComputedStyle(copy).textOverflow).toBe("ellipsis");
+  const triggerBox = triggerNode.getBoundingClientRect();
+  const copyBox = copy.getBoundingClientRect();
+  expect(Math.abs(Math.round((copyBox.top + copyBox.bottom) / 2) - Math.round((triggerBox.top + triggerBox.bottom) / 2))).toBeLessThanOrEqual(1);
   await trigger.click();
   const panel = document.querySelector<HTMLElement>(".pwa-device-popover")!;
   expect(panel).not.toBeNull();
   expect(panel.closest(".pwa-root")).not.toBeNull();
+  await expect.poll(() => Math.round(panel.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(triggerNode.getBoundingClientRect().top));
   expect(Number(getComputedStyle(panel).zIndex)).toBe(220);
   const current = screen.getByRole("button", { name: /Current computer with an intentionally very long local name ONLINE/ });
   const label = current.element().querySelector<HTMLElement>(".pwa-peer-label")!;
@@ -69,6 +80,17 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
   await new Promise((resolve) => setTimeout(resolve, 30));
   await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
+});
+
+test("unpaired desktop footer pairs directly without opening a chooser", async () => {
+  const events: string[] = [];
+  const screen = await renderPwa(<WorkspaceDeviceControl devices={[]} activeDeviceId={null} pairingPresence={{}} variant="desktop" onPair={() => events.push("pair")} onSelectDevice={() => {}} onRename={() => {}} onRemove={() => {}} />);
+  const pair = screen.getByRole("button", { name: "Pair a computer" });
+  await expect.element(pair).toBeVisible();
+  expect(Math.round(pair.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await pair.click();
+  expect(events).toEqual(["pair"]);
+  expect(document.querySelector(".pwa-device-popover")).toBeNull();
 });
 
 test("desktop management panel routes rename, remove, and pair after it closes", async () => {

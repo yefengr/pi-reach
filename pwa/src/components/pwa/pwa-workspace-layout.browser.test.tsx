@@ -151,8 +151,11 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
     const center = (element: Element) => { const rect = element.getBoundingClientRect(); return rect.top + rect.height / 2; };
     const brand = document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!;
     const titleBar = document.querySelector(".pwa-title-bar")!;
-    // 主区平铺贴顶，品牌与标题的内部内容各自避让安全区。
-    expect(Math.round(brand.getBoundingClientRect().top)).toBe(safeTop);
+    // 主区平铺贴顶；侧栏外框消费安全区，品牌从外框内侧发丝线之后开始。
+    const frame = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!;
+    expect(Math.round(frame.getBoundingClientRect().top)).toBe(safeTop);
+    const border = Number.parseFloat(getComputedStyle(frame).borderTopWidth);
+    expect(Math.round(brand.getBoundingClientRect().top)).toBe(Math.round(safeTop + border));
     expect(Math.round(toggle.element().getBoundingClientRect().top)).toBeGreaterThanOrEqual(safeTop);
     expect(Math.round(document.querySelector(".pwa-main")!.getBoundingClientRect().top)).toBe(0);
     expect(Math.round(titleBar.getBoundingClientRect().top)).toBe(0);
@@ -404,6 +407,7 @@ test.each([1280, 390])("keeps the notice below navigation/settings and confirmat
 beforeEach(async () => {
   window.history.replaceState(null, "");
   window.localStorage.removeItem("pi-reach-sidebar-collapsed");
+  window.localStorage.removeItem("pi-reach-sidebar-width");
   await page.viewport(1280, 900);
 });
 afterEach(async () => {
@@ -524,8 +528,8 @@ test("standalone status bar backdrop is a top-layer fixed element that only expo
     expect([rect.top, rect.left, rect.width, rect.height].map(Math.round)).toEqual([0, 0, window.innerWidth, 12]);
     expect([style().position, style().paddingTop, style().backgroundClip, style().pointerEvents]).toEqual(["fixed", "12px", "content-box", "none"]);
     expect(Number(style().zIndex)).toBeGreaterThan(layer("feedback"));
-    // 桌面侧栏展开：状态栏下方是 panel；收起后主区贴顶，换成 bg。
-    expect(style().backgroundColor).toBe(color(".pwa-desktop-navigation .pwa-sidebar"));
+    // 独立原生标题栏下的网页背景始终是 bg，悬浮侧栏不再给整条状态区铺 panel。
+    expect(style().backgroundColor).toBe(color(".pwa-main"));
     await screen.getByRole("button", { name: "Collapse sidebar" }).click();
     await expect.poll(() => style().backgroundColor).toBe(color(".pwa-main"));
     // 移动端为 bg；导航打开时取导航头部的 panel。
@@ -615,8 +619,9 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         await expect.poll(() => Math.round(screen.getByRole("dialog", { name: /Workspace/ }).element().getBoundingClientRect().bottom)).toBe(height);
       }
       const container = mobile ? screen.getByRole("dialog", { name: /Workspace/ }) : screen.getByRole("complementary", { name: "Workspace navigation" });
-      // 未配对时导航只显示电脑选择入口与底部入口，不显示在线 Pi 与本地历史分组。
-      await expect.element(container.getByText("No computer paired", { exact: true })).toBeVisible();
+      // 桌面底部直接配对；移动导航仍保留未配对说明，不显示在线 Pi 与本地历史分组。
+      if (mobile) await expect.element(container.getByText("No computer paired", { exact: true })).toBeVisible();
+      else await expect.element(container.getByText("No computer paired", { exact: true })).not.toBeInTheDocument();
       expect(container.element().querySelector(".pwa-nav-section")).toBeNull();
       const navigationPair = container.getByRole("button", { name: "Pair a computer", exact: true });
       const navigationPairRect = navigationPair.element().getBoundingClientRect();
@@ -1168,7 +1173,7 @@ test("the navigation icon slides the drawer in on every open, including after re
   }
 });
 
-test("desktop main stays flat beside the 280px sidebar with a separator, while the mobile main stays flush", async () => {
+test("desktop main stays flat beside the floating 280px sidebar, while the mobile main stays flush", async () => {
   await page.viewport(1280, 844);
   const screen = await renderLayout({ events: [] });
   await expect.element(screen.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
@@ -1178,7 +1183,7 @@ test("desktop main stays flat beside the 280px sidebar with a separator, while t
   // 主区四边贴边、直角且无阴影；仅桌面侧栏外框有发丝线。
   const frame = layout.getBoundingClientRect();
   const card = main.getBoundingClientRect();
-  expect([card.left - frame.left, card.top - frame.top, frame.right - card.right, frame.bottom - card.bottom].map(Math.round)).toEqual([280, 0, 0, 0]);
+  expect([card.left - frame.left, card.top - frame.top, frame.right - card.right, frame.bottom - card.bottom].map(Math.round)).toEqual([292, 0, 0, 0]);
   const style = getComputedStyle(main);
   expect(style.borderRadius).toBe("0px");
   const navigationFrame = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!;
@@ -1186,8 +1191,8 @@ test("desktop main stays flat beside the 280px sidebar with a separator, while t
   expect(Number.parseFloat(getComputedStyle(navigationFrame).borderRightWidth)).toBeGreaterThan(0);
   expect(getComputedStyle(sidebar).borderRightWidth).toBe("0px");
   expect(style.boxShadow).toBe("none");
-  expect(getComputedStyle(layout).backgroundColor).toBe(getComputedStyle(sidebar).backgroundColor);
-  expect(style.backgroundColor).not.toBe(getComputedStyle(layout).backgroundColor);
+  expect(getComputedStyle(layout).backgroundColor).not.toBe(getComputedStyle(sidebar).backgroundColor);
+  expect(style.backgroundColor).toBe(getComputedStyle(layout).backgroundColor);
   // 收起侧栏：主区贴满窗口，四边不留 panel 底，圆角为 0。
   await screen.getByRole("button", { name: "Collapse sidebar" }).click();
   await expect.element(screen.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
@@ -1197,7 +1202,7 @@ test("desktop main stays flat beside the 280px sidebar with a separator, while t
   }).toEqual([0, 0, 0, 0]);
   await expect.poll(() => getComputedStyle(main).borderRadius).toBe("0px");
   await screen.getByRole("button", { name: "Expand sidebar" }).click();
-  await expect.poll(() => Math.round(main.getBoundingClientRect().left - frame.left)).toBe(280);
+  await expect.poll(() => Math.round(main.getBoundingClientRect().left - frame.left)).toBe(292);
   await page.viewport(390, 844);
   await expect.poll(() => getComputedStyle(main).borderRadius).toBe("0px");
   const mobile = main.getBoundingClientRect();
@@ -1214,12 +1219,13 @@ test("landscape side safe areas are avoided once by the edge-touching layers", a
     const screen = await renderLayout({ events: [] });
     const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
     await expect.element(toggle).toBeVisible();
-    // 展开：侧栏内容宽 280，面板另加左安全区；主区贴边并在内部消费右安全区。
+    // 展开：844 - 两侧安全区94 - 外距12 - 主区预算480 = 有效宽258；安全区在面板外消费。
     const navigation = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!;
-    expect(Math.round(navigation.getBoundingClientRect().width)).toBe(280 + safe);
-    expect(Math.round(document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!.getBoundingClientRect().left)).toBe(safe + 8);
+    expect(Math.round(navigation.getBoundingClientRect().width)).toBe(258);
+    const border = Number.parseFloat(getComputedStyle(navigation).borderLeftWidth);
+    expect(Math.round(document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!.getBoundingClientRect().left)).toBe(Math.round(safe + 12 + border + 8));
     const main = document.querySelector<HTMLElement>(".pwa-main")!;
-    expect(Math.round(main.getBoundingClientRect().left)).toBe(280 + safe);
+    await expect.poll(() => Math.round(main.getBoundingClientRect().left)).toBe(258 + safe + 12);
     expect(Math.round(main.getBoundingClientRect().right)).toBe(844);
     const titleBar = document.querySelector<HTMLElement>(".pwa-title-bar")!;
     expect(getComputedStyle(titleBar).paddingLeft).toBe("20px");

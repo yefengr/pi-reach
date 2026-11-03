@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button, NavLink } from "@mantine/core";
+import { ActionIcon, Button, NavLink } from "@mantine/core";
 import { Bot, History, Link2, LoaderCircle, Settings } from "lucide-react";
 import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "@/components/pwa/workspace-device-control";
 import { displayPi } from "@/components/pwa/session-title";
@@ -155,7 +155,7 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
   const loadingVisible = useDelayedVisibility(historyListStatus === "loading");
   if (!activeDevice) return null;
   return <section className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={historyListStatus === "loading" || undefined}>
-    <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong><em>{t.navigation.savedInBrowser}</em></span>{history.length > 0 || historyListStatus === "success" ? <small className="pwa-tabular">{history.length}</small> : null}</div>
+    <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong>{variant === "sheet" ? <em>{t.navigation.savedInBrowser}</em> : null}</span>{history.length > 0 || historyListStatus === "success" ? <small className="pwa-tabular">{history.length}</small> : null}</div>
     {loadingVisible ? <p className="pwa-nav-empty pwa-nav-empty-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.operationFeedback.historyLoading}</p> : null}
     {historyListStatus === "error" && !loadingVisible ? <div className="pwa-nav-empty" role="status">{t.operationFeedback.historyError}<Button variant="transparent" type="button" onClick={onRetryHistory}>{t.common.retry}</Button></div> : null}
     {history.length === 0 ? historyListStatus === "success" && !loadingVisible ? <p className="pwa-nav-empty">{t.navigation.historyEmpty}</p> : null : history.map((entry) => {
@@ -188,19 +188,22 @@ export function WorkspaceNavigationFooter({ onPair, onSettings, className = "pwa
 }
 
 export function WorkspaceNavigationContent({ devices, endpoints, history, historyListStatus, onRetryHistory, activeDeviceId, activeEndpointId, selectedHistoryId, snapshotReady, pairingPresence = {}, completedEndpointIds, onPair, onSettings, onSelectDevice, onSelectEndpoint, onSelectHistory, onRename, onRemove, idPrefix = "pwa-navigation", collapsed = false }: WorkspaceNavigationContentProps) {
+  const { t } = useI18n();
   const activeDevice = getActiveDevice(devices, activeDeviceId);
   const runningHeading = `${idPrefix}-running-heading`;
   const historyHeading = `${idPrefix}-history-heading`;
   return <div className="pwa-navigation-content">
-    <div className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={24} /><span>Pi Reach</span></div>
-    <div className="pwa-sidebar-head"><WorkspaceDeviceControl key={`pwa-device-picker-${collapsed}`} devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} /></div>
+    <div className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={20} /><span>Pi Reach</span></div>
     <div className="pwa-navigation-scroll">
       {activeDevice ? <>
         <WorkspaceRunningPiSection activeDevice={activeDevice} endpoints={endpoints} activeEndpointId={activeEndpointId} selectedHistoryId={selectedHistoryId} snapshotReady={snapshotReady} completedEndpointIds={completedEndpointIds} onSelectEndpoint={onSelectEndpoint} headingId={runningHeading} />
         <WorkspaceHistorySection activeDevice={activeDevice} history={history} historyListStatus={historyListStatus} onRetryHistory={onRetryHistory} selectedHistoryId={selectedHistoryId} onSelectHistory={onSelectHistory} headingId={historyHeading} />
       </> : null}
     </div>
-    <WorkspaceNavigationFooter onPair={onPair} onSettings={onSettings} />
+    <div className="pwa-sidebar-foot">
+      <WorkspaceDeviceControl key={`pwa-device-picker-${collapsed}`} devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} />
+      <ActionIcon className="pwa-nav-settings" type="button" onClick={onSettings} aria-label={t.navigation.openSettings} title={t.navigation.settings}><Settings size={20} /></ActionIcon>
+    </div>
   </div>;
 }
 
