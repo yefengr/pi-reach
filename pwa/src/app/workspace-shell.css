@@ -142,8 +142,10 @@
 .pwa-root .pwa-nav-session[data-disabled],
 .pwa-root .pwa-history-row[data-disabled] { cursor: default; opacity: 1; }
 .pwa-root .pwa-pi-directory { color: var(--pwa-secondary); }
-.pwa-root .pwa-pi-status { display: inline-flex; align-items: center; gap: var(--pwa-space-status); }
-.pwa-root .pwa-pi-status-running { color: var(--pwa-running); }
+/* 会话行首行：标题占剩余宽度，右侧固定 16px 状态槽，状态切换不改变文字起点与宽度。 */
+.pwa-root .pwa-nav-session .pwa-pi-title-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 16px; column-gap: 8px; align-items: center; }
+.pwa-root .pwa-nav-session .pwa-pi-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwa-root .pwa-nav-session .pwa-pi-status-slot { width: 16px; height: 16px; display: grid; place-items: center; color: var(--pwa-running); }
 .pwa-notice-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-accent); }
 
 /* 桌面与移动导航共用同一行底部入口：电脑选择器与设置操作固定，导航列表独立滚动。 */

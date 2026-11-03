@@ -1,0 +1,14 @@
+/* 运行点：外层固定 16px 占位，内点只呼吸透明度；侧栏 6px、Working 8px，替换图标时文字不位移。 */
+.pwa-running-indicator { box-sizing: border-box; display: inline-grid; place-items: center; flex: 0 0 auto; width: 16px; height: 16px; }
+.pwa-running-indicator-dot { box-sizing: border-box; display: block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pwa-running-breathe var(--pwa-duration-breathe) linear infinite; }
+.pwa-running-indicator-compact .pwa-running-indicator-dot { width: 6px; height: 6px; }
+@keyframes pwa-running-breathe {
+  0%, 100% { opacity: var(--pwa-opacity-breathe); }
+  50% { opacity: 1; }
+}
+
+/* 减少动态效果：暂停循环并固定全亮；侧栏行用细环区分完成的实心点，Working 仍是实心点。 */
+@media (prefers-reduced-motion: reduce) {
+  .pwa-running-indicator-dot { opacity: 1 !important; animation-play-state: paused !important; }
+  .pwa-running-indicator-compact .pwa-running-indicator-dot { background: transparent; border: 1px solid currentColor; }
+}

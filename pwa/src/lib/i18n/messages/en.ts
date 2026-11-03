@@ -92,7 +92,7 @@ export const en = {
     savedInBrowser: "This browser only",
     historyEmpty: "No local history yet",
     noPiOnline: "No Pi online",
-    newReply: "New reply",
+    newReply: "Run finished, not yet viewed",
     yesterday: "Yesterday",
     settings: "Settings",
     openSettings: "Open settings",

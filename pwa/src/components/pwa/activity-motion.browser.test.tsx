@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { LoaderCircle } from "lucide-react";
 import { renderPwa } from "@/test/browser/render";
+import { RunningIndicator } from "./running-indicator";
 import "./tool-reader.css";
 
 const marker = "data-pwa-animation";
@@ -19,18 +20,20 @@ async function harness() {
     <LoaderCircle className="pwa-spin" aria-label="Working" />
     <span className="pwa-tool-status pwa-tool-status-running"><LoaderCircle aria-label="Tool running" /></span>
     <div className="pwa-skeleton" />
+    <RunningIndicator size="compact" />
   </div>);
   const fixture = document.querySelector<HTMLElement>("[data-motion-fixture]")!;
   const spin = fixture.querySelector<SVGSVGElement>(".pwa-spin")!;
   const tool = fixture.querySelector<SVGSVGElement>(".pwa-tool-status > svg")!;
   const skeleton = fixture.querySelector<HTMLElement>(".pwa-skeleton")!;
-  await expect.poll(() => [spin, tool, skeleton].every(element => state(element) === "running")).toBe(true);
-  return { screen, fixture, spin, tool, skeleton };
+  const dot = fixture.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
+  await expect.poll(() => [spin, tool, skeleton, dot].every(element => state(element) === "running")).toBe(true);
+  return { screen, fixture, spin, tool, skeleton, dot };
 }
 
 test("Provider pauses all real loops offscreen and resumes the same animations on reentry", async () => {
   const view = await harness();
-  const elements = [view.spin, view.tool, view.skeleton];
+  const elements = [view.spin, view.tool, view.skeleton, view.dot];
   const animations = elements.map(element => element.getAnimations()[0]);
   expect(animations.every(Boolean)).toBe(true);
   view.fixture.style.top = "-1000px";
@@ -52,14 +55,17 @@ test("page hidden pauses loops and foreground resumes only still-needed activity
   expect(state(view.spin)).toBe("paused");
   expect(state(view.tool)).toBe("paused");
   expect(state(view.skeleton)).toBe("paused");
+  expect(state(view.dot)).toBe("paused");
   view.tool.parentElement!.className = "pwa-tool-status pwa-tool-status-complete";
   view.spin.classList.remove("pwa-spin");
-  await expect.poll(() => view.tool.hasAttribute(marker) || view.spin.hasAttribute(marker)).toBe(false);
+  view.dot.classList.remove("pwa-running-indicator-dot");
+  await expect.poll(() => view.tool.hasAttribute(marker) || view.spin.hasAttribute(marker) || view.dot.hasAttribute(marker)).toBe(false);
   vi.restoreAllMocks();
   document.dispatchEvent(new Event("visibilitychange"));
   expect(state(view.skeleton)).toBe("running");
   expect(getComputedStyle(view.tool).animationName).toBe("none");
   expect(getComputedStyle(view.spin).animationName).toBe("none");
+  expect(getComputedStyle(view.dot).animationName).toBe("none");
 });
 
 test("reentry stays paused while hidden or reduced, and new offscreen nodes wait for visibility", async () => {
@@ -69,19 +75,24 @@ test("reentry stays paused while hidden or reduced, and new offscreen nodes wait
   const added = view.spin.cloneNode(true) as SVGSVGElement;
   added.removeAttribute(marker);
   view.fixture.append(added);
-  await expect.poll(() => added.getAttribute(marker)).toBe("paused");
+  const addedDot = view.dot.cloneNode(true) as HTMLElement;
+  addedDot.removeAttribute(marker);
+  view.fixture.append(addedDot);
+  await expect.poll(() => added.getAttribute(marker) === "paused" && addedDot.getAttribute(marker) === "paused").toBe(true);
   vi.spyOn(document, "hidden", "get").mockReturnValue(true);
   document.dispatchEvent(new Event("visibilitychange"));
   view.fixture.style.top = "20px";
   await frames();
   expect(state(view.spin)).toBe("paused");
   expect(state(added)).toBe("paused");
+  expect(state(view.dot)).toBe("paused");
+  expect(state(addedDot)).toBe("paused");
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   vi.restoreAllMocks();
   document.dispatchEvent(new Event("visibilitychange"));
   expect(state(view.spin)).toBe("paused");
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
-  await expect.poll(() => state(view.spin) === "running" && state(added) === "running").toBe(true);
+  await expect.poll(() => state(view.spin) === "running" && state(added) === "running" && state(view.dot) === "running" && state(addedDot) === "running").toBe(true);
   view.fixture.style.top = "-1000px";
   await expect.poll(() => state(view.spin)).toBe("paused");
   document.dispatchEvent(new Event("visibilitychange"));
@@ -91,13 +102,15 @@ test("reentry stays paused while hidden or reduced, and new offscreen nodes wait
 test("runtime reduced motion stops spinner, tool svg and skeleton without hiding status", async () => {
   const view = await harness();
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
-  await expect.poll(() => [view.spin, view.tool, view.skeleton].every(element => state(element) === "paused")).toBe(true);
+  await expect.poll(() => [view.spin, view.tool, view.skeleton, view.dot].every(element => state(element) === "paused")).toBe(true);
   expect(view.spin.checkVisibility({ visibilityProperty: true, opacityProperty: true })).toBe(true);
   expect(view.tool.checkVisibility({ visibilityProperty: true, opacityProperty: true })).toBe(true);
+  expect(view.dot.checkVisibility({ visibilityProperty: true, opacityProperty: true })).toBe(true);
+  expect(getComputedStyle(view.dot).opacity).toBe("1");
   expect(view.spin.getAttribute("aria-label")).toBe("Working");
   expect(view.tool.getAttribute("aria-label")).toBe("Tool running");
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
-  await expect.poll(() => [view.spin, view.tool, view.skeleton].every(element => state(element) === "running")).toBe(true);
+  await expect.poll(() => [view.spin, view.tool, view.skeleton, view.dot].every(element => state(element) === "running")).toBe(true);
 });
 
 test("incremental nodes, parent class changes, moves and removals leave no stale markers", async () => {
@@ -218,6 +231,7 @@ test("DEV review is untouched and unmount disconnects observers and listeners", 
   expect(view.spin.hasAttribute(marker)).toBe(false);
   expect(view.tool.hasAttribute(marker)).toBe(false);
   expect(view.skeleton.hasAttribute(marker)).toBe(false);
+  expect(view.dot.hasAttribute(marker)).toBe(false);
   document.dispatchEvent(new Event("visibilitychange"));
   expect(view.spin.hasAttribute(marker)).toBe(false);
 });

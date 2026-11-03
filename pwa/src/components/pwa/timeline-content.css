@@ -49,8 +49,8 @@
 /* 本轮活动区：沿用 Working 行的高度与外边距，Working 只在界面没有可见动作时淡入；显隐只改透明度，不改变列表高度。 */
 .pwa-turn-activity-working { display: inline-flex; align-items: center; gap: var(--pwa-space-status); opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-turn-activity[data-working] .pwa-turn-activity-working { opacity: 1; }
-.pwa-turn-activity-working > svg { color: var(--pwa-running); }
-.pwa-turn-activity:not([data-working]) .pwa-spin { animation-play-state: paused; }
+.pwa-turn-activity-working .pwa-running-indicator { color: var(--pwa-running); }
+.pwa-turn-activity:not([data-working]) .pwa-running-indicator-dot { animation-play-state: paused; }
 /* 压缩终态是本地提示，不是会话记录；固定 44px 行高，与进行中行切换时不跳动。 */
 .pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-compaction-notice.is-error { color: var(--pwa-error); }

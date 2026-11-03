@@ -23,6 +23,7 @@ import { entryGroupId, projectTimelineGaps, isPiOutputEntry, projectTimeline, ty
 import type { RunCompletion } from "@/lib/pwa/run-completion";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
 import { LoaderCircle } from "lucide-react";
+import { RunningIndicator } from "./running-indicator";
 import { useI18n } from "@/lib/i18n";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
@@ -90,7 +91,7 @@ function TurnActivitySlot({ working }: { working: boolean }) {
   const { t } = useI18n();
   return <p className="pwa-thinking-status pwa-turn-activity" role="status" data-working={working ? "true" : undefined}>
     <span className="pwa-turn-activity-working" aria-hidden={working ? undefined : true}>
-      <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /><span className="pwa-working-label">{t.timeline.working}</span>
+      <RunningIndicator /><span className="pwa-working-label">{t.timeline.working}</span>
     </span>
   </p>;
 }

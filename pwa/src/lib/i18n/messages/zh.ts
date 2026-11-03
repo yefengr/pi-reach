@@ -94,7 +94,7 @@ export const zh: Messages = {
     savedInBrowser: "仅保存在此浏览器",
     historyEmpty: "暂无本地历史",
     noPiOnline: "没有在线的 Pi",
-    newReply: "有新回复",
+    newReply: "运行已结束，尚未查看",
     yesterday: "昨天",
     settings: "设置",
     openSettings: "打开设置",

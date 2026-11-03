@@ -10,6 +10,7 @@ import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { BrandMark } from "@/components/pwa/brand-mark";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
+import { RunningIndicator } from "./running-indicator";
 import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 
 export { displayDevice } from "@/components/pwa/workspace-device-control";
@@ -110,22 +111,25 @@ export function cwdName(cwd?: string | null): string | null {
   return cwd?.split(/[\\/]/).filter(Boolean).at(-1) ?? null;
 }
 
-/** 在线 Pi 行：会话名；第二行为工作目录最后一级 · 运行中／空闲。不显示模型名。 */
+/** 在线 Pi 行：首行会话名与右侧状态槽，第二行只显示工作目录名，缺少目录时不补替代文案。 */
 export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = "desktop", trailing }: { endpoint: PwaEndpointRecord; current: boolean; completed: boolean; onSelect: () => void; variant?: NavigationVariant; trailing?: ReactNode }) {
   const { t } = useI18n();
   const directory = cwdName(endpoint.cwd);
+  // 运行优先于后台完成提醒；提醒记录本身不清除，运行结束后完成点自动恢复。
   const status = endpoint.working
-    ? <span className="pwa-pi-status pwa-pi-status-running"><LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" />{t.actions.running}</span>
-    : <span className="pwa-pi-status">{t.actions.idle}</span>;
+    ? <RunningIndicator size="compact" label={t.actions.running} />
+    : completed && !current
+      ? <span className="pwa-notice-dot" role="img" aria-label={t.navigation.newReply} title={t.navigation.newReply} />
+      : null;
   return <NavLink
     className={`pwa-nav-session${variant === "sheet" ? " pwa-sheet-room" : ""}`}
     classNames={navigationNavLinkClassNames}
     component="button"
     type="button"
-    label={displayPi(endpoint)}
+    label={<span className="pwa-pi-title-row"><span className="pwa-pi-title">{displayPi(endpoint)}</span><span className="pwa-pi-status-slot">{status}</span></span>}
     title={displayPi(endpoint)}
-    description={<>{directory ? <span className="pwa-pi-directory">{directory}<span aria-hidden="true"> · </span></span> : null}{status}</>}
-    rightSection={completed && !current ? <span className="pwa-notice-dot" role="img" aria-label={t.navigation.newReply} /> : trailing}
+    description={directory ? <span className="pwa-pi-directory">{directory}</span> : null}
+    rightSection={trailing}
     active={current}
     aria-current={current ? "true" : undefined}
     noWrap

@@ -283,16 +283,23 @@ test.each([1280, 390])("Working appears only after the page stays still and neve
   // 活动区立即占位，Working 等界面静止后才淡入。
   expect(activitySlot()).not.toBeNull();
   expect(workingShown()).toBeNull();
+  // Working 尚未显示时，运行点也必须暂停；显隐与动画控制解耦。
+  const hiddenDot = activitySlot()!.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
+  expect(getComputedStyle(hiddenDot).animationPlayState).toBe("paused");
   const slotHeight = Math.round(activitySlot()!.getBoundingClientRect().height);
   await expect.poll(workingShown).not.toBeNull();
   expect(Math.round(activitySlot()!.getBoundingClientRect().height)).toBe(slotHeight);
+  await expect.poll(() => getComputedStyle(hiddenDot).animationPlayState).toBe("running");
   // 与过程组头同字号、同字重；运行色与图标一致，但保持正体；图标与状态文字取 6px 语义档。
   const workingStyle = getComputedStyle(activitySlot()!);
   expect(workingStyle.fontSize).toBe("16px");
   expect(workingStyle.fontWeight).toBe("600");
   expect(workingStyle.fontStyle).toBe("normal");
   const label = workingShown()!.querySelector<HTMLElement>(".pwa-turn-activity-working")!;
-  expect(getComputedStyle(label).color).toBe(getComputedStyle(label.querySelector("svg")!).color);
+  const dot = label.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
+  expect(getComputedStyle(label).color).toBe(getComputedStyle(dot).backgroundColor);
+  expect(Math.round(label.querySelector<HTMLElement>(".pwa-running-indicator")!.getBoundingClientRect().width)).toBe(16);
+  expect([Math.round(dot.getBoundingClientRect().width), Math.round(dot.getBoundingClientRect().height)]).toEqual([8, 8]);
   expect(getComputedStyle(label).gap).toBe("6px");
   // 新内容出现立即隐藏 Working。
   await update([question, partialItem(thinking)]);
