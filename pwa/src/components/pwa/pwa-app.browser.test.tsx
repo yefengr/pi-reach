@@ -4174,7 +4174,15 @@ test("shows the Relay status while waiting for the user to choose a Pi", async (
 });
 
 function navigationHistoryRows(): string[] {
-  return [...document.querySelectorAll("#pwa-desktop-navigation .pwa-history-row")].map((row) => row.textContent ?? "");
+  return historyRowNodes().map((row) => row.textContent ?? "");
+}
+
+function historyRowNodes(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>("#pwa-desktop-navigation .pwa-history-row")];
+}
+
+function historyRowTops(rows: readonly HTMLElement[]): number[] {
+  return rows.map((row) => Math.round(row.getBoundingClientRect().top));
 }
 
 function savedAssistantEvent(endpointSession: string, text: string, timestamp: number): TimelineEvent {
@@ -4227,6 +4235,87 @@ test("hides only the latest local record of another online Pi", async () => {
     await expect.poll(() => navigationHistoryRows().some((text) => text.includes("Other older record"))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(navigationHistoryRows().some((text) => text.includes("Other latest record"))).toBe(false);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("keeps local history rows in place while a selected Pi's handshake is still pending", async () => {
+  const now = Date.now();
+  await mergeTimelineEvents({ deviceId: "owner-device-key", endpointId: "daemon-endpoint", sessionId: "archived-session", leafId: "generation-archived-session" }, [savedAssistantEvent("archived-session", "Archived daemon record", now - 90_000)]);
+  await mergeTimelineEvents({ deviceId: "owner-device-key", endpointId: "daemon-endpoint", sessionId: "session-1", leafId: "generation-session-1" }, [savedAssistantEvent("session-1", "Current daemon record", now - 10_000)]);
+  await mergeTimelineEvents({ deviceId: "owner-device-key", endpointId: "old-endpoint", sessionId: "old-session", leafId: "generation-old-session" }, [savedAssistantEvent("old-session", "Offline record", now - 60_000)]);
+  await mergeTimelineEvents({ deviceId: "owner-device-key", endpointId: "second-endpoint", sessionId: "second-latest", leafId: "generation-second-latest" }, [savedAssistantEvent("second-latest", "Second latest record", now - 30_000)]);
+  const screen = await renderTwoPis();
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1", 1));
+    await flushMicrotasks();
+    // 未选中的在线 Pi 只隐藏它最近的一条历史，其余历史照常列出。
+    await expect.poll(() => historyRowNodes()).toHaveLength(2);
+    const initialRows = historyRowNodes();
+    const initialTexts = initialRows.map((row) => row.textContent);
+    const initialTops = historyRowTops(initialRows);
+    expect(initialTexts.some((text) => text?.includes("Second latest record"))).toBe(false);
+
+    await selectPi("Second Pi");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    // 目标 Pi 的握手到达前，暂按最新历史记录隐藏，避免列表跳动。
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const pendingRows = historyRowNodes();
+    expect(pendingRows.map((row) => row.textContent)).toEqual(initialTexts);
+    expect(pendingRows.map((row) => row.textContent).some((text) => text?.includes("Second latest record"))).toBe(false);
+    expect(pendingRows[0]).toBe(initialRows[0]);
+    expect(pendingRows[1]).toBe(initialRows[1]);
+    expect(historyRowTops(pendingRows)).toEqual(initialTops);
+
+    // 握手确认的正是该 Pi 最新一条历史时，它继续只出现在「在线 Pi」分组。
+    const second = channelHarness.channels[1]!;
+    second.emit(readyFrame(second, "second-latest", 1));
+    await flushMicrotasks();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const confirmedRows = historyRowNodes();
+    expect(confirmedRows.map((row) => row.textContent)).toEqual(initialTexts);
+    expect(confirmedRows[0]).toBe(initialRows[0]);
+    expect(confirmedRows[1]).toBe(initialRows[1]);
+    expect(historyRowTops(confirmedRows)).toEqual(initialTops);
+
+    // Pi 退出后，它保存的会话照常回到本地历史。
+    expect((await listTimelineSessions("owner-device-key")).map((entry) => entry.sessionId)).toContain("second-latest");
+    relayHarness.instances[0]!.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [] });
+    await expect.poll(() => historyRowNodes().some((row) => /Second Pi|Second latest record/.test(row.textContent ?? ""))).toBe(true);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("shows a Pi's older local history after its handshake confirms another session", async () => {
+  const now = Date.now();
+  await mergeTimelineEvents({ deviceId: "owner-device-key", endpointId: "old-endpoint", sessionId: "old-session", leafId: "generation-old-session" }, [savedAssistantEvent("old-session", "Offline record", now - 60_000)]);
+  await mergeTimelineEvents({ deviceId: "owner-device-key", endpointId: "second-endpoint", sessionId: "second-old", leafId: "generation-second-old" }, [savedAssistantEvent("second-old", "Second old record", now - 30_000)]);
+  const screen = await renderTwoPis();
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1"));
+    await flushMicrotasks();
+    await expect.poll(() => historyRowNodes()).toHaveLength(1);
+    const initialRow = historyRowNodes()[0]!;
+    expect(initialRow.textContent).toContain("Offline record");
+    expect(historyRowNodes().some((row) => row.textContent?.includes("Second old record"))).toBe(false);
+
+    await selectPi("Second Pi");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    // 握手未确认时同样不显示目标 Pi 的中断行，已有历史行不离位。
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(historyRowNodes()).toHaveLength(1);
+    expect(historyRowNodes()[0]).toBe(initialRow);
+
+    // 握手确认了另一个会话后，该 Pi 较早的本地历史重新出现，并可按只读历史打开。
+    const second = channelHarness.channels[1]!;
+    second.emit(readyFrame(second, "second-new"));
+    await flushMicrotasks();
+    await expect.poll(() => historyRowNodes().some((row) => row.textContent?.includes("Second old record"))).toBe(true);
+    expect(historyRowNodes()).toContain(initialRow);
+    await userEvent.click([...document.querySelectorAll<HTMLButtonElement>(".pwa-history-row")].find((row) => row.textContent?.includes("Second old record"))!);
+    await expect.element(screen.getByRole("heading", { level: 1, name: /Second old record$/ })).toBeVisible();
   } finally {
     await screen.unmount();
   }
