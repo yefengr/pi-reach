@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Badge, Button, Drawer, Menu, NavLink, Popover } from "@mantine/core";
-import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, pwaFadeTransition, useMenuExitAction, usePwaMenuTransition } from "@/components/pwa/use-pwa-motion";
+import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, useMenuExitAction, usePwaMenuTransition } from "@/components/pwa/use-pwa-motion";
 import { ChevronDown, Computer, Ellipsis, Link2, Pencil, Trash2 } from "lucide-react";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
@@ -123,7 +123,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
   const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer");
   const chooserExitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const floatingMiddlewares = useFloatingSafeMiddlewares();
-  const popoverDuration = usePwaMotionDuration("--pwa-duration-fade");
+  const menuTransition = usePwaMenuTransition();
   const { t } = useI18n();
   const [opened, setOpened] = useState(false);
   const openedRef = useRef(false);
@@ -231,10 +231,10 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     withinPortal
     portalProps={{ target: ".pwa-root" }}
     zIndex="var(--pwa-z-device-panel)"
-    transitionProps={{ transition: pwaFadeTransition, duration: popoverDuration }}
+    transitionProps={menuTransition}
     returnFocus={false}
   >
     <Popover.Target>{trigger}</Popover.Target>
-    <Popover.Dropdown className="pwa-device-popover" aria-label={title}>{panel}</Popover.Dropdown>
+    <Popover.Dropdown className="pwa-device-popover pwa-menu-motion" aria-label={title}>{panel}</Popover.Dropdown>
   </Popover>;
 }

@@ -68,6 +68,10 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   const panel = document.querySelector<HTMLElement>(".pwa-device-popover")!;
   expect(panel).not.toBeNull();
   expect(panel.closest(".pwa-root")).not.toBeNull();
+  // 与菜单共用同一组进入过渡：方向由实际 data-position 推导，顶部面板从下方 4px 归位。
+  expect(panel.getAttribute("data-position")).toMatch(/^top/);
+  expect(getComputedStyle(panel).getPropertyValue("--pwa-menu-shift-y").trim()).toBe("4px");
+  expect(parseFloat(getComputedStyle(panel).transitionDuration)).toBe(0.16);
   await expect.poll(() => Math.round(panel.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(triggerNode.getBoundingClientRect().top));
   expect(Number(getComputedStyle(panel).zIndex)).toBe(220);
   const current = screen.getByRole("button", { name: /Current computer with an intentionally very long local name ONLINE/ });
