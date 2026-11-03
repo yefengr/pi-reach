@@ -4,7 +4,6 @@
   "description": "Control your Pi coding agents from a browser.",
   "start_url": "/app",
   "scope": "/app",
-  "display_override": ["window-controls-overlay"],
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#FFFFFF",

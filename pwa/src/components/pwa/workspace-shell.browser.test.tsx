@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { render } from "vitest-browser-react";
+import { cleanup, render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
@@ -9,6 +9,7 @@ import { MessageList } from "./message-list";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { WorkspaceNavigationProps } from "./workspace-view";
+import { useSettingsRoute } from "@/lib/pwa/settings-route";
 
 const navigation: WorkspaceNavigationProps = {
   devices: [{ id: "computer", deviceId: "computer-key", nickname: "MacBook Pro", relayUrl: "https://relay.example.test", pairedAt: "2026-01-01" }],
@@ -24,8 +25,9 @@ const items: TimelineViewItem[] = Array.from({ length: 30 }, (_, index) => ({
 
 function ShellHarness() {
   const [draft, setDraft] = useState("");
+  const { route, openSettings, closeSettings } = useSettingsRoute();
   const viewport = useTimelineViewport(items);
-  return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "pi-reach", prefix: "pi-reach", showTitle: true }} historyMode={false} toast={null} settingsRoute={{ open: false, origin: null, animate: false, change: 0 }} onOpenSettings={() => {}} onSettingsBack={() => {}} renderSettings={() => null} overlays={null} closeBackgroundOverlay={(close) => close()}>
+  return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "pi-reach", prefix: "pi-reach", showTitle: true }} historyMode={false} toast={null} settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={() => <button onClick={closeSettings}>Return to workspace</button>} overlays={null} closeBackgroundOverlay={(close) => close()}>
     <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive />
     <textarea aria-label="Draft" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
   </PwaWorkspaceLayout></PwaAppShell>;
@@ -34,7 +36,53 @@ const mount = () => render(<PwaUiProvider><ShellHarness /></PwaUiProvider>);
 
 beforeEach(async () => {
   localStorage.removeItem("pi-reach-sidebar-collapsed");
+  localStorage.removeItem("pi-reach-sidebar-width");
   await page.viewport(1280, 900);
+});
+
+afterEach(async () => {
+  await cleanup();
+  localStorage.removeItem("pi-reach-sidebar-width");
+  for (const name of ["top", "bottom", "left", "right"]) document.documentElement.style.removeProperty(`--pwa-safe-${name}`);
+  delete document.documentElement.dataset.pwaTextSize;
+});
+
+test("ordinary safe areas protect the floating frame and settings covers both brand and title", async () => {
+  for (const [name, value] of [["left", 24], ["right", 32], ["top", 16], ["bottom", 20]] as const) document.documentElement.style.setProperty(`--pwa-safe-${name}`, `${value}px`);
+  const screen = await mount();
+  const nav = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!;
+  const brand = nav.querySelector<HTMLElement>(".pwa-sidebar-brand")!;
+  const logo = brand.querySelector("svg")!;
+  const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+  const settings = screen.getByRole("button", { name: "Open settings" });
+  const frame = nav.getBoundingClientRect();
+  expect([frame.left, frame.top, window.innerHeight - frame.bottom].map(Math.round)).toEqual([36, 16, 58]);
+  for (const [size, pixels] of [["standard", 14], ["large", 16], ["xlarge", 18]] as const) {
+    document.documentElement.dataset.pwaTextSize = size;
+    await expect.poll(() => getComputedStyle(brand).fontSize).toBe(`${pixels}px`);
+    expect(getComputedStyle(brand).fontWeight).toBe("400");
+    expect(Math.round(logo.getBoundingClientRect().width)).toBe(20);
+    for (const button of [toggle.element(), settings.element()]) {
+      const box = button.getBoundingClientRect();
+      expect([box.width, box.height].map(Math.round)).toEqual([44, 44]);
+      expect(button.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
+    }
+  }
+  const splitter = screen.getByRole("separator").element().getBoundingClientRect();
+  expect(Math.round(splitter.left)).toBe(Math.round(frame.right));
+  expect(Math.round(splitter.top)).toBeGreaterThanOrEqual(Math.round(brand.getBoundingClientRect().bottom) - 1);
+  const main = screen.getByRole("main").element();
+  expect(Math.round(main.getBoundingClientRect().top)).toBe(0);
+  expect(getComputedStyle(main).borderRadius).toBe("0px");
+  await settings.click();
+  const surface = document.querySelector<HTMLElement>(".pwa-settings-view")!;
+  await settleLayout();
+  expect(surface.getBoundingClientRect().top).toBe(0);
+  for (const x of [60, 600]) expect(surface.contains(document.elementFromPoint(x, 40))).toBe(true);
+  expect(document.querySelector(".pwa-workspace-view")!.hasAttribute("inert")).toBe(true);
+  await screen.getByRole("button", { name: "Return to workspace" }).click();
+  await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
+  await expect.element(toggle).toBeVisible();
 });
 
 async function settleLayout() {
@@ -58,7 +106,7 @@ test("moves the toggle from the sidebar brand row to the title bar start, preser
   const after = buttonNode.getBoundingClientRect();
   // 展开时位于侧栏品牌行右端，收起后停在贴边主区标题区左端（距窗口 8），与品牌行同高、与标题同一行。
   const brand = document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!.getBoundingClientRect();
-  expect(Math.round(before.right)).toBe(272);
+  expect(Math.round(before.right)).toBe(284);
   expect(before.top).toBeGreaterThanOrEqual(brand.top);
   expect(before.bottom).toBeLessThanOrEqual(brand.bottom);
   expect(after.x).toBe(8);

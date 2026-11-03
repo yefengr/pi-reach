@@ -101,6 +101,7 @@ export const en = {
     currentComputer: "Current computer",
     expandSidebar: "Expand sidebar",
     collapseSidebar: "Collapse sidebar",
+    resizeSidebar: "Resize sidebar",
     refreshApp: "Refresh app",
   },
   devices: {

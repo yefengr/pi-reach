@@ -93,7 +93,7 @@ test("computer row keeps current selection separate from actual presence", () =>
   expect(computerActions).toContain("lucide-ellipsis");
 });
 
-test("keeps the brand and computer selection at the top and pairing plus settings in the footer", () => {
+test("keeps brand above scrolling navigation and computer selection plus settings in the footer", () => {
   const html = renderToStaticMarkup(<PwaUiProvider><DesktopSidebar {...navigationProps()} /></PwaUiProvider>);
   const chooser = html.match(/<button[^>]*aria-label="Choose computer, current Office Mac"[^>]*>/)?.[0] ?? "";
   const pair = buttonMarkup(html, "Pair a computer");
@@ -101,9 +101,10 @@ test("keeps the brand and computer selection at the top and pairing plus setting
 
   expect(html).toContain("pwa-navigation-content");
   expect(html).toMatch(/class="pwa-sidebar-brand"[\s\S]*Pi Reach/);
-  expect(html).toContain("pwa-sidebar-head");
+  expect(html).not.toContain("pwa-sidebar-head");
   expect(chooser).toMatch(/pwa-device-trigger/);
-  expect(pair).toMatch(/pwa-nav-pair/);
+  expect(pair).toBe("");
+  expect(html.indexOf("pwa-sidebar-foot")).toBeLessThan(html.indexOf("Choose computer, current Office Mac"));
   expect(settings).toMatch(/pwa-nav-settings/);
   expect(html).toContain("pwa-sidebar-foot");
   expect(html).not.toContain("pwa-manage-computers");
@@ -122,7 +123,7 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(liveHtml).toContain("Online Pi");
   expect(liveHtml).toMatch(/lucide-bot"[^>]*>(?:(?!<\/svg>)[\s\S])*<\/svg><span>Online Pi<\/span>/);
   expect(liveHtml).toContain("Local history");
-  expect(liveHtml).toContain("This browser only");
+  expect(liveHtml).not.toContain("This browser only");
   expect(liveHtml).not.toMatch(/role="tab"|>Live<|>History</);
   expect(currentLive).toMatch(/current<span aria-hidden="true"> · <\/span><\/span><span class="pwa-pi-status">Idle</);
   expect(nextLive).toContain("pwa-pi-status-running");
@@ -157,7 +158,7 @@ test("12px running spinners override the global stroke to match 16px icons", () 
   }
 });
 
-test("shows only the computer entry in an unpaired sidebar and uses structured main empty states", () => {
+test("shows direct pairing in an unpaired sidebar and uses structured main empty states", () => {
   const sidebarHtml = renderToStaticMarkup(
     <PwaUiProvider>
       <DesktopSidebar devices={[]} endpoints={[]} history={[]} activeDeviceId={null} activeEndpointId={null} selectedHistoryId={null} snapshotReady onPair={() => {}} onSettings={() => {}} onSelectDevice={() => {}} onSelectEndpoint={() => {}} onSelectHistory={() => {}} onRename={() => {}} onRemove={() => {}} />
@@ -167,10 +168,11 @@ test("shows only the computer entry in an unpaired sidebar and uses structured m
   const noPiHtml = renderToStaticMarkup(<PwaUiProvider><NoPiWorkspace onViewHistory={() => {}} /></PwaUiProvider>);
   const noPiWithoutHistoryHtml = renderToStaticMarkup(<PwaUiProvider><NoPiWorkspace /></PwaUiProvider>);
 
-  expect(sidebarHtml).toContain("No computer paired");
+  expect(sidebarHtml).not.toContain("No computer paired");
+  expect(buttonMarkup(sidebarHtml, "Pair a computer")).toMatch(/pwa-nav-pair/);
   expect(sidebarHtml).not.toContain("pwa-empty");
   expect(sidebarHtml).not.toContain("Online Pi");
-  expect(sidebarHtml).toContain("Settings");
+  expect(sidebarHtml).toContain('aria-label="Open settings"');
   expect(unpairedHtml).toContain("No computers paired yet");
   expect(unpairedHtml).toContain("<code>/pi-reach pair</code>");
   expect(unpairedHtml).toMatch(/aria-label="Copy command"/);
