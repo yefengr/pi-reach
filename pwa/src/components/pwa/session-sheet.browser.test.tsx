@@ -168,6 +168,34 @@ async function pairThroughChooser(screen: Awaited<ReturnType<typeof renderPwa>>)
   await chooser.getByRole("button", { name: "Pair a computer", exact: true }).click();
 }
 
+test.each([0, 34])("mobile navigation and computer chooser respect the bottom safe area (%ipx)", async (safeBottom) => {
+  await page.viewport(390, 700);
+  document.documentElement.style.setProperty("--pwa-safe-bottom", `${safeBottom}px`);
+  const screen = await renderPwa(<SessionSheetHarness events={[]} />);
+  try {
+    const { dialog } = await openSheet(screen);
+    const footer = dialog.element().querySelector<HTMLElement>(".pwa-session-sheet-foot")!;
+    expect(getComputedStyle(footer).paddingBottom).toBe(`${Math.max(24, safeBottom)}px`);
+    const trigger = screen.getByRole("button", { name: /Choose computer, current Alpha Pi/ });
+    trigger.element().focus();
+    await trigger.click();
+    const chooser = screen.getByRole("dialog", { name: "Choose computer" });
+    await expect.element(chooser).toBeVisible();
+    const body = chooser.element().querySelector<HTMLElement>(".pwa-device-drawer-body")!;
+    expect(getComputedStyle(body).paddingBottom).toBe(`${Math.max(24, safeBottom)}px`);
+    const pair = chooser.getByRole("button", { name: "Pair a computer", exact: true });
+    await expect.element(pair).toBeVisible();
+    expect(Math.round(chooser.element().getBoundingClientRect().bottom - pair.element().getBoundingClientRect().bottom)).toBe(Math.max(24, safeBottom));
+    await userEvent.keyboard("{Escape}");
+    await expect.element(chooser).not.toBeInTheDocument();
+    await expect.element(trigger).toHaveFocus();
+    await expect.element(dialog).toBeVisible();
+  } finally {
+    await screen.unmount();
+    document.documentElement.style.removeProperty("--pwa-safe-bottom");
+  }
+});
+
 // 关闭生命周期走未配对导航的直接入口，保持同步交接语义。
 
 test("stale Drawer exit cannot steal focus after reopening", async () => {
