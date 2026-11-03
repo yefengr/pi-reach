@@ -258,6 +258,9 @@
   --pwa-composer-fade: 24px;
   /* 渐隐先慢后快（约 ease-in）：线性渐变的起点会显出一条淡边；各段不透明度取透明度刻度。 */
   --pwa-composer-fade-gradient: linear-gradient(transparent, color-mix(in srgb, var(--pwa-bg) 16%, transparent) 25%, color-mix(in srgb, var(--pwa-bg) 48%, transparent) 50%, color-mix(in srgb, var(--pwa-bg) 80%, transparent) 75%, var(--pwa-bg));
+  /* 侧栏导航列表在底部操作区上方的渐隐：与 Composer 同高度与段点，终点取面板底色。 */
+  --pwa-navigation-fade: 24px;
+  --pwa-navigation-fade-gradient: linear-gradient(transparent, color-mix(in srgb, var(--pwa-panel) 16%, transparent) 25%, color-mix(in srgb, var(--pwa-panel) 48%, transparent) 50%, color-mix(in srgb, var(--pwa-panel) 80%, transparent) 75%, var(--pwa-panel));
 
   /* 通用间距档位，按内容关系选用（见 DESIGN「间距」）；Mantine spacing 2xs–2xl 依次引用 4／8／12／16／24／32／48。
      页面 gutter（桌面 20、移动 16）不是通用档位，由布局层单独定义。 */

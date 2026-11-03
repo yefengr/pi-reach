@@ -495,12 +495,23 @@ test.each(navigationViewports)("keeps header and footer fixed while the only bod
   await expect.element(last).toBeVisible();
   const lastRect = last.element().getBoundingClientRect();
   expect(lastRect.bottom).toBeLessThanOrEqual(scroll.getBoundingClientRect().bottom + 1);
+  // 与消息列表一致：停在底部时最后一行位于 24px 渐隐带之上，不被淡化。
+  expect(Math.round(scroll.getBoundingClientRect().bottom - lastRect.bottom)).toBeGreaterThanOrEqual(23);
   expect(header.getBoundingClientRect().top).toBeCloseTo(beforeHeader.top, 0);
   expect(footer.getBoundingClientRect().bottom).toBeCloseTo(beforeFooter.bottom, 0);
   expect(dialog.element().getBoundingClientRect().width).toBe(Math.min(320, width * 0.85));
   expect(dialog.element().getBoundingClientRect().height).toBe(height);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+  // 顶栏滚动边缘线与底部渐隐：属性写入由 scroll-indicator 专项测试覆盖，这里验证导航实际结构上的样式。
+  scroll.setAttribute("data-scroll-edge", "true");
+  await expect.poll(() => getComputedStyle(header, "::after").opacity).toBe("1");
+  scroll.removeAttribute("data-scroll-edge");
+  await expect.poll(() => getComputedStyle(header, "::after").opacity).toBe("0");
+  const fade = getComputedStyle(footer, "::before");
+  expect(fade.content).not.toBe("none");
+  expect(fade.height).toBe("24px");
+  expect(fade.pointerEvents).toBe("none");
   await page.screenshot({ path: `../../../.vitest/screenshots/workspace-navigation-${width}x${height}.png` });
 });
 
