@@ -57,7 +57,7 @@ const COLOR_MIX = /color-mix\(/i;
 /** 函数写法的颜色（rgb、hsl 等）同 hex 一样只在主题文件出现。 */
 const FUNCTIONAL_COLOR = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i;
 /** opacity 只写动效端点 0／1 或引用 --pwa-opacity-* token。 */
-const OPACITY_VALUE = /^(?:0|1|var\(--pwa-opacity-[a-z]+\))(?:\s*!important)?$/;
+const OPACITY_VALUE = /^(?:0|1|var\(--pwa-opacity-[a-z]+(?:-[a-z]+)*\))(?:\s*!important)?$/;
 const MOTION_PROPERTY = /^(?:transition|animation)(?:-(?:duration|delay|timing-function))?$/;
 /** 非零时长字面量；时长只引用 --pwa-duration-*（DESIGN「动效时长」）。 */
 const DURATION_LITERAL = /(?<![\w.-])(\d*\.?\d+)m?s\b/g;
@@ -198,6 +198,15 @@ describe("CSS static guard", () => {
     // 历史开发评审样式保留当时的对照取色，与圆角守卫同样不受限制。
     const offenders = all.filter((entry) => entry.file !== THEME_FILE && !entry.file.startsWith("dev/") && COLOR_MIX.test(entry.value)).map(keyOf);
     expect(offenders).toEqual([]);
+  });
+
+  test("opacity syntax accepts compound theme token names but rejects literal intermediate values", () => {
+    for (const value of ["0", "1", "var(--pwa-opacity-breathe)", "var(--pwa-opacity-running-breathe) !important"]) {
+      expect(OPACITY_VALUE.test(value), value).toBe(true);
+    }
+    for (const value of ["0.48", "48%", "var(--pwa-running)", "var(--pwa-opacity--breathe)", "var(--pwa-opacity-running-breathe, 0.48)"]) {
+      expect(OPACITY_VALUE.test(value), value).toBe(false);
+    }
   });
 
   test("production functional colors and element opacities come from theme tokens", () => {

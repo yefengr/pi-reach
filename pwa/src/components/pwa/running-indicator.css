@@ -3,7 +3,7 @@
 .pwa-running-indicator-dot { box-sizing: border-box; display: block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pwa-running-breathe var(--pwa-duration-breathe) linear infinite; }
 .pwa-running-indicator-compact .pwa-running-indicator-dot { width: 6px; height: 6px; }
 @keyframes pwa-running-breathe {
-  0%, 100% { opacity: var(--pwa-opacity-breathe); }
+  0%, 100% { opacity: var(--pwa-opacity-running-breathe); }
   50% { opacity: 1; }
 }
 

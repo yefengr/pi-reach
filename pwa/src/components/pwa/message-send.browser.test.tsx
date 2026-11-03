@@ -375,7 +375,10 @@ test("Reduced Motion immediately settles Working geometry and keeps the status f
     expect(gap(h.list)).toBeGreaterThan(32);
     const status = h.list.querySelector<HTMLElement>(".pwa-thinking-status")!;
     expect(status.textContent).toBe("Working…");
-    expect(getComputedStyle(status.querySelector("svg")!).opacity).toBe("1");
+    const dot = status.querySelector<HTMLElement>(".pwa-running-indicator-dot");
+    expect(dot).not.toBeNull();
+    expect(getComputedStyle(dot!).opacity).toBe("1");
+    expect(getComputedStyle(dot!).animationPlayState).toBe("paused");
     expect(getComputedStyle(status.querySelector(".pwa-working-label")!).transform).toBe("none");
     h.work(false);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
