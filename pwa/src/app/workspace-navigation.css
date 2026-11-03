@@ -5,8 +5,6 @@
 /* 只配对一台电脑时收成无框的一行，悬停浅底；多台时保持卡片样式。 */
 .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: var(--pwa-hit-target); padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
 @media (hover: hover) { .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact:hover:not(:disabled) { background: var(--pwa-hover); } }
-.pwa-root .pwa-device-trigger-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-secondary); }
-.pwa-root .pwa-device-trigger-dot.online { background: var(--pwa-accent); }
 
 .pwa-root .pwa-device-trigger .mantine-Button-inner,
 .pwa-root .pwa-device-trigger .mantine-Button-label {
@@ -34,22 +32,12 @@
   text-align: left;
 }
 
-.pwa-root .pwa-device-trigger-copy strong,
-.pwa-root .pwa-device-trigger-copy small {
+.pwa-root .pwa-device-trigger-copy strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.pwa-root .pwa-device-trigger-copy strong {
   font-size: var(--pwa-text-list);
   font-weight: var(--pwa-weight-strong);
-}
-
-.pwa-root .pwa-device-trigger-copy small {
-  color: var(--pwa-secondary);
-  font-size: var(--pwa-text-meta);
-  font-weight: var(--pwa-weight-regular);
 }
 
 .pwa-root .pwa-device-popover {

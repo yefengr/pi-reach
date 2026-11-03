@@ -86,9 +86,11 @@ type HarnessProps = {
   historyItems?: TimelineSessionSummary[];
   conditionallyUnmount?: boolean;
   exits?: string[];
+  /** 未配对导航：底部直接配对入口仍走 closeAfter，用于验证关闭生命周期。 */
+  unpaired?: boolean;
 };
 
-function SessionSheetHarness({ events, renamed = [], removed = [], rejectClose = false, activeEndpointId = "alpha-live", selectedHistoryId = null, historyItems = [history], conditionallyUnmount = false, exits }: HarnessProps) {
+function SessionSheetHarness({ events, renamed = [], removed = [], rejectClose = false, activeEndpointId = "alpha-live", selectedHistoryId = null, historyItems = [history], conditionallyUnmount = false, exits, unpaired = false }: HarnessProps) {
   const [mounted, setMounted] = useState(false);
   const [opened, setOpened] = useState(false);
   const [focusOrigin, setFocusOrigin] = useState<HTMLElement | null>(null);
@@ -111,10 +113,10 @@ function SessionSheetHarness({ events, renamed = [], removed = [], rejectClose =
     <button type="button" onClick={open}>Open navigation</button>
     {actionTarget ? <button ref={actionTargetRef} type="button" data-testid="action-target">{actionTarget}</button> : null}
     {mounted ? <SessionSheet
-      devices={devices}
+      devices={unpaired ? [] : devices}
       endpoints={endpoints}
       history={historyItems}
-      activeDeviceId={alphaDevice.id}
+      activeDeviceId={unpaired ? null : alphaDevice.id}
       activeEndpointId={activeEndpointId}
       selectedHistoryId={selectedHistoryId}
       snapshotReady
@@ -158,6 +160,16 @@ async function waitForClosed(screen: Awaited<ReturnType<typeof renderPwa>>) {
   await expect.element(screen.getByRole("dialog", { name: "Workspace" })).not.toBeInTheDocument();
 }
 
+/** 已配对导航的配对入口只在电脑面板内：经真实 Drawer 面板交付动作。 */
+async function pairThroughChooser(screen: Awaited<ReturnType<typeof renderPwa>>) {
+  await screen.getByRole("button", { name: /Choose computer, current Alpha Pi/ }).click();
+  const chooser = screen.getByRole("dialog", { name: "Choose computer" });
+  await expect.element(chooser).toBeVisible();
+  await chooser.getByRole("button", { name: "Pair a computer", exact: true }).click();
+}
+
+// 关闭生命周期走未配对导航的直接入口，保持同步交接语义。
+
 test("stale Drawer exit cannot steal focus after reopening", async () => {
   const exits: string[] = [];
   const screen = await renderPwa(<SessionSheetHarness events={[]} exits={exits} />);
@@ -179,7 +191,7 @@ test("stale Drawer exit cannot steal focus after reopening", async () => {
 test("stale Drawer epoch cannot consume the next close action and current exit runs once", async () => {
   const events: string[] = [];
   const exits: string[] = [];
-  const screen = await renderPwa(<SessionSheetHarness events={events} exits={exits} />);
+  const screen = await renderPwa(<SessionSheetHarness events={events} exits={exits} unpaired />);
   const { trigger } = await openSheet(screen);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   flushSync(() => (screen.getByRole("button", { name: "Close navigation" }).element() as HTMLElement).click());
@@ -200,7 +212,7 @@ test("stale Drawer epoch cannot consume the next close action and current exit r
 
 test("completed Drawer action RAF cannot steal focus from a reopened navigation", async () => {
   const events: string[] = [];
-  const screen = await renderPwa(<SessionSheetHarness events={events} />);
+  const screen = await renderPwa(<SessionSheetHarness events={events} unpaired />);
   const { trigger, dialog } = await openSheet(screen);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   flushSync(() => (screen.getByRole("button", { name: "Pair a computer" }).element() as HTMLElement).click());
@@ -226,7 +238,7 @@ test("completed Drawer action RAF cannot steal focus from a reopened navigation"
 test("unmounted Drawer ignores old exits while cleanup hands off its action once", async () => {
   const events: string[] = [];
   const exits: string[] = [];
-  const screen = await renderPwa(<SessionSheetHarness events={events} exits={exits} />);
+  const screen = await renderPwa(<SessionSheetHarness events={events} exits={exits} unpaired />);
   await openSheet(screen);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   flushSync(() => (screen.getByRole("button", { name: "Pair a computer" }).element() as HTMLElement).click());
@@ -267,7 +279,7 @@ test("portals the full-height Drawer and restores focus for each plain close pat
 
 test("keeps focus trapped when the parent rejects a close request", async () => {
   const events: string[] = [];
-  const screen = await renderPwa(<SessionSheetHarness events={events} rejectClose />);
+  const screen = await renderPwa(<SessionSheetHarness events={events} rejectClose unpaired />);
   const { trigger, dialog } = await openSheet(screen);
   await screen.getByRole("button", { name: "Close navigation" }).click();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -289,7 +301,7 @@ test("shows online Pi and local history together and routes choices after exit",
 
   await expect.element(screen.getByText("Online Pi", { exact: true })).toBeVisible();
   await expect.element(screen.getByText("Local history", { exact: true })).toBeVisible();
-  await expect.element(screen.getByText("This browser only", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("This browser only", { exact: true })).not.toBeInTheDocument();
   await expect.element(screen.getByText("Sprint recap", { exact: true })).toBeVisible();
   await expect.element(screen.getByText("Old cached Pi", { exact: true })).not.toBeInTheDocument();
   await expect.element(screen.getByText("Beta live Pi", { exact: true })).not.toBeInTheDocument();
@@ -322,7 +334,7 @@ test("shows online Pi and local history together and routes choices after exit",
   await waitForClosed(screen);
 
   await trigger.click();
-  await screen.getByRole("button", { name: "Pair a computer" }).click();
+  await pairThroughChooser(screen);
   await expect.poll(() => events.slice(-2)).toEqual(["close", "pair"]);
   await expect.element(screen.getByTestId("action-target")).toHaveFocus();
 });
@@ -400,7 +412,7 @@ const navigationViewports = [
 
 test("finishes a conditional-unmount action even when a frame runs before React commits", async () => {
   const events: string[] = [];
-  const screen = await renderPwa(<SessionSheetHarness events={events} conditionallyUnmount />);
+  const screen = await renderPwa(<SessionSheetHarness events={events} conditionallyUnmount unpaired />);
   await openSheet(screen);
   const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
     callback(performance.now());
@@ -423,6 +435,18 @@ test.each(navigationViewports)("keeps header and footer fixed while the only bod
   const header = dialog.element().querySelector<HTMLElement>(".pwa-session-sheet-head")!;
   const scroll = dialog.element().querySelector<HTMLElement>(".pwa-navigation-scroll")!;
   const footer = dialog.element().querySelector<HTMLElement>(".pwa-session-sheet-foot")!;
+  // 底部固定行：电脑选择器与设置入口同行，已配对时不再出现外部独立配对按钮。
+  const footTrigger = footer.querySelector<HTMLElement>(".pwa-device-trigger")!;
+  const footSettings = footer.querySelector<HTMLElement>(".pwa-nav-settings")!;
+  expect(footTrigger).not.toBeNull();
+  expect(footSettings).not.toBeNull();
+  expect(footer.querySelector(".pwa-nav-pair")).toBeNull();
+  const triggerBox = footTrigger.getBoundingClientRect();
+  const settingsBox = footSettings.getBoundingClientRect();
+  expect(Math.round((triggerBox.top + triggerBox.bottom) / 2)).toBe(Math.round((settingsBox.top + settingsBox.bottom) / 2));
+  expect(Math.round(settingsBox.height)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(triggerBox.height)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(footer.getBoundingClientRect().bottom)).toBe(height);
   // 本地历史直接列出当前电脑的全部记录，不再分批展开。
   expect(dialog.element().querySelectorAll(".pwa-history-row")).toHaveLength(28);
   await expect.element(screen.getByRole("button", { name: "Show earlier records" })).not.toBeInTheDocument();

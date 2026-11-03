@@ -52,7 +52,7 @@
 | [ADR-20261101](20261101-opacity-scale.md) | 透明度刻度、半透明文字选区，按 iOS 27 拆分行间分隔与浮层外框 | 调整 ADR-20261101（发丝线）的分隔色取值与「常规档与 line 同深」 |
 | [ADR-20261101](20261101-ios-reference-structure-not-material.md) | 参照 iOS 时跟随结构与度量，不跟随 Liquid Glass 材质 | — |
 | [ADR-20261102](20261102-desktop-flat-window-controls.md) | 桌面平铺工作区与窗口控件融合 | 取代 ADR-20261010／20261011 的桌面主区外壳规则；WCO 与侧栏规则由 ADR-20261103 取代 |
-| [ADR-20261103](20261103-native-titlebar-floating-sidebar.md) | 独立原生标题栏与可调宽悬浮侧栏 | 取代 ADR-20261102 的 WCO 与侧栏规则，调整 ADR-20261028 的桌面侧栏直角规则；主区平铺与移动行为保留 |
+| [ADR-20261103](20261103-native-titlebar-floating-sidebar.md) | 独立原生标题栏与可调宽悬浮侧栏 | 取代 ADR-20261102 的 WCO 与侧栏规则，调整 ADR-20261028 的桌面侧栏直角规则；主区平铺与移动动效保留；补充修订两端底部导航入口与桌面底边对齐 |
 
 ---
 

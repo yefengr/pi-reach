@@ -38,6 +38,8 @@
   --pwa-shadow-color: #00000014;
   --pwa-shadow-contact-color: #0000001F;
   --pwa-shadow-composer: 0 1px 2px var(--pwa-shadow-contact-color), 0 6px 20px var(--pwa-shadow-color);
+  /* 常驻导航比临时浮层更轻：接触层 8%、投影 4%，不改变浮层与 Composer 的阴影。 */
+  --pwa-shadow-sidebar: 0 1px 2px #00000014, 0 2px 8px #0000000A;
   /* 文字选区：主色 20%，半透明以随气泡、代码块等底色变化，文字保持原色。 */
   --pwa-selection: #44639633;
   --pwa-complete: #347953;
@@ -96,6 +98,7 @@
   --pwa-shadow-color: #00000047;
   --pwa-shadow-contact-color: #00000052;
   --pwa-shadow-composer: none;
+  --pwa-shadow-sidebar: none;
   --pwa-selection: #98B8E63D;
   --pwa-complete: #95CBA8;
   --pwa-complete-wash: #26392E;
@@ -155,6 +158,7 @@
     --pwa-shadow-color: #00000047;
     --pwa-shadow-contact-color: #00000052;
     --pwa-shadow-composer: none;
+    --pwa-shadow-sidebar: none;
     --pwa-selection: #98B8E63D;
     --pwa-complete: #95CBA8;
     --pwa-complete-wash: #26392E;
@@ -242,7 +246,7 @@
   --pwa-radius-xs: 4px;
   --pwa-radius-md: 8px;
   --pwa-radius-lg: 12px;
-  /* 用户消息气泡与底部弹出面板上沿。 */
+  /* 用户消息气泡、底部弹出面板上沿与桌面悬浮侧栏。 */
   --pwa-radius-xl: 16px;
   /* Toast：单行高 44 的一半，与其 36 圆形关闭按钮同心（18 + 视觉内缩 4）；多行时仍是大圆角而非椭圆两端。 */
   --pwa-radius-toast: 22px;
