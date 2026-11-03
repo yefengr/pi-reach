@@ -22,7 +22,12 @@ function validRect(rect: DOMRect): boolean {
 const px = (value: string) => Number.parseFloat(value) || 0;
 
 /** 内容不足以与系统控件共用首行时，仅把受影响列移到系统带下方。按真实字形和点击区测量，不猜平台。 */
-function measureFallback(root: HTMLElement, rect: DOMRect) {
+function measureFallback(root: HTMLElement, rect: DOMRect, safeTop: number) {
+  const center = rect.y + rect.height / 2;
+  const rootStyle = getComputedStyle(root);
+  const visualSize = Math.min(px(rootStyle.getPropertyValue("--pwa-hit-target")) - 8, rect.height);
+  // 与两列 CSS 的实际 padding 起点一致，避免 y > 0 时负 padding 被归零而误判可融合。
+  const fitsVertically = (height: number) => center - Math.max(height, visualSize) / 2 >= Math.max(safeTop, rect.y);
   const brand = root.querySelector<HTMLElement>(".pwa-desktop-navigation .pwa-sidebar-brand");
   const sidebar = brand?.closest<HTMLElement>(".pwa-sidebar");
   const main = root.querySelector<HTMLElement>(".pwa-main");
@@ -37,7 +42,8 @@ function measureFallback(root: HTMLElement, rect: DOMRect) {
     // 侧栏从 viewport 原点展开；只取布局宽度，不让收展 translate 被误判为系统控件挤占空间。
     const available = Math.min(sidebar.getBoundingClientRect().width, rect.x + rect.width)
       - Math.max(rect.x, px(sidebarStyle.paddingLeft));
-    root.toggleAttribute("data-wco-sidebar-below", available < required);
+    const contentHeight = Math.max(...[...brand.children].map(child => child.getBoundingClientRect().height));
+    root.toggleAttribute("data-wco-sidebar-below", available < required || !fitsVertically(contentHeight));
   }
   if (main && actions && toggle) {
     const title = main.querySelector<HTMLElement>(".pwa-title-bar")!;
@@ -46,7 +52,9 @@ function measureFallback(root: HTMLElement, rect: DOMRect) {
     const available = rect.x + rect.width - Math.max(rect.x, main.getBoundingClientRect().left);
     // 即使标题省略也要保留完整操作槽和两个 gutter；放不下则整列标题下移。
     const required = actions.scrollWidth + toggleWidth + gutter * 2;
-    root.toggleAttribute("data-wco-main-below", available < required || !title);
+    const titleHeight = px(getComputedStyle(title).getPropertyValue("--pwa-text-title"))
+      * px(getComputedStyle(title).getPropertyValue("--pwa-leading-ui"));
+    root.toggleAttribute("data-wco-main-below", available < required || !fitsVertically(titleHeight));
   }
 }
 
@@ -58,6 +66,11 @@ export function useWindowControlsOverlay(rootRef: RefObject<HTMLDivElement | nul
     const overlay = (navigator as Navigator & { windowControlsOverlay?: WindowControlsOverlay }).windowControlsOverlay;
     if (!overlay) { clearOverlay(root); return; }
     const desktop = window.matchMedia(DESKTOP_LAYOUT_QUERY);
+    // 由浏览器解析同一份 API/env 交集及安全区，避免在 JS 再实现 CSS max()/env() 规则。
+    const geometryProbe = document.createElement("div");
+    geometryProbe.setAttribute("aria-hidden", "true");
+    geometryProbe.style.cssText = "position: absolute; visibility: hidden; pointer-events: none; top: var(--pwa-wco-top); left: var(--pwa-wco-left); right: var(--pwa-wco-reserved-right); height: var(--pwa-wco-band-height); padding-top: var(--pwa-safe-top); box-sizing: content-box;";
+    root.append(geometryProbe);
     const update = () => {
       const origin = root.getBoundingClientRect();
       if (!overlay.visible || !desktop.matches || document.fullscreenElement || origin.x !== 0 || origin.y !== 0) {
@@ -70,7 +83,9 @@ export function useWindowControlsOverlay(rootRef: RefObject<HTMLDivElement | nul
       const geometry = { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: window.innerWidth - rect.x - rect.width };
       for (const property of GEOMETRY_PROPERTIES) root.style.setProperty(`--pwa-wco-${property}`, `${geometry[property]}px`);
       root.setAttribute("data-wco", "");
-      measureFallback(root, rect);
+      const bounds = geometryProbe.getBoundingClientRect();
+      const safeTop = px(getComputedStyle(geometryProbe).paddingTop);
+      measureFallback(root, new DOMRect(bounds.x, bounds.y, bounds.width, bounds.height - safeTop), safeTop);
     };
     update();
     overlay.addEventListener("geometrychange", update);
@@ -89,6 +104,7 @@ export function useWindowControlsOverlay(rootRef: RefObject<HTMLDivElement | nul
       document.removeEventListener("fullscreenchange", update);
       observer.disconnect();
       attributes.disconnect();
+      geometryProbe.remove();
       clearOverlay(root);
     };
   }, [rootRef]);

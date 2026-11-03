@@ -3628,8 +3628,18 @@ test("preserves the session, draft, attachment, tool row and reader across layou
       assertSessionUnchanged();
     }
     await screen.getByRole("button", { name: "View read tool details" }).click();
-    // 阅读器先收起挂载、下一帧再打开；等正文真实出现后再取节点。
+    // DOM 挂载早于 Mantine 两帧进入调度；等真实 surface 完成进入且关闭目标可命中，再改断点。
     await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll")).not.toBeNull();
+    const readerReady = () => {
+      const surface = document.querySelector<HTMLElement>('.pwa-tool-reader[role="dialog"]');
+      const close = surface?.querySelector<HTMLElement>(".pwa-tool-reader-close");
+      if (!surface || surface.hasAttribute("data-pwa-moving") || !close) return false;
+      const bounds = close.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0 && bounds.top >= 0 && bounds.left >= 0
+        && bounds.right <= window.innerWidth && bounds.bottom <= window.innerHeight
+        && close.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2));
+    };
+    await expect.poll(readerReady).toBe(true);
     // 正文在同一个 Drawer 中保持挂载，断点变化不重建阅读内容。
     const reader = document.querySelector(".pwa-tool-reader-scroll")!;
     for (const width of [390, 1280]) {
@@ -3637,6 +3647,9 @@ test("preserves the session, draft, attachment, tool row and reader across layou
       expect(document.querySelector(".pwa-tool-reader-scroll")).toBe(reader);
       assertSessionUnchanged();
     }
+    // 最后一次 viewport 调用不保证 useMediaQuery 已提交桌面关闭入口。
+    await expect.poll(() => document.querySelector(".pwa-tool-reader-close")?.classList.contains("pwa-topbar-back")).toBe(false);
+    await expect.poll(readerReady).toBe(true);
     await screen.getByRole("button", { name: "Close tool details" }).click();
     await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
     await expect.element(screen.getByRole("button", { name: "View read tool details" })).toHaveFocus();

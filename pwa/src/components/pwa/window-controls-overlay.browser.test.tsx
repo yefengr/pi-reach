@@ -52,10 +52,23 @@ function Harness() {
   </PwaWorkspaceLayout></PwaAppShell>;
 }
 
-const mount = () => render(<PwaUiProvider><Harness /></PwaUiProvider>);
+const mount = (appearance?: "light" | "dark") => render(<PwaUiProvider colorSchemeManager={appearance ? {
+  get: () => appearance, set() {}, subscribe() {}, unsubscribe() {}, clear() {},
+} : undefined}><Harness /></PwaUiProvider>);
 const root = () => document.querySelector<HTMLElement>(".pwa-root")!;
 const box = (selector: string) => document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
 const settle = () => Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished));
+const readerSurface = () => document.querySelector<HTMLElement>('.pwa-tool-reader[role="dialog"], .pwa-file-reader[role="dialog"]');
+function readerReady(surface = readerSurface()) {
+  if (!surface?.isConnected || surface.hasAttribute("data-pwa-moving")) return false;
+  const controls = [...surface.querySelectorAll<HTMLElement>("header button, header a")];
+  return controls.length > 0 && controls.every(button => {
+    const bounds = button.getBoundingClientRect();
+    return bounds.width > 0 && bounds.height > 0 && bounds.top >= 0 && bounds.left >= 0
+      && bounds.right <= window.innerWidth && bounds.bottom <= window.innerHeight
+      && button.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2));
+  });
+}
 let overlay: OverlayFixture;
 let originalOverlay: PropertyDescriptor | undefined;
 
@@ -150,6 +163,114 @@ test.each([768, 1280].flatMap(width => [
   }
 });
 
+test.each([32, 38, 48])("aligns the real native %ipx band without clipping hit targets or the project line", async height => {
+  overlay.rect = new DOMRect(84, 4, 1040, height);
+  const screen = await mount();
+  for (const size of ["standard", "large", "xlarge"]) {
+    document.documentElement.dataset.pwaTextSize = size;
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    for (const name of ["Collapse sidebar", "Expand sidebar"]) {
+      await settle();
+      const center = overlay.rect.y + height / 2;
+      const selectors = [".pwa-title-bar-name", ".pwa-title-bar-refresh svg", ".pwa-connection", ".pwa-sidebar-toggle svg"];
+      if (name === "Collapse sidebar") selectors.push(".pwa-sidebar-brand > svg", ".pwa-sidebar-brand > span");
+      for (const selector of selectors) {
+        const bounds = box(selector);
+        expect(Math.round(bounds.top + bounds.height / 2), selector).toBe(Math.round(center));
+        expect(Math.round(bounds.top), selector).toBeGreaterThanOrEqual(0);
+      }
+      for (const selector of [".pwa-title-bar-refresh", ".pwa-sidebar-toggle"]) {
+        const button = document.querySelector<HTMLElement>(selector)!;
+        const bounds = button.getBoundingClientRect();
+        expect([Math.round(bounds.width), Math.round(bounds.height)]).toEqual([44, 44]);
+        expect(Math.round(bounds.top)).toBeGreaterThanOrEqual(0);
+        expectControlsSafe(selector);
+        for (const y of [bounds.top + 1, bounds.top + bounds.height / 2, bounds.bottom - 1]) {
+          expect(button.contains(document.elementFromPoint(bounds.left + bounds.width / 2, y)), selector).toBe(true);
+        }
+      }
+      expect(Math.round(box(".pwa-title-bar").height)).toBeGreaterThanOrEqual(64);
+      expect(Math.round(box(".pwa-title-bar-project").top - box(".pwa-title-bar-name").bottom)).toBe(2);
+      expect(Math.round(box(".pwa-title-bar-project").bottom)).toBeLessThanOrEqual(Math.round(box(".pwa-title-bar").bottom - 6));
+      await screen.getByRole("button", { name }).click();
+    }
+  }
+});
+
+test("keeps hover, focus and pressed feedback centered inside full hit targets in a short native band", async () => {
+  document.documentElement.dataset.pwaTextSize = "xlarge";
+  await mount();
+  for (const selector of [".pwa-sidebar-toggle", ".pwa-title-bar-refresh"]) {
+    const button = document.querySelector<HTMLButtonElement>(selector)!;
+    const bounds = button.getBoundingClientRect();
+    await userEvent.hover(button);
+    await userEvent.keyboard("{Tab}");
+    button.focus();
+    expect(button.matches(":focus-visible")).toBe(true);
+    for (const pressed of [false, true]) {
+      button.toggleAttribute("data-pwa-pressed", pressed);
+      const visual = getComputedStyle(button, "::before");
+      const top = bounds.top + Number.parseFloat(visual.top);
+      const left = bounds.left + Number.parseFloat(visual.left);
+      const height = Number.parseFloat(visual.height);
+      const width = Number.parseFloat(visual.width);
+      expect([Math.round(width), Math.round(height)]).toEqual([32, 32]);
+      expect(Math.round(top + height / 2)).toBe(16);
+      expect(Math.round(top)).toBeGreaterThanOrEqual(0);
+      expect(left).toBeGreaterThanOrEqual(bounds.left);
+      expect(left + width).toBeLessThanOrEqual(bounds.right);
+      expect(top + height).toBeLessThanOrEqual(bounds.bottom);
+      expect(visual.outlineStyle).toBe("solid");
+      expect(visual.outlineOffset).toBe("-2px");
+      expect(getComputedStyle(button).outlineStyle).toBe("none");
+      const icon = button.querySelector("svg")!.getBoundingClientRect();
+      expect(Math.round(icon.top + icon.height / 2)).toBe(16);
+    }
+    button.removeAttribute("data-pwa-pressed");
+  }
+});
+
+test.each(["light", "dark"] as const)("matches only the native top band to the %s main background and restores the ordinary sidebar", async appearance => {
+  await mount(appearance);
+  const sidebar = document.querySelector(".pwa-desktop-navigation .pwa-sidebar")!;
+  const background = getComputedStyle(document.querySelector(".pwa-main")!).backgroundColor;
+  const panel = getComputedStyle(sidebar).backgroundColor;
+  const band = getComputedStyle(sidebar).backgroundImage;
+  expect(band).toContain("linear-gradient");
+  expect(band).toContain(background);
+  expect(band).toContain(panel);
+  expect(band).toContain("32px");
+  overlay.change(overlay.rect, false);
+  expect(getComputedStyle(sidebar).backgroundImage).toBe("none");
+  expect(getComputedStyle(sidebar).backgroundColor).toBe(panel);
+});
+
+test.each([{ y: 0, height: 12 }, { y: 10, height: 20 }])("falls below a native band at y=$y height=$height too short for text or conflicting with the safe top, then recovers", async ({ y, height }) => {
+  await page.viewport(1440, 900);
+  overlay.rect = new DOMRect(84, y, 1216, height);
+  await mount();
+  await expect.poll(() => root().hasAttribute("data-wco-main-below") && root().hasAttribute("data-wco-sidebar-below")).toBe(true);
+  const selectors = [".pwa-title-bar-name", ".pwa-sidebar-brand > span", ".pwa-sidebar-toggle", ".pwa-title-bar-refresh"];
+  for (const selector of selectors) {
+    expect(Math.round(box(selector).top), selector).toBeGreaterThanOrEqual(overlay.rect.bottom);
+  }
+  overlay.change(new DOMRect(84, y, 1216, 32));
+  await expect.poll(() => root().hasAttribute("data-wco-main-below") || root().hasAttribute("data-wco-sidebar-below")).toBe(false);
+  const title = box(".pwa-title-bar-name");
+  expect(Math.round(title.top + title.height / 2)).toBe(y + 16);
+  document.documentElement.style.setProperty("--pwa-safe-top", "16px");
+  window.dispatchEvent(new Event("resize"));
+  await expect.poll(() => root().hasAttribute("data-wco-main-below") && root().hasAttribute("data-wco-sidebar-below")).toBe(true);
+  for (const selector of selectors) {
+    expect(Math.round(box(selector).top), selector).toBeGreaterThanOrEqual(overlay.rect.bottom);
+  }
+  document.documentElement.style.removeProperty("--pwa-safe-top");
+  window.dispatchEvent(new Event("resize"));
+  await expect.poll(() => root().hasAttribute("data-wco-main-below") || root().hasAttribute("data-wco-sidebar-below")).toBe(false);
+  const recovered = box(".pwa-title-bar-name");
+  expect(Math.round(recovered.top + recovered.height / 2)).toBe(y + 16);
+});
+
 test("does not mistake the sidebar's exit transform for a narrower system titlebar lane", async () => {
   const screen = await mount();
   await expect.poll(() => root().hasAttribute("data-wco")).toBe(true);
@@ -215,7 +336,7 @@ test("moves only insufficient header lanes below the real system band and never 
   overlay.change(new DOMRect(0, 0, 1124, 32));
   await expect.poll(() => root().hasAttribute("data-wco-main-below")).toBe(false);
   expect(Math.round(box(".pwa-sidebar-toggle").left)).toBe(8);
-  expect(Math.round(box(".pwa-sidebar-toggle").top)).toBe(2);
+  expect(Math.round(box(".pwa-sidebar-toggle").top)).toBe(0);
 });
 
 test("keeps safe areas, settings return and both reader close/save bands below system controls", async () => {
@@ -235,8 +356,8 @@ test("keeps safe areas, settings return and both reader close/save bands below s
   await expect.poll(() => document.querySelector(".pwa-settings-view")).toBeNull();
   for (const kind of ["tool", "file"]) {
     await screen.getByRole("button", { name: `Open ${kind}` }).click();
-    await expect.poll(() => document.querySelector(".pwa-tool-reader-header, .pwa-file-reader-header")).not.toBeNull();
-    await settle();
+    await expect.poll(readerSurface).not.toBeNull();
+    await expect.poll(() => readerReady()).toBe(true);
     if (kind === "file") await expect.element(screen.getByRole("link", { name: "Save" })).toBeVisible();
     for (const button of document.querySelectorAll<HTMLElement>(".pwa-tool-reader-header button, .pwa-tool-reader-header a, .pwa-file-reader-header button, .pwa-file-reader-header a")) {
       const bounds = button.getBoundingClientRect();
@@ -247,6 +368,31 @@ test("keeps safe areas, settings return and both reader close/save bands below s
     await expect.poll(() => window.history.state?.piReachToolReader ?? window.history.state?.piReachFileReader).toBeUndefined();
     await expect.poll(() => document.querySelector(".pwa-tool-reader-header, .pwa-file-reader-header")).toBeNull();
   }
+});
+
+test("does not treat an existing reader as ready while its delayed enter frames are held", async () => {
+  const screen = await mount();
+  const requestFrame = window.requestAnimationFrame.bind(window);
+  const pending: FrameRequestCallback[] = [];
+  const heldFrames = vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => requestFrame(() => { pending.push(callback); }));
+  try {
+    (screen.getByRole("button", { name: "Open tool" }).element() as HTMLButtonElement).click();
+    // 只推进到 Portal 实体出现；后续进入帧仍冻结，不能因尚未挂载误判为 ready。
+    await expect.poll(() => {
+      if (!readerSurface()) for (const callback of pending.splice(0)) callback(performance.now());
+      return readerSurface();
+    }).not.toBeNull();
+    await expect.poll(() => pending.length).toBeGreaterThan(0);
+    expect(readerSurface()!.hasAttribute("data-pwa-moving")).toBe(true);
+    expect(readerReady()).toBe(false);
+  } finally {
+    heldFrames.mockRestore();
+    for (const callback of pending) requestFrame(callback);
+  }
+  await expect.poll(() => readerReady()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => window.history.state?.piReachToolReader).toBeUndefined();
+  await expect.poll(readerSurface).toBeNull();
 });
 
 test("keeps centered keyboard help inside a short WCO window without moving its close target under system controls", async () => {
