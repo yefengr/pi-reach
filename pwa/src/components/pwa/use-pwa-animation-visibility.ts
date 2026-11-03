@@ -1,7 +1,7 @@
 import { useEffect, type RefObject } from "react";
 import "./activity-motion.css";
 
-const LOOPS = ".pwa-spin, .pwa-tool-status-running > svg, .pwa-skeleton";
+const LOOPS = ".pwa-spin, .pwa-tool-status-running > svg, .pwa-skeleton, .pwa-running-indicator-dot";
 const MANAGED = "data-pwa-animation";
 const CANDIDATES = `${LOOPS}, [${MANAGED}]`;
 

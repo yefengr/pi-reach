@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ComputerRow, displayDevice } from "./workspace-device-control";
-import { ConnectionStatus, DesktopSidebar } from "./workspace-view";
-import { NoPiWorkspace, UnpairedWorkspace } from "./workspace-content";
+import { ConnectionStatus, DesktopSidebar, OnlinePiRow } from "./workspace-view";
+import { ChoosePiWorkspace, NoPiWorkspace, UnpairedWorkspace } from "./workspace-content";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
@@ -125,16 +125,19 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(liveHtml).toContain("Local history");
   expect(liveHtml).not.toContain("This browser only");
   expect(liveHtml).not.toMatch(/role="tab"|>Live<|>History</);
-  expect(currentLive).toMatch(/current<span aria-hidden="true"> · <\/span><\/span><span class="pwa-pi-status">Idle</);
-  expect(nextLive).toContain("pwa-pi-status-running");
-  expect(nextLive).toContain("Running");
+  expect(currentLive).toContain('class="pwa-pi-directory">current</span>');
+  expect(currentLive).toContain('class="pwa-pi-status-slot"></span>');
+  expect(currentLive).not.toContain(">Idle<");
+  expect(nextLive).toContain("pwa-running-indicator");
+  expect(nextLive).toContain('aria-label="Running"');
+  expect(nextLive).toContain('title="Running"');
+  expect(nextLive).not.toContain(">Running<");
   expect(currentLive).not.toContain("/workspace/current");
   // 当前项保持可聚焦：aria-current 标记，不禁用。
   expect(currentLive).toContain("data-active");
   expect(currentLive).toContain('aria-current="true"');
   expect(currentLive).not.toContain("data-disabled");
-  expect(nextLive).toContain("pwa-notice-dot");
-  expect(nextLive).toContain('aria-label="New reply"');
+  expect(nextLive).not.toContain("pwa-notice-dot");
   expect(currentLive).not.toContain("pwa-notice-dot");
   expect(currentHistory).toContain("data-active");
   expect(currentHistory).toContain("<time");
@@ -147,15 +150,66 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(waitingHtml).toContain("**Pinned history**");
 });
 
-test("12px running spinners override the global stroke to match 16px icons", () => {
+test("12px connection spinners override the global stroke to match 16px icons", () => {
   const spinner = (html: string) => html.match(/<svg\b[^>]*\bpwa-spin\b[^>]*>/)?.[0] ?? "";
-  const running = navLinkMarkup(renderToStaticMarkup(<PwaUiProvider><DesktopSidebar {...navigationProps()} /></PwaUiProvider>), "Next Pi");
   const statuses = (["connecting", "retrying"] as const).map((state) => renderToStaticMarkup(<PwaUiProvider><ConnectionStatus state={state} /></PwaUiProvider>));
 
-  for (const html of [running, ...statuses]) {
+  for (const html of statuses) {
     expect(spinner(html)).toContain('width="12"');
     expect(spinner(html)).toContain('stroke-width="2.4"');
   }
+});
+
+function renderOnlineRow(overrides: Partial<PwaEndpointRecord> = {}, current = false, completed = false): string {
+  const endpoint: PwaEndpointRecord = { id: "endpoint-alpha", deviceId: "e5FRoCabBqVX", endpointId: "alpha", runtimeInstanceId: "runtime-alpha", kind: "interactive", name: "Alpha Pi", cwd: "/workspace/alpha", online: true, updatedAt: 1, ...overrides };
+  return renderToStaticMarkup(<PwaUiProvider><OnlinePiRow endpoint={endpoint} current={current} completed={completed} onSelect={() => {}} /></PwaUiProvider>);
+}
+
+test("online Pi row shows one status mark with running priority and restores the completed hint", () => {
+  // 运行（包括当前项）优先，只遮住旧提醒，不清除 completed 数据。
+  expect(renderOnlineRow({ working: true }, false, true)).toContain("pwa-running-indicator");
+  expect(renderOnlineRow({ working: true }, false, true)).not.toContain("pwa-notice-dot");
+  expect(renderOnlineRow({ working: true }, true, true)).toContain('aria-label="Running"');
+  // 运行结束后完成提醒重新显示，并提供静态可访问说明。
+  const finished = renderOnlineRow({ working: false }, false, true);
+  expect(finished).toContain("pwa-notice-dot");
+  expect(finished).toContain('aria-label="Run finished, not yet viewed"');
+  expect(finished).toContain('title="Run finished, not yet viewed"');
+  expect(finished).not.toContain("pwa-running-indicator");
+  // 当前查看的会话不显示后台完成提醒。
+  expect(renderOnlineRow({}, true, true)).not.toContain("pwa-notice-dot");
+  // 空闲行没有状态标记，但状态槽始终保留固定宽度。
+  const idle = renderOnlineRow();
+  expect(idle).not.toContain("pwa-running-indicator");
+  expect(idle).not.toContain("pwa-notice-dot");
+  expect(idle).toContain('class="pwa-pi-status-slot"></span>');
+  expect(idle).not.toContain(">Idle<");
+  expect(idle).not.toContain(">Running<");
+});
+
+test("online Pi row omits the directory line when cwd is missing", () => {
+  const html = renderOnlineRow({ cwd: undefined });
+  expect(html).toContain("Alpha Pi");
+  expect(html).not.toContain("pwa-pi-directory");
+});
+
+test("choose Pi list keeps the action chevron beside the new status slot", () => {
+  const endpoints: PwaEndpointRecord[] = [
+    { id: "endpoint-working", deviceId: "e5FRoCabBqVX", endpointId: "working", runtimeInstanceId: "runtime-working", kind: "interactive", name: "Working Pi", cwd: "/workspace/working", working: true, online: true, updatedAt: 2 },
+    { id: "endpoint-finished", deviceId: "e5FRoCabBqVX", endpointId: "finished", runtimeInstanceId: "runtime-finished", kind: "interactive", name: "Finished Pi", cwd: "/workspace/finished", online: true, updatedAt: 1 },
+  ];
+  const html = renderToStaticMarkup(<PwaUiProvider><ChoosePiWorkspace endpoints={endpoints} completedEndpointIds={new Set(["finished"])} onSelect={() => {}} /></PwaUiProvider>);
+  const working = navLinkMarkup(html, "Working Pi");
+  const finished = navLinkMarkup(html, "Finished Pi");
+  // 运行状态点与行动箭头并存，箭头不因新状态点被隐藏。
+  for (const row of [working, finished]) {
+    expect(row).toContain("pwa-pi-status-slot");
+    expect(row).toContain("pwa-nav-link-section");
+    expect(row.match(/lucide-chevron-right/g)).toHaveLength(1);
+  }
+  expect(working).toContain("pwa-running-indicator");
+  expect(working).not.toContain("pwa-notice-dot");
+  expect(finished).toContain("pwa-notice-dot");
 });
 
 test("shows direct pairing in an unpaired sidebar and uses structured main empty states", () => {

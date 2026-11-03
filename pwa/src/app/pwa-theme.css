@@ -199,7 +199,7 @@
   /* 元素透明度（DESIGN「透明度」）：动效端点只用 0 与 1，中间值只取这里的具名 token，均落在透明度刻度上。 */
   /* 发送／停止按钮禁用；其余禁用态改用 disabled-bg 与 secondary，不靠透明度。 */
   --pwa-opacity-disabled: 0.48;
-  /* 骨架屏呼吸的最暗点。 */
+  /* 骨架屏与会话运行点呼吸的最暗点。 */
   --pwa-opacity-breathe: 0.72;
   /* 会话内容接管骨架时的淡入起点；脚本副本 CONTENT_ENTER_OPACITY 由 pwa-script-token-guard 校验同值。 */
   --pwa-opacity-enter: 0.32;
@@ -332,7 +332,7 @@
   --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容与流式新文字的淡入。 */
   --pwa-duration-content: 320ms;
-  /* 无限循环：旋转一圈与骨架呼吸一个周期，配 linear；减少动态效果时循环直接暂停，不替换时长。 */
+  /* 无限循环：旋转一圈、骨架与运行点呼吸一个周期，配 linear；减少动态效果时循环直接暂停，不替换时长。 */
   --pwa-duration-spin: 1.3s;
   --pwa-duration-breathe: 2s;
   /* 位移类动效乘以该系数；减少动态效果时为 0，只保留透明度淡化。 */

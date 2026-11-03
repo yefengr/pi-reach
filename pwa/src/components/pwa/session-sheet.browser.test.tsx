@@ -308,11 +308,13 @@ test("shows online Pi and local history together and routes choices after exit",
   expect(document.querySelector('[role="tab"]')).toBeNull();
   const currentLive = screen.getByRole("button", { name: /A live Pi/ });
   const selectableLive = screen.getByRole("button", { name: /B working Pi/ });
-  // 当前项保持可聚焦，以 aria-current 标记；第二行为目录与运行状态。
+  // 当前项保持可聚焦，以 aria-current 标记；第二行只显示目录，运行状态由首行右侧可访问标记表达。
   await expect.element(currentLive).toHaveAttribute("aria-current", "true");
   await expect.element(currentLive).toBeEnabled();
   await expect.element(selectableLive).toBeEnabled();
-  expect(selectableLive.element().textContent).toContain("Running");
+  expect(selectableLive.element().querySelector('.pwa-pi-status-slot [aria-label="Running"]')).not.toBeNull();
+  expect(selectableLive.element().querySelectorAll(".pwa-pi-status-slot > *")).toHaveLength(1);
+  expect(selectableLive.element().textContent).not.toContain("Running");
 
   await selectableLive.click();
   await waitForClosed(screen);

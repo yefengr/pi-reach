@@ -301,8 +301,12 @@ test("keeps navigation behind pairing confirmation and returns to its management
   await expect.element(dialog).not.toBeInTheDocument();
   await expect.element(screen.getByTestId("session-confirm-transition")).toHaveAttribute("data-state", "exited");
   await expect.element(drawer).toBeVisible();
-  // 删除后电脑选择入口的名称随之改变，焦点仍回到同一个入口。
-  await expect.poll(() => document.activeElement).toBe(document.querySelector(".pwa-session-sheet .pwa-device-trigger"));
+  // 删除最后一台电脑后，选择入口被直接配对入口替换；焦点回到导航内的新有效入口。
+  const pair = screen.getByRole("button", { name: "Pair a computer", exact: true });
+  await expect.element(management).not.toBeInTheDocument();
+  await expect.element(pair).toBeVisible();
+  expect(drawer.element().contains(pair.element())).toBe(true);
+  await expect.element(pair).toHaveFocus();
 });
 
 test("uses the shared modal-in/modal-out motion, blocks pointers while exiting and keeps a single scrim over navigation", async () => {
