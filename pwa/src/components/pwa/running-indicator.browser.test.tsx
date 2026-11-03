@@ -1,5 +1,6 @@
 import { createRef, useEffect, useState } from "react";
 import { flushSync } from "react-dom";
+import { ChevronRight } from "lucide-react";
 import { afterEach, expect, test } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
@@ -18,7 +19,7 @@ function endpoint(cwd: string | null = "/workspace/pi-reach"): PwaEndpointRecord
 }
 
 let setRowState: ((next: RowState) => void) | null = null;
-function RowHarness({ initial, cwd }: { initial: RowState; cwd?: string | null }) {
+function RowHarness({ initial, cwd, trailing = false }: { initial: RowState; cwd?: string | null; trailing?: boolean }) {
   const [state, update] = useState(initial);
   // 只通过 effect 暴露 setter，卸载时释放，避免渲染期赋值或卸载后仍被调用。
   useEffect(() => {
@@ -26,7 +27,7 @@ function RowHarness({ initial, cwd }: { initial: RowState; cwd?: string | null }
     return () => { setRowState = null; };
   }, [update]);
   return <div className="pwa-sidebar" style={{ width: 280, padding: 8 }}>
-    <OnlinePiRow endpoint={{ ...endpoint(cwd), working: state.working }} current={state.current} completed={state.completed} onSelect={() => {}} />
+    <OnlinePiRow endpoint={{ ...endpoint(cwd), working: state.working }} current={state.current} completed={state.completed} onSelect={() => {}} trailing={trailing ? <ChevronRight size={20} data-testid="row-chevron" /> : undefined} />
   </div>;
 }
 function updateRow(next: RowState) { flushSync(() => setRowState!(next)); }
@@ -64,15 +65,18 @@ test.each([1280, 390])("status changes never move the row text at %ipx", async w
   await screen.unmount();
 });
 
-test.each(["standard", "large", "xlarge"] as const)("keeps the status slot aligned with the first line at %s text size", async size => {
+test.each(["standard", "large", "xlarge"] as const)("centers the status and action chevron on the whole row at %s text size", async size => {
   document.documentElement.dataset.pwaTextSize = size;
-  const screen = await renderPwa(<RowHarness initial={{ working: true, current: false, completed: false }} />);
-  const title = rect(".pwa-pi-title");
+  const screen = await renderPwa(<RowHarness initial={{ working: true, current: true, completed: false }} trailing />);
+  const row = rect(".pwa-nav-session");
   const indicator = rect(".pwa-running-indicator");
   const dot = rect(".pwa-running-indicator-dot");
   expect([rounded(indicator.width), rounded(indicator.height)]).toEqual([16, 16]);
   expect([rounded(dot.width), rounded(dot.height)]).toEqual([6, 6]);
-  expect(center(dot)).toBe(center(title));
+  expect(center(dot)).toBe(center(row));
+  expect(center(rect('[data-testid="row-chevron"]'))).toBe(center(row));
+  updateRow({ working: false, current: false, completed: true });
+  expect(center(rect(".pwa-notice-dot"))).toBe(center(row));
   await screen.unmount();
 });
 
@@ -101,10 +105,11 @@ test("shows one accessible status mark per row and restores the completed hint",
   await screen.unmount();
 });
 
-test("omits the directory line when cwd is missing", async () => {
-  const screen = await renderPwa(<RowHarness initial={{ working: false, current: false, completed: false }} cwd={null} />);
+test("omits the directory line and keeps the running dot centered when cwd is missing", async () => {
+  const screen = await renderPwa(<RowHarness initial={{ working: true, current: false, completed: false }} cwd={null} />);
   expect(document.querySelector(".pwa-pi-title")?.textContent).toBe(sessionName);
   expect(document.querySelector(".pwa-pi-directory")).toBeNull();
+  expect(center(rect(".pwa-running-indicator-dot"))).toBe(center(rect(".pwa-nav-session")));
   await screen.unmount();
 });
 
@@ -123,11 +128,14 @@ test("reduced motion shows a static ring beside the filled completed dot", async
   await screen.unmount();
 });
 
-test("breathing dot only changes opacity between the shared tokens", async () => {
+test("breathing dot uses its stronger opacity token without changing the skeleton range", async () => {
   const screen = await renderPwa(<div style={{ padding: 20 }}><RunningIndicator size="compact" /><RunningIndicator /></div>);
   const dots = [...document.querySelectorAll<HTMLElement>(".pwa-running-indicator-dot")];
   expect([rounded(dots[0]!.getBoundingClientRect().width), rounded(dots[1]!.getBoundingClientRect().width)]).toEqual([6, 8]);
-  const breathe = getComputedStyle(document.documentElement).getPropertyValue("--pwa-opacity-breathe").trim();
+  const theme = getComputedStyle(document.documentElement);
+  const breathe = theme.getPropertyValue("--pwa-opacity-running-breathe").trim();
+  expect(breathe).toBe("0.48");
+  expect(theme.getPropertyValue("--pwa-opacity-breathe").trim()).toBe("0.72");
   const duration = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pwa-duration-breathe"));
   const animation = dots[0]!.getAnimations()[0]!;
   expect(animation).toBeTruthy();
@@ -150,6 +158,28 @@ const userEvent: TimelineEvent = {
 };
 const items: TimelineViewItem[] = [{ kind: "event", event: userEvent }];
 
+test.each(["standard", "large", "xlarge"] as const)("Working dot follows the text middle at %s text size", async size => {
+  document.documentElement.dataset.pwaTextSize = size;
+  const screen = await renderPwa(<main className="pwa-main" style={{ width: "100vw", height: "100vh" }}>
+    <MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} running isLive />
+  </main>);
+  await expect.poll(() => document.querySelector(".pwa-turn-activity[data-working]")).not.toBeNull();
+  const label = document.querySelector<HTMLElement>(".pwa-working-label")!;
+  const indicator = document.querySelector<HTMLElement>(".pwa-turn-activity .pwa-running-indicator")!;
+  // middle 对齐到基线以上半个 x-height；使用当前字体的 ex 测量，不写死像素补偿。
+  const probe = document.createElement("span");
+  probe.style.cssText = "display:inline-block;width:0;height:1ex;vertical-align:baseline";
+  label.append(probe);
+  try {
+    expect(center(rect(".pwa-turn-activity .pwa-running-indicator-dot"))).toBe(center(probe.getBoundingClientRect()));
+    expect(rounded(label.getBoundingClientRect().left - indicator.getBoundingClientRect().right)).toBe(6);
+    expect(rounded(rect(".pwa-turn-activity").height)).toBe(44);
+  } finally {
+    probe.remove();
+  }
+  await screen.unmount();
+});
+
 test("Working keeps its 16px slot, 8px dot and unchanged text metrics", async () => {
   const screen = await renderPwa(<main className="pwa-main" style={{ width: "100vw", height: "100vh" }}>
     <MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} running isLive />
@@ -169,7 +199,7 @@ test("Working keeps its 16px slot, 8px dot and unchanged text metrics", async ()
   expect(style.marginTop).toBe("6px");
   expect(style.minHeight).toBe("44px");
   expect(getComputedStyle(label).fontWeight).toBe("600");
-  expect(getComputedStyle(working).gap).toBe("6px");
+  expect(rounded(label.getBoundingClientRect().left - indicator.getBoundingClientRect().right)).toBe(6);
   expect(getComputedStyle(working).lineHeight).toBe(style.lineHeight);
   expect(getComputedStyle(dot).backgroundColor).toBe(getComputedStyle(slot).color);
   const lineHeight = style.lineHeight;

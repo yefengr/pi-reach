@@ -111,7 +111,7 @@ export function cwdName(cwd?: string | null): string | null {
   return cwd?.split(/[\\/]/).filter(Boolean).at(-1) ?? null;
 }
 
-/** 在线 Pi 行：首行会话名与右侧状态槽，第二行只显示工作目录名，缺少目录时不补替代文案。 */
+/** 在线 Pi 行：会话名与目录在左，右侧固定状态槽按整行居中；缺少目录时不补替代文案。 */
 export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = "desktop", trailing }: { endpoint: PwaEndpointRecord; current: boolean; completed: boolean; onSelect: () => void; variant?: NavigationVariant; trailing?: ReactNode }) {
   const { t } = useI18n();
   const directory = cwdName(endpoint.cwd);
@@ -126,10 +126,10 @@ export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = 
     classNames={navigationNavLinkClassNames}
     component="button"
     type="button"
-    label={<span className="pwa-pi-title-row"><span className="pwa-pi-title">{displayPi(endpoint)}</span><span className="pwa-pi-status-slot">{status}</span></span>}
+    label={<span className="pwa-pi-title">{displayPi(endpoint)}</span>}
     title={displayPi(endpoint)}
     description={directory ? <span className="pwa-pi-directory">{directory}</span> : null}
-    rightSection={trailing}
+    rightSection={<span className="pwa-pi-row-end"><span className="pwa-pi-status-slot">{status}</span>{trailing}</span>}
     active={current}
     aria-current={current ? "true" : undefined}
     noWrap

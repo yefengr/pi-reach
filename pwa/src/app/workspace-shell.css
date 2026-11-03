@@ -142,9 +142,9 @@
 .pwa-root .pwa-nav-session[data-disabled],
 .pwa-root .pwa-history-row[data-disabled] { cursor: default; opacity: 1; }
 .pwa-root .pwa-pi-directory { color: var(--pwa-secondary); }
-/* 会话行首行：标题占剩余宽度，右侧固定 16px 状态槽，状态切换不改变文字起点与宽度。 */
-.pwa-root .pwa-nav-session .pwa-pi-title-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 16px; column-gap: 8px; align-items: center; }
-.pwa-root .pwa-nav-session .pwa-pi-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 状态位位于文字块之外，随整条导航行居中；留空时也保持宽度，行动箭头另行保留。 */
+.pwa-root .pwa-nav-session .pwa-pi-row-end { display: flex; align-items: center; gap: 8px; }
+.pwa-root .pwa-nav-session .pwa-pi-title { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-nav-session .pwa-pi-status-slot { width: 16px; height: 16px; display: grid; place-items: center; color: var(--pwa-running); }
 .pwa-notice-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-accent); }
 

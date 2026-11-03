@@ -298,9 +298,11 @@ test.each([1280, 390])("Working appears only after the page stays still and neve
   const label = workingShown()!.querySelector<HTMLElement>(".pwa-turn-activity-working")!;
   const dot = label.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
   expect(getComputedStyle(label).color).toBe(getComputedStyle(dot).backgroundColor);
-  expect(Math.round(label.querySelector<HTMLElement>(".pwa-running-indicator")!.getBoundingClientRect().width)).toBe(16);
+  const indicator = label.querySelector<HTMLElement>(".pwa-running-indicator")!.getBoundingClientRect();
+  const text = label.querySelector<HTMLElement>(".pwa-working-label")!.getBoundingClientRect();
+  expect(Math.round(indicator.width)).toBe(16);
   expect([Math.round(dot.getBoundingClientRect().width), Math.round(dot.getBoundingClientRect().height)]).toEqual([8, 8]);
-  expect(getComputedStyle(label).gap).toBe("6px");
+  expect(Math.round(text.left - indicator.right)).toBe(6);
   // 新内容出现立即隐藏 Working。
   await update([question, partialItem(thinking)]);
   expect(workingShown()).toBeNull();

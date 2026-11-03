@@ -132,6 +132,8 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(nextLive).toContain('aria-label="Running"');
   expect(nextLive).toContain('title="Running"');
   expect(nextLive).not.toContain(">Running<");
+  expect(nextLive).toContain('class="pwa-pi-row-end"');
+  expect(nextLive.indexOf('class="pwa-pi-status-slot"')).toBeGreaterThan(nextLive.indexOf('class="pwa-pi-directory"'));
   expect(currentLive).not.toContain("/workspace/current");
   // 当前项保持可聚焦：aria-current 标记，不禁用。
   expect(currentLive).toContain("data-active");
