@@ -151,6 +151,7 @@
 /* 桌面与移动导航共用同一行底部入口：电脑选择器与设置操作固定，导航列表独立滚动。 */
 .pwa-root .pwa-sidebar-foot,
 .pwa-root .pwa-session-sheet-foot { min-width: 0; flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
+.pwa-root .pwa-session-sheet-foot { padding-bottom: max(24px, var(--pwa-safe-bottom)); }
 .pwa-root .pwa-desktop-navigation .pwa-sidebar-foot { padding: 8px 0; }
 .pwa-root .pwa-sidebar-foot .pwa-device-trigger,
 .pwa-root .pwa-session-sheet-foot .pwa-device-trigger,

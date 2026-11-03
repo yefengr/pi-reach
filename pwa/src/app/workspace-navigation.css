@@ -314,7 +314,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: var(--pwa-space-menu-pad) calc(var(--pwa-space-menu-pad) + var(--pwa-safe-right)) calc(12px + var(--pwa-safe-bottom)) calc(var(--pwa-space-menu-pad) + var(--pwa-safe-left));
+  padding: var(--pwa-space-menu-pad) calc(var(--pwa-space-menu-pad) + var(--pwa-safe-right)) max(24px, var(--pwa-safe-bottom)) calc(var(--pwa-space-menu-pad) + var(--pwa-safe-left));
 }
 
 .pwa-root .pwa-device-drawer-body .pwa-device-panel {
