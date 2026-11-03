@@ -60,7 +60,11 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   const triggerBox = triggerNode.getBoundingClientRect();
   const copyBox = copy.getBoundingClientRect();
   expect(Math.abs(Math.round((copyBox.top + copyBox.bottom) / 2) - Math.round((triggerBox.top + triggerBox.bottom) / 2))).toBeLessThanOrEqual(1);
+  expect(triggerNode.getAttribute("aria-expanded")).toBe("false");
+  const chevron = triggerNode.querySelector<SVGElement>(".pwa-device-trigger-chevron")!;
   await trigger.click();
+  await expect.poll(() => triggerNode.getAttribute("aria-expanded")).toBe("true");
+  await expect.poll(() => getComputedStyle(chevron).transform).toBe("matrix(-1, 0, 0, -1, 0, 0)");
   const panel = document.querySelector<HTMLElement>(".pwa-device-popover")!;
   expect(panel).not.toBeNull();
   expect(panel.closest(".pwa-root")).not.toBeNull();

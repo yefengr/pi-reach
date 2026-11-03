@@ -88,7 +88,7 @@ export function UiStateNavigation({ enabled, settingsOpen, children, onSceneChan
     <ConfirmActionDialog action={removeDevice ? { kind: "remove-pairing", label: removeDevice.nickname ?? removeDevice.hostname ?? "演示电脑" } : null} pending={false}
       onExitTransitionEnd={() => {
         if (readerFocusable(document.activeElement)) return;
-        const fallback = [...document.querySelectorAll<HTMLElement>(".pwa-session-sheet button, .pwa-desktop-navigation .pwa-nav-pair, .pwa-session-trigger")].find(readerFocusable);
+        const fallback = [...document.querySelectorAll<HTMLElement>(".pwa-session-sheet button, .pwa-desktop-navigation .pwa-device-trigger, .pwa-desktop-navigation .pwa-nav-pair, .pwa-session-trigger")].find(readerFocusable);
         fallback?.focus({ preventScroll: true });
       }}
       onClose={() => setRemoveDevice(null)} onConfirm={() => {

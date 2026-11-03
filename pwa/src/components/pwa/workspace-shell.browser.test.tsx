@@ -68,9 +68,14 @@ test("ordinary safe areas protect the floating frame and settings covers both br
       expect(button.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
     }
   }
-  const splitter = screen.getByRole("separator").element().getBoundingClientRect();
+  const separator = screen.getByRole("separator").element();
+  const splitter = separator.getBoundingClientRect();
   expect(Math.round(splitter.left)).toBe(Math.round(frame.right));
   expect(Math.round(splitter.top)).toBeGreaterThanOrEqual(Math.round(brand.getBoundingClientRect().bottom) - 1);
+  // 视觉线压住侧栏右边框，不再跟着 8px 透明命中区整体外移。
+  const resizerEdge = getComputedStyle(separator, "::before");
+  expect(resizerEdge.left).toBe("-1px");
+  expect(resizerEdge.width).toBe("2px");
   const main = screen.getByRole("main").element();
   expect(Math.round(main.getBoundingClientRect().top)).toBe(0);
   expect(getComputedStyle(main).borderRadius).toBe("0px");
@@ -140,6 +145,10 @@ test("closes desktop computer portals and returns nested menu focus to the sideb
   const collapse = screen.getByRole("button", { name: "Collapse sidebar" });
   await screen.getByRole("button", { name: "Choose computer, current MacBook Pro" }).click();
   await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
+  // 面板宽度按侧栏内容宽计算，不再等于底部入口宽度。
+  const sidebarFrame = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!.getBoundingClientRect();
+  const popover = document.querySelector<HTMLElement>(".pwa-device-popover")!.getBoundingClientRect();
+  expect(Math.round(popover.width)).toBe(Math.round(sidebarFrame.width - 16));
   await screen.getByRole("button", { name: "Computer actions for MacBook Pro" }).click();
   const rename = screen.getByRole("menuitem", { name: "Rename MacBook Pro" });
   await expect.element(rename).toBeVisible();

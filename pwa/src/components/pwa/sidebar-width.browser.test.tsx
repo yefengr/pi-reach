@@ -140,6 +140,8 @@ test("isolated primary-left pointer previews immediately, clamps, commits once a
   }
   const save = vi.spyOn(Storage.prototype, "setItem");
   pointer.send("pointerdown");
+  // 指针拖动不应主动抢走键盘焦点。
+  expect(document.activeElement).not.toBe(node);
   expect(pointer.captured()).toBe(true);
   expect(document.body.style.cursor).toBe("col-resize");
   expect(document.body.style.userSelect).toBe("none");

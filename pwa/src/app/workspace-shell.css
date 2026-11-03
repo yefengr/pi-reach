@@ -80,11 +80,15 @@
 /* 外框已消费普通安全区，内部不重复叠加。 */
 .pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: 0; padding-left: 8px; }
 .pwa-root .pwa-desktop-navigation .pwa-sidebar-brand { padding-right: calc(var(--pwa-hit-target) + 8px); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-regular); white-space: nowrap; }
-/* 命中区完全在侧栏右侧，避开品牌行按钮和列表滚动条。 */
+/* 命中区完全在侧栏右侧，避开品牌行按钮和列表滚动条；视觉线压住侧栏右边框，不跟着命中区偏移。 */
 .pwa-root .pwa-sidebar-resizer { position: absolute; z-index: var(--pwa-z-sidebar-toggle); top: calc(var(--pwa-safe-top) + var(--pwa-topbar-height)); bottom: calc(38px + var(--pwa-safe-bottom)); left: var(--pwa-sidebar-span); width: 8px; cursor: col-resize; touch-action: none; }
-.pwa-root .pwa-sidebar-resizer::before { content: ""; position: absolute; inset: 8px 2px; border-radius: var(--pwa-radius-xs); background: transparent; pointer-events: none; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
-@media (hover: hover) { .pwa-root .pwa-sidebar-resizer:hover::before { background: var(--pwa-hover); } }
-.pwa-root .pwa-sidebar-resizer:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
+.pwa-root .pwa-sidebar-resizer::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: -1px; width: 2px; border-radius: var(--pwa-radius-xs); background: transparent; pointer-events: none; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+@media (hover: hover) { .pwa-root .pwa-sidebar-resizer:hover::before { background: var(--pwa-control-line); } }
+/* 键盘焦点环贴合 2px 视觉线，不再沿 8px 透明命中区画整条宽框；拖动中只保留强调色线。 */
+.pwa-root .pwa-sidebar-resizer:focus-visible { outline: none; }
+.pwa-root .pwa-sidebar-resizer:focus-visible::before { box-shadow: 0 0 0 2px var(--pwa-accent); }
+.pwa-root[data-sidebar-resizing] .pwa-sidebar-resizer::before { background: var(--pwa-accent); }
+.pwa-root[data-sidebar-resizing] .pwa-sidebar-resizer:focus-visible::before { box-shadow: none; }
 .pwa-root[data-sidebar-collapsed] .pwa-sidebar-resizer { display: none; }
 .pwa-root[data-sidebar-resizing] .pwa-layout,
 .pwa-ui-scope .pwa-root[data-sidebar-resizing] .pwa-icon-button.pwa-sidebar-toggle { transition: none; }

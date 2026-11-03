@@ -126,6 +126,9 @@ test("all navigation states and opening isolated settings and pairing leave stor
   for (const state of ["loading", "error", "unpaired", "paired"]) {
     await page.getByLabelText("导航状态", { exact: true }).selectOptions(state);
   }
+  // 未配对时 footer 直接提供配对入口；已配对时入口在电脑面板底部，本用例只验证配对弹窗本身。
+  await page.getByLabelText("导航状态", { exact: true }).selectOptions("unpaired");
+  await expect.poll(() => document.querySelector(".pwa-desktop-navigation .pwa-nav-pair")).not.toBeNull();
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-desktop-navigation .pwa-nav-pair")!);
   await expect.poll(() => document.querySelector(".pwa-pairing-dialog")).not.toBeNull();
   await userEvent.keyboard("{Escape}");
