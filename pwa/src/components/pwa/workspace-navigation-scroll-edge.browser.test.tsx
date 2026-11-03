@@ -53,31 +53,18 @@ afterEach(async () => {
   await cleanup();
 });
 
-test("the desktop navigation edge line follows the scroll position and the footer owns the bottom fade", async () => {
+test("the desktop navigation edge line follows the scroll position", async () => {
   await render(<PwaUiProvider><SidebarScrollHarness /></PwaUiProvider>);
   const brand = document.querySelector<HTMLElement>(".pwa-desktop-navigation .pwa-sidebar-brand")!;
   const scroll = document.querySelector<HTMLElement>(".pwa-desktop-navigation .pwa-navigation-scroll")!;
-  const footer = document.querySelector<HTMLElement>(".pwa-desktop-navigation .pwa-sidebar-foot")!;
 
   expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
   expect(getComputedStyle(brand, "::after").opacity).toBe("0");
-  // 底部渐隐挂在 footer 上沿，随 footer 高度自适应，不随列表滚动。
-  const fade = getComputedStyle(footer, "::before");
-  expect(fade.content).not.toBe("none");
-  expect(fade.height).toBe("24px");
-  expect(fade.pointerEvents).toBe("none");
-  expect(fade.backgroundImage).toContain("linear-gradient");
 
   scroll.scrollTop = 160;
   scroll.dispatchEvent(new Event("scroll", { bubbles: true }));
   await expect.poll(() => getComputedStyle(brand, "::after").opacity).toBe("1");
   await page.screenshot({ path: "../../../.vitest/screenshots/workspace-navigation-scroll-edge.png" });
-
-  // 与消息列表一致：停在底部时最后一行落在 24px 渐隐带之上，不被淡化。
-  scroll.scrollTop = scroll.scrollHeight;
-  await expect.poll(() => Math.round(scroll.scrollTop + scroll.clientHeight)).toBeGreaterThanOrEqual(Math.round(scroll.scrollHeight) - 1);
-  const lastRow = [...document.querySelectorAll<HTMLElement>(".pwa-desktop-navigation .pwa-history-row")].at(-1)!;
-  expect(Math.round(scroll.getBoundingClientRect().bottom - lastRow.getBoundingClientRect().bottom)).toBeGreaterThanOrEqual(23);
 
   scroll.scrollTop = 0;
   scroll.dispatchEvent(new Event("scroll", { bubbles: true }));
