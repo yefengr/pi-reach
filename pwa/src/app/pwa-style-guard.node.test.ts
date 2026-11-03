@@ -81,7 +81,6 @@ const ALIGN = "负外边距让文字或图标与内容左缘对齐，或抵消�
 
 /** 已登记的非档位、非细档间距；数值不在 values 中或登记失效都会失败。新增时同步 DESIGN。 */
 const EXCEPTIONS: Exception[] = [
-  { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-desktop-navigation", property: "margin-bottom", values: [38], reason: "悬浮侧栏底部视觉基线，另加普通底部安全区，不推导原生标题栏高度" },
   { file: "app/globals.css", selector: ".pwa-sr-only", property: "margin", values: [-1], reason: OPTICAL },
   { file: "app/globals.css", selector: ".pwa-message-list", property: "--pwa-timeline-pad-bottom", values: [88], reason: "消息区底部为浮动「最新」入口预留" },
   { file: "app/globals.css", selector: ".pwa-message-list", property: "scroll-padding-bottom", values: [88], reason: "与消息区底部留白同值，确保滚动定位避开「最新」入口" },

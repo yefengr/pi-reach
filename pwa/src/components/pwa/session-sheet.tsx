@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "@/components/pwa/use-pwa-motion";
-import { WorkspaceDeviceControl } from "@/components/pwa/workspace-device-control";
 import { useI18n } from "@/lib/i18n";
 import { getActiveDevice, WorkspaceHistorySection, WorkspaceNavigationFooter, WorkspaceRunningPiSection, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { BrandMark } from "@/components/pwa/brand-mark";
@@ -289,14 +288,11 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
       <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={24} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} /></Drawer.Header>
       <Drawer.Body>
         <div className="pwa-navigation-content">
-          <div className="pwa-sidebar-head">
-            <WorkspaceDeviceControl devices={navigation.devices} activeDeviceId={navigation.activeDeviceId} pairingPresence={navigation.pairingPresence} onPair={wrappedPair} onSelectDevice={wrappedDevice} onRename={wrappedRename} onRemove={wrappedRemove} variant="sheet" onOverlayChange={handleDeviceOverlayChange} />
-          </div>
           <div className="pwa-navigation-scroll" ref={scrollRef}>
             <WorkspaceRunningPiSection activeDevice={activeDevice} endpoints={navigation.endpoints} activeEndpointId={navigation.activeEndpointId} selectedHistoryId={navigation.selectedHistoryId} snapshotReady={navigation.snapshotReady} completedEndpointIds={navigation.completedEndpointIds} onSelectEndpoint={wrappedEndpoint} headingId="pwa-sheet-running-heading" variant="sheet" />
             <WorkspaceHistorySection activeDevice={activeDevice} history={navigation.history} historyListStatus={navigation.historyListStatus} onRetryHistory={navigation.onRetryHistory} selectedHistoryId={navigation.selectedHistoryId} onSelectHistory={wrappedHistory} headingId="pwa-sheet-history-heading" variant="sheet" />
           </div>
-          <WorkspaceNavigationFooter className="pwa-session-sheet-foot" onPair={wrappedPair} onSettings={wrappedSettings} autoFocusSettings={autoFocusSettings} />
+          <WorkspaceNavigationFooter className="pwa-session-sheet-foot" variant="sheet" devices={navigation.devices} activeDeviceId={navigation.activeDeviceId} pairingPresence={navigation.pairingPresence} onPair={wrappedPair} onSelectDevice={wrappedDevice} onRename={wrappedRename} onRemove={wrappedRemove} onSettings={wrappedSettings} autoFocusSettings={autoFocusSettings} onOverlayChange={handleDeviceOverlayChange} />
         </div>
       </Drawer.Body>
     </Drawer.Content>

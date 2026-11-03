@@ -6,10 +6,12 @@ import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
 import { MessageList } from "./message-list";
+import { ReadOnlyComposer } from "./message-composer";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { WorkspaceNavigationProps } from "./workspace-view";
 import { useSettingsRoute } from "@/lib/pwa/settings-route";
+import { APPEARANCE_STORAGE_KEY } from "@/lib/ui/appearance";
 
 const navigation: WorkspaceNavigationProps = {
   devices: [{ id: "computer", deviceId: "computer-key", nickname: "MacBook Pro", relayUrl: "https://relay.example.test", pairedAt: "2026-01-01" }],
@@ -23,16 +25,17 @@ const items: TimelineViewItem[] = Array.from({ length: 30 }, (_, index) => ({
   kind: "event", event: { event_id: `message-${index}`, session_id: "live", leaf_id: "live", group_id: `group-${index}`, timestamp: index, kind: "assistant", status: "complete", blocks: [{ type: "text", text: `Paragraph ${index}. ${"Keep the reading position stable while the workspace sidebar changes width. ".repeat(12)}` }] },
 }));
 
-function ShellHarness() {
+function ShellHarness({ composer = false }: { composer?: boolean }) {
   const [draft, setDraft] = useState("");
   const { route, openSettings, closeSettings } = useSettingsRoute();
   const viewport = useTimelineViewport(items);
   return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "pi-reach", prefix: "pi-reach", showTitle: true }} historyMode={false} toast={null} settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={() => <button onClick={closeSettings}>Return to workspace</button>} overlays={null} closeBackgroundOverlay={(close) => close()}>
     <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive />
     <textarea aria-label="Draft" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
+    {composer ? <ReadOnlyComposer notice="Read-only history" modelName="test-model" thinking="medium" /> : null}
   </PwaWorkspaceLayout></PwaAppShell>;
 }
-const mount = () => render(<PwaUiProvider><ShellHarness /></PwaUiProvider>);
+const mount = (options: { composer?: boolean } = {}) => render(<PwaUiProvider><ShellHarness {...options} /></PwaUiProvider>);
 
 beforeEach(async () => {
   localStorage.removeItem("pi-reach-sidebar-collapsed");
@@ -43,8 +46,35 @@ beforeEach(async () => {
 afterEach(async () => {
   await cleanup();
   localStorage.removeItem("pi-reach-sidebar-width");
+  localStorage.removeItem(APPEARANCE_STORAGE_KEY);
   for (const name of ["top", "bottom", "left", "right"]) document.documentElement.style.removeProperty(`--pwa-safe-${name}`);
   delete document.documentElement.dataset.pwaTextSize;
+});
+
+test.each([
+  [1280, "light"], [1280, "dark"], [768, "light"], [768, "dark"],
+] as const)("sidebar owns its radius and elevation without changing the computer popover at %spx in %s mode", async (width, appearance) => {
+  await page.viewport(width, 900);
+  localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance);
+  const screen = await mount();
+  await expect.poll(() => document.documentElement.getAttribute("data-mantine-color-scheme")).toBe(appearance);
+  const sidebar = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!;
+  const style = getComputedStyle(sidebar);
+  expect(style.borderRadius).toBe("16px");
+  expect(style.boxShadow).toBe(appearance === "dark" ? "none"
+    : "rgba(0, 0, 0, 0.08) 0px 1px 2px 0px, rgba(0, 0, 0, 0.04) 0px 2px 8px 0px");
+  expect(style.backgroundColor).toBe(appearance === "dark" ? "rgb(40, 40, 40)" : "rgb(247, 247, 247)");
+  expect(style.borderTopWidth).toBe(getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim());
+  expect(style.borderTopColor).toBe(appearance === "dark" ? "rgba(255, 255, 255, 0.16)" : "rgba(0, 0, 0, 0.12)");
+  expect(getComputedStyle(sidebar.querySelector(".pwa-nav-session")!).borderRadius).toBe("8px");
+
+  await screen.getByRole("button", { name: "Choose computer, current MacBook Pro" }).click();
+  await expect.poll(() => document.querySelector(".pwa-device-popover")).not.toBeNull();
+  const popover = getComputedStyle(document.querySelector(".pwa-device-popover")!);
+  expect(popover.borderRadius).toBe("12px");
+  expect(popover.boxShadow).toBe(appearance === "dark"
+    ? "rgba(0, 0, 0, 0.32) 0px 1px 2px 0px, rgba(0, 0, 0, 0.28) 0px 4px 16px 0px"
+    : "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px 4px 16px 0px");
 });
 
 test("ordinary safe areas protect the floating frame and settings covers both brand and title", async () => {
@@ -56,7 +86,7 @@ test("ordinary safe areas protect the floating frame and settings covers both br
   const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
   const settings = screen.getByRole("button", { name: "Open settings" });
   const frame = nav.getBoundingClientRect();
-  expect([frame.left, frame.top, window.innerHeight - frame.bottom].map(Math.round)).toEqual([36, 16, 58]);
+  expect([frame.left, frame.top, window.innerHeight - frame.bottom].map(Math.round)).toEqual([36, 16, 20]);
   for (const [size, pixels] of [["standard", 14], ["large", 16], ["xlarge", 18]] as const) {
     document.documentElement.dataset.pwaTextSize = size;
     await expect.poll(() => getComputedStyle(brand).fontSize).toBe(`${pixels}px`);
@@ -207,6 +237,7 @@ test("keeps mobile navigation independent from desktop preference and shows both
   // 移动导航宽 min(320px, 85vw)，全高。
   expect(Math.round(rect.height)).toBe(844);
   expect(Math.round(rect.width)).toBe(320);
+  expect(getComputedStyle(dialog.element()).borderRadius).toBe("0px");
   await expect.element(dialog.getByText("Online Pi", { exact: true })).toBeVisible();
   await expect.element(dialog.getByText("Local history", { exact: true })).toBeVisible();
   await expect.element(dialog.getByRole("button", { name: /Saved conversation/ })).toBeVisible();
@@ -218,4 +249,42 @@ test("keeps mobile navigation independent from desktop preference and shows both
   await expect.element(screen.getByRole("textbox", { name: "Draft" })).toBeVisible();
   await page.viewport(1280, 900);
   await expect.element(screen.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+});
+
+test("aligns the sidebar bottom with the real composer card across safe areas and compact errors", async () => {
+  const readGap = (selector: string) => {
+    const box = document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+    return Math.round(window.innerHeight - box.bottom);
+  };
+  for (const safeBottom of [0, 20]) {
+    if (safeBottom > 0) document.documentElement.style.setProperty("--pwa-safe-bottom", `${safeBottom}px`);
+    const screen = await mount({ composer: true });
+    try {
+      const expected = Math.max(16, safeBottom);
+      await expect.poll(() => readGap(".pwa-desktop-navigation")).toBe(expected);
+      await expect.poll(() => readGap(".pwa-composer-card")).toBe(expected);
+      expect(readGap(".pwa-desktop-navigation")).toBe(readGap(".pwa-composer-card"));
+      // 键盘可聚焦的分隔条保留轮廓；悬停与拖动都不额外画竖线。
+      const separator = screen.getByRole("separator").element();
+      screen.getByRole("button", { name: "Open settings" }).element().focus();
+      await userEvent.tab();
+      expect(document.activeElement).toBe(separator);
+      await expect.poll(() => getComputedStyle(separator, "::before").boxShadow).toContain("rgb");
+      await userEvent.hover(separator);
+      await expect.poll(() => getComputedStyle(separator, "::before").backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      document.querySelector(".pwa-root")!.setAttribute("data-sidebar-resizing", "");
+      expect(getComputedStyle(separator, "::before").backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      document.querySelector(".pwa-root")!.removeAttribute("data-sidebar-resizing");
+      // very-short 且主区有局部错误：输入区与侧栏同步收到 4 + 安全区底部留白。
+      document.querySelector<HTMLElement>(".pwa-app-shell")!.dataset.compactHeight = "very-short";
+      const error = document.createElement("div");
+      error.className = "pwa-status-error";
+      document.querySelector<HTMLElement>(".pwa-main-notices")!.append(error);
+      await expect.poll(() => readGap(".pwa-desktop-navigation")).toBe(4 + safeBottom);
+      await expect.poll(() => readGap(".pwa-composer-card")).toBe(4 + safeBottom);
+    } finally {
+      await screen.unmount();
+      document.documentElement.style.removeProperty("--pwa-safe-bottom");
+    }
+  }
 });

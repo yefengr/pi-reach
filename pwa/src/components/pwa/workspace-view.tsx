@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ActionIcon, Button, NavLink } from "@mantine/core";
-import { Bot, History, Link2, LoaderCircle, Settings } from "lucide-react";
+import { Bot, History, LoaderCircle, Settings } from "lucide-react";
 import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "@/components/pwa/workspace-device-control";
 import { displayPi } from "@/components/pwa/session-title";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
@@ -76,10 +76,14 @@ type WorkspaceHistorySectionProps = Pick<WorkspaceNavigationProps, "history" | "
   variant?: NavigationVariant;
 };
 
-type WorkspaceNavigationFooterProps = Pick<WorkspaceNavigationProps, "onPair" | "onSettings"> & {
+type WorkspaceNavigationFooterProps = Pick<WorkspaceNavigationProps, "devices" | "activeDeviceId" | "pairingPresence" | "onPair" | "onSelectDevice" | "onRename" | "onRemove" | "onSettings"> & {
+  variant?: NavigationVariant;
+  /** 桌面侧栏收起变化时重置所属 Portal；移动导航不传。 */
+  collapsed?: boolean;
   /** 从设置页返回导航时，焦点落在设置入口上。 */
   autoFocusSettings?: boolean;
   className?: string;
+  onOverlayChange?: (opened: boolean) => void;
 };
 
 type WorkspaceNavigationContentProps = WorkspaceNavigationProps & {
@@ -155,7 +159,7 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
   const loadingVisible = useDelayedVisibility(historyListStatus === "loading");
   if (!activeDevice) return null;
   return <section className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={historyListStatus === "loading" || undefined}>
-    <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong>{variant === "sheet" ? <em>{t.navigation.savedInBrowser}</em> : null}</span>{history.length > 0 || historyListStatus === "success" ? <small className="pwa-tabular">{history.length}</small> : null}</div>
+    <div className={sectionHeadingClassName(variant)} id={headingId}><History size={16} /><span className="pwa-nav-heading-copy"><strong>{t.navigation.localHistory}</strong></span>{history.length > 0 || historyListStatus === "success" ? <small className="pwa-tabular">{history.length}</small> : null}</div>
     {loadingVisible ? <p className="pwa-nav-empty pwa-nav-empty-status" role="status"><LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />{t.operationFeedback.historyLoading}</p> : null}
     {historyListStatus === "error" && !loadingVisible ? <div className="pwa-nav-empty" role="status">{t.operationFeedback.historyError}<Button variant="transparent" type="button" onClick={onRetryHistory}>{t.common.retry}</Button></div> : null}
     {history.length === 0 ? historyListStatus === "success" && !loadingVisible ? <p className="pwa-nav-empty">{t.navigation.historyEmpty}</p> : null : history.map((entry) => {
@@ -179,16 +183,16 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
   </section>;
 }
 
-export function WorkspaceNavigationFooter({ onPair, onSettings, className = "pwa-sidebar-foot", autoFocusSettings = false }: WorkspaceNavigationFooterProps) {
+/** 桌面与移动导航共用底部入口：当前电脑选择器与设置操作同行固定。 */
+export function WorkspaceNavigationFooter({ devices, activeDeviceId, pairingPresence, onPair, onSelectDevice, onRename, onRemove, onSettings, variant = "desktop", collapsed, autoFocusSettings = false, className = "pwa-sidebar-foot", onOverlayChange }: WorkspaceNavigationFooterProps) {
   const { t } = useI18n();
   return <div className={className}>
-    <Button className="pwa-nav-pair" variant="transparent" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>
-    <Button className="pwa-nav-settings" variant="transparent" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} leftSection={<Settings size={16} />}>{t.navigation.settings}</Button>
+    <WorkspaceDeviceControl key={variant === "desktop" ? `pwa-device-picker-${collapsed}` : undefined} devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} variant={variant} onOverlayChange={onOverlayChange} />
+    <ActionIcon className="pwa-nav-settings" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} title={t.navigation.settings}><Settings size={20} /></ActionIcon>
   </div>;
 }
 
 export function WorkspaceNavigationContent({ devices, endpoints, history, historyListStatus, onRetryHistory, activeDeviceId, activeEndpointId, selectedHistoryId, snapshotReady, pairingPresence = {}, completedEndpointIds, onPair, onSettings, onSelectDevice, onSelectEndpoint, onSelectHistory, onRename, onRemove, idPrefix = "pwa-navigation", collapsed = false }: WorkspaceNavigationContentProps) {
-  const { t } = useI18n();
   const activeDevice = getActiveDevice(devices, activeDeviceId);
   const runningHeading = `${idPrefix}-running-heading`;
   const historyHeading = `${idPrefix}-history-heading`;
@@ -200,10 +204,7 @@ export function WorkspaceNavigationContent({ devices, endpoints, history, histor
         <WorkspaceHistorySection activeDevice={activeDevice} history={history} historyListStatus={historyListStatus} onRetryHistory={onRetryHistory} selectedHistoryId={selectedHistoryId} onSelectHistory={onSelectHistory} headingId={historyHeading} />
       </> : null}
     </div>
-    <div className="pwa-sidebar-foot">
-      <WorkspaceDeviceControl key={`pwa-device-picker-${collapsed}`} devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} />
-      <ActionIcon className="pwa-nav-settings" type="button" onClick={onSettings} aria-label={t.navigation.openSettings} title={t.navigation.settings}><Settings size={20} /></ActionIcon>
-    </div>
+    <WorkspaceNavigationFooter devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} onSettings={onSettings} collapsed={collapsed} />
   </div>;
 }
 

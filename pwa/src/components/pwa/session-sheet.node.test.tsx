@@ -79,18 +79,27 @@ test("shows current computer, online Pi, and local history in the same navigatio
   const html = renderSheet();
 
   expect(html).toContain('aria-label="Choose computer, current office"');
-  // 只配对一台电脑时，选择入口收成一行，不显示「当前电脑」副标题。
+  // 底部入口与桌面一致：单行电脑名加箭头，不显示状态圆点、图标框或副标题。
   expect(html).toContain("pwa-device-trigger-compact");
+  expect(html).not.toContain("pwa-device-trigger-dot");
+  expect(html).not.toContain("pwa-device-trigger-copy small");
   expect(html).not.toContain("Current computer");
   expect(html).toContain("Online Pi");
   expect(html).toContain("Office Pi");
   expect(html).toContain("Local history");
-  expect(html).toContain("This browser only");
+  expect(html).not.toContain("This browser only");
   expect(html).toContain("Saved design review");
   expect(html).toContain('aria-current="true"');
   expect(html).not.toContain("OPEN");
-  expect(html).toContain("Pair a computer");
+  // 已配对时导航外不再有独立配对入口，配对只保留在电脑面板内。
+  expect(html).not.toContain("Pair a computer");
   expect(html).toContain("Open settings");
+  expect(html).not.toContain("pwa-sidebar-head");
+  // 底部固定行位于独立滚动区之后：电脑选择器与设置入口同行。
+  const footIndex = html.indexOf("pwa-session-sheet-foot");
+  expect(footIndex).toBeGreaterThan(html.indexOf("pwa-navigation-scroll"));
+  expect(footIndex).toBeLessThan(html.indexOf("pwa-device-trigger"));
+  expect(html.indexOf("pwa-device-trigger")).toBeLessThan(html.indexOf("pwa-nav-settings"));
   expect(html).not.toContain("Back to live");
   expect(html).not.toMatch(/endpoint ID|runtime|generation|interactive|daemon/i);
 });

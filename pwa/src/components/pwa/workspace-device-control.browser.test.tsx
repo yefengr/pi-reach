@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { beforeEach, expect, test } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "./workspace-device-control";
@@ -20,14 +21,14 @@ const nextDevice: PwaDeviceRecord = {
   nickname: "Travel Mac",
 };
 
-function DeviceControlHarness({ variant, purpose = "choose", events }: { variant: WorkspaceDeviceControlVariant; purpose?: "choose" | "manage"; events: string[] }) {
+function DeviceControlHarness({ variant, purpose = "choose", events, devices = [currentDevice, nextDevice] }: { variant: WorkspaceDeviceControlVariant; purpose?: "choose" | "manage"; events: string[]; devices?: PwaDeviceRecord[] }) {
   const [target, setTarget] = useState<string | null>(null);
   const targetRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => { targetRef.current?.focus(); }, [target]);
   const finish = (event: string) => { events.push(event); setTarget(event); };
   return <div style={variant === "desktop" ? { width: 286, position: "absolute", left: 12, bottom: 38 } : { width: 286 }}>
     <WorkspaceDeviceControl
-      devices={[currentDevice, nextDevice]}
+      devices={devices}
       activeDeviceId={currentDevice.id}
       pairingPresence={{
         [currentDevice.id]: { status: "online", onlineEndpoints: 2, totalEndpoints: 2 },
@@ -195,4 +196,158 @@ test("mobile chooser is a compact z220 bottom Drawer with reachable actions and 
   await expect.element(dialog).not.toBeInTheDocument();
   await expect.element(trigger).toHaveFocus();
   expect(events).toEqual([]);
+});
+
+test("desktop trigger toggles, closes on outside click or Escape, and preserves other focus", async () => {
+  const events: string[] = [];
+  const screen = await renderPwa(<DeviceControlHarness variant="desktop" events={events} />);
+  const trigger = screen.getByRole("button", { name: /Choose computer, current Current computer/ });
+  const panel = () => document.querySelector<HTMLElement>(".pwa-device-popover");
+  await trigger.click();
+  await expect.poll(() => trigger.element().getAttribute("aria-expanded")).toBe("true");
+  await expect.poll(() => panel()).not.toBeNull();
+  // 重复点击关闭，箭头与 aria-expanded 同步。
+  await trigger.click();
+  await expect.poll(() => trigger.element().getAttribute("aria-expanded")).toBe("false");
+  await expect.poll(() => panel()).toBeNull();
+  // 快速反向后再次开关，状态始终与真实浮层一致。
+  await trigger.click();
+  await expect.poll(() => panel()).not.toBeNull();
+  await trigger.click();
+  await expect.poll(() => panel()).toBeNull();
+  // 外部点击关闭，不把焦点从用户刚点的控件夺走。
+  await trigger.click();
+  await expect.poll(() => panel()).not.toBeNull();
+  const outside = document.createElement("button");
+  outside.type = "button";
+  outside.textContent = "Outside";
+  document.body.append(outside);
+  try {
+    await userEvent.click(outside);
+    await expect.poll(() => panel()).toBeNull();
+    expect(document.activeElement).toBe(outside);
+  } finally {
+    outside.remove();
+  }
+  // Escape 从面板内真实可聚焦项关闭并回到入口。
+  await trigger.click();
+  await expect.poll(() => panel()).not.toBeNull();
+  (screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).element() as HTMLButtonElement).focus();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => panel()).toBeNull();
+  await expect.element(trigger).toHaveFocus();
+  expect(events).toEqual([]);
+});
+
+test("reopening during the popover exit transition keeps the panel open", async () => {
+  const events: string[] = [];
+  const screen = await renderPwa(<DeviceControlHarness variant="desktop" events={events} />);
+  const trigger = screen.getByRole("button", { name: /Choose computer, current Current computer/ });
+  const triggerNode = trigger.element() as HTMLButtonElement;
+  const findPanel = () => document.querySelector<HTMLElement>(".pwa-device-popover");
+  // 先等进入转场真正结束，避免随后把进入的 transitionrun 当成退场门槛。
+  let enterEnded = false;
+  const onEnterTransitionEnd = (event: TransitionEvent) => {
+    if (event.target === findPanel() && event.propertyName === "opacity") enterEnded = true;
+  };
+  document.addEventListener("transitionend", onEnterTransitionEnd, true);
+  await trigger.click();
+  await expect.poll(() => triggerNode.getAttribute("aria-expanded")).toBe("true");
+  await expect.poll(() => enterEnded, { interval: 10, timeout: 2_000 }).toBe(true);
+  document.removeEventListener("transitionend", onEnterTransitionEnd, true);
+
+  const panelNode = findPanel()!;
+  let exitSnapshot: { expanded: string | null; connected: boolean } | null = null;
+  const onExitTransitionRun = (event: TransitionEvent) => {
+    if (event.target !== panelNode || event.propertyName !== "opacity" || exitSnapshot) return;
+    exitSnapshot = { expanded: triggerNode.getAttribute("aria-expanded"), connected: panelNode.isConnected };
+  };
+  panelNode.addEventListener("transitionrun", onExitTransitionRun);
+  flushSync(() => triggerNode.click());
+  expect(triggerNode.getAttribute("aria-expanded")).toBe("false");
+  await expect.poll(() => exitSnapshot, { interval: 10, timeout: 2_000 }).not.toBeNull();
+  expect(exitSnapshot).toEqual({ expanded: "false", connected: true });
+  // 退场透明度实际开始下降时才重开：此时退场仍在进行，节点尚未卸载。
+  // 门槛在同一次同步回调内闭合，避免“检查通过、点击前退场已结束”的空窗：
+  // 透明度必须严格介于 0 与 1 之间（0 说明退场已走完）、面板仍是当前连接节点，
+  // 且确实存在 running 的 opacity CSS 转场。
+  let reversed = false;
+  await expect
+    .poll(
+      () => {
+        if (reversed) return true;
+        const opacity = parseFloat(getComputedStyle(panelNode).opacity);
+        const opacityTransitionRunning = panelNode
+          .getAnimations()
+          .some(
+            (animation) =>
+              animation instanceof CSSTransition &&
+              animation.transitionProperty === "opacity" &&
+              animation.playState === "running",
+          );
+        if (!(opacity > 0 && opacity < 1 && opacityTransitionRunning && findPanel() === panelNode && panelNode.isConnected)) {
+          return false;
+        }
+        reversed = true;
+        flushSync(() => triggerNode.click());
+        return true;
+      },
+      { interval: 10, timeout: 2_000 },
+    )
+    .toBe(true);
+  await expect.poll(() => triggerNode.getAttribute("aria-expanded")).toBe("true");
+  // 重开必须真的启动入场转场，而不是退场被中断后直接静止。
+  await expect.poll(() => findPanel()!.getAnimations().length, { interval: 10, timeout: 2_000 }).toBeGreaterThan(0);
+  await expect.poll(() => parseFloat(getComputedStyle(findPanel()!).opacity)).toBe(1);
+  // 所有入场转场结束；旧退场若在结束阶段关闭面板，这里会看到 aria-expanded=false。
+  await expect.poll(() => findPanel()!.getAnimations().length, { interval: 10, timeout: 2_000 }).toBe(0);
+  expect(triggerNode.getAttribute("aria-expanded")).toBe("true");
+  const row = screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).element();
+  const rowBox = row.getBoundingClientRect();
+  const hit = document.elementFromPoint(Math.round(rowBox.left + rowBox.width / 2), Math.round(rowBox.top + rowBox.height / 2));
+  expect(hit === row || row.contains(hit)).toBe(true);
+  // 正常关闭后无排队动作残留，也不残留旧面板。
+  flushSync(() => triggerNode.click());
+  await expect.poll(() => triggerNode.getAttribute("aria-expanded")).toBe("false");
+  await expect.poll(() => findPanel()).toBeNull();
+  expect(events).toEqual([]);
+});
+
+test("queued action keeps the panel closed when the trigger is pressed again", async () => {
+  const events: string[] = [];
+  const screen = await renderPwa(<DeviceControlHarness variant="desktop" events={events} />);
+  const trigger = screen.getByRole("button", { name: /Choose computer, current Current computer/ });
+  await trigger.click();
+  await expect.poll(() => document.querySelector(".pwa-device-popover")).not.toBeNull();
+  const row = screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).element() as HTMLButtonElement;
+  flushSync(() => row.click());
+  // 退出动画尚未结束、动作已排队：不能再打开面板，否则动作会被搁置。
+  flushSync(() => (trigger.element() as HTMLButtonElement).click());
+  await expect.poll(() => document.querySelector(".pwa-device-popover")).toBeNull();
+  await expect.poll(() => events).toEqual(["select:device:next"]);
+  await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
+});
+
+test("computer trigger stays a single line for one and many computers", async () => {
+  for (const devices of [[currentDevice], [currentDevice, nextDevice]]) {
+    const screen = await renderPwa(<DeviceControlHarness variant="desktop" events={[]} devices={devices} />);
+    const trigger = document.querySelector<HTMLElement>(".pwa-device-trigger")!;
+    expect(trigger.classList.contains("pwa-device-trigger-compact")).toBe(true);
+    expect(trigger.querySelector(".pwa-device-trigger-dot")).toBeNull();
+    expect(trigger.querySelector(".pwa-peer-icon")).toBeNull();
+    expect(trigger.querySelector(".pwa-device-trigger-copy small")).toBeNull();
+    expect(trigger.querySelector(".pwa-device-trigger-chevron")).not.toBeNull();
+    expect(Math.round(trigger.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    await screen.unmount();
+  }
+});
+
+test("unpaired mobile footer pairs directly without opening an empty chooser", async () => {
+  await page.viewport(320, 568);
+  const events: string[] = [];
+  const screen = await renderPwa(<WorkspaceDeviceControl devices={[]} activeDeviceId={null} pairingPresence={{}} variant="sheet" onPair={() => events.push("pair")} onSelectDevice={() => {}} onRename={() => {}} onRemove={() => {}} />);
+  const pair = screen.getByRole("button", { name: "Pair a computer" });
+  await pair.click();
+  expect(events).toEqual(["pair"]);
+  expect(document.querySelector(".pwa-device-drawer")).toBeNull();
 });

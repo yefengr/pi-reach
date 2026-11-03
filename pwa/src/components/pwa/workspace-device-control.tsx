@@ -132,9 +132,6 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
   const pendingActionRef = useRef<(() => void) | null>(null);
   const activeDevice = devices.find((device) => device.id === activeDeviceId) ?? null;
   const label = activeDevice ? displayDevice(activeDevice) : devices.length > 0 ? t.devices.chooseComputer : t.devices.noComputerPaired;
-  // 只配对一台电脑时收成一行：在线圆点＋电脑名＋展开箭头，不显示图标框与副标题。
-  const compact = variant === "desktop" || (devices.length === 1 && activeDevice !== null);
-  const activeOnline = activeDevice !== null && (pairingPresence[activeDevice.id]?.onlineEndpoints ?? 0) > 0;
   const title = purpose === "manage" ? t.devices.computers : t.devices.chooseTitle;
 
   const setPanelOpened = (nextOpened: boolean) => {
@@ -144,6 +141,12 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
   };
   const dismissPanel = () => {
     if (!menuOwnsDismissRef.current) setPanelOpened(false);
+  };
+  // 底部入口与展开面板共用同一个开关状态：重复点击或快速连点可反向，不另建状态机。
+  const togglePanel = () => {
+    if (openedRef.current) dismissPanel();
+    // 面板正在退出且已排队业务动作时不再重开，避免动作挂在被取消的退场里。
+    else if (!pendingActionRef.current) setPanelOpened(true);
   };
   const handleMenuChange = (nextOpened: boolean) => {
     menuOwnsDismissRef.current = nextOpened;
@@ -156,7 +159,13 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     if (openedRef.current) return;
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
-    triggerRef.current?.focus({ preventScroll: true });
+    // 关闭结束后只在焦点落空或仍停在旧面板内时回焦入口；用户已移到其他有效控件时不抢占。
+    const active = document.activeElement;
+    const validPageFocus = active instanceof HTMLElement && active !== document.body && active.isConnected
+      && !active.closest(".pwa-device-popover, .pwa-device-drawer")
+      && !active.matches(":disabled") && active.getClientRects().length > 0
+      && !active.closest('[aria-hidden="true"], [inert]');
+    if (!validPageFocus) triggerRef.current?.focus({ preventScroll: true });
     action?.();
   };
   const panel = <DevicePanel
@@ -169,7 +178,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     onRename={(device) => runAfterClose(() => onRename(device))}
     onRemove={(device) => runAfterClose(() => onRemove(device))}
   />;
-  if (variant === "desktop" && purpose === "choose" && devices.length === 0) return <Button className="pwa-nav-pair" variant="transparent" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>;
+  if (purpose === "choose" && devices.length === 0) return <Button className="pwa-nav-pair" variant="transparent" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>;
 
   const trigger: ReactNode = purpose === "manage" ? <Button
     ref={triggerRef}
@@ -177,21 +186,18 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     variant="transparent"
     type="button"
     aria-expanded={opened}
-    onClick={() => setPanelOpened(true)}
+    onClick={togglePanel}
     leftSection={<Computer size={16} />}
   >{t.devices.computers}</Button> : <Button
     ref={triggerRef}
-    className={compact ? "pwa-device-trigger pwa-device-trigger-compact" : "pwa-device-trigger"}
+    className="pwa-device-trigger pwa-device-trigger-compact"
     variant="default"
     type="button"
     aria-expanded={opened}
-    onClick={() => setPanelOpened(true)}
+    onClick={togglePanel}
     aria-label={t.devices.triggerLabel(label)}
-    leftSection={compact
-      ? <span className={`pwa-device-trigger-dot${activeOnline ? " online" : ""}`} aria-hidden="true" />
-      : <span className={`pwa-peer-icon ${activeOnline ? "online" : ""}`}><Computer size={20} /></span>}
     rightSection={<ChevronDown className="pwa-device-trigger-chevron" size={16} />}
-  ><span className="pwa-device-trigger-copy"><strong>{label}</strong>{compact ? null : <small>{activeDevice ? t.devices.currentComputer : t.devices.selectComputer}</small>}</span></Button>;
+  ><span className="pwa-device-trigger-copy"><strong>{label}</strong></span></Button>;
 
   if (variant === "sheet") return <>
     {trigger}

@@ -619,9 +619,8 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         await expect.poll(() => Math.round(screen.getByRole("dialog", { name: /Workspace/ }).element().getBoundingClientRect().bottom)).toBe(height);
       }
       const container = mobile ? screen.getByRole("dialog", { name: /Workspace/ }) : screen.getByRole("complementary", { name: "Workspace navigation" });
-      // 桌面底部直接配对；移动导航仍保留未配对说明，不显示在线 Pi 与本地历史分组。
-      if (mobile) await expect.element(container.getByText("No computer paired", { exact: true })).toBeVisible();
-      else await expect.element(container.getByText("No computer paired", { exact: true })).not.toBeInTheDocument();
+      // 桌面底部直接配对；移动导航复用同一直接入口，不再先开空面板。
+      await expect.element(container.getByText("No computer paired", { exact: true })).not.toBeInTheDocument();
       expect(container.element().querySelector(".pwa-nav-section")).toBeNull();
       const navigationPair = container.getByRole("button", { name: "Pair a computer", exact: true });
       const navigationPairRect = navigationPair.element().getBoundingClientRect();

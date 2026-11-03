@@ -18,6 +18,8 @@
   --pwa-main-safe-bottom: var(--pwa-safe-bottom);
   --pwa-main-inset-start: calc(var(--pwa-gutter) + var(--pwa-main-safe-left));
   --pwa-main-inset-end: calc(var(--pwa-gutter) + var(--pwa-main-safe-right));
+  /* 主区底部留白：侧栏、分隔条、输入区与只读说明条共用，侧栏底边与 Composer 卡片底边对齐。 */
+  --pwa-main-bottom-gap: max(var(--pwa-composer-bottom, 16px), var(--pwa-main-safe-bottom, var(--pwa-safe-bottom)));
   /* 工作区页面以 bg 承载；悬浮侧栏不再给整条状态区铺 panel，移动导航与设置层另行覆盖。 */
   --pwa-status-backdrop: var(--pwa-bg);
 }
@@ -67,27 +69,25 @@
   width: var(--pwa-sidebar-width);
   min-height: 0;
   margin-top: var(--pwa-safe-top);
-  margin-bottom: calc(38px + var(--pwa-safe-bottom));
+  margin-bottom: var(--pwa-main-bottom-gap);
   margin-left: calc(12px + var(--pwa-safe-left));
   overflow: hidden;
   border: var(--pwa-hairline) solid var(--pwa-edge);
-  border-radius: var(--pwa-radius-lg);
+  border-radius: var(--pwa-radius-xl);
   background: var(--pwa-panel);
-  box-shadow: var(--pwa-shadow-float);
+  box-shadow: var(--pwa-shadow-sidebar);
   /* 展开时立即可见；只在收起时延迟到过渡结束再隐藏，避免从设置页返回时继承的隐藏状态被过渡拖住而无法聚焦。 */
   transition: transform var(--pwa-sidebar-motion) var(--pwa-ease-content), opacity var(--pwa-sidebar-motion) var(--pwa-ease-content), visibility 0s;
 }
 /* 外框已消费普通安全区，内部不重复叠加。 */
 .pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: 0; padding-left: 8px; }
 .pwa-root .pwa-desktop-navigation .pwa-sidebar-brand { padding-right: calc(var(--pwa-hit-target) + 8px); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-regular); white-space: nowrap; }
-/* 命中区完全在侧栏右侧，避开品牌行按钮和列表滚动条；视觉线压住侧栏右边框，不跟着命中区偏移。 */
-.pwa-root .pwa-sidebar-resizer { position: absolute; z-index: var(--pwa-z-sidebar-toggle); top: calc(var(--pwa-safe-top) + var(--pwa-topbar-height)); bottom: calc(38px + var(--pwa-safe-bottom)); left: var(--pwa-sidebar-span); width: 8px; cursor: col-resize; touch-action: none; }
-.pwa-root .pwa-sidebar-resizer::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: -1px; width: 2px; border-radius: var(--pwa-radius-xs); background: transparent; pointer-events: none; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
-@media (hover: hover) { .pwa-root .pwa-sidebar-resizer:hover::before { background: var(--pwa-control-line); } }
-/* 键盘焦点环贴合 2px 视觉线，不再沿 8px 透明命中区画整条宽框；拖动中只保留强调色线。 */
+/* 命中区完全在侧栏右侧，避开品牌行按钮和列表滚动条；视觉分隔只由侧栏自身边框承担。 */
+.pwa-root .pwa-sidebar-resizer { position: absolute; z-index: var(--pwa-z-sidebar-toggle); top: calc(var(--pwa-safe-top) + var(--pwa-topbar-height)); bottom: var(--pwa-main-bottom-gap); left: var(--pwa-sidebar-span); width: 8px; cursor: col-resize; touch-action: none; }
+.pwa-root .pwa-sidebar-resizer::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: -1px; width: 2px; border-radius: var(--pwa-radius-xs); background: transparent; pointer-events: none; }
+/* 悬停与拖动都不画竖线；其余路径只在键盘聚焦时给轮廓提示。 */
 .pwa-root .pwa-sidebar-resizer:focus-visible { outline: none; }
 .pwa-root .pwa-sidebar-resizer:focus-visible::before { box-shadow: 0 0 0 2px var(--pwa-accent); }
-.pwa-root[data-sidebar-resizing] .pwa-sidebar-resizer::before { background: var(--pwa-accent); }
 .pwa-root[data-sidebar-resizing] .pwa-sidebar-resizer:focus-visible::before { box-shadow: none; }
 .pwa-root[data-sidebar-collapsed] .pwa-sidebar-resizer { display: none; }
 .pwa-root[data-sidebar-resizing] .pwa-layout,
@@ -108,7 +108,6 @@
 .pwa-root .pwa-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 0 8px; background: var(--pwa-panel); }
 .pwa-root .pwa-navigation-content { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; }
 .pwa-root .pwa-sidebar-brand { min-height: var(--pwa-topbar-height); flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
-.pwa-root .pwa-sidebar-head { min-width: 0; flex: 0 0 auto; padding: 0 0 4px; }
 .pwa-root .pwa-navigation-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; padding: 0 0 12px; overscroll-behavior: contain; }
 
 .pwa-root .pwa-nav-section { margin-top: 12px; }
@@ -147,14 +146,16 @@
 .pwa-root .pwa-pi-status-running { color: var(--pwa-running); }
 .pwa-notice-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--pwa-accent); }
 
-/* 移动导航保留既有两个文字入口；桌面当前电脑与独立设置固定底部。 */
-.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot { display: flex; align-items: center; gap: 4px; padding: 8px 0; }
-.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot .pwa-device-trigger,
-.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot .pwa-nav-pair { width: auto; min-width: 0; flex: 1 1 auto; }
-.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot .pwa-nav-settings { flex: 0 0 var(--pwa-hit-target); }
-
+/* 桌面与移动导航共用同一行底部入口：电脑选择器与设置操作固定，导航列表独立滚动。 */
 .pwa-root .pwa-sidebar-foot,
-.pwa-root .pwa-session-sheet-foot { min-width: 0; flex: 0 0 auto; display: grid; gap: var(--pwa-space-pair); padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
+.pwa-root .pwa-session-sheet-foot { min-width: 0; flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-foot { padding: 8px 0; }
+.pwa-root .pwa-sidebar-foot .pwa-device-trigger,
+.pwa-root .pwa-session-sheet-foot .pwa-device-trigger,
+.pwa-root .pwa-sidebar-foot .pwa-nav-pair,
+.pwa-root .pwa-session-sheet-foot .pwa-nav-pair { width: auto; min-width: 0; flex: 1 1 auto; }
+.pwa-root .pwa-sidebar-foot .pwa-nav-settings,
+.pwa-root .pwa-session-sheet-foot .pwa-nav-settings { flex: 0 0 var(--pwa-hit-target); }
 .pwa-root .pwa-sidebar-foot .pwa-button,
 .pwa-root .pwa-session-sheet-foot .pwa-button { min-width: 0; width: 100%; justify-content: flex-start; padding-inline: 10px; }
 .pwa-root .pwa-sidebar-foot .pwa-button .mantine-Button-inner,
@@ -228,7 +229,7 @@
 .pwa-root .pwa-choose-pi-list .pwa-nav-link-section { color: var(--pwa-secondary); }
 
 /* 本地历史的只读说明条替换输入区。 */
-.pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) max(var(--pwa-composer-bottom, 16px), var(--pwa-main-safe-bottom)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-main-bottom-gap) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 
 /* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }
