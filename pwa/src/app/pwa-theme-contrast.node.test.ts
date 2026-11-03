@@ -180,7 +180,7 @@ test("every translucent color, color-mix ratio and element opacity in the theme 
   expect(percents.length).toBeGreaterThan(0);
   // 8 位 hex 的 alpha 字节按 round(百分比 × 255) 写出，读回取整后必须正好是刻度档位。
   expect(percents.filter(([, percent]) => !OPACITY_SCALE.includes(Math.round(percent))).map(([source]) => source)).toEqual([]);
-  expect([...css.matchAll(/(--pwa-opacity-[a-z-]+):/g)].map((match) => match[1])).toEqual(["--pwa-opacity-disabled", "--pwa-opacity-breathe", "--pwa-opacity-running-breathe", "--pwa-opacity-enter"]);
+  expect([...css.matchAll(/(--pwa-opacity-[a-z-]+):/g)].map((match) => match[1])).toEqual(["--pwa-opacity-disabled", "--pwa-opacity-breathe", "--pwa-opacity-enter"]);
 });
 
 test("the opacity scale steps by 4% up to 32% and by 8% above", () => {

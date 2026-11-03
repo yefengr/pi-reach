@@ -355,8 +355,10 @@ describe("turn presentation", () => {
     expect(slot(first)).toBe(true);
     expect(first).not.toContain('data-working="true"');
     expect(first).toContain('class="pwa-turn-activity-working" aria-hidden="true">');
-    expect(first).toContain('class="pwa-running-indicator pwa-running-indicator-default" aria-hidden="true">');
-    expect(first).toContain('class="pwa-running-indicator-dot"');
+    expect(first).toContain('<span class="pwa-working-icon" aria-hidden="true"><svg');
+    expect(first).toContain("pwa-spin");
+    // Working 改用槽内旋转图标，不再渲染会话行的静态实心点。
+    expect(first).not.toContain("pwa-running-indicator");
     // 正文、思考、工具与已完成摘要期间活动区都保持，高度不随具体活动变化。
     expect(slot(renderList([...events(user("u1", "g1", 1)), { kind: "event", event: { ...toolEvent, group_id: "g1" } }], live))).toBe(true);
     expect(slot(renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2)), live))).toBe(true);

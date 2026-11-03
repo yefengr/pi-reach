@@ -283,26 +283,26 @@ test.each([1280, 390])("Working appears only after the page stays still and neve
   // 活动区立即占位，Working 等界面静止后才淡入。
   expect(activitySlot()).not.toBeNull();
   expect(workingShown()).toBeNull();
-  // Working 尚未显示时，运行点也必须暂停；显隐与动画控制解耦。
-  const hiddenDot = activitySlot()!.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
-  expect(getComputedStyle(hiddenDot).animationPlayState).toBe("paused");
+  // Working 尚未显示时，槽内旋转图标也必须暂停；显隐与动画控制解耦。
+  const hiddenSpinner = activitySlot()!.querySelector<SVGSVGElement>(".pwa-working-icon .pwa-spin")!;
+  expect(getComputedStyle(hiddenSpinner).animationPlayState).toBe("paused");
   const slotHeight = Math.round(activitySlot()!.getBoundingClientRect().height);
   await expect.poll(workingShown).not.toBeNull();
   expect(Math.round(activitySlot()!.getBoundingClientRect().height)).toBe(slotHeight);
-  await expect.poll(() => getComputedStyle(hiddenDot).animationPlayState).toBe("running");
+  await expect.poll(() => getComputedStyle(hiddenSpinner).animationPlayState).toBe("running");
   // 与过程组头同字号、同字重；运行色与图标一致，但保持正体；图标与状态文字取 6px 语义档。
   const workingStyle = getComputedStyle(activitySlot()!);
   expect(workingStyle.fontSize).toBe("16px");
   expect(workingStyle.fontWeight).toBe("600");
   expect(workingStyle.fontStyle).toBe("normal");
   const label = workingShown()!.querySelector<HTMLElement>(".pwa-turn-activity-working")!;
-  const dot = label.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
-  expect(getComputedStyle(label).color).toBe(getComputedStyle(dot).backgroundColor);
-  const indicator = label.querySelector<HTMLElement>(".pwa-running-indicator")!.getBoundingClientRect();
+  const icon = label.querySelector<HTMLElement>(".pwa-working-icon")!.getBoundingClientRect();
+  const spinner = label.querySelector<SVGSVGElement>(".pwa-spin")!;
+  expect(getComputedStyle(spinner).color).toBe(getComputedStyle(label).color);
   const text = label.querySelector<HTMLElement>(".pwa-working-label")!.getBoundingClientRect();
-  expect(Math.round(indicator.width)).toBe(16);
-  expect([Math.round(dot.getBoundingClientRect().width), Math.round(dot.getBoundingClientRect().height)]).toEqual([8, 8]);
-  expect(Math.round(text.left - indicator.right)).toBe(6);
+  expect(Math.round(icon.width)).toBe(16);
+  expect([getComputedStyle(spinner).width, getComputedStyle(spinner).height]).toEqual(["16px", "16px"]);
+  expect(Math.round(text.left - icon.right)).toBe(6);
   // 新内容出现立即隐藏 Working。
   await update([question, partialItem(thinking)]);
   expect(workingShown()).toBeNull();

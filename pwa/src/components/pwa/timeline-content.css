@@ -47,11 +47,12 @@
 .pwa-thinking-status { box-sizing: border-box; display: flex; align-items: center; gap: var(--pwa-space-status); min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-running); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-thinking-status > svg { color: var(--pwa-running); }
 /* 本轮活动区：沿用 Working 行的高度与外边距，Working 只在界面没有可见动作时淡入；显隐只改透明度，不改变列表高度。 */
-.pwa-turn-activity-working { display: inline-block; opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-turn-activity-working { display: inline-flex; align-items: center; gap: var(--pwa-space-status); opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-turn-activity[data-working] .pwa-turn-activity-working { opacity: 1; }
-/* 行框中心与字形中心不同；middle 跟随字体基线与 x-height，不用固定像素偏移补偿。 */
-.pwa-turn-activity-working .pwa-running-indicator { margin-inline-end: var(--pwa-space-status); vertical-align: middle; color: var(--pwa-running); }
-.pwa-turn-activity:not([data-working]) .pwa-running-indicator-dot { animation-play-state: paused; }
+/* 图标固定 16px 方槽，槽与文字由活动区整行居中；旋转只作用在槽内的 svg，不移动文字或行高。 */
+.pwa-working-icon { box-sizing: border-box; display: inline-grid; place-items: center; flex: 0 0 auto; width: 16px; height: 16px; }
+/* Working 不可见时不绘制旋转，避免透明度为 0 时仍持续消耗合成帧。 */
+.pwa-turn-activity:not([data-working]) .pwa-turn-activity-working .pwa-spin { animation-play-state: paused; }
 /* 压缩终态是本地提示，不是会话记录；固定 44px 行高，与进行中行切换时不跳动。 */
 .pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-compaction-notice.is-error { color: var(--pwa-error); }

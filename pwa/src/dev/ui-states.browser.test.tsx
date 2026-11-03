@@ -183,7 +183,7 @@ test("native clipboard outcome drives production feedback without claiming an un
   if (!succeeded) await expect.poll(() => document.querySelector(".pwa-copy-error")).not.toBeNull();
 });
 
-test("live reduced-motion preference pauses the actual running dot and takes precedence over slow motion, with cleanup", async () => {
+test("live reduced-motion preference pauses the actual Working spinner and takes precedence over slow motion, with cleanup", async () => {
   const nativeMatchMedia = window.matchMedia.bind(window);
   const media = new EventTarget();
   let reduced = false;
@@ -196,18 +196,18 @@ test("live reduced-motion preference pauses the actual running dot and takes pre
   expect(document.documentElement.style.getPropertyValue("--pwa-duration-collapse-in")).toBe("1600ms");
   expect(document.documentElement.style.getPropertyValue("--pwa-duration-image-in")).toBe("1600ms");
   expect(document.documentElement.style.getPropertyValue("--pwa-duration-fetch-settle")).toBe("");
-  await expect.poll(() => document.querySelector(".pwa-turn-activity[data-working] .pwa-running-indicator-dot")).not.toBeNull();
-  const dot = document.querySelector<HTMLElement>(".pwa-turn-activity .pwa-running-indicator-dot")!;
-  await expect.poll(() => dot.getAttribute("data-pwa-animation")).toBe("running");
+  await expect.poll(() => document.querySelector(".pwa-turn-activity[data-working] .pwa-spin")).not.toBeNull();
+  const spinner = document.querySelector<HTMLElement>(".pwa-turn-activity .pwa-working-icon .pwa-spin")!;
+  await expect.poll(() => spinner.getAttribute("data-pwa-animation")).toBe("running");
   reduced = true;
   media.dispatchEvent(new MediaQueryListEvent("change", { matches: true, media: query.media }));
   await expect.poll(() => document.documentElement.style.getPropertyValue("--pwa-duration-drawer")).toBe("");
-  await expect.poll(() => dot.getAttribute("data-pwa-animation")).toBe("paused");
+  await expect.poll(() => spinner.getAttribute("data-pwa-animation")).toBe("paused");
   expect(document.querySelector(".pwa-ui-states-motion")?.textContent).toContain("已开启");
   reduced = false;
   media.dispatchEvent(new MediaQueryListEvent("change", { matches: false, media: query.media }));
   await expect.poll(() => document.documentElement.style.getPropertyValue("--pwa-duration-drawer")).not.toBe("");
-  await expect.poll(() => dot.getAttribute("data-pwa-animation")).toBe("running");
+  await expect.poll(() => spinner.getAttribute("data-pwa-animation")).toBe("running");
   await screen.unmount();
   expect(document.documentElement.style.getPropertyValue("--pwa-duration-drawer")).toBe("");
 });
