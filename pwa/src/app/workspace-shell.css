@@ -108,7 +108,12 @@
 .pwa-root .pwa-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 0 8px; background: var(--pwa-panel); }
 .pwa-root .pwa-navigation-content { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; }
 .pwa-root .pwa-sidebar-brand { min-height: var(--pwa-topbar-height); flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
-.pwa-root .pwa-navigation-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; padding: 0 0 12px; overscroll-behavior: contain; }
+/* 桌面侧栏品牌行是固定层：列表离开顶部时淡入发丝线（data-scroll-edge，见 useScrollIndicator）；线内缩到行文字左缘。 */
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-brand { position: relative; }
+.pwa-root .pwa-desktop-navigation .pwa-sidebar-brand::after { content: ""; position: absolute; right: 8px; bottom: 0; left: 8px; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-desktop-navigation:has(.pwa-navigation-scroll[data-scroll-edge]) .pwa-sidebar-brand::after { opacity: 1; }
+/* 列表底部留白与渐隐同高（当前 24）：停在底部时最后一行落在渐隐带之上，不被淡化（与消息列表一致）。 */
+.pwa-root .pwa-navigation-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; padding: 0 0 var(--pwa-space-lg); overscroll-behavior: contain; }
 
 .pwa-root .pwa-nav-section { margin-top: 12px; }
 .pwa-root .pwa-nav-section-heading { min-height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
@@ -150,8 +155,11 @@
 
 /* 桌面与移动导航共用同一行底部入口：电脑选择器与设置操作固定，导航列表独立滚动。 */
 .pwa-root .pwa-sidebar-foot,
-.pwa-root .pwa-session-sheet-foot { min-width: 0; flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
+.pwa-root .pwa-session-sheet-foot { position: relative; min-width: 0; flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 8px 0 max(8px, var(--pwa-safe-bottom)); }
 .pwa-root .pwa-session-sheet-foot { padding-bottom: max(24px, var(--pwa-safe-bottom)); }
+/* 导航列表与底部操作区之间不硬切：footer 上沿起 24px「透明 → panel」渐隐（DESIGN「滚动边缘分隔」）。 */
+.pwa-root .pwa-sidebar-foot::before,
+.pwa-root .pwa-session-sheet-foot::before { content: ""; position: absolute; right: 0; bottom: 100%; left: 0; height: var(--pwa-navigation-fade); background: var(--pwa-navigation-fade-gradient); pointer-events: none; }
 .pwa-root .pwa-desktop-navigation .pwa-sidebar-foot { padding: 8px 0; }
 .pwa-root .pwa-sidebar-foot .pwa-device-trigger,
 .pwa-root .pwa-session-sheet-foot .pwa-device-trigger,

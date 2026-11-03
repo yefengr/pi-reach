@@ -344,7 +344,10 @@
 /* 移动导航：左侧 min(320px, 85vw)，顶部为品牌与关闭按钮，内容与桌面侧栏一致。 */
 /* 品牌与下方导航列表左缘对齐（内容区 8px + 行内 8px）。 */
 /* 移动导航只贴左边缘：面板总宽另加左安全区，头部与内容内缩同样的距离。 */
-.pwa-root .pwa-session-sheet-head { padding-right: 4px; padding-left: calc(16px + var(--pwa-safe-left)); background: var(--pwa-panel); }
+.pwa-root .pwa-session-sheet-head { position: relative; padding-right: 4px; padding-left: calc(16px + var(--pwa-safe-left)); background: var(--pwa-panel); }
+/* 移动导航顶栏：列表离开顶部时在固定头部下沿淡入发丝线，贯穿面板宽度（与其它移动顶栏一致）。 */
+.pwa-root .pwa-session-sheet-head::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-session-sheet:has(.pwa-navigation-scroll[data-scroll-edge]) .pwa-session-sheet-head::after { opacity: 1; }
 .pwa-root .pwa-session-sheet-head .pwa-sidebar-brand { min-height: 0; padding: 0; }
 .pwa-root .pwa-session-sheet .pwa-navigation-content { padding: 0 8px 0 calc(8px + var(--pwa-safe-left)); }
 .pwa-scrim { background: var(--pwa-scrim) !important; backdrop-filter: none !important; }
