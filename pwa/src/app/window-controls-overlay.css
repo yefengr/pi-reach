@@ -6,25 +6,48 @@
   --pwa-wco-band-height: max(var(--pwa-wco-height), env(titlebar-area-height, var(--pwa-wco-height)));
   --pwa-wco-bottom: calc(var(--pwa-wco-top) + var(--pwa-wco-band-height));
   --pwa-wco-row: max(var(--pwa-topbar-height), var(--pwa-wco-band-height));
+  --pwa-wco-visual-size: min(calc(var(--pwa-hit-target) - 8px), var(--pwa-wco-band-height));
   --pwa-wco-sidebar-top: max(var(--pwa-safe-top), var(--pwa-wco-top));
   --pwa-wco-main-top: max(var(--pwa-safe-top), var(--pwa-wco-top));
+  --pwa-wco-sidebar-center: calc(var(--pwa-wco-top) + var(--pwa-wco-band-height) / 2 - var(--pwa-wco-sidebar-top));
+  --pwa-wco-main-center: calc(var(--pwa-wco-top) + var(--pwa-wco-band-height) / 2 - var(--pwa-wco-main-top));
   --pwa-wco-sidebar-left: max(var(--pwa-safe-left), var(--pwa-wco-left));
   --pwa-wco-main-left: max(0px, calc(var(--pwa-wco-left) - var(--pwa-sidebar-span)));
   --pwa-wco-main-right: max(var(--pwa-safe-right), var(--pwa-wco-reserved-right));
 }
 .pwa-root[data-wco][data-sidebar-collapsed] { --pwa-wco-main-left: max(var(--pwa-safe-left), var(--pwa-wco-left)); }
-.pwa-root[data-wco][data-wco-sidebar-below] { --pwa-wco-sidebar-top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); --pwa-wco-sidebar-left: var(--pwa-safe-left); }
-.pwa-root[data-wco][data-wco-main-below] { --pwa-wco-main-top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); --pwa-wco-main-left: var(--pwa-main-safe-left); --pwa-wco-main-right: var(--pwa-safe-right); }
+.pwa-root[data-wco][data-wco-sidebar-below] { --pwa-wco-sidebar-top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); --pwa-wco-sidebar-left: var(--pwa-safe-left); --pwa-wco-sidebar-center: calc(var(--pwa-wco-row) / 2); }
+.pwa-root[data-wco][data-wco-main-below] { --pwa-wco-main-top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); --pwa-wco-main-left: var(--pwa-main-safe-left); --pwa-wco-main-right: var(--pwa-safe-right); --pwa-wco-main-center: calc(var(--pwa-wco-row) / 2); }
 
-.pwa-root[data-wco] .pwa-desktop-navigation .pwa-sidebar { padding-top: var(--pwa-wco-sidebar-top); }
+/* 仅实际原生带与 theme-color 共用 bg；下面仍是侧栏自己的 panel，不新增公共顶栏。 */
+.pwa-root[data-wco] .pwa-desktop-navigation .pwa-sidebar { padding-top: var(--pwa-wco-sidebar-top); background-image: linear-gradient(to bottom, var(--pwa-bg) var(--pwa-wco-bottom), var(--pwa-panel) var(--pwa-wco-bottom)); }
 .pwa-root[data-wco] .pwa-desktop-navigation .pwa-sidebar-brand { min-height: var(--pwa-wco-row); margin-left: calc(var(--pwa-wco-sidebar-left) - var(--pwa-safe-left)); padding-right: calc(var(--pwa-hit-target) + 8px); white-space: nowrap; }
-.pwa-root[data-wco] .pwa-sidebar-brand > * { flex-shrink: 0; }
-.pwa-ui-scope .pwa-root[data-wco] .pwa-icon-button.pwa-sidebar-toggle { top: calc(var(--pwa-wco-sidebar-top) + (var(--pwa-wco-row) - var(--pwa-hit-target)) / 2); transition: none; }
-.pwa-ui-scope .pwa-root[data-wco][data-sidebar-collapsed] .pwa-icon-button.pwa-sidebar-toggle { top: calc(var(--pwa-wco-main-top) + (var(--pwa-wco-row) - var(--pwa-hit-target)) / 2); left: calc(var(--pwa-wco-main-left) + 8px); }
-.pwa-root[data-wco] .pwa-title-bar { min-height: calc(64px + var(--pwa-wco-main-top) + var(--pwa-wco-row) - var(--pwa-topbar-height)); padding-top: var(--pwa-wco-main-top); padding-left: calc(var(--pwa-gutter) + var(--pwa-wco-main-left)); padding-right: calc(8px + var(--pwa-wco-main-right)); }
+.pwa-root[data-wco] .pwa-sidebar-brand > * { position: relative; top: calc(var(--pwa-wco-sidebar-center) - var(--pwa-wco-row) / 2); flex-shrink: 0; }
+.pwa-ui-scope .pwa-root[data-wco] .pwa-icon-button.pwa-sidebar-toggle { --pwa-wco-control-center: var(--pwa-wco-sidebar-center); top: calc(var(--pwa-wco-sidebar-top) + var(--pwa-wco-control-top)); transition: none; }
+.pwa-ui-scope .pwa-root[data-wco][data-sidebar-collapsed] .pwa-icon-button.pwa-sidebar-toggle { --pwa-wco-control-center: var(--pwa-wco-main-center); top: calc(var(--pwa-wco-main-top) + var(--pwa-wco-control-top)); left: calc(var(--pwa-wco-main-left) + 8px); }
+.pwa-root[data-wco] .pwa-title-bar { min-height: max(64px, calc(64px + var(--pwa-wco-main-top) + var(--pwa-wco-row) - var(--pwa-topbar-height))); padding-top: var(--pwa-wco-main-top); padding-left: calc(var(--pwa-gutter) + var(--pwa-wco-main-left)); padding-right: calc(8px + var(--pwa-wco-main-right)); }
 .pwa-root[data-wco][data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(var(--pwa-wco-main-left) + 8px + var(--pwa-hit-target) + 4px); }
-.pwa-root[data-wco] .pwa-title-bar-heading { padding-top: calc((var(--pwa-wco-row) - var(--pwa-text-title) * var(--pwa-leading-ui)) / 2); }
-.pwa-root[data-wco] .pwa-title-bar-actions { min-height: var(--pwa-wco-row); }
+.pwa-root[data-wco] .pwa-title-bar-heading { padding-top: calc(var(--pwa-wco-main-center) - var(--pwa-text-title) * var(--pwa-leading-ui) / 2); }
+.pwa-root[data-wco] .pwa-title-bar-actions { min-height: var(--pwa-wco-row); align-items: flex-start; }
+.pwa-root[data-wco] .pwa-title-bar-actions .pwa-connection { margin-top: calc(var(--pwa-wco-main-center) - var(--pwa-text-meta) * var(--pwa-leading-ui) / 2); line-height: var(--pwa-leading-ui); }
+.pwa-root[data-wco] .pwa-title-bar-refresh { --pwa-wco-control-center: var(--pwa-wco-main-center); margin-top: var(--pwa-wco-control-top); }
+
+/* 点击槽不负向越出窗口；图标、hover 与 focus 在槽内按原生中线定位，静态几何不依赖 transform。 */
+.pwa-ui-scope .pwa-root[data-wco] :is(.pwa-sidebar-toggle, .pwa-title-bar-refresh) {
+  --pwa-wco-control-top: max(0px, calc(var(--pwa-wco-control-center) - var(--pwa-hit-target) / 2));
+  --pwa-wco-control-size: var(--pwa-wco-visual-size);
+  --pwa-wco-control-visual-top: calc(var(--pwa-wco-control-center) - var(--pwa-wco-control-top) - var(--pwa-wco-control-size) / 2);
+  outline: none;
+}
+.pwa-root[data-wco][data-wco-sidebar-below]:not([data-sidebar-collapsed]) .pwa-sidebar-toggle,
+.pwa-root[data-wco][data-wco-main-below] .pwa-title-bar-refresh,
+.pwa-root[data-wco][data-wco-main-below][data-sidebar-collapsed] .pwa-sidebar-toggle { --pwa-wco-control-size: calc(var(--pwa-hit-target) - 8px); }
+.pwa-ui-scope .pwa-root[data-wco] :is(.pwa-sidebar-toggle, .pwa-title-bar-refresh)::before,
+.pwa-ui-scope .pwa-root[data-wco] :is(.pwa-sidebar-toggle, .pwa-title-bar-refresh) .mantine-ActionIcon-icon {
+  position: absolute; top: var(--pwa-wco-control-visual-top); right: auto; bottom: auto; left: calc((var(--pwa-hit-target) - var(--pwa-wco-control-size)) / 2);
+  width: var(--pwa-wco-control-size); height: var(--pwa-wco-control-size);
+}
+.pwa-ui-scope .pwa-root[data-wco] :is(.pwa-sidebar-toggle, .pwa-title-bar-refresh):focus-visible::before { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
 
 /* 设置页和顶边 Drawer 不跨列重排，单独预留完整系统带；滚动正文也不能进入控件带。 */
 .pwa-root[data-wco] .pwa-settings-view { top: max(var(--pwa-safe-top), var(--pwa-wco-bottom)); }
