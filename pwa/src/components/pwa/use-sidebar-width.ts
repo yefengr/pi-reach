@@ -26,7 +26,7 @@ function startDrag(event: PointerEvent<HTMLDivElement>, width: number, cap: () =
   const startX = event.clientX;
   const pointerId = event.pointerId;
   event.preventDefault();
-  target.focus({ preventScroll: true });
+  // 指针拖动不需要键盘焦点；主动 focus 会让浏览器把透明命中区当作键盘目标并画出宽焦点框。
   target.setPointerCapture(pointerId);
   const body = document.body;
   const previous = ["cursor", "user-select"].map((name) => [name, body.style.getPropertyValue(name), body.style.getPropertyPriority(name)]);

@@ -4002,7 +4002,12 @@ test("synchronizes live session titles from registry metadata without replacing 
 test("keeps an invalid manual pairing code visible with its error inside the dialog", async () => {
   const screen = await renderOnlineApp(renderWorkspaceApp);
   try {
-    await screen.getByRole("button", { name: "Pair a computer", exact: true }).first().click();
+    // 桌面已配对后配对入口在电脑面板底部，不再常驻侧栏 footer。
+    await screen.getByRole("button", { name: "Choose computer, current test-host" }).click();
+    const chooser = screen.getByRole("dialog", { name: "Choose computer" });
+    await expect.element(chooser).toBeVisible();
+    await chooser.getByRole("button", { name: "Pair a computer", exact: true }).click();
+    await expect.element(screen.getByRole("dialog", { name: "Pair a computer" })).toBeVisible();
     const input = screen.getByRole("textbox", { name: "Pairing code" });
     await input.fill("K7MP");
     await screen.getByRole("button", { name: "Pair", exact: true }).click();

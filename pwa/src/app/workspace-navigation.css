@@ -19,6 +19,14 @@
   margin-left: 8px;
 }
 
+/* 面板向下弹开时箭头向上；减少动态效果时瞬时翻转，不保留旋转过渡。 */
+.pwa-root .pwa-device-trigger-chevron { flex: 0 0 auto; transition: transform var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-device-trigger[aria-expanded="true"] .pwa-device-trigger-chevron { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-root .pwa-device-trigger-chevron { transition: none; }
+}
+
 .pwa-root .pwa-device-trigger-copy {
   min-width: 0;
   display: grid;

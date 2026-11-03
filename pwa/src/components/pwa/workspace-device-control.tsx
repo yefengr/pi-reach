@@ -176,6 +176,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     className="pwa-manage-computers"
     variant="transparent"
     type="button"
+    aria-expanded={opened}
     onClick={() => setPanelOpened(true)}
     leftSection={<Computer size={16} />}
   >{t.devices.computers}</Button> : <Button
@@ -183,12 +184,13 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     className={compact ? "pwa-device-trigger pwa-device-trigger-compact" : "pwa-device-trigger"}
     variant="default"
     type="button"
+    aria-expanded={opened}
     onClick={() => setPanelOpened(true)}
     aria-label={t.devices.triggerLabel(label)}
     leftSection={compact
       ? <span className={`pwa-device-trigger-dot${activeOnline ? " online" : ""}`} aria-hidden="true" />
       : <span className={`pwa-peer-icon ${activeOnline ? "online" : ""}`}><Computer size={20} /></span>}
-    rightSection={<ChevronDown size={16} />}
+    rightSection={<ChevronDown className="pwa-device-trigger-chevron" size={16} />}
   ><span className="pwa-device-trigger-copy"><strong>{label}</strong>{compact ? null : <small>{activeDevice ? t.devices.currentComputer : t.devices.selectComputer}</small>}</span></Button>;
 
   if (variant === "sheet") return <>
@@ -223,7 +225,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     opened={opened}
     onChange={(nextOpened) => { if (nextOpened) setPanelOpened(true); else dismissPanel(); }}
     onExitTransitionEnd={finishClose}
-    width="target"
+    width="min(calc(var(--pwa-sidebar-width) - var(--pwa-space-md)), calc(100vw - var(--pwa-space-2xl)))"
     position="top-start"
     offset={8}
     withinPortal
