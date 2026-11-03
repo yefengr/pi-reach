@@ -1109,8 +1109,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     : target.kind === "endpoint" ? selectedHistory !== null || target.endpointId !== activeEndpointId : selectedHistory?.id !== target.historyId;
   const onlinePis = useMemo(() => activePis.filter((endpoint) => endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right))), [activePis]);
   const placeholderKind: WorkspacePlaceholderKind = !activeDevice ? "choose-computer" : !snapshotReady ? "checking" : onlinePis.length === 0 ? "no-pi" : onlinePis.length > 1 ? "choose-pi" : "opening";
-  // 在线 Pi 的当前会话只出现在「在线 Pi」分组：当前选中的 Pi 只隐藏已握手的实时会话；其他在线 Pi 隐藏它在本浏览器中
-  // 最近更新的一条历史，视为它当前的会话。Pi 退出或切换会话后，这些记录照常回到本地历史；正在阅读的历史始终保留。
+  // 在线 Pi 的当前会话只出现在「在线 Pi」分组：已握手的当前 Pi 按会话身份隐藏；其他 Pi 和切换中尚未握手的目标
+  // 暂时隐藏本浏览器最近更新的一条历史。Pi 退出或切换会话后，这些记录照常回到本地历史；正在阅读的历史始终保留。
   const selectedEndpointId = activeEndpoint?.endpointId ?? null;
   const navigationHistory = useMemo(() => {
     const onlineEndpointIds = new Set(onlinePis.map((endpoint) => endpoint.endpointId));
@@ -1122,9 +1122,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     }
     return historySessions.filter((session) => {
       if (session.id === selectedHistory?.id || !onlineEndpointIds.has(session.endpointId)) return true;
-      if (session.endpointId === selectedEndpointId) {
+      if (session.endpointId === selectedEndpointId && (!liveSession || liveSession.deviceId !== session.deviceId || liveSession.endpointId === session.endpointId)) {
         return !(liveSession?.deviceId === session.deviceId && liveSession.endpointId === session.endpointId && liveSession.sessionId === session.sessionId);
       }
+      // 目标握手前沿用其他在线 Pi 的规则，避免最近历史短暂出现又消失。
       return latestByEndpoint.get(session.endpointId) !== session;
     });
   }, [historySessions, liveSession, onlinePis, selectedEndpointId, selectedHistory?.id]);

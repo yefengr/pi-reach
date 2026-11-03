@@ -4,11 +4,12 @@ import { page } from "vitest/browser";
 import { userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { ActionIcon, Badge, Button, Select, Stack, Text, TextInput, Title } from "@mantine/core";
-import { DesktopSidebar } from "./workspace-view";
+import { DesktopSidebar, WorkspaceHistorySection } from "./workspace-view";
 import { ChoosePiWorkspace, UnpairedWorkspace } from "./workspace-content";
 import { StartupErrorView } from "./pwa-startup";
 import { PwaConnectionBanner } from "./pwa-app-actions";
-import type { PwaEndpointRecord } from "@/lib/pwa/db";
+import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
+import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 
 function SelectHarness({ disabled = false }: { disabled?: boolean }) {
   const [value, setValue] = useState("endpoint-main");
@@ -241,6 +242,25 @@ test("navigation row text shares the 16px left edge of the brand and section hea
     expect(Math.round(label.left - sidebar.left)).toBe(16);
     // 分组标题以 16 的图标开头，图标盒左缘即内容左缘。
     expect(Math.round(heading.firstElementChild!.getBoundingClientRect().left - sidebar.left)).toBe(16);
+  } finally { await screen.unmount(); }
+});
+
+test("background history loading keeps existing rows in place", async () => {
+  const device: PwaDeviceRecord = { id: "device:a", deviceId: "device", relayUrl: "https://relay.example.test", pairedAt: "2026-01-01T00:00:00.000Z" };
+  const history: TimelineSessionSummary[] = [{ id: "history:a", deviceId: "device", endpointId: "old", sessionId: "saved", leafId: null, startedAt: 1, updatedAt: 2, eventCount: 1, preview: "Saved record" }];
+  function Harness() {
+    const [loading, setLoading] = useState(false);
+    return <><button onClick={() => setLoading(true)}>Refresh</button><WorkspaceHistorySection activeDevice={device} history={history} selectedHistoryId={null} historyListStatus={loading ? "loading" : "success"} onSelectHistory={() => {}} headingId="history-heading" /></>;
+  }
+  const screen = await renderPwa(<Harness />);
+  try {
+    const row = document.querySelector<HTMLElement>(".pwa-history-row")!;
+    const top = Math.round(row.getBoundingClientRect().top);
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(document.querySelector(".pwa-history-row")).toBe(row);
+    expect(Math.round(row.getBoundingClientRect().top)).toBe(top);
+    expect(document.querySelector(".pwa-nav-empty-status")).toBeNull();
   } finally { await screen.unmount(); }
 });
 
