@@ -16,6 +16,7 @@
 
 - 修改前先读取目标子项目的 `AGENTS.md`、相关代码、测试和配置。
 - 只修改用户明确授权的范围；不自动扩大到无关子项目或文档。
+- 不擅自修改规范与规则：`docs/DESIGN.md`、`docs/adr/`、各 `AGENTS.md` 及 README 等文档中的约束条款只能提出变更建议，须先说明依据、影响和替代方案并获得明确授权；实现优先使用现有 token、档位与已登记规则，不新增规范条目来支撑个别实现。
 - 当前分支可以直接开发，不要求使用特定终端、pane、worktree 或外部编排工具。
 - Node 工程使用根 pnpm workspace；从仓库根执行 `pnpm install --frozen-lockfile`，版本与安装策略以根 `package.json`、`.node-version`、`pnpm-workspace.yaml` 和 `.npmrc` 为准，pnpm 可用 `corepack enable` 按 `packageManager` 启用。不要在子项目创建独立锁文件或 workspace 配置。
 - 构建、测试和 lint 可使用根命令或 `pnpm --filter <包名> <命令>`；也可在对应子项目目录执行原命令。Relay 包名为 `@pi-reach/relay`，已纳入根验证。
