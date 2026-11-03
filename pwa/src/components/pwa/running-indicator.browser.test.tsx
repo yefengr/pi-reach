@@ -113,42 +113,39 @@ test("omits the directory line and keeps the running dot centered when cwd is mi
   await screen.unmount();
 });
 
-test("reduced motion shows a static ring beside the filled completed dot", async () => {
+test("reduced motion keeps the static running dot filled and unanimated", async () => {
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   const screen = await renderPwa(<RowHarness initial={{ working: true, current: false, completed: true }} />);
   const dot = document.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
   const style = getComputedStyle(dot);
-  expect(style.animationPlayState).toBe("paused");
   expect(style.opacity).toBe("1");
-  expect(style.borderTopWidth).toBe("1px");
-  expect(style.borderTopStyle).toBe("solid");
+  expect(style.borderTopWidth).toBe("0px");
+  expect(style.animationName).toBe("none");
+  expect(dot.getAnimations()).toHaveLength(0);
+  expect(dot.hasAttribute("data-pwa-animation")).toBe(false);
   updateRow({ working: false, current: false, completed: true });
   const completed = document.querySelector<HTMLElement>(".pwa-notice-dot")!;
   expect(getComputedStyle(completed).backgroundColor).not.toBe(style.backgroundColor);
   await screen.unmount();
 });
 
-test("breathing dot uses its stronger opacity token without changing the skeleton range", async () => {
+test("running dot stays a static filled point in both sizes without motion", async () => {
   const screen = await renderPwa(<div style={{ padding: 20 }}><RunningIndicator size="compact" /><RunningIndicator /></div>);
   const dots = [...document.querySelectorAll<HTMLElement>(".pwa-running-indicator-dot")];
   expect([rounded(dots[0]!.getBoundingClientRect().width), rounded(dots[1]!.getBoundingClientRect().width)]).toEqual([6, 8]);
   const theme = getComputedStyle(document.documentElement);
-  const breathe = theme.getPropertyValue("--pwa-opacity-running-breathe").trim();
-  expect(breathe).toBe("0.48");
+  // 运行点不再有独立呼吸幅度：骨架屏的 0.72 保持不变，运行点始终满亮。
+  expect(theme.getPropertyValue("--pwa-opacity-running-breathe").trim()).toBe("");
   expect(theme.getPropertyValue("--pwa-opacity-breathe").trim()).toBe("0.72");
-  const duration = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pwa-duration-breathe"));
-  const animation = dots[0]!.getAnimations()[0]!;
-  expect(animation).toBeTruthy();
-  animation.pause();
-  animation.currentTime = 0;
-  expect(getComputedStyle(dots[0]!).opacity).toBe(breathe);
-  expect(getComputedStyle(dots[0]!).transform).toBe("none");
-  const geometryBefore = dots.map(dot => [rounded(dot.getBoundingClientRect().left), rounded(dot.getBoundingClientRect().top), rounded(dot.getBoundingClientRect().width)]);
-  animation.currentTime = (duration * 1000) / 2;
-  expect(getComputedStyle(dots[0]!).opacity).toBe("1");
-  expect(getComputedStyle(dots[0]!).transform).toBe("none");
-  expect(dots.map(dot => [rounded(dot.getBoundingClientRect().left), rounded(dot.getBoundingClientRect().top), rounded(dot.getBoundingClientRect().width)])).toEqual(geometryBefore);
-  animation.play();
+  for (const dot of dots) {
+    const style = getComputedStyle(dot);
+    expect(style.opacity).toBe("1");
+    expect(style.animationName).toBe("none");
+    expect(style.transform).toBe("none");
+    expect(style.backgroundColor).toBe(getComputedStyle(dot.parentElement!).color);
+    expect(dot.getAnimations()).toHaveLength(0);
+    expect(dot.hasAttribute("data-pwa-animation")).toBe(false);
+  }
   await screen.unmount();
 });
 
@@ -158,65 +155,109 @@ const userEvent: TimelineEvent = {
 };
 const items: TimelineViewItem[] = [{ kind: "event", event: userEvent }];
 
-test.each(["standard", "large", "xlarge"] as const)("Working dot follows the text middle at %s text size", async size => {
+test.each(["standard", "large", "xlarge"] as const)("Working spinner centers its icon slot and label on the 44px row at %s text size", async size => {
   document.documentElement.dataset.pwaTextSize = size;
   const screen = await renderPwa(<main className="pwa-main" style={{ width: "100vw", height: "100vh" }}>
     <MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} running isLive />
   </main>);
   await expect.poll(() => document.querySelector(".pwa-turn-activity[data-working]")).not.toBeNull();
-  const label = document.querySelector<HTMLElement>(".pwa-working-label")!;
-  const indicator = document.querySelector<HTMLElement>(".pwa-turn-activity .pwa-running-indicator")!;
-  // middle 对齐到基线以上半个 x-height；使用当前字体的 ex 测量，不写死像素补偿。
-  const probe = document.createElement("span");
-  probe.style.cssText = "display:inline-block;width:0;height:1ex;vertical-align:baseline";
-  label.append(probe);
-  try {
-    expect(center(rect(".pwa-turn-activity .pwa-running-indicator-dot"))).toBe(center(probe.getBoundingClientRect()));
-    expect(rounded(label.getBoundingClientRect().left - indicator.getBoundingClientRect().right)).toBe(6);
-    expect(rounded(rect(".pwa-turn-activity").height)).toBe(44);
-  } finally {
-    probe.remove();
-  }
+  const slot = document.querySelector<HTMLElement>(".pwa-turn-activity")!;
+  const icon = slot.querySelector<HTMLElement>(".pwa-working-icon")!;
+  const spinner = icon.querySelector<SVGSVGElement>(".pwa-spin")!;
+  const label = slot.querySelector<HTMLElement>(".pwa-working-label")!;
+  // 旋转只作用在槽内的 svg；位置按固定 16px 外槽与活动区整行判定，不用旋转后的 svg 包围盒。
+  expect([rounded(icon.getBoundingClientRect().width), rounded(icon.getBoundingClientRect().height)]).toEqual([16, 16]);
+  expect([getComputedStyle(spinner).width, getComputedStyle(spinner).height]).toEqual(["16px", "16px"]);
+  expect(center(icon.getBoundingClientRect())).toBe(center(slot.getBoundingClientRect()));
+  expect(center(label.getBoundingClientRect())).toBe(center(slot.getBoundingClientRect()));
+  expect(rounded(label.getBoundingClientRect().left - icon.getBoundingClientRect().right)).toBe(6);
+  expect(rounded(slot.getBoundingClientRect().height)).toBe(44);
   await screen.unmount();
 });
 
-test("Working keeps its 16px slot, 8px dot and unchanged text metrics", async () => {
+test("Working spinner keeps its slot, row and text while rotating", async () => {
   const screen = await renderPwa(<main className="pwa-main" style={{ width: "100vw", height: "100vh" }}>
     <MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} running isLive />
   </main>);
   await expect.poll(() => document.querySelector(".pwa-turn-activity")).not.toBeNull();
   const slot = document.querySelector<HTMLElement>(".pwa-turn-activity")!;
   const working = slot.querySelector<HTMLElement>(".pwa-turn-activity-working")!;
+  const icon = slot.querySelector<HTMLElement>(".pwa-working-icon")!;
+  const spinner = icon.querySelector<SVGSVGElement>(".pwa-spin")!;
   const label = slot.querySelector<HTMLElement>(".pwa-working-label")!;
-  const indicator = slot.querySelector<HTMLElement>(".pwa-running-indicator")!;
-  const dot = slot.querySelector<HTMLElement>(".pwa-running-indicator-dot")!;
-  // Working 未显示时点也必须暂停；显隐只控制透明度。
-  expect(getComputedStyle(dot).animationPlayState).toBe("paused");
-  expect([rounded(indicator.getBoundingClientRect().width), rounded(indicator.getBoundingClientRect().height)]).toEqual([16, 16]);
-  expect([rounded(dot.getBoundingClientRect().width), rounded(dot.getBoundingClientRect().height)]).toEqual([8, 8]);
+  // Working 不可见时旋转必须暂停；显隐只控制透明度，不改变布局。
+  expect(getComputedStyle(spinner).animationPlayState).toBe("paused");
   const style = getComputedStyle(slot);
   expect(style.fontSize).toBe("16px");
   expect(style.marginTop).toBe("6px");
   expect(style.minHeight).toBe("44px");
   expect(getComputedStyle(label).fontWeight).toBe("600");
-  expect(rounded(label.getBoundingClientRect().left - indicator.getBoundingClientRect().right)).toBe(6);
   expect(getComputedStyle(working).lineHeight).toBe(style.lineHeight);
-  expect(getComputedStyle(dot).backgroundColor).toBe(getComputedStyle(slot).color);
+  expect(getComputedStyle(spinner).color).toBe(style.color);
   const lineHeight = style.lineHeight;
   const before = {
     slot: [rounded(slot.getBoundingClientRect().left), rounded(slot.getBoundingClientRect().top), rounded(slot.getBoundingClientRect().height)],
+    icon: [rounded(icon.getBoundingClientRect().left), rounded(icon.getBoundingClientRect().top), rounded(icon.getBoundingClientRect().width)],
     label: [rounded(label.getBoundingClientRect().left), rounded(label.getBoundingClientRect().top), rounded(label.getBoundingClientRect().width)],
-    dot: getComputedStyle(dot).backgroundColor,
+    color: getComputedStyle(spinner).color,
   };
-  // 等待 Working 真实显示后切减少动态效果：真实点静音、全亮、保持实心，行高与文字位置不变。
+  const geometry = () => ({
+    slot: [rounded(slot.getBoundingClientRect().left), rounded(slot.getBoundingClientRect().top), rounded(slot.getBoundingClientRect().height)],
+    icon: [rounded(icon.getBoundingClientRect().left), rounded(icon.getBoundingClientRect().top), rounded(icon.getBoundingClientRect().width)],
+    label: [rounded(label.getBoundingClientRect().left), rounded(label.getBoundingClientRect().top), rounded(label.getBoundingClientRect().width)],
+  });
+  // 等待 Working 真实显示后旋转：只改旋转角度，槽位、文字和行高不动。
   await expect.poll(() => document.querySelector(".pwa-turn-activity[data-working]")).not.toBeNull();
-  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
-  await expect.poll(() => getComputedStyle(dot).animationPlayState).toBe("paused");
-  expect(getComputedStyle(dot).opacity).toBe("1");
-  expect(getComputedStyle(dot).borderTopWidth).toBe("0px");
-  expect(getComputedStyle(dot).backgroundColor).toBe(before.dot);
-  expect([rounded(slot.getBoundingClientRect().left), rounded(slot.getBoundingClientRect().top), rounded(slot.getBoundingClientRect().height)]).toEqual(before.slot);
-  expect([rounded(label.getBoundingClientRect().left), rounded(label.getBoundingClientRect().top), rounded(label.getBoundingClientRect().width)]).toEqual(before.label);
+  await expect.poll(() => getComputedStyle(spinner).animationPlayState).toBe("running");
+  const animation = spinner.getAnimations()[0]!;
+  expect(animation).toBeTruthy();
+  animation.pause();
+  await animation.ready;
+  const duration = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pwa-duration-spin"));
+  animation.currentTime = 0;
+  const started = getComputedStyle(spinner).transform;
+  animation.currentTime = (duration * 1000) / 4;
+  expect(getComputedStyle(spinner).transform).not.toBe(started);
+  expect(geometry()).toEqual({ slot: before.slot, icon: before.icon, label: before.label });
   expect(getComputedStyle(slot).lineHeight).toBe(lineHeight);
+  expect(getComputedStyle(spinner).color).toBe(before.color);
+  await screen.unmount();
+});
+
+test("Working pauses and resumes the real animation for reduced motion without moving text", async () => {
+  // 独立实例只读取动画，不调用 pause/play；脚本改写的播放状态不能作为 CSS 生命周期的验收对象。
+  const screen = await renderPwa(<main className="pwa-main" style={{ width: "100vw", height: "100vh" }}>
+    <MessageList items={items} hasEarlier={false} listRef={createRef<HTMLDivElement>()} bottomSentinelRef={createRef<HTMLDivElement>()} onScroll={() => {}} running isLive />
+  </main>);
+  const slot = document.querySelector<HTMLElement>(".pwa-turn-activity")!;
+  const working = slot.querySelector<HTMLElement>(".pwa-turn-activity-working")!;
+  const icon = slot.querySelector<HTMLElement>(".pwa-working-icon")!;
+  const spinner = icon.querySelector<SVGSVGElement>(".pwa-spin")!;
+  const label = slot.querySelector<HTMLElement>(".pwa-working-label")!;
+  expect(getComputedStyle(spinner).animationPlayState).toBe("paused");
+  const animation = spinner.getAnimations()[0]!;
+  expect(animation).toBeTruthy();
+  await expect.poll(() => getComputedStyle(working).opacity).toBe("1");
+  await expect.poll(() => animation.playState).toBe("running");
+  await expect.poll(() => Number(animation.currentTime)).toBeGreaterThan(0);
+  const geometry = () => [slot, icon, label].map(element => {
+    const box = element.getBoundingClientRect();
+    return [rounded(box.left), rounded(box.top), rounded(box.width), rounded(box.height)];
+  });
+  const before = geometry();
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await expect.poll(() => animation.playState).toBe("paused");
+  await animation.ready;
+  const pausedTime = animation.currentTime;
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  expect(animation.currentTime).toBe(pausedTime);
+  expect(getComputedStyle(spinner).opacity).toBe("1");
+  expect(spinner.checkVisibility({ visibilityProperty: true, opacityProperty: true })).toBe(true);
+  expect(geometry()).toEqual(before);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+  await expect.poll(() => animation.playState).toBe("running");
+  await expect.poll(() => Number(animation.currentTime)).toBeGreaterThan(Number(pausedTime));
+  expect(spinner.getAnimations()[0]).toBe(animation);
+  expect(geometry()).toEqual(before);
   await screen.unmount();
 });

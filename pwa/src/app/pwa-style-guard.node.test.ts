@@ -201,10 +201,11 @@ describe("CSS static guard", () => {
   });
 
   test("opacity syntax accepts compound theme token names but rejects literal intermediate values", () => {
-    for (const value of ["0", "1", "var(--pwa-opacity-breathe)", "var(--pwa-opacity-running-breathe) !important"]) {
+    // test-state 仅作为语法夹具，保留复合名称覆盖，不依赖某个生产 token 是否仍被消费。
+    for (const value of ["0", "1", "var(--pwa-opacity-breathe)", "var(--pwa-opacity-test-state) !important"]) {
       expect(OPACITY_VALUE.test(value), value).toBe(true);
     }
-    for (const value of ["0.48", "48%", "var(--pwa-running)", "var(--pwa-opacity--breathe)", "var(--pwa-opacity-running-breathe, 0.48)"]) {
+    for (const value of ["0.48", "48%", "var(--pwa-running)", "var(--pwa-opacity--breathe)", "var(--pwa-opacity-test-state, 0.48)"]) {
       expect(OPACITY_VALUE.test(value), value).toBe(false);
     }
   });
