@@ -53,7 +53,7 @@
 
 ## 范围与限制
 
-- UI 调整以 [`DESIGN`](../docs/DESIGN.md) 的当前规则为基线；品牌刷新按[活动方案](../docs/plans/active/20260925-pi-reach-brand-refresh.md#分阶段实施)分阶段落地。修改共享布局、全局 CSS、设计 token 或 Mantine theme 时，核对响应式断点两侧的桌面与移动表现。
+- UI 调整以 [`DESIGN`](../docs/DESIGN.md) 的当前规则为基线；进行中的事项及其边界见 [ROADMAP](../docs/ROADMAP.md)，活动方案不作为实施授权。修改共享布局、全局 CSS、设计 token 或 Mantine theme 时，核对响应式断点两侧的桌面与移动表现。
 - 不恢复 landing page、公开文档、教程或法律页面；产品界面仅位于 `/app` 下。
 - 不未经授权添加 backend、API routes、账号或其他服务端业务入口。
 - 不把历史 room/mesh 模型或尚未实施的主题原型当作当前实现规范；协议与安全边界引用 [协议与安全总览](../docs/reference/protocol/README.md)。

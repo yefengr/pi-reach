@@ -29,7 +29,8 @@
 - 提交信息与 Pull Request 标题使用 `<type>(<scope>): <摘要>`：type 取 `feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`、`ci`、`build`；scope 取 `pwa`、`relay`、`extension`、`protocol`、`release`、`deps`、`ci`，跨多个包时省略；摘要写做了什么，不加句号，原因写在正文。维护者的摘要使用中文，外部贡献者可以使用英文。Dependabot 自动生成的提交除外。
 - Pull Request 由 Codex 自动评审；合并前逐条处理评审意见，修复或在对话中说明不采纳的理由。自动合并只等待 `verify`、不等待 Codex，须在 Codex 给出 👍 或其意见处理完毕后再启用。
 - CI 在 Linux 上运行：测试不得依赖关闭事件的处理时序、亚像素几何或过短的计时器；几何断言按整像素比较（`Math.round`），超时与重试窗口要为慢机器留出余量。
-- 文档、代码、测试与示例数据只描述 Pi Reach 本身，不写入其他项目的名称、仓库链接、作者或来源说明；LICENSE 中保留的原版权声明除外。
+- 文档、代码、测试与示例数据只描述 Pi Reach 本身，不写入来源或衍生项目的名称、仓库链接、作者或来源说明；LICENSE 中保留的原版权声明除外。依赖、平台与设计参照（如 Mantine、Pi SDK、iOS）按实际需要引用。
+- 代码注释默认使用中文，只解释不易从代码看出的原因、约束和边界；既有英文注释不要求集中改写。
 - 发现现有未提交改动时，保留并基于当前工作区继续，不回退用户改动。
 - 涉及架构、协议、配对、UI 或安全方向时，先阅读 [`docs/adr/20260518-closed-decisions.md`](docs/adr/20260518-closed-decisions.md)，不要静默推翻已关闭决策。
 - PWA UI/Mantine 改动以 [`docs/DESIGN.md`](docs/DESIGN.md) 为基线，按 `pwa/AGENTS.md` 的受影响验证要求验收；涉及叠层、焦点或 Portal 时执行 [overlay 验证技能](.agents/skills/validate-mantine-stacked-overlays/SKILL.md)。
@@ -47,13 +48,13 @@
 
 ### 文档职责
 
-- `README.md` 是项目入口；`AGENTS.md` 只记录项目协作、命令、范围和验证规范。
+- `README.md` 是项目入口；`AGENTS.md`（含各子项目）只记录项目协作、命令、范围和验证规范，面向贡献者与协作 agent，可以链接内部文档，公开文档也可以链接它。
 - 公开文档面向使用者、自托管者和贡献者：`README`、`CONTRIBUTING`、`SECURITY`、`docs/CONTEXT.md`、`docs/ARCHITECTURE.md`、`docs/DESIGN.md`、`docs/reference/` 与各子项目 README。它们只描述项目本身，不链接项目内部的工作管理与运维文档：`docs/ROADMAP.md`、`docs/BACKLOG.md`、`docs/plans/` 和 `docs/DEPLOYMENT.md`。内部文档可以链接公开文档；ADR 记录决策背景时可以引用内部方案。
 - `docs/CONTEXT.md`、`docs/DESIGN.md`、`docs/ARCHITECTURE.md`、`docs/DEPLOYMENT.md` 分别维护稳定业务背景、设计系统、当前架构和部署运维事实；没有相应内容时不创建。
 - `docs/BACKLOG.md` 保存尚未确定开发的候选事项；`docs/ROADMAP.md` 保存已确定事项及唯一项目级状态，状态使用 `待开始`、`进行中`、`阻塞`、`已完成`、`已取消`。
 - 已有 Issues、Projects、Jira 等权威任务系统时，沿用其状态约定，仓库文档只保留必要链接，不双写状态。
-- `docs/plans/active/` 保存尚未结束的详细方案，`docs/plans/completed/` 保存已完成、已取消或被替代的方案及验证和遗留风险；归档不代表实现完成，方案不独立维护当前项目级事项状态。
-- `docs/reference/` 保存长期参考；`docs/adr/` 记录重要决策原因并原则上只追加；`docs/prototypes/` 保存可评审原型，但不作为当前实现真源。
+- `docs/plans/active/` 保存尚未结束的详细方案，也可保存 BACKLOG 候选的预研方案（由 BACKLOG 条目链接，不代表已确定开发或获准实施）；`docs/plans/completed/` 保存已完成、已取消或被替代的方案及验证和遗留风险；归档不代表实现完成，方案不独立维护当前项目级事项状态。
+- `docs/reference/` 保存长期参考；`docs/adr/` 记录重要决策原因并原则上只追加，修订写成带日期的修订节或头部「后续调整」，不改写原决策段落；`docs/prototypes/` 保存可评审原型，但不作为当前实现真源。
 - 协议、部署等专项文档按上述职责归入对应长期文档或参考目录；消费者通过链接引用，不复制维护协议、部署或状态事实。
 
 ### 生命周期与命名
