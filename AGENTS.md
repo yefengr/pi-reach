@@ -27,7 +27,7 @@
 - `main` 受保护：改动在功能分支完成并提交 Pull Request，CI 检查 `verify` 通过后由维护者以变基或压缩方式合并（仓库已关闭合并提交）；不要直接推送或强推 `main`。
 - 分支命名为单层 `<类别>/<YYMMDD>-<主题>`，主题用小写英文短横线：`feature`（功能、重构与规范调整）、`bugfix`（缺陷修复）、`chore`（发布与维护）、`docs`（纯文档）。只有 `feature/*` 与 `bugfix/*` 会部署 staging，需要真机验证的缺陷修复用 `bugfix`。
 - 提交信息与 Pull Request 标题使用 `<type>(<scope>): <摘要>`：type 取 `feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`、`ci`、`build`；scope 取 `pwa`、`relay`、`extension`、`protocol`、`release`、`deps`、`ci`，跨多个包时省略；摘要写做了什么，不加句号，原因写在正文。维护者的摘要使用中文，外部贡献者可以使用英文。Dependabot 自动生成的提交除外。
-- Pull Request 由 Codex 自动评审；合并前逐条处理评审意见，修复或在对话中说明不采纳的理由。自动合并只等待 `verify`、不等待 Codex，须在 Codex 给出 👍 或其意见处理完毕后再启用。
+- Pull Request 不配置自动评审，合并以 `verify` 通过为准；收到评审意见时，合并前逐条处理，修复或在对话中说明不采纳的理由，处理完毕后再启用自动合并。
 - CI 在 Linux 上运行：测试不得依赖关闭事件的处理时序、亚像素几何或过短的计时器；几何断言按整像素比较（`Math.round`），超时与重试窗口要为慢机器留出余量。
 - 文档、代码、测试与示例数据只描述 Pi Reach 本身，不写入来源或衍生项目的名称、仓库链接、作者或来源说明；LICENSE 中保留的原版权声明除外。依赖、平台与设计参照（如 Mantine、Pi SDK、iOS）按实际需要引用。
 - 代码注释默认使用中文，只解释不易从代码看出的原因、约束和边界；既有英文注释不要求集中改写。
@@ -111,7 +111,7 @@ GitHub 的 Dependabot 告警已开启；`.github/dependabot.yml` 每周为 GitHu
 
 ## Review guidelines
 
-本节供 Codex 等代码评审 agent 使用。
+本节供人工评审者与代码评审 agent 使用。
 
 - 评审评论使用 Pull Request 标题与描述所用的语言；Pull Request 以中文提交时，评论使用中文。
 - 重点报告会造成真实影响的问题并标注严重程度；不评论已由 lint、类型检查覆盖的问题或纯风格偏好。
