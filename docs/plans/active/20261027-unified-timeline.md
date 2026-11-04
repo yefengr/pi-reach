@@ -141,3 +141,9 @@
 - 验证：Node 全量 1088 项；Browser Mode `pwa-app`、`history-conversation`、`composer-viewport`、`message-send`、`collapse`、`message-list`、`use-timeline`、`use-timeline-viewport`、`timeline-viewport.integration` 通过；lint 0 error、构建通过。
 
 未覆盖：全量 Browser Mode 与 Linux CI 以 Pull Request 结果为准；iOS 真机（历史快速甩到顶、顶部下拉、历史与在线切换恢复位置、离线阅读历史）待 staging 验收。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+2026-10-27 iOS 录屏确认历史会话快速上滑展开时跳到会话开头，原因是历史由 `HistoryWorkspace` 单独实现分页与位置恢复。用户已确认方案与 D1–D4：历史复用在线会话的加载器（只读模式，不经 Relay、不写回）、视口协调器与阅读位置，删除 `HistoryWorkspace`；协议、Extension、Relay 不变。P1–P4 已在分支 `feature/261027-unified-timeline` 本地实现：运行时只读模式、本地分页器、`useTimeline` 统一翻页与暂存前插、`HistoryConversation` 替代 `HistoryWorkspace`、不足一屏补页保持跟随；类型检查、lint、构建、Node 全量与定向 Browser Mode 通过，与方案的差异见方案实施记录。待推送 staging 真机验收并提交 Pull Request。历史经 Relay 补全不在本轮，需另立 ADR。

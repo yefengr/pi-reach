@@ -144,3 +144,9 @@
 - 捕获语义：`document` 上的捕获监听能收到元素滚动事件（bubble 阶段计数为 0）。
 - 过渡语义：`transition: scrollbar-color 400ms` 下 computed 值按 60ms 采样逐步插值（`rgba(132,132,132,0.875)` → `0.416` → …），说明可用作淡入淡出。
 - 伪元素长度：`::-webkit-scrollbar-thumb { height: 80% }` 会把滑块画成 160px（而非按内容比例算出的 10px），说明该私有属性可覆盖长度但会让滑块不再指示滚动比例，因此不采用。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+方案 v7 本地实现完成：`:root` 逐元素 `thin` + 继承 `control-line`/透明轨道，`useScrollIndicator` 用 document 捕获监听标记 `data-scrolling`、停止 3s 后隐藏（`--pwa-duration-fade` 淡入淡出），过渡只挂在真正滚动过的容器（`data-scroll-host`）上，显示不向下继承，时间线在加载更早记录期间用 `data-scroll-hold` 抑制显示以避免看到滑块突然变短；覆盖全部滚动区（含宽表格、代码块、工具输出、文件阅读器的横向条），脚本未就绪时降级为常显；`DESIGN` 与注释已同步。PWA typecheck、lint（0 error）、build、新增浏览器测试 10 项、message-list 85 项、markdown-table／attachment-cards 15 项、mobile-swipe 20 项、pwa-app 196 项、use-page-transition 15 项、工作区布局 77 项、工具指示 16 项、样式守卫与主题对比 33 项、`pnpm check:docs` 与 `git diff --check` 均通过。未覆盖：本机为覆盖式滚动条，非覆盖式环境（13px 轨道）的观感、透明轨道残留绘制与淡入淡出效果需真实现场确认；滑块长度瞬变无过渡（原生不可过渡，已靠 hold 与自动隐藏弱化）；全量浏览器回归与 E2E 未运行。PR #145 的 Codex P2 两条（全局过渡覆盖侧栏收展、父容器滚动带出内嵌容器滑块）与 CI 四个浏览器分片失败已在 v7 修复。已否决：悬停显示、内部常显、自绘 thumb 长度动效。PR #145 已合并；后续在 `bugfix/261026-timeline-scroll-restore` 改为每个元素自身取透明（滚动开始、停止只重算被滚动的容器，长会话不再整棵子树重算）、消息列表补上滚动条过渡、`data-scrolling` 已存在时不重复写入。

@@ -98,3 +98,9 @@
 文档同步已完成第 4 节三处。
 
 本地验证：protocol 测试；Extension 全量测试；PWA 全部 Node 测试与直接受影响的 Browser Mode 文件；根 `pnpm typecheck`、`pnpm test:relay`、`pnpm build`；`pnpm test:e2e:pwa`。Docker 支撑的 `pnpm test:e2e:protocol` 与 `pnpm test:e2e:remote`（含本次新增的跨 Owner 取回步骤）在开发容器内无法访问宿主机发布的端口，尚未运行，须在宿主机或 CI 外补跑后才能结束本事项。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+2026-10-27 用户确认方案 2：正式消息附件可从在线 Pi 取回原件预览与保存，取代原决策 13（见 [ADR-20261027](../../adr/20261027-attachment-original-fetch.md)）。已定预览＋保存、会话内授权 Owner 可取、旧内联图片不纳入；下一步评审方案后按 protocol → Extension → PWA → E2E 实施。

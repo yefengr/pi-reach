@@ -301,3 +301,9 @@
 | 真实浏览器 Owner 重连恢复用例 | 两段均通过 |
 
 未覆盖：Extension 自身 Relay 重连会清理 Owner binding 及其投递记录，补推和查询都无法恢复，仍按 §12 保留未知；附件消息的投递保护只走查询，不补推。根 `pnpm verify`、全量 Browser Mode 与根 `pnpm test:e2e` 留给 CI 和发布前验证。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+主流程已实现，首轮实现与复审修复已本地提交；后续确认的 SDK 插入异常重复投递、旧 attempt 重新准入、查询超时丢失迟到回执均已本地修复，补充真实 Owner 重连恢复用例；通过功能分支 staging 与 Pull Request 继续验收。验证与内存记录边界见方案[投递边界与恢复回归](#12-2026-10-23-投递边界与恢复回归)。剩余验收：CI 全量 Browser／根 `pnpm verify`、真实已安装旧 Extension 联调与真机；旧 decoder 联调不替代旧版完整链路，完成前不标完成。部署与 CI 结果以对应 Pull Request 为准；未发布生产或 Extension npm。
