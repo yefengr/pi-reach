@@ -60,6 +60,7 @@ description: 在 Pi Reach PWA 中实现或审查 Mantine Modal、Drawer、Menu�
 | Toast 与提示共存 | 固定 ID、展示条数、队列及优先级符合现有控制器；连接 banner、局部错误、SW 提示同时出现时测正文或 Range 边界与点击命中，结合截图验可用面积 |
 
 - 命令真源是根与 PWA 的 `package.json`、`vitest.config.ts` 和 `playwright.config.ts`。执行受影响 Node／Browser Mode 测试与 PWA lint；改动层级、叠层组件或其 CSS 时运行 `pwa-layer-guard` 等静态守卫；涉及类型或生产产物时再运行 typecheck／build，关键跨模块流程增加对应 Playwright。最终运行 `git diff --check`，不据纯技能或文字变更宣称业务测试通过。
+- 叠层组件清单（直接引入 Mantine Modal、Drawer、Menu、Popover 或 Notifications 的产品组件，由 `scripts/overlay-skill-guard.test.mjs` 与源码双向核对；增删叠层组件时同步本行与上方矩阵）：`composer-command-menu`、`message-composer`、`session-actions-menu`、`workspace-device-control`、`session-sheet`、`reader-shell`、`published-file-reader`、`confirm-action-dialog`、`pairing-dialog`、`rename-pairing-dialog`、`keyboard-shortcuts-dialog`、`pwa-operation-notifications`。
 - 现有目标测试可从 `pwa/src/components/pwa/` 定位：设置与帮助看 `settings-page`、`pwa-workspace-layout`；确认与配对看 `confirm-action-dialog`、`pairing-dialog`、`rename-pairing-dialog`；电脑面板、导航与标题区看 `workspace-device-control`、`session-sheet`、`session-actions-menu`、`workspace-title-bar`；阅读器看 `reader-drawer`、`summary-reader`、`thinking-reader`、`published-file`、`published-image-motion`；侧栏看 `sidebar-width`；通知看 `pwa-operation-notifications`、`pwa-notice-layout`；时间线看 `message-list`；手势看 swipe／drag 浏览器测试。先确认文件存在，不固定测试数量。
 - 缺少真实 DOM runner 或真机证据时报告未覆盖风险；结构门禁和截图只作补充，不能当作 transition、history、焦点或设备验收已通过。
 - 触及授权外流程、共享契约冲突、真实数据或环境阻塞时停止并报告，不扩大写入、提交或部署范围。

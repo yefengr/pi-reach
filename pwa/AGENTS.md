@@ -49,7 +49,7 @@
 - 保留业务 CSS 的现有组织方式；颜色、圆角、字号与字重、动效时长与曲线、层级与 44px 点击区引用 `src/app/pwa-theme.css` 的 `--pwa-*` token，间距按 [`DESIGN`](../docs/DESIGN.md#间距) 的通用档位与领域细档取值（可直接写 px，也可用语义 token）。不擅自引入 CSS Modules 或 styled-components。
 - 设计规则由 `src/app/` 下的 Node 静态守卫校验：`pwa-style-guard`（间距、色值、圆角、动效、字体、悬停与边框）、`pwa-button-guard`（按钮颜色）、`pwa-layer-guard`（层级）、`pwa-script-token-guard`（脚本中的断点、图标尺寸、动效回退时长与 Mantine 色值副本）与 `pwa-theme-contrast`（对比度与主题色）。改动 CSS、主题 token、Mantine theme、叠层组件或图标时一并运行；守卫只覆盖直接写出的字面量，不替代盒模型与行为测试。
 - 图片使用浏览器原生资源与现有错误 fallback；data URL 附件按实际消费者处理。界面只使用系统字体栈（见 `src/app/pwa-theme.css`），不引入或下载网络字体。品牌图标由 `scripts/render-brand-icons.mjs` 生成到 `public/`，修改标识几何后重新运行。
-- 涉及 Modal、Drawer、Menu、Popover 的调整必须核对 Portal、焦点返回、Escape 竞争、滚动和叠层关系；按项目 overlay 验证技能验收，不仅比较截图。
+- 涉及 Modal、Drawer、Menu、Popover 的调整必须核对 Portal、焦点返回、Escape 竞争、滚动和叠层关系；按项目 overlay 验证技能验收，不仅比较截图。叠层组件或行为，或 DESIGN 中叠层、导航、滑动、设置页、桌面键盘与侧栏宽度的相关规则变化时，同一 Pull Request 同步更新该技能；修复叠层缺陷时把可复用的根因补入技能的 Pitfalls。技能引用与叠层组件清单由 `scripts/overlay-skill-guard.test.mjs` 校验。
 
 ## 范围与限制
 
