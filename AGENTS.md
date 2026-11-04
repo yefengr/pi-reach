@@ -1,6 +1,6 @@
 # Pi Reach — Monorepo
 
-本仓库是 Pi Reach monorepo。当前主要使用 Pi coding agent 协作；Pi 的主 Agent、`subagent` 和项目 skills 是默认工作流。
+本仓库是 Pi Reach monorepo。当前主要使用 Pi coding agent 协作；Pi 的主 Agent、`subagent` 和项目 skills 是默认工作流。项目 skills 的真源在 `.agents/skills/`；`.claude/skills/` 只放供 Claude Code 发现的同名相对软链，新增、改名或删除技能时同步，由 `scripts/agent-skill-links.test.mjs` 校验。
 
 ## 项目结构
 
@@ -88,7 +88,7 @@ pnpm verify:release
 
 只运行与当前变更相关的命令；跨项目共享协议或部署配置变更时扩大验证范围。PWA 浏览器组件测试按文件串行、耗时长，本地只运行直接覆盖改动的测试文件，更广的回归以 Pull Request 的 CI 结果为准（见 [`pwa/AGENTS.md`](pwa/AGENTS.md#验证与交付)）。`pnpm check:docs` 检查已跟踪文档的站内链接与 Markdown 锚点。纯文档变更核对事实、引用和授权范围，并执行 `pnpm check:docs` 与 `git diff --check`，不运行或宣称通过无关业务测试。
 
-CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks` 负责类型检查、lint、除 PWA 浏览器组件测试外的测试与构建，`pwa-browser` 把浏览器组件测试按耗时分到 4 台机器；只改文档时跳过这两项，只运行空白、链接与 overlay 技能引用检查。汇总任务 `verify` 是 `main` 保护规则要求的检查；调整 `pnpm verify` 的内容时同步修改工作流。
+CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks` 负责类型检查、lint、除 PWA 浏览器组件测试外的测试与构建，`pwa-browser` 把浏览器组件测试按耗时分到 4 台机器；只改文档时跳过这两项，只运行空白、链接与项目技能检查。汇总任务 `verify` 是 `main` 保护规则要求的检查；调整 `pnpm verify` 的内容时同步修改工作流。
 
 ## 依赖安全告警
 
