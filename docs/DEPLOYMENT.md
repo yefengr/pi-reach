@@ -135,8 +135,9 @@ staging 晋升决策见 [ADR-20261006](adr/20261006-staging-promotion.md)。不�
 3. 构建只按 digest 推送 GHCR，不移动公开版本标签；镜像版本取分支上的 `package.json`，来源 revision 为分支提交，无需改版本号。
 4. 部署沿用 staging 的对齐、部署、快照核对和 smoke：未选组件对齐生产当前实际 digest；撤销全部改动等导致两个组件都与 `main` 无差异时，staging 整体对齐生产，不停留在旧分支镜像。运行摘要记录分支和提交；不输出晋升凭据、不进入 production、不创建标签或 Release。
 5. staging 只有一个：任一功能分支的新推送都会取消其他仍在构建的运行；已开始的部署不取消，排队中的部署只保留最新一次，staging 最终是最后一次推送的内容。
+6. 仓库变量 `STAGING_BRANCH_DEPLOY` 为 `paused` 时，推送不构建也不部署，Pull Request 的 CI 照常运行；构建与部署作业都检查该变量，重跑旧作业也不会覆盖 staging。手动运行 workflow_dispatch 不受影响。维护者在发布候选真机验收前执行 `gh variable set STAGING_BRANCH_DEPLOY --body paused`，验收结束后执行 `gh variable delete STAGING_BRANCH_DEPLOY` 恢复。
 
-分支部署会覆盖 staging：等待审批的发布在批准时会检测到漂移并停止，需要从 `main` 重新运行发布；发布候选做真机验收期间不要推送功能分支：推送前执行 `gh run list --workflow deploy.yml --status waiting` 与 `--status in_progress`，有等待 production 审批或进行中的发布运行即视为验收期，先与维护者确认。分支部署与发布的 staging 作业同时写入时，服务器锁拒绝后到者，重新运行即可。分支部署不等待 CI，结果只用于测试，不能作为发布验收证据。被替换的分支镜像在服务器上成为悬空镜像，下次 production 部署清理时删除。
+分支部署会覆盖 staging：等待审批的发布在批准时会检测到漂移并停止，需要从 `main` 重新运行发布；发布候选做真机验收期间不要推送功能分支，除非已按上条暂停：推送前执行 `gh run list --workflow deploy.yml --status waiting` 与 `--status in_progress`，有等待 production 审批或进行中的发布运行即视为验收期，先用 `gh variable get STAGING_BRANCH_DEPLOY` 核对是否已暂停，未暂停时与维护者确认。分支部署与发布的 staging 作业同时写入时，服务器锁拒绝后到者，重新运行即可。分支部署不等待 CI，结果只用于测试，不能作为发布验收证据。被替换的分支镜像在服务器上成为悬空镜像，下次 production 部署清理时删除。
 
 协议有变更时，仍须在 PWA 部署完成后再批准 Extension 的 npm 待审版本（见「Extension npm 发布」）。部署 Relay 会让在线连接短暂断开，可选择合适的时机批准。
 

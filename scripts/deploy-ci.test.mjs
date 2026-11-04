@@ -183,6 +183,10 @@ test('branch staging workflow is owner-only, staging-only, digest-only and never
   const ownerOnly = /github\.actor == github\.repository_owner && github\.triggering_actor == github\.repository_owner/;
   assert.match(build, ownerOnly);
   assert.match(staging, ownerOnly);
+  // 发布候选验收期间暂停推送触发的部署；构建与部署作业都检查，防止重跑旧作业覆盖 staging。
+  const pausable = /\(github\.event_name != 'push' \|\| vars\.STAGING_BRANCH_DEPLOY != 'paused'\)/;
+  assert.match(build, pausable);
+  assert.match(staging, pausable);
   assert.match(build, /group: staging-branch-build\n      cancel-in-progress: true/);
   assert.doesNotMatch(staging, /needs\.build\.outputs\.(relay|pwa) ==/);
   assert.match(staging, /group: deploy-staging-branch\n      cancel-in-progress: false/);

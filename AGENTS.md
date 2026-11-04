@@ -23,7 +23,7 @@
 - 公共协议改在 `packages/protocol/`，两端旧入口保持薄适配；共享包不得引入 SDK、Node 专用 API、React 或连接生命周期。修改共享源码后，局部测试或类型检查前先执行 `pnpm --filter @pi-reach/protocol build`；根 `pnpm typecheck` / `pnpm test` 自动完成此前置步骤，持续开发可另开 `pnpm dev:protocol`。
 - 行为变更必须提供适当的自动化验证；最终执行受影响验证和 `git diff --check`。
 - 不自动执行 `git commit`、`git push`、Pull Request、生产发布或其他外部副作用，除非用户明确授权。
-- 推送前核对工作流副作用：仓库所有者向单层 `bugfix/*`、`feature/*` 分支推送 PWA 或 Relay 构建输入改动，会自动部署并覆盖 staging；须提前告知用户并确认推送授权包含该副作用。发布候选真机验收期间不执行会覆盖 staging 的分支推送；触发条件与边界见 [DEPLOYMENT](docs/DEPLOYMENT.md#功能分支部署-staging)。
+- 推送前核对工作流副作用：仓库所有者向单层 `bugfix/*`、`feature/*` 分支推送 PWA 或 Relay 构建输入改动，会自动部署并覆盖 staging；须提前告知用户并确认推送授权包含该副作用。发布候选真机验收期间不执行会覆盖 staging 的分支推送，仓库变量 `STAGING_BRANCH_DEPLOY` 已设为 `paused` 时推送只跑 CI、不部署（推送前用 `gh variable get` 核对）；触发条件、暂停方法与边界见 [DEPLOYMENT](docs/DEPLOYMENT.md#功能分支部署-staging)。
 - `main` 受保护：改动在功能分支完成并提交 Pull Request，CI 检查 `verify` 通过后由维护者以变基或压缩方式合并（仓库已关闭合并提交）；不要直接推送或强推 `main`。
 - 分支命名为单层 `<类别>/<YYMMDD>-<主题>`，主题用小写英文短横线：`feature`（功能、重构与规范调整）、`bugfix`（缺陷修复）、`chore`（发布与维护）、`docs`（纯文档）。只有 `feature/*` 与 `bugfix/*` 会部署 staging，需要真机验证的缺陷修复用 `bugfix`。
 - 提交信息与 Pull Request 标题使用 `<type>(<scope>): <摘要>`：type 取 `feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`、`ci`、`build`；scope 取 `pwa`、`relay`、`extension`、`protocol`、`release`、`deps`、`ci`，跨多个包时省略；摘要写做了什么，不加句号，原因写在正文。维护者的摘要使用中文，外部贡献者可以使用英文。Dependabot 自动生成的提交除外。

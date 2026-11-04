@@ -2,6 +2,7 @@
 # 只写 staging：不进入 production 审批、不移动 GHCR 版本标签、不创建 Release；正式发布仍走 deploy.yml。
 # 只有仓库所有者能触发；staging Environment 分支策略与分支 Ruleset 的配置见 docs/DEPLOYMENT.md。
 # 覆盖 staging 后，等待审批的发布会在批准时检测到漂移并停止，需要重新运行发布。
+# 仓库变量 STAGING_BRANCH_DEPLOY=paused 时，推送只跑 CI、不部署（发布候选验收期间使用）；手动运行不受影响。
 name: Deploy branch to staging
 
 on:
@@ -31,7 +32,7 @@ jobs:
   build:
     name: build
     # 推送者与触发者都必须是仓库所有者；部署作业再次检查，防止他人重跑失败作业。
-    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.event.deleted != true
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.event.deleted != true && (github.event_name != 'push' || vars.STAGING_BRANCH_DEPLOY != 'paused')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # staging 只有一个：任一功能分支的新推送都取消仍在构建的旧运行，避免较慢的旧构建随后覆盖新部署。
@@ -123,7 +124,7 @@ jobs:
     name: staging
     needs: build
     # 两个组件都与 main 无差异（如撤销全部改动）时仍运行，把 staging 对齐生产，不停留在旧分支镜像。
-    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && (github.event_name != 'push' || vars.STAGING_BRANCH_DEPLOY != 'paused')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # 不取消进行中的部署，避免服务器锁或容器停在中途；GitHub 只保留最新的等待者，staging 最终是最后一次推送。
