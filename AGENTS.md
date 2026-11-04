@@ -1,6 +1,6 @@
 # Pi Reach — Monorepo
 
-本仓库是 Pi Reach monorepo。当前主要使用 Pi coding agent 协作；Pi 的主 Agent、`subagent` 和项目 skills 是默认工作流。
+本仓库是 Pi Reach monorepo。当前主要使用 Pi coding agent 协作；Pi 的主 Agent、`subagent` 和项目 skills 是默认工作流。项目 skills 的真源在 `.agents/skills/`；`.claude/skills/` 只放供 Claude Code 发现的同名相对软链，新增、改名或删除技能时同步，由 `scripts/agent-skill-links.test.mjs` 校验。
 
 ## 项目结构
 
@@ -17,19 +17,20 @@
 - 修改前先读取目标子项目的 `AGENTS.md`、相关代码、测试和配置。
 - 只修改用户明确授权的范围；不自动扩大到无关子项目或文档。
 - 不擅自修改规范与规则：`docs/DESIGN.md`、`docs/adr/`、各 `AGENTS.md` 及 README 等文档中的约束条款只能提出变更建议，须先说明依据、影响和替代方案并获得明确授权；实现优先使用现有 token、档位与已登记规则，不新增规范条目来支撑个别实现。
-- 当前分支可以直接开发，不要求使用特定终端、pane、worktree 或外部编排工具。
+- 当前分支可以直接开发，不要求使用特定终端、pane、worktree 或外部编排工具；位于 `main` 时先按下方命名规则创建分支。
 - Node 工程使用根 pnpm workspace；从仓库根执行 `pnpm install --frozen-lockfile`，版本与安装策略以根 `package.json`、`.node-version`、`pnpm-workspace.yaml` 和 `.npmrc` 为准，pnpm 可用 `corepack enable` 按 `packageManager` 启用。不要在子项目创建独立锁文件或 workspace 配置。
 - 构建、测试和 lint 可使用根命令或 `pnpm --filter <包名> <命令>`；也可在对应子项目目录执行原命令。Relay 包名为 `@pi-reach/relay`，已纳入根验证。
 - 公共协议改在 `packages/protocol/`，两端旧入口保持薄适配；共享包不得引入 SDK、Node 专用 API、React 或连接生命周期。修改共享源码后，局部测试或类型检查前先执行 `pnpm --filter @pi-reach/protocol build`；根 `pnpm typecheck` / `pnpm test` 自动完成此前置步骤，持续开发可另开 `pnpm dev:protocol`。
 - 行为变更必须提供适当的自动化验证；最终执行受影响验证和 `git diff --check`。
 - 不自动执行 `git commit`、`git push`、Pull Request、生产发布或其他外部副作用，除非用户明确授权。
-- 推送前核对工作流副作用：仓库所有者向单层 `bugfix/*`、`feature/*` 分支推送 PWA 或 Relay 构建输入改动，会自动部署并覆盖 staging；须提前告知用户并确认推送授权包含该副作用。发布候选真机验收期间不执行会覆盖 staging 的分支推送；触发条件与边界见 [DEPLOYMENT](docs/DEPLOYMENT.md#功能分支部署-staging)。
+- 推送前核对工作流副作用：仓库所有者向单层 `bugfix/*`、`feature/*` 分支推送 PWA 或 Relay 构建输入改动，会自动部署并覆盖 staging；须提前告知用户并确认推送授权包含该副作用。发布候选真机验收期间不执行会覆盖 staging 的分支推送，仓库变量 `STAGING_BRANCH_DEPLOY` 已设为 `paused` 时推送只跑 CI、不部署（推送前用 `gh variable get` 核对）；触发条件、暂停方法与边界见 [DEPLOYMENT](docs/DEPLOYMENT.md#功能分支部署-staging)。
 - `main` 受保护：改动在功能分支完成并提交 Pull Request，CI 检查 `verify` 通过后由维护者以变基或压缩方式合并（仓库已关闭合并提交）；不要直接推送或强推 `main`。
 - 分支命名为单层 `<类别>/<YYMMDD>-<主题>`，主题用小写英文短横线：`feature`（功能、重构与规范调整）、`bugfix`（缺陷修复）、`chore`（发布与维护）、`docs`（纯文档）。只有 `feature/*` 与 `bugfix/*` 会部署 staging，需要真机验证的缺陷修复用 `bugfix`。
-- 提交信息与 Pull Request 标题使用 `<type>(<scope>): <中文摘要>`：type 取 `feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`、`ci`、`build`；scope 取 `pwa`、`relay`、`extension`、`protocol`、`release`、`deps`、`ci`，跨多个包时省略；摘要写做了什么，不加句号，原因写在正文。Dependabot 自动生成的提交除外。
-- Pull Request 由 Codex 自动评审；合并前逐条处理评审意见，修复或在对话中说明不采纳的理由。自动合并只等待 `verify`、不等待 Codex，须在 Codex 给出 👍 或其意见处理完毕后再启用。
+- 提交信息与 Pull Request 标题使用 `<type>(<scope>): <摘要>`：type 取 `feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`、`ci`、`build`；scope 取 `pwa`、`relay`、`extension`、`protocol`、`release`、`deps`、`ci`，跨多个包时省略；摘要写做了什么，不加句号，原因写在正文。维护者的摘要使用中文，外部贡献者可以使用英文。Dependabot 自动生成的提交除外。
+- Pull Request 不配置自动评审，合并以 `verify` 通过为准；收到评审意见时，合并前逐条处理，修复或在对话中说明不采纳的理由，处理完毕后再启用自动合并。
 - CI 在 Linux 上运行：测试不得依赖关闭事件的处理时序、亚像素几何或过短的计时器；几何断言按整像素比较（`Math.round`），超时与重试窗口要为慢机器留出余量。
-- 文档、代码、测试与示例数据只描述 Pi Reach 本身，不写入其他项目的名称、仓库链接、作者或来源说明；LICENSE 中保留的原版权声明除外。
+- 文档、代码、测试与示例数据只描述 Pi Reach 本身，不写入来源或衍生项目的名称、仓库链接、作者或来源说明；LICENSE 中保留的原版权声明除外。依赖、平台与设计参照（如 Mantine、Pi SDK、iOS）按实际需要引用。
+- 代码注释默认使用中文，只解释不易从代码看出的原因、约束和边界；既有英文注释不要求集中改写。
 - 发现现有未提交改动时，保留并基于当前工作区继续，不回退用户改动。
 - 涉及架构、协议、配对、UI 或安全方向时，先阅读 [`docs/adr/20260518-closed-decisions.md`](docs/adr/20260518-closed-decisions.md)，不要静默推翻已关闭决策。
 - PWA UI/Mantine 改动以 [`docs/DESIGN.md`](docs/DESIGN.md) 为基线，按 `pwa/AGENTS.md` 的受影响验证要求验收；涉及叠层、焦点或 Portal 时执行 [overlay 验证技能](.agents/skills/validate-mantine-stacked-overlays/SKILL.md)。
@@ -47,13 +48,13 @@
 
 ### 文档职责
 
-- `README.md` 是项目入口；`AGENTS.md` 只记录项目协作、命令、范围和验证规范。
+- `README.md` 是项目入口；`AGENTS.md`（含各子项目）只记录项目协作、命令、范围和验证规范，面向贡献者与协作 agent，可以链接内部文档，公开文档也可以链接它。
 - 公开文档面向使用者、自托管者和贡献者：`README`、`CONTRIBUTING`、`SECURITY`、`docs/CONTEXT.md`、`docs/ARCHITECTURE.md`、`docs/DESIGN.md`、`docs/reference/` 与各子项目 README。它们只描述项目本身，不链接项目内部的工作管理与运维文档：`docs/ROADMAP.md`、`docs/BACKLOG.md`、`docs/plans/` 和 `docs/DEPLOYMENT.md`。内部文档可以链接公开文档；ADR 记录决策背景时可以引用内部方案。
 - `docs/CONTEXT.md`、`docs/DESIGN.md`、`docs/ARCHITECTURE.md`、`docs/DEPLOYMENT.md` 分别维护稳定业务背景、设计系统、当前架构和部署运维事实；没有相应内容时不创建。
-- `docs/BACKLOG.md` 保存尚未确定开发的候选事项；`docs/ROADMAP.md` 保存已确定事项及唯一项目级状态，状态使用 `待开始`、`进行中`、`阻塞`、`已完成`、`已取消`。
+- `docs/BACKLOG.md` 保存尚未确定开发的候选事项；`docs/ROADMAP.md` 保存已确定事项及唯一项目级状态，状态使用 `待开始`、`进行中`、`待验收`、`阻塞`、`已完成`、`已取消`；`待验收` 指实现已合并到 `main`，只差真机、staging 或需另行授权的验收证据，取得证据后再标 `已完成`。
 - 已有 Issues、Projects、Jira 等权威任务系统时，沿用其状态约定，仓库文档只保留必要链接，不双写状态。
-- `docs/plans/active/` 保存尚未结束的详细方案，`docs/plans/completed/` 保存已完成、已取消或被替代的方案及验证和遗留风险；归档不代表实现完成，方案不独立维护当前项目级事项状态。
-- `docs/reference/` 保存长期参考；`docs/adr/` 记录重要决策原因并原则上只追加；`docs/prototypes/` 保存可评审原型，但不作为当前实现真源。
+- `docs/plans/active/` 保存尚未结束的详细方案，也可保存 BACKLOG 候选的预研方案（由 BACKLOG 条目链接，不代表已确定开发或获准实施）；`docs/plans/completed/` 保存已完成、已取消或被替代的方案及验证和遗留风险；归档不代表实现完成，方案不独立维护当前项目级事项状态。
+- `docs/reference/` 保存长期参考；`docs/adr/` 记录重要决策原因并原则上只追加，修订写成带日期的修订节或头部「后续调整」，不改写原决策段落；`docs/prototypes/` 保存可评审原型，但不作为当前实现真源。
 - 协议、部署等专项文档按上述职责归入对应长期文档或参考目录；消费者通过链接引用，不复制维护协议、部署或状态事实。
 
 ### 生命周期与命名
@@ -87,7 +88,7 @@ pnpm verify:release
 
 只运行与当前变更相关的命令；跨项目共享协议或部署配置变更时扩大验证范围。PWA 浏览器组件测试按文件串行、耗时长，本地只运行直接覆盖改动的测试文件，更广的回归以 Pull Request 的 CI 结果为准（见 [`pwa/AGENTS.md`](pwa/AGENTS.md#验证与交付)）。`pnpm check:docs` 检查已跟踪文档的站内链接与 Markdown 锚点。纯文档变更核对事实、引用和授权范围，并执行 `pnpm check:docs` 与 `git diff --check`，不运行或宣称通过无关业务测试。
 
-CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks` 负责类型检查、lint、除 PWA 浏览器组件测试外的测试与构建，`pwa-browser` 把浏览器组件测试按耗时分到 4 台机器；只改文档时跳过这两项，只运行空白与链接检查。汇总任务 `verify` 是 `main` 保护规则要求的检查；调整 `pnpm verify` 的内容时同步修改工作流。
+CI（`.github/workflows/ci.yml`）把 `pnpm verify` 拆成并行任务：`checks` 负责类型检查、lint、除 PWA 浏览器组件测试外的测试与构建，`pwa-browser` 把浏览器组件测试按耗时分到 4 台机器；只改文档时跳过这两项，只运行空白、链接与项目技能检查。汇总任务 `verify` 是 `main` 保护规则要求的检查；调整 `pnpm verify` 的内容时同步修改工作流。
 
 ## 依赖安全告警
 
@@ -102,7 +103,7 @@ GitHub 的 Dependabot 告警已开启；`.github/dependabot.yml` 每周为 GitHu
 
 ## 发布
 
-发布、推送和部署必须在本地验证通过后按用户授权执行。PWA 与 Relay 的版本号变更合并到 `main` 后，由 Deploy PWA & Relay 工作流（`.github/workflows/deploy.yml`）单次构建 GHCR 镜像，经 staging 检查与真机验收后，维护者在 `production` 环境批准同 digest 晋升，生产核验通过后创建标签与 Release；一次性配置、本机备用部署和镜像发布说明以 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)、`pwa/push-docker.sh` 和 `scripts/deploy-self-hosted.sh` 为准。Extension 的版本号变更合并到 `main` 后，由 Extension npm 工作流（`.github/workflows/release.yml`）提交到 npm 待审区并打标签，维护者在 npmjs.com 批准后上线，再由 Extension GitHub Release 工作流（`.github/workflows/extension-github-release.yml`）自动创建 Release；流程、认证方式与发布后核对见 [DEPLOYMENT](docs/DEPLOYMENT.md#extension-npm-发布)。各组件上线后打版本标签并创建 GitHub Release，命名与时机见 [DEPLOYMENT](docs/DEPLOYMENT.md#版本标签与-github-release)。
+发布、推送和部署必须在本地验证通过后按用户授权执行。各组件的版本号变更合并到 `main` 后由发布工作流处理，上线须经维护者批准；PWA 与 Relay 的 staging 晋升、Extension 的 npm 发布、本机备用部署及版本标签与 Release 均以 [DEPLOYMENT](docs/DEPLOYMENT.md) 为准。
 
 ## 已关闭决策
 
@@ -110,7 +111,7 @@ GitHub 的 Dependabot 告警已开启；`.github/dependabot.yml` 每周为 GitHu
 
 ## Review guidelines
 
-本节供 Codex 等代码评审 agent 使用。
+本节供人工评审者与代码评审 agent 使用。
 
 - 评审评论使用 Pull Request 标题与描述所用的语言；Pull Request 以中文提交时，评论使用中文。
 - 重点报告会造成真实影响的问题并标注严重程度；不评论已由 lint、类型检查覆盖的问题或纯风格偏好。

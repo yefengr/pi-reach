@@ -1,6 +1,6 @@
 # CI：推送到 main、Pull Request 与手动触发时运行。
 # - changes：只改文档（docs/ 下除协议 fixtures 外的文件、任意 *.md、branding/、LICENSE）时跳过代码任务。
-# - docs：检查本次改动的空白错误与文档站内链接，所有改动都运行。
+# - docs：检查本次改动的空白错误、文档站内链接与项目技能，所有改动都运行。
 # - checks 与 pwa-browser：合起来覆盖 `pnpm verify`。checks 负责类型检查、lint、除 PWA 浏览器组件测试外的
 #   全部测试与构建；pwa-browser 按耗时把浏览器组件测试分到 4 台机器，每台仍按文件串行以隔离键盘焦点。
 #   调整 `pnpm verify` 时同步修改这两个任务。
@@ -87,6 +87,10 @@ jobs:
 
       - name: Check documentation links
         run: node scripts/check-doc-links.mjs
+
+      # 只改技能时 checks 会跳过，这里保证技能软链、技能引用与叠层组件清单在每次改动中都被核对。
+      - name: Check project skills
+        run: node --test scripts/agent-skill-links.test.mjs scripts/overlay-skill-guard.test.mjs
 
   checks:
     name: checks

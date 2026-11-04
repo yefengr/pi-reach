@@ -47,3 +47,8 @@ openspec
 # Project agent resources are shared repository content, including hidden files.
 !/.agents/
 !/.agents/**
+# Claude Code only discovers .claude/skills/; track the links to .agents/skills/ and keep local settings, locks and worktrees ignored.
+!/.claude/
+/.claude/*
+!/.claude/skills/
+!/.claude/skills/**

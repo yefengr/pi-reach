@@ -261,3 +261,9 @@ DESIGN「嵌套不递减」改为：
 | 不采纳 | 毛玻璃、连续曲率圆角、顶栏渐隐、所有按钮胶囊、设置分组加大到 20 以上（理由见 ADR-20261101 补充决策） |
 
 验证：Node 守卫与对比度 53 项通过（专用圆角按选择器登记并检查登记失效；`tonal` 上的 `ink`、`secondary` 与悬停、按下档上的 `ink` ≥ 4.5:1；危险悬停混色比例固定）；Browser Mode `settings-page`、`pwa-controls`、`ui-controls`、`pwa-operation-notifications`、`copy-button`、`pwa-notice-layout`、`settings-drag`、`mobile-swipe`、`workspace-device-control`、`confirm-action-dialog`、`ui-state-surfaces`、`ui-state-navigation`、`navigation-swipe`、`queue-turn-handoff` 共 168 项，`pwa-workspace-layout` 全文件 78 项，`message-send`、`queued-messages`、`hairline`、`scroll-indicator` 共 120 项通过。未覆盖：深色 `tonal` 与危险悬停底的目测、iOS 真机与 Safari 观感。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+2026-11-01 对比原型评审后，在分支 `feature/261101-ios-borders-spacing` 实施批次 1–3：发丝线与半透明分隔色、列表分隔缩进、固定顶栏滚动边缘分隔、Composer 32 与浮层 12／4 同心圆角，以及批次 4 设置页分组列表；发丝线按实测分两档（Chromium 画不出 0.5px）。最终对照评审后撤回 iOS 专属的行尾对勾与操作行，新增色调次级与危险按钮、胶囊标签与「最新」入口、Toast 22、气泡 16、底部面板上沿圆角 16。决策见 [ADR-20261101](../../adr/20261101-hairline-concentric-radii.md)，规则已同步 DESIGN。本地静态守卫与定向浏览器测试通过，验证与差异见方案实施记录；尚未提交，全量浏览器回归以 Pull Request CI 为准，Safari 与 iOS 真机可见度待验收。

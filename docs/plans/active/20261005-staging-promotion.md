@@ -284,3 +284,9 @@ git diff --check
 ### 后续门槛
 
 远程 DNS/TLS、Caddy、端口/资源、受限密钥、服务器入口同步、GitHub Environment 和首个候选均未执行；真实 iOS／Android、真实生产升级和经过授权的首次晋升未验收。下一步先取得服务器/GitHub 初始化授权，再按 DEPLOYMENT 的一次性要求核验并安装；版本 PR、提交/发布、真机操作和生产批准继续分别授权。本方案保留 active，不因仓库实现完成而归档或标记全流程完成。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+本地仓库实现与验证完成：隔离 Compose、受限快照/部署与实际镜像回滚、公开 PWA 运行时配置、staging 完整组合 smoke 和 production 同 digest 晋升、Release 补建。根验证以进程 `LC_ALL=C` 通过（保留主线 Extension 脚本的 macOS Bash3/UTF-8 既有失败边界），完整 E2E、真实同镜像多配置与独立审查通过；操作事实见 DEPLOYMENT、验证快照见方案。未改版本或提交/发布；服务器/GitHub 初始化、真实 iOS／Android 和首次晋升仍待分别授权，事项不标完成。

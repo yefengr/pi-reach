@@ -1222,3 +1222,9 @@ B 和 C 的根因都定位在 Extension：`pi-extension/src/timeline/v2_service.
 - iOS／Android 真机观感待在 staging 上验收。
 - B／C 真机复核未执行：需要本机 Pi 加载 `bugfix/261030-send-queue-snapshot` 的 Extension 构建，Extension 须另行发布到 npm 后才会到达其他 Host。
 - 以上各项闭合前，方案不归档。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+2026-10-30 用户确认 R01—R04 与活动承载规则后，在 `bugfix/261028-stream-smoothness` 实施。P1—P7 已全部提交：P1—P4（分组、状态推导、过程组组件、Thinking Reader）`1aaf852`，P5（时间线集成、Working 承载、删除旧组头队列与旧 Thinking 折叠）`d9658a2`，P6（经确认增加过程组收起的视口通知，方案 10.5）与 P7 代码清理 `2eb2e9b`，P7 文档 `d9c7ffd`（同步 [DESIGN](../../DESIGN.md#组件规则)、[ADR-20261030](../../adr/20261030-thinking-tool-process-groups.md)，归档旧工具分组方案）。本地自动化与视觉核对通过，已随 PR #159 推送并部署 staging；CI、评审与 staging 结果以该 Pull Request 为准。Docker 远程 E2E 与 iOS／Android 真机观感尚未验证。录屏中的 B（发送闪帧）／C（发送回跳）已定位到 Extension 入队后的队列快照，并在本事项外的 `bugfix/261030-send-queue-snapshot` 修复 Extension、补充链路与 PWA 回归；真机复核前不视为闭合，结论见方案[实施记录](#十九实施记录)。

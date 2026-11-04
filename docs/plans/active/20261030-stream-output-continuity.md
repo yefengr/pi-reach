@@ -347,3 +347,9 @@ P1—P6、P8 只改 PWA，可分批上线；P7 跨三端，单独成 PR，按发
 测试改写原则：旧用例中断言「组头承载 Working」「Working 与具体图标逐帧互斥」「新行立即出现」「完成时间与 run_end 同时出现」的部分按新规则改写；几何类断言改为可观察结果（末行完整可见并保留 8px、跟随不反向、借用留白不回补），并在比较前等待显示追上与滚动静止。
 
 未覆盖：PWA 浏览器全量（本地只跑直接受影响文件，以 PR CI 的 4 组 `pwa-browser` 为准）、`pnpm test:e2e` 与 Docker 远程 E2E、真实模型下的真机录屏对比（7.2），以及新旧版本混跑期间旧 PWA 收到准备中帧的协议提示（按发布顺序规避，未实测）。
+
+## ROADMAP 状态快照（2026-11-03）
+
+以下为 ROADMAP 精简前该事项的状态描述原文，仅作历史记录；当前状态以 [ROADMAP](../../ROADMAP.md) 为准。
+
+2026-10-30 iOS 录屏确认思考与工具阶段以跳变为主、Working 位置迁移且结束早于正文。用户确认 D1—D3 与 R1—R7 后，在分支 `feature/261030-stream-output-continuity` 一次性实施：显示队列结构门控与 `run_end` 排队、末尾活动区与 400ms 空闲 Working、后续正文收起过程组、思考尾部预览、工具「准备中」（协议新增 `preparing`、Extension 流式发布）、实时过程组平滑跟随与新行淡入、流式 Markdown 补闭合，并修正窗口变化时逐帧接续被误判为回看；决策见 [ADR](../../adr/20261030-stream-output-continuity.md)。验证结果与差异见方案实施记录；已提交 PR #162 并推送功能分支（触发 staging 部署），CI、评审与 staging 结果以该 Pull Request 为准。协议变更须先部署 PWA 再发布 Extension；真机录屏对比待 staging。
