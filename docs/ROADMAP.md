@@ -6,19 +6,19 @@
 
 | 事项 | 状态 | 当前边界与下一步 |
 | --- | --- | --- |
-| [边框、分隔与圆角参照 iOS 的调整](plans/active/20261101-ios-borders-spacing.md) | 进行中 | 批次 1–4 与最终对照修订已在本地实现，规则已同步 DESIGN，决策见 [ADR-20261101](adr/20261101-hairline-concentric-radii.md)。下一步：提交 Pull Request，由 CI 完成全量浏览器回归；Safari 与 iOS 真机可见度待验收。 |
-| [会话输出连续性与 Working 兜底](plans/active/20261030-stream-output-continuity.md) | 进行中 | 已随 PR #162 推送并部署 staging，决策见 [ADR](adr/20261030-stream-output-continuity.md)。下一步：以该 Pull Request 的 CI、评审与 staging 结果收口，真机录屏对比待 staging；协议变更须先部署 PWA 再发布 Extension。 |
-| [时间线视口协调层重构](plans/active/20261022-timeline-viewport-coordinator.md) | 进行中 | 协调层与帧内计时已随 PR #134、#135 合并；留白优先规则、软键盘原生处理与前插位置保护已在功能分支实现，定向自动化通过。下一步：功能分支 staging 真机复验与 Pull Request 验证，设备验收前不关闭。 |
-| [历史会话与在线会话统一时间线](plans/active/20261027-unified-timeline.md) | 进行中 | P1–P4 已在 `feature/261027-unified-timeline` 本地实现，自动化通过。下一步：推送 staging 真机验收并提交 Pull Request。历史经 Relay 补全不在本轮，需另立 ADR。 |
-| [同机 staging 与镜像晋升](plans/active/20261005-staging-promotion.md) | 进行中 | 本地实现与验证完成，操作事实见 DEPLOYMENT。剩余：服务器／GitHub 初始化、真实 iOS／Android 与首次晋升，均需分别授权，完成前不标完成。 |
-| [Pi Reach 品牌刷新](plans/active/20260925-pi-reach-brand-refresh.md) | 进行中 | 阶段 1–6 已实现，阶段 7 本地修正完成，中性色与雾蓝主色按 [ADR-20261001](adr/20261001-neutral-surfaces-mist-blue.md) 落地。下一步：完成实屏与设备验收（iOS／Android 键盘和安全区、安装图标真机裁剪、已安装 PWA 打开 `/app/settings`），取得证据后归档方案；协议变更仍按 [ADR-20260927](adr/20260927-run-end-event.md) 先部署 PWA 再发布 Extension。 |
-| [PWA 加固与真实设备验收](plans/active/20260824-pwa-hardening.md) | 进行中 | Serwist、离线壳与多标签控制已有实现；尚缺真实 iOS/Android 关键流程通过证据。保留设备发布门槛，不重做已被取代的 room/旧历史规则。 |
-| [移动端触发式滑动手势](plans/active/20261005-mobile-swipe-gestures.md) | 进行中 | G1–G5 已实现，自动化与独立审查通过，规则已同步 DESIGN。下一步：iOS／Android 真机矩阵及 Linux CI 证据；尚未提交、发布或部署。 |
-| [移动端跟手拖动](plans/active/20261007-follow-finger-swipe.md) | 进行中 | D1–D5 与覆盖模型已随 PR #62、#64、#65 合并，规则已同步 DESIGN。下一步：iOS／Android 真机验证（边缘手势冲突、边缘排除宽度、standalone 系统边缘返回）；PR #64 与覆盖模型尚未发布部署。 |
-| [Thinking 与工具统一过程组](plans/active/20261030-thinking-tool-process-groups.md) | 进行中 | P1–P7 已提交，随 PR #159 部署 staging，规则已同步 [DESIGN](DESIGN.md#组件规则) 与 [ADR-20261030](adr/20261030-thinking-tool-process-groups.md)。下一步：以该 Pull Request 的 CI、评审与 staging 结果收口；Docker 远程 E2E 与 iOS／Android 真机观感待验证；发送闪帧与回跳由 `bugfix/261030-send-queue-snapshot` 修复，真机复核前不闭合。 |
-| [PWA 滚动条统一与滚动时显示](plans/active/20261026-pwa-scrollbar-auto-hide.md) | 进行中 | 方案 v7 已随 PR #145 合并，后续优化在 `bugfix/261026-timeline-scroll-restore`。下一步：在非覆盖式滚动条环境现场确认观感与淡入淡出；全量浏览器回归与 E2E 尚未运行。 |
-| [消息投递与异常恢复](plans/active/20261023-message-delivery-recovery.md) | 进行中 | 主流程与复审修复已本地提交，后续发现的重复投递、旧 attempt 准入与迟到回执问题已修复。下一步：经功能分支 staging 与 Pull Request 完成 CI 全量 Browser／根 `pnpm verify`、真实已安装旧 Extension 联调与真机验收；未发布生产或 Extension npm。 |
-| [会话附件原件预览与保存](plans/active/20261027-attachment-original-preview.md) | 进行中 | 2026-10-27 已确认方案 2（[ADR-20261027](adr/20261027-attachment-original-fetch.md)）。下一步：评审方案后按 protocol → Extension → PWA → E2E 实施。 |
+| [边框、分隔与圆角参照 iOS 的调整](plans/active/20261101-ios-borders-spacing.md) | 待验收 | 已随 PR #171 合并（透明度后续调整见 PR #173），决策见 [ADR-20261101](adr/20261101-hairline-concentric-radii.md)，规则已同步 DESIGN。待验收：Safari 与 iOS 真机可见度。 |
+| [会话输出连续性与 Working 兜底](plans/active/20261030-stream-output-continuity.md) | 待验收 | 已随 PR #162 合并并发布，决策见 [ADR](adr/20261030-stream-output-continuity.md)。待验收：真机录屏对比。 |
+| [时间线视口协调层重构](plans/active/20261022-timeline-viewport-coordinator.md) | 待验收 | 协调层、留白优先、软键盘原生处理与前插位置保护已分别随 PR #134、#135、#136、#139、#146 合并。待验收：设备上的跟随、软键盘与前插复验，不以合并或自动化通过替代关闭。 |
+| [历史会话与在线会话统一时间线](plans/active/20261027-unified-timeline.md) | 待验收 | 已随 PR #147 合并。待验收：staging 真机。历史经 Relay 补全不在本轮，需另立 ADR。 |
+| [同机 staging 与镜像晋升](plans/active/20261005-staging-promotion.md) | 待验收 | staging 验收与同 digest 晋升已用于 PWA 0.0.32–0.0.35 等生产发布，操作事实见 DEPLOYMENT。待验收：确认方案列出的真实 iOS／Android 验收证据后标已完成。 |
+| [Pi Reach 品牌刷新](plans/active/20260925-pi-reach-brand-refresh.md) | 待验收 | 阶段 1–7 已实现，中性色与雾蓝主色按 [ADR-20261001](adr/20261001-neutral-surfaces-mist-blue.md) 落地。待验收：iOS／Android 键盘和安全区、安装图标真机裁剪、已安装 PWA 打开 `/app/settings`，取得证据后归档方案。 |
+| [PWA 加固与真实设备验收](plans/active/20260824-pwa-hardening.md) | 待验收 | Serwist、离线壳与多标签控制已有实现；尚缺真实 iOS/Android 关键流程通过证据。保留设备发布门槛，不重做已被取代的 room/旧历史规则。 |
+| [移动端触发式滑动手势](plans/active/20261005-mobile-swipe-gestures.md) | 待验收 | G1–G5 已随 PR #48 合并，规则已同步 DESIGN。待验收：iOS／Android 真机矩阵。 |
+| [移动端跟手拖动](plans/active/20261007-follow-finger-swipe.md) | 待验收 | D1–D5 与覆盖模型已随 PR #62、#64、#65 合并，规则已同步 DESIGN。待验收：iOS／Android 真机（边缘手势冲突、边缘排除宽度、standalone 系统边缘返回）。 |
+| [Thinking 与工具统一过程组](plans/active/20261030-thinking-tool-process-groups.md) | 待验收 | 已随 PR #159 合并（后续调整见 PR #164、#169），发送闪帧与回跳由 PR #160 修复；规则已同步 [DESIGN](DESIGN.md#组件规则) 与 [ADR-20261030](adr/20261030-thinking-tool-process-groups.md)。待验收：Docker 远程 E2E 与 iOS／Android 真机观感。 |
+| [PWA 滚动条统一与滚动时显示](plans/active/20261026-pwa-scrollbar-auto-hide.md) | 待验收 | 已随 PR #145、#146 合并。待验收：在非覆盖式滚动条环境现场确认观感与淡入淡出。 |
+| [消息投递与异常恢复](plans/active/20261023-message-delivery-recovery.md) | 待验收 | 主流程与后续修复已随 PR #137、#158 合并。待验收：真实已安装旧 Extension 联调与真机。 |
+| [会话附件原件预览与保存](plans/active/20261027-attachment-original-preview.md) | 待验收 | 已随 PR #151 合并，决策见 [ADR-20261027](adr/20261027-attachment-original-fetch.md)。待验收：Docker 支撑的 `pnpm test:e2e:protocol` 与 `pnpm test:e2e:remote`（含跨 Owner 取回）。 |
 
 ## 已结束
 

@@ -51,7 +51,7 @@
 - `README.md` 是项目入口；`AGENTS.md`（含各子项目）只记录项目协作、命令、范围和验证规范，面向贡献者与协作 agent，可以链接内部文档，公开文档也可以链接它。
 - 公开文档面向使用者、自托管者和贡献者：`README`、`CONTRIBUTING`、`SECURITY`、`docs/CONTEXT.md`、`docs/ARCHITECTURE.md`、`docs/DESIGN.md`、`docs/reference/` 与各子项目 README。它们只描述项目本身，不链接项目内部的工作管理与运维文档：`docs/ROADMAP.md`、`docs/BACKLOG.md`、`docs/plans/` 和 `docs/DEPLOYMENT.md`。内部文档可以链接公开文档；ADR 记录决策背景时可以引用内部方案。
 - `docs/CONTEXT.md`、`docs/DESIGN.md`、`docs/ARCHITECTURE.md`、`docs/DEPLOYMENT.md` 分别维护稳定业务背景、设计系统、当前架构和部署运维事实；没有相应内容时不创建。
-- `docs/BACKLOG.md` 保存尚未确定开发的候选事项；`docs/ROADMAP.md` 保存已确定事项及唯一项目级状态，状态使用 `待开始`、`进行中`、`阻塞`、`已完成`、`已取消`。
+- `docs/BACKLOG.md` 保存尚未确定开发的候选事项；`docs/ROADMAP.md` 保存已确定事项及唯一项目级状态，状态使用 `待开始`、`进行中`、`待验收`、`阻塞`、`已完成`、`已取消`；`待验收` 指实现已合并到 `main`，只差真机、staging 或需另行授权的验收证据，取得证据后再标 `已完成`。
 - 已有 Issues、Projects、Jira 等权威任务系统时，沿用其状态约定，仓库文档只保留必要链接，不双写状态。
 - `docs/plans/active/` 保存尚未结束的详细方案，也可保存 BACKLOG 候选的预研方案（由 BACKLOG 条目链接，不代表已确定开发或获准实施）；`docs/plans/completed/` 保存已完成、已取消或被替代的方案及验证和遗留风险；归档不代表实现完成，方案不独立维护当前项目级事项状态。
 - `docs/reference/` 保存长期参考；`docs/adr/` 记录重要决策原因并原则上只追加，修订写成带日期的修订节或头部「后续调整」，不改写原决策段落；`docs/prototypes/` 保存可评审原型，但不作为当前实现真源。
