@@ -4,7 +4,7 @@
 
 ## 技术栈与入口
 
-- React、Vite、TypeScript；版本与 Node 兼容范围以 [`package.json`](package.json) 和锁文件为准。
+- React、Vite、TypeScript；依赖版本以 [`package.json`](package.json) 和锁文件为准，Node 版本以根 `.node-version` 为准。
 - Mantine core/hooks 提供基础组件与交互能力；业务 CSS 承担布局、响应式及项目样式。Tailwind 只提供 preflight 与入口，业务组件不使用其间距、颜色和圆角工具类。
 - Dexie 管理 IndexedDB；Serwist 与 Vite 构建集成；ZXing 用于二维码扫描，react-markdown/remark-gfm 用于消息展示。
 - Vitest 分 Node 与 Browser Mode；Playwright 承担跨模块 E2E。
@@ -58,13 +58,13 @@
 - 不未经授权添加 backend、API routes、账号或其他服务端业务入口。
 - 不把历史 room/mesh 模型或尚未实施的主题原型当作当前实现规范；协议与安全边界引用 [协议与安全总览](../docs/reference/protocol/README.md)。
 - 不提交 `dist/`、`node_modules/` 等生成物；不通过禁用 lint 或修改生成物规避错误。
-- 可以直接在当前分支开发；保留用户既有未提交改动，不自动提交、push 或发布。
+- 可以直接在当前分支开发，位于 `main` 时先创建功能分支；保留用户既有未提交改动，不自动提交、push 或发布。
 
 ## 验证与交付
 
 - PWA 行为变更：执行 `pnpm lint` 和受影响的 Node/Browser Mode 测试。
 - 本地 Browser Mode 测试按文件串行（隔离键盘焦点），平均约 1 秒／用例，全量 `pnpm test:component` 需十分钟以上。本地只运行直接覆盖改动的测试文件，即断言了被改组件、选择器或行为的文件，可用 `-t` 进一步缩小到相关用例；不因“可能受影响”在本地运行全量或成批文件。
-- 共享布局、全局 CSS、设计 token 等更广的回归由 Pull Request 的 CI（`checks` 与分 4 组的 `pwa-browser`）覆盖：本地定向验证通过后推送，以 CI 结果作为扩大验证的证据，CI 失败时再在本地定向复现。
+- 共享布局、全局 CSS、设计 token 等更广的回归由 Pull Request 的 CI（`checks` 与分 4 组的 `pwa-browser`）覆盖：本地定向验证通过后，经用户授权推送功能分支，以 CI 结果作为扩大验证的证据，CI 失败时再在本地定向复现。推送 `feature/*`、`bugfix/*` 会部署并覆盖 staging，授权要求与发布候选验收期间的限制见[根工作规则](../AGENTS.md#工作规则)。
 - 需要逐帧采样或等待动画的测试，采样窗口只覆盖一次过渡所需时长，避免累积等待。
 - 生产 bundle 受影响时执行 `pnpm build`；关键跨模块流程增加相关 Playwright 场景。
 - UI/Mantine 改动按上述受影响验证要求验收；涉及叠层、焦点或 Portal 时执行 [overlay 验证技能](../.agents/skills/validate-mantine-stacked-overlays/SKILL.md)。

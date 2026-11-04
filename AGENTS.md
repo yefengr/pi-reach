@@ -17,7 +17,7 @@
 - 修改前先读取目标子项目的 `AGENTS.md`、相关代码、测试和配置。
 - 只修改用户明确授权的范围；不自动扩大到无关子项目或文档。
 - 不擅自修改规范与规则：`docs/DESIGN.md`、`docs/adr/`、各 `AGENTS.md` 及 README 等文档中的约束条款只能提出变更建议，须先说明依据、影响和替代方案并获得明确授权；实现优先使用现有 token、档位与已登记规则，不新增规范条目来支撑个别实现。
-- 当前分支可以直接开发，不要求使用特定终端、pane、worktree 或外部编排工具。
+- 当前分支可以直接开发，不要求使用特定终端、pane、worktree 或外部编排工具；位于 `main` 时先按下方命名规则创建分支。
 - Node 工程使用根 pnpm workspace；从仓库根执行 `pnpm install --frozen-lockfile`，版本与安装策略以根 `package.json`、`.node-version`、`pnpm-workspace.yaml` 和 `.npmrc` 为准，pnpm 可用 `corepack enable` 按 `packageManager` 启用。不要在子项目创建独立锁文件或 workspace 配置。
 - 构建、测试和 lint 可使用根命令或 `pnpm --filter <包名> <命令>`；也可在对应子项目目录执行原命令。Relay 包名为 `@pi-reach/relay`，已纳入根验证。
 - 公共协议改在 `packages/protocol/`，两端旧入口保持薄适配；共享包不得引入 SDK、Node 专用 API、React 或连接生命周期。修改共享源码后，局部测试或类型检查前先执行 `pnpm --filter @pi-reach/protocol build`；根 `pnpm typecheck` / `pnpm test` 自动完成此前置步骤，持续开发可另开 `pnpm dev:protocol`。
@@ -26,7 +26,7 @@
 - 推送前核对工作流副作用：仓库所有者向单层 `bugfix/*`、`feature/*` 分支推送 PWA 或 Relay 构建输入改动，会自动部署并覆盖 staging；须提前告知用户并确认推送授权包含该副作用。发布候选真机验收期间不执行会覆盖 staging 的分支推送；触发条件与边界见 [DEPLOYMENT](docs/DEPLOYMENT.md#功能分支部署-staging)。
 - `main` 受保护：改动在功能分支完成并提交 Pull Request，CI 检查 `verify` 通过后由维护者以变基或压缩方式合并（仓库已关闭合并提交）；不要直接推送或强推 `main`。
 - 分支命名为单层 `<类别>/<YYMMDD>-<主题>`，主题用小写英文短横线：`feature`（功能、重构与规范调整）、`bugfix`（缺陷修复）、`chore`（发布与维护）、`docs`（纯文档）。只有 `feature/*` 与 `bugfix/*` 会部署 staging，需要真机验证的缺陷修复用 `bugfix`。
-- 提交信息与 Pull Request 标题使用 `<type>(<scope>): <中文摘要>`：type 取 `feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`、`ci`、`build`；scope 取 `pwa`、`relay`、`extension`、`protocol`、`release`、`deps`、`ci`，跨多个包时省略；摘要写做了什么，不加句号，原因写在正文。Dependabot 自动生成的提交除外。
+- 提交信息与 Pull Request 标题使用 `<type>(<scope>): <摘要>`：type 取 `feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`、`ci`、`build`；scope 取 `pwa`、`relay`、`extension`、`protocol`、`release`、`deps`、`ci`，跨多个包时省略；摘要写做了什么，不加句号，原因写在正文。维护者的摘要使用中文，外部贡献者可以使用英文。Dependabot 自动生成的提交除外。
 - Pull Request 由 Codex 自动评审；合并前逐条处理评审意见，修复或在对话中说明不采纳的理由。自动合并只等待 `verify`、不等待 Codex，须在 Codex 给出 👍 或其意见处理完毕后再启用。
 - CI 在 Linux 上运行：测试不得依赖关闭事件的处理时序、亚像素几何或过短的计时器；几何断言按整像素比较（`Math.round`），超时与重试窗口要为慢机器留出余量。
 - 文档、代码、测试与示例数据只描述 Pi Reach 本身，不写入其他项目的名称、仓库链接、作者或来源说明；LICENSE 中保留的原版权声明除外。

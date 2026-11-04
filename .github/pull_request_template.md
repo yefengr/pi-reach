@@ -14,4 +14,4 @@
 
 - [ ] 行为变更附带了自动化测试 / Behavior changes include automated tests
 - [ ] 不包含配对码、私钥、token 或会话内容 / No pairing codes, private keys, tokens, or session content
-- [ ] 涉及协议、配对、架构或安全方向时，已核对[已关闭决策](https://github.com/yefengr/pi-reach/blob/main/docs/adr/20260518-closed-decisions.md) / Checked the closed decisions for protocol, pairing, architecture, or security changes
+- [ ] 涉及协议、配对、架构、UI 或安全方向时，已核对[已关闭决策](https://github.com/yefengr/pi-reach/blob/main/docs/adr/20260518-closed-decisions.md) / Checked the closed decisions for protocol, pairing, architecture, UI, or security changes
