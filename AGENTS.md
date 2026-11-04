@@ -102,7 +102,7 @@ GitHub 的 Dependabot 告警已开启；`.github/dependabot.yml` 每周为 GitHu
 
 ## 发布
 
-发布、推送和部署必须在本地验证通过后按用户授权执行。PWA 与 Relay 的版本号变更合并到 `main` 后，由 Deploy PWA & Relay 工作流（`.github/workflows/deploy.yml`）单次构建 GHCR 镜像，经 staging 检查与真机验收后，维护者在 `production` 环境批准同 digest 晋升，生产核验通过后创建标签与 Release；一次性配置、本机备用部署和镜像发布说明以 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)、`pwa/push-docker.sh` 和 `scripts/deploy-self-hosted.sh` 为准。Extension 的版本号变更合并到 `main` 后，由 Extension npm 工作流（`.github/workflows/release.yml`）提交到 npm 待审区并打标签，维护者在 npmjs.com 批准后上线，再由 Extension GitHub Release 工作流（`.github/workflows/extension-github-release.yml`）自动创建 Release；流程、认证方式与发布后核对见 [DEPLOYMENT](docs/DEPLOYMENT.md#extension-npm-发布)。各组件上线后打版本标签并创建 GitHub Release，命名与时机见 [DEPLOYMENT](docs/DEPLOYMENT.md#版本标签与-github-release)。
+发布、推送和部署必须在本地验证通过后按用户授权执行。各组件的版本号变更合并到 `main` 后由发布工作流处理，上线须经维护者批准；PWA 与 Relay 的 staging 晋升、Extension 的 npm 发布、本机备用部署及版本标签与 Release 均以 [DEPLOYMENT](docs/DEPLOYMENT.md) 为准。
 
 ## 已关闭决策
 
