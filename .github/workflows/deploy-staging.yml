@@ -7,7 +7,7 @@ name: Deploy branch to staging
 on:
   push:
     branches: ['bugfix/*', 'feature/*']
-    # 与 scripts/deploy-branch.mjs 的 COMPONENT_INPUTS 保持一致；只改文档等其他文件时不触发。
+    # 与 scripts/deploy-branch.mjs 的 COMPONENT_INPUTS、EXCLUDED_INPUTS 保持一致；只改文档等其他文件时不触发。
     paths:
       - package.json
       - pnpm-lock.yaml
@@ -18,6 +18,10 @@ on:
       - packages/protocol/**
       - relay/**
       - pwa/**
+      - '!pwa/README.md'
+      - '!pwa/AGENTS.md'
+      - '!relay/README.md'
+      - '!relay/AGENTS.md'
   workflow_dispatch:
 
 permissions:

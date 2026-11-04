@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { COMPONENT_INPUTS, branchComponents } from './deploy-branch.mjs';
+import { COMPONENT_INPUTS, EXCLUDED_INPUTS, branchComponents } from './deploy-branch.mjs';
 
 test('component selection follows each Dockerfile build input', () => {
   assert.deepEqual(branchComponents(['pwa/src/App.tsx']), { relay: false, pwa: true });
@@ -21,12 +21,22 @@ test('files outside build inputs select nothing', () => {
   assert.deepEqual(branchComponents(['docs/DEPLOYMENT.md', 'pi-extension/src/index.ts', 'pwa-notes.md', 'relay.md']), { relay: false, pwa: false });
 });
 
+test('package root docs inside component directories select nothing', () => {
+  assert.deepEqual(branchComponents(EXCLUDED_INPUTS), { relay: false, pwa: false });
+  assert.deepEqual(branchComponents(['pwa/AGENTS.md', 'pwa/src/App.tsx']), { relay: false, pwa: true });
+  assert.deepEqual(branchComponents(['pwa/docs/AGENTS.md']), { relay: false, pwa: true });
+});
+
 test('workflow push paths cover exactly the component inputs', () => {
   const workflow = readFileSync(new URL('../.github/workflows/deploy-staging.yml', import.meta.url), 'utf8');
   const paths = workflow.split('    paths:\n')[1].split('  workflow_dispatch:')[0]
-    .split('\n').filter((line) => line.trim().startsWith('- ')).map((line) => line.trim().slice(2));
+    .split('\n').filter((line) => line.trim().startsWith('- ')).map((line) => line.trim().slice(2).replace(/^'(.*)'$/, '$1'));
   const inputs = [...new Set(Object.values(COMPONENT_INPUTS).flat())].map((input) => (input.endsWith('/') ? `${input}**` : input));
-  assert.deepEqual([...paths].sort(), inputs.sort());
+  // GitHub 按顺序应用 paths，排除项必须位于包含项之后才生效。
+  const firstExclusion = paths.findIndex((path) => path.startsWith('!'));
+  assert.ok(firstExclusion > 0 && paths.slice(firstExclusion).every((path) => path.startsWith('!')));
+  assert.deepEqual(paths.slice(0, firstExclusion).sort(), inputs.sort());
+  assert.deepEqual(paths.slice(firstExclusion).map((path) => path.slice(1)).sort(), [...EXCLUDED_INPUTS].sort());
 });
 
 test('moving a file out of a component directory still selects that component', () => {

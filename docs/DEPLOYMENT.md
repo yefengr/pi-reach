@@ -130,7 +130,7 @@ staging 晋升决策见 [ADR-20261006](adr/20261006-staging-promotion.md)。不�
 
 合并前的真机测试由 [Deploy branch to staging 工作流](../.github/workflows/deploy-staging.yml)完成，决策见 [ADR-20261009](adr/20261009-branch-staging.md)：
 
-1. 仓库所有者推送 `bugfix/<名称>` 或 `feature/<名称>`（单层）分支，且改动了 PWA 或 Relay 的构建输入时自动运行；只改文档等其他文件不触发。也可在这些分支上手动运行 workflow_dispatch，重新部署当前提交。
+1. 仓库所有者推送 `bugfix/<名称>` 或 `feature/<名称>`（单层）分支，且改动了 PWA 或 Relay 的构建输入时自动运行；只改文档等其他文件不触发，`pwa/`、`relay/` 包根的 `README.md` 与 `AGENTS.md` 也不算构建输入。也可在这些分支上手动运行 workflow_dispatch，重新部署当前提交。
 2. `scripts/deploy-branch.mjs` 按分支相对 `main` 分叉点的全部改动选组件：`pwa/`、`pi-extension/install.sh` 选 PWA，`relay/` 选 Relay，`packages/protocol/`、根 `package.json`、锁文件、workspace 配置、`.npmrc`、`pi-extension/package.json` 两者都选。触发路径与这份清单由测试保持一致。
 3. 构建只按 digest 推送 GHCR，不移动公开版本标签；镜像版本取分支上的 `package.json`，来源 revision 为分支提交，无需改版本号。
 4. 部署沿用 staging 的对齐、部署、快照核对和 smoke：未选组件对齐生产当前实际 digest；撤销全部改动等导致两个组件都与 `main` 无差异时，staging 整体对齐生产，不停留在旧分支镜像。运行摘要记录分支和提交；不输出晋升凭据、不进入 production、不创建标签或 Release。

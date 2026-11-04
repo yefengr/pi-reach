@@ -9,15 +9,19 @@ export const COMPONENT_INPUTS = {
   pwa: [...SHARED_INPUTS, 'pi-extension/install.sh', 'pwa/'],
 };
 
+// 包根说明文档位于组件目录内，但不进入构建产物；只改它们时不重建、不覆盖 staging。
+export const EXCLUDED_INPUTS = ['pwa/README.md', 'pwa/AGENTS.md', 'relay/README.md', 'relay/AGENTS.md'];
+
 function matches(file, input) {
   return input.endsWith('/') ? file.startsWith(input) : file === input;
 }
 
 // 以分支相对 main 分叉点的全部改动选组件，staging 因此始终是该分支的完整状态，而非仅最近一次推送。
 export function branchComponents(files) {
+  const inputFiles = files.filter((file) => !EXCLUDED_INPUTS.includes(file));
   return Object.fromEntries(Object.entries(COMPONENT_INPUTS).map(([component, inputs]) => [
     component,
-    files.some((file) => inputs.some((input) => matches(file, input))),
+    inputFiles.some((file) => inputs.some((input) => matches(file, input))),
   ]));
 }
 
