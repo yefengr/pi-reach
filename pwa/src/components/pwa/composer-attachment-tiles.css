@@ -2,8 +2,11 @@
  * 输入框卡片内的附件方块（DESIGN「会话附件」）：72 方块单行横排，超出宽度横向滚动并按方块吸附。
  * 上方与右侧内边距 12 留出移除角标越出方块的空间（滚动容器会裁切越界内容）；左侧不留，首个方块与文本框左缘对齐。
  */
-.pwa-attachment-tiles { display: flex; gap: 12px; min-width: 0; padding: 12px 12px 8px 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin; }
-.pwa-attachment-tile { position: relative; flex: 0 0 72px; width: 72px; height: 72px; scroll-snap-align: start; }
+.pwa-attachment-tiles { position: relative; display: flex; gap: 12px; min-width: 0; padding: 12px 12px 8px 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.pwa-attachment-tile { position: relative; flex: 0 0 72px; width: 72px; height: 72px; scroll-snap-align: start; transition: opacity var(--pwa-duration-toast) var(--pwa-ease-content); }
+/* 新方块淡入；离开的方块已脱离布局（附件行为包含块），在原位淡出，其余方块当场补位（DESIGN「输入区内的增减」）。 */
+@starting-style { .pwa-attachment-tile { opacity: 0; } }
+.pwa-attachment-tile[data-presence="leaving"] { z-index: 1; opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit); }
 .pwa-attachment-tile-face { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; overflow: hidden; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-lg); background: var(--pwa-panel); color: var(--pwa-secondary); }
 .pwa-attachment-tile[data-status="preparing"] .pwa-attachment-tile-face { opacity: var(--pwa-opacity-disabled); }
 .pwa-attachment-tile[data-status="failed"] .pwa-attachment-tile-face { border-color: var(--pwa-error-line); }

@@ -9,20 +9,58 @@
 }
 
 .pwa-queued-messages-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 0 12px;
-}
-
-.pwa-queued-messages-header h2 {
   min-width: 0;
   margin: 0;
+  font: inherit;
+}
+
+/* 标题行整行为折叠按钮：标题、计数与箭头，44 点击区；折叠的是下方整段列表。 */
+.pwa-ui-scope .pwa-queued-messages-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--pwa-hit-target);
+  padding: 0 12px;
   color: var(--pwa-ink);
+  text-align: left;
+}
+
+@media (hover: hover) {
+  .pwa-ui-scope .pwa-queued-messages-toggle:hover { background: var(--pwa-hover); }
+}
+
+.pwa-ui-scope .pwa-queued-messages-toggle:active { background: var(--pwa-hover); }
+
+.pwa-ui-scope .pwa-queued-messages-toggle:focus-visible {
+  outline: 2px solid var(--pwa-accent);
+  outline-offset: -2px;
+}
+
+.pwa-queued-messages-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pwa-queued-messages-attention {
+  flex: 0 0 auto;
+  color: var(--pwa-running);
+}
+
+.pwa-queued-messages-chevron {
+  flex: 0 0 auto;
+  color: var(--pwa-secondary);
+  transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-content);
+}
+
+.pwa-queued-messages-toggle[aria-expanded="true"] .pwa-queued-messages-chevron {
+  transform: rotate(180deg);
+  transition-duration: var(--pwa-duration-collapse-in);
 }
 
 .pwa-queued-messages-count {
@@ -48,10 +86,51 @@
 .pwa-composer > .pwa-queued-messages {
   margin: 0 8px calc(-1 * var(--pwa-radius-composer));
   padding-bottom: var(--pwa-radius-composer);
+  transition: transform var(--pwa-duration-drawer) var(--pwa-ease-content), opacity var(--pwa-duration-drawer) var(--pwa-ease-content);
 }
 
-/* 抽屉内容区：折叠态（标题、3 行与切换行）完整可见，展开后在抽屉内滚动。 */
+/*
+ * 进出（DESIGN「输入区内的增减」）：出现时从卡片背后向上滑出并淡入；清空时当场脱离布局（脚本按当前位置改为绝对定位），
+ * 布局高度一次收回，副本滑回卡片背后并淡出后再移除。只用位移与透明度，不逐帧改变输入区高度；位移取 min(自身高度, --pwa-queue-drawer-shift)。
+ */
+@starting-style {
+  .pwa-composer > .pwa-queued-messages {
+    opacity: 0;
+    transform: translateY(calc(min(100%, var(--pwa-queue-drawer-shift)) * var(--pwa-motion-shift)));
+  }
+}
+
+.pwa-composer > .pwa-queued-messages[data-presence="leaving"] {
+  opacity: 0;
+  transform: translateY(calc(min(100%, var(--pwa-queue-drawer-shift)) * var(--pwa-motion-shift)));
+  transition-duration: var(--pwa-duration-drawer-out);
+}
+
+/*
+ * 抽屉内单条消息的进出：新行淡入（toast、内容曲线）；离开的行已脱离布局，带 panel 底在原位淡出（fade、退出曲线），
+ * 下方的行当场补位，看上去是离开的行淡去露出后面的行。
+ */
+.pwa-queued-message {
+  transition: opacity var(--pwa-duration-toast) var(--pwa-ease-content);
+}
+
+@starting-style {
+  .pwa-queued-message {
+    opacity: 0;
+  }
+}
+
+.pwa-queued-message[data-presence="leaving"] {
+  z-index: 1;
+  opacity: 0;
+  background: var(--pwa-panel);
+  transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit);
+}
+
+/* 列表固定最大高度，超出后在抽屉内滚动；标题行不随列表滚动。 */
 .pwa-queued-message-list {
+  /* 离开的行脱离布局后以列表为包含块，仍受折叠区与滚动区裁切。 */
+  position: relative;
   display: grid;
   max-height: min(236px, 30dvh);
   overflow-x: hidden;
@@ -73,8 +152,7 @@
 
 /* 行间分隔左右各缩进 12（与行左内边距一致），不碰列表外框；绘制在伪元素上，行高不变。 */
 .pwa-queued-message + .pwa-queued-message::before,
-.pwa-queued-messages-header + .pwa-queued-message::before,
-.pwa-queued-messages-overflow-inner > .pwa-queued-message:first-child::before {
+.pwa-queued-messages-header + .pwa-queued-messages-body .pwa-queued-message:first-child::before {
   content: "";
   position: absolute;
   top: 0;
@@ -147,20 +225,19 @@
   color: var(--pwa-running);
 }
 
-/* 折叠区：行高 0fr ↔ 1fr，内容淡化并位移 collapse-shift；展开 collapse-in、收起 collapse-out（DESIGN「输入区内的增减」）。 */
-.pwa-queued-messages-overflow {
+/* 整段列表折叠：行高 0fr ↔ 1fr，内容淡化并位移 collapse-shift；展开 collapse-in、收起 collapse-out（DESIGN「输入区内的增减」）。 */
+.pwa-queued-messages-body {
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows var(--pwa-duration-collapse-out) var(--pwa-ease-content);
 }
 
-.pwa-queued-messages-overflow[data-open] {
+.pwa-queued-messages-body[data-open] {
   grid-template-rows: 1fr;
   transition-duration: var(--pwa-duration-collapse-in);
 }
 
-.pwa-queued-messages-overflow-inner {
-  display: grid;
+.pwa-queued-messages-body-inner {
   min-height: 0;
   overflow: hidden;
   opacity: 0;
@@ -168,36 +245,9 @@
   transition: opacity var(--pwa-duration-collapse-out) var(--pwa-ease-content), transform var(--pwa-duration-collapse-out) var(--pwa-ease-content);
 }
 
-.pwa-queued-messages-overflow[data-open] > .pwa-queued-messages-overflow-inner {
+.pwa-queued-messages-body[data-open] > .pwa-queued-messages-body-inner {
   opacity: 1;
   transform: none;
-  transition-duration: var(--pwa-duration-collapse-in);
-}
-
-.pwa-ui-scope .pwa-queued-message-list .pwa-queued-messages-more[data-variant="transparent"] {
-  position: relative;
-  width: 100%;
-  justify-content: flex-start;
-  padding: 0 12px;
-  border-radius: 0;
-}
-
-.pwa-queued-messages-more::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 12px;
-  left: 12px;
-  border-top: var(--pwa-hairline) solid var(--pwa-separator);
-  pointer-events: none;
-}
-
-.pwa-queued-messages-more-icon {
-  transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-content);
-}
-
-.pwa-queued-messages-more[aria-expanded="true"] .pwa-queued-messages-more-icon {
-  transform: rotate(180deg);
   transition-duration: var(--pwa-duration-collapse-in);
 }
 

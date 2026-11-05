@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ActionIcon, RingProgress, Tooltip } from "@mantine/core";
 import { File, RefreshCw, X } from "lucide-react";
 import { attachmentPreviewSchema } from "@pi-reach/protocol/session";
@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { attachmentSizeLabel, type ComposerAttachmentItem } from "./attachment-cards";
 import { usePwaMotionDuration } from "./use-pwa-motion";
+import { detachInPlace, useLeavingItems, withLeavingItems } from "./use-leaving-items";
 import "./composer-attachment-tiles.css";
 
 /** 圆圈进度的外径与线宽（DESIGN「会话附件」），与 72 方块的中央留白配套。 */
@@ -48,8 +49,10 @@ function TileFace({ item }: { item: ComposerAttachmentItem }) {
   </span>;
 }
 
-function AttachmentTile({ item, onRemove, onRetry, disabled }: { item: ComposerAttachmentItem } & Omit<Props, "items">) {
+function AttachmentTile({ item, onRemove, onRetry, disabled, leaving = false }: { item: ComposerAttachmentItem; leaving?: boolean } & Omit<Props, "items">) {
   const { t } = useI18n();
+  const tileRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { if (leaving) detachInPlace(tileRef.current); }, [leaving]);
   const middlewares = useFloatingSafeMiddlewares();
   const fadeDuration = usePwaMotionDuration("--pwa-duration-fade");
   const active = item.status === "preparing" || item.status === "uploading" || item.status === "paused";
@@ -62,7 +65,8 @@ function AttachmentTile({ item, onRemove, onRetry, disabled }: { item: ComposerA
   return <Tooltip label={tip} position="top" offset={8} zIndex="var(--pwa-z-workspace-float)" classNames={{ tooltip: "pwa-attachment-tile-tip" }}
     events={{ hover: true, focus: true, touch: false }} portalProps={{ target: ".pwa-root" }} floatingStrategy="fixed" middlewares={middlewares}
     transitionProps={{ transition: "fade", duration: fadeDuration }}>
-    <div className="pwa-attachment-tile" data-status={item.status} role="group" aria-label={status ? `${item.fileName}，${status}` : item.status === "complete" ? t.attachments.ready(item.fileName) : item.fileName}>
+    <div ref={tileRef} className="pwa-attachment-tile" data-status={item.status} role="group"
+      {...(leaving ? { "data-presence": "leaving", inert: true, "aria-hidden": true } : {})} aria-label={status ? `${item.fileName}，${status}` : item.status === "complete" ? t.attachments.ready(item.fileName) : item.fileName}>
       <span className="pwa-attachment-tile-face">
         <TileFace item={item} />
         {ringed ? <span className="pwa-attachment-tile-overlay">
@@ -82,11 +86,17 @@ function AttachmentTile({ item, onRemove, onRetry, disabled }: { item: ComposerA
   </Tooltip>;
 }
 
-/** 输入框卡片内的附件：72 方块单行横排，超出宽度横向滚动，不折叠；上传中的逐件取消始终可达。 */
+/**
+ * 输入框卡片内的附件：72 方块单行横排，超出宽度横向滚动，不折叠；上传中的逐件取消始终可达。
+ * 新方块淡入；单个方块离开时脱离布局、原位淡出，其余方块当场补位。整行清空（提交或移除最后一件）即时完成：
+ * 附件行在卡片内部，没有可退回的背后，原位淡出会叠在正文上。
+ */
 export function ComposerAttachmentTiles({ items, onRemove, onRetry, disabled = false }: Props) {
   const { t } = useI18n();
+  const leaving = useLeavingItems(items);
   if (!items.length) return null;
   return <section className="pwa-attachment-tiles" aria-label={t.attachments.title}>
-    {items.map(item => <AttachmentTile key={item.id} item={item} onRemove={onRemove} onRetry={onRetry} disabled={disabled} />)}
+    {withLeavingItems(items, leaving).map(({ item, leaving: isLeaving }) =>
+      <AttachmentTile key={item.id} item={item} onRemove={onRemove} onRetry={onRetry} disabled={disabled} leaving={isLeaving} />)}
   </section>;
 }

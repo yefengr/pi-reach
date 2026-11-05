@@ -104,7 +104,8 @@ test("upload tiles expose preparing, a 50 percent ring and paused states with pe
   expect(input().readOnly).toBe(true);
   for (const status of ["preparing", "uploading"]) {
     await userEvent.click(document.querySelector<HTMLButtonElement>(`.pwa-attachment-tile[data-status="${status}"] .pwa-attachment-tile-remove`)!);
-    expect(document.querySelector(`.pwa-attachment-tile[data-status="${status}"]`)).toBeNull();
+    // 移除的方块在原位淡出，离开中的副本不可操作，不再算作附件。
+    expect(document.querySelector(`.pwa-attachment-tile[data-status="${status}"]:not([data-presence="leaving"])`)).toBeNull();
   }
   expect(document.querySelector('.pwa-attachment-tile[data-status="paused"]')).not.toBeNull();
   await page.getByRole("button", { name: "演示附件完成", exact: true }).click();

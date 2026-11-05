@@ -1236,35 +1236,64 @@ test("operation hint owns the single notice line and keeps a 12px spinner 8px ab
   } finally { await screen.unmount(); }
 });
 
-test("the in-card hint grows and shrinks with a height transition and leaves as an unannounced copy", async () => {
+test("the in-card hint fades in and out, keeping its height until the fade ends and staying silent while it leaves", async () => {
   await page.viewport(390, 844);
   const hint = { text: "Creating a new session…", tone: "running" as const, busy: true };
   const screen = await renderPwa(<ComposerHarness operationHint={hint} />);
   try {
-    const slot = document.querySelector<HTMLElement>(".pwa-composer-hint-slot")!;
-    expect(getComputedStyle(slot).transitionProperty).toContain("grid-template-rows");
-    await expect.poll(() => Math.round(slot.getBoundingClientRect().height)).toBeGreaterThan(0);
-    const shown = Math.round(slot.getBoundingClientRect().height);
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const line = document.querySelector<HTMLElement>(".pwa-composer-hint")!;
+    // 沿用浮动入口与局部提示的进出：只过渡透明度，高度一次到位。
+    expect(line.classList.contains("pwa-presence")).toBe(true);
+    expect(getComputedStyle(line).transitionProperty).toContain("opacity");
+    expect(getComputedStyle(line).transitionProperty).not.toContain("height");
+    const shown = Math.round(card.getBoundingClientRect().height);
     await screen.rerender(<PwaUiProvider><div className="pwa-root"><ComposerHarness operationHint={null} /></div></PwaUiProvider>);
-    // 隐藏后读屏不再读到提示：只读副本不带 status 角色与 .pwa-composer-hint，并在折叠的插槽内 inert。
+    // 隐藏后读屏不再读到提示：淡出副本不带 status 角色与 .pwa-composer-hint，且 inert。
     expect(document.querySelector(".pwa-composer-hint")).toBeNull();
-    const leaving = slot.querySelector<HTMLElement>(".pwa-composer-hint-line")!;
+    const leaving = document.querySelector<HTMLElement>(".pwa-composer-hint-line")!;
+    expect(leaving.getAttribute("data-presence")).toBe("leaving");
     expect(leaving.getAttribute("aria-hidden")).toBe("true");
     expect(leaving.getAttribute("role")).toBeNull();
-    expect(leaving.closest("[inert]")).not.toBeNull();
-    expect(slot.hasAttribute("data-open")).toBe(false);
-    await expect.poll(() => Math.round(slot.getBoundingClientRect().height)).toBe(0);
-    expect(shown).toBeGreaterThan(0);
+    expect(leaving.hasAttribute("inert")).toBe(true);
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(shown);
+    await expect.poll(() => document.querySelector(".pwa-composer-hint-line")).toBeNull();
+    expect(Math.round(card.getBoundingClientRect().height)).toBeLessThan(shown);
   } finally { await screen.unmount(); }
 });
 
-test("the in-card hint changes instantly while the own-send transition owns the footer height", async () => {
+test("the in-card hint leaves at once while the own-send transition owns the footer height", async () => {
   await page.viewport(390, 844);
+  const harness = (operationHint: OperationHint | null) => <PwaUiProvider><div className="pwa-root"><div className="pwa-chat-footer" data-own-send=""><ComposerHarness operationHint={operationHint} /></div></div></PwaUiProvider>;
   const screen = await renderPwa(<div className="pwa-chat-footer" data-own-send=""><ComposerHarness operationHint={{ text: "Creating a new session…", tone: "running", busy: true }} /></div>);
   try {
-    const slot = document.querySelector<HTMLElement>(".pwa-composer-hint-slot")!;
-    expect(getComputedStyle(slot).transitionDuration).toBe("0s");
-    expect(Math.round(slot.getBoundingClientRect().height)).toBeGreaterThan(0);
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const shown = Math.round(card.getBoundingClientRect().height);
+    await screen.rerender(harness(null));
+    // 副本立即不占位：要么已移除，要么在移除前隐藏。
+    const leaving = document.querySelector<HTMLElement>(".pwa-composer-hint-line");
+    if (leaving) expect(getComputedStyle(leaving).display).toBe("none");
+    const settled = Math.round(card.getBoundingClientRect().height);
+    expect(settled).toBeLessThan(shown);
+    // 过渡先结束、标记移除后，尚未卸载的副本也不能重新占位。
+    delete document.querySelector<HTMLElement>(".pwa-chat-footer")!.dataset.ownSend;
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(settled);
+    await expect.poll(() => document.querySelector(".pwa-composer-hint-line")).toBeNull();
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(settled);
+  } finally { await screen.unmount(); }
+});
+
+test("the in-card hint sits 13px below the card edge and 14px above the text", async () => {
+  await page.viewport(390, 844);
+  const screen = await renderPwa(<ComposerHarness operationHint={{ text: "Creating a new session…", tone: "neutral", busy: false }} />);
+  try {
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!.getBoundingClientRect();
+    const text = document.querySelector<HTMLElement>(".pwa-composer-hint span")!.getBoundingClientRect();
+    const input = document.querySelector<HTMLElement>(".pwa-composer-input")!;
+    const textTop = input.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(input).paddingTop);
+    // 提示离卡片上沿略近于离正文，读作卡片的状态行而不是正文的一部分；发丝线按整像素取整。
+    expect(Math.round(text.top - card.top)).toBe(13);
+    expect(Math.round(textTop - text.bottom)).toBe(14);
   } finally { await screen.unmount(); }
 });
 

@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { PwaUiProvider } from "./pwa-ui-provider";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, TimelineRuntime, type TimelineRuntimeChange, type TimelineScope, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -95,7 +96,8 @@ test("renders parent-supplied status, previews, actions, and disabled states", a
   const cancel = screen.getByRole("button", { name: "Edit queued message 1: First queued message with a preview" });
 
   await expect.element(screen.getByRole("heading", { name: "Queued messages" })).toBeVisible();
-  await expect.element(screen.getByLabelText("3 queued messages")).toBeVisible();
+  // 计数芯片只供视觉，读屏从折叠按钮内的隐藏文字读到条数。
+  await expect.element(screen.getByText("3 queued messages")).toBeInTheDocument();
   await expect.element(screen.getByText("Waiting for the current task")).toBeVisible();
   expect(document.querySelector(".pwa-queued-message-status svg")).toBeNull();
   await expect.element(screen.getByText("First queued message with a preview")).toBeVisible();
@@ -168,7 +170,9 @@ test("uses a scheduled timeout for an insertion notice and never sends when it i
     await expect.element(dismiss).toBeEnabled();
     await dismiss.click();
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    // 抽屉清空后先滑回卡片背后（drawer-out）再移除，离开期间 inert、对读屏隐藏。
+    expect(document.querySelector(".pwa-queued-messages")?.getAttribute("data-presence")).toBe("leaving");
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
   } finally {
     vi.useRealTimers();
     await screen.unmount();
@@ -204,7 +208,9 @@ test("dismisses an unconfirmed insertion offline without sending", async () => {
     await expect.element(dismiss).toBeEnabled();
     await dismiss.click();
     expect(onSend).not.toHaveBeenCalled();
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    // 抽屉清空后先滑回卡片背后（drawer-out）再移除，离开期间 inert、对读屏隐藏。
+    expect(document.querySelector(".pwa-queued-messages")?.getAttribute("data-presence")).toBe("leaving");
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
   } finally {
     await screen.unmount();
   }
@@ -220,8 +226,7 @@ test.each([[1280, 900], [390, 844], [390, 500]])("keeps a scrolling queue above 
   }));
   const screen = await renderPwa(<QueueComposerHarness items={items} />);
   try {
-    // 默认折叠到 3 条；展开后的长队列在面板内滚动，不挤压输入区。
-    await screen.getByRole("button", { name: "5 more" }).click();
+    // 所有条目都在固定最大高度的列表内滚动，不挤压输入区。
     const list = document.querySelector<HTMLElement>(".pwa-queued-message-list")!;
     const composer = document.querySelector<HTMLElement>(".pwa-composer-card")!;
     const textarea = screen.getByRole("textbox").element();
@@ -231,8 +236,7 @@ test.each([[1280, 900], [390, 844], [390, 500]])("keeps a scrolling queue above 
     const composerBefore = composer.getBoundingClientRect();
     const textareaBox = textarea.getBoundingClientRect();
 
-    // 展开按 collapse-in 过渡高度，等折叠区长到位后再测量滚动。
-    await expect.poll(() => list.scrollHeight - list.clientHeight).toBeGreaterThan(0);
+    expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
     // 抽屉内容区上限 min(236px, 30dvh)：折叠态完整可见，展开后在抽屉内滚动。
     expect(list.getBoundingClientRect().height).toBeLessThanOrEqual(Math.min(236, height * 0.3) + 1);
     expect(textareaBox.height).toBeGreaterThanOrEqual(44);
@@ -344,28 +348,35 @@ test("queued rows share one panel with dividers and keep the message text at the
   }
 });
 
-test("collapses a long queue after three rows, keeps folded rows out of reach and animates the fold", async () => {
+test("lists every queued message without a show-more row and folds the whole list from the header", async () => {
   const items = Array.from({ length: 5 }, (_, index) => queuedItem({ id: `queued-${index + 1}`, text: `Folded message ${index + 1}` }));
+  items[3] = { ...items[3]!, attention: true, status: "Unconfirmed", notice: "May still be processed; dismissing won't withdraw it.", dismissible: true, canManage: false };
   const screen = await renderPwa(<QueuedMessages items={items} isOnline onInsert={() => {}} onCancel={() => {}} />);
-  // 折叠区常驻以过渡高度；收起时 inert，读屏与键盘都到不了其中的条目。
+  // 折叠区常驻以过渡高度；折叠时 inert，读屏与键盘都到不了其中的条目。
   const reachable = () => [...document.querySelectorAll(".pwa-queued-message")].filter((row) => !row.closest("[inert]"));
   try {
-    expect(reachable()).toHaveLength(3);
-    await expect.element(screen.getByLabelText("5 queued messages")).toBeVisible();
-    const more = screen.getByRole("button", { name: "2 more" });
-    await expect.element(more).toHaveAttribute("aria-expanded", "false");
-    const overflow = document.getElementById(more.element().getAttribute("aria-controls")!)!;
-    expect(overflow.classList.contains("pwa-queued-messages-overflow")).toBe(true);
-    expect(Math.round(overflow.getBoundingClientRect().height)).toBe(0);
-    expect(getComputedStyle(overflow).transitionProperty).toContain("grid-template-rows");
-    expect(Math.round(more.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
-    await more.click();
     expect(reachable()).toHaveLength(5);
-    await expect.element(screen.getByText("Folded message 5")).toBeVisible();
-    await expect.poll(() => Math.round(overflow.getBoundingClientRect().height)).toBeGreaterThanOrEqual(88);
-    await screen.getByRole("button", { name: "Show less" }).click();
-    expect(reachable()).toHaveLength(3);
-    await expect.poll(() => Math.round(overflow.getBoundingClientRect().height)).toBe(0);
+    await expect.element(screen.getByRole("button", { name: /more$/ })).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: /^Queued messages/ });
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
+    const body = document.getElementById(toggle.element().getAttribute("aria-controls")!)!;
+    expect(body.classList.contains("pwa-queued-messages-body")).toBe(true);
+    expect(getComputedStyle(body).transitionProperty).toContain("grid-template-rows");
+    expect(Math.round(toggle.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    const open = Math.round(body.getBoundingClientRect().height);
+    expect(open).toBeGreaterThan(0);
+    expect(document.querySelector(".pwa-queued-messages-attention")).toBeNull();
+
+    await toggle.click();
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(reachable()).toHaveLength(0);
+    await expect.poll(() => Math.round(body.getBoundingClientRect().height)).toBe(0);
+    // 折叠后仍有需要关注的条目时，标题行给出告警，避免未确认被藏起来。
+    expect(document.querySelector(".pwa-queued-messages-attention")).not.toBeNull();
+
+    await toggle.click();
+    expect(reachable()).toHaveLength(5);
+    await expect.poll(() => Math.round(body.getBoundingClientRect().height)).toBe(open);
   } finally {
     await screen.unmount();
   }
@@ -375,7 +386,11 @@ test("tucks the queue drawer behind the Composer card, inset on both sides", asy
   await page.viewport(390, 844);
   const screen = await renderPwa(<QueueComposerHarness items={[queuedItem({ waiting: true })]} />);
   try {
-    const drawer = document.querySelector<HTMLElement>(".pwa-queued-messages")!.getBoundingClientRect();
+    const element = document.querySelector<HTMLElement>(".pwa-queued-messages")!;
+    // 出现时从卡片背后滑出：起点位移 min(自身高度, 48)，等滑入结束再量静止几何。
+    expect(getComputedStyle(element).transitionProperty).toContain("transform");
+    await expect.poll(() => element.getAnimations().length).toBe(0);
+    const drawer = element.getBoundingClientRect();
     const card = document.querySelector<HTMLElement>(".pwa-composer-card")!.getBoundingClientRect();
     // 下沿以一个 Composer 圆角高度压在卡片之后，左右各比卡片内缩 8；重叠处由卡片承接指针。
     expect(Math.round(drawer.bottom - card.top)).toBe(32);
@@ -417,6 +432,65 @@ test("waits for the run to end before an insertion becomes unconfirmed", async (
     await expect.element(screen.getByText("Unconfirmed", { exact: true })).toBeVisible();
   } finally {
     vi.useRealTimers();
+    await screen.unmount();
+  }
+});
+
+test("an emptied drawer releases its space at once and slides back behind the card as a detached copy, also during own send", async () => {
+  await page.viewport(390, 844);
+  const tree = (items: QueuedMessageView[]) => <div className="pwa-chat-footer" data-own-send=""><QueueComposerHarness items={items} /></div>;
+  const screen = await renderPwa(tree([queuedItem({ waiting: true })]));
+  try {
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    // 桩把输入区固定在底部，量输入区表单本身的高度。
+    const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+    const drawer = document.querySelector<HTMLElement>(".pwa-queued-messages")!;
+    await expect.poll(() => drawer.getAnimations().length).toBe(0);
+    const withDrawer = Math.round(composer.getBoundingClientRect().height);
+    const drawerBottom = Math.round(drawer.getBoundingClientRect().bottom);
+    await screen.rerender(<PwaUiProvider><div className="pwa-root">{tree([])}</div></PwaUiProvider>);
+    // 离开开始即脱离布局：输入区高度一次收回，副本留在原位，滑回卡片背后后再移除。
+    expect(drawer.getAttribute("data-presence")).toBe("leaving");
+    expect(getComputedStyle(drawer).position).toBe("absolute");
+    expect(getComputedStyle(drawer).transitionProperty).toContain("transform");
+    const settled = Math.round(composer.getBoundingClientRect().height);
+    expect(settled).toBeLessThan(withDrawer);
+    expect(Math.abs(Math.round(drawer.getBoundingClientRect().bottom) - drawerBottom)).toBeLessThanOrEqual(1);
+    // 过渡结束、标记移除后，副本也不会重新撑开输入区。
+    delete footer.dataset.ownSend;
+    expect(Math.round(composer.getBoundingClientRect().height)).toBe(settled);
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
+    expect(Math.round(composer.getBoundingClientRect().height)).toBe(settled);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("a row entering the drawer fades in; a leaving row fades out in place while the rest take its space at once", async () => {
+  await page.viewport(390, 844);
+  const three = [1, 2, 3].map((n) => queuedItem({ id: `row-${n}`, text: `Row ${n}`, waiting: true }));
+  const tree = (items: QueuedMessageView[]) => <PwaUiProvider><div className="pwa-root"><QueuedMessages items={items} isOnline onInsert={() => {}} onCancel={() => {}} /></div></PwaUiProvider>;
+  const screen = await renderPwa(<QueuedMessages items={three.slice(0, 2)} isOnline onInsert={() => {}} onCancel={() => {}} />);
+  try {
+    await screen.rerender(tree(three));
+    const added = [...document.querySelectorAll<HTMLElement>(".pwa-queued-message")].find((row) => row.textContent?.includes("Row 3"))!;
+    expect(getComputedStyle(added).transitionProperty).toContain("opacity");
+    await expect.poll(() => getComputedStyle(added).opacity).toBe("1");
+    const list = document.querySelector<HTMLElement>(".pwa-queued-message-list")!;
+    const full = Math.round(list.getBoundingClientRect().height);
+    const third = Math.round(added.getBoundingClientRect().top);
+
+    await screen.rerender(tree([three[0]!, three[2]!]));
+    const leaving = document.querySelector<HTMLElement>('.pwa-queued-message[data-presence="leaving"]')!;
+    expect(leaving.textContent).toContain("Row 2");
+    expect(leaving.hasAttribute("inert")).toBe(true);
+    expect(getComputedStyle(leaving).position).toBe("absolute");
+    // 后面的行当场补位，列表高度一次收回。
+    expect(Math.round(list.getBoundingClientRect().height)).toBeLessThan(full);
+    expect(Math.round(added.getBoundingClientRect().top)).toBeLessThan(third);
+    await expect.poll(() => document.querySelector('.pwa-queued-message[data-presence="leaving"]')).toBeNull();
+    expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(2);
+  } finally {
     await screen.unmount();
   }
 });

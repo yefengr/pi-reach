@@ -524,6 +524,8 @@ test.each([false, true])("mobile diagnostic settings round trip preserves natura
     const row = list.querySelector("article");
     const measure = () => [list.clientHeight, list.clientWidth, list.getBoundingClientRect().top].map(Math.round);
     await input.fill("Diagnostic draft remains local");
+    // 会话就绪后打开提示会先淡出再移除；等淡出副本移除后再取自然布局。
+    await expect.poll(() => document.querySelector('.pwa-composer-hint-line[data-presence="leaving"]')).toBeNull();
     const geometry = measure();
     await screen.getByRole("button", { name: "Open navigation", exact: true }).click();
     await screen.getByRole("button", { name: "Open settings", exact: true }).click();

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { PwaUiProvider } from "./pwa-ui-provider";
 import type { ComposerAttachmentItem } from "./attachment-cards";
 import { ComposerAttachmentTiles } from "./composer-attachment-tiles";
 
@@ -70,6 +71,36 @@ test("draws a 36px ring with the percentage for uploads and lets a failed tile r
     await retry.click();
     expect(onRetry).toHaveBeenCalledWith("failed");
     await expect.element(screen.getByRole("group", { name: "failed.txt，Disk full" })).toBeInTheDocument();
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("a new tile fades in; a removed tile fades out in place while the others take its space at once", async () => {
+  const two = [{ ...file, id: "a", fileName: "a.txt" }, { ...file, id: "b", fileName: "b.txt" }];
+  const tree = (items: ComposerAttachmentItem[]) => <PwaUiProvider><div className="pwa-root"><Card><ComposerAttachmentTiles items={items} onRemove={() => {}} /></Card></div></PwaUiProvider>;
+  const screen = await renderPwa(<Card><ComposerAttachmentTiles items={two.slice(0, 1)} onRemove={() => {}} /></Card>);
+  try {
+    await screen.rerender(tree(two));
+    const second = screen.getByRole("group", { name: "b.txt" }).element() as HTMLElement;
+    expect(getComputedStyle(second).transitionProperty).toContain("opacity");
+    await expect.poll(() => getComputedStyle(second).opacity).toBe("1");
+    const secondLeft = Math.round(second.getBoundingClientRect().left);
+    const first = document.querySelector<HTMLElement>('.pwa-attachment-tile[aria-label="a.txt"]')!;
+    const firstLeft = Math.round(first.getBoundingClientRect().left);
+
+    await screen.rerender(tree(two.slice(1)));
+    // 离开的方块脱离布局、原位淡出，不可操作；后面的方块当场补位。
+    expect(first.getAttribute("data-presence")).toBe("leaving");
+    expect(first.hasAttribute("inert")).toBe(true);
+    expect(getComputedStyle(first).position).toBe("absolute");
+    expect(Math.round(first.getBoundingClientRect().left)).toBe(firstLeft);
+    expect(Math.round(second.getBoundingClientRect().left)).toBeLessThan(secondLeft);
+    await expect.poll(() => document.querySelector('.pwa-attachment-tile[data-presence="leaving"]')).toBeNull();
+
+    // 整行清空即时完成：附件行在卡片内部，没有可退回的背后。
+    await screen.rerender(tree([]));
+    expect(document.querySelector(".pwa-attachment-tiles")).toBeNull();
   } finally {
     await screen.unmount();
   }

@@ -53,7 +53,8 @@ function recordHandoff(h: HandoffHarness) {
     header: Math.round(h.header.getBoundingClientRect().top), input: Math.round(h.input.getBoundingClientRect().top),
     footer: Math.round(h.footer.getBoundingClientRect().height),
     partial: h.timeline().items.some(item => item.kind === "partial"),
-    queued: document.querySelector(".pwa-queued-messages") !== null,
+    // 离开中的抽屉不可交互、对读屏隐藏（发送过渡期间直接隐藏），不再算作排队区。
+    queued: document.querySelector('.pwa-queued-messages:not([data-presence="leaving"])') !== null,
     meta: h.list.querySelector(".pwa-turn-meta") !== null,
   });
   type Geometry = ReturnType<typeof geometry>;
@@ -518,7 +519,9 @@ test("a queue drained in the background does not replay a send transition on ret
     flushSync(() => document.dispatchEvent(new Event("visibilitychange")));
     for (let time = FORMAL_AT_MS + FRAME_MS; time <= SETTLED_AT_MS; time += FRAME_MS) clock.step(time);
     assertSettled(h, clock, event);
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    // 抽屉清空后先滑回卡片背后（drawer-out）再移除，离开期间 inert、对读屏隐藏。
+    expect(document.querySelector(".pwa-queued-messages")?.getAttribute("data-presence")).toBe("leaving");
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
     expect(h.list.textContent).toContain("The queued follow-up");
     expect(send).not.toHaveBeenCalled();
   } finally {

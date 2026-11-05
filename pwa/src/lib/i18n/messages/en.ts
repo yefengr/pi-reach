@@ -380,8 +380,6 @@ export const en = {
     insertLabel: (description: string) => `Insert into conversation — ${description}`,
     cancelLabel: (description: string) => `Edit ${description}`,
     dismissLabel: (description: string) => `Dismiss notice — ${description}`,
-    showMore: (count: number) => `${count} more`,
-    showLess: "Show less",
     attachmentCount: (count: number) => (count === 1 ? "1 attachment" : `${count} attachments`),
     unconfirmed: "Unconfirmed",
     inserting: "Inserting…",

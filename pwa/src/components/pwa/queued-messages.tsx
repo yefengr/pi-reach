@@ -1,12 +1,12 @@
-import { useId, useState } from "react";
-import { ActionIcon, Button } from "@mantine/core";
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import { ActionIcon, UnstyledButton } from "@mantine/core";
 import { useI18n, type Messages } from "@/lib/i18n";
+import { presenceProps, usePresence } from "./use-presence";
+import { detachInPlace, useLeavingItems, withLeavingItems } from "./use-leaving-items";
 import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 import { ArrowUp, ChevronDown, CircleAlert, Clock, LoaderCircle, Paperclip, Pencil, X } from "lucide-react";
 import type { AttachmentDescriptor } from "@pi-reach/protocol/session";
 
-/** 超过该条数时折叠其余排队消息，避免面板挤占对话区。 */
-const COLLAPSED_QUEUE_LIMIT = 3;
 
 export type QueuedMessageView = {
   id: string;
@@ -58,12 +58,15 @@ type QueuedMessageRowProps = {
   onDismissNotice?: (id: string) => void;
 };
 
-function QueuedMessageRow({ item, index, numbered, isOnline, onInsert, onCancel, onDismissNotice }: QueuedMessageRowProps) {
+function QueuedMessageRow({ item, index, numbered, isOnline, onInsert, onCancel, onDismissNotice, leaving = false }: QueuedMessageRowProps & { leaving?: boolean }) {
   const q = useI18n().t.queued;
+  const rowRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => { if (leaving) detachInPlace(rowRef.current); }, [leaving]);
   const description = queuedMessageDescription(item, index, q);
   const manageable = item.canManage && item.busy !== true && !item.dismissible;
   const attachmentCount = item.attachments?.length ?? 0;
-  return <article className="pwa-queued-message" title={item.text || undefined} data-attention={item.attention ? "" : undefined}>
+  return <article ref={rowRef} className="pwa-queued-message" title={item.text || undefined} data-attention={item.attention ? "" : undefined}
+    {...(leaving ? { "data-presence": "leaving", inert: true, "aria-hidden": true } : {})}>
     {numbered ? <span className="pwa-queued-message-index" aria-hidden="true">{index + 1}</span> : null}
     {item.images?.length ? <div className="pwa-queued-message-images">
       {item.images.map((image, imageIndex) => <img key={`${item.id}-${imageIndex}`} src={`data:${image.mime};base64,${image.data}`} alt={q.imageAlt(index + 1, imageIndex + 1)} />)}
@@ -89,40 +92,45 @@ function QueuedMessageRow({ item, index, numbered, isOnline, onInsert, onCancel,
 }
 
 /**
- * 排队消息抽屉：收在输入框卡片后方，同一面板内每条一行（序号、状态、单行正文、附件计数、操作），
- * 两条以上在首行显示标题与计数；超过上限时其余条目进入折叠区，展开与收起按 0fr↔1fr 过渡高度，
- * 收起期间折叠区 inert，不可聚焦也不被读屏读到。只有可操作的条目显示插入与撤回，未确认提示只保留关闭。
+ * 排队消息抽屉：收在输入框卡片后方，出现时从卡片背后滑出，清空时滑回卡片背后再移除（高度一次到位）；同一面板内每条一行（序号、状态、单行正文、附件计数、操作），列表固定最大高度并在内部滚动。
+ * 两条以上时首行为标题、计数与箭头组成的折叠按钮，折叠整段列表，按 0fr↔1fr 过渡高度；折叠期间列表 inert，
+ * 有需要关注的条目（如插入未确认）时标题行显示告警图标。只有可操作的条目显示插入与撤回，未确认提示只保留关闭。
  */
-export function QueuedMessages({ items, isOnline, onInsert, onCancel, onDismissNotice }: QueuedMessagesProps) {
+export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, onDismissNotice }: QueuedMessagesProps) {
   const { t } = useI18n();
   const q = t.queued;
-  const [expanded, setExpanded] = useState(false);
-  const overflowId = useId();
+  const [collapsed, setCollapsed] = useState(false);
+  const bodyId = useId();
+  const sectionRef = useRef<HTMLElement>(null);
+  // 清空后保留最后一批条目，脱离布局后滑回卡片背后（drawer-out）再移除；离开期间 inert，不可操作也不被播报。
+  const presence = usePresence(current.length ? current : null, Object.is, { exit: "--pwa-duration-drawer-out" });
+  const leavingRows = useLeavingItems(current);
+  useLayoutEffect(() => { if (presence.leaving) detachInPlace(sectionRef.current, "bottom"); }, [presence.leaving]);
+  const items = presence.rendered ?? [];
   if (items.length === 0) return null;
   const numbered = items.length > 1;
-  const collapsible = items.length > COLLAPSED_QUEUE_LIMIT;
+  // 只有一条时没有标题行，也就不提供折叠。
+  const folded = numbered && collapsed;
+  const attention = items.some((item) => item.attention);
   const rowProps = { numbered, isOnline, onInsert, onCancel, onDismissNotice };
-  const head = collapsible ? items.slice(0, COLLAPSED_QUEUE_LIMIT) : items;
-  const rest = collapsible ? items.slice(COLLAPSED_QUEUE_LIMIT) : [];
 
-  return <section className="pwa-queued-messages" aria-label={q.title}>
-    <div className="pwa-queued-message-list">
-      {numbered ? <header className="pwa-queued-messages-header">
-        <h2>{q.title}</h2>
-        <span className="pwa-queued-messages-count" aria-label={q.count(items.length)}>{items.length}</span>
-      </header> : null}
-      {head.map((item, index) => <QueuedMessageRow key={item.id} item={item} index={index} {...rowProps} />)}
-      {collapsible ? <>
-        <div id={overflowId} className="pwa-queued-messages-overflow" data-open={expanded ? "" : undefined}>
-          <div className="pwa-queued-messages-overflow-inner" inert={expanded ? undefined : true}>
-            {rest.map((item, index) => <QueuedMessageRow key={item.id} item={item} index={index + COLLAPSED_QUEUE_LIMIT} {...rowProps} />)}
-          </div>
+  return <section ref={sectionRef} className="pwa-queued-messages" aria-label={q.title} {...presenceProps(presence)}>
+    {numbered ? <h2 className="pwa-queued-messages-header">
+      <UnstyledButton className="pwa-queued-messages-toggle" type="button" aria-expanded={!folded} aria-controls={bodyId} onClick={() => setCollapsed((current) => !current)}>
+        <span className="pwa-queued-messages-title">{q.title}</span>
+        {folded && attention ? <CircleAlert className="pwa-queued-messages-attention" size={16} aria-hidden="true" /> : null}
+        <span className="pwa-queued-messages-count" aria-hidden="true">{items.length}</span>
+        <span className="pwa-sr-only">{q.count(items.length)}</span>
+        <ChevronDown className="pwa-queued-messages-chevron" size={16} aria-hidden="true" />
+      </UnstyledButton>
+    </h2> : null}
+    <div id={bodyId} className="pwa-queued-messages-body" data-open={folded ? undefined : ""}>
+      <div className="pwa-queued-messages-body-inner" inert={folded ? true : undefined}>
+        <div className="pwa-queued-message-list">
+          {withLeavingItems(items, presence.leaving ? [] : leavingRows).map(({ item, index, leaving }) =>
+            <QueuedMessageRow key={item.id} item={item} index={index} leaving={leaving} {...rowProps} />)}
         </div>
-        <Button className="pwa-queued-messages-more" variant="transparent" type="button" aria-expanded={expanded} aria-controls={overflowId}
-          leftSection={<ChevronDown className="pwa-queued-messages-more-icon" size={16} aria-hidden="true" />} onClick={() => setExpanded((current) => !current)}>
-          {expanded ? q.showLess : q.showMore(rest.length)}
-        </Button>
-      </> : null}
+      </div>
     </div>
   </section>;
 }

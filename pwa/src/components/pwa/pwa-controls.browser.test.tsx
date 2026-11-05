@@ -154,8 +154,9 @@ test("Composer owns its radius and light elevation without changing the shared r
   expect(getComputedStyle(card).borderRadius).toBe("32px");
   expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-radius-lg").trim()).toBe("12px");
   const notice = screen.getByText("Attachment limit fixture").element();
-  expect(card.contains(notice)).toBe(false);
-  expect(notice.getBoundingClientRect().bottom).toBeLessThanOrEqual(card.getBoundingClientRect().top);
+  // 提示行位于输入框卡片内、文本框之上（DESIGN「Composer」）。
+  expect(card.contains(notice)).toBe(true);
+  expect(notice.getBoundingClientRect().bottom).toBeLessThanOrEqual(card.querySelector<HTMLElement>(".pwa-composer-input")!.getBoundingClientRect().top);
   await screen.getByRole("button", { name: "Dark fixture" }).click();
   await expect.poll(() => getComputedStyle(card).boxShadow).toBe("none");
   expect(getComputedStyle(card).borderRadius).toBe("32px");

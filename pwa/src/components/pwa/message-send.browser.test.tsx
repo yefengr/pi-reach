@@ -1178,7 +1178,9 @@ test("an editable queue item enters the conversation once it starts draining", a
     expect(h.list.textContent).not.toContain("Queued original");
     h.receive(queueSnapshot("queued-one", "Queued original", false));
     await frames();
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    // 抽屉清空后先滑回卡片背后（drawer-out）再移除，离开期间 inert、对读屏隐藏。
+    expect(document.querySelector(".pwa-queued-messages")?.getAttribute("data-presence")).toBe("leaving");
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
     expect(h.list.textContent).toContain("Queued original");
     // 在途时不再提供取消按钮，也不再显示发送中状态。
     expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();

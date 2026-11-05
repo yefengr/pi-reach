@@ -382,8 +382,6 @@ export const zh: Messages = {
     insertLabel: (description) => `插入到会话——${description}`,
     cancelLabel: (description) => `撤回编辑——${description}`,
     dismissLabel: (description) => `关闭提示——${description}`,
-    showMore: (count) => `还有 ${count} 条`,
-    showLess: "收起",
     attachmentCount: (count) => `${count} 个附件`,
     unconfirmed: "未确认",
     inserting: "插入中…",

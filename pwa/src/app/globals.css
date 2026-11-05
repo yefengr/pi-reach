@@ -207,7 +207,7 @@ body:has(.pwa-root) { overflow: hidden; }
  * 这两种状态写进启用条件，不靠后续规则覆盖（:has 选择器的优先级更高）。
  */
 .pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-composer)); --pwa-composer-lead: var(--pwa-composer-fade); }
-.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):has(.pwa-queued-messages):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-xl)); }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):has(.pwa-queued-messages:not([data-presence="leaving"])):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-xl)); }
 .pwa-chat-footer::before { content: ""; position: absolute; z-index: -1; right: 0; bottom: 100%; left: 0; height: var(--pwa-composer-fade); background: var(--pwa-composer-fade-gradient); pointer-events: none; }
 .pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) .pwa-chat-footer::before { top: 0; bottom: auto; height: var(--pwa-composer-overlap); }
 .pwa-app-shell[data-compact-height] .pwa-chat-footer::before,

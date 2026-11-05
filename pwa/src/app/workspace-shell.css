@@ -211,16 +211,11 @@
 .pwa-root .pwa-composer-hint { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-hint > svg { flex: 0 0 auto; }
 /*
- * 卡片内提示（DESIGN「Composer」）：位于附件与文本框之上，与文本框左缘对齐。插槽常驻，出现与隐藏按 0fr↔1fr
- * 过渡高度并淡化；本端发送过渡期间（footer 带 data-own-send）即时完成，不与输入区回缩争抢高度。
+ * 卡片内提示（DESIGN「Composer」）：位于附件与文本框之上，与文本框左缘对齐；距卡片上沿 13、距正文 14，提示归属卡片而非贴着正文。进出沿用 .pwa-presence：出现淡入、隐藏淡出后再移除，
+ * 高度一次到位，不逐帧改变布局。本端发送过渡期间（footer 带 data-own-send）淡出中的副本直接隐藏，不与输入区回缩争抢高度。
  */
-.pwa-composer-hint-slot { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--pwa-duration-collapse-out) var(--pwa-ease-content); }
-.pwa-composer-hint-slot[data-open] { grid-template-rows: 1fr; transition-duration: var(--pwa-duration-collapse-in); }
-.pwa-composer-hint-inner { min-height: 0; overflow: hidden; opacity: 0; transition: opacity var(--pwa-duration-collapse-out) var(--pwa-ease-content); }
-.pwa-composer-hint-slot[data-open] > .pwa-composer-hint-inner { opacity: 1; transition-duration: var(--pwa-duration-collapse-in); }
-.pwa-chat-footer[data-own-send] .pwa-composer-hint-slot,
-.pwa-chat-footer[data-own-send] .pwa-composer-hint-inner { transition: none; }
-.pwa-root .pwa-composer-card .pwa-composer-hint-line { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0; padding: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
+.pwa-chat-footer[data-own-send] .pwa-composer-hint-line[data-presence="leaving"] { display: none; }
+.pwa-root .pwa-composer-card .pwa-composer-hint-line { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0; padding: 2px 0 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > svg { flex: 0 0 auto; }
 
