@@ -4325,6 +4325,82 @@ async function seedArchivedSession(text = "Archived note") {
   await mergeTimelineEvents({ deviceId: "owner-device-key", endpointId: "daemon-endpoint", sessionId: "archived-session", leafId: "generation-archived-session" }, [savedAssistantEvent("archived-session", text, Date.now() - 60_000)]);
 }
 
+function backgroundCompletionDot() {
+  return document.querySelector(".pwa-session-trigger-icon .pwa-notice-dot");
+}
+
+function setBackgroundPiWorking(working: boolean) {
+  flushSync(() => relayHarness.instances[0]!.emitControl({
+    type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "second-endpoint", runtime_instance_id: "runtime-2",
+    metadata: { kind: "interactive", name: "Second Pi", cwd: "/workspace/second", working },
+  }));
+}
+
+async function finishBackgroundPi() {
+  setBackgroundPiWorking(true);
+  await flushMicrotasks();
+  setBackgroundPiWorking(false);
+  await expect.poll(backgroundCompletionDot).not.toBeNull();
+}
+
+test("keeps background completion reminders while reading saved history and clears them only on opening the live Pi", async () => {
+  await seedArchivedSession();
+  await page.viewport(390, 844);
+  const screen = await renderTwoPis();
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1"));
+    await finishBackgroundPi();
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    const navigation = screen.getByRole("dialog", { name: /Workspace/ });
+    await navigation.getByRole("button", { name: /Archived note/ }).click();
+    await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-session-trigger-title")?.textContent).toBe("Archived note");
+    expect(backgroundCompletionDot()).not.toBeNull();
+
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    const second = navigation.getByRole("button", { name: /Second Pi/ });
+    await expect.element(second).toBeVisible();
+    expect(second.element().querySelector(".pwa-notice-dot")).not.toBeNull();
+    expect(backgroundCompletionDot()).not.toBeNull();
+    await second.click();
+    await expect.poll(() => document.querySelector(".pwa-session-trigger-title")?.textContent).toBe("Second Pi");
+    await expect.poll(backgroundCompletionDot).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test.each(["already-completed", "completed-while-offline"] as const)("preserves background completion reminders across relay reconnects: %s", async phase => {
+  await page.viewport(390, 844);
+  const screen = await renderTwoPis();
+  try {
+    channelHarness.channels[0]!.emit(readyFrame(channelHarness.channels[0]!, "session-1"));
+    if (phase === "already-completed") await finishBackgroundPi();
+    else { setBackgroundPiWorking(true); await flushMicrotasks(); }
+    const relay = relayHarness.instances[0]!;
+    const previousConnects = relay.connectCalls;
+    relay.emitState("closed");
+    // 等待真实重连完成，不能只模拟 open 而遗留原退避计时器。
+    await vi.waitFor(() => expect(relay.connectCalls).toBeGreaterThan(previousConnects), { timeout: 5000 });
+    await vi.waitFor(() => expect(relay.state).toBe("open"));
+    relay.emitControl(twoPisFrame());
+    await vi.waitFor(() => expect(channelHarness.channels.length).toBeGreaterThan(1));
+    const resumed = channelHarness.channels.at(-1)!;
+    resumed.emit(readyFrame(resumed, "session-1"));
+    await expect.poll(backgroundCompletionDot).not.toBeNull();
+    await screen.getByRole("button", { name: "Open navigation" }).click();
+    const navigation = screen.getByRole("dialog", { name: /Workspace/ });
+    const second = navigation.getByRole("button", { name: /Second Pi/ });
+    await expect.element(second).toBeVisible();
+    expect(second.element().querySelector(".pwa-notice-dot")).not.toBeNull();
+
+    relay.emitControl({
+      type: "endpoint_updated", device_id: "owner-device-key", endpoint_id: "second-endpoint", runtime_instance_id: "runtime-new",
+      metadata: { kind: "interactive", name: "Second Pi", cwd: "/workspace/second", working: false },
+    });
+    await expect.poll(backgroundCompletionDot).toBeNull();
+    expect(second.element().querySelector(".pwa-notice-dot")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
 test("uses the product name as the mobile title before any computer is paired", async () => {
   await page.viewport(390, 844);
   const db = await openPwaDatabase();

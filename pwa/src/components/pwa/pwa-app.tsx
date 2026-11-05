@@ -32,6 +32,7 @@ import { assertBrowserCapabilities, fromStoredKey, migrateLegacyDefaultRelay, to
 import { derivePairingPresence } from "@/lib/pwa/pwa-view-model";
 import { readDefaultRelayUrl } from "@/lib/pwa/runtime-config";
 import { useEndpointRegistry } from "@/lib/pwa/use-endpoint-registry";
+import { useBackgroundCompletionNotices } from "@/lib/pwa/use-background-completion-notices";
 import { useDevicePairing, type DevicePairingResult } from "@/lib/pwa/use-device-pairing";
 import { ACTIVE_DEVICE_SETTING, activeEndpointSettingKey, useActiveEndpointSelection } from "@/lib/pwa/use-active-endpoint-selection";
 import { PendingCapacityError, type QueuedCancellation, type TimelineScope } from "@/lib/pwa/timeline-runtime";
@@ -1183,30 +1184,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       operationNotifications.notify(getMessages().connection.restored);
     }
   }, [connectionBannerVisible, displayConnection, operationNotifications]);
-  const [completedEndpointIds, setCompletedEndpointIds] = useState<ReadonlySet<string>>(() => new Set());
-  const previousWorkingRef = useRef(new Map<string, boolean>());
-  const viewingEndpointId = selectedHistory === null ? activeEndpoint?.endpointId ?? null : null;
-  useEffect(() => {
-    // 后台完成提醒只保存在当前页面内存中：非当前查看的在线 Pi 由运行中变为空闲时出现，打开该会话后消失。
-    const previous = previousWorkingRef.current;
-    const next = new Map<string, boolean>();
-    const finished: string[] = [];
-    for (const endpoint of endpoints) {
-      if (endpoint.online === false) continue;
-      next.set(endpoint.endpointId, endpoint.working === true);
-      if (previous.get(endpoint.endpointId) === true && endpoint.working !== true && endpoint.endpointId !== viewingEndpointId) finished.push(endpoint.endpointId);
-    }
-    previousWorkingRef.current = next;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setCompletedEndpointIds((current) => {
-        const updated = new Set([...current, ...finished].filter((endpointId) => next.has(endpointId) && endpointId !== viewingEndpointId));
-        return updated.size === current.size && [...updated].every((endpointId) => current.has(endpointId)) ? current : updated;
-      });
-    });
-    return () => { cancelled = true; };
-  }, [endpoints, viewingEndpointId]);
+  const completedEndpointIds = useBackgroundCompletionNotices({
+    devices, endpoints, snapshotDeviceIds, viewingEndpoint: selectedHistory === null ? activeEndpoint : null,
+  });
   const newSessionPending = pendingAction?.action === "session_new";
   const visibleTimelineItems = newSessionPending ? pendingAction.projection ?? timelineItems : timelineItems;
   const compactingNow = displayEndpoint !== null && exitedDisplay === null
@@ -1232,12 +1212,15 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
   const connectionStatus = <ConnectionStatus state={displayConnection} retryAttempt={retryAttempt} />;
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;
-  const titleBar: PwaWorkspaceTitleBar = selectedHistory
-    ? { title: historySessionTitle(selectedHistory), prefix: cwdName(historyEndpoint?.cwd), showTitle: true, moreMenu: <SessionActionsMenu info={{ name: historySessionTitle(selectedHistory), cwd: historyEndpoint?.cwd ?? null, computer: computerName, status: t.common.readOnly }} /> }
-    : activeDevice && displayEndpoint
-      ? { title: displayPi(displayEndpoint), prefix: cwdName(displayEndpoint.cwd), showTitle: true, status: exitedDisplay ? <span className="pwa-connection offline"><span className="pwa-status-dot" aria-hidden="true" />{t.workspace.exited}</span> : connectionStatus, navigationNotice: completedEndpointIds.size > 0, moreMenu: <SessionActionsMenu info={{ name: displayPi(displayEndpoint), cwd: displayEndpoint.cwd ?? null, computer: computerName, status: exitedDisplay ? t.workspace.exited : displayEndpoint.working ? t.actions.running : t.actions.idle }} /> }
-      // 没有配对或未选中电脑时，移动顶栏显示品牌名（不翻译），不把「导航」当标题。
-      : { title: activeDevice ? computerName : "Pi Reach", showTitle: false, status: devices.length > 0 ? connectionStatus : null, navigationNotice: completedEndpointIds.size > 0 };
+  const titleBar: PwaWorkspaceTitleBar = {
+    ...(selectedHistory
+      ? { title: historySessionTitle(selectedHistory), prefix: cwdName(historyEndpoint?.cwd), showTitle: true, moreMenu: <SessionActionsMenu info={{ name: historySessionTitle(selectedHistory), cwd: historyEndpoint?.cwd ?? null, computer: computerName, status: t.common.readOnly }} /> }
+      : activeDevice && displayEndpoint
+        ? { title: displayPi(displayEndpoint), prefix: cwdName(displayEndpoint.cwd), showTitle: true, status: exitedDisplay ? <span className="pwa-connection offline"><span className="pwa-status-dot" aria-hidden="true" />{t.workspace.exited}</span> : connectionStatus, moreMenu: <SessionActionsMenu info={{ name: displayPi(displayEndpoint), cwd: displayEndpoint.cwd ?? null, computer: computerName, status: exitedDisplay ? t.workspace.exited : displayEndpoint.working ? t.actions.running : t.actions.idle }} /> }
+        // 没有配对或未选中电脑时，移动顶栏显示品牌名（不翻译），不把「导航」当标题。
+        : { title: activeDevice ? computerName : "Pi Reach", showTitle: false, status: devices.length > 0 ? connectionStatus : null }),
+    navigationNotice: completedEndpointIds.size > 0,
+  };
   const connectionBannerKind = connectionBannerDue ? rawConnectionBannerKind : null;
   // 新会话无消息时显示目录 · 模型 · 思考级别，发送前就能确认对象；缺哪项省略哪项。
   const emptySessionContext = displayEndpoint
