@@ -15,6 +15,16 @@
 
 .pwa-root .pwa-device-trigger .mantine-Button-section[data-position="right"] {
   margin-left: 8px;
+  gap: 8px;
+}
+
+/* 入口提示始终预留位置，蓝点显隐不改变名称的可用宽度。 */
+.pwa-root .pwa-device-trigger-status {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
 }
 
 /* 面板向下弹开时箭头向上；减少动态效果时瞬时翻转，不保留旋转过渡。 */

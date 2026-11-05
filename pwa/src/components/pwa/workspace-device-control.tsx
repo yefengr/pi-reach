@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Badge, Button, Drawer, Menu, NavLink, Popover } from "@mantine/core";
 import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, useMenuExitAction, usePwaMenuTransition } from "@/components/pwa/use-pwa-motion";
 import { ChevronDown, Computer, Ellipsis, Link2, Pencil, Trash2 } from "lucide-react";
@@ -140,6 +140,8 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
   const menuOwnsDismissRef = useRef(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const pendingActionRef = useRef<(() => void) | null>(null);
+  const completionDescriptionId = useId();
+  const hasOtherComputerCompletion = devices.some((device) => device.id !== activeDeviceId && deviceActivity[device.id] === "completed");
   const activeDevice = devices.find((device) => device.id === activeDeviceId) ?? null;
   const label = activeDevice ? displayDevice(activeDevice) : devices.length > 0 ? t.devices.chooseComputer : t.devices.noComputerPaired;
   const title = purpose === "manage" ? t.devices.computers : t.devices.chooseTitle;
@@ -207,8 +209,9 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     aria-expanded={opened}
     onClick={togglePanel}
     aria-label={t.devices.triggerLabel(label)}
-    rightSection={<ChevronDown className="pwa-device-trigger-chevron" size={16} />}
-  ><span className="pwa-device-trigger-copy"><strong>{label}</strong></span></Button>;
+    aria-describedby={hasOtherComputerCompletion ? completionDescriptionId : undefined}
+    rightSection={<><span className="pwa-device-trigger-status">{hasOtherComputerCompletion ? <span className="pwa-device-trigger-dot pwa-notice-dot" aria-hidden="true" title={t.devices.otherComputerCompletion} /> : null}</span><ChevronDown className="pwa-device-trigger-chevron" size={16} /></>}
+  ><span className="pwa-device-trigger-copy"><strong>{label}</strong></span>{hasOtherComputerCompletion ? <span id={completionDescriptionId} className="pwa-sr-only">{t.devices.otherComputerCompletion}</span> : null}</Button>;
 
   if (variant === "sheet") return <>
     {trigger}

@@ -49,6 +49,7 @@ function DeviceControlHarness({ variant, purpose = "choose", events, devices = [
 let setDeviceActivity: ((activity: Readonly<Record<string, DeviceActivity>>) => void) | null = null;
 
 function DeviceActivityHarness({ variant, events }: { variant: WorkspaceDeviceControlVariant; events: string[] }) {
+  const [activeDeviceId, setActiveDeviceId] = useState(currentDevice.id);
   const [activity, setActivity] = useState<Readonly<Record<string, DeviceActivity>>>({ [currentDevice.id]: "completed" });
   // 只在挂载期间暴露 setter，卸载后不残留指向旧组件的控制入口。
   useEffect(() => {
@@ -58,14 +59,14 @@ function DeviceActivityHarness({ variant, events }: { variant: WorkspaceDeviceCo
   return <div style={variant === "desktop" ? { width: 286, position: "absolute", left: 12, bottom: 38 } : { width: 286 }}>
     <WorkspaceDeviceControl
       devices={[currentDevice, nextDevice]}
-      activeDeviceId={currentDevice.id}
+      activeDeviceId={activeDeviceId}
       pairingPresence={{
         [currentDevice.id]: { status: "online", onlineEndpoints: 2, totalEndpoints: 2 },
         [nextDevice.id]: { status: "offline", onlineEndpoints: 0, totalEndpoints: 1 },
       }}
       deviceActivity={activity}
       onPair={() => events.push("pair")}
-      onSelectDevice={(deviceId) => events.push(`select:${deviceId}`)}
+      onSelectDevice={(deviceId) => { events.push(`select:${deviceId}`); setActiveDeviceId(deviceId); }}
       onRename={(device) => events.push(`rename:${device.id}`)}
       onRemove={(device) => events.push(`remove:${device.id}`)}
       variant={variant}
@@ -189,6 +190,76 @@ test("sheet computer row keeps the status slot and actions reachable in a narrow
     await expect.element(dialog).not.toBeInTheDocument();
     await expect.element(trigger).toHaveFocus();
     expect(events).toEqual([]);
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 800);
+  }
+});
+
+test.each(["desktop", "sheet"] as const)("%s computer trigger only reports other-computer completion and preserves it across chooser dismissal", async (variant) => {
+  if (variant === "sheet") await page.viewport(320, 568);
+  const events: string[] = [];
+  const screen = await renderPwa(<DeviceActivityHarness variant={variant} events={events} />);
+  try {
+    const trigger = screen.getByRole("button", { name: /^Choose computer, current / });
+    const triggerNode = trigger.element();
+    const dot = () => triggerNode.querySelector<HTMLElement>(".pwa-device-trigger-dot");
+    const panel = () => document.querySelector(variant === "desktop" ? ".pwa-device-popover" : ".pwa-device-drawer");
+    const copyWidth = () => Math.round(triggerNode.querySelector<HTMLElement>(".pwa-device-trigger-copy")!.getBoundingClientRect().width);
+    const originalWidth = copyWidth();
+    // 当前电脑完成、其他电脑运行中，以及已不在配对列表中的记录均不触发入口提示。
+    expect(dot()).toBeNull();
+    expect(triggerNode.getAttribute("aria-describedby")).toBeNull();
+    flushSync(() => setDeviceActivity?.({ [currentDevice.id]: "completed", [nextDevice.id]: "running", removed: "completed" }));
+    expect(dot()).toBeNull();
+    flushSync(() => setDeviceActivity?.({ [currentDevice.id]: "completed", [nextDevice.id]: "completed" }));
+    expect(dot()).not.toBeNull();
+    const descriptionId = triggerNode.getAttribute("aria-describedby")!;
+    expect(document.getElementById(descriptionId)?.textContent).toBe("A run on another computer finished, not yet viewed");
+    expect(dot()!.title).toBe("A run on another computer finished, not yet viewed");
+    expect(copyWidth()).toBe(originalWidth);
+    expect(Math.round(triggerNode.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await page.screenshot({ path: `../../../.vitest/screenshots/other-computer-completion-${variant}.png` });
+
+    triggerNode.focus();
+    await trigger.click();
+    await expect.poll(panel).not.toBeNull();
+    expect(dot()).not.toBeNull();
+    // 面板打开期间仍随同一份状态实时更新，不因开关确认任何提醒。
+    flushSync(() => setDeviceActivity?.({ [currentDevice.id]: "completed", [nextDevice.id]: "running" }));
+    expect(dot()).toBeNull();
+    flushSync(() => setDeviceActivity?.({ [currentDevice.id]: "completed", [nextDevice.id]: "completed" }));
+    expect(dot()).not.toBeNull();
+    if (variant === "desktop") {
+      await userEvent.tab();
+      expect(document.activeElement?.closest(".pwa-device-popover")).not.toBeNull();
+    }
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(panel).toBeNull();
+    await expect.element(trigger).toHaveFocus();
+    expect(dot()).not.toBeNull();
+    expect(events).toEqual([]);
+
+    // 切换电脑后按新的当前 id 重算，目标电脑仍保留自己的行内提醒。
+    flushSync(() => setDeviceActivity?.({ [nextDevice.id]: "completed" }));
+    await trigger.click();
+    await screen.getByRole("button", { name: /^Travel Mac OFFLINE/ }).click();
+    await expect.poll(() => events).toEqual(["select:device:next"]);
+    await expect.poll(() => triggerNode.getAttribute("aria-label")).toBe("Choose computer, current Travel Mac");
+    expect(dot()).toBeNull();
+    expect(triggerNode.getAttribute("aria-describedby")).toBeNull();
+    await trigger.click();
+    const selectedRow = screen.getByRole("button", { name: /^Travel Mac OFFLINE/ });
+    await expect.element(selectedRow).toBeVisible();
+    expect(selectedRow.element().querySelector(".pwa-notice-dot")).not.toBeNull();
+    if (variant === "desktop") await userEvent.tab();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(panel).toBeNull();
+    flushSync(() => setDeviceActivity?.({ [currentDevice.id]: "completed", [nextDevice.id]: "completed" }));
+    expect(dot()).not.toBeNull();
+    flushSync(() => setDeviceActivity?.({}));
+    expect(dot()).toBeNull();
   } finally {
     await screen.unmount();
     await page.viewport(1280, 800);

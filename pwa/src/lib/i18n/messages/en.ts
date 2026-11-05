@@ -121,6 +121,7 @@ export const en = {
     computers: "Computers",
     chooseTitle: "Choose computer",
     triggerLabel: (name: string) => `Choose computer, current ${name}`,
+    otherComputerCompletion: "A run on another computer finished, not yet viewed",
     currentComputer: "Current computer",
     selectComputer: "Select a computer",
     closeChooser: "Close computer chooser",

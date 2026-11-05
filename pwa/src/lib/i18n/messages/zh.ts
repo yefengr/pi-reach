@@ -123,6 +123,7 @@ export const zh: Messages = {
     computers: "电脑",
     chooseTitle: "选择电脑",
     triggerLabel: (name) => `选择电脑，当前为 ${name}`,
+    otherComputerCompletion: "其他电脑的运行已结束，尚未查看",
     currentComputer: "当前电脑",
     selectComputer: "选择一台电脑",
     closeChooser: "关闭电脑选择",
