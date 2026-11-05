@@ -36,6 +36,10 @@ function formal(value: TimelinePending): TimelineViewItem {
   return { kind: "event", event: { event_id: value.messageId, session_id: "send-session", leaf_id: "leaf", group_id: "new", timestamp: 1, kind: "user", origin: "pwa", sender_ref: "local-sender", status: "committed", delivery: "normal", message_id: value.messageId, blocks: [{ type: "text", text: value.text }] } };
 }
 const gap = (list: HTMLElement) => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop);
+// 输入区浮在列表之上（ADR-20261105）：底部留白 = 尾部留白 + 输入区高度，可见内容止于输入区上沿。
+const footerSpace = (list: HTMLElement) => Number.parseFloat(list.style.getPropertyValue("--pwa-chat-footer-space")) || 0;
+const visibleBottom = (list: HTMLElement) => Math.min(list.getBoundingClientRect().bottom, document.querySelector<HTMLElement>(".pwa-chat-footer")?.getBoundingClientRect().top ?? Infinity);
+const tailPadding = (list: HTMLElement) => Math.round(Number.parseFloat(getComputedStyle(list).paddingBottom) - footerSpace(list));
 const top = (node: Element) => Math.round(node.getBoundingClientRect().top);
 async function frames(count = 3) { for (let i = 0; i < count; i++) await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); }
 async function harness({ width = 390, compact = false, working = false, draft = "New message", live = true, initial = [history], attachment = false, sentAttachment = attachment, height }: { width?: number; compact?: boolean; working?: boolean; draft?: string; live?: boolean; initial?: TimelineViewItem[]; attachment?: boolean; sentAttachment?: boolean; height?: number } = {}) {
@@ -67,7 +71,7 @@ async function harness({ width = 390, compact = false, working = false, draft = 
       setText("");
       setFiles([]);
     };
-    return <div className="pwa-app-shell" data-compact-height={compact ? "short" : undefined}><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ display: "flex", flexDirection: "column", width: "100vw", height: height ?? (compact ? 280 : 650), flex: "none" }}>
+    return <div className="pwa-app-shell" data-compact-height={compact ? "short" : undefined}><main className="pwa-main" data-composer-budget={compact ? "constrained" : undefined} style={{ position: "relative", display: "flex", flexDirection: "column", width: "100vw", height: height ?? (compact ? 280 : 650), flex: "none" }}>
       <MessageList items={items} isLive={online} running={running} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onRetryFailed={noop} onCheckStatus={noop} onCancelQueued={noop} />
       <div className="pwa-chat-footer"><PwaMessageActions show={!viewport.followingOutput} showLatest={!viewport.followingOutput} showRetry={false} unreadOutput={viewport.unreadOutput} onRetry={noop} onLatest={viewport.showLatest} /><MessageComposer {...composer} attachments={files} draft={text} onDraftChange={setText} onSend={send} /></div>
     </main></div>;
@@ -288,7 +292,7 @@ test.each([false, true].flatMap(receipt => [0, 16].map(commitCost => ({ receipt,
     await frames();
     const clock = layoutClock();
     const before = h.list.scrollTop;
-    expect(getComputedStyle(h.list).paddingBottom).toBe("8px");
+    expect(tailPadding(h.list)).toBe(8);
     withGeometryWork(h.list, () => h.work(true, receipt ? [history, h.sent()] : undefined), () => clock.elapse(commitCost));
     expect(h.list.scrollTop).toBe(before);
     clock.step(40);
@@ -495,12 +499,12 @@ test.each([false, true])("xlarge late Working uses only the current safe tail bu
     const padding = Number.parseFloat(getComputedStyle(h.list).paddingBottom);
     h.work(true);
     const bottom = h.list.scrollHeight - h.list.clientHeight;
-    const expected = Math.min(bottom, Math.max(before, bottom - Math.max(0, padding - 8)));
+    const expected = Math.min(bottom, Math.max(before, bottom - Math.max(0, padding - footerSpace(h.list) - 8)));
     expect(h.list.scrollTop).toBe(before);
     clock.step(160); clock.step(200);
     expect(Math.round(h.list.scrollTop)).toBe(Math.round(expected));
     const status = h.list.querySelector(".pwa-thinking-status")!;
-    expect(Math.round(status.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) - 8);
+    expect(Math.round(status.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(visibleBottom(h.list)) - 8);
     expect(h.viewport().followingOutput).toBe(true);
     expect(h.list.style.paddingBottom).toBe("");
   } finally { await h.screen.unmount(); }
@@ -587,7 +591,7 @@ test("borrowed tail stays put while a process group enters above the activity sl
     // 正文接管并收起活动区：不回到旧位置之上，正文完整可见并保留基础间距，仍在跟随。
     expect(Math.round(h.list.scrollTop)).toBeGreaterThanOrEqual(Math.round(before));
     const firstBody = h.list.querySelectorAll(".pwa-message.assistant")[1]!;
-    expect(Math.round(firstBody.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) - 8);
+    expect(Math.round(firstBody.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(visibleBottom(h.list)) - 8);
     expect(h.list.querySelector(".pwa-turn-activity")).toBeNull();
     expect(h.viewport().followingOutput).toBe(true);
     const credit = gap(h.list);
@@ -595,7 +599,7 @@ test("borrowed tail stays put while a process group enters above the activity sl
       h.update([history, reply(text)]); run();
       expect(gap(h.list)).toBe(credit);
       const body = h.list.querySelectorAll(".pwa-message.assistant")[1];
-      expect(Math.round(body.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(h.list.getBoundingClientRect().bottom) - 8);
+      expect(Math.round(body.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(visibleBottom(h.list)) - 8);
       expect(h.viewport().followingOutput).toBe(true);
     }
     expect(h.list.style.paddingBottom).toBe("");
@@ -613,8 +617,8 @@ test("natural tail padding matches scroll clearance in normal, compact and budge
       if (mode === "compact") shell.dataset.compactHeight = "short";
       else if (mode !== "normal") main.dataset.composerBudget = mode === "conflict" ? "conflict" : "constrained";
       const style = getComputedStyle(h.list);
-      // 正常布局下列表延伸到输入框卡片圆角之后：88 加上重叠的 24 渐隐与 32 圆角；紧凑与预算受限时不重叠。
-      expect(style.paddingBottom).toBe(mode === "normal" ? "144px" : "8px");
+      // 尾部留白正常为 88，紧凑与预算受限时为 8；输入区浮在列表之上，底部留白另加输入区高度。
+      expect(tailPadding(h.list)).toBe(mode === "normal" ? 88 : 8);
       expect(style.scrollPaddingBottom).toBe(style.paddingBottom);
     }
   } finally { await h.screen.unmount(); }
@@ -626,7 +630,7 @@ test("measuring compensated activity does not write styles or scroll position", 
   try {
     const clock = layoutClock();
     h.work(false); clock.step(40);
-    expect(Number.parseFloat(h.list.style.paddingBottom)).toBeGreaterThan(88);
+    expect(Number.parseFloat(h.list.style.paddingBottom)).toBeGreaterThan(88 + footerSpace(h.list));
     const writeTop = vi.spyOn(h.list, "scrollTop", "set");
     observer.observe(h.list, { attributes: true, attributeFilter: ["style"] });
     const layout = new TimelineViewportLayout(h.list);
@@ -642,7 +646,7 @@ test.each(["density", "budget"])("temporary activity padding never becomes a new
   try {
     const clock = layoutClock();
     h.work(false); clock.step(40);
-    expect(Number.parseFloat(h.list.style.paddingBottom)).toBeGreaterThan(88);
+    expect(Number.parseFloat(h.list.style.paddingBottom)).toBeGreaterThan(88 + footerSpace(h.list));
     if (change === "density") h.list.closest<HTMLElement>(".pwa-app-shell")!.dataset.compactHeight = "short";
     else h.list.closest<HTMLElement>(".pwa-main")!.dataset.composerBudget = "constrained";
     const geometry = new TimelineViewportLayout(h.list).measure();
@@ -652,7 +656,7 @@ test.each(["density", "budget"])("temporary activity padding never becomes a new
     clock.step(160); clock.step(200);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     expect(h.list.style.paddingBottom).toBe("");
-    expect(getComputedStyle(h.list).paddingBottom).toBe("8px");
+    expect(tailPadding(h.list)).toBe(8);
     expect(h.viewport().followingOutput).toBe(true);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }

@@ -184,7 +184,7 @@
 .pwa-root .pwa-main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: 0; border-radius: 0; background: var(--pwa-bg); }
 /* 会话列：外层消费主区左右安全区，内层为消息列表与输入区提供独立滚动上下文。 */
 .pwa-root .pwa-workspace-body { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
-.pwa-root .pwa-workspace-column { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.pwa-root .pwa-workspace-column { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* 桌面标题区始终贴顶并避让安全区：首行对齐共享 48px 顶栏带，最小高 64px；字号变大时自然撑高。 */
 .pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }

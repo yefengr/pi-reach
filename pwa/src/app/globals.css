@@ -191,12 +191,16 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-session-actions-secondary-item { min-height: var(--pwa-hit-target); }
 .pwa-session-title { min-width: 0; max-width: 100%; display: inline-flex; align-items: baseline; vertical-align: bottom; white-space: nowrap; }
 .pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; }
-.pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) calc(var(--pwa-timeline-pad-bottom) + var(--pwa-composer-overlap, 0px)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: calc(88px + var(--pwa-composer-overlap, 0px)); -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
+.pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: var(--pwa-timeline-pad-top) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) calc(var(--pwa-timeline-pad-bottom) + var(--pwa-chat-footer-space, 0px)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: calc(var(--pwa-timeline-pad-bottom) + var(--pwa-chat-footer-space, 0px)); -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }
 .pwa-bottom-sentinel { width: 1px; height: 1px; }
 /* 过程组收起保持期间的临时空间：位于哨兵之后，高度由视口协调层写入；不用底部内边距，避免撑高滚动容器。 */
 .pwa-message-list[data-timeline-hold]::after { content: ""; display: block; height: var(--pwa-timeline-hold, 0px); }
-/* 发送过渡只改变高度，不在结束时切换格式化上下文，避免滚动合成层重新定位。 */
-.pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; margin-top: calc(-1 * var(--pwa-composer-overlap, 0px)); position: relative; z-index: var(--pwa-z-composer); pointer-events: none; }
+/*
+ * 输入区浮在消息列表之上（ADR-20261105）：列表占满工作区列，输入区贴底覆盖，不占列表高度；
+ * 列表底部留白由视口观察器按输入区实际高度写入 --pwa-chat-footer-space。
+ * 发送过渡只改变高度，不在结束时切换格式化上下文，避免滚动合成层重新定位。
+ */
+.pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; position: absolute; right: 0; bottom: 0; left: 0; z-index: var(--pwa-z-composer); pointer-events: none; }
 /*
  * 消息列表与输入区之间不硬切。footer 上提 overlap，列表延伸到输入区最上方不透明表面的上沿以下一个该表面圆角高度：
  * 有排队抽屉时为抽屉（radius-xl），否则为输入框卡片（radius-composer）；提示行与附件都在卡片内，不改变最上方表面。
@@ -209,6 +213,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-composer)); --pwa-composer-lead: var(--pwa-composer-fade); }
 .pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):has(.pwa-queued-messages:not([data-presence="leaving"])):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-xl)); }
 .pwa-chat-footer::before { content: ""; position: absolute; z-index: -1; right: 0; bottom: 100%; left: 0; height: var(--pwa-composer-fade); background: var(--pwa-composer-fade-gradient); pointer-events: none; }
+/* 渐隐以下为不透明底色，遮住从输入区下方穿过的正文；底色区接收指针，避免点到被盖住的内容。 */
+.pwa-chat-footer::after { content: ""; position: absolute; z-index: -1; top: var(--pwa-composer-overlap, 0px); right: 0; bottom: 0; left: 0; background: var(--pwa-bg); pointer-events: auto; }
 .pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) .pwa-chat-footer::before { top: 0; bottom: auto; height: var(--pwa-composer-overlap); }
 .pwa-app-shell[data-compact-height] .pwa-chat-footer::before,
 .pwa-main[data-composer-budget] .pwa-chat-footer::before { content: none; }
@@ -577,7 +583,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-operation-notifications .pwa-operation-notification-close { flex: 0 0 var(--pwa-hit-target); width: var(--pwa-hit-target); min-width: var(--pwa-hit-target); height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); color: var(--pwa-secondary); }
 
 /* 密度取应用壳的实际可见高度；软键盘不改变 layout viewport 时也使用同一套规则。 */
-.pwa-app-shell[data-compact-height] .pwa-message-list { --pwa-timeline-pad-top: 8px; --pwa-timeline-pad-bottom: 8px; scroll-padding-bottom: 8px; }
+.pwa-app-shell[data-compact-height] .pwa-message-list { --pwa-timeline-pad-top: 8px; --pwa-timeline-pad-bottom: 8px; }
 .pwa-app-shell[data-compact-height] .pwa-connection-banner { margin-top: 0; padding-block: 0; font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-wrapper { gap: 8px; }
 .pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-icon svg { width: 16px; height: 16px; }
