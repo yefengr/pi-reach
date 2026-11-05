@@ -4401,6 +4401,7 @@ test("marks the current computer row with live activity and another Pi's unread 
     flushSync(() => setBackgroundPiWorking(false));
     await expect.poll(() => computerRow().querySelector(".pwa-notice-dot")).not.toBeNull();
     expect(computerRow().querySelector(".pwa-running-indicator")).toBeNull();
+    expect(chooser.element().querySelector(".pwa-device-trigger-dot")).toBeNull();
 
     // 当前电脑行显示另一会话的完成点；关闭电脑列表不确认提醒。
     computerRow().focus();
@@ -4428,6 +4429,7 @@ test.each(["desktop", "mobile"] as const)("marks only the other computer for unr
   const panelSelector = mode === "mobile" ? ".pwa-device-drawer" : ".pwa-device-popover";
   const computerRows = () => [...document.querySelectorAll<HTMLElement>(`${panelSelector} .pwa-computer-select`)];
   const rowFor = (label: string) => computerRows().find((row) => row.textContent?.includes(label))!;
+  const triggerDot = () => document.querySelector(".pwa-device-trigger-dot");
   try {
     if (mode === "mobile") await screen.getByRole("button", { name: "Open navigation" }).click();
     await openComputers();
@@ -4439,10 +4441,12 @@ test.each(["desktop", "mobile"] as const)("marks only the other computer for unr
     const relay = relayHarness.instances[0]!;
     flushSync(() => relay.emitControl({ type: "endpoints", device_id: "other-computer", endpoints: [{ endpoint_id: "other-endpoint", runtime_instance_id: "runtime-other", metadata: { kind: "interactive", name: "Other Pi", cwd: "/workspace/other", working: true } }] }));
     await expect.poll(() => rowFor("other-host").querySelector(".pwa-running-indicator")).not.toBeNull();
+    expect(triggerDot()).toBeNull();
     flushSync(() => relay.emitControl({ type: "endpoint_updated", device_id: "other-computer", endpoint_id: "other-endpoint", runtime_instance_id: "runtime-other", metadata: { kind: "interactive", name: "Other Pi", cwd: "/workspace/other", working: false } }));
     await expect.poll(() => rowFor("other-host").querySelector(".pwa-notice-dot")).not.toBeNull();
     expect(rowFor("other-host").querySelector(".pwa-running-indicator")).toBeNull();
     expect(rowFor("test-host").querySelector(".pwa-notice-dot")).toBeNull();
+    expect(triggerDot()).not.toBeNull();
 
     // 关闭再打开电脑列表不确认提醒。
     if (mode === "mobile") {
@@ -4453,10 +4457,12 @@ test.each(["desktop", "mobile"] as const)("marks only the other computer for unr
       await userEvent.keyboard("{Escape}");
       await expect.poll(() => document.querySelector(panelSelector)).toBeNull();
     }
+    expect(triggerDot()).not.toBeNull();
     await openComputers();
     await expect.poll(() => computerRows().length).toBe(2);
     expect(rowFor("other-host").querySelector(".pwa-notice-dot")).not.toBeNull();
     expect(rowFor("test-host").querySelector(".pwa-notice-dot")).toBeNull();
+    expect(triggerDot()).not.toBeNull();
   } finally {
     await screen.unmount();
     if (mode === "mobile") await page.viewport(1280, 900);
