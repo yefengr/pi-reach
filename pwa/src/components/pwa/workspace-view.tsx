@@ -6,7 +6,7 @@ import { displayPi } from "@/components/pwa/session-title";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import { historySessionTitle } from "@/lib/pwa/history-preview";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
-import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
+import type { DeviceActivity, PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { BrandMark } from "@/components/pwa/brand-mark";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
@@ -49,6 +49,8 @@ export type WorkspaceNavigationProps = {
   selectedHistoryId: string | null;
   snapshotReady: boolean;
   pairingPresence?: Record<string, PairingPresence>;
+  /** 电脑行状态：完成未查看优先于运行中，只服务电脑列表行。 */
+  deviceActivity?: Readonly<Record<string, DeviceActivity>>;
   /** 后台完成提醒：非当前查看、由运行中变为空闲的在线 Pi。 */
   completedEndpointIds?: ReadonlySet<string>;
   onPair: () => void;
@@ -77,7 +79,7 @@ type WorkspaceHistorySectionProps = Pick<WorkspaceNavigationProps, "history" | "
   variant?: NavigationVariant;
 };
 
-type WorkspaceNavigationFooterProps = Pick<WorkspaceNavigationProps, "devices" | "activeDeviceId" | "pairingPresence" | "onPair" | "onSelectDevice" | "onRename" | "onRemove" | "onSettings"> & {
+type WorkspaceNavigationFooterProps = Pick<WorkspaceNavigationProps, "devices" | "activeDeviceId" | "pairingPresence" | "deviceActivity" | "onPair" | "onSelectDevice" | "onRename" | "onRemove" | "onSettings"> & {
   variant?: NavigationVariant;
   /** 桌面侧栏收起变化时重置所属 Portal；移动导航不传。 */
   collapsed?: boolean;
@@ -188,15 +190,15 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
 }
 
 /** 桌面与移动导航共用底部入口：当前电脑选择器与设置操作同行固定。 */
-export function WorkspaceNavigationFooter({ devices, activeDeviceId, pairingPresence, onPair, onSelectDevice, onRename, onRemove, onSettings, variant = "desktop", collapsed, autoFocusSettings = false, className = "pwa-sidebar-foot", onOverlayChange }: WorkspaceNavigationFooterProps) {
+export function WorkspaceNavigationFooter({ devices, activeDeviceId, pairingPresence, deviceActivity, onPair, onSelectDevice, onRename, onRemove, onSettings, variant = "desktop", collapsed, autoFocusSettings = false, className = "pwa-sidebar-foot", onOverlayChange }: WorkspaceNavigationFooterProps) {
   const { t } = useI18n();
   return <div className={className}>
-    <WorkspaceDeviceControl key={variant === "desktop" ? `pwa-device-picker-${collapsed}` : undefined} devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} variant={variant} onOverlayChange={onOverlayChange} />
+    <WorkspaceDeviceControl key={variant === "desktop" ? `pwa-device-picker-${collapsed}` : undefined} devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} deviceActivity={deviceActivity} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} variant={variant} onOverlayChange={onOverlayChange} />
     <ActionIcon className="pwa-nav-settings" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} title={t.navigation.settings}><Settings size={20} /></ActionIcon>
   </div>;
 }
 
-export function WorkspaceNavigationContent({ devices, endpoints, history, historyListStatus, onRetryHistory, activeDeviceId, activeEndpointId, selectedHistoryId, snapshotReady, pairingPresence = {}, completedEndpointIds, onPair, onSettings, onSelectDevice, onSelectEndpoint, onSelectHistory, onRename, onRemove, idPrefix = "pwa-navigation", collapsed = false }: WorkspaceNavigationContentProps) {
+export function WorkspaceNavigationContent({ devices, endpoints, history, historyListStatus, onRetryHistory, activeDeviceId, activeEndpointId, selectedHistoryId, snapshotReady, pairingPresence = {}, deviceActivity, completedEndpointIds, onPair, onSettings, onSelectDevice, onSelectEndpoint, onSelectHistory, onRename, onRemove, idPrefix = "pwa-navigation", collapsed = false }: WorkspaceNavigationContentProps) {
   const activeDevice = getActiveDevice(devices, activeDeviceId);
   const runningHeading = `${idPrefix}-running-heading`;
   const historyHeading = `${idPrefix}-history-heading`;
@@ -208,7 +210,7 @@ export function WorkspaceNavigationContent({ devices, endpoints, history, histor
         <WorkspaceHistorySection activeDevice={activeDevice} history={history} historyListStatus={historyListStatus} onRetryHistory={onRetryHistory} selectedHistoryId={selectedHistoryId} onSelectHistory={onSelectHistory} headingId={historyHeading} />
       </> : null}
     </div>
-    <WorkspaceNavigationFooter devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} onSettings={onSettings} collapsed={collapsed} />
+    <WorkspaceNavigationFooter devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} deviceActivity={deviceActivity} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} onSettings={onSettings} collapsed={collapsed} />
   </div>;
 }
 

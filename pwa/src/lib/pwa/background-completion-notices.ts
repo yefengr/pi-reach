@@ -15,6 +15,7 @@ export type BackgroundCompletionInput = {
 export class BackgroundCompletionNotices {
   private readonly observed = new Map<string, ObservedEndpoint>();
   private completedEndpointIds: ReadonlySet<string> = new Set();
+  private completedDeviceIds: ReadonlySet<string> = new Set();
 
   update({ devices, endpoints, snapshotDeviceIds, viewingEndpoint }: BackgroundCompletionInput): ReadonlySet<string> {
     const paired = new Set(devices.map((device) => device.deviceId));
@@ -46,10 +47,20 @@ export class BackgroundCompletionNotices {
       });
     }
 
-    const completed = new Set([...this.observed.values()].filter((endpoint) => endpoint.completed).map((endpoint) => endpoint.endpointId));
+    const completedEndpoints = [...this.observed.values()].filter((endpoint) => endpoint.completed);
+    const completed = new Set(completedEndpoints.map((endpoint) => endpoint.endpointId));
     if (completed.size !== this.completedEndpointIds.size || [...completed].some((id) => !this.completedEndpointIds.has(id))) {
       this.completedEndpointIds = completed;
     }
+    // 电脑级聚合与 Pi 级提醒同源，按 wire deviceId 去重：断线时 endpoints 为空，不能反推已完成的电脑。
+    const completedDevices = new Set(completedEndpoints.map((endpoint) => endpoint.deviceId));
+    if (completedDevices.size !== this.completedDeviceIds.size || [...completedDevices].some((id) => !this.completedDeviceIds.has(id))) {
+      this.completedDeviceIds = completedDevices;
+    }
     return this.completedEndpointIds;
+  }
+
+  getCompletedDeviceIds(): ReadonlySet<string> {
+    return this.completedDeviceIds;
   }
 }

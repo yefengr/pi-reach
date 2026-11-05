@@ -4384,6 +4384,85 @@ test("keeps background completion reminders while reading saved history and clea
   } finally { await screen.unmount(); }
 });
 
+test("marks the current computer row with live activity and another Pi's unread completion", async () => {
+  const screen = await renderTwoPis();
+  try {
+    const chooser = screen.getByRole("button", { name: "Choose computer, current test-host" });
+    await chooser.click();
+    const panel = () => document.querySelector<HTMLElement>(".pwa-device-popover");
+    await expect.poll(() => panel()).not.toBeNull();
+    const computerRow = () => panel()!.querySelector<HTMLElement>(".pwa-computer-select")!;
+    const slot = () => computerRow().querySelector<HTMLElement>(".pwa-peer-status-slot")!;
+    expect(slot().textContent).toBe("");
+    expect(computerRow().querySelector(".pwa-notice-dot")).toBeNull();
+
+    flushSync(() => setBackgroundPiWorking(true));
+    await expect.poll(() => computerRow().querySelector(".pwa-running-indicator")).not.toBeNull();
+    flushSync(() => setBackgroundPiWorking(false));
+    await expect.poll(() => computerRow().querySelector(".pwa-notice-dot")).not.toBeNull();
+    expect(computerRow().querySelector(".pwa-running-indicator")).toBeNull();
+
+    // 当前电脑行显示另一会话的完成点；关闭电脑列表不确认提醒。
+    computerRow().focus();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => panel()).toBeNull();
+    expect(backgroundCompletionDot()).not.toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test.each(["desktop", "mobile"] as const)("marks only the other computer for unread completion (other computer activity, %s)", async mode => {
+  const db = await openPwaDatabase();
+  await db.devices.put({ id: makePwaDeviceId("other-computer"), deviceId: "other-computer", relayUrl: "https://relay.example.test", pairedAt: "2026-08-31T00:00:00.000Z", hostname: "other-host" });
+  await db.settings.put({ key: "active_device", value: makePwaDeviceId("owner-device-key") });
+  if (mode === "mobile") await page.viewport(390, 844);
+  const screen = await renderTwoPis();
+  // 移动端必须经真实导航 Drawer → SessionSheet → 底部电脑 Drawer。
+  const openComputers = async () => {
+    if (mode === "mobile") {
+      const sheet = screen.getByRole("dialog", { name: /Workspace/ });
+      await sheet.getByRole("button", { name: "Choose computer, current test-host" }).click();
+    } else {
+      await screen.getByRole("button", { name: "Choose computer, current test-host" }).click();
+    }
+  };
+  const panelSelector = mode === "mobile" ? ".pwa-device-drawer" : ".pwa-device-popover";
+  const computerRows = () => [...document.querySelectorAll<HTMLElement>(`${panelSelector} .pwa-computer-select`)];
+  const rowFor = (label: string) => computerRows().find((row) => row.textContent?.includes(label))!;
+  try {
+    if (mode === "mobile") await screen.getByRole("button", { name: "Open navigation" }).click();
+    await openComputers();
+    await expect.poll(() => computerRows().length).toBe(2);
+    expect(rowFor("test-host").querySelector(".pwa-notice-dot")).toBeNull();
+    expect(rowFor("other-host").querySelector(".pwa-notice-dot")).toBeNull();
+
+    // 另一台电脑的 Pi 由运行中变空闲：只有那台电脑出现完成点，当前电脑不被误标。
+    const relay = relayHarness.instances[0]!;
+    flushSync(() => relay.emitControl({ type: "endpoints", device_id: "other-computer", endpoints: [{ endpoint_id: "other-endpoint", runtime_instance_id: "runtime-other", metadata: { kind: "interactive", name: "Other Pi", cwd: "/workspace/other", working: true } }] }));
+    await expect.poll(() => rowFor("other-host").querySelector(".pwa-running-indicator")).not.toBeNull();
+    flushSync(() => relay.emitControl({ type: "endpoint_updated", device_id: "other-computer", endpoint_id: "other-endpoint", runtime_instance_id: "runtime-other", metadata: { kind: "interactive", name: "Other Pi", cwd: "/workspace/other", working: false } }));
+    await expect.poll(() => rowFor("other-host").querySelector(".pwa-notice-dot")).not.toBeNull();
+    expect(rowFor("other-host").querySelector(".pwa-running-indicator")).toBeNull();
+    expect(rowFor("test-host").querySelector(".pwa-notice-dot")).toBeNull();
+
+    // 关闭再打开电脑列表不确认提醒。
+    if (mode === "mobile") {
+      await screen.getByRole("dialog", { name: "Choose computer" }).getByRole("button", { name: "Close computer chooser" }).click();
+      await expect.poll(() => document.querySelector(panelSelector)).toBeNull();
+    } else {
+      rowFor("test-host").focus();
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => document.querySelector(panelSelector)).toBeNull();
+    }
+    await openComputers();
+    await expect.poll(() => computerRows().length).toBe(2);
+    expect(rowFor("other-host").querySelector(".pwa-notice-dot")).not.toBeNull();
+    expect(rowFor("test-host").querySelector(".pwa-notice-dot")).toBeNull();
+  } finally {
+    await screen.unmount();
+    if (mode === "mobile") await page.viewport(1280, 900);
+  }
+});
+
 test.each(["already-completed", "completed-while-offline"] as const)("preserves background completion reminders across relay reconnects: %s", async phase => {
   await page.viewport(390, 844);
   const screen = await renderTwoPis();

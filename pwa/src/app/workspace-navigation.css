@@ -129,6 +129,16 @@
   margin: 0;
 }
 
+/* 电脑行状态槽固定 16px 且始终占位，右侧操作菜单不被状态标记挤压。 */
+.pwa-root .pwa-computer-select .pwa-peer-status-slot {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  color: var(--pwa-running);
+}
+
 .pwa-root .pwa-peer-icon {
   width: 31px;
   height: 31px;

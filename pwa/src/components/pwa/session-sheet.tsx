@@ -292,7 +292,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
             <WorkspaceRunningPiSection activeDevice={activeDevice} endpoints={navigation.endpoints} activeEndpointId={navigation.activeEndpointId} selectedHistoryId={navigation.selectedHistoryId} snapshotReady={navigation.snapshotReady} completedEndpointIds={navigation.completedEndpointIds} onSelectEndpoint={wrappedEndpoint} headingId="pwa-sheet-running-heading" variant="sheet" />
             <WorkspaceHistorySection activeDevice={activeDevice} history={navigation.history} historyListStatus={navigation.historyListStatus} onRetryHistory={navigation.onRetryHistory} selectedHistoryId={navigation.selectedHistoryId} onSelectHistory={wrappedHistory} headingId="pwa-sheet-history-heading" variant="sheet" />
           </div>
-          <WorkspaceNavigationFooter className="pwa-session-sheet-foot" variant="sheet" devices={navigation.devices} activeDeviceId={navigation.activeDeviceId} pairingPresence={navigation.pairingPresence} onPair={wrappedPair} onSelectDevice={wrappedDevice} onRename={wrappedRename} onRemove={wrappedRemove} onSettings={wrappedSettings} autoFocusSettings={autoFocusSettings} onOverlayChange={handleDeviceOverlayChange} />
+          <WorkspaceNavigationFooter className="pwa-session-sheet-foot" variant="sheet" devices={navigation.devices} activeDeviceId={navigation.activeDeviceId} pairingPresence={navigation.pairingPresence} deviceActivity={navigation.deviceActivity} onPair={wrappedPair} onSelectDevice={wrappedDevice} onRename={wrappedRename} onRemove={wrappedRemove} onSettings={wrappedSettings} autoFocusSettings={autoFocusSettings} onOverlayChange={handleDeviceOverlayChange} />
         </div>
       </Drawer.Body>
     </Drawer.Content>

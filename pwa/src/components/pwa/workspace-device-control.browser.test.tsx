@@ -5,6 +5,7 @@ import { cdp, page, userEvent } from "vitest/browser";
 import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "./workspace-device-control";
 import { renderPwa } from "@/test/browser/render";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
+import type { DeviceActivity } from "@/lib/pwa/pwa-view-model";
 
 const currentDevice: PwaDeviceRecord = {
   id: "device:current",
@@ -42,6 +43,33 @@ function DeviceControlHarness({ variant, purpose = "choose", events, devices = [
       purpose={purpose}
     />
     {target ? <button ref={targetRef} type="button" data-testid="device-action-target">{target}</button> : null}
+  </div>;
+}
+
+let setDeviceActivity: ((activity: Readonly<Record<string, DeviceActivity>>) => void) | null = null;
+
+function DeviceActivityHarness({ variant, events }: { variant: WorkspaceDeviceControlVariant; events: string[] }) {
+  const [activity, setActivity] = useState<Readonly<Record<string, DeviceActivity>>>({ [currentDevice.id]: "completed" });
+  // 只在挂载期间暴露 setter，卸载后不残留指向旧组件的控制入口。
+  useEffect(() => {
+    setDeviceActivity = setActivity;
+    return () => { setDeviceActivity = null; };
+  }, []);
+  return <div style={variant === "desktop" ? { width: 286, position: "absolute", left: 12, bottom: 38 } : { width: 286 }}>
+    <WorkspaceDeviceControl
+      devices={[currentDevice, nextDevice]}
+      activeDeviceId={currentDevice.id}
+      pairingPresence={{
+        [currentDevice.id]: { status: "online", onlineEndpoints: 2, totalEndpoints: 2 },
+        [nextDevice.id]: { status: "offline", onlineEndpoints: 0, totalEndpoints: 1 },
+      }}
+      deviceActivity={activity}
+      onPair={() => events.push("pair")}
+      onSelectDevice={(deviceId) => events.push(`select:${deviceId}`)}
+      onRename={(device) => events.push(`rename:${device.id}`)}
+      onRemove={(device) => events.push(`remove:${device.id}`)}
+      variant={variant}
+    />
   </div>;
 }
 
@@ -89,6 +117,82 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
   await new Promise((resolve) => setTimeout(resolve, 30));
   await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
+});
+
+test("desktop computer row shows current-computer activity and swaps it live without selecting", async () => {
+  const events: string[] = [];
+  const screen = await renderPwa(<DeviceActivityHarness variant="desktop" events={events} />);
+  try {
+    const trigger = screen.getByRole("button", { name: /Choose computer, current Current computer/ });
+    await trigger.click();
+    const panel = () => document.querySelector<HTMLElement>(".pwa-device-popover");
+    await expect.poll(() => panel()).not.toBeNull();
+    const enterPanel = panel()!;
+    // 等 Popover 进入过渡到达可观察终态后再做几何命中，避免转场中的临时位置。
+    await expect.poll(() => Math.round(enterPanel.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(trigger.element().getBoundingClientRect().top));
+    await expect.poll(() => parseFloat(getComputedStyle(enterPanel).opacity)).toBe(1);
+    await expect.poll(() => enterPanel.getAnimations().length, { interval: 10, timeout: 2_000 }).toBe(0);
+    const computerRow = () => panel()!.querySelector<HTMLElement>(".pwa-computer-select")!;
+    const slot = () => computerRow().querySelector<HTMLElement>(".pwa-peer-status-slot")!;
+    const more = () => panel()!.querySelector<HTMLElement>(".pwa-peer-menu-trigger")!;
+    // 当前电脑也显示完成点，槽固定 16px；更多按钮保持完整命中。
+    await expect.poll(() => computerRow().querySelector(".pwa-notice-dot")).not.toBeNull();
+    expect(computerRow().querySelector(".pwa-running-indicator")).toBeNull();
+    expect(Math.round(slot().getBoundingClientRect().width)).toBe(16);
+    const menuBox = more().getBoundingClientRect();
+    expect(Math.round(menuBox.width)).toBeGreaterThanOrEqual(44);
+    const hit = document.elementFromPoint(Math.round(menuBox.left + menuBox.width / 2), Math.round(menuBox.top + menuBox.height / 2));
+    expect(hit === more() || more().contains(hit)).toBe(true);
+
+    flushSync(() => setDeviceActivity?.({ [currentDevice.id]: "running" }));
+    await expect.poll(() => computerRow().querySelector(".pwa-running-indicator")).not.toBeNull();
+    expect(computerRow().querySelector(".pwa-notice-dot")).toBeNull();
+    flushSync(() => setDeviceActivity?.({}));
+    await expect.poll(() => computerRow().querySelector(".pwa-running-indicator")).toBeNull();
+    expect(slot().textContent).toBe("");
+
+    // 沿真实菜单路径：打开更多菜单后直接 Escape 关闭菜单，再 Escape 关闭浮层，不强制挪动焦点。
+    await screen.getByRole("button", { name: "Computer actions for Travel Mac" }).click();
+    await expect.element(screen.getByRole("menu")).toBeVisible();
+    await userEvent.keyboard("{Escape}{Escape}");
+    await expect.poll(() => panel()).toBeNull();
+    expect(events).toEqual([]);
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("sheet computer row keeps the status slot and actions reachable in a narrow long-name layout", async () => {
+  await page.viewport(320, 568);
+  const events: string[] = [];
+  const screen = await renderPwa(<DeviceActivityHarness variant="sheet" events={events} />);
+  try {
+    const trigger = screen.getByRole("button", { name: /Choose computer, current Current computer/ });
+    await trigger.click();
+    const dialog = screen.getByRole("dialog", { name: "Choose computer" });
+    await expect.element(dialog).toBeVisible();
+    const row = dialog.element().querySelector<HTMLElement>(".pwa-computer-select")!;
+    const label = row.querySelector<HTMLElement>(".pwa-peer-label")!;
+    expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+    expect(Math.round(label.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(row.getBoundingClientRect().right));
+    expect(row.querySelector(".pwa-notice-dot")).not.toBeNull();
+    expect(Math.round(row.querySelector<HTMLElement>(".pwa-peer-status-slot")!.getBoundingClientRect().width)).toBe(16);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    const more = screen.getByRole("button", { name: "Computer actions for Travel Mac" });
+    const menuBox = more.element().getBoundingClientRect();
+    expect(Math.round(menuBox.width)).toBeGreaterThanOrEqual(44);
+    expect(Math.round(menuBox.height)).toBeGreaterThanOrEqual(44);
+    // 状态槽与长名不阻断操作入口：真实点击能打开菜单。
+    await more.click();
+    await expect.element(screen.getByRole("menu")).toBeVisible();
+    await userEvent.keyboard("{Escape}{Escape}");
+    await expect.element(dialog).not.toBeInTheDocument();
+    await expect.element(trigger).toHaveFocus();
+    expect(events).toEqual([]);
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 800);
+  }
 });
 
 test("unpaired desktop footer pairs directly without opening a chooser", async () => {

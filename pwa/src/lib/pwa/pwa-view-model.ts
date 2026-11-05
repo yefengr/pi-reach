@@ -7,6 +7,7 @@ export type PairingPresence = {
   totalEndpoints: number;
   lastSeenAt?: number;
 };
+export type DeviceActivity = "completed" | "running" | null;
 
 /** Derives device-level endpoint presence without owning endpoint or session state. */
 export function derivePairingPresence(
@@ -29,5 +30,24 @@ export function derivePairingPresence(
       totalEndpoints: deviceEndpoints.length,
       lastSeenAt: deviceEndpoints.find((endpoint) => endpoint.online)?.updatedAt,
     }];
+  }));
+}
+
+/**
+ * 电脑行聚合状态：完成未查看优先于运行中，其次无标记。
+ * completedDeviceIds 使用 wire deviceId；运行只认实时在线端口，缓存元数据不算在线。
+ */
+export function deriveDeviceActivity(
+  devices: readonly Pick<PwaDeviceRecord, "id" | "deviceId">[],
+  endpoints: readonly Pick<PwaEndpointRecord, "deviceId" | "online" | "working">[],
+  completedDeviceIds: ReadonlySet<string>,
+): Record<string, DeviceActivity> {
+  return Object.fromEntries(devices.map((device) => {
+    const activity: DeviceActivity = completedDeviceIds.has(device.deviceId)
+      ? "completed"
+      : endpoints.some((endpoint) => endpoint.deviceId === device.deviceId && endpoint.online === true && endpoint.working === true)
+        ? "running"
+        : null;
+    return [device.id, activity];
   }));
 }

@@ -29,7 +29,7 @@ import type { WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-ba
 import { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
 import { assertBrowserCapabilities, fromStoredKey, migrateLegacyDefaultRelay, toStoredKey, type ConnectionContext } from "@/lib/pwa/runtime";
-import { derivePairingPresence } from "@/lib/pwa/pwa-view-model";
+import { deriveDeviceActivity, derivePairingPresence } from "@/lib/pwa/pwa-view-model";
 import { readDefaultRelayUrl } from "@/lib/pwa/runtime-config";
 import { useEndpointRegistry } from "@/lib/pwa/use-endpoint-registry";
 import { useBackgroundCompletionNotices } from "@/lib/pwa/use-background-completion-notices";
@@ -1184,9 +1184,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       operationNotifications.notify(getMessages().connection.restored);
     }
   }, [connectionBannerVisible, displayConnection, operationNotifications]);
-  const completedEndpointIds = useBackgroundCompletionNotices({
+  const { completedEndpointIds, completedDeviceIds } = useBackgroundCompletionNotices({
     devices, endpoints, snapshotDeviceIds, viewingEndpoint: selectedHistory === null ? activeEndpoint : null,
   });
+  const deviceActivity = useMemo(() => deriveDeviceActivity(devices, endpoints, completedDeviceIds), [completedDeviceIds, devices, endpoints]);
   const newSessionPending = pendingAction?.action === "session_new";
   const visibleTimelineItems = newSessionPending ? pendingAction.projection ?? timelineItems : timelineItems;
   const compactingNow = displayEndpoint !== null && exitedDisplay === null
@@ -1208,7 +1209,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   // 选择其他 Pi：只有一个在线时直接进入，多个时回到主区选择列表。
   const chooseOtherPi = () => { if (onlinePis.length === 1) openLiveEndpoint(onlinePis[0]!.endpointId); else setExitedEndpoint(null); };
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
-  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, historyListStatus, onRetryHistory: () => { void refreshHistory(); }, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
+  const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, historyListStatus, onRetryHistory: () => { void refreshHistory(); }, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, deviceActivity, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
   const connectionStatus = <ConnectionStatus state={displayConnection} retryAttempt={retryAttempt} />;
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;

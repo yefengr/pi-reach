@@ -93,6 +93,38 @@ test("computer row keeps current selection separate from actual presence", () =>
   expect(computerActions).toContain("lucide-ellipsis");
 });
 
+test("computer row marks unread completion on the current computer and keeps an empty status slot", () => {
+  const renderRow = (activity?: "completed" | "running") => renderToStaticMarkup(
+    <PwaUiProvider>
+      <ComputerRow
+        device={device({ nickname: "Office Mac" })}
+        active
+        presence={{ status: "online", onlineEndpoints: 2, totalEndpoints: 2 }}
+        activity={activity}
+        onSelect={() => {}}
+        onRename={() => {}}
+        onRemove={() => {}}
+      />
+    </PwaUiProvider>,
+  );
+  const completedRow = navLinkMarkup(renderRow("completed"), "Office Mac");
+  expect(completedRow).toContain('class="pwa-peer-status-slot"');
+  expect(completedRow).toContain("pwa-notice-dot");
+  expect(completedRow).toContain('aria-label="Run finished, not yet viewed"');
+  expect(completedRow).not.toContain("pwa-running-indicator");
+  // 当前电脑也显示其他会话的完成点；运行状态与完成点互斥。
+  const runningRow = navLinkMarkup(renderRow("running"), "Office Mac");
+  expect(runningRow).toContain("pwa-running-indicator");
+  expect(runningRow).not.toContain("pwa-notice-dot");
+  const idle = renderRow();
+  const idleRow = navLinkMarkup(idle, "Office Mac");
+  expect(idleRow).toContain('class="pwa-peer-status-slot"></span>');
+  expect(idleRow).not.toContain("pwa-notice-dot");
+  expect(idleRow).not.toContain("pwa-running-indicator");
+  // 状态槽不挤掉行外的更多菜单。
+  expect(idle).toMatch(/aria-label="Computer actions for Office Mac"/);
+});
+
 test("keeps brand above scrolling navigation and computer selection plus settings in the footer", () => {
   const html = renderToStaticMarkup(<PwaUiProvider><DesktopSidebar {...navigationProps()} /></PwaUiProvider>);
   const chooser = html.match(/<button[^>]*aria-label="Choose computer, current Office Mac"[^>]*>/)?.[0] ?? "";

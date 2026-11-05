@@ -67,6 +67,48 @@ test("a temporary relay disconnect preserves unread completions without retainin
   expect([...update({ endpoints: [endpoint()], snapshotDeviceIds: ["device-a"] })]).toEqual(["pi-a"]);
 });
 
+test("aggregates unread completions per wire device across computers and disconnects", () => {
+  const notices = new BackgroundCompletionNotices();
+  const devices = [{ deviceId: "device-a" }, { deviceId: "device-b" }];
+  const base = { devices, snapshotDeviceIds: ["device-a", "device-b"], viewingEndpoint: null };
+  const other = (working: boolean) => endpoint(working, { id: "device-b:pi-b", deviceId: "device-b", endpointId: "pi-b", runtimeInstanceId: "runtime-b" });
+  notices.update({ ...base, endpoints: [endpoint(true), other(true)] });
+  notices.update({ ...base, endpoints: [endpoint(), other(false)] });
+  expect([...notices.getCompletedDeviceIds()]).toEqual(["device-a", "device-b"]);
+  // 断线时 endpoints 为空，不能由实时注册表反推完成电脑。
+  notices.update({ ...base, endpoints: [], snapshotDeviceIds: [] });
+  expect([...notices.getCompletedDeviceIds()]).toEqual(["device-a", "device-b"]);
+});
+
+test("acknowledging one Pi keeps its computer marked while another Pi on it is unread", () => {
+  const notices = new BackgroundCompletionNotices();
+  const base = { devices: [{ deviceId: "device-a" }], snapshotDeviceIds: ["device-a"], viewingEndpoint: null };
+  const piA = endpoint();
+  const piB = endpoint(false, { id: "device-a:pi-b", endpointId: "pi-b", runtimeInstanceId: "runtime-b" });
+  notices.update({ ...base, endpoints: [endpoint(true), endpoint(true, { id: "device-a:pi-b", endpointId: "pi-b", runtimeInstanceId: "runtime-b" })] });
+  expect([...notices.update({ ...base, endpoints: [piA, piB] })]).toEqual(["pi-a", "pi-b"]);
+  expect([...notices.getCompletedDeviceIds()]).toEqual(["device-a"]);
+  expect(notices.update({ ...base, endpoints: [piA, piB], viewingEndpoint: piA }).size).toBe(1);
+  expect([...notices.getCompletedDeviceIds()]).toEqual(["device-a"]);
+  expect(notices.update({ ...base, endpoints: [piA, piB], viewingEndpoint: piB }).size).toBe(0);
+  expect(notices.getCompletedDeviceIds().size).toBe(0);
+});
+
+test("runtime replacement and unpairing clear the computer completion mark", () => {
+  const notices = new BackgroundCompletionNotices();
+  const base = { devices: [{ deviceId: "device-a" }], snapshotDeviceIds: ["device-a"], viewingEndpoint: null };
+  notices.update({ ...base, endpoints: [endpoint(true)] });
+  notices.update({ ...base, endpoints: [endpoint()] });
+  expect([...notices.getCompletedDeviceIds()]).toEqual(["device-a"]);
+  notices.update({ ...base, endpoints: [endpoint(false, { runtimeInstanceId: "runtime-new" })] });
+  expect(notices.getCompletedDeviceIds().size).toBe(0);
+  notices.update({ ...base, endpoints: [endpoint(true, { runtimeInstanceId: "runtime-new" })] });
+  notices.update({ ...base, endpoints: [endpoint(false, { runtimeInstanceId: "runtime-new" })] });
+  expect([...notices.getCompletedDeviceIds()]).toEqual(["device-a"]);
+  notices.update({ ...base, devices: [], endpoints: [], snapshotDeviceIds: [] });
+  expect(notices.getCompletedDeviceIds().size).toBe(0);
+});
+
 test("the same instance finishing during a disconnect creates a completion on reconnect", () => {
   const update = observer();
   update({ endpoints: [endpoint(true)] });
