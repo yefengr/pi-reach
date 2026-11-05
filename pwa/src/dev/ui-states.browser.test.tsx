@@ -47,9 +47,9 @@ test("real state fixtures expose thinking, running tools, failures and explicit 
   expect(drawer()).not.toBeNull();
   await closeReader();
   await choose("failure");
-  expect(document.querySelector('.pwa-attachment-card[data-status="failed"]')).not.toBeNull();
-  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-attachment-actions button")!);
-  await expect.poll(() => document.querySelector('.pwa-attachment-card[data-status="complete"]')).not.toBeNull();
+  expect(document.querySelector('.pwa-composer .pwa-attachment-tile[data-status="failed"]')).not.toBeNull();
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-composer .pwa-attachment-tile-retry")!);
+  await expect.poll(() => document.querySelector('.pwa-composer .pwa-attachment-tile[data-status="complete"]')).not.toBeNull();
   await page.getByRole("button", { name: "演示工具重试", exact: true }).click();
   await expect.element(page.getByText("演示工具重试已完成。", { exact: true })).toBeVisible();
   await openTool();
@@ -78,8 +78,10 @@ test("one real Composer retains its draft through theme, speed, width and fixtur
   await expect.poll(() => document.activeElement).toBe(command);
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-composer-send")!);
   await expect.element(page.getByText("已演示发送，草稿保留；未发送到 Pi。", { exact: true })).toBeVisible();
+  // 提示行在输入框卡片内、文本框之上。
   const notice = document.querySelector(".pwa-composer-hint")!;
-  expect(notice.compareDocumentPosition(document.querySelector(".pwa-composer-card")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(document.querySelector(".pwa-composer-card")!.contains(notice)).toBe(true);
+  expect(notice.compareDocumentPosition(document.querySelector(".pwa-composer-input")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(composer.value).toBe("保留这个草稿");
 });
 

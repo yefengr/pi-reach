@@ -198,16 +198,18 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 发送过渡只改变高度，不在结束时切换格式化上下文，避免滚动合成层重新定位。 */
 .pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; flex: 0 0 auto; min-width: 0; margin-top: calc(-1 * var(--pwa-composer-overlap, 0px)); position: relative; z-index: var(--pwa-z-composer); pointer-events: none; }
 /*
- * 消息列表与输入区之间不硬切。输入框卡片位于输入区最上方（没有排队面板、提示行与附件）时，footer 上提 overlap，
- * 列表延伸到卡片上沿以下一个 Composer 圆角高度；footer 上沿起画「透明 → 底色」渐变（卡片之下、列表之上），
- * 正文在卡片上方 --pwa-composer-fade 内开始淡出，从圆角两侧滑到卡片下方。列表底部留白同步加 overlap，停在底部时内容不进入渐隐。
- * 卡片上方另有内容时不重叠：提示文字没有底色、附件卡片之间有空隙，重叠会透出正文；改为在 footer 上方挂同样高度的渐隐。
- * footer 与表单自身不接收指针，渐隐区内仍可滚动与选中列表。紧凑高度与输入框预算受限（data-composer-budget）时底部留白只有 8，
- * 两者都不加，避免淡化最后一行；这两种状态写进启用条件，不靠后续规则覆盖（:has 选择器的优先级更高）。
+ * 消息列表与输入区之间不硬切。footer 上提 overlap，列表延伸到输入区最上方不透明表面的上沿以下一个该表面圆角高度：
+ * 有排队抽屉时为抽屉（radius-xl），否则为输入框卡片（radius-composer）；提示行与附件都在卡片内，不改变最上方表面。
+ * footer 上沿起画「透明 → 底色」渐变（表面之下、列表之上），正文在表面上方 --pwa-composer-fade 内开始淡出，从圆角两侧滑到表面下方。
+ * 列表底部留白同步加 overlap，停在底部时内容不进入渐隐。只读说明条（.pwa-composer 的直接子级提示）没有底色，此时不重叠，
+ * 只在 footer 上方挂同样高度的渐隐。footer 与表单自身不接收指针，渐隐区内仍可滚动与选中列表。
+ * 紧凑高度与输入框预算受限（data-composer-budget）时底部留白只有 8，两者都不加，避免淡化最后一行；
+ * 这两种状态写进启用条件，不靠后续规则覆盖（:has 选择器的优先级更高）。
  */
-.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-queued-messages, .pwa-composer-hint, .pwa-attachment-cards)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-composer)); --pwa-composer-lead: var(--pwa-composer-fade); }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-composer)); --pwa-composer-lead: var(--pwa-composer-fade); }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):has(.pwa-queued-messages:not([data-presence="leaving"])):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-xl)); }
 .pwa-chat-footer::before { content: ""; position: absolute; z-index: -1; right: 0; bottom: 100%; left: 0; height: var(--pwa-composer-fade); background: var(--pwa-composer-fade-gradient); pointer-events: none; }
-.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-queued-messages, .pwa-composer-hint, .pwa-attachment-cards)) .pwa-chat-footer::before { top: 0; bottom: auto; height: var(--pwa-composer-overlap); }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) .pwa-chat-footer::before { top: 0; bottom: auto; height: var(--pwa-composer-overlap); }
 .pwa-app-shell[data-compact-height] .pwa-chat-footer::before,
 .pwa-main[data-composer-budget] .pwa-chat-footer::before { content: none; }
 /* 重叠时卡片上方留出整段渐隐高度（--pwa-composer-lead）；「最新」入口按原位置（卡片上沿以上 space-composer）补偿 footer 上沿的上移。 */
@@ -255,7 +257,7 @@ body:has(.pwa-root) { overflow: hidden; }
 
 .pwa-composer { box-sizing: border-box; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0; padding: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-main-bottom-gap) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); container: pwa-composer / inline-size; }
 .pwa-image-input { display: none; }
-.pwa-composer-card { min-width: 0; padding: var(--pwa-space-composer) 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-composer-card { position: relative; z-index: 1; min-width: 0; padding: var(--pwa-space-composer) 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
 .pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }

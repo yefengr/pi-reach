@@ -30,6 +30,7 @@ const history = { kind: "event", event: {
   kind: "assistant", status: "complete", blocks: [{ type: "text", text: Array.from({ length: 30 }, (_, i) => `Earlier paragraph ${i}.`).join("\n\n") }],
 } } satisfies TimelineViewItem;
 const pending = (id = "local"): TimelinePending => ({ kind: "pending", id, clientRequestId: id, requestId: id, text: "New message", createdAt: 1, delivery: "pending" });
+const sentAttachmentFixture = { attachment_id: "file", file_name: "send-note.txt", mime_type: "text/plain", byte_length: 12, sha256: "a".repeat(64) };
 function formal(value: TimelinePending): TimelineViewItem {
   value.messageId = `message-${value.id}`;
   return { kind: "event", event: { event_id: value.messageId, session_id: "send-session", leaf_id: "leaf", group_id: "new", timestamp: 1, kind: "user", origin: "pwa", sender_ref: "local-sender", status: "committed", delivery: "normal", message_id: value.messageId, blocks: [{ type: "text", text: value.text }] } };
@@ -37,7 +38,7 @@ function formal(value: TimelinePending): TimelineViewItem {
 const gap = (list: HTMLElement) => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop);
 const top = (node: Element) => Math.round(node.getBoundingClientRect().top);
 async function frames(count = 3) { for (let i = 0; i < count; i++) await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); }
-async function harness({ width = 390, compact = false, working = false, draft = "New message", live = true, initial = [history], attachment = false, height }: { width?: number; compact?: boolean; working?: boolean; draft?: string; live?: boolean; initial?: TimelineViewItem[]; attachment?: boolean; height?: number } = {}) {
+async function harness({ width = 390, compact = false, working = false, draft = "New message", live = true, initial = [history], attachment = false, sentAttachment = attachment, height }: { width?: number; compact?: boolean; working?: boolean; draft?: string; live?: boolean; initial?: TimelineViewItem[]; attachment?: boolean; sentAttachment?: boolean; height?: number } = {}) {
   await page.viewport(width, 844);
   let viewport!: TimelineViewport;
   let update!: (items: TimelineViewItem[]) => void;
@@ -58,7 +59,8 @@ async function harness({ width = 390, compact = false, working = false, draft = 
     viewport = useTimelineViewport(items);
     update = setItems;
     send = (afterActivation) => {
-      sent = { ...pending(), text };
+      // 与真实应用一致：带附件的消息进入对话区时，气泡内同样显示该附件的只读卡片。
+      sent = { ...pending(), text, ...(sentAttachment ? { attachments: [sentAttachmentFixture] } : {}) };
       viewport.followOwnSend(viewport.captureOwnSend());
       afterActivation?.();
       setItems([...items, sent]);
@@ -389,7 +391,8 @@ test("Reduced Motion immediately settles Working geometry and keeps the status f
 });
 
 test.each([40, 145, 160])("send handoff owns late programmatic scroll at %ims without flashing Latest", async time => {
-  const h = await harness({ attachment: true, draft: "One\nTwo\nThree" });
+  // 只验证附件收回期间的滚动接管；气泡保持纯文字，让 200ms 的收敛上限不随气泡高度变化。
+  const h = await harness({ attachment: true, sentAttachment: false, draft: "One\nTwo\nThree" });
   try {
     const clock = layoutClock();
     h.send(); clock.step(time);
@@ -1175,7 +1178,9 @@ test("an editable queue item enters the conversation once it starts draining", a
     expect(h.list.textContent).not.toContain("Queued original");
     h.receive(queueSnapshot("queued-one", "Queued original", false));
     await frames();
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    // 抽屉清空后先滑回卡片背后（drawer-out）再移除，离开期间 inert、对读屏隐藏。
+    expect(document.querySelector(".pwa-queued-messages")?.getAttribute("data-presence")).toBe("leaving");
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
     expect(h.list.textContent).toContain("Queued original");
     // 在途时不再提供取消按钮，也不再显示发送中状态。
     expect(h.list.querySelector(".pwa-delivery-status")).toBeNull();

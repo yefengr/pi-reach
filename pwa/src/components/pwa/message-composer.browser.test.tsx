@@ -4,6 +4,7 @@ import { Drawer, Modal } from "@mantine/core";
 import { ENTER_SENDS_STORAGE_KEY, isAppleKeyboard, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { PwaUiProvider } from "./pwa-ui-provider";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { MessageComposer } from "./message-composer";
 import type { ComposerAttachmentItem } from "./attachment-cards";
@@ -422,20 +423,32 @@ test.each([[1280, 900], [390, 844]])("keeps a single Composer surface, frameless
   }
 });
 
-test.each([320, 390, 1440])("keeps a single attachment notice outside the cards and input surface at %ipx", async width => {
+test.each([320, 390, 1440])("places the single attachment notice and the attachment tiles inside the card above the text at %ipx", async width => {
   await page.viewport(width, 900);
   const screen = await renderPwa(<ComposerHarness attachmentNotice="Uploads paused" />);
   screen.getByTestId("composer-set-attachment").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
   screen.getByTestId("composer-go-offline").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await expect.element(screen.getByText("Uploads paused")).toBeVisible();
   const notice = document.querySelector<HTMLElement>(".pwa-composer-hint")!;
-  const cards = document.querySelector<HTMLElement>(".pwa-attachment-cards")!;
+  const tiles = document.querySelector<HTMLElement>(".pwa-attachment-tiles")!;
   const surface = document.querySelector<HTMLElement>(".pwa-composer-card")!;
-  expect(notice.parentElement).toBe(surface.parentElement);
-  expect(surface.contains(cards)).toBe(false);
+  const input = screen.getByRole("textbox").element();
+  // 提示与附件都属于当前草稿，位于卡片内文本框之上，聚焦边框一并覆盖；左缘与文本对齐。
+  expect(surface.contains(notice)).toBe(true);
+  expect(surface.contains(tiles)).toBe(true);
   expect(document.querySelectorAll(".pwa-composer-hint")).toHaveLength(1);
-  expect(Math.round(notice.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(cards.getBoundingClientRect().top));
-  expect(Math.round(cards.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(surface.getBoundingClientRect().top));
+  expect(Math.round(notice.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(tiles.getBoundingClientRect().top));
+  expect(Math.round(tiles.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(input.getBoundingClientRect().top));
+  expect(Math.round(notice.getBoundingClientRect().left)).toBe(Math.round(input.getBoundingClientRect().left));
+  const tile = tiles.querySelector<HTMLElement>(".pwa-attachment-tile")!.getBoundingClientRect();
+  expect([Math.round(tile.width), Math.round(tile.height)]).toEqual([72, 72]);
+  expect(Math.round(tile.left)).toBe(Math.round(input.getBoundingClientRect().left));
+  const remove = screen.getByRole("button", { name: "Remove Queued image" }).element().getBoundingClientRect();
+  expect(Math.round(remove.width)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(remove.height)).toBeGreaterThanOrEqual(44);
+  // 角标越出方块，但仍在附件行的滚动区域内，不被裁切。
+  expect(remove.top).toBeGreaterThanOrEqual(tiles.getBoundingClientRect().top - 0.5);
+  expect(remove.right).toBeLessThanOrEqual(tiles.getBoundingClientRect().right + 0.5);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   await screen.unmount();
   await page.viewport(1280, 900);
@@ -1218,7 +1231,69 @@ test("operation hint owns the single notice line and keeps a 12px spinner 8px ab
     expect(Math.round(spinner.getBoundingClientRect().width)).toBe(12);
     expect(Math.round(text.getBoundingClientRect().left - spinner.getBoundingClientRect().right)).toBe(6);
     const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
-    expect(Math.round(card.getBoundingClientRect().top - hint.getBoundingClientRect().bottom)).toBe(8);
+    expect(card.contains(hint)).toBe(true);
+    expect(Math.round(hint.getBoundingClientRect().left)).toBe(Math.round(screen.getByRole("textbox").element().getBoundingClientRect().left));
+  } finally { await screen.unmount(); }
+});
+
+test("the in-card hint fades in and out, keeping its height until the fade ends and staying silent while it leaves", async () => {
+  await page.viewport(390, 844);
+  const hint = { text: "Creating a new session…", tone: "running" as const, busy: true };
+  const screen = await renderPwa(<ComposerHarness operationHint={hint} />);
+  try {
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const line = document.querySelector<HTMLElement>(".pwa-composer-hint")!;
+    // 沿用浮动入口与局部提示的进出：只过渡透明度，高度一次到位。
+    expect(line.classList.contains("pwa-presence")).toBe(true);
+    expect(getComputedStyle(line).transitionProperty).toContain("opacity");
+    expect(getComputedStyle(line).transitionProperty).not.toContain("height");
+    const shown = Math.round(card.getBoundingClientRect().height);
+    await screen.rerender(<PwaUiProvider><div className="pwa-root"><ComposerHarness operationHint={null} /></div></PwaUiProvider>);
+    // 隐藏后读屏不再读到提示：淡出副本不带 status 角色与 .pwa-composer-hint，且 inert。
+    expect(document.querySelector(".pwa-composer-hint")).toBeNull();
+    const leaving = document.querySelector<HTMLElement>(".pwa-composer-hint-line")!;
+    expect(leaving.getAttribute("data-presence")).toBe("leaving");
+    expect(leaving.getAttribute("aria-hidden")).toBe("true");
+    expect(leaving.getAttribute("role")).toBeNull();
+    expect(leaving.hasAttribute("inert")).toBe(true);
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(shown);
+    await expect.poll(() => document.querySelector(".pwa-composer-hint-line")).toBeNull();
+    expect(Math.round(card.getBoundingClientRect().height)).toBeLessThan(shown);
+  } finally { await screen.unmount(); }
+});
+
+test("the in-card hint leaves at once while the own-send transition owns the footer height", async () => {
+  await page.viewport(390, 844);
+  const harness = (operationHint: OperationHint | null) => <PwaUiProvider><div className="pwa-root"><div className="pwa-chat-footer" data-own-send=""><ComposerHarness operationHint={operationHint} /></div></div></PwaUiProvider>;
+  const screen = await renderPwa(<div className="pwa-chat-footer" data-own-send=""><ComposerHarness operationHint={{ text: "Creating a new session…", tone: "running", busy: true }} /></div>);
+  try {
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const shown = Math.round(card.getBoundingClientRect().height);
+    await screen.rerender(harness(null));
+    // 副本立即不占位：要么已移除，要么在移除前隐藏。
+    const leaving = document.querySelector<HTMLElement>(".pwa-composer-hint-line");
+    if (leaving) expect(getComputedStyle(leaving).display).toBe("none");
+    const settled = Math.round(card.getBoundingClientRect().height);
+    expect(settled).toBeLessThan(shown);
+    // 过渡先结束、标记移除后，尚未卸载的副本也不能重新占位。
+    delete document.querySelector<HTMLElement>(".pwa-chat-footer")!.dataset.ownSend;
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(settled);
+    await expect.poll(() => document.querySelector(".pwa-composer-hint-line")).toBeNull();
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(settled);
+  } finally { await screen.unmount(); }
+});
+
+test("the in-card hint sits 13px below the card edge and 14px above the text", async () => {
+  await page.viewport(390, 844);
+  const screen = await renderPwa(<ComposerHarness operationHint={{ text: "Creating a new session…", tone: "neutral", busy: false }} />);
+  try {
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!.getBoundingClientRect();
+    const text = document.querySelector<HTMLElement>(".pwa-composer-hint span")!.getBoundingClientRect();
+    const input = document.querySelector<HTMLElement>(".pwa-composer-input")!;
+    const textTop = input.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(input).paddingTop);
+    // 提示离卡片上沿略近于离正文，读作卡片的状态行而不是正文的一部分；发丝线按整像素取整。
+    expect(Math.round(text.top - card.top)).toBe(13);
+    expect(Math.round(textTop - text.bottom)).toBe(14);
   } finally { await screen.unmount(); }
 });
 

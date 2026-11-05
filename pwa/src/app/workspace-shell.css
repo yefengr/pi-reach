@@ -210,6 +210,14 @@
 /* 输入约束与操作状态共用一行；进行中只由旋转图标表达，文字保持中性色。 */
 .pwa-root .pwa-composer-hint { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-hint > svg { flex: 0 0 auto; }
+/*
+ * 卡片内提示（DESIGN「Composer」）：位于附件与文本框之上，与文本框左缘对齐；距卡片上沿 13、距正文 14，提示归属卡片而非贴着正文。进出沿用 .pwa-presence：出现淡入、隐藏淡出后再移除，
+ * 高度一次到位，不逐帧改变布局。本端发送过渡期间（footer 带 data-own-send）淡出中的副本直接隐藏，不与输入区回缩争抢高度。
+ */
+.pwa-chat-footer[data-own-send] .pwa-composer-hint-line[data-presence="leaving"] { display: none; }
+.pwa-root .pwa-composer-card .pwa-composer-hint-line { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0; padding: 2px 0 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
+.pwa-root .pwa-composer-card .pwa-composer-hint-line > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pwa-root .pwa-composer-card .pwa-composer-hint-line > svg { flex: 0 0 auto; }
 
 /* 连接状态：在线为 accent 圆点加中性文字，连接中／重连运行色并带动态图形，离线中性色；带文字（移动端已连接时只显示圆点）。 */
 .pwa-connection { display: inline-flex; align-items: center; gap: var(--pwa-space-status); padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); white-space: nowrap; }

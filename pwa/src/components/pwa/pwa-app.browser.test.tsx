@@ -524,6 +524,8 @@ test.each([false, true])("mobile diagnostic settings round trip preserves natura
     const row = list.querySelector("article");
     const measure = () => [list.clientHeight, list.clientWidth, list.getBoundingClientRect().top].map(Math.round);
     await input.fill("Diagnostic draft remains local");
+    // 会话就绪后打开提示会先淡出再移除；等淡出副本移除后再取自然布局。
+    await expect.poll(() => document.querySelector('.pwa-composer-hint-line[data-presence="leaving"]')).toBeNull();
     const geometry = measure();
     await screen.getByRole("button", { name: "Open navigation", exact: true }).click();
     await screen.getByRole("button", { name: "Open settings", exact: true }).click();
@@ -603,7 +605,8 @@ test("streaming replies preserve the composer render boundary, draft and open co
     // 开始投递后离开排队区，以发送同款进入动画出现在对话区；排队条高度由发送过渡收回。
     channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "assistant-marker", snapshot_id: "working-queue-started", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
     await expect.poll(() => list.querySelector(".pwa-message.user.pwa-user-message-in")?.textContent).toContain("Keep this draft");
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    // 抽屉清空后先滑回卡片背后再移除。
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
     expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).not.toBe("");
     await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
     await screen.getByRole("button", { name: "Stop current task", exact: true }).click();
@@ -1674,7 +1677,7 @@ test.each([
       const clipboard = new DataTransfer();
       clipboard.items.add(new File(["Contents"], "follow-note.txt", { type: "text/plain" }));
       input.element().dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
-      await expect.element(screen.getByText("follow-note.txt", { exact: true })).toBeVisible();
+      await expect.element(screen.getByRole("group", { name: "follow-note.txt", exact: true })).toBeVisible();
       channelHarness.holdFinish = true;
     }
     list.scrollTop = 100;
@@ -1700,7 +1703,8 @@ test.each([
       await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
       expect(scrollTo).not.toHaveBeenCalled();
       expect(list.scrollTop).toBe(100);
-      expect(document.querySelector(".pwa-composer .pwa-attachment-card")).toBeNull();
+      // 回看时没有发送过渡，附件行按移除最后一件的方式原位淡出后再收回。
+      await expect.poll(() => document.querySelector(".pwa-composer .pwa-attachment-tile")).toBeNull();
       return;
     }
     await expect.element(input).toHaveValue("");
@@ -1741,7 +1745,7 @@ test.each([false, true])("successful own send releases actual workspace geometry
     await input.fill("One\nTwo\nThree\nFour\nFive");
     if (attachment) {
       pasteAttachments(input.element(), new File(["Note"], "layout-note.txt", { type: "text/plain" }));
-      await expect.element(screen.getByText("layout-note.txt", { exact: true })).toBeVisible();
+      await expect.element(screen.getByRole("group", { name: "layout-note.txt", exact: true })).toBeVisible();
       channelHarness.holdFinish = true;
     }
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
@@ -1754,7 +1758,9 @@ test.each([false, true])("successful own send releases actual workspace geometry
     await expect.element(input).toHaveValue("");
     await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
     await expect.poll(() => list.style.paddingBottom).toBe("");
-    expect(document.querySelector(".pwa-composer .pwa-attachment-card")).toBeNull();
+    // 附件行已离开、不再算作附件；离开副本按计时器卸载，慢机器上可能晚于发送过渡结束。
+    expect(document.querySelector('.pwa-composer .pwa-attachment-tiles:not([data-presence="leaving"])')).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-composer .pwa-attachment-tile")).toBeNull();
     expect(input.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     const naturalPadding = Number.parseFloat(getComputedStyle(list).scrollPaddingBottom) || 0;
     const gap = () => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop);
@@ -1808,7 +1814,7 @@ test.each([false, true])("attachment final submission preserves a restored draft
     await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     // 撤回已请求但尚未收到权威快照，最终提交时再交付这条异步回执。
     pasteAttachments(input.element(), new File(["Note"], "draft-handoff.txt", { type: "text/plain" }));
-    await expect.element(screen.getByText("draft-handoff.txt", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("group", { name: "draft-handoff.txt", exact: true })).toBeVisible();
     channelHarness.holdFinish = true;
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
@@ -1834,7 +1840,7 @@ test.each([false, true])("attachment final submission preserves a restored draft
     await expect.element(input).toHaveValue("Original attachment draft\nNext draft survives");
     await expect.poll(() => footer.style.height).toBe("");
     // 已交给消息生命周期（含发送失败转失败气泡），输入区不再保留附件。
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(0);
     expect(channel.frames.some((frame) => frame.type === "user_message_status_request" && frame.client_request_id === "restore-during-send")).toBe(false);
     expect(channel.frames.findLast(frame => frame.type === "user_message")).toMatchObject({ text: "Original attachment draft" });
   } finally { channelHarness.beforeUserSend = null; await screen.unmount(); }
@@ -2162,7 +2168,7 @@ test("confirms leaving an attachment send, preserves the original draft and reje
     const clipboard = new DataTransfer();
     clipboard.items.add(new File([Uint8Array.of(137, 80, 78, 71)], "scope-image.png", { type: "image/png" }));
     input.element().dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
-    await expect.element(screen.getByText("scope-image.png", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("group", { name: "scope-image.png", exact: true })).toBeVisible();
     channelHarness.holdFinish = true;
     const send = screen.getByRole("button", { name: "Send message", exact: true }).element();
     send.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -3601,9 +3607,12 @@ test("preserves the session, draft, attachment, tool row and reader across layou
     const png = await new Promise<Blob>((resolve) => canvas.toBlob((blob) => resolve(blob!), "image/png"));
     clipboard.items.add(new File([png], "layout-image.png", { type: "image/png" }));
     input.element().dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }));
-    const image = screen.getByRole("img", { name: "layout-image.png" });
-    await expect.element(image).toBeVisible();
-    const imageUrl = image.element().getAttribute("src");
+    // 附件方块以 aria-label 命名，缩略图本身是装饰性的（alt 为空）。
+    const tile = screen.getByRole("group", { name: "layout-image.png", exact: true });
+    await expect.element(tile).toBeVisible();
+    const image = () => tile.element().querySelector<HTMLImageElement>("img.pwa-attachment-tile-image");
+    await expect.poll(image).not.toBeNull();
+    const imageUrl = image()!.getAttribute("src");
     const originalInput = input.element();
 
     list.scrollTop = 100;
@@ -3639,7 +3648,7 @@ test("preserves the session, draft, attachment, tool row and reader across layou
     for (const width of [766, 767, 768, 390, 1280]) {
       await page.viewport(width, 900);
       await expect.element(input).toHaveValue("Keep this draft across layouts");
-      expect(image.element().getAttribute("src")).toBe(imageUrl);
+      expect(image()?.getAttribute("src")).toBe(imageUrl);
       expect(screen.getByRole("button", { name: "View read tool details" }).element()).toBe(toolRowElement);
       await expect.element(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
       assertSessionUnchanged();
@@ -4655,7 +4664,7 @@ test.each([false, true])("uploads originals and retains readonly text until IDs 
     await input.fill("Please review the original file");
     const bytes = Uint8Array.from({ length: ATTACHMENT_CHUNK_BYTES + 17 }, (_, index) => index % 251);
     pasteAttachments(input.element(), new File([bytes], "original.bin", { type: "application/octet-stream" }));
-    await expect.element(screen.getByText("original.bin", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("group", { name: "original.bin", exact: true })).toBeVisible();
     expect(channel.frames.some((frame) => frame.type === "attachment_begin")).toBe(false);
     channelHarness.holdFinish = true;
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
@@ -4675,7 +4684,7 @@ test.each([false, true])("uploads originals and retains readonly text until IDs 
     await expect.element(input).not.toHaveAttribute("readonly");
     // transport=false 代表已接管后的发送失败：消息由失败气泡承担，可原地重试，不重新上传。
     await expect.element(input).toHaveValue("");
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(0);
     if (unknownDelivery) {
       await expect.element(screen.getByText("Not sent; check the connection and retry", { exact: true })).toBeVisible();
       const beforeRetry = channel.frames.filter((frame) => frame.type === "user_message").length;
@@ -4776,7 +4785,7 @@ test("a persisted pagehide and pageshow keep attachment selection and sending us
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     pasteAttachments(screen.getByPlaceholder("Message your agent…").element(), new File(["restored"], "bfcache.txt"));
-    await expect.element(screen.getByText("bfcache.txt", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("group", { name: "bfcache.txt", exact: true })).toBeVisible();
     window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
     window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
     // Relay 对恢复时的重新订阅回包，避免慢机器上触发失效连接重连。
@@ -4786,7 +4795,7 @@ test("a persisted pagehide and pageshow keep attachment selection and sending us
     const restored = channelHarness.channels[1]!;
     restored.emit(readyFrame(restored, "session-1"));
     await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
-    await expect.element(screen.getByText("bfcache.txt", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("group", { name: "bfcache.txt", exact: true })).toBeVisible();
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => restored.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
     expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
@@ -4805,7 +4814,7 @@ test("queued cancellation restores a released descriptor and removal discards th
     if (message.type !== "user_message") throw new Error("missing attachment handoff");
     const attachmentId = message.attachment_ids![0];
     expect(channelHarness.uploads.size).toBe(1);
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(0);
     channel.emit(queuedStateFrame([{ id: message.client_request_id, text: message.text }], "queue-before-cancel"));
     await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
     channel.emit(queuedStateFrame([], "queue-after-cancel"));
@@ -4814,7 +4823,7 @@ test("queued cancellation restores a released descriptor and removal discards th
     channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId,
       in_reply_to: query.id, client_request_id: message.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
     await expect.element(input).toHaveValue("Restore then remove");
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(1);
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(1);
     await screen.getByRole("button", { name: "Remove restored.txt", exact: true }).click();
     await expect.poll(() => channelHarness.uploads.size).toBe(0);
     expect(channel.frames.filter((frame) => frame.type === "attachment_discard")).toEqual([expect.objectContaining({
@@ -4822,7 +4831,7 @@ test("queued cancellation restores a released descriptor and removal discards th
     })]);
     expect(channel.frames.some((frame) => frame.type === "attachment_cancel")).toBe(false);
     expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
-    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-card").length).toBe(0);
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(0);
   } finally { await screen.unmount(); }
 });
 
@@ -4834,7 +4843,8 @@ test("failed upload offers a safe retry without dropping the original File or te
     pasteAttachments(input.element(), new File(["original bytes"], "retry.txt"));
     channelHarness.failNextChunk = true;
     await screen.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect.element(screen.getByText("Not enough space on the computer.", { exact: true })).toBeVisible();
+    // 方块上不显示文字，短原因经方块的无障碍名称与 Tooltip 提供。
+    await expect.element(screen.getByRole("group", { name: "retry.txt，Not enough space on the computer.", exact: true })).toBeInTheDocument();
     await expect.element(input).toHaveValue("Retry my original");
     await expect.element(input).toHaveAttribute("readonly");
     await expect.element(input).toBeEnabled();
@@ -4957,7 +4967,7 @@ test("session replacement preserves old text and File without automatically send
     channelHarness.finishReplies[0]?.();
     await flushMicrotasks();
     expect(next.frames.some((frame) => frame.type === "user_message")).toBe(false);
-    await expect.element(screen.getByText("old-session.txt", { exact: true })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("group", { name: /^old-session\.txt/ })).not.toBeInTheDocument();
   } finally { await screen.unmount(); }
 });
 

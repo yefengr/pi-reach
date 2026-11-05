@@ -1,6 +1,6 @@
-import { useId, useState } from "react";
-import { ActionIcon, Progress, UnstyledButton } from "@mantine/core";
-import { Check, ChevronDown, ChevronUp, File, RefreshCw, X } from "lucide-react";
+import { useState } from "react";
+import { ActionIcon, Progress } from "@mantine/core";
+import { Check, File, RefreshCw, X } from "lucide-react";
 import { attachmentPreviewSchema, type AttachmentDescriptor, type AttachmentPreview } from "@pi-reach/protocol/session";
 import { useI18n } from "@/lib/i18n";
 import "./attachment-cards.css";
@@ -20,7 +20,6 @@ type AttachmentCardsProps = {
   onRemove?: (id: string) => void;
   onRetry?: (id: string) => void;
   disabled?: boolean;
-  collapsible?: boolean;
 };
 
 /** 展示描述不含原件或路径；无操作回调时统一为只读卡片。 */
@@ -42,7 +41,7 @@ export function AttachmentThumbnail({ preview, fileName }: { preview?: Attachmen
   return <span className="pwa-attachment-thumb pwa-attachment-file" aria-hidden="true"><File size={20} /></span>;
 }
 
-function AttachmentCard({ item, onRemove, onRetry, disabled }: { item: ComposerAttachmentItem } & Omit<AttachmentCardsProps, "items" | "collapsible">) {
+function AttachmentCard({ item, onRemove, onRetry, disabled }: { item: ComposerAttachmentItem } & Omit<AttachmentCardsProps, "items">) {
   const { t, locale } = useI18n();
   const progress = item.byteLength > 0 ? Math.min(100, Math.max(0, (item.receivedBytes ?? 0) / item.byteLength * 100)) : 0;
   const size = attachmentSizeLabel(item.byteLength, locale);
@@ -68,20 +67,12 @@ function AttachmentCard({ item, onRemove, onRetry, disabled }: { item: ComposerA
   </div>;
 }
 
-export function AttachmentCards({ items, onRemove, onRetry, disabled = false, collapsible = false }: AttachmentCardsProps) {
+export function AttachmentCards({ items, onRemove, onRetry, disabled = false }: AttachmentCardsProps) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
-  const listId = useId();
-  // 上传中的单项取消必须始终可达；只折叠尚未发送的纯草稿。
-  const canCollapse = collapsible && items.length > 2 && items.every(item => item.status === "draft");
-  const visible = canCollapse && !expanded ? items.slice(0, 2) : items;
   if (!items.length) return null;
   return <section className="pwa-attachment-cards" aria-label={t.attachments.title}>
-    <div id={listId} className="pwa-attachment-list">
-      {visible.map(item => <AttachmentCard key={item.id} item={item} onRemove={onRemove} onRetry={onRetry} disabled={disabled} />)}
+    <div className="pwa-attachment-list">
+      {items.map(item => <AttachmentCard key={item.id} item={item} onRemove={onRemove} onRetry={onRetry} disabled={disabled} />)}
     </div>
-    {canCollapse ? <UnstyledButton type="button" className="pwa-attachment-toggle" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>
-      {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{expanded ? t.attachments.showLess : t.attachments.showMore(items.length)}
-    </UnstyledButton> : null}
   </section>;
 }

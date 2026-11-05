@@ -80,6 +80,8 @@ export class OwnSendTransition {
     if (this.footer && this.composer) {
       // 附件提交会移除卡片，短期保留真实 footer 尺寸并贴底收回；不留下固定占位。
       this.footer.style.height = `${this.footerHeight}px`;
+      // 标记发送过渡：输入区内的提示行在此期间即时变化，不与回缩争抢高度（DESIGN「输入区内的增减」）。
+      this.footer.dataset.ownSend = "";
     }
     this.paddingTop = capture.paddingTop;
     this.clock = new FollowMotionClock(this.list);
@@ -128,6 +130,9 @@ export class OwnSendTransition {
         height: `${this.inputSize.height}px`, maxHeight: `${this.inputSize.maximum}px`, overflowY: this.inputSize.overflow,
       });
     }
-    if (this.footer) this.footer.style.height = this.footerStyle;
+    if (this.footer) {
+      this.footer.style.height = this.footerStyle;
+      delete this.footer.dataset.ownSend;
+    }
   }
 }

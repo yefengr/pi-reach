@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>输入区托盘重设计</title>
+  <link rel="stylesheet" href="./shared.css">
+</head>
+<body>
+  <main class="review">
+    <header class="review-head">
+      <h1>输入区托盘重设计（附件 × 排队消息）</h1>
+      <p>评审稿，状态均为本页模拟：对比现状与三个候选方案下，消息列表与输入区的衔接、以及多条时展开／收起的过渡。可直接滚动消息列表观察正文进入渐隐区。</p>
+    </header>
+
+    <section class="controls" aria-label="评审控制">
+      <div class="control"><span>方案</span><div class="seg" data-key="scheme">
+        <button type="button" data-value="current">现状</button>
+        <button type="button" data-value="a">A 统一面板</button>
+        <button type="button" data-value="b">B 合入输入框</button>
+        <button type="button" data-value="c">C 收拢抽屉</button>
+        <button type="button" data-value="d">D 附件进卡片＋排队抽屉（已选）</button>
+      </div></div>
+      <div class="control"><span>排队</span><div class="seg" data-key="queue">
+        <button type="button" data-value="0">0</button><button type="button" data-value="1">1</button><button type="button" data-value="5">5</button>
+      </div></div>
+      <div class="control"><span>附件</span><div class="seg" data-key="atts">
+        <button type="button" data-value="0">0</button><button type="button" data-value="1">1</button><button type="button" data-value="4">4</button>
+      </div></div>
+      <div class="control"><span>附件状态</span><div class="seg" data-key="upload">
+        <button type="button" data-value="draft">草稿</button><button type="button" data-value="uploading">上传中</button><button type="button" data-value="failed">失败</button>
+      </div></div>
+      <div class="control"><span>提示行</span><div class="seg" data-key="hint">
+        <button type="button" data-value="off">无</button><button type="button" data-value="on">有</button>
+      </div></div>
+      <div class="control"><span>桌面附件（D）</span><div class="seg" data-key="deskTile">
+        <button type="button" data-value="wide">宽块</button><button type="button" data-value="square">方块</button>
+      </div></div>
+      <div class="control"><span>上传进度（D）</span><div class="seg" data-key="ring">
+        <button type="button" data-value="bar">底部细线</button><button type="button" data-value="ring">圆圈</button><button type="button" data-value="ring-num">圆圈＋数字</button>
+      </div></div>
+      <div class="control"><span>文件名提示（D）</span><div class="seg" data-key="tip">
+        <button type="button" data-value="off">不显示</button><button type="button" data-value="native">原生 title（模拟）</button><button type="button" data-value="mantine">Mantine Tooltip</button>
+      </div></div>
+      <div class="control"><span>提示位置（D）</span><div class="seg" data-key="hintPos">
+        <button type="button" data-value="card">卡片内</button><button type="button" data-value="outside">卡片上方</button>
+      </div></div>
+      <div class="control"><span>视口</span><div class="seg" data-key="viewport">
+        <button type="button" data-value="mobile">手机 390</button><button type="button" data-value="desktop">桌面 780</button>
+      </div></div>
+      <div class="control"><span>外观</span><div class="seg" data-key="theme">
+        <button type="button" data-value="light">浅色</button><button type="button" data-value="dark">深色</button>
+      </div></div>
+      <button type="button" class="tool-btn" id="peek">把正文移到衔接区</button>
+      <button type="button" class="tool-btn" id="hintAnim">动画切换提示</button>
+      <button type="button" class="tool-btn" id="bottom">回到底部</button>
+    </section>
+
+    <div class="stage">
+      <section class="device" id="device" aria-label="工作区预览">
+        <header class="topbar"><span class="dot" aria-hidden="true"></span>修复上传重试<small>· Working</small></header>
+        <div class="list" id="list">
+          <div class="msg msg-user">上传失败后重试会重复写入同一个分片，帮我看下原因。</div>
+          <div class="msg">
+            <p>问题出在 <code>attachment-upload.ts</code> 的重试分支：失败时只重置了进度，没有清掉已确认的分片游标，所以重试会从第一个分片重新写。</p>
+            <ul><li>失败回调里保留 <code>confirmedOffset</code>，重试从该偏移续传；</li><li>Relay 侧对同一 <code>transfer_id</code> 的重复分片按幂等处理；</li><li>补一条“失败后重试只写剩余分片”的组件测试。</li></ul>
+            <p>我先改上传端，再跑相关测试。</p>
+          </div>
+          <div class="msg msg-user">好，顺便看看暂停后恢复是不是同样的问题。</div>
+          <div class="msg">
+            <p>暂停恢复走的是另一条路径：<code>resume()</code> 会读取最近一次确认的偏移，所以不受影响。不过暂停期间如果连接断开，恢复时会重新协商租约，这一步目前没有校验旧租约是否已经过期。</p>
+            <p>我会在恢复前检查租约有效期，过期则直接重新开始传输，并在卡片上提示“已重新开始上传”。</p>
+            <p>现在开始修改 <code>use-attachment-composer.ts</code> 与对应测试，完成后汇报验证结果。</p>
+          </div>
+        </div>
+        <div class="footer"><div class="composer" id="composer"></div></div>
+      </section>
+    </div>
+
+    <aside class="notes" id="notes" aria-live="polite"></aside>
+  </main>
+  <script src="./shared.js"></script>
+</body>
+</html>

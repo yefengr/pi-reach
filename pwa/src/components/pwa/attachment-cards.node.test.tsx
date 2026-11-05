@@ -5,7 +5,7 @@ import { PwaUiProvider } from "./pwa-ui-provider";
 
 const file: ComposerAttachmentItem = { id: "file", fileName: "notes.txt", byteLength: 1024, status: "draft" };
 function markup(items: ComposerAttachmentItem[], interactive = false) {
-  return renderToStaticMarkup(<PwaUiProvider><AttachmentCards items={items} onRemove={interactive ? () => {} : undefined} onRetry={interactive ? () => {} : undefined} collapsible /></PwaUiProvider>);
+  return renderToStaticMarkup(<PwaUiProvider><AttachmentCards items={items} onRemove={interactive ? () => {} : undefined} onRetry={interactive ? () => {} : undefined} /></PwaUiProvider>);
 }
 
 test("empty and readonly cards never expose file operations", () => {
@@ -40,10 +40,4 @@ test("rejects invalid historical previews instead of accepting arbitrary data UR
   const valid = markup([{ ...file, preview: { mime_type: "image/jpeg", data: "YQ==", byte_length: 1, width: 1, height: 1 } }]);
   expect(valid).toContain('alt="notes.txt"');
   expect(valid).toContain('src="data:image/jpeg;base64,YQ=="');
-});
-
-test("collapsing a draft unmounts hidden controls but active uploads remain reachable", () => {
-  const files = Array.from({ length: 4 }, (_, index) => ({ ...file, id: `file-${index}`, fileName: `file-${index}.txt` }));
-  expect(markup(files, true)).not.toContain("file-2.txt");
-  expect(markup(files.map(item => ({ ...item, status: "paused" })), true)).toContain("file-3.txt");
 });
