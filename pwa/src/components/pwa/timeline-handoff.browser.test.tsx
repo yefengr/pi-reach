@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
+import { finishCssTransitions, pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { flushSync } from "react-dom";
 import { cdp, page } from "vitest/browser";
 import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
@@ -114,7 +114,10 @@ function startQueuedFinish(h: HandoffHarness, clock: Clock, recording: Recording
   return { event, time };
 }
 
-function assertSettled(h: HandoffHarness, clock: Clock, event: TimelineEvent) {
+async function assertSettled(h: HandoffHarness, clock: Clock, event: TimelineEvent) {
+  // 输入区高度过渡按真实时间播放，结束时的尺寸变化会再排一帧贴底；等过渡结束并跑完这一帧，再断言没有残留帧。
+  await finishCssTransitions();
+  for (let frame = 1; frame <= 4 && clock.pending() > 0; frame += 1) clock.step(SETTLED_AT_MS + 1000 + frame * FRAME_MS);
   expect(h.timeline().runtimeRef.current.formalEvents()).toContainEqual(event);
   expect(h.timeline().items.some(item => item.kind === "partial")).toBe(false);
   expect(h.list.textContent).toContain("Tail 4");
@@ -169,7 +172,7 @@ test.each(replayCases.flatMap(replay => [false, true].map(advanceLeaf => ({ ...r
     for (let time = FORMAL_AT_MS + frameMs; time <= SETTLED_AT_MS; time += frameMs) {
       recording.capture("finish", time, () => clock.step(time));
     }
-    assertSettled(h, clock, event);
+    await assertSettled(h, clock, event);
     expect(Math.round(h.list.scrollHeight - h.list.clientHeight - h.list.scrollTop)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
     const takeover = recording.samples.find(sample => sample.before.partial && !sample.after.partial);
     expect(takeover).toBeDefined();
@@ -213,7 +216,7 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
       // 先实际推进一帧，再发送下一帧快照；不能只改采样标签而让时钟仍停在上一帧。
       if (delay === frameMs && time === FORMAL_AT_MS + frameMs) drain();
     }
-    assertSettled(h, clock, event);
+    await assertSettled(h, clock, event);
     // 出队到达时上一条回复仍在放尾巴：消息先留在排队区，回复放完、完成时间出现后才进入对话区。
     const started = recording.samples.find(sample => sample.phase === "queue starts")!;
     expect(started.before.partial).toBe(true);
@@ -281,7 +284,7 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
         recording.capture("queue starts", time, () => h.receive(queue(false)));
       }
     }
-    assertSettled(h, clock, event);
+    await assertSettled(h, clock, event);
     // 回复放完后完成时间出现，整个过程没有同步跳变。
     expect(h.list.querySelector(".pwa-turn-meta")).not.toBeNull();
     expect(synchronousJumps(recording.samples)).toEqual([]);
@@ -492,7 +495,7 @@ test("Reduced Motion immediately releases queue dimensions and skips the inherit
       expect(h.footer.style.height).toBe("");
     });
     for (let time = started + FRAME_MS; time <= SETTLED_AT_MS; time += FRAME_MS) clock.step(time);
-    assertSettled(h, clock, event);
+    await assertSettled(h, clock, event);
     expect(Math.round(h.list.scrollHeight - h.list.clientHeight - h.list.scrollTop)).toBeLessThanOrEqual(PIXEL_TOLERANCE);
   } finally {
     recording.close();
@@ -518,7 +521,7 @@ test("a queue drained in the background does not replay a send transition on ret
     hidden.mockReturnValue(false);
     flushSync(() => document.dispatchEvent(new Event("visibilitychange")));
     for (let time = FORMAL_AT_MS + FRAME_MS; time <= SETTLED_AT_MS; time += FRAME_MS) clock.step(time);
-    assertSettled(h, clock, event);
+    await assertSettled(h, clock, event);
     // 抽屉清空后先滑回卡片背后（drawer-out）再移除，离开期间 inert、对读屏隐藏。
     expect(document.querySelector(".pwa-queued-messages")?.getAttribute("data-presence")).toBe("leaving");
     await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();

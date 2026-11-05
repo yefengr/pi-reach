@@ -102,10 +102,9 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
   const [collapsed, setCollapsed] = useState(false);
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement>(null);
-  // 清空后保留最后一批条目，脱离布局后滑回卡片背后（drawer-out）再移除；离开期间 inert，不可操作也不被播报。
+  // 清空后保留最后一批条目，随包裹层收拢沉回卡片背后（drawer-out）再移除；离开期间 inert，不可操作也不被播报。
   const presence = usePresence(current.length ? current : null, Object.is, { exit: "--pwa-duration-drawer-out" });
   const leavingRows = useLeavingItems(current);
-  useLayoutEffect(() => { if (presence.leaving) detachInPlace(sectionRef.current, "bottom"); }, [presence.leaving]);
   const items = presence.rendered ?? [];
   const present = items.length > 0;
   // 抽屉在场之后才让新行单独淡入；与抽屉同时出现的行随抽屉滑出，不叠加第二层淡入。
@@ -123,7 +122,7 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
   const attention = items.some((item) => item.attention);
   const rowProps = { numbered, isOnline, onInsert, onCancel, onDismissNotice };
 
-  return <section ref={sectionRef} className="pwa-queued-messages" aria-label={q.title} {...presenceProps(presence)}>
+  return <div className="pwa-composer-grow pwa-queued-messages-slot" {...presenceProps(presence)}><section ref={sectionRef} className="pwa-queued-messages" aria-label={q.title} {...presenceProps(presence)}>
     {numbered ? <h2 className="pwa-queued-messages-header">
       <UnstyledButton className="pwa-queued-messages-toggle" type="button" aria-expanded={!folded} aria-controls={bodyId} onClick={() => setCollapsed((current) => !current)}>
         <span className="pwa-queued-messages-title">{q.title}</span>
@@ -141,5 +140,5 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
         </div>
       </div>
     </div>
-  </section>;
+  </section></div>;
 }

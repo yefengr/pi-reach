@@ -26,3 +26,13 @@ export function pinMechanismMotion(): void {
 export function unpinMechanismMotion(): void {
   document.getElementById(STYLE_ID)?.remove();
 }
+
+/**
+ * 等待按真实时间播放的 CSS 过渡结束，如输入区进出的高度过渡；假时钟只接管 requestAnimationFrame，不推进这些过渡。
+ * 只等过渡，不等转圈等循环动画（它们永不结束）。
+ */
+export async function finishCssTransitions(): Promise<void> {
+  await Promise.all(document.getAnimations()
+    .filter((animation) => animation instanceof CSSTransition)
+    .map((animation) => animation.finished.catch(() => undefined)));
+}
