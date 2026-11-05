@@ -323,7 +323,7 @@ document.getElementById("composer").addEventListener("click", (event) => {
 list.addEventListener("scroll", () => { following = list.scrollHeight - list.scrollTop - list.clientHeight < 4; });
 new ResizeObserver(() => { if (following) list.scrollTop = list.scrollHeight; }).observe(list);
 
-document.getElementById("peek").addEventListener("click", () => { following = false; 
+document.getElementById("peek").addEventListener("click", () => { following = false;
   // 无重叠时把末行放进 24 渐隐中段；有重叠时让末行滑到最上方表面上沿以下 12。
   const offset = 88 + (device.hasAttribute("data-overlap") ? 16 : -12);
   list.scrollTop = list.scrollHeight - list.clientHeight - offset;
