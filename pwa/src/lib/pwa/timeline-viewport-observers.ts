@@ -1,3 +1,5 @@
+import { chatFooterOf, syncChatFooterSpace } from "./chat-footer-space";
+
 export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
 const EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty-slot";
 const TOUCH_READ_THRESHOLD = 4;
@@ -19,10 +21,15 @@ export class TimelineViewportObservers {
   private observer: ResizeObserver | null;
   private elements = new Set<Element>();
   private snapshot: { elements: Element[]; classes: (string | null)[] } | null = null;
+  private footer: HTMLElement | null = null;
   private cleanup: () => void;
 
   constructor(readonly list: HTMLDivElement, events: Events) {
-    this.observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => events.resize());
+    // 输入区浮在列表之上：先按其高度同步列表底部留白，再报告尺寸变化，协调层读到的几何已包含新留白。
+    this.observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver((entries) => {
+      if (this.footer && entries.some((entry) => entry.target === this.footer)) syncChatFooterSpace(list, this.footer);
+      events.resize();
+    });
     const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
     const geometry = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail : null;
@@ -88,6 +95,7 @@ export class TimelineViewportObservers {
   }
 
   refresh(): void {
+    this.refreshFooter();
     const children = this.list.children;
     const snapshot = this.snapshot;
     const className = (element: Element) => element instanceof HTMLElement ? element.className : null;
@@ -97,9 +105,20 @@ export class TimelineViewportObservers {
     const next = new Set<Element>([this.list]);
     for (const child of elements) if (child instanceof HTMLElement && !child.matches(EXCLUSIONS)) next.add(child);
     for (const element of this.elements) if (!next.has(element)) this.observer?.unobserve(element);
-    for (const element of next) if (!this.elements.has(element)) this.observer?.observe(element);
+    // 列表只观察外框：底部留白随输入区同步时不改变外框，不会在同一轮观察中再次触发、产生观察循环。
+    for (const element of next) if (!this.elements.has(element)) this.observer?.observe(element, element === this.list ? { box: "border-box" } : undefined);
     this.elements = next;
     this.snapshot = { elements, classes: elements.map(className) };
+  }
+
+  /** 输入区与列表同级，可能随只读与在线切换重新挂载；列表子项未变时也要核对。 */
+  private refreshFooter(): void {
+    const footer = chatFooterOf(this.list);
+    if (footer === this.footer) return;
+    if (this.footer) this.observer?.unobserve(this.footer);
+    this.footer = footer;
+    if (footer) this.observer?.observe(footer, { box: "border-box" });
+    syncChatFooterSpace(this.list, footer);
   }
 
   disconnect(): void {
@@ -108,5 +127,6 @@ export class TimelineViewportObservers {
     this.cleanup();
     this.elements.clear();
     this.snapshot = null;
+    this.footer = null;
   }
 }

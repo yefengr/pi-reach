@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
+import { activityFollowSpace } from "@/lib/pwa/timeline-follow-motion";
 import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageComposer } from "./message-composer";
@@ -216,6 +217,53 @@ test("keeps a real timeline paragraph anchored through draft and rotation change
   await page.viewport(844, 390);
   await settle();
   expect(Math.abs(offset(paragraph, view.list) - initial)).toBeLessThanOrEqual(1);
+  expect(view.timeline().followingOutput).toBe(false);
+  await view.screen.unmount();
+});
+
+test("floats the Composer over the list: the list keeps its height and its bottom padding follows the footer", async () => {
+  await page.viewport(390, 844);
+  const view = await renderWorkspace();
+  const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+  const sentinel = document.querySelector<HTMLElement>(".pwa-bottom-sentinel")!;
+  const listHeight = Math.round(view.list.clientHeight);
+  const padding = () => Math.round(parseFloat(getComputedStyle(view.list).paddingBottom));
+  const check = (label: string) => {
+    // 列表高度不随输入区变化；底部留白 = 尾部留白 88 + 输入区高度；跟随时最新内容停在输入区上沿之上。
+    expect(Math.round(view.list.clientHeight), label).toBe(listHeight);
+    expect(padding(), label).toBe(88 + Math.round(footer.getBoundingClientRect().height));
+    // 自然尾部留白的测量依赖滚动避让与底部留白同值。
+    expect(Math.round(parseFloat(getComputedStyle(view.list).scrollPaddingBottom)), label).toBe(padding());
+    expect(bottomGap(view.list), label).toBeLessThanOrEqual(1);
+    expect(Math.round(sentinel.getBoundingClientRect().bottom), label).toBeLessThanOrEqual(Math.round(footer.getBoundingClientRect().top));
+    // 被输入区盖住的留白不能用来容纳内容增长。
+    expect(activityFollowSpace(view.list as HTMLDivElement).tailSpace, label).toBe(80);
+  };
+  check("empty");
+  await view.attachment({ id: "attachment", fileName: "Attachment", byteLength: 1024, status: "draft" });
+  check("attachment");
+  await view.draft("Line\n".repeat(5));
+  check("draft");
+  await view.attachment(null);
+  await view.draft("");
+  check("restored");
+  await view.screen.unmount();
+});
+
+test("keeps the reading position while the floating Composer grows over the list", async () => {
+  await page.viewport(390, 844);
+  const view = await renderWorkspace();
+  const paragraph = view.screen.getByText(/^Answer 3, paragraph 9:/).element();
+  view.list.scrollTop += offset(paragraph, view.list) - 120;
+  view.list.dispatchEvent(new Event("scroll", { bubbles: true }));
+  await settle();
+  expect(view.timeline().followingOutput).toBe(false);
+  const initial = { offset: Math.round(offset(paragraph, view.list)), top: Math.round(view.list.scrollTop) };
+  await view.attachment({ id: "attachment", fileName: "Attachment", byteLength: 1024, status: "draft" });
+  await view.draft("Line\n".repeat(5));
+  // 回看时输入区增高只盖住列表底部，正在读的内容与滚动位置都不动。
+  expect(Math.round(offset(paragraph, view.list))).toBe(initial.offset);
+  expect(Math.round(view.list.scrollTop)).toBe(initial.top);
   expect(view.timeline().followingOutput).toBe(false);
   await view.screen.unmount();
 });

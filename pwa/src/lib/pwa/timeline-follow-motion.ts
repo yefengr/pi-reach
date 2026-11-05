@@ -1,3 +1,4 @@
+import { chatFooterSpace } from "./chat-footer-space";
 import { pwaContentEasing } from "@/lib/ui/motion";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 
@@ -45,8 +46,10 @@ export function activityFollowSpace(list: HTMLDivElement): { tailSpace: number; 
   const owner = activityOwners.get(list);
   const applied = Number.parseFloat(getComputedStyle(list).paddingBottom) || 0;
   const padding = owner ? owner.naturalPadding() : applied;
+  // 底部留白包含浮动输入区的高度，那部分被输入区盖住，不能用来容纳内容增长。
+  const footer = chatFooterSpace(list);
   // 自然预算增长时差值可以为负；仍以当前 CSS 目标还原自然滚动范围。
-  return { tailSpace: Math.max(0, padding - MINIMUM_TAIL_SPACE), compensation: owner ? applied - padding + (owner.heldSpace?.() ?? 0) : 0 };
+  return { tailSpace: Math.max(0, padding - footer - MINIMUM_TAIL_SPACE), compensation: owner ? applied - padding + (owner.heldSpace?.() ?? 0) : 0 };
 }
 
 /** Working 显隐的局部滚动交接；不拥有输入框，不用于正文增量或普通回执。 */

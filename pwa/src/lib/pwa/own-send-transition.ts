@@ -1,3 +1,4 @@
+import { syncChatFooterSpace } from "./chat-footer-space";
 import { FollowMotionClock } from "./timeline-follow-motion";
 import type { ViewportMotionStep } from "./timeline-viewport-coordinator";
 
@@ -80,6 +81,7 @@ export class OwnSendTransition {
     if (this.footer && this.composer) {
       // 附件提交会移除卡片，短期保留真实 footer 尺寸并贴底收回；不留下固定占位。
       this.footer.style.height = `${this.footerHeight}px`;
+      syncChatFooterSpace(this.list, this.footer);
       // 标记发送过渡：输入区内的提示行在此期间即时变化，不与回缩争抢高度（DESIGN「输入区内的增减」）。
       this.footer.dataset.ownSend = "";
     }
@@ -109,7 +111,8 @@ export class OwnSendTransition {
       const target = this.composer.getBoundingClientRect().height + (size ? size.height - actualInput : 0);
       const height = this.footerHeight + (target - this.footerHeight) * progress;
       this.footer.style.height = `${height}px`;
-      remainingShrink = target - this.footer.getBoundingClientRect().height;
+      // 输入区浮在列表之上：同帧同步底部留白，下面读取的 scrollHeight 才对应本帧的输入区高度。
+      remainingShrink = target - syncChatFooterSpace(this.list, this.footer);
     }
     const bottom = Math.max(0, this.list.scrollHeight - this.list.clientHeight + remainingShrink);
     // 真实预算切换可能改变顶部 padding；先补偿锚点，不让密度切换在第一帧移动旧正文。
@@ -133,6 +136,7 @@ export class OwnSendTransition {
     if (this.footer) {
       this.footer.style.height = this.footerStyle;
       delete this.footer.dataset.ownSend;
+      syncChatFooterSpace(this.list, this.footer);
     }
   }
 }
