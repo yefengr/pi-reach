@@ -6,7 +6,7 @@
 
 | 事项 | 状态 | 当前边界与下一步 |
 | --- | --- | --- |
-| [输入区浮层与提示重新设计](plans/active/20261105-floating-composer-and-notices.md) | 待开始 | 2026-11-05 由 BACKLOG 移入，决策见 [ADR-20261105](adr/20261105-floating-composer-and-notices.md)：输入区浮于消息列表之上，顶部不再有占布局的提示条，连接与只读状态移入输入区提示行。P0 可评审原型见 [`docs/prototypes/20261105-floating-composer-notices/`](prototypes/20261105-floating-composer-notices/page.html)。下一步：P1 结构；之后按 P2 过渡、P3 提示分别提交，DESIGN 随各阶段同步。 |
+| [输入区浮层与提示重新设计](plans/active/20261105-floating-composer-and-notices.md) | 进行中 | 2026-11-05 由 BACKLOG 移入，决策见 [ADR-20261105](adr/20261105-floating-composer-and-notices.md)：输入区浮于消息列表之上，顶部不再有占布局的提示条，连接与只读状态移入输入区提示行。P0 可评审原型见 [`docs/prototypes/20261105-floating-composer-notices/`](prototypes/20261105-floating-composer-notices/page.html)。P1 结构（输入区改为浮层、列表底部留白跟随输入区高度，观感不变）已提交 Pull Request，待 CI 与 staging 真机验收。下一步：P2 过渡、P3 提示分别提交，DESIGN 随各阶段同步。 |
 | [边框、分隔与圆角参照 iOS 的调整](plans/active/20261101-ios-borders-spacing.md) | 待验收 | 已随 PR #171 合并（透明度后续调整见 PR #173），决策见 [ADR-20261101](adr/20261101-hairline-concentric-radii.md)，规则已同步 DESIGN。待验收：Safari 与 iOS 真机可见度。 |
 | [会话输出连续性与 Working 兜底](plans/active/20261030-stream-output-continuity.md) | 待验收 | 已随 PR #162 合并并发布，决策见 [ADR](adr/20261030-stream-output-continuity.md)。待验收：真机录屏对比。 |
 | [时间线视口协调层重构](plans/active/20261022-timeline-viewport-coordinator.md) | 待验收 | 协调层、留白优先、软键盘原生处理与前插位置保护已分别随 PR #134、#135、#136、#139、#146 合并。待验收：设备上的跟随、软键盘与前插复验，不以合并或自动化通过替代关闭。 |
