@@ -1,6 +1,7 @@
 import { FollowGlide, transitionGlideOmega } from "./timeline-follow-glide";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { ReplyContinuity, type ReplyProbe } from "./timeline-viewport-continuity";
+import { TimelineViewportUserInput } from "./timeline-viewport-user-input";
 
 export const VIEWPORT_REASONS = ["commit", "geometry", "activity", "resize", "viewport-resize", "hidden", "reduce", "output", "frame", "send", "latest", "input", "user", "details", "reset", "bind", "settle", "scroll"] as const;
 export type ViewportReason = typeof VIEWPORT_REASONS[number];
@@ -49,8 +50,6 @@ const PREPEND_GUARD_MS = 1000;
 const LATEST_SMOOTH_SCREENS = 2;
 /** 跟随中 Pi 回复增长不超过该屏数时逐帧平滑接续，更大的跳变（如整段补齐）仍瞬时贴底。 */
 const FOLLOW_GLIDE_SCREENS = 1;
-/** 任何输入后暂停逐帧跟随的时长，与滚动静止判定一致；期间用户滚动会顺延，避免与惯性争夺位置。 */
-const FOLLOW_INPUT_HOLD_MS = 200;
 
 /** 不引用 DOM：所有过程的退出、布局释放和后继推进都在这里决定。 */
 export class TimelineViewportCoordinator<C, A> {
@@ -80,7 +79,7 @@ export class TimelineViewportCoordinator<C, A> {
   private glide: FollowGlide | null = null;
   /** 运动过程报告目标时的滚动追赶；过程结束且到达目标后才交接。 */
   private motionGlide: FollowGlide | null = null;
-  private inputHoldUntil = 0;
+  private readonly userInput = new TimelineViewportUserInput();
   private tailCredit = 0;
   private ready = false;
   private handoff = false;
@@ -117,6 +116,7 @@ export class TimelineViewportCoordinator<C, A> {
   bind(layout: ViewportLayout<C, A> | null): void {
     if (layout === this.layout) return;
     this.exit(false);
+    this.userInput.reset();
     this.generation += 1;
     this.layout = layout;
     this.anchor = null;
@@ -129,6 +129,7 @@ export class TimelineViewportCoordinator<C, A> {
     this.publish("bind");
   }
   reset(): void {
+    if (!this.userInput.held) this.userInput.reset();
     this.pendingAnchor = null;
     this.resumeFollowing("reset");
   }
@@ -150,12 +151,14 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   captureOwnSend(): ViewportCapture<C> | null {
+    if (!this.following || this.paused) return null;
     const value = this.layout?.captureSend();
     return value == null || !this.layout ? null : Object.freeze({ generation: this.generation, binding: this.layout, value });
   }
 
   followOwnSend(capture: ViewportCapture<C> | null): void {
-    if (!capture || capture.binding !== this.layout || capture.generation !== this.generation || !this.layout) return;
+    if (!this.following || this.paused
+      || !capture || capture.binding !== this.layout || capture.generation !== this.generation || !this.layout) return;
     // 连续成功发送从捕获的可见尺寸接续，不先写上一次输入的终点。
     const inherited = this.motionGlide ?? this.glide;
     this.collapseHold = null;
@@ -193,6 +196,11 @@ export class TimelineViewportCoordinator<C, A> {
     this.mode = geometry.animate ? "latest" : "follow";
     // 即时 Latest 没有后继动画帧，完成后必须能直接处理下一次状态几何。
     this.ready = !geometry.animate;
+    if (this.userInput.blocked(this.scheduler.now())) {
+      this.mode = "follow";
+      if (!this.userInput.held) this.schedule();
+      return;
+    }
     if (geometry.animate) this.approachLatest(layout, geometry);
     this.write(geometry.height, geometry.animate, geometry);
     this.record("latest", geometry, geometry.height);
@@ -221,8 +229,16 @@ export class TimelineViewportCoordinator<C, A> {
   /** 新的触摸、滚轮、按键或指针输入表示用户接管位置，前插保护随即失效。 */
   engage(): void {
     this.prependGuard = null;
-    this.glide = null;
-    this.inputHoldUntil = this.scheduler.now() + FOLLOW_INPUT_HOLD_MS;
+    this.userInput.engage(this.scheduler.now(), this.motion !== null || this.glide !== null || this.handoff || this.mode === "latest");
+    // 输入优先于任何尚未确认的程序落点；保留运动身份供随后 interrupt 判定。
+    this.receipt = null;
+  }
+
+  /** 按住不等于回看；先退出旧运动，意图保持，抬起后仍等待惯性静止。 */
+  touch(active: boolean): void {
+    if (active) this.exit(true);
+    this.userInput.touch(active, this.scheduler.now());
+    if (!active) this.schedule();
   }
 
   details(reading: boolean): void {
@@ -245,6 +261,8 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   userRead(fallback = false): void {
+    this.userInput.interruptedMotion = false;
+    this.generation += 1;
     this.collapseHold = null;
     this.exit(true);
     this.pendingAnchor = null;
@@ -257,7 +275,7 @@ export class TimelineViewportCoordinator<C, A> {
 
   /** 明确输入只打断正在拥有滚动位置的过程；轻点不调用本入口。 */
   interrupt(): void {
-    if (this.motion || this.mode === "latest" || this.handoff || this.glide) this.userRead();
+    if (this.motion || this.mode === "latest" || this.handoff || this.glide || this.userInput.interruptedMotion) this.userRead();
   }
 
   input(): void {
@@ -285,6 +303,20 @@ export class TimelineViewportCoordinator<C, A> {
     const layout = this.layout;
     if (!layout) return;
     const current = layout.top();
+    // 真实输入的移动先于 receipt、借用空间与前插保护；旧程序不能先把用户位置写回。
+    if (this.userInput.blocked(this.scheduler.now()) && current !== this.lastTop) {
+      this.userInput.engage(this.scheduler.now());
+      this.prependGuard = null;
+      this.receipt = null;
+      const bottom = layout.measure().bottom;
+      const atBottom = bottom - current <= EPSILON;
+      if (this.paused && atBottom) { this.anchor = layout.captureAnchor(); this.lastTop = current; }
+      else if (!atBottom) this.userRead();
+      // 输入静止窗口内也可能发生布局收缩钳制；向上被夹到底不代表用户主动返回。
+      else if (!this.following && Math.min(current, bottom) > Math.max(0, this.lastTop)) { this.resumeFollowing("scroll"); this.ready = true; }
+      else this.lastTop = current;
+      return;
+    }
     const receipt = this.receipt;
     if (receipt) {
       const reachable = Math.min(receipt.target, layout.measure().bottom);
@@ -308,8 +340,6 @@ export class TimelineViewportCoordinator<C, A> {
       }
       this.receipt = null;
     }
-    // 非程序写入的滚动：输入暂停期内的惯性或拖动继续顺延，不恢复逐帧跟随。
-    if (this.scheduler.now() < this.inputHoldUntil) this.inputHoldUntil = this.scheduler.now() + FOLLOW_INPUT_HOLD_MS;
     if (this.reassertPrepend(layout, current)) return;
     // MessageList 的 nearBottom 只描述物理底部；借过留白的有效目标可能远于 32px。
     if (this.tailCredit > 0 && this.following && !this.paused && !this.motion) {
@@ -323,14 +353,24 @@ export class TimelineViewportCoordinator<C, A> {
         return;
       }
     }
+    const previousTop = this.lastTop;
     this.lastTop = current;
     if (this.paused) {
       this.anchor = layout.captureAnchor();
       if (!nearBottom) { this.pendingAnchor = null; this.following = false; this.publish(); }
       return;
     }
+    if (!this.following) {
+      const bottom = layout.measure().bottom;
+      // 原生滚动条不保证有前置输入事件；只接受真实向下到达底部，不把收缩钳制或上边界回弹当成返回。
+      // 协调器写入、锚点恢复的 receipt 与前插保护已在上方消费。
+      if (nearBottom && bottom - current <= EPSILON && Math.min(current, bottom) > Math.max(0, previousTop)) {
+        this.resumeFollowing("scroll");
+        this.ready = true;
+      }
+      return;
+    }
     if (!nearBottom) { this.userRead(); return; }
-    this.resumeFollowing("scroll");
     this.ready = true;
   }
 
@@ -370,7 +410,8 @@ export class TimelineViewportCoordinator<C, A> {
    */
   collapse(removed: number, duration: number, live = false): void {
     const layout = this.layout;
-    if (!layout || removed <= EPSILON || !this.following || this.paused || this.mode === "send" || this.mode === "latest") return;
+    if (!layout || this.userInput.blocked(this.scheduler.now()) || removed <= EPSILON
+      || !this.following || this.paused || this.mode === "send" || this.mode === "latest") return;
     const geometry = layout.measure();
     if (!geometry.animate) return;
     const reserve = Math.ceil(removed);
@@ -539,6 +580,11 @@ export class TimelineViewportCoordinator<C, A> {
   }
 
   private advance(layout: ViewportLayout<C, A>, reason: ViewportReason, frameTime?: number): void {
+    // 覆盖 send/activity/Latest、瞬贴与阅读锚点；按住时不启动常驻 RAF。
+    if (this.userInput.blocked(this.scheduler.now())) {
+      if (!this.userInput.held) this.schedule();
+      return;
+    }
     if (this.sendHold?.track(layout.top())) this.finishSendHold();
     this.diagnosticCallbackTime = frameTime ?? null;
     this.diagnosticMotionTime = null;
@@ -655,11 +701,7 @@ export class TimelineViewportCoordinator<C, A> {
     const distance = target - geometry.top;
     const continuing = this.handoff || this.replyContinuity !== null;
     const glide = (continuityRejected || (!continuing && (viewportChanged || !liveReply))) ? null : this.glideMode(geometry, distance);
-    if (glide === "hold") {
-      // 输入暂停期不写入滚动，逐帧等待暂停结束后从静止重新跟随。
-      this.lastTop = geometry.top;
-      this.schedule();
-    } else if (glide === "glide") {
+    if (glide === "glide") {
       requested = target;
       this.advanceGlide(geometry, target, frameTime);
     } else if (Math.abs(distance) > EPSILON) {
@@ -728,12 +770,12 @@ export class TimelineViewportCoordinator<C, A> {
    * 已稳定跟随时，实时 Pi 回复或运行中过程组向下增长的小段位移逐帧平滑接续，输入暂停期内保持不动；
    * 其他新行、回执、首次贴底、回缩与可视高度变化仍瞬时。
    */
-  private glideMode(geometry: ViewportGeometry, distance: number): "glide" | "hold" | null {
+  private glideMode(geometry: ViewportGeometry, distance: number): "glide" | null {
     const viewport = geometry.height - geometry.bottom;
     if (!geometry.animate || !this.ready || viewport <= 0
       || (!this.handoff && distance > viewport * FOLLOW_GLIDE_SCREENS)) return null;
     if (this.glide ? distance < -EPSILON : distance <= EPSILON) return null;
-    return this.scheduler.now() < this.inputHoldUntil ? "hold" : "glide";
+    return "glide";
   }
 
   /** 同步布局只更新目标并预约下一帧；位移只在动画帧按真实时间推进。 */

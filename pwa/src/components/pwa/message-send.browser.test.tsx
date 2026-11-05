@@ -701,11 +701,81 @@ test("late Working preserves a reading anchor and does not take over Latest", as
   } finally { await h.screen.unmount(); }
 });
 
+test.each([390, 1280].flatMap(width => [false, true].map(attachment => ({ width, attachment }))))("manual scroll ownership: sending while reviewing preserves old body at $width (attachment=$attachment)", async ({ width, attachment }) => {
+  const h = await harness({ width, attachment, draft: "One\nTwo\nThree\nFour" });
+  try {
+    await h.read();
+    const old = h.list.querySelector(".pwa-message.assistant")!;
+    const before = top(old);
+    const clock = layoutClock();
+    h.send();
+    expect(document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!.value).toBe("");
+    expect(h.list.querySelectorAll(".pwa-message.user")).toHaveLength(1);
+    expect(h.viewport().followingOutput).toBe(false);
+    expect(top(old)).toBe(before);
+    h.work(true); clock.step(300); h.work(false);
+    h.update([history, h.sent(), { ...history, event: { ...history.event, event_id: "review-reply", blocks: [{ type: "text", text: "Synthetic reply" }] } }]);
+    clock.step(1000);
+    expect(top(old)).toBe(before);
+    expect(gap(h.list)).toBeGreaterThan(1);
+    expect(h.viewport().followingOutput).toBe(false);
+    expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
+    expect(h.list.style.paddingBottom).toBe("");
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
+test("MessageList treats bottom overscroll and its return as bottom but not a two-pixel gap or upper overscroll", async () => {
+  const listRef = { current: null as HTMLDivElement | null };
+  const bottomSentinelRef = { current: null as HTMLDivElement | null };
+  const onScroll = vi.fn();
+  const screen = await renderPwa(<MessageList items={[]} hasEarlier={false} listRef={listRef} bottomSentinelRef={bottomSentinelRef} onScroll={onScroll} />);
+  try {
+    const list = listRef.current!;
+    // Chromium 不提供 iOS 越界滚动；这里只验证平台数值边界，非真机回弹证据。
+    Object.defineProperties(list, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollTop: { configurable: true, writable: true, value: 704 },
+    });
+    for (const [position, atBottom] of [[704, true], [700, true], [699, true], [698, false], [-4, false]] as const) {
+      list.scrollTop = position;
+      flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
+      expect(onScroll).toHaveBeenLastCalledWith(atBottom);
+    }
+  } finally { await screen.unmount(); }
+});
+
+test("a send inside the input idle window keeps its geometry owner and starts on the first released frame", async () => {
+  const h = await harness({ draft: "One\nTwo\nThree\nFour\nFive" });
+  try {
+    const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const before = { input: input.getBoundingClientRect().height, footer: footer.getBoundingClientRect().height, scroll: h.list.scrollTop };
+    const clock = layoutClock();
+    flushSync(() => h.list.dispatchEvent(new WheelEvent("wheel", { deltaY: 1, bubbles: true })));
+    h.send();
+    expect(h.viewport().followingOutput).toBe(true);
+    expect(input.getBoundingClientRect().height).toBe(before.input);
+    expect(footer.getBoundingClientRect().height).toBe(before.footer);
+    clock.step(100);
+    expect(h.list.scrollTop).toBe(before.scroll);
+    expect(input.getBoundingClientRect().height).toBe(before.input);
+    clock.step(201);
+    expect(input.getBoundingClientRect().height).toBe(before.input);
+    expect(footer.style.height).not.toBe("");
+    clock.step(241);
+    expect(input.getBoundingClientRect().height).toBeLessThan(before.input);
+    stepFrames(clock, 257, 737);
+    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(footer.style.height).toBe("");
+    expect(clock.pending()).toBe(0);
+  } finally { await h.screen.unmount(); }
+});
+
 test("own-send scroll is interruptible without a later frame reclaiming the reading position", async () => {
   const h = await harness({ draft: "Line one\nLine two\nLine three\nLine four\nLine five" });
   try {
-    await h.read();
-    expect(h.viewport().followingOutput).toBe(false);
     const clock = layoutClock();
     h.send();
     clock.step(40);
@@ -724,7 +794,7 @@ test("own-send scroll is interruptible without a later frame reclaiming the read
   } finally { await h.screen.unmount(); }
 });
 
-test.each(["tap", "toward-latest", "read-earlier"])("touch %s only interrupts the send when moving toward earlier content", async action => {
+test.each(["tap", "toward-latest", "read-earlier"])("touch %s pauses the send and either direction transfers ownership", async action => {
   const h = await harness({ draft: "One\nTwo\nThree\nFour" });
   try {
     const clock = layoutClock();
@@ -735,22 +805,29 @@ test.each(["tap", "toward-latest", "read-earlier"])("touch %s only interrupts th
       if (action !== "tap") touch("touchmove", action === "read-earlier" ? 120 : 80);
       touch("touchend", 100, true);
     });
-    expect(h.viewport().followingOutput).toBe(action !== "read-earlier");
+    expect(h.viewport().followingOutput).toBe(action === "tap");
+    const stopped = h.list.scrollTop;
     clock.step(160);
-    if (action !== "read-earlier") expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(h.list.scrollTop).toBe(stopped);
+    clock.step(260); stepFrames(clock, 276, 600);
+    if (action === "tap") expect(gap(h.list)).toBeLessThanOrEqual(1);
+    else expect(h.list.scrollTop).toBe(stopped);
   } finally { await h.screen.unmount(); }
 });
 
-test("Reduced Motion skips send layout motion while clearing the draft and restoring follow", async () => {
+test("Reduced Motion preserves review while a send still clears the draft", async () => {
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   const h = await harness({ draft: "Line one\nLine two\nLine three\nLine four\nLine five" });
   try {
     await h.read();
+    const old = h.list.querySelector(".pwa-message.assistant")!;
+    const before = top(old);
     const clock = layoutClock();
     h.send();
-    expect(gap(h.list)).toBeLessThanOrEqual(1);
+    expect(top(old)).toBe(before);
+    expect(gap(h.list)).toBeGreaterThan(1);
     expect(document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!.value).toBe("");
-    expect(h.viewport().followingOutput).toBe(true);
+    expect(h.viewport().followingOutput).toBe(false);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
 });
@@ -834,7 +911,7 @@ test("receipts and output arriving inside a send update its target without resta
   } finally { await h.screen.unmount(); }
 });
 
-test("send capture is read-only and a reset invalidates its later activation", async () => {
+test("send capture while reviewing is read-only and returns null", async () => {
   const h = await harness({ draft: "One\nTwo\nThree\nFour" });
   try {
     await h.read();
@@ -842,17 +919,34 @@ test("send capture is read-only and a reset invalidates its later activation", a
     const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
     const before = { top: h.list.scrollTop, input: input.style.cssText, footer: footer.style.cssText };
     const capture = h.viewport().captureOwnSend();
-    expect(capture).not.toBeNull();
+    expect(capture).toBeNull();
     expect({ top: h.list.scrollTop, input: input.style.cssText, footer: footer.style.cssText }).toEqual(before);
     expect(h.viewport().followingOutput).toBe(false);
-    flushSync(() => { h.viewport().reset(); h.viewport().handleScroll(false); });
-    const afterReset = h.list.scrollTop;
     flushSync(() => h.viewport().followOwnSend(capture));
     await frames();
     expect(h.viewport().followingOutput).toBe(false);
-    expect(h.list.scrollTop).toBe(afterReset);
+    expect(h.list.scrollTop).toBe(before.top);
     expect(footer.style.height).toBe("");
     expect(input.value).toBe("One\nTwo\nThree\nFour");
+  } finally { await h.screen.unmount(); }
+});
+
+test("reset invalidates a nonnull readonly send capture even while still following", async () => {
+  const h = await harness({ draft: "One\nTwo\nThree\nFour" });
+  try {
+    const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const before = { top: h.list.scrollTop, input: input.style.cssText, footer: footer.style.cssText };
+    const capture = h.viewport().captureOwnSend();
+    expect(capture).not.toBeNull();
+    expect({ top: h.list.scrollTop, input: input.style.cssText, footer: footer.style.cssText }).toEqual(before);
+    const activate = vi.spyOn(TimelineViewportLayout.prototype, "send");
+    flushSync(() => h.viewport().reset());
+    expect(h.viewport().followingOutput).toBe(true);
+    flushSync(() => h.viewport().followOwnSend(capture));
+    expect(activate).not.toHaveBeenCalled();
+    expect(input.value).toBe("One\nTwo\nThree\nFour");
+    expect(footer.style.height).toBe("");
   } finally { await h.screen.unmount(); }
 });
 
@@ -881,10 +975,9 @@ test.each(["reset", "details", "history", "resize", "hidden", "unmount"])("%s re
   } finally { if (!unmounted) await h.screen.unmount(); }
 });
 
-test.each([390, 1280])("editing an equal-height next draft still reaches the bottom without new output at %ipx", async width => {
+test.each([390, 1280])("editing an equal-height next draft while following still reaches the bottom without new output at %ipx", async width => {
   const h = await harness({ width, draft: "A single line" });
   try {
-    await h.read();
     const input = document.querySelector<HTMLTextAreaElement>(".pwa-composer-input")!;
     const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
     const before = { input: Math.round(input.getBoundingClientRect().height), footer: Math.round(footer.getBoundingClientRect().height) };

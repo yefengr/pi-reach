@@ -1293,16 +1293,18 @@ test("reduced motion keeps the running indicator and uses a short reader fade", 
   }
 });
 
-test("reports whether scrolling is within 32px of the latest output", async () => {
+test("reports the bottom with one-pixel rounding tolerance without treating bottom overscroll as review", async () => {
   const positions: boolean[] = [];
   const screen = await renderMessageList([], { onScroll: nearBottom => positions.push(nearBottom) });
-  const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
-  Object.defineProperties(list, { scrollHeight: { configurable: true, value: 1000 }, clientHeight: { configurable: true, value: 400 }, scrollTop: { configurable: true, writable: true, value: 560 } });
-  list.dispatchEvent(new Event("scroll", { bubbles: true }));
-  list.scrollTop = 568;
-  list.dispatchEvent(new Event("scroll", { bubbles: true }));
-  expect(positions).toEqual([false, true]);
-  await screen.unmount();
+  try {
+    const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+    Object.defineProperties(list, { scrollHeight: { configurable: true, value: 1000 }, clientHeight: { configurable: true, value: 400 }, scrollTop: { configurable: true, writable: true, value: 560 } });
+    for (const position of [560, 568, 598, 599, 599.5, 600, 604, -4]) {
+      list.scrollTop = position;
+      list.dispatchEvent(new Event("scroll", { bubbles: true }));
+    }
+    expect(positions).toEqual([false, false, false, true, true, true, true, false]);
+  } finally { await screen.unmount(); }
 });
 
 test("message list controls retain 44px touch targets", async () => {

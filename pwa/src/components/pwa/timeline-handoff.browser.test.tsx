@@ -355,7 +355,11 @@ test("a stationary partial probe permits blank-area taps and smooths only its ow
   const clock = installHandoffClock();
   try {
     await stationaryQueuedReply(h, clock);
-    flushSync(() => h.list.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "mouse", bubbles: true })));
+    flushSync(() => {
+      h.list.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "mouse", bubbles: true }));
+      // 轻点包含抬起；只发送按下会被视为持续按住，不能恢复自动写入。
+      h.list.dispatchEvent(new PointerEvent("pointerup", { pointerType: "mouse", bubbles: true }));
+    });
     expect(h.timeline().followingNow()).toBe(true);
     // 经过既有输入暂停窗口再开始下一段显示。
     clock.step(2200);

@@ -48,6 +48,11 @@ async function renderTimeline(initialItems: TimelineViewItem[]) {
       list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
       list.scrollTop += element.getBoundingClientRect().top - list.getBoundingClientRect().top - 2;
       flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
+      // 这些用例从已静止的阅读位置开始验证补偿，不能仍处于禁止锚点写入的输入窗口。
+      let idle = false;
+      const cancel = viewport.whenScrollIdle(() => { idle = true; });
+      try { await expect.poll(() => idle, { timeout: 5000 }).toBe(true); }
+      finally { cancel(); }
       await settleLayout();
       expect(viewport.followingOutput).toBe(false);
     },
