@@ -107,6 +107,15 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
   const leavingRows = useLeavingItems(current);
   useLayoutEffect(() => { if (presence.leaving) detachInPlace(sectionRef.current, "bottom"); }, [presence.leaving]);
   const items = presence.rendered ?? [];
+  const present = items.length > 0;
+  // 抽屉在场之后才让新行单独淡入；与抽屉同时出现的行随抽屉滑出，不叠加第二层淡入。
+  // 先读一次几何，让初始行在没有标记时完成首次样式计算，再加标记，@starting-style 不会作用于它们。
+  useLayoutEffect(() => {
+    const section = sectionRef.current;
+    if (!present || !section || section.hasAttribute("data-entered")) return;
+    section.getBoundingClientRect();
+    section.setAttribute("data-entered", "");
+  }, [present]);
   if (items.length === 0) return null;
   const numbered = items.length > 1;
   // 只有一条时没有标题行，也就不提供折叠。

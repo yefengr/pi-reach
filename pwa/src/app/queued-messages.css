@@ -114,8 +114,9 @@
   transition: opacity var(--pwa-duration-toast) var(--pwa-ease-content);
 }
 
+/* 只对抽屉在场后加入的行生效；与抽屉同时挂载的行随抽屉滑出，不叠加第二层淡入。 */
 @starting-style {
-  .pwa-queued-message {
+  .pwa-queued-messages[data-entered] .pwa-queued-message {
     opacity: 0;
   }
 }

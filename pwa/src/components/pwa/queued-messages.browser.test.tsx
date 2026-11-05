@@ -472,9 +472,14 @@ test("a row entering the drawer fades in; a leaving row fades out in place while
   const tree = (items: QueuedMessageView[]) => <PwaUiProvider><div className="pwa-root"><QueuedMessages items={items} isOnline onInsert={() => {}} onCancel={() => {}} /></div></PwaUiProvider>;
   const screen = await renderPwa(<QueuedMessages items={three.slice(0, 2)} isOnline onInsert={() => {}} onCancel={() => {}} />);
   try {
+    // 与抽屉同时出现的行随抽屉滑出，自身不再叠加一层淡入。
+    expect([...document.querySelectorAll<HTMLElement>(".pwa-queued-message")].map((row) => getComputedStyle(row).opacity)).toEqual(["1", "1"]);
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")?.hasAttribute("data-entered")).toBe(true);
     await screen.rerender(tree(three));
     const added = [...document.querySelectorAll<HTMLElement>(".pwa-queued-message")].find((row) => row.textContent?.includes("Row 3"))!;
     expect(getComputedStyle(added).transitionProperty).toContain("opacity");
+    // 抽屉在场后新加入的行单独淡入：起点透明，随后到 1。
+    expect(Number(getComputedStyle(added).opacity)).toBeLessThan(1);
     await expect.poll(() => getComputedStyle(added).opacity).toBe("1");
     const list = document.querySelector<HTMLElement>(".pwa-queued-message-list")!;
     const full = Math.round(list.getBoundingClientRect().height);

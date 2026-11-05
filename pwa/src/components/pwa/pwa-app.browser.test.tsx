@@ -1703,7 +1703,8 @@ test.each([
       await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
       expect(scrollTo).not.toHaveBeenCalled();
       expect(list.scrollTop).toBe(100);
-      expect(document.querySelector(".pwa-composer .pwa-attachment-tile")).toBeNull();
+      // 回看时没有发送过渡，附件行按移除最后一件的方式原位淡出后再收回。
+      await expect.poll(() => document.querySelector(".pwa-composer .pwa-attachment-tile")).toBeNull();
       return;
     }
     await expect.element(input).toHaveValue("");

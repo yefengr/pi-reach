@@ -7,6 +7,7 @@ import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { attachmentSizeLabel, type ComposerAttachmentItem } from "./attachment-cards";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import { detachInPlace, useLeavingItems, withLeavingItems } from "./use-leaving-items";
+import { hideDuringOwnSend, presenceProps, usePresence } from "./use-presence";
 import "./composer-attachment-tiles.css";
 
 /** 圆圈进度的外径与线宽（DESIGN「会话附件」），与 72 方块的中央留白配套。 */
@@ -88,15 +89,19 @@ function AttachmentTile({ item, onRemove, onRetry, disabled, leaving = false }: 
 
 /**
  * 输入框卡片内的附件：72 方块单行横排，超出宽度横向滚动，不折叠；上传中的逐件取消始终可达。
- * 新方块淡入；单个方块离开时脱离布局、原位淡出，其余方块当场补位。整行清空（提交或移除最后一件）即时完成：
- * 附件行在卡片内部，没有可退回的背后，原位淡出会叠在正文上。
+ * 新方块淡入；单个方块离开时脱离布局、原位淡出，其余方块当场补位。移除最后一件时整行原位淡出，淡出结束后
+ * 附件行的高度一次收回：附件行在卡片内部，没有可退回的背后，脱离布局会叠在正文上。随消息提交的交接
+ * （本端发送过渡期间，附件改由气泡里的只读卡片呈现）直接移除，高度由发送过渡收回。
  */
 export function ComposerAttachmentTiles({ items, onRemove, onRetry, disabled = false }: Props) {
   const { t } = useI18n();
+  const sectionRef = useRef<HTMLElement>(null);
+  const row = usePresence(items.length ? items : null, Object.is, { skipExit: () => hideDuringOwnSend(sectionRef.current) });
   const leaving = useLeavingItems(items);
-  if (!items.length) return null;
-  return <section className="pwa-attachment-tiles" aria-label={t.attachments.title}>
-    {withLeavingItems(items, leaving).map(({ item, leaving: isLeaving }) =>
+  const shown = row.rendered ?? [];
+  if (!shown.length) return null;
+  return <section ref={sectionRef} className="pwa-attachment-tiles" aria-label={t.attachments.title} {...presenceProps(row)}>
+    {withLeavingItems(shown, row.leaving ? [] : leaving).map(({ item, leaving: isLeaving }) =>
       <AttachmentTile key={item.id} item={item} onRemove={onRemove} onRetry={onRetry} disabled={disabled} leaving={isLeaving} />)}
   </section>;
 }

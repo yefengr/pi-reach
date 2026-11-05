@@ -7,6 +7,9 @@
 /* 新方块淡入；离开的方块已脱离布局（附件行为包含块），在原位淡出，其余方块当场补位（DESIGN「输入区内的增减」）。 */
 @starting-style { .pwa-attachment-tile { opacity: 0; } }
 .pwa-attachment-tile[data-presence="leaving"] { z-index: 1; opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit); }
+/* 移除最后一件：整行在原位淡出（高度暂留），结束后一次收回；交接（footer 带 data-own-send）时同一次提交即不占位，脚本随后保持隐藏到移除。 */
+.pwa-chat-footer[data-own-send] .pwa-attachment-tiles[data-presence="leaving"] { display: none; }
+.pwa-attachment-tiles[data-presence="leaving"] .pwa-attachment-tile { opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit); }
 .pwa-attachment-tile-face { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; overflow: hidden; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-lg); background: var(--pwa-panel); color: var(--pwa-secondary); }
 .pwa-attachment-tile[data-status="preparing"] .pwa-attachment-tile-face { opacity: var(--pwa-opacity-disabled); }
 .pwa-attachment-tile[data-status="failed"] .pwa-attachment-tile-face { border-color: var(--pwa-error-line); }

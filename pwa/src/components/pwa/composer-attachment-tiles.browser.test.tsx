@@ -98,9 +98,35 @@ test("a new tile fades in; a removed tile fades out in place while the others ta
     expect(Math.round(second.getBoundingClientRect().left)).toBeLessThan(secondLeft);
     await expect.poll(() => document.querySelector('.pwa-attachment-tile[data-presence="leaving"]')).toBeNull();
 
-    // 整行清空即时完成：附件行在卡片内部，没有可退回的背后。
+    // 移除最后一件：整行原位淡出，高度暂留到淡出结束后一次收回；附件行在卡片内部，没有可退回的背后。
+    const row = document.querySelector<HTMLElement>(".pwa-attachment-tiles")!;
+    const rowHeight = Math.round(row.getBoundingClientRect().height);
     await screen.rerender(tree([]));
-    expect(document.querySelector(".pwa-attachment-tiles")).toBeNull();
+    expect(row.getAttribute("data-presence")).toBe("leaving");
+    expect(row.hasAttribute("inert")).toBe(true);
+    expect(Math.round(row.getBoundingClientRect().height)).toBe(rowHeight);
+    expect(getComputedStyle(second).transitionProperty).toContain("opacity");
+    await expect.poll(() => document.querySelector(".pwa-attachment-tiles")).toBeNull();
+  } finally {
+    await screen.unmount();
+  }
+});
+
+test("attachments handed off with the message during the own-send transition leave at once and never take space again", async () => {
+  const tree = (items: ComposerAttachmentItem[]) => <PwaUiProvider><div className="pwa-root"><div className="pwa-chat-footer" data-own-send=""><Card><ComposerAttachmentTiles items={items} onRemove={() => {}} /></Card></div></div></PwaUiProvider>;
+  const screen = await renderPwa(<div className="pwa-chat-footer" data-own-send=""><Card><ComposerAttachmentTiles items={[file]} onRemove={() => {}} /></Card></div>);
+  try {
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const withTiles = Math.round(card.getBoundingClientRect().height);
+    await screen.rerender(tree([]));
+    // 交接：附件改由气泡呈现，附件行立即不占位；要么已移除，要么在移除前隐藏。
+    const row = document.querySelector<HTMLElement>(".pwa-attachment-tiles");
+    if (row) expect(getComputedStyle(row).display).toBe("none");
+    const settled = Math.round(card.getBoundingClientRect().height);
+    expect(settled).toBeLessThan(withTiles);
+    delete document.querySelector<HTMLElement>(".pwa-chat-footer")!.dataset.ownSend;
+    expect(Math.round(card.getBoundingClientRect().height)).toBe(settled);
+    await expect.poll(() => document.querySelector(".pwa-attachment-tiles")).toBeNull();
   } finally {
     await screen.unmount();
   }
