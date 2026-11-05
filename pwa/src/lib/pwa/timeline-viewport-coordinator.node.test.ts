@@ -101,6 +101,218 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   };
 }
 
+describe("manual scroll ownership", () => {
+  test("engage then interrupt cancels a running glide and rejects its old RAF", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.setBottom(130); f.core.notify("commit"); f.step(16); f.step(32);
+    const at = f.layout.top();
+    const stale = [...f.frames.values()];
+    f.core.engage(); f.core.interrupt();
+    expect(f.core.state.following).toBe(false);
+    f.setBottom(160); f.core.notify("commit");
+    stale.forEach(run => run(1000));
+    expect(f.layout.top()).toBe(at);
+  });
+
+  test("downward takeover is accepted before a send receipt can write its old target", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.followOwnSend(f.core.captureOwnSend());
+    f.setBottom(200); f.core.notify("commit");
+    const before = f.writes.length;
+    f.core.engage(); f.setTop(160); f.core.scroll(false);
+    expect(f.layout.top()).toBe(160);
+    expect(f.writes).toHaveLength(before);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test.each(["send", "activity", "snap"] as const)("input hold gates the entire %s path", mode => {
+    const f = fixture();
+    f.core.notify("commit");
+    if (mode === "send") f.core.followOwnSend(f.core.captureOwnSend());
+    f.core.engage();
+    const at = f.layout.top();
+    f.setBottom(300);
+    f.core.notify(mode === "activity" ? "activity" : "commit", true, mode === "activity" ? 200 : 0);
+    f.step(100);
+    expect(f.layout.top()).toBe(at);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("two pixels of user review persists through idle, passive bottom and growth until a real return", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.core.engage(); f.setTop(98); f.core.scroll(true);
+    expect(f.core.state.following).toBe(false);
+    f.setNow(1000); f.setBottom(98); f.core.scroll(true);
+    expect(f.core.state.following).toBe(false);
+    f.setBottom(200); f.core.notify("commit");
+    expect(f.layout.top()).toBe(98);
+    f.core.engage(); f.setTop(200); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test.each(["send", "activity", "snap", "collapse", "latest"] as const)("touch remains held beyond idle and blocks %s writes", mode => {
+    const f = fixture();
+    f.core.notify("commit");
+    if (mode === "send") f.core.followOwnSend(f.core.captureOwnSend());
+    f.core.engage(); f.core.touch(true);
+    const at = f.layout.top();
+    const count = f.writes.length;
+    f.setNow(1000); f.setBottom(300);
+    if (mode === "latest") f.core.latest();
+    else if (mode === "collapse") f.core.collapse(50, 190, true);
+    else f.core.notify(mode === "activity" ? "activity" : "commit", true, mode === "activity" ? 200 : 0);
+    f.step(1100);
+    expect(f.layout.top()).toBe(at);
+    expect(f.writes).toHaveLength(count);
+    expect(f.frames.size).toBe(0);
+    f.core.touch(false); f.step(1200);
+    expect(f.writes).toHaveLength(count);
+    f.step(1400); f.step(1600); f.step(1800);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test.each([99, 99.5, 100])("a real user return from a two-pixel gap to %spx accepts only bottom rounding tolerance", top => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.core.engage(); f.setTop(98); f.core.scroll(true);
+    expect(f.core.state.following).toBe(false);
+    f.setTop(top); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("an actual downward return without engage resumes review only at the physical bottom", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.setTop(40); f.core.scroll(false);
+    f.core.output("unread");
+    f.setNow(1000);
+    f.setTop(98); f.core.scroll(true);
+    expect(f.core.state.following).toBe(false);
+    f.setTop(100); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    expect(f.core.state.unread).toBe(0);
+  });
+
+  test("a passive downward anchor restore receipt at bottom does not resume review", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.setTop(40); f.core.scroll(false);
+    f.shiftAnchor(60); f.core.notify("geometry");
+    expect(f.layout.top()).toBe(100);
+    f.core.scroll(true);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test.each([false, true])("bottom overscroll and its return preserve following (engaged=%s)", engaged => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    if (engaged) f.core.engage();
+    f.setTop(104); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    f.setTop(100); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    f.setTop(-4); f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+    f.setNow(1000); f.setTop(100); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test.each([false, true])("a valid send during the idle window retains its owner without consuming held time (touch=%s)", held => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.core.engage();
+    if (held) f.core.touch(true);
+    const capture = f.core.captureOwnSend();
+    expect(capture).not.toBeNull();
+    f.core.followOwnSend(capture);
+    expect(f.starts).toBe(1);
+    f.setBottom(200); f.core.notify("commit");
+    const count = f.writes.length;
+    f.step(100);
+    if (held) {
+      f.step(1000);
+      expect(f.writes).toHaveLength(count);
+      expect(f.samples).toEqual([]);
+      f.core.touch(false); f.step(1199);
+    }
+    expect(f.samples).toEqual([]);
+    expect(f.writes).toHaveLength(count);
+    const first = held ? 1201 : 201;
+    f.step(first);
+    expect(f.samples).toEqual([first]);
+    expect(f.core.state.mode).toBe("send");
+    expect(f.layout.top()).toBeLessThan(200);
+    f.step(first + 160);
+    expect(f.layout.top()).toBe(200);
+  });
+
+  test.each(["reset", "binding"] as const)("%s invalidates a nonnull send capture while following remains enabled", action => {
+    const f = fixture();
+    f.core.notify("commit");
+    const capture = f.core.captureOwnSend();
+    expect(capture).not.toBeNull();
+    if (action === "reset") f.core.reset();
+    else { f.core.bind(null); f.core.bind(f.layout); }
+    expect(f.core.state.following).toBe(true);
+    f.core.followOwnSend(capture);
+    expect(f.starts).toBe(0);
+  });
+
+  test("a passive clamp to the bottom inside the input idle window never resumes review", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.core.engage(); f.setTop(98); f.core.scroll(true);
+    expect(f.core.state.following).toBe(false);
+    f.setBottom(50); f.setTop(50); f.core.scroll(true);
+    expect(f.core.state.following).toBe(false);
+    f.setNow(1000); f.setBottom(200); f.core.notify("commit");
+    expect(f.core.state.following).toBe(false);
+    expect(f.layout.top()).toBeLessThan(200);
+  });
+
+  test("continued downward input at the real bottom does not reuse a consumed motion interruption", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.setBottom(130); f.core.notify("commit"); f.step(16); f.step(32);
+    f.core.engage(); f.core.interrupt();
+    f.setTop(130); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    f.core.engage(); f.core.interrupt();
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("history anchor compensation waits through a touch hold and a new drag replaces the old anchor", () => {
+    const f = fixture();
+    f.setTop(40); f.core.historyPrepend();
+    f.core.engage(); f.core.touch(true);
+    const restores = f.restored.length;
+    f.shiftAnchor(300); f.setBottom(400); f.core.notify("commit");
+    expect(f.layout.top()).toBe(40);
+    expect(f.restored).toHaveLength(restores);
+    f.setNow(1000); f.core.notify("geometry");
+    expect(f.layout.top()).toBe(40);
+    f.core.touch(false); f.step(1199);
+    expect(f.layout.top()).toBe(40);
+    f.step(1201);
+    expect(f.layout.top()).toBe(340);
+    f.core.engage(); f.setTop(320); f.core.scroll(false);
+    f.setNow(1600); f.core.notify("geometry");
+    expect(f.layout.top()).toBe(320);
+    expect(f.core.state.following).toBe(false);
+  });
+
+  test("a capture made before user review cannot reactivate even after Latest", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    const capture = f.core.captureOwnSend();
+    f.core.userRead(); f.core.latest();
+    f.core.followOwnSend(capture);
+    expect(f.starts).toBe(0);
+  });
+});
+
 test("passive diagnostic target and consumed clocks preserve requests and motion samples", () => {
   const traces: ViewportTrace[] = [];
   const on = fixture((entry) => traces.push(entry));
@@ -150,6 +362,9 @@ test("armed signal tracing observes send without adding reading geometry measure
   f.core.notify("geometry");
   expect(f.measures).toBe(1);
   sampling = false;
+  f.core.followOwnSend(f.core.captureOwnSend());
+  expect(traces.some((entry) => entry.reason === "send")).toBe(false);
+  f.core.reset();
   f.core.followOwnSend(f.core.captureOwnSend());
   expect(traces.some((entry) => entry.reason === "send")).toBe(true);
 });
@@ -287,13 +502,14 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.layout.top()).toBe(stopped);
     // 暂停期内的用户滚动（惯性或拖动）顺延暂停。
     f.setNow(150); f.setTop(stopped + 2); f.core.scroll(true);
-    expect(f.core.state.following).toBe(true);
+    expect(f.core.state.following).toBe(false);
     f.setNow(300); f.core.notify("commit"); f.step(316);
     expect(f.layout.top()).toBe(stopped + 2);
-    // 暂停结束后从当前位置静止起步，继续贴底。
-    const tops = glideFrames(f, 360);
-    expect(tops.at(-1)).toBe(140);
-    expect(tops[0]! - (stopped + 2)).toBeLessThan(5);
+    // 静止只释放暂停，不恢复已被用户接管的阅读意图。
+    glideFrames(f, 360);
+    expect(f.layout.top()).toBe(stopped + 2);
+    f.core.engage(); f.setTop(140); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
   });
 
   test("a send transition chases a target that grows near its end instead of jumping", () => {
@@ -559,11 +775,10 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.layout.top()).toBe(156);
   });
 
-  test("capture is readonly; only successful activation starts motion", () => {
+  test("capture is readonly; only successful activation while following starts motion", () => {
     const f = fixture();
-    f.core.userRead();
     const capture = f.core.captureOwnSend();
-    expect(f.core.state.following).toBe(false);
+    expect(f.core.state.following).toBe(true);
     expect(f.starts).toBe(0);
     expect(f.writes).toEqual([]);
     f.core.followOwnSend(capture);
@@ -660,6 +875,8 @@ describe("TimelineViewportCoordinator", () => {
     else if (exit === "replace" || exit === "unmount") f.core.bind(exit === "replace" ? { ...f.layout } : null);
     else { if (exit === "reduce") f.reduce(); f.core.settle(exit); }
     f.core.bind(f.layout); f.allowMotion();
+    // 新发送不替代阅读意图；先显式恢复，才验证新的尺寸时钟。
+    if (exit === "user" || exit === "details") f.core.reset();
     f.setNow(500); f.core.followOwnSend(f.core.captureOwnSend()); f.core.notify("commit");
     expect(f.samples.at(-1)).toBe(500);
     const count = f.samples.length;
@@ -1195,11 +1412,11 @@ describe("process group collapse hold", () => {
     f.core.userRead();
     f.core.collapse(50, LONG, true);
     expect(f.holds).toHaveLength(0);
-    // 第一次 scroll 消费此前程序写入的回执；第二次才是用户回到底部。
-    f.core.scroll(true);
-    f.core.scroll(true);
+    // 只有真实输入把位置从回看处移到底部才能恢复；被动回执不算。
+    f.setTop(80); f.core.scroll(false);
+    f.core.engage(); f.setTop(100); f.core.scroll(true);
     expect(f.core.state.following).toBe(true);
-    f.setBottom(130); f.core.notify("commit"); f.step(16);
+    f.setNow(201); f.setBottom(130); f.core.notify("commit"); f.step(216);
     expect(f.layout.top()).toBe(130);
   });
 

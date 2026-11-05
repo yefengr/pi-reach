@@ -51,7 +51,7 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
   expect(api.historyLoaderRef.current?.receive(frame)).toBe(true);
 }
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
-// 以「连续三帧 scrollTop 不变」判定静止；弹簧起步的亚像素位移会被误判，固定机制时钟。
+// 固定机制时钟，避免弹簧起步与尾段的亚像素位移被整数 scrollTop 采样掩盖。
 beforeEach(pinMechanismMotion);
 afterEach(async () => { unpinMechanismMotion(); piRunning = false; vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
 
@@ -161,12 +161,16 @@ test.each([1280, 390])("same-run tool/reply cycles preserve DOM order and readin
     // 新行按显示队列依次出现，运行中的过程组增长时跟随平滑接续；比较几何前等显示追上且滚动静止。
     const settleScroll = async () => {
       await expect.poll(() => api.displayPending).toBe(false);
-      let stable = 0;
-      for (let frame = 0; frame < 90 && stable < 3; frame += 1) {
+      // 尾段量化可能连续三帧不动后再前进；等完整静止窗口，且必须在有界帧数内真正收敛。
+      let stableSince = performance.now();
+      let settled = false;
+      for (let frame = 0; frame < 90 && !settled; frame += 1) {
         const top = list.scrollTop;
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-        stable = list.scrollTop === top ? stable + 1 : 0;
+        if (list.scrollTop !== top) stableSince = performance.now();
+        settled = performance.now() - stableSince >= SCROLL_IDLE_MS;
       }
+      expect(settled).toBe(true);
     };
     commit(done("a-second", 2));
     await settleScroll();

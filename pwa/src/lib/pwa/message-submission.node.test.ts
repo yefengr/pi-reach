@@ -89,6 +89,20 @@ test("successful text and attachment sends return handled and only accepted tran
   expect(input.follow).toHaveBeenCalledTimes(2);
 });
 
+test.each([false, true])("manual scroll ownership: text and attachments preserve review (attachments=%s)", attachments => {
+  for (const [before, after] of [[false, false], [false, true], [true, false], [true, true]]) {
+    const { input, runtime, send } = setup();
+    let following = before;
+    input.apply.mockImplementation(() => { following = after; });
+    expect(submitMessage({ ...input, following: () => following, ...(attachments ? { text: "", attachments: [attachment] } : {}) })).toBe("handled");
+    expect(send).toHaveBeenCalledOnce();
+    expect(runtime.pendingItems).toHaveLength(1);
+    expect(runtime.pendingItems[0].delivery).toBe("pending");
+    expect(input.capture).toHaveBeenCalledTimes(before ? 1 : 0);
+    expect(input.follow).toHaveBeenCalledTimes(before && after ? 1 : 0);
+  }
+});
+
 test.each(["handled", "not-handled"] as const)("attachment ownership transfer only clears drafts on %s", (outcome) => {
   const { input, runtime, send } = setup();
   send.mockReturnValue(false);
@@ -138,5 +152,6 @@ test("sends while Pi works go straight to the queue area and keep following only
   const { input, runtime } = setup();
   expect(submitMessage({ ...input, following: () => false })).toBe("handled");
   expect(isQueuedMessage(runtime.pendingItems[0]!)).toBe(false);
-  expect(input.follow).toHaveBeenCalledOnce();
+  expect(input.capture).not.toHaveBeenCalled();
+  expect(input.follow).not.toHaveBeenCalled();
 });

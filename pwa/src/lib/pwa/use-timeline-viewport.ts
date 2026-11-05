@@ -85,7 +85,7 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       interrupt: () => { if (valid()) core.interrupt(); },
       input: () => { if (valid()) core.input(); },
       engage: () => { if (valid()) core.engage(); },
-      touch: (active) => { if (!valid()) return; idleGate.touch(active); latestEntry.touch(active); },
+      touch: (active) => { if (!valid()) return; core.touch(active); idleGate.touch(active); latestEntry.touch(active); },
     });
   }, [core, idleGate, latestEntry]);
 

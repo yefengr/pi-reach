@@ -5,6 +5,7 @@ import { renderPwa } from "@/test/browser/render";
 import type { TimelineViewItem } from "./timeline-runtime";
 import { useTimelineViewport, type TimelineViewport } from "./use-timeline-viewport";
 import { captureOwnSendLayout, OwnSendTransition, stageOwnSendInputSize } from "./own-send-transition";
+import { TimelineViewportLayout } from "./timeline-viewport-layout";
 import { viewportDiagnosticCapture, recordViewportDiagnostic, viewportDiagnosticsEnabled } from "./timeline-viewport-diagnostics";
 
 type ViewportHarnessProps = {
@@ -145,6 +146,152 @@ test("send capture is readonly and activation after autosize preserves its natur
   } finally { main.remove(); }
 });
 
+test.each(["up", "down", "key-up", "key-down", "touch-up", "touch-down", "scrollbar"])("manual scroll ownership: real observer %s interrupts an in-flight send", async direction => {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => { frames.push(run); return frames.length; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const { screen, list, viewport, scrollTo } = await renderViewport();
+  try {
+    Object.defineProperties(list, {
+      clientHeight: { configurable: true, value: 300 },
+      scrollTop: { configurable: true, writable: true, value: 100 },
+    });
+    scrollTo.mockImplementation(({ top }: ScrollToOptions) => { list.scrollTop = Math.min(700, top!); });
+    viewport().followOwnSend(viewport().captureOwnSend());
+    const stale = [...frames];
+    flushSync(() => {
+      if (direction.startsWith("touch")) {
+        const touch = (type: string, y: number) => list.dispatchEvent(new TouchEvent(type, { touches: [new Touch({ identifier: 1, target: list, clientY: y })] }));
+        touch("touchstart", 100);
+        touch("touchmove", direction === "touch-up" ? 120 : 80);
+      } else list.dispatchEvent(direction === "scrollbar"
+        ? new PointerEvent("pointerdown", { pointerType: "mouse" })
+        : direction.startsWith("key") ? new KeyboardEvent("keydown", { key: direction === "key-up" ? "ArrowUp" : "ArrowDown" })
+          : new WheelEvent("wheel", { deltaY: direction === "up" ? -20 : 20 }));
+    });
+    expect(viewport().followingOutput).toBe(false);
+    list.scrollTop = direction.endsWith("up") ? 80 : 120;
+    flushSync(() => viewport().handleScroll(false));
+    const writes = scrollTo.mock.calls.length;
+    stale.forEach(run => run(performance.now() + 1000));
+    list.dispatchEvent(new Event("pwa:timeline-geometry"));
+    expect(scrollTo).toHaveBeenCalledTimes(writes);
+    expect(list.scrollTop).toBe(direction.endsWith("up") ? 80 : 120);
+  } finally { await screen.unmount(); }
+});
+
+test("manual scroll ownership: touch hold blocks large-growth writes and a bottom tap resumes only after release", async () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => { frames.push(run); return frames.length; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const { screen, list, viewport, scrollTo } = await renderViewport();
+  try {
+    Object.defineProperties(list, {
+      clientHeight: { configurable: true, value: 300 },
+      scrollTop: { configurable: true, writable: true, value: 700 },
+    });
+    scrollTo.mockImplementation(({ top }: ScrollToOptions) => { list.scrollTop = Math.min(list.scrollHeight - 300, top!); });
+    viewport().captureOwnSend();
+    const finger = new Touch({ identifier: 1, target: list, clientY: 100 });
+    list.dispatchEvent(new TouchEvent("touchstart", { touches: [finger] }));
+    await new Promise(resolve => setTimeout(resolve, 220));
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1400 });
+    list.dispatchEvent(new Event("pwa:timeline-geometry"));
+    frames.splice(0).forEach(run => run(performance.now()));
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(viewport().followingOutput).toBe(true);
+    list.dispatchEvent(new TouchEvent("touchend", { touches: [] }));
+    frames.splice(0).forEach(run => run(performance.now()));
+    expect(scrollTo).not.toHaveBeenCalled();
+    await new Promise(resolve => setTimeout(resolve, 220));
+    frames.splice(0).forEach(run => run(performance.now()));
+    expect(scrollTo).toHaveBeenCalled();
+    expect(viewport().followingOutput).toBe(true);
+  } finally { await screen.unmount(); }
+});
+
+test("manual scroll ownership: real wheel engage then interrupt stops a live reply glide", async () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => { frames.push(run); return frames.length; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const { screen, list, viewport, scrollTo, setItems } = await renderViewport();
+  try {
+    Object.defineProperties(list, {
+      clientHeight: { configurable: true, value: 300 },
+      scrollTop: { configurable: true, writable: true, value: 700 },
+    });
+    const row = document.createElement("article");
+    row.className = "pwa-message assistant partial"; row.dataset.viewportRow = "live"; list.append(row);
+    scrollTo.mockImplementation(({ top }: ScrollToOptions) => { list.scrollTop = Math.min(list.scrollHeight - 300, top!); });
+    flushSync(() => setItems([renderedTimelineItem]));
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1024 });
+    list.dispatchEvent(new Event("pwa:timeline-geometry"));
+    frames.splice(0).forEach(run => run(16)); frames.splice(0).forEach(run => run(32));
+    expect(list.scrollTop).toBeGreaterThan(700);
+    expect(list.scrollTop).toBeLessThan(724);
+    const stale = [...frames];
+    flushSync(() => list.dispatchEvent(new WheelEvent("wheel", { deltaY: -20 })));
+    expect(viewport().followingOutput).toBe(false);
+    const stopped = list.scrollTop;
+    stale.forEach(run => run(1000));
+    list.dispatchEvent(new Event("pwa:timeline-geometry"));
+    expect(list.scrollTop).toBe(stopped);
+  } finally { await screen.unmount(); }
+});
+
+test("manual scroll ownership: two-pixel review survives passive bottom and resumes only on user return", async () => {
+  const { screen, list, viewport, scrollTo } = await renderViewport();
+  try {
+    Object.defineProperties(list, {
+      clientHeight: { configurable: true, value: 300 },
+      scrollTop: { configurable: true, writable: true, value: 700 },
+    });
+    viewport().captureOwnSend();
+    flushSync(() => {
+      list.dispatchEvent(new WheelEvent("wheel", { deltaY: -2 }));
+      list.scrollTop = 698; viewport().handleScroll(true);
+    });
+    expect(viewport().followingOutput).toBe(false);
+    // 静止窗口尚未结束时的原生钳制也不是主动到底。
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 900 });
+    list.scrollTop = 600;
+    flushSync(() => viewport().handleScroll(true));
+    expect(viewport().followingOutput).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 240));
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 900 });
+    flushSync(() => viewport().handleScroll(true));
+    expect(viewport().followingOutput).toBe(false);
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1400 });
+    list.dispatchEvent(new Event("pwa:timeline-geometry"));
+    expect(list.scrollTop).toBe(600);
+    expect(scrollTo).not.toHaveBeenCalled();
+    flushSync(() => {
+      list.dispatchEvent(new WheelEvent("wheel", { deltaY: 500 }));
+      list.scrollTop = 1100; viewport().handleScroll(true);
+    });
+    expect(viewport().followingOutput).toBe(true);
+  } finally { await screen.unmount(); }
+});
+
+test("manual scroll ownership: a moved position returns to bottom without a preceding input event", async () => {
+  const { screen, list, viewport } = await renderViewport();
+  try {
+    Object.defineProperties(list, {
+      clientHeight: { configurable: true, value: 300 },
+      scrollTop: { configurable: true, writable: true, value: 700 },
+    });
+    viewport().captureOwnSend();
+    flushSync(() => { list.scrollTop = 400; viewport().handleScroll(false); });
+    expect(viewport().followingOutput).toBe(false);
+    flushSync(() => viewport().receiveRealtimeOutput("unread"));
+    flushSync(() => { list.scrollTop = 698; viewport().handleScroll(true); });
+    expect(viewport().followingOutput).toBe(false);
+    flushSync(() => { list.scrollTop = 700; viewport().handleScroll(true); });
+    expect(viewport().followingOutput).toBe(true);
+    expect(viewport().unreadOutput).toBe(0);
+  } finally { await screen.unmount(); }
+});
+
 test("follows realtime output at the bottom without unread output", async () => {
   const { screen, scrollTo, viewport } = await renderViewport();
   try {
@@ -175,12 +322,15 @@ test("deduplicates unread output after scrolling away without auto-scrolling", a
 });
 
 test("resumes following and clears unread output when returning to the bottom or resetting", async () => {
-  const { screen, viewport } = await renderViewport();
+  const { screen, list, viewport } = await renderViewport();
   try {
+    Object.defineProperty(list, "scrollTop", { configurable: true, writable: true, value: 100 });
     viewport().handleScroll(false);
     viewport().receiveRealtimeOutput("group-1");
     await vi.waitFor(() => expect(viewport().unreadOutput).toBe(1));
 
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: 900 }));
+    list.scrollTop = 1000;
     viewport().handleScroll(true);
     await vi.waitFor(() => expect(viewport().followingOutput).toBe(true));
     expect(viewport().unreadOutput).toBe(0);
@@ -682,15 +832,19 @@ test("replacing the list DOM with unchanged items rebinds observers and invalida
   try {
     const oldList = viewport.messageListRef.current!;
     const capture = viewport.captureOwnSend();
+    expect(capture).not.toBeNull();
+    const activate = vi.spyOn(TimelineViewportLayout.prototype, "send");
     expect(observed.has(oldList)).toBe(true);
     flushSync(replace);
     const newList = viewport.messageListRef.current!;
     expect(newList).not.toBe(oldList);
     expect(observed.has(oldList)).toBe(false);
     expect(observed.has(newList)).toBe(true);
-    // 用户回看结束跟随；旧 capture 已随列表替换失效，不能据此恢复跟随。
-    flushSync(() => { viewport.handleScroll(false); viewport.followOwnSend(capture); });
-    expect(viewport.followingOutput).toBe(false);
+    // 不借回看门禁掩盖 binding 校验：仍在跟随时也必须拒绝旧列表的有效捕获。
+    expect(viewport.followingOutput).toBe(true);
+    flushSync(() => viewport.followOwnSend(capture));
+    expect(activate).not.toHaveBeenCalled();
+    expect(viewport.followingOutput).toBe(true);
   } finally { await screen.unmount(); }
 });
 

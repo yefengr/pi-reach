@@ -10,7 +10,7 @@ type Events = {
   input(): void;
   /** 任何触摸（含拖动）、滚轮、按键或指针输入；只表示用户正在接管位置，不判断方向。 */
   engage(): void;
-  /** 列表上是否仍有手指按着；抬起或取消后为 false。 */
+  /** 列表上是否仍有触摸或滚动条指针按着；全部抬起或取消后为 false。 */
   touch(active: boolean): void;
 };
 
@@ -31,13 +31,24 @@ export class TimelineViewportObservers {
       events.geometry(detail?.reason === "activity", added);
     };
     const input = (event: Event) => { if (event.target instanceof HTMLTextAreaElement) events.input(); };
-    const wheel = (event: WheelEvent) => { events.engage(); if (event.deltaY < 0) events.interrupt(); };
-    const key = (event: KeyboardEvent) => { events.engage(); if (["ArrowUp", "PageUp", "Home"].includes(event.key)) events.interrupt(); };
-    const pointer = (event: PointerEvent) => { events.engage(); if (event.pointerType === "mouse" && event.target === list) events.interrupt(); };
+    const wheel = (event: WheelEvent) => { events.engage(); if (event.deltaY !== 0) events.interrupt(); };
+    const key = (event: KeyboardEvent) => {
+      if (!["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) return;
+      events.engage(); events.interrupt();
+    };
+    let pointerHeld = false;
+    let touchHeld = false;
+    const held = () => events.touch(pointerHeld || touchHeld);
+    const pointer = (event: PointerEvent) => {
+      events.engage();
+      if (event.pointerType === "mouse" && event.target === list) { pointerHeld = true; held(); events.interrupt(); }
+    };
+    const pointerEnd = () => { if (pointerHeld) { pointerHeld = false; held(); } };
     let touch: { id: number; y: number } | null = null;
     const start = (event: TouchEvent) => {
       events.engage();
-      events.touch(event.touches.length > 0);
+      touchHeld = event.touches.length > 0;
+      held();
       const first = event.touches[0];
       touch = event.touches.length === 1 ? { id: first.identifier, y: first.clientY } : null;
     };
@@ -46,14 +57,16 @@ export class TimelineViewportObservers {
       events.engage();
       const first = event.touches[0];
       if (event.touches.length !== 1 || first.identifier !== touch?.id) { touch = null; return; }
-      if (first.clientY - touch.y > TOUCH_READ_THRESHOLD) { touch = null; events.interrupt(); }
+      if (Math.abs(first.clientY - touch.y) > TOUCH_READ_THRESHOLD) { touch = null; events.interrupt(); }
     };
-    const end = (event: TouchEvent) => { touch = null; events.touch(event.touches.length > 0); };
+    const end = (event: TouchEvent) => { touch = null; touchHeld = event.touches.length > 0; held(); };
     const main = list.closest(".pwa-main");
     list.addEventListener(TIMELINE_GEOMETRY_EVENT, geometry);
     list.addEventListener("wheel", wheel, { passive: true });
     list.addEventListener("keydown", key);
     list.addEventListener("pointerdown", pointer);
+    window.addEventListener("pointerup", pointerEnd);
+    window.addEventListener("pointercancel", pointerEnd);
     list.addEventListener("touchstart", start, { passive: true });
     list.addEventListener("touchmove", move, { passive: true });
     list.addEventListener("touchend", end, { passive: true });
@@ -64,6 +77,8 @@ export class TimelineViewportObservers {
       list.removeEventListener("wheel", wheel);
       list.removeEventListener("keydown", key);
       list.removeEventListener("pointerdown", pointer);
+      window.removeEventListener("pointerup", pointerEnd);
+      window.removeEventListener("pointercancel", pointerEnd);
       list.removeEventListener("touchstart", start);
       list.removeEventListener("touchmove", move);
       list.removeEventListener("touchend", end);

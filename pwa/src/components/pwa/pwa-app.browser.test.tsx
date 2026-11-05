@@ -1658,12 +1658,16 @@ async function settledTimelineGeometry(list: HTMLDivElement) {
 test.each([
   { attachment: false, accepted: true }, { attachment: true, accepted: true },
   { attachment: false, accepted: false }, { attachment: true, accepted: false },
-])("own sends restore following only after transport accepts them (attachment=$attachment accepted=$accepted)", async ({ attachment, accepted }) => {
+])("own sends preserve review after transport accepts them and Latest explicitly resumes (attachment=$attachment accepted=$accepted)", async ({ attachment, accepted }) => {
   const { screen, channel, list, scrollTo } = await renderReadyTimeline(renderWorkspaceApp);
   try {
     // 固定几何夹具只验证 transport 门禁：列表自身不留可借留白，活动区出现或移除都不改变跟随目标。
     list.style.paddingBottom = "0px";
     list.style.scrollPaddingBottom = "0px";
+    // 回看须有稳定的旧内容，不能让新发送气泡的入场位置成为首个阅读锚点。
+    emitEvent(channel, numberedEvents(1)[0]!);
+    await expect.poll(() => list.querySelector(".pwa-message.assistant")).not.toBeNull();
+    await Promise.allSettled(list.getAnimations({ subtree: true }).filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished));
     const input = screen.getByPlaceholder("Message your agent…");
     await input.fill("Follow my new message");
     if (attachment) {
@@ -1700,13 +1704,25 @@ test.each([
       return;
     }
     await expect.element(input).toHaveValue("");
-    await expect.poll(() => list.scrollTop).toBe(600);
-    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).not.toBeInTheDocument();
+    await settledTimelineGeometry(list);
+    expect(list.scrollTop).toBe(100);
+    expect(scrollTo).not.toHaveBeenCalled();
+    await expect.element(screen.getByRole("button", { name: "Latest", exact: true })).toBeVisible();
     Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1100 });
-    scrollTo.mockClear();
     channel.emit(partialFrame("own-send-reply", "own-send-run", "Reply after the new message"));
-    // 回复跟随到底：发送过渡未结束时由其交接，结束后逐帧平滑；都只做瞬时写入，不发起原生平滑滚动。
+    await expect.poll(() => list.querySelector("article.partial")?.textContent).toContain("Reply after the new message");
+    await settledTimelineGeometry(list);
+    expect(list.scrollTop).toBe(100);
+    expect(scrollTo).not.toHaveBeenCalled();
+    const latest = screen.getByRole("button", { name: /^(?:Latest|\d+ new outputs?)$/ });
+    await expect.element(latest).toBeVisible();
+    await latest.click();
     await expect.poll(() => list.scrollTop).toBe(1100 - list.clientHeight);
+    await expect.element(latest).not.toBeInTheDocument();
+    Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1200 });
+    scrollTo.mockClear();
+    channel.emit(partialFrame("own-send-reply", "own-send-run", " More output after Latest."));
+    await expect.poll(() => list.scrollTop).toBe(1200 - list.clientHeight);
     expect(scrollTo.mock.calls.every(([options]) => options.behavior === "auto")).toBe(true);
   } finally { await screen.unmount(); }
 });

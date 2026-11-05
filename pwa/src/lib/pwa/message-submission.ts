@@ -41,7 +41,7 @@ export function submitMessage(input: {
   runtime: TimelineRuntime;
   /** Pi 正在运行：消息预计进入队列，直接显示在排队区，不进入对话区。 */
   queueExpected?: boolean;
-  /** 当前是否仍在跟随最新输出；预计排队的消息不进入对话区，回看时不为它恢复跟随。 */
+  /** 发送前后即时检查阅读意图；普通消息与预计排队的消息都不能为回看者恢复跟随。 */
   following?: () => boolean;
   capture: () => OwnSendCapture | null;
   follow: (capture: OwnSendCapture | null) => void;
@@ -56,7 +56,8 @@ export function submitMessage(input: {
     || scope.runtimeInstanceId !== current.runtimeInstanceId || scope.sessionId !== current.sessionId
     || scope.selfSenderRef !== current.selfSenderRef || scope.channelId !== current.channelId
     || channel.channelId !== scope.channelId) return "not-handled";
-  const capture = input.capture();
+  const following = input.following?.() !== false;
+  const capture = following ? input.capture() : null;
   let prepared;
   try {
     prepared = input.attachments?.length
@@ -80,6 +81,6 @@ export function submitMessage(input: {
     input.apply(runtime.markDeliveryFailed(prepared.frame.client_request_id, "transport_unavailable", true));
     return "handled";
   }
-  if (!input.queueExpected || input.following?.() !== false) input.follow(capture);
+  if (following && input.following?.() !== false) input.follow(capture);
   return "handled";
 }
