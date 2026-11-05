@@ -95,19 +95,20 @@ test("model failure preserves menu context and its real retry switches to succes
   await closeOverlay();
 });
 
-test("upload cards expose preparing, 50 percent and paused states with per-item cancellation", async () => {
+test("upload tiles expose preparing, a 50 percent ring and paused states with per-item cancellation", async () => {
   await render(<UiStateGalleryPage />);
   await choose("uploading");
-  for (const status of ["preparing", "uploading", "paused"]) expect(document.querySelector(`.pwa-attachment-card[data-status="${status}"]`)).not.toBeNull();
-  expect(document.querySelector('.pwa-attachment-card[data-status="uploading"]')?.textContent).toContain("50%");
+  for (const status of ["preparing", "uploading", "paused"]) expect(document.querySelector(`.pwa-attachment-tile[data-status="${status}"]`)).not.toBeNull();
+  expect(document.querySelector('.pwa-attachment-tile[data-status="uploading"] [role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("50");
+  expect(document.querySelector('.pwa-attachment-tile[data-status="uploading"] .pwa-attachment-tile-percent')?.textContent).toBe("50");
   expect(input().readOnly).toBe(true);
   for (const status of ["preparing", "uploading"]) {
-    await userEvent.click(document.querySelector<HTMLButtonElement>(`.pwa-attachment-card[data-status="${status}"] .pwa-attachment-actions button`)!);
-    expect(document.querySelector(`.pwa-attachment-card[data-status="${status}"]`)).toBeNull();
+    await userEvent.click(document.querySelector<HTMLButtonElement>(`.pwa-attachment-tile[data-status="${status}"] .pwa-attachment-tile-remove`)!);
+    expect(document.querySelector(`.pwa-attachment-tile[data-status="${status}"]`)).toBeNull();
   }
-  expect(document.querySelector('.pwa-attachment-card[data-status="paused"]')).not.toBeNull();
+  expect(document.querySelector('.pwa-attachment-tile[data-status="paused"]')).not.toBeNull();
   await page.getByRole("button", { name: "演示附件完成", exact: true }).click();
-  expect(document.querySelectorAll('.pwa-attachment-card[data-status="complete"]')).toHaveLength(1);
+  expect(document.querySelectorAll('.pwa-attachment-tile[data-status="complete"]')).toHaveLength(1);
   expect(input().readOnly).toBe(false);
 });
 

@@ -1,0 +1,25 @@
+/*
+ * 输入框卡片内的附件方块（DESIGN「会话附件」）：72 方块单行横排，超出宽度横向滚动并按方块吸附。
+ * 上方与右侧内边距 12 留出移除角标越出方块的空间（滚动容器会裁切越界内容）；左侧不留，首个方块与文本框左缘对齐。
+ */
+.pwa-attachment-tiles { display: flex; gap: 12px; min-width: 0; padding: 12px 12px 8px 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.pwa-attachment-tile { position: relative; flex: 0 0 72px; width: 72px; height: 72px; scroll-snap-align: start; }
+.pwa-attachment-tile-face { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; overflow: hidden; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-lg); background: var(--pwa-panel); color: var(--pwa-secondary); }
+.pwa-attachment-tile[data-status="preparing"] .pwa-attachment-tile-face { opacity: var(--pwa-opacity-disabled); }
+.pwa-attachment-tile[data-status="failed"] .pwa-attachment-tile-face { border-color: var(--pwa-error-line); }
+.pwa-attachment-tile-image { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pwa-attachment-tile-file { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; padding: 0 4px; }
+.pwa-attachment-tile-file > svg { flex: 0 0 auto; margin-bottom: 2px; }
+.pwa-attachment-tile-ext,
+.pwa-attachment-tile-size { max-width: 100%; overflow: hidden; font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); white-space: nowrap; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.pwa-attachment-tile-ext { color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); }
+/* 上传中与失败时以 panel 底覆盖整块，让圆圈与重试图标清晰。 */
+.pwa-attachment-tile-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: var(--pwa-panel); }
+.pwa-attachment-tile-percent { display: block; color: var(--pwa-ink); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); text-align: center; font-variant-numeric: tabular-nums; }
+.pwa-ui-scope .pwa-attachment-tile-retry { color: var(--pwa-error); }
+/* 移除角标：视觉 20 的 ink 圆，命中区 44，中心落在方块右上角并越出方块；始终显示，不依赖悬停。 */
+.pwa-ui-scope .pwa-attachment-tile-remove { position: absolute; top: -12px; right: -12px; z-index: 1; width: var(--pwa-hit-target); min-width: var(--pwa-hit-target); height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); border: 0; border-radius: 50%; background: transparent; color: var(--pwa-bg); }
+.pwa-ui-scope .pwa-attachment-tile-remove:disabled { background: transparent; }
+.pwa-attachment-tile-badge { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--pwa-ink); box-shadow: 0 0 0 2px var(--pwa-surface); }
+.pwa-ui-scope .pwa-attachment-tile-remove:disabled .pwa-attachment-tile-badge { opacity: var(--pwa-opacity-disabled); }
+.pwa-attachment-tile-tip { padding: 4px 8px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: none; }

@@ -121,16 +121,22 @@ test("renders parent-supplied status, previews, actions, and disabled states", a
   expect(document.querySelector(".pwa-queued-message-index")).toBeNull();
 });
 
-test("queue panel passes pending attachments to readonly bounded cards", async () => {
+test("queue panel shows pending attachments only as a paperclip count", async () => {
   const runtime = new TimelineRuntime();
   runtime.setScope(queueScope);
-  runtime.sendUserWithAttachments("Original queue text", [{ attachment_id: "file", file_name: "queued-notes.txt", mime_type: "text/plain", byte_length: 1024, sha256: "a".repeat(64) }], { clientRequestId: "q", requestId: "send" });
+  runtime.sendUserWithAttachments("Original queue text", [
+    { attachment_id: "file", file_name: "queued-notes.txt", mime_type: "text/plain", byte_length: 1024, sha256: "a".repeat(64) },
+    { attachment_id: "file-2", file_name: "queued-log.txt", mime_type: "text/plain", byte_length: 2048, sha256: "b".repeat(64) },
+  ], { clientRequestId: "q", requestId: "send" });
   runtime.receive(runtimeSnapshot([{ ...runtimeQueueItem, text: "Original queue text" }]));
   const screen = await renderPwa(<QueuePanelHarness runtime={runtime} onSend={() => true} />);
-  await expect.element(screen.getByText("queued-notes.txt")).toBeVisible();
-  const cards = document.querySelector<HTMLElement>(".pwa-attachment-cards")!;
-  expect(cards.querySelector("button")).toBeNull();
-  expect(getComputedStyle(cards.querySelector(".pwa-attachment-list")!).overflowY).toBe("auto");
+  const count = document.querySelector<HTMLElement>(".pwa-queued-message-attachments")!;
+  await expect.element(screen.getByText("2 attachments")).toBeInTheDocument();
+  expect(count.title).toBe("2 attachments");
+  expect(count.querySelector(".lucide-paperclip")).not.toBeNull();
+  // 抽屉一行放不下附件卡片，文件名不在排队行里展开。
+  expect(document.querySelector(".pwa-queued-messages .pwa-attachment-cards")).toBeNull();
+  expect(screen.container.textContent).not.toContain("queued-notes.txt");
   await expect.element(screen.getByRole("button", { name: /^Edit queued message/ })).toBeEnabled();
   await screen.unmount();
 });
@@ -225,8 +231,10 @@ test.each([[1280, 900], [390, 844], [390, 500]])("keeps a scrolling queue above 
     const composerBefore = composer.getBoundingClientRect();
     const textareaBox = textarea.getBoundingClientRect();
 
-    expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
-    expect(list.getBoundingClientRect().height).toBeLessThanOrEqual(Math.min(220, height * 0.25) + 1);
+    // 展开按 collapse-in 过渡高度，等折叠区长到位后再测量滚动。
+    await expect.poll(() => list.scrollHeight - list.clientHeight).toBeGreaterThan(0);
+    // 抽屉内容区上限 min(236px, 30dvh)：折叠态完整可见，展开后在抽屉内滚动。
+    expect(list.getBoundingClientRect().height).toBeLessThanOrEqual(Math.min(236, height * 0.3) + 1);
     expect(textareaBox.height).toBeGreaterThanOrEqual(44);
     expect(textareaBox.top).toBeGreaterThanOrEqual(0);
     expect(textareaBox.bottom).toBeLessThanOrEqual(height);
@@ -305,13 +313,16 @@ test("keeps a single queued message on one compact row with icon actions", async
 test("queued rows share one panel with dividers and keep the message text at the same height with or without an icon", async () => {
   const screen = await renderPwa(<QueuedMessages items={[queuedItem({ waiting: true }), queuedItem({ id: "queued-2", status: "Sending…", pending: true })]} isOnline onInsert={() => {}} onCancel={() => {}} />);
   try {
-    const list = document.querySelector<HTMLElement>(".pwa-queued-message-list")!;
+    const panel = document.querySelector<HTMLElement>(".pwa-queued-messages")!;
+    const list = panel.querySelector<HTMLElement>(".pwa-queued-message-list")!;
     const rows = [...list.querySelectorAll<HTMLElement>(".pwa-queued-message")];
-    // 外框与行间分隔都是发丝线：外框取 edge，行间分隔取更淡的 separator；行间分隔画在伪元素上，左右各缩进 12，不碰外框。
+    // 外框与行间分隔都是发丝线：抽屉外框取 edge，行间分隔取更淡的 separator；分隔画在伪元素上，左右各缩进 12，不碰外框。
+    // 两条以上时标题在抽屉首行，首条与标题之间同样有分隔。
     const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
-    expect(getComputedStyle(list).borderTopWidth).toBe(hairline);
+    expect(getComputedStyle(panel).borderTopWidth).toBe(hairline);
+    expect(getComputedStyle(panel).borderTopLeftRadius).toBe("16px");
     expect(rows.map((row) => getComputedStyle(row).borderTopWidth)).toEqual(["0px", "0px"]);
-    expect(rows.map((row) => getComputedStyle(row, "::before").borderTopWidth)).toEqual(["0px", hairline]);
+    expect(rows.map((row) => getComputedStyle(row, "::before").borderTopWidth)).toEqual([hairline, hairline]);
     const divider = getComputedStyle(rows[1]!, "::before");
     expect([divider.left, divider.right]).toEqual(["12px", "12px"]);
     const probe = document.createElement("div");
@@ -323,7 +334,7 @@ test("queued rows share one panel with dividers and keep the message text at the
     const [separator, edge] = [resolved("--pwa-separator"), resolved("--pwa-edge")];
     probe.remove();
     expect(divider.borderTopColor).toBe(separator);
-    expect(getComputedStyle(list).borderTopColor).toBe(edge);
+    expect(getComputedStyle(panel).borderTopColor).toBe(edge);
     expect(separator).not.toBe(edge);
     expect(rows.map((row) => getComputedStyle(row).borderRadius)).toEqual(["0px", "0px"]);
     const offsets = rows.map((row) => Math.round(row.querySelector<HTMLElement>(".pwa-queued-message-text")!.getBoundingClientRect().top - row.getBoundingClientRect().top));
@@ -333,25 +344,49 @@ test("queued rows share one panel with dividers and keep the message text at the
   }
 });
 
-test("collapses a long queue after three rows and expands on request", async () => {
+test("collapses a long queue after three rows, keeps folded rows out of reach and animates the fold", async () => {
   const items = Array.from({ length: 5 }, (_, index) => queuedItem({ id: `queued-${index + 1}`, text: `Folded message ${index + 1}` }));
   const screen = await renderPwa(<QueuedMessages items={items} isOnline onInsert={() => {}} onCancel={() => {}} />);
+  // 折叠区常驻以过渡高度；收起时 inert，读屏与键盘都到不了其中的条目。
+  const reachable = () => [...document.querySelectorAll(".pwa-queued-message")].filter((row) => !row.closest("[inert]"));
   try {
-    expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(3);
+    expect(reachable()).toHaveLength(3);
     await expect.element(screen.getByLabelText("5 queued messages")).toBeVisible();
     const more = screen.getByRole("button", { name: "2 more" });
     await expect.element(more).toHaveAttribute("aria-expanded", "false");
+    const overflow = document.getElementById(more.element().getAttribute("aria-controls")!)!;
+    expect(overflow.classList.contains("pwa-queued-messages-overflow")).toBe(true);
+    expect(Math.round(overflow.getBoundingClientRect().height)).toBe(0);
+    expect(getComputedStyle(overflow).transitionProperty).toContain("grid-template-rows");
     expect(Math.round(more.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     await more.click();
-    expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(5);
+    expect(reachable()).toHaveLength(5);
     await expect.element(screen.getByText("Folded message 5")).toBeVisible();
+    await expect.poll(() => Math.round(overflow.getBoundingClientRect().height)).toBeGreaterThanOrEqual(88);
     await screen.getByRole("button", { name: "Show less" }).click();
-    expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(3);
+    expect(reachable()).toHaveLength(3);
+    await expect.poll(() => Math.round(overflow.getBoundingClientRect().height)).toBe(0);
   } finally {
     await screen.unmount();
   }
 });
 
+test("tucks the queue drawer behind the Composer card, inset on both sides", async () => {
+  await page.viewport(390, 844);
+  const screen = await renderPwa(<QueueComposerHarness items={[queuedItem({ waiting: true })]} />);
+  try {
+    const drawer = document.querySelector<HTMLElement>(".pwa-queued-messages")!.getBoundingClientRect();
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!.getBoundingClientRect();
+    // 下沿以一个 Composer 圆角高度压在卡片之后，左右各比卡片内缩 8；重叠处由卡片承接指针。
+    expect(Math.round(drawer.bottom - card.top)).toBe(32);
+    expect(Math.round(drawer.left - card.left)).toBe(8);
+    expect(Math.round(card.right - drawer.right)).toBe(8);
+    const hit = document.elementFromPoint(card.left + card.width / 2, card.top + 8);
+    expect(hit?.closest(".pwa-composer-card")).not.toBeNull();
+  } finally {
+    await screen.unmount();
+  }
+});
 test("waits for the run to end before an insertion becomes unconfirmed", async () => {
   const runtime = panelRuntime();
   let setWorking!: (working: boolean) => void;

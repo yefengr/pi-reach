@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { AttachmentCards, type ComposerAttachmentItem } from "./attachment-cards";
 
@@ -58,21 +58,6 @@ test("upload completion preserves the filename and metadata slots", async () => 
   await screen.unmount();
 });
 
-test("collapse removes hidden keyboard targets and keeps focus on the toggle", async () => {
-  const items = Array.from({ length: 5 }, (_, index) => ({ ...file, id: `${index}`, fileName: `${index}.txt` }));
-  const screen = await renderPwa(<AttachmentCards items={items} onRemove={() => {}} collapsible />);
-  expect(document.querySelectorAll(".pwa-attachment-actions button")).toHaveLength(2);
-  const toggle = document.querySelector<HTMLButtonElement>(".pwa-attachment-toggle")!;
-  toggle.focus();
-  await userEvent.keyboard("{Enter}");
-  expect(document.querySelectorAll(".pwa-attachment-actions button")).toHaveLength(5);
-  await userEvent.keyboard("{Enter}");
-  expect(document.activeElement).toBe(toggle);
-  expect(document.querySelectorAll(".pwa-attachment-actions button")).toHaveLength(2);
-  await userEvent.keyboard("{Tab}");
-  expect(document.activeElement?.closest(".pwa-attachment-actions")).toBeNull();
-  await screen.unmount();
-});
 
 test("readonly thumbnails have filename alternatives and fall back after decoding fails", async () => {
   const screen = await renderPwa(<AttachmentCards items={[{ ...file, fileName: "photo.jpg", preview: { mime_type: "image/jpeg", data: "YQ==", byte_length: 1, width: 1, height: 1 } }]} />);

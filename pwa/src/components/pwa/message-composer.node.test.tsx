@@ -28,7 +28,8 @@ test("renders Mantine textarea, attachment menu and a disabled empty Send", () =
   expect(button(html, "Send message")).toMatch(/disabled=""/);
   expect(button(html, "Send message")).toMatch(/lucide-arrow-up/);
   expect(html).not.toContain("pwa-composer-menu-panel");
-  expect(html).not.toContain("pwa-composer-hint");
+  // 提示插槽常驻以过渡高度，没有提示时不渲染提示行本身。
+  expect(html).not.toContain("pwa-composer-hint-line");
   expect(html).toContain('multiple=""');
   expect(html).toContain('accept="image/*"');
 });
@@ -42,13 +43,16 @@ test("renders the opened Mantine attachment menu", () => {
   expect(html).toContain("bottom:auto");
 });
 
-test("keeps offline text editable and places its one hint outside and before the card", () => {
+test("keeps offline text editable and places its one hint and the attachments inside the card above the text", () => {
   const html = renderComposer({ isOnline: false, canAttach: false, attachments: [attachment] });
   expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain('disabled=""');
   expect(button(html, "Pi commands")).toContain('disabled=""');
   expect(button(html, "Send message")).toContain('disabled=""');
-  expect(html.indexOf("pwa-composer-hint")).toBeLessThan(html.indexOf("pwa-attachment-cards"));
-  expect(html.indexOf("pwa-attachment-cards")).toBeLessThan(html.indexOf('class="pwa-composer-card"'));
+  const card = html.indexOf('class="pwa-composer-card"');
+  expect(card).toBeGreaterThan(-1);
+  expect(html.indexOf("pwa-composer-hint-line")).toBeGreaterThan(card);
+  expect(html.indexOf("pwa-composer-hint-line")).toBeLessThan(html.indexOf("pwa-attachment-tiles"));
+  expect(html.indexOf("pwa-attachment-tiles")).toBeLessThan(html.indexOf("<textarea"));
   const explicit = renderComposer({ isOnline: false, attachmentNotice: "Uploads paused" });
   expect(explicit).toContain("Uploads paused");
   expect(explicit).not.toContain("You can send once");

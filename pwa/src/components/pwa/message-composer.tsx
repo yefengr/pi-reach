@@ -1,7 +1,9 @@
 import { createContext, memo, useCallback, useContext, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type Ref } from "react";
 import { ActionIcon, FileButton, Menu, Textarea, UnstyledButton } from "@mantine/core";
 import { ArrowUp, Camera, ChevronDown, Files, LoaderCircle, Plus, Slash, Square } from "lucide-react";
-import { AttachmentCards, type ComposerAttachmentItem } from "./attachment-cards";
+import type { ComposerAttachmentItem } from "./attachment-cards";
+import { ComposerAttachmentTiles } from "./composer-attachment-tiles";
+import { ComposerHint } from "./composer-hint";
 import { ComposerCommandMenu, ComposerModelSettingsMenu, type ComposerCommandAction, type ModelListStatus } from "./composer-command-menu";
 import { useMenuExitAction, usePwaMenuTransition } from "./use-pwa-motion";
 import { useComposerAutosize } from "./use-composer-autosize";
@@ -9,7 +11,6 @@ import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import type { OperationHint } from "@/lib/pwa/operation-feedback";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
-import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 import { hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { DESKTOP_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
@@ -409,12 +410,9 @@ const MessageComposerContent = memo(function MessageComposerContent({
     <form className="pwa-composer" onSubmit={handleSubmit}>
       <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/*" capture="environment" disabled={addDisabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file && !addDisabled) onAddFiles([file]); event.currentTarget.value = ""; }} />
       <ComposerQueuedMessages />
-      {hint ? <p className="pwa-composer-hint" role="status" data-tone={hint.tone}>
-        {hint.busy ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : null}
-        <span>{hint.text}</span>
-      </p> : null}
-      <AttachmentCards items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} collapsible />
       <div className="pwa-composer-card">
+        <ComposerHint hint={hint} />
+        <ComposerAttachmentTiles items={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} />
         <Textarea ref={textareaRef} className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value={draft} onChange={handleDraftChange} onKeyDown={handleTextareaKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} onPaste={handlePaste} placeholder={t.composer.placeholder} readOnly={sendingAttachments || newSessionPending} rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">
