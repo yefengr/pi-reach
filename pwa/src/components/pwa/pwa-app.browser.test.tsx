@@ -605,7 +605,8 @@ test("streaming replies preserve the composer render boundary, draft and open co
     // 开始投递后离开排队区，以发送同款进入动画出现在对话区；排队条高度由发送过渡收回。
     channel.emit({ protocol_version: 2, type: "queued_message_state", session_id: "session-1", leaf_id: "assistant-marker", snapshot_id: "working-queue-started", chunk_index: 0, final: true, items: [{ id: sent.client_request_id, text: sent.text, sender_ref: "sender-session-1", editable: false, created_at: 1 }] });
     await expect.poll(() => list.querySelector(".pwa-message.user.pwa-user-message-in")?.textContent).toContain("Keep this draft");
-    expect(document.querySelector(".pwa-queued-messages")).toBeNull();
+    // 抽屉清空后先滑回卡片背后再移除。
+    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
     expect(document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).not.toBe("");
     await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
     await screen.getByRole("button", { name: "Stop current task", exact: true }).click();
