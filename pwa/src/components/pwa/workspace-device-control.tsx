@@ -3,7 +3,8 @@ import { ActionIcon, Badge, Button, Drawer, Menu, NavLink, Popover } from "@mant
 import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, useMenuExitAction, usePwaMenuTransition } from "@/components/pwa/use-pwa-motion";
 import { ChevronDown, Computer, Ellipsis, Link2, Pencil, Trash2 } from "lucide-react";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
-import type { PairingPresence } from "@/lib/pwa/pwa-view-model";
+import type { DeviceActivity, PairingPresence } from "@/lib/pwa/pwa-view-model";
+import { RunningIndicator } from "@/components/pwa/running-indicator";
 import { getMessages, useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 
@@ -13,6 +14,8 @@ export type WorkspaceDeviceControlProps = {
   devices: PwaDeviceRecord[];
   activeDeviceId: string | null;
   pairingPresence?: Record<string, PairingPresence>;
+  /** 电脑行状态：完成未查看优先于运行中；按本地 device.id 索引。 */
+  deviceActivity?: Readonly<Record<string, DeviceActivity>>;
   onPair: () => void;
   onSelectDevice: (deviceId: string) => void;
   onRename: (device: PwaDeviceRecord) => void;
@@ -78,7 +81,7 @@ function ComputerActionsMenu({ device, onRename, onRemove, onMenuChange }: { dev
   </Menu>;
 }
 
-export function ComputerRow({ device, active, presence, onSelect, onRename, onRemove, onMenuChange }: { device: PwaDeviceRecord; active: boolean; presence?: PairingPresence; onSelect: () => void; onRename: () => void; onRemove: () => void; onMenuChange?: (opened: boolean) => void }) {
+export function ComputerRow({ device, active, presence, activity = null, onSelect, onRename, onRemove, onMenuChange }: { device: PwaDeviceRecord; active: boolean; presence?: PairingPresence; activity?: DeviceActivity; onSelect: () => void; onRename: () => void; onRemove: () => void; onMenuChange?: (opened: boolean) => void }) {
   const { t } = useI18n();
   const status = presence?.status ?? "checking";
   const onlinePis = presence?.onlineEndpoints ?? 0;
@@ -92,6 +95,12 @@ export function ComputerRow({ device, active, presence, onSelect, onRename, onRe
       label={displayDevice(device)}
       description={<span className="pwa-peer-presence"><Badge className={`pwa-presence-label ${status}`}>{t.devices.status[status]}</Badge>{active ? <Badge className="pwa-current-label">{t.common.current}</Badge> : null}<span className="pwa-peer-summary">{summary}</span></span>}
       leftSection={<span className={`pwa-peer-icon ${onlinePis > 0 ? "online" : ""}`}><Computer size={20} /></span>}
+      // 固定 16px 状态槽始终占位；完成点优先于运行中，且不参与 Pi 行的 running 优先规则。
+      rightSection={<span className="pwa-peer-status-slot">{activity === "completed"
+        ? <span className="pwa-notice-dot" role="img" aria-label={t.navigation.newReply} title={t.navigation.newReply} />
+        : activity === "running"
+          ? <RunningIndicator size="compact" label={t.actions.running} />
+          : null}</span>}
       active={active}
       noWrap
       onClick={onSelect}
@@ -100,7 +109,7 @@ export function ComputerRow({ device, active, presence, onSelect, onRename, onRe
   </div>;
 }
 
-function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, onSelectDevice, onRename, onRemove, onMenuChange }: Omit<WorkspaceDeviceControlProps, "variant" | "purpose" | "onOverlayChange">) {
+function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, deviceActivity = {}, onPair, onSelectDevice, onRename, onRemove, onMenuChange }: Omit<WorkspaceDeviceControlProps, "variant" | "purpose" | "onOverlayChange">) {
   const { t } = useI18n();
   return <div className="pwa-device-panel">
     <div className="pwa-device-panel-list">
@@ -109,6 +118,7 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
         device={device}
         active={device.id === activeDeviceId}
         presence={pairingPresence[device.id]}
+        activity={deviceActivity[device.id] ?? null}
         onSelect={() => onSelectDevice(device.id)}
         onRename={() => onRename(device)}
         onRemove={() => onRemove(device)}
@@ -119,7 +129,7 @@ function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, onPair, on
   </div>;
 }
 
-export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresence = {}, onPair, onSelectDevice, onRename, onRemove, variant = "desktop", purpose = "choose", onOverlayChange }: WorkspaceDeviceControlProps) {
+export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresence = {}, deviceActivity = {}, onPair, onSelectDevice, onRename, onRemove, variant = "desktop", purpose = "choose", onOverlayChange }: WorkspaceDeviceControlProps) {
   const chooserDuration = usePwaMotionDuration("--pwa-duration-drawer");
   const chooserExitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const floatingMiddlewares = useFloatingSafeMiddlewares();
@@ -172,6 +182,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     devices={devices}
     activeDeviceId={activeDeviceId}
     pairingPresence={pairingPresence}
+    deviceActivity={deviceActivity}
     onMenuChange={handleMenuChange}
     onPair={() => runAfterClose(onPair)}
     onSelectDevice={(deviceId) => runAfterClose(() => onSelectDevice(deviceId))}
