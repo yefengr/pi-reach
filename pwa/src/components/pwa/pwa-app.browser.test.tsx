@@ -1758,7 +1758,9 @@ test.each([false, true])("successful own send releases actual workspace geometry
     await expect.element(input).toHaveValue("");
     await expect.poll(() => document.querySelector<HTMLElement>(".pwa-chat-footer")!.style.height).toBe("");
     await expect.poll(() => list.style.paddingBottom).toBe("");
-    expect(document.querySelector(".pwa-composer .pwa-attachment-tile")).toBeNull();
+    // 附件行已离开、不再算作附件；离开副本按计时器卸载，慢机器上可能晚于发送过渡结束。
+    expect(document.querySelector('.pwa-composer .pwa-attachment-tiles:not([data-presence="leaving"])')).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-composer .pwa-attachment-tile")).toBeNull();
     expect(input.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     const naturalPadding = Number.parseFloat(getComputedStyle(list).scrollPaddingBottom) || 0;
     const gap = () => Math.round(list.scrollHeight - list.clientHeight - list.scrollTop);
