@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { finishCssTransitions } from "@/test/browser/motion";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
-import { page } from "vitest/browser";
+import { cdp, page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { activityFollowSpace } from "@/lib/pwa/timeline-follow-motion";
@@ -70,7 +71,15 @@ async function renderWorkspace(initialDraft = "") {
   return {
     screen, input, list, shell, timeline: () => timeline,
     draft: async (text: string) => { flushSync(() => changeDraft(text)); await settle(); },
-    attachment: async (value: ComposerAttachmentItem | null) => { flushSync(() => changeAttachment(value)); await settle(); },
+    // 附件行的高度随进出过渡，等过渡结束再断言稳定布局。
+    attachment: async (value: ComposerAttachmentItem | null) => {
+      flushSync(() => changeAttachment(value));
+      await settle();
+      await finishCssTransitions();
+      await settle();
+    },
+    /** 只提交、不等待过渡，供逐帧采样。 */
+    setAttachment: (value: ComposerAttachmentItem | null) => { flushSync(() => changeAttachment(value)); },
   };
 }
 
@@ -79,6 +88,16 @@ const sixLineHeight = (input: HTMLElement) => {
   return 6 * parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
 };
 const bottomGap = (list: HTMLElement) => list.scrollHeight - list.clientHeight - list.scrollTop;
+const draftAttachment: ComposerAttachmentItem = { id: "attachment", fileName: "Attachment", byteLength: 1024, status: "draft" };
+/** 附件行进出的过渡时长（collapse-in 400ms）加余量；采样窗口只覆盖一次过渡。 */
+const GROW_SAMPLE_MS = 520;
+async function sampleFrames(sample: () => void) {
+  const start = performance.now();
+  while (performance.now() - start < GROW_SAMPLE_MS) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    sample();
+  }
+}
 const offset = (node: Element, list: Element) => node.getBoundingClientRect().top - list.getBoundingClientRect().top;
 
 afterEach(async () => {
@@ -266,6 +285,81 @@ test("keeps the reading position while the floating Composer grows over the list
   expect(Math.round(view.list.scrollTop)).toBe(initial.top);
   expect(view.timeline().followingOutput).toBe(false);
   await view.screen.unmount();
+});
+
+test("grows and shrinks the attachment row smoothly while following, keeping the latest content above the Composer", async () => {
+  await page.viewport(390, 844);
+  const view = await renderWorkspace();
+  const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+  const sentinel = document.querySelector<HTMLElement>(".pwa-bottom-sentinel")!;
+  const footerHeight = () => Math.round(footer.getBoundingClientRect().height);
+  const run = async (value: ComposerAttachmentItem | null) => {
+    const heights: number[] = [];
+    let covered = 0;
+    view.setAttachment(value);
+    await sampleFrames(() => {
+      heights.push(footerHeight());
+      // 输入区浮在列表之上：跟随时最新内容每一帧都停在输入区上沿以上。
+      if (Math.round(sentinel.getBoundingClientRect().bottom) > Math.round(footer.getBoundingClientRect().top)) covered += 1;
+    });
+    return { heights, covered };
+  };
+  const collapsed = footerHeight();
+  const grow = await run(draftAttachment);
+  const expanded = grow.heights.at(-1)!;
+  expect(expanded).toBeGreaterThan(collapsed + 40);
+  // 高度经过中间值逐帧增长，而不是一次到位。
+  expect(grow.heights.some(height => height > collapsed + 2 && height < expanded - 2)).toBe(true);
+  expect(grow.covered).toBe(0);
+  expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+  const shrink = await run(null);
+  expect(shrink.heights.at(-1)).toBe(collapsed);
+  expect(shrink.heights.some(height => height > collapsed + 2 && height < expanded - 2)).toBe(true);
+  expect(shrink.covered).toBe(0);
+  expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+  expect(view.timeline().followingOutput).toBe(true);
+  await view.screen.unmount();
+});
+
+test("keeps the reading position on every frame while the attachment row grows over the list", async () => {
+  await page.viewport(390, 844);
+  const view = await renderWorkspace();
+  const paragraph = view.screen.getByText(/^Answer 3, paragraph 9:/).element();
+  view.list.scrollTop += offset(paragraph, view.list) - 120;
+  view.list.dispatchEvent(new Event("scroll", { bubbles: true }));
+  await settle();
+  expect(view.timeline().followingOutput).toBe(false);
+  const initial = Math.round(offset(paragraph, view.list));
+  const moved: number[] = [];
+  view.setAttachment(draftAttachment);
+  await sampleFrames(() => {
+    const current = Math.round(offset(paragraph, view.list));
+    if (current !== initial) moved.push(current);
+  });
+  expect(moved).toEqual([]);
+  expect(view.timeline().followingOutput).toBe(false);
+  await view.screen.unmount();
+});
+
+test("changes the attachment row height at once with reduced motion", async () => {
+  await page.viewport(390, 844);
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  const view = await renderWorkspace();
+  try {
+    const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
+    const slot = () => document.querySelector<HTMLElement>(".pwa-attachment-tiles-slot");
+    view.setAttachment(draftAttachment);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    // 减少动态效果只保留透明度淡化，尺寸不过渡。
+    expect(getComputedStyle(slot()!).transitionProperty).not.toContain("grid-template-rows");
+    const expanded = Math.round(footer.getBoundingClientRect().height);
+    await settle();
+    expect(Math.round(footer.getBoundingClientRect().height)).toBe(expanded);
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+  } finally {
+    await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+    await view.screen.unmount();
+  }
 });
 
 test("grows the single-line Composer input with the extra-large text size", async () => {

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
+import { finishCssTransitions } from "@/test/browser/motion";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { PwaUiProvider } from "./pwa-ui-provider";
@@ -387,9 +388,9 @@ test("tucks the queue drawer behind the Composer card, inset on both sides", asy
   const screen = await renderPwa(<QueueComposerHarness items={[queuedItem({ waiting: true })]} />);
   try {
     const element = document.querySelector<HTMLElement>(".pwa-queued-messages")!;
-    // 出现时从卡片背后滑出：起点位移 min(自身高度, 48)，等滑入结束再量静止几何。
-    expect(getComputedStyle(element).transitionProperty).toContain("transform");
-    await expect.poll(() => element.getAnimations().length).toBe(0);
+    // 出现时包裹层从 0 伸展，抽屉从卡片背后升起；等过渡结束再量静止几何。
+    expect(getComputedStyle(element.parentElement!).transitionProperty).toContain("grid-template-rows");
+    await finishCssTransitions();
     const drawer = element.getBoundingClientRect();
     const card = document.querySelector<HTMLElement>(".pwa-composer-card")!.getBoundingClientRect();
     // 下沿以一个 Composer 圆角高度压在卡片之后，左右各比卡片内缩 8；重叠处由卡片承接指针。
@@ -436,7 +437,7 @@ test("waits for the run to end before an insertion becomes unconfirmed", async (
   }
 });
 
-test("an emptied drawer releases its space at once and slides back behind the card as a detached copy, also during own send", async () => {
+test("an emptied drawer sinks back behind the card while its space collapses, also during own send", async () => {
   await page.viewport(390, 844);
   const tree = (items: QueuedMessageView[]) => <div className="pwa-chat-footer" data-own-send=""><QueueComposerHarness items={items} /></div>;
   const screen = await renderPwa(tree([queuedItem({ waiting: true })]));
@@ -444,22 +445,32 @@ test("an emptied drawer releases its space at once and slides back behind the ca
     const footer = document.querySelector<HTMLElement>(".pwa-chat-footer")!;
     // 桩把输入区固定在底部，量输入区表单本身的高度。
     const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+    const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
     const drawer = document.querySelector<HTMLElement>(".pwa-queued-messages")!;
-    await expect.poll(() => drawer.getAnimations().length).toBe(0);
+    await finishCssTransitions();
     const withDrawer = Math.round(composer.getBoundingClientRect().height);
-    const drawerBottom = Math.round(drawer.getBoundingClientRect().bottom);
+    const cardTop = Math.round(card.getBoundingClientRect().top);
     await screen.rerender(<PwaUiProvider><div className="pwa-root">{tree([])}</div></PwaUiProvider>);
-    // 离开开始即脱离布局：输入区高度一次收回，副本留在原位，滑回卡片背后后再移除。
+    // 离开期间不脱离布局：包裹层逐帧收回高度，抽屉随之沉回卡片背后并淡出；本端发送过渡期间同样播放。
     expect(drawer.getAttribute("data-presence")).toBe("leaving");
-    expect(getComputedStyle(drawer).position).toBe("absolute");
-    expect(getComputedStyle(drawer).transitionProperty).toContain("transform");
+    expect(getComputedStyle(drawer).position).not.toBe("absolute");
+    const heights: number[] = [];
+    const tops: number[] = [];
+    while (drawer.isConnected) {
+      heights.push(Math.round(composer.getBoundingClientRect().height));
+      tops.push(Math.round(drawer.getBoundingClientRect().top));
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    }
     const settled = Math.round(composer.getBoundingClientRect().height);
     expect(settled).toBeLessThan(withDrawer);
-    expect(Math.abs(Math.round(drawer.getBoundingClientRect().bottom) - drawerBottom)).toBeLessThanOrEqual(1);
-    // 过渡结束、标记移除后，副本也不会重新撑开输入区。
+    // 高度逐帧收回、不反弹，并经过中间值；抽屉上沿只向卡片方向移动。
+    expect(heights.every((height, index) => index === 0 || height <= heights[index - 1])).toBe(true);
+    expect(heights.some(height => height < withDrawer - 2 && height > settled + 2)).toBe(true);
+    expect(tops.every((top, index) => index === 0 || top >= tops[index - 1])).toBe(true);
+    // 输入区贴底，收回的是抽屉露出的部分，卡片本身不动。
+    expect(Math.round(card.getBoundingClientRect().top)).toBe(cardTop);
+    // 移除后标记撤销，也不会重新撑开输入区。
     delete footer.dataset.ownSend;
-    expect(Math.round(composer.getBoundingClientRect().height)).toBe(settled);
-    await expect.poll(() => document.querySelector(".pwa-queued-messages")).toBeNull();
     expect(Math.round(composer.getBoundingClientRect().height)).toBe(settled);
   } finally {
     await screen.unmount();

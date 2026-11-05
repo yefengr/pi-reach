@@ -26,6 +26,7 @@ export class TimelineViewportObservers {
 
   constructor(readonly list: HTMLDivElement, events: Events) {
     // 输入区浮在列表之上：先按其高度同步列表底部留白，再报告尺寸变化，协调层读到的几何已包含新留白。
+    // 跟随时贴底与其他尺寸变化一样合并到下一帧；输入区上沿以上的尾部留白足以容纳这一帧的增量。
     this.observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver((entries) => {
       if (this.footer && entries.some((entry) => entry.target === this.footer)) syncChatFooterSpace(list, this.footer);
       events.resize();

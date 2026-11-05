@@ -2858,6 +2858,8 @@ test.each([[1280, 900], [390, 844]])("fills recent and earlier missing ranges wi
     }
     await expect.poll(() => list.querySelectorAll("article").length).toBe(111);
     await expect.poll(() => live.getBoundingClientRect().bottom).toBeGreaterThan(list.getBoundingClientRect().top);
+    // 用户翻页的结果等滚动静止才插入；输入区进出的高度过渡期间列表会被动钳制滚动位置，按钮可能稍后才恢复。
+    await expect.element(button).toBeInTheDocument();
     // 直接触发按钮：定位器点击会先滚到顶部，自动加载可能已抢先开始；两条路径都只能加载一次。
     button.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     await expect.poll(() => list.querySelectorAll("article").length).toBe(161);

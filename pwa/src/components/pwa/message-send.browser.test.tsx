@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
+import { finishCssTransitions, pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { TIMELINE_GEOMETRY_EVENT, useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { TimelineViewportLayout } from "@/lib/pwa/timeline-viewport-layout";
@@ -409,6 +409,9 @@ test.each([40, 145, 160])("send handoff owns late programmatic scroll at %ims wi
     expect(h.viewport().followingOutput).toBe(true);
     expect(document.querySelector(".pwa-message-actions")).toBeNull();
     clock.step(160); clock.step(200);
+    // 输入区高度过渡按真实时间播放，结束时会再排一帧贴底；跑完这一帧再断言没有残留帧。
+    await finishCssTransitions();
+    for (let frame = 1; frame <= 4 && clock.pending() > 0; frame += 1) clock.step(200 + frame * 16);
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     expect(clock.pending()).toBe(0);
   } finally { await h.screen.unmount(); }
