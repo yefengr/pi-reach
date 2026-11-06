@@ -308,9 +308,9 @@
   --pwa-duration-collapse-out: 280ms;
   /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
   --pwa-duration-collapse-settle: 400ms;
-  /* 只用作延迟：主屏 PWA 聚焦后，等 iOS 整页上推过半（真机约在聚焦后 100ms 开始、持续约 230ms）再收起输入区底部留白。
-     减少动态效果时相关尺寸过渡已取消，不参与时长替换。 */
-  --pwa-duration-keyboard-lag: 200ms;
+  /* 只用作延迟：主屏 PWA 聚焦后，等 iOS 整页上推结束并停顿片刻再收起输入区底部留白，键盘到位与输入区落座成为两个独立动作。
+     真机上推约在聚焦后 50–150ms 开始、持续约 230ms，最晚约 380ms 结束；减少动态效果时相关尺寸过渡已取消，不参与时长替换。 */
+  --pwa-duration-keyboard-lag: 450ms;
   --pwa-duration-image-in: 400ms;
   --pwa-duration-image-out: 280ms;
   --pwa-duration-toast: 400ms;
