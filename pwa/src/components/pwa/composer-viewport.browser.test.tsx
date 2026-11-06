@@ -24,6 +24,7 @@ const items: TimelineViewItem[] = Array.from({ length: 5 }, (_, index) => ({
 }));
 
 class ViewportMock extends EventTarget {
+  width = window.innerWidth;
   height = window.innerHeight;
   offsetTop = 0;
   scale = 1;
@@ -370,4 +371,93 @@ test("grows the single-line Composer input with the extra-large text size", asyn
   expect(minimum).toBeGreaterThan(44);
   expect(view.input.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimum - 0.5);
   await view.screen.unmount();
+});
+
+test("keeps the mobile Composer bottom gap on focus without a touch screen", async () => {
+  // 窄桌面窗口聚焦时没有软键盘，留白保持不变。
+  await page.viewport(390, 844);
+  await expect.poll(() => matchMedia("(any-pointer: coarse), (hover: none)").matches).toBe(false);
+  const view = await renderWorkspace();
+  const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+  try {
+    view.input.focus({ preventScroll: true });
+    await finishCssTransitions();
+    expect(getComputedStyle(composer).paddingBottom).toBe("16px");
+  } finally {
+    await view.screen.unmount();
+  }
+});
+
+// Linux 无头 Chromium 关闭触控模拟后无法恢复 pointer／hover 媒体特性，触控用例放在文件末尾，避免影响其他用例。
+test("keeps a fixed small gap in a touch browser tab and docks only in the standalone app while the soft keyboard is open", async () => {
+  await page.viewport(390, 844);
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await expect.poll(() => matchMedia("(any-pointer: coarse)").matches).toBe(true);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
+  const view = await renderWorkspace();
+  const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+  const bottom = () => getComputedStyle(composer).paddingBottom;
+  const seconds = (token: string) => `${parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) / 1000}s`;
+  const card = composer.querySelector<HTMLElement>(".pwa-composer-card")!;
+  const shadow = () => getComputedStyle(card).boxShadow;
+  const fullShadow = "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px 6px 20px 0px";
+  const dockedShadow = "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px -6px 20px -6px";
+  // 浏览器标签页：下方紧接浏览器工具栏，可见区域在卡片下方 8 处结束。留白固定为 8，
+  // 投影始终向上散开不被截断；聚焦时两者都不变、不过渡，避免与工具栏伸缩叠加位移。
+  expect(bottom()).toBe("8px");
+  expect(shadow()).toBe(dockedShadow);
+  view.input.focus({ preventScroll: true });
+  expect(getComputedStyle(composer).transitionDuration).toBe("0s");
+  expect(getComputedStyle(card).transitionProperty).toBe("border-color");
+  expect(bottom()).toBe("8px");
+  expect(shadow()).toBe(dockedShadow);
+  view.input.blur();
+  const standalone = applyStandaloneRules();
+  try {
+    // 主屏 PWA 的留白带过渡，切到 24 也要等过渡结束。
+    await finishCssTransitions();
+    expect(bottom()).toBe("24px");
+    // 主屏 PWA 未聚焦时卡片下方留有 24，保留完整投影。
+    expect(shadow()).toBe(fullShadow);
+    // 只聚焦、可视高度不变（外接键盘）时不停靠。
+    view.input.focus({ preventScroll: true });
+    await finishCssTransitions();
+    expect(bottom()).toBe("24px");
+    expect(shadow()).toBe(fullShadow);
+    // 可视高度明显变矮即软键盘弹出；键盘到位与停靠是两个独立动作：脚本在最后一次变化后等 keyboard-lag 才标记 open，
+    // 停靠以 drawer 进行、CSS 不设延迟，阴影同一时长；键盘收起或失焦即以 drawer-out 抬起。
+    viewport.change({ height: 415 });
+    expect(document.documentElement.dataset.softKeyboard).toBe("opening");
+    expect(bottom()).toBe("24px");
+    await expect.poll(() => document.documentElement.dataset.softKeyboard, { timeout: 2000 }).toBe("open");
+    expect(getComputedStyle(composer).transitionProperty).toBe("padding-bottom");
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-drawer"));
+    expect(getComputedStyle(composer).transitionDelay).toBe("0s");
+    expect(getComputedStyle(card).transitionDuration).toBe(`${seconds("--pwa-duration-fade")}, ${seconds("--pwa-duration-drawer")}`);
+    await finishCssTransitions();
+    expect(bottom()).toBe("0px");
+    // 卡片底边即可见区域底边，投影改为只向上方和两侧散开，不在底边被截断。
+    expect(shadow()).toBe(dockedShadow);
+    await settle();
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+    view.input.blur();
+    expect(document.documentElement.hasAttribute("data-soft-keyboard")).toBe(false);
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-drawer-out"));
+    viewport.change({ height: 844 });
+    await finishCssTransitions();
+    expect(bottom()).toBe("24px");
+    expect(shadow()).toBe(fullShadow);
+    await settle();
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+    // 桌面布局不受影响。
+    await page.viewport(1280, 844);
+    view.input.focus({ preventScroll: true });
+    await expect.poll(bottom).toBe("16px");
+    view.input.blur();
+  } finally {
+    standalone.remove();
+    await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+    await view.screen.unmount();
+  }
 });

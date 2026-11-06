@@ -13,6 +13,7 @@ import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { DESKTOP_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
+import { dismissKeyboardAfterSend } from "@/lib/pwa/dismiss-keyboard-after-send";
 
 type ComposerAttachmentMenuProps = {
   disabled: boolean;
@@ -179,6 +180,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
   const imageFocusFrameRef = useRef<number | null>(null);
   const commandFocusFrameRef = useRef<number | null>(null);
   const sendPendingRef = useRef(false);
+  const cancelKeyboardDismissRef = useRef<() => void>(() => {});
   const composingRef = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -265,6 +267,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
     if (imageFocusFrameRef.current !== null) cancelAnimationFrame(imageFocusFrameRef.current);
     if (commandFocusFrameRef.current !== null) cancelAnimationFrame(commandFocusFrameRef.current);
     if (modelFocusFrameRef.current !== null) cancelAnimationFrame(modelFocusFrameRef.current);
+    cancelKeyboardDismissRef.current();
   }, []);
 
   const hasMessage = Boolean(draft.trim() || attachments.length);
@@ -283,12 +286,14 @@ const MessageComposerContent = memo(function MessageComposerContent({
     sendPendingRef.current = true;
     try {
       await onSend();
+      cancelKeyboardDismissRef.current();
+      cancelKeyboardDismissRef.current = dismissKeyboardAfterSend(textareaRef.current);
     } finally {
       sendPendingRef.current = false;
     }
   };
 
-  // 输入框已聚焦时按下发送不抢走焦点：保留软键盘，发送过渡不与键盘收起后的整页复位叠加。
+  // 输入框已聚焦时按下发送不抢走焦点：保留软键盘，发送过渡不与键盘收起后的整页复位叠加；触屏移动布局在过渡结束后再收起键盘。
   const keepComposerFocus = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (document.activeElement === textareaRef.current) event.preventDefault();
   };

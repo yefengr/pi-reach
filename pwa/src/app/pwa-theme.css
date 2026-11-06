@@ -38,6 +38,9 @@
   --pwa-shadow-color: #00000014;
   --pwa-shadow-contact-color: #0000001F;
   --pwa-shadow-composer: 0 1px 2px var(--pwa-shadow-contact-color), 0 6px 20px var(--pwa-shadow-color);
+  /* 卡片底边接近可见区域底边时（触屏浏览器标签页下方 8、主屏 PWA 聚焦后为 0）：投影改为上移 6px、内缩 6px，
+     只向上方和两侧散开，底边处浓度不足 1%，不留截断硬边。 */
+  --pwa-shadow-composer-docked: 0 1px 2px var(--pwa-shadow-contact-color), 0 -6px 20px -6px var(--pwa-shadow-color);
   /* 常驻导航比临时浮层更轻：接触层 8%、投影 4%，不改变浮层与 Composer 的阴影。 */
   --pwa-shadow-sidebar: 0 1px 2px #00000014, 0 2px 8px #0000000A;
   /* 文字选区：主色 20%，半透明以随气泡、代码块等底色变化，文字保持原色。 */
@@ -98,6 +101,7 @@
   --pwa-shadow-color: #00000047;
   --pwa-shadow-contact-color: #00000052;
   --pwa-shadow-composer: none;
+  --pwa-shadow-composer-docked: none;
   --pwa-shadow-sidebar: none;
   --pwa-selection: #98B8E63D;
   --pwa-complete: #95CBA8;
@@ -158,6 +162,7 @@
     --pwa-shadow-color: #00000047;
     --pwa-shadow-contact-color: #00000052;
     --pwa-shadow-composer: none;
+    --pwa-shadow-composer-docked: none;
     --pwa-shadow-sidebar: none;
     --pwa-selection: #98B8E63D;
     --pwa-complete: #95CBA8;
@@ -303,6 +308,9 @@
   --pwa-duration-collapse-out: 280ms;
   /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
   --pwa-duration-collapse-settle: 400ms;
+  /* 只由脚本计时（use-soft-keyboard）：可视高度最后一次变化后等待，iOS 整页上推约 250ms 加约 100ms 停顿，再让主屏 PWA 输入区停靠，
+     键盘到位与停靠成为两个独立动作。不随减少动态效果替换：停靠仍等键盘到位，只是不再过渡。 */
+  --pwa-duration-keyboard-lag: 350ms;
   --pwa-duration-image-in: 400ms;
   --pwa-duration-image-out: 280ms;
   --pwa-duration-toast: 400ms;

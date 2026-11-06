@@ -4,3 +4,5 @@
  */
 export const MOBILE_LAYOUT_QUERY = "(max-width: 767.98px)";
 export const DESKTOP_LAYOUT_QUERY = "(min-width: 768px)";
+/** 以触屏为主要输入的设备，与正式 CSS 中触屏专属规则的媒体查询一致。 */
+export const TOUCH_INPUT_QUERY = "(any-pointer: coarse), (hover: none)";
