@@ -388,7 +388,7 @@ test("keeps the mobile Composer bottom gap on focus without a touch screen", asy
 });
 
 // Linux 无头 Chromium 关闭触控模拟后无法恢复 pointer／hover 媒体特性，触控用例放在文件末尾，避免影响其他用例。
-test("drops the mobile Composer bottom gap while the input is focused on a touch device", async () => {
+test("keeps a fixed small gap in a touch browser tab and drops it on focus only in the standalone app", async () => {
   await page.viewport(390, 844);
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await expect.poll(() => matchMedia("(any-pointer: coarse)").matches).toBe(true);
@@ -396,9 +396,15 @@ test("drops the mobile Composer bottom gap while the input is focused on a touch
   const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
   const bottom = () => getComputedStyle(composer).paddingBottom;
   const seconds = (token: string) => `${parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) / 1000}s`;
+  // 浏览器标签页：下方紧接浏览器工具栏，留白固定为 8，聚焦时不变也不过渡，避免与工具栏伸缩叠加位移。
+  expect(bottom()).toBe("8px");
+  view.input.focus({ preventScroll: true });
+  expect(getComputedStyle(composer).transitionDuration).toBe("0s");
+  expect(bottom()).toBe("8px");
+  view.input.blur();
   const standalone = applyStandaloneRules();
   try {
-    // 触屏移动布局的留白带过渡，切到主屏 PWA 的 24 也要等过渡结束。
+    // 主屏 PWA 的留白带过渡，切到 24 也要等过渡结束。
     await finishCssTransitions();
     expect(bottom()).toBe("24px");
     const card = composer.querySelector<HTMLElement>(".pwa-composer-card")!;
