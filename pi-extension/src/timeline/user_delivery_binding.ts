@@ -106,6 +106,19 @@ export class UserDeliveryBinding {
     return this.queue.steer(ownerId, service, targetId);
   }
 
+  /** 停止本轮后撤回排队与未开始的插入：取消回执先于快照，PWA 直接结清并把内容放回输入框。 */
+  withdrawAfterCancel(steersCleared: boolean): void {
+    const withdrawn = this.queue.withdrawAfterCancel(steersCleared);
+    const owners = new Map<string, UserDeliveryScope>();
+    for (const { scope, correlation, steered } of withdrawn) {
+      // SDK 已清空插入队列，留下的登记会被之后相同内容的消息误取。
+      if (steered) this.options.getTimeline()?.discardSteer(correlation);
+      this.sendScope(scope, scope.service.withdrawn(scope.clientRequestId));
+      owners.set(`${scope.ownerId}\n${scope.service.sessionId}`, scope);
+    }
+    for (const scope of owners.values()) this.sendSnapshot(scope);
+  }
+
   onStarted(started: TimelineStarted): void {
     if (started.role !== "user") return;
     const scope = this.queue.onUserStarted(started);

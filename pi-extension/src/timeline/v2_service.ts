@@ -212,6 +212,14 @@ export class TimelineV2Service {
     { message_id: messageId, ...(groupId ? { group_id: groupId } : {}) })];
   }
 
+  /** 停止本轮时撤回的排队或未开始的插入：回执沿用原投递请求，PWA 据此结清并回填草稿。 */
+  withdrawn(clientRequestId: string): ServerFrame[] {
+    const request = this.findRecord(clientRequestId);
+    if (!request || !this.state.markWithdrawn(request.key)) return [];
+    return [this.statusReply({ id: request.attemptId ?? clientRequestId,
+      channel_id: request.channelId, client_request_id: clientRequestId }, "cancelled")];
+  }
+
   canDrain(clientRequestId: string): boolean {
     const status = this.findRecord(clientRequestId)?.status;
     return status === "received" || status === "queued";

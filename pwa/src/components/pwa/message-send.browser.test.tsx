@@ -335,11 +335,13 @@ test.each([false, true])("real frames remain monotonic through send release and 
       const borrowed = gap(h.list);
       expect(borrowed).toBeGreaterThan(32);
       await sampleUntilSettled(borrowed);
-      expect(top(old)).toBe(settledTop);
+      // 发送跟随的终点可落在被最大滚动截住的小数像素上，Working 让出空间后可能补走不足 1px；
+      // 与逐帧采样同用 1px 容差，仍能发现迟到的 Working 推动正文。
+      expect(Math.abs(top(old) - settledTop)).toBeLessThanOrEqual(1);
       for (let i = 1; i < samples.length; i++) expect(samples[i]).toBeLessThanOrEqual(samples[i - 1] + 1);
       expect(latestFlashed).toBe(false);
       expect(h.viewport().followingOutput).toBe(true);
-      expect(gap(h.list)).toBe(borrowed);
+      expect(Math.abs(gap(h.list) - borrowed)).toBeLessThanOrEqual(1);
     } finally { observer.disconnect(); }
   } finally { await h.screen.unmount(); }
 });

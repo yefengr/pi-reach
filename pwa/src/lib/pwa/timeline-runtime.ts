@@ -839,18 +839,19 @@ export class TimelineRuntime {
     this.deliveryQueryRetries.delete(pending);
     if (frame.status === "not_found") return this.change();
     if (frame.status === "cancelled") {
-      // 服务端只对未投递的 received/queued 记录返回 cancelled。排队项和因证据缺失进入未知的消息
-      // 都可以据此结清；明确失败是终态，不能被取消结果改写。
-      if (!pending.queued && pending.delivery !== "unknown_delivery") return this.change();
-      const cancellation = pending.queuedAction === "cancel" ? {
+      // 服务端只对未投递的 received/queued 记录返回 cancelled；停止本轮时还会撤回尚未开始的插入。
+      // 排队项、插入中和因证据缺失进入未知的消息都可以据此结清；明确失败是终态，不能被取消结果改写。
+      if (!pending.queued && pending.delivery !== "unknown_delivery" && pending.insertionStatus === undefined) return this.change();
+      // 本端撤回，以及停止本轮时在原投递请求上直接回执撤回的本端消息，放回输入框；查询得知的取消只结清。
+      const withdrawnByStop = !query && pending.requestId === frame.in_reply_to && this.pendingBases.get(pending)?.local === true;
+      const cancellation = pending.queuedAction === "cancel" || withdrawnByStop ? {
         clientRequestId: pending.clientRequestId, text: pending.text, images: pending.images, attachments: pending.attachments,
       } : null;
       // 保留内容直到调用方确认草稿与附件描述已回填；回填失败时继续只读展示。
       pending.delivery = "cancelled";
       pending.queued = false;
       pending.cancelable = false;
-      delete pending.queuedAction;
-      delete pending.queuedActionRequestId;
+      this.clearInsertionNotice(pending);
       return { ...this.change(), ...(cancellation ? { cancelledQueued: [cancellation] } : {}) };
     }
     if (frame.status === "rejected") {
