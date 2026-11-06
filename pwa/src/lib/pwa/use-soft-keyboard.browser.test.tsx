@@ -3,6 +3,8 @@ import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 import { observeSoftKeyboard, SOFT_KEYBOARD_ATTRIBUTE, SOFT_KEYBOARD_BASELINE_KEY } from "./use-soft-keyboard";
 
 const LAG = PWA_MOTION_FALLBACK_MS["--pwa-duration-keyboard-lag"];
+/** 布局视口高度（根元素 clientHeight）；默认保持不变，即浏览器平移页面（iOS）。 */
+let layoutHeight = 812;
 
 class ViewportMock extends EventTarget {
   width = 402;
@@ -26,11 +28,14 @@ function setup() {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  layoutHeight = 812;
+  Object.defineProperty(document.documentElement, "clientHeight", { configurable: true, get: () => layoutHeight });
   window.localStorage.removeItem(SOFT_KEYBOARD_BASELINE_KEY);
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  Reflect.deleteProperty(document.documentElement, "clientHeight");
   vi.unstubAllGlobals();
   window.localStorage.removeItem(SOFT_KEYBOARD_BASELINE_KEY);
   document.body.replaceChildren();
@@ -120,4 +125,20 @@ test("ignores changes while the page is zoomed and cleans up on stop", () => {
   expect(root.hasAttribute(SOFT_KEYBOARD_ATTRIBUTE)).toBe(false);
   vi.advanceTimersByTime(LAG);
   expect(root.hasAttribute(SOFT_KEYBOARD_ATTRIBUTE)).toBe(false);
+});
+
+test("does not mark the keyboard when the browser shrinks the layout viewport with it", () => {
+  // 安卓 Chrome 执行 resizes-content：布局视口随键盘变矮，外壳已贴住键盘，输入区无需停靠。
+  const { viewport, input, state, stop } = setup();
+  input.focus();
+  layoutHeight = 415;
+  viewport.change({ height: 415 });
+  expect(state()).toBeNull();
+  vi.advanceTimersByTime(LAG);
+  expect(state()).toBeNull();
+  // 同一设备改为平移页面时照常判断。
+  layoutHeight = 812;
+  viewport.change({ height: 414 });
+  expect(state()).toBe("opening");
+  stop();
 });
