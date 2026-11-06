@@ -56,8 +56,12 @@ type DeliveryJob = {
   state: DeliveryState;
   /** 空闲时入队、下一次 drain 即投递：对外已按在途报告，不再提供编辑、清除或插入。 */
   dispatching: boolean;
+  /** 已交给 SDK 的插入队列、尚未开始：停止本轮时 SDK 可能把它移出队列。 */
+  steered: boolean;
   timer: DeliveryTimer | undefined;
 };
+
+export type UserDeliveryWithdrawal = { readonly scope: UserDeliveryScope; readonly correlation: Correlation; readonly steered: boolean };
 
 export type UserDeliveryQueueOptions = {
   isIdle: () => boolean;
@@ -125,6 +129,7 @@ export class UserDeliveryQueue {
       payload: copyPayload(payload),
       state: "queued",
       dispatching: false,
+      steered: false,
       timer: undefined,
     };
     if (!this.canQueueItem(scope, this.itemFor(job))) return "rejected";
@@ -185,10 +190,29 @@ export class UserDeliveryQueue {
     if (job.state === "steering" && this.jobs.has(job.scope.deliveryToken)) {
       this.releasePayload(job);
       job.state = "timed_out";
+      job.steered = true;
       this.retainLateRecord(job);
     }
     this.scheduleDrain();
     return { kind: "sent", scope: job.scope };
+  }
+
+  /**
+   * 停止本轮后撤回仍可编辑的排队消息，与 Pi 终端 Esc 把队列放回输入框一致，避免下一条接着开始新一轮。
+   * includeSteered 表示 SDK 的插入队列已被清空，此时尚未开始的插入也不会再开始。
+   */
+  withdrawAfterCancel(includeSteered: boolean): UserDeliveryWithdrawal[] {
+    const withdrawn: UserDeliveryWithdrawal[] = [];
+    for (const job of [...this.jobs.values()]) {
+      const steered = job.steered && job.state === "timed_out";
+      if (!isEditable(job) && !(includeSteered && steered)) continue;
+      this.followCurrentTip(job);
+      if (!this.isCurrentScope(job.scope)) continue;
+      withdrawn.push({ scope: job.scope, correlation: job.correlation, steered });
+      this.remove(job);
+    }
+    this.rescheduleAfterMutation();
+    return withdrawn;
   }
 
   scheduleDrain(): void {

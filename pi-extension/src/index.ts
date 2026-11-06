@@ -64,7 +64,7 @@ let timeline: TimelineRuntime | null = null;
 let piApi: ExtensionAPI | null = null;
 let footerCtx: Pick<ExtensionContext, "ui" | "mode"> | null = null;
 let lastCommandCtx: Pick<ExtensionContext, "ui" | "abort" | "cwd"> | null = null;
-let lastEventCtx: Pick<ExtensionContext, "ui" | "abort" | "compact" | "isIdle"> | null = null;
+let lastEventCtx: Pick<ExtensionContext, "ui" | "abort" | "compact" | "isIdle" | "hasPendingMessages"> | null = null;
 let currentTurnId: string | null = null;
 let replacedSessionId: string | null = null;
 const sessionNewBridge = new SessionNewBridge({ getPi: () => piApi, onCommandContext: (ctx) => { lastCommandCtx = ctx; }, onReplaced: (ctx) => { lastCommandCtx = ctx as typeof lastCommandCtx; }, onFinished: () => finishSessionReplacement() });
@@ -354,6 +354,8 @@ function createBinding(relayClient: RelayClient, ownerId: string): OwnerBinding 
       const abort = lastEventCtx?.abort ?? lastCommandCtx?.abort;
       if (!abort) return false;
       abort();
+      // 终端界面的中止会把 Pi 自身队列（含未开始的插入）放回终端输入框；排队消息随之撤回，与 Esc 一致。
+      userDelivery.withdrawAfterCancel(lastEventCtx?.hasPendingMessages() === false);
       return true;
     },
     onAction: (frame) => routeAction(ownerId, frame),

@@ -9,13 +9,14 @@ function harness(idle = false) {
   const manager = SessionManager.inMemory(process.cwd());
   const runtime = new TimelineRuntime();
   const send = vi.fn();
+  const sendFrames = vi.fn();
   let service!: TimelineV2Service;
   const binding = new UserDeliveryBinding({
     isIdle: () => idle, canAcceptNormal: () => true,
     getPi: () => ({ sendUserMessage: send }) as unknown as ExtensionAPI,
     getTimeline: () => runtime, getCurrentSessionId: () => manager.getSessionId(),
     getCurrentLeafId: () => manager.getLeafId() ?? null, findTarget: (owner) => owner === "owner" ? { service, sessionId: manager.getSessionId(), leafId: manager.getLeafId() ?? null } : null,
-    sendFrames: vi.fn(),
+    sendFrames,
   });
   service = new TimelineV2Service({
     sessionManager: manager, runtime, senderRef: "owner", extensionVersion: "1.2.3",
@@ -25,7 +26,7 @@ function harness(idle = false) {
     onQueuedMessageClear: (target) => binding.clearQueued("owner", service, target),
     onQueuedMessageSteer: (target) => binding.steerQueued("owner", service, target).kind,
   });
-  return { service, send, binding, manager };
+  return { service, send, sendFrames, binding, manager, runtime };
 }
 const hello: ClientFrame = { protocol_version: 2, type: "session_hello", id: "hello", channel_id: "c" };
 const user: Extract<ClientFrame, { type: "user_message" }> = { protocol_version: 2, type: "user_message", id: "wire", client_request_id: "q", channel_id: "c", leaf_id: null, text: "later", images: [{ mime: "image/png", data: "abc" }] };
@@ -203,4 +204,32 @@ test("snapshot chunks fit the wire limit including image payloads and framing ov
   });
   expect(service.canQueueItem(base)).toBe(true);
   expect(service.canQueueItem({ ...base, images: [{ mime: "image/png", data: "a".repeat(MAX_FRAME_BYTES) }] })).toBe(false);
+});
+
+test.each([true, false])("stopping withdraws queued messages and, once the SDK queue is cleared (%s), the unstarted insertion", async (cleared) => {
+  const { service, send, sendFrames, binding, runtime } = harness();
+  const expectedSteers = () => (runtime as unknown as { steers: { expected: unknown[] } }).steers.expected.length;
+  try {
+    service.handle(hello); service.handle(user);
+    service.handle({ ...user, id: "wire-2", client_request_id: "q2", text: "next", images: undefined });
+    service.handle(steer);
+    sendFrames.mockClear();
+    expect(expectedSteers()).toBe(1);
+    binding.withdrawAfterCancel(cleared);
+    // SDK 已清空插入队列时撤销登记，避免之后相同内容的消息被认作这条插入。
+    expect(expectedSteers()).toBe(cleared ? 0 : 1);
+    const frames = sendFrames.mock.calls.flatMap(([, sent]) => sent as ServerFrame[]);
+    const cancelled = frames.filter((frame) => frame.type === "user_message_status" && frame.status === "cancelled");
+    // 回执沿用原投递请求的 id；取消回执先于快照，PWA 不必把快照缺席当作未知再查询。
+    expect(cancelled.map((frame) => "in_reply_to" in frame && frame.in_reply_to))
+      .toEqual(cleared ? ["wire", "wire-2"] : ["wire-2"]);
+    expect(frames.at(-1)).toMatchObject({ type: "queued_message_state", items: [] });
+    const query = (id: string) => service.handle({ protocol_version: 2, type: "user_message_status_request", id: `query-${id}`,
+      channel_id: "c", session_id: service.sessionId, leaf_id: service.leafId, client_request_id: id })[0];
+    expect(query("q")).toMatchObject({ status: cleared ? "cancelled" : "unknown_delivery" });
+    expect(query("q2")).toMatchObject({ status: "cancelled" });
+    binding.scheduleDrain();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(send).toHaveBeenCalledTimes(1);
+  } finally { binding.clearAll(); }
 });

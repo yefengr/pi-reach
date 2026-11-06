@@ -222,6 +222,13 @@ export class V2SessionState {
     return this.update(key, "cancelled");
   }
 
+  /** 停止本轮时撤回：插入后记为未知的消息也可结清，已开始或已提交的不能改写。 */
+  markWithdrawn(key: string): V2IdempotencyRecord | undefined {
+    const record = this.getRecord(key);
+    if (!record || (record.status !== "received" && record.status !== "queued" && record.status !== "unknown_delivery")) return undefined;
+    return this.update(key, "cancelled");
+  }
+
   markCancelledByClientRequest(senderRef: string, clientRequestId: string): V2IdempotencyRecord | undefined {
     this.prune();
     this.assertId(senderRef, "senderRef");

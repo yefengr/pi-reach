@@ -452,6 +452,44 @@ test("a direct cancellation receipt whose restore failed stays cancelled after t
   expect(runtime.pendingItems).toEqual([expect.objectContaining({ delivery: "cancelled", queued: false, text: "later" })]);
 });
 
+function withdrawnByStop(runtime: TimelineRuntime, inReplyTo = "send") {
+  // 停止本轮时 Extension 撤回排队与未开始的插入，回执沿用原投递请求的 id，先于快照到达。
+  return runtime.receive({ protocol_version: 2, type: "user_message_status", target_channel_id: "c",
+    in_reply_to: inReplyTo, client_request_id: "q", session_id: "s", leaf_id: "g", status: "cancelled" });
+}
+
+test("stopping the run withdraws a local queued message back into the draft", () => {
+  const runtime = queuedRuntime();
+  expect(withdrawnByStop(runtime).cancelledQueued).toEqual([{ clientRequestId: "q", text: "later", images: item.images }]);
+  runtime.confirmCancelledRestore(["q"]);
+  const after = runtime.receive(snapshot([], { snapshot_id: "after-stop" }));
+  expect(after.items.filter((entry) => entry.kind === "pending")).toEqual([]);
+  expect(after.unknown).toEqual([]);
+});
+
+test("stopping the run withdraws an insertion that has not started instead of leaving it waiting", () => {
+  const runtime = queuedRuntime();
+  requestInsertion(runtime);
+  runtime.receive(snapshot([]));
+  const requestedAt = queuedPending(runtime).insertionRequestedAt!;
+  const withdrawn = withdrawnByStop(runtime);
+  expect(withdrawn.cancelledQueued).toEqual([{ clientRequestId: "q", text: "later", images: item.images }]);
+  expect(queuedPending(runtime)).toMatchObject({ delivery: "cancelled" });
+  expect(queuedPending(runtime).insertionStatus).toBeUndefined();
+  runtime.expireQueuedInsertions(requestedAt + QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS);
+  expect(queuedPending(runtime).insertionStatus).toBeUndefined();
+  runtime.confirmCancelledRestore(["q"]);
+  expect(runtime.pendingItems).toEqual([]);
+});
+
+test("a stop withdrawal of an own item known only from a snapshot settles it without touching the draft", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  runtime.receive(snapshot([item]));
+  const withdrawn = withdrawnByStop(runtime, "q");
+  expect(withdrawn.cancelledQueued).toBeUndefined();
+  expect(queuedPending(runtime)).toMatchObject({ delivery: "cancelled", queued: false, text: "later" });
+});
+
 test("keeps a cancelled message content when the host cannot confirm the cancellation", () => {
   const runtime = queuedRuntime();
   runtime.actOnQueued("q", "cancel");
