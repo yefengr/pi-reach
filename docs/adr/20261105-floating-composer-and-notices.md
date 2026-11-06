@@ -66,7 +66,7 @@
 
 - 评审原型见 [`docs/prototypes/20261105-floating-composer-notices/`](../prototypes/20261105-floating-composer-notices/page.html)。
 - 本记录只改变 PWA 呈现，不改变协议、Relay、Extension、连接重试策略或本地历史模型。
-- 分阶段实施，详细范围与验收见[实施方案](../plans/active/20261105-floating-composer-and-notices.md)：先只改结构、不改观感，再改为高度过渡，最后重做提示。DESIGN 与 ARCHITECTURE 随各阶段的实现同步更新，未实现前仍以现有规则为准。
+- 分阶段实施，详细范围与验收见[实施方案](../plans/completed/20261105-floating-composer-and-notices.md)：先只改结构、不改观感，再改为高度过渡，最后重做提示。DESIGN 与 ARCHITECTURE 随各阶段的实现同步更新，未实现前仍以现有规则为准。
 - 列表留白同步、跟随贴底、发送过渡、历史前插锚点、「最新」入口、iOS 键盘与安全区、矮窗口密度须逐项复核；验收沿用时间线视口集成测试，并以真机录屏为准。
 
 ## 补充决策：Toast 正文换行后圆角改为 16（2026-11-05）
