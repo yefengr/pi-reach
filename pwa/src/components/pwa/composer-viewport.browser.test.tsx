@@ -371,3 +371,58 @@ test("grows the single-line Composer input with the extra-large text size", asyn
   expect(view.input.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimum - 0.5);
   await view.screen.unmount();
 });
+
+test("keeps the mobile Composer bottom gap on focus without a touch screen", async () => {
+  // 窄桌面窗口聚焦时没有软键盘，留白保持不变。
+  await page.viewport(390, 844);
+  await expect.poll(() => matchMedia("(any-pointer: coarse), (hover: none)").matches).toBe(false);
+  const view = await renderWorkspace();
+  const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+  try {
+    view.input.focus({ preventScroll: true });
+    await finishCssTransitions();
+    expect(getComputedStyle(composer).paddingBottom).toBe("16px");
+  } finally {
+    await view.screen.unmount();
+  }
+});
+
+// Linux 无头 Chromium 关闭触控模拟后无法恢复 pointer／hover 媒体特性，触控用例放在文件末尾，避免影响其他用例。
+test("drops the mobile Composer bottom gap while the input is focused on a touch device", async () => {
+  await page.viewport(390, 844);
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await expect.poll(() => matchMedia("(any-pointer: coarse)").matches).toBe(true);
+  const view = await renderWorkspace();
+  const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
+  const bottom = () => getComputedStyle(composer).paddingBottom;
+  const seconds = (token: string) => `${parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) / 1000}s`;
+  const standalone = applyStandaloneRules();
+  try {
+    // 触屏移动布局的留白带过渡，切到主屏 PWA 的 24 也要等过渡结束。
+    await finishCssTransitions();
+    expect(bottom()).toBe("24px");
+    // 软键盘与辅助栏贴住底边，聚焦期间不再为 Home 指示条留白；收起按输入区内增减的高度过渡。
+    view.input.focus({ preventScroll: true });
+    expect(getComputedStyle(composer).transitionProperty).toBe("padding-bottom");
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-in"));
+    await finishCssTransitions();
+    expect(bottom()).toBe("0px");
+    await settle();
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+    view.input.blur();
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-out"));
+    await finishCssTransitions();
+    expect(bottom()).toBe("24px");
+    await settle();
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+    // 桌面布局不受影响。
+    await page.viewport(1280, 844);
+    view.input.focus({ preventScroll: true });
+    await expect.poll(bottom).toBe("16px");
+    view.input.blur();
+  } finally {
+    standalone.remove();
+    await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+    await view.screen.unmount();
+  }
+});
