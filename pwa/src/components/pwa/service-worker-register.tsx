@@ -5,6 +5,7 @@ import { PwaOperationNotifications, PwaToastProvider, useToast } from "@/compone
 import { createOperationNotificationController, type OperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { PwaRuntimeNoticePortal } from "@/components/pwa/pwa-app-shell";
 import { refreshPwaApp } from "@/lib/pwa/service-worker-update";
+import { detectInstallGuide, readInstallGuideEnvironment, type InstallGuide } from "@/lib/pwa/install-guide";
 import { useI18n } from "@/lib/i18n";
 import { presenceProps, usePresence } from "./use-presence";
 
@@ -39,12 +40,16 @@ function hasOpenDialog(): boolean {
   ));
 }
 
-type NoticeView = { unsupported: boolean; install: boolean };
-const sameNoticeView = (left: NoticeView, right: NoticeView) => left.unsupported === right.unsupported && left.install === right.install;
+type NoticeView = { unsupported: boolean; install: boolean; guide: InstallGuide | null };
+const sameNoticeView = (left: NoticeView, right: NoticeView) => (
+  left.unsupported === right.unsupported && left.install === right.install && left.guide === right.guide
+);
 
 type ServiceWorkerNoticeProps = {
   installPrompt: boolean;
   unsupported: boolean;
+  /** 无法调起系统安装时的手动添加引导；能力不支持或可直接安装时不显示。 */
+  installGuide?: InstallGuide | null;
   onInstall: () => void;
   onDismiss: () => void;
   onFocusRecoveryReady?: (restore: (() => void) | null) => void;
@@ -55,6 +60,7 @@ type ServiceWorkerNoticeProps = {
 export function ServiceWorkerNotice({
   installPrompt,
   unsupported,
+  installGuide = null,
   onInstall,
   onDismiss,
   onFocusRecoveryReady,
@@ -65,8 +71,9 @@ export function ServiceWorkerNotice({
   const focusWithinNoticeRef = useRef(false);
   const { t } = useI18n();
   const n = t.pwaNotice;
-  const title = unsupported ? n.unsupportedTitle : n.installTitle;
-  const description = unsupported ? n.unsupportedBody : n.installBody;
+  const guide = unsupported || installPrompt ? null : installGuide;
+  const title = unsupported ? n.unsupportedTitle : guide === "ios" ? n.iosGuideTitle : guide === "mac-safari" ? n.macSafariGuideTitle : n.installTitle;
+  const description = unsupported ? n.unsupportedBody : guide === "ios" ? n.iosGuideBody : guide === "mac-safari" ? n.macSafariGuideBody : n.installBody;
 
   const restoreFocus = useCallback(() => {
     const notice = noticeRef.current;
@@ -165,6 +172,7 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState(0);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
   const [unsupported, setUnsupported] = useState(false);
+  const [installGuide, setInstallGuide] = useState<InstallGuide | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [updateRequested, setUpdateRequested] = useState(false);
   const updateRequestedRef = useRef(false);
@@ -203,6 +211,7 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
       };
     }
 
+    queueMicrotask(() => setInstallGuide(detectInstallGuide(readInstallGuideEnvironment())));
     let disposed = false;
     let currentRegistration: ServiceWorkerRegistration | null = null;
     const inspectWaitingWorker = () => {
@@ -256,10 +265,10 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
     }, () => setDismissedUpdateVersion(updateVersion));
   }, [applyUpdate, dismissedUpdateVersion, notifications, updateNotice, updateRequested, updateVersion]);
 
-  // 更新提示使用独立的操作 Toast；安装与浏览器能力提示仍在文档流 Alert 中。
-  const showNotice = !dismissed && (unsupported || Boolean(installPrompt));
+  // 更新提示使用独立的操作 Toast；安装、手动添加引导与浏览器能力提示仍在文档流 Alert 中。
+  const showNotice = !dismissed && (unsupported || Boolean(installPrompt) || installGuide !== null);
   // 关闭或安装后淡出，淡出期间保留原有标题与操作。
-  const notice = usePresence(showNotice ? { unsupported, install: Boolean(installPrompt) } : null, sameNoticeView);
+  const notice = usePresence(showNotice ? { unsupported, install: Boolean(installPrompt), guide: installGuide } : null, sameNoticeView);
   if (process.env.NODE_ENV !== "production") return null;
   const view = notice.rendered;
   if (!view) return null;
@@ -275,6 +284,7 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
   return <ServiceWorkerNotice
     installPrompt={view.install}
     unsupported={view.unsupported}
+    installGuide={view.guide}
     leaving={notice.leaving}
     onInstall={() => void install()}
     onDismiss={() => setDismissed(true)}

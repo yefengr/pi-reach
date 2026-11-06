@@ -6,6 +6,7 @@ import { renderPwa } from "@/test/browser/render";
 import { PwaAppShell, PwaRuntimeNoticeSlot } from "./pwa-app-shell";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { ServiceWorkerNotice, ServiceWorkerRegister } from "./service-worker-register";
+import type { InstallGuide } from "@/lib/pwa/install-guide";
 
 const { refreshPwaApp } = vi.hoisted(() => ({ refreshPwaApp: vi.fn() }));
 
@@ -14,6 +15,7 @@ vi.mock("@/lib/pwa/service-worker-update", () => ({ refreshPwaApp }));
 type NoticeHarnessProps = {
   installPrompt?: boolean;
   unsupported?: boolean;
+  installGuide?: InstallGuide | null;
   onInstall?: () => void;
   onDismiss?: () => void;
 };
@@ -21,6 +23,7 @@ type NoticeHarnessProps = {
 function NoticeHarness({
   installPrompt = false,
   unsupported = false,
+  installGuide = null,
   onInstall = () => {},
   onDismiss = () => {},
 }: NoticeHarnessProps) {
@@ -31,6 +34,7 @@ function NoticeHarness({
     <ServiceWorkerNotice
       installPrompt={installPrompt}
       unsupported={unsupported}
+      installGuide={installGuide}
       onInstall={onInstall}
       onDismiss={() => {
         onDismiss();
@@ -87,6 +91,18 @@ function restoreServiceWorkerApi() {
   } else {
     Reflect.deleteProperty(navigatorPrototype, "serviceWorker");
   }
+}
+
+const IPHONE_SAFARI_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
+
+/** 模拟 iPhone Safari；`standalone` 表示已从主屏幕打开。 */
+function emulateIphoneSafari({ standalone = false } = {}) {
+  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPHONE_SAFARI_USER_AGENT);
+  vi.spyOn(navigator, "maxTouchPoints", "get").mockReturnValue(5);
+  const matchMedia = window.matchMedia.bind(window);
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => (
+    query === "(display-mode: standalone)" ? { ...matchMedia(query), matches: standalone } : matchMedia(query)
+  ));
 }
 
 function removeServiceWorkerApi() {
@@ -177,6 +193,35 @@ test("runtime notice keeps the reading width in the shell fallback", async () =>
   } finally {
     await screen.unmount();
   }
+});
+
+test("guides iOS and Mac Safari users to add Pi Reach manually without an install action", async () => {
+  const onDismiss = vi.fn();
+  const iosScreen = await renderPwa(<NoticeHarness installGuide="ios" onDismiss={onDismiss} />);
+  await expect.element(iosScreen.getByText("Add to Home Screen", { exact: true })).toBeVisible();
+  await expect.element(iosScreen.getByText(/from your browser's Share menu/)).toBeVisible();
+  await expect.element(iosScreen.getByRole("button", { name: "Install app" })).not.toBeInTheDocument();
+  await iosScreen.getByRole("button", { name: "Dismiss PWA notice" }).click();
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+  await expect.element(iosScreen.getByRole("status")).not.toBeInTheDocument();
+  await iosScreen.unmount();
+
+  const macScreen = await renderPwa(<NoticeHarness installGuide="mac-safari" />);
+  await expect.element(macScreen.getByText("Add to Dock", { exact: true })).toBeVisible();
+  await expect.element(macScreen.getByText(/choose File > Add to Dock/)).toBeVisible();
+  await expect.element(macScreen.getByRole("button", { name: "Install app" })).not.toBeInTheDocument();
+});
+
+test("lets unsupported mode and a real install prompt take precedence over the manual guide", async () => {
+  const unsupportedScreen = await renderPwa(<NoticeHarness unsupported installGuide="ios" />);
+  await expect.element(unsupportedScreen.getByText("Offline app mode unavailable")).toBeVisible();
+  await expect.element(unsupportedScreen.getByText("Add to Home Screen", { exact: true })).not.toBeInTheDocument();
+  await unsupportedScreen.unmount();
+
+  const installScreen = await renderPwa(<NoticeHarness installPrompt installGuide="mac-safari" />);
+  await expect.element(installScreen.getByText("Install Pi Reach")).toBeVisible();
+  await expect.element(installScreen.getByRole("button", { name: "Install app" })).toBeVisible();
+  await expect.element(installScreen.getByText("Add to Dock", { exact: true })).not.toBeInTheDocument();
 });
 
 test("does not put update actions into the persistent install notice", async () => {
@@ -373,6 +418,42 @@ productionTest("keeps a dismissed notice hidden for the mount while allowing a r
     await expect.element(remountedScreen.getByRole("button", { name: "Install app" })).toBeVisible();
   } finally {
     await remountedScreen.unmount();
+  }
+});
+
+productionTest("shows the iOS guide in a browser tab, hides it for the mount on dismissal and again on the next open", async () => {
+  emulateIphoneSafari();
+  const { register } = installServiceWorker(createRegistration());
+  const firstScreen = await renderPwa(<ServiceWorkerRegister />);
+
+  try {
+    await waitForRegistration(register);
+    await expect.element(firstScreen.getByText("Add to Home Screen", { exact: true })).toBeVisible();
+    await firstScreen.getByRole("button", { name: "Dismiss PWA notice" }).click();
+    await expect.element(firstScreen.getByRole("status")).not.toBeInTheDocument();
+  } finally {
+    await firstScreen.unmount();
+  }
+
+  const remountedScreen = await renderPwa(<ServiceWorkerRegister />);
+  try {
+    await waitForRegistration(register, 2);
+    await expect.element(remountedScreen.getByText("Add to Home Screen", { exact: true })).toBeVisible();
+  } finally {
+    await remountedScreen.unmount();
+  }
+});
+
+productionTest("does not show the iOS guide once opened from the Home Screen", async () => {
+  emulateIphoneSafari({ standalone: true });
+  const { register } = installServiceWorker(createRegistration());
+  const screen = await renderPwa(<ServiceWorkerRegister />);
+
+  try {
+    await waitForRegistration(register);
+    await expect.element(screen.getByRole("status")).not.toBeInTheDocument();
+  } finally {
+    await screen.unmount();
   }
 });
 
