@@ -195,8 +195,8 @@ test("sidebar elevation is lighter in light mode and absent in dark mode without
   expect(shared["--pwa-shadow-modal"]).toBe("0 12px 32px var(--pwa-shadow-color)");
   expect(light["--pwa-shadow-composer"]).toBe("0 1px 2px var(--pwa-shadow-contact-color), 0 6px 20px var(--pwa-shadow-color)");
   expect(dark["--pwa-shadow-composer"]).toBe("none");
-  // 触屏聚焦贴住键盘辅助栏时只留接触层；深色本无 Composer 阴影，聚焦时也不增加。
-  expect(light["--pwa-shadow-composer-docked"]).toBe("0 1px 2px var(--pwa-shadow-contact-color)");
+  // 触屏聚焦贴住键盘辅助栏时投影只向上方和两侧散开；深色本无 Composer 阴影，聚焦时也不增加。
+  expect(light["--pwa-shadow-composer-docked"]).toBe("0 1px 2px var(--pwa-shadow-contact-color), 0 -6px 20px -6px var(--pwa-shadow-color)");
   expect(dark["--pwa-shadow-composer-docked"]).toBe("none");
   expect(systemDark["--pwa-shadow-composer-docked"]).toBe("none");
 });

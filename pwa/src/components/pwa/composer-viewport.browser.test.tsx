@@ -413,9 +413,9 @@ test("drops the mobile Composer bottom gap while the input is focused on a touch
     expect(getComputedStyle(card).transitionDelay).toBe(`0s, ${seconds("--pwa-duration-collapse-out")}`);
     await finishCssTransitions();
     expect(bottom()).toBe("0px");
-    // 卡片底边即可见区域底边，投影会被截断，只留接触层。
+    // 卡片底边即可见区域底边，投影改为只向上方和两侧散开，不在底边被截断。
     expect(shadow()).not.toBe(fullShadow);
-    expect(shadow()).toBe("rgba(0, 0, 0, 0.12) 0px 1px 2px 0px");
+    expect(shadow()).toBe("rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px -6px 20px -6px");
     await settle();
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     view.input.blur();

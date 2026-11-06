@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { finishCssTransitions } from "@/test/browser/motion";
 import { Drawer, Modal } from "@mantine/core";
 import { ENTER_SENDS_STORAGE_KEY, isAppleKeyboard, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { MOBILE_LAYOUT_QUERY, TOUCH_INPUT_QUERY } from "@/lib/ui/viewport-queries";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { MessageComposer } from "./message-composer";
@@ -34,6 +35,8 @@ type ComposerHarnessProps = {
   onCommandsOpen?: () => void;
   onNewSession?: () => void;
   onSend?: () => void | Promise<void>;
+  /** 与正式应用一样在发送成功后清空草稿。 */
+  clearOnSend?: boolean;
   onStop?: () => void;
   onAddFiles?: (files: File[]) => void;
   onSetModel?: (nextModel: WireModel) => void;
@@ -58,6 +61,7 @@ function ComposerHarness({
   onCommandsOpen = () => {},
   onNewSession = () => {},
   onSend = () => {},
+  clearOnSend = false,
   onStop = () => {},
   onAddFiles = () => {},
   onSetModel = () => {},
@@ -99,7 +103,7 @@ function ComposerHarness({
         stopping={stopping}
         draft={draft}
         onDraftChange={setDraft}
-        onSend={onSend}
+        onSend={clearOnSend ? async () => { await onSend(); setDraft(""); } : onSend}
         onStop={onStop}
         onAddFiles={addFiles}
         onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
@@ -1330,4 +1334,27 @@ test("sending from a focused input keeps focus so the soft keyboard stays open",
     send.element().dispatchEvent(unfocused);
     expect(unfocused.defaultPrevented).toBe(false);
   } finally { await screen.unmount(); }
+});
+
+test("dismisses the soft keyboard after a successful send on a touch phone", async () => {
+  // 无头 Chromium 关闭触控模拟后无法恢复指针媒体特性，只替换布局与触屏两条查询。
+  const original = window.matchMedia.bind(window);
+  vi.stubGlobal("matchMedia", (query: string) => query === MOBILE_LAYOUT_QUERY || query === TOUCH_INPUT_QUERY
+    ? { ...original(query), matches: true } : original(query));
+  let sends = 0;
+  const screen = await renderPwa(<ComposerHarness initialDraft="Ready" clearOnSend onSend={() => { sends += 1; }} />);
+  try {
+    const input = screen.getByRole("textbox", { name: /Message your agent/i }).element() as HTMLTextAreaElement;
+    input.focus();
+    // 按下发送时仍不抢焦点，键盘在发送过渡期间保持打开；这里没有时间线过渡，发送成功即收起。
+    const pressed = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    screen.getByRole("button", { name: "Send message", exact: true }).element().dispatchEvent(pressed);
+    expect(pressed.defaultPrevented).toBe(true);
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => sends).toBe(1);
+    await expect.poll(() => document.activeElement === input).toBe(false);
+  } finally {
+    vi.unstubAllGlobals();
+    await screen.unmount();
+  }
 });
