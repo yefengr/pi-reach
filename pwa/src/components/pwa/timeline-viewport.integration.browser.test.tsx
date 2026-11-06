@@ -602,14 +602,14 @@ test.each([1280, 390])("running tool members keep following without reversal and
   } finally { await screen.unmount(); }
 });
 
-test("a floating local error entering and fading out above the list keeps the reading row in place", async () => {
-  let setMessage!: (message: string | null) => void;
-  let viewport!: TimelineViewport;
+/** 与工作区布局相同的浮动提示区：提示区高度经 useMainNoticesSpace 同步为列表顶部留白（ADR-20261105）。 */
+function floatingErrorHarness() {
   const items = [answer("first", paragraphs("First")), answer("second", paragraphs("Second")), answer("third", paragraphs("Third"))];
+  const controls = {} as { setMessage: (message: string | null) => void; viewport: TimelineViewport };
   function Harness() {
     const [message, setErrorMessage] = useState<string | null>(null);
-    setMessage = setErrorMessage;
-    viewport = useTimelineViewport(items);
+    controls.setMessage = setErrorMessage;
+    const viewport = controls.viewport = useTimelineViewport(items);
     const rootRef = useRef<HTMLDivElement>(null);
     const noticesRef = useRef<HTMLDivElement>(null);
     useMainNoticesSpace(rootRef, noticesRef);
@@ -618,16 +618,27 @@ test("a floating local error entering and fading out above the list keeps the re
       <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} />
     </main></div>;
   }
+  return { Harness, controls };
+}
+
+/** 模拟用户向上滚到指定位置：先以滚轮中断跟随，再派发滚动。 */
+function readAtScrollTop(list: HTMLElement, scrollTop: number) {
+  list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
+  list.scrollTop = scrollTop;
+  flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
+}
+
+test("a floating local error entering and fading out above the list keeps the reading row in place", async () => {
+  const { Harness, controls } = floatingErrorHarness();
+  const setMessage = (message: string | null) => controls.setMessage(message);
   const screen = await renderPwa(<Harness />);
   try {
     await settleLayout();
     const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
     const row = [...list.querySelectorAll("p")].find((element) => element.textContent?.startsWith("Second paragraph 4"))!;
-    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
-    list.scrollTop += offset(row, list) - 40;
-    flushSync(() => list.dispatchEvent(new Event("scroll", { bubbles: true })));
+    readAtScrollTop(list, list.scrollTop + offset(row, list) - 40);
     await settleLayout();
-    expect(viewport.followingOutput).toBe(false);
+    expect(controls.viewport.followingOutput).toBe(false);
     const before = offset(row, list);
     const listTop = Math.round(list.getBoundingClientRect().top);
     const paddingTop = Number.parseFloat(getComputedStyle(list).paddingTop);
@@ -645,7 +656,34 @@ test("a floating local error entering and fading out above the list keeps the re
     await settleLayout();
     expect(Number.parseFloat(getComputedStyle(list).paddingTop)).toBe(paddingTop);
     expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
-    expect(viewport.followingOutput).toBe(false);
+    expect(controls.viewport.followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+// 卡片盖住的内容不会丢：回看时首行被盖住也保持不动，滚回顶部后顶部留白让首行完整落在卡片下方。
+test("the first row covered by a floating local error scrolls out below the card at the top", async () => {
+  const { Harness, controls } = floatingErrorHarness();
+  const screen = await renderPwa(<Harness />);
+  try {
+    await settleLayout();
+    const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+    readAtScrollTop(list, 0);
+    await settleLayout();
+    expect(controls.viewport.followingOutput).toBe(false);
+    const first = list.querySelector("p")!;
+    expect(first.textContent).toMatch(/^First paragraph 0/);
+
+    flushSync(() => controls.setMessage("Could not update local history."));
+    await settleLayout();
+    const card = document.querySelector(".pwa-status-error")!;
+    expect(first.getBoundingClientRect().top).toBeLessThan(card.getBoundingClientRect().bottom);
+
+    readAtScrollTop(list, 0);
+    await settleLayout();
+    expect(list.scrollTop).toBe(0);
+    const firstBox = first.getBoundingClientRect();
+    expect(Math.round(firstBox.top)).toBeGreaterThanOrEqual(Math.round(card.getBoundingClientRect().bottom));
+    expect(first.contains(document.elementFromPoint(firstBox.left + 4, firstBox.top + firstBox.height / 2))).toBe(true);
   } finally { await screen.unmount(); }
 });
 
