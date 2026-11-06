@@ -38,6 +38,8 @@ function writeBaselines(baselines: Baselines) {
  * 键盘只改变高度，旋转与分屏必然改变宽度，且宽高在同一次 resize 中更新。
  * 时机：iOS 在整页上推开始时一次变到终点、之后不再报告进度，安卓可能随键盘逐步缩小；统一在可视高度最后一次变化后
  * 等 keyboard-lag（上推约 250ms 加约 100ms 停顿）再由 opening 转为 open。页面缩放时可视尺寸与键盘无关，不更新判断。
+ * 只标记浏览器平移页面的情形（布局视口不变、只缩小可视窗口，如 iOS）：浏览器缩小布局视口时（安卓 Chrome 执行
+ * interactive-widget=resizes-content），外壳已随视口贴住键盘，输入区无需停靠，不打标记。
  */
 export function observeSoftKeyboard(root: HTMLElement): () => void {
   const viewport = window.visualViewport;
@@ -67,6 +69,11 @@ export function observeSoftKeyboard(root: HTMLElement): () => void {
     }
     const baseline = baselines[key];
     if (baseline === undefined || viewport.height >= baseline - KEYBOARD_MIN_HEIGHT) {
+      close();
+      return;
+    }
+    // 根元素 clientHeight 即布局视口高度：平移时保持不变，缩小视口时随键盘变矮、与可视高度相近。
+    if (document.documentElement.clientHeight - viewport.height < KEYBOARD_MIN_HEIGHT) {
       close();
       return;
     }
