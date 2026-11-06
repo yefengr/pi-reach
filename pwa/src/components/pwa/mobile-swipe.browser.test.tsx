@@ -35,7 +35,7 @@ function Harness({ clicks, empty = false }: { clicks: () => void; empty?: boolea
   }, [openSettings]);
   return <PwaUiProvider><PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout
     navigation={navigation} titleBar={{ title: "Swipe Pi", showTitle: true, moreMenu: <SessionActionsMenu info={{ name: "Swipe Pi", computer: "Computer", status: "Online", cwd: "/notes" }} /> }}
-    historyMode={false} toast={null} settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings}
+    toast={null} settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings}
     renderSettings={({ titleRef }) => <><h1 ref={titleRef} id="pwa-settings-title" tabIndex={-1}>Settings</h1><button onClick={closeSettings}>Back</button></>}
     overlays={<Menu opened={menuOpen} onChange={setMenuOpen} withinPortal={false}><Menu.Target><button style={{ position: "absolute", right: 0, bottom: 0 }}>Command menu</button></Menu.Target><Menu.Dropdown><Menu.Item>New session</Menu.Item></Menu.Dropdown></Menu>}
     closeBackgroundOverlay={(close) => close()}

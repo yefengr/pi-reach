@@ -8,7 +8,7 @@ import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 import { PwaAppShell } from "@/components/pwa/pwa-app-shell";
 import { PwaApp } from "@/components/pwa/pwa-app";
-import { connectionBannerTiming } from "@/components/pwa/pwa-app-actions";
+import { CONNECTION_HINT_TIMING } from "@/lib/pwa/connection-hint";
 import { setLanguagePreference } from "@/lib/i18n";
 import { APPEARANCE_STORAGE_KEY } from "@/lib/ui/appearance";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
@@ -158,7 +158,8 @@ type Appearance = "light" | "dark";
 async function seed(lang: Lang, appearance: Appearance) {
   harness.relays.length = 0;
   harness.channels.length = 0;
-  connectionBannerTiming.delayMs = 0;
+  CONNECTION_HINT_TIMING.reconnectingMs = 0;
+  CONNECTION_HINT_TIMING.retryMs = 0;
   window.localStorage.clear();
   window.localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance);
   setLanguagePreference(lang);

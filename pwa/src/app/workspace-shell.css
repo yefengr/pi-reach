@@ -198,7 +198,6 @@
 /* 提示区自身避让主区贴边一侧的安全区，内部提示条仍按 gutter 居中。 */
 .pwa-root .pwa-main-notices { flex: 0 0 auto; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
 /* 连接提示条、Toast 与操作通知与阅读列同宽，位于会话标题区下方。 */
-.pwa-root .pwa-main-notices > .pwa-connection-banner,
 .pwa-root .pwa-main-notices > .pwa-status-error { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); max-width: none; }
 /* 工作区内的运行时提示条 Portal 到提示区槽位，提示区已避让安全区，这里只留 gutter；
    启动与故障态挂在应用壳顶层的备用槽位，仍按 globals.css 自行扣除左右安全区。 */
@@ -215,22 +214,28 @@
  * 高度一次到位，不逐帧改变布局。本端发送过渡期间（footer 带 data-own-send）淡出中的副本直接隐藏，不与输入区回缩争抢高度。
  */
 .pwa-chat-footer[data-own-send] .pwa-composer-hint-slot[data-presence="leaving"] { display: none; }
-/* 提示行随包裹层收拢时裁切，不溢出到正文上。 */
-.pwa-root .pwa-composer-hint-slot > .pwa-composer-hint-line { overflow: hidden; }
+/* 提示行随包裹层收拢时裁切，不溢出到正文上；裁切范围上下各外扩 10，留给文字操作 44 的点击区与悬停底色。 */
+.pwa-root .pwa-composer-hint-slot > .pwa-composer-hint-line { overflow: clip; overflow-clip-margin: 10px; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0; padding: 2px 0 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > svg { flex: 0 0 auto; }
+/* 提示行的文字操作（如「立即重试」）：中性色、600，靠右；点击区 44，越出提示行的部分由负外边距抵消，不撑高提示行；悬停底色上下各内缩 10。 */
+.pwa-root .pwa-composer-card .pwa-composer-hint-line > span { flex: 1 1 auto; }
+.pwa-root .pwa-composer-hint-action { position: relative; z-index: 1; isolation: isolate; flex: 0 0 auto; min-height: var(--pwa-hit-target); margin-block: -10px; padding: 0 8px; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); font: inherit; font-weight: var(--pwa-weight-strong); white-space: nowrap; }
+.pwa-root .pwa-composer-hint-action::before { content: ""; position: absolute; z-index: -1; inset: 10px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-composer-hint-action:focus-visible { outline-offset: -10px; }
+.pwa-root .pwa-composer-hint-action:disabled { color: var(--pwa-secondary); cursor: default; }
+@media (hover: hover) { .pwa-root .pwa-composer-hint-action:not(:disabled):hover::before { background: var(--pwa-hover); } }
 
 /* 连接状态：在线为 accent 圆点加中性文字，连接中／重连运行色并带动态图形，离线中性色；带文字（移动端已连接时只显示圆点）。 */
-.pwa-connection { display: inline-flex; align-items: center; gap: var(--pwa-space-status); padding: 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); white-space: nowrap; }
-.pwa-connection.online .pwa-status-dot { background: var(--pwa-accent); }
-.pwa-connection.connecting,
-.pwa-connection.retrying { color: var(--pwa-running); }
 .pwa-status-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
 
 /* 主区空状态：阅读列中部偏上，图标、标题、一行说明，最多一个操作。 */
 .pwa-root .pwa-workspace-state { min-width: 0; flex: 1 1 auto; display: grid; align-content: start; justify-items: center; gap: 0; overflow-y: auto; padding: clamp(48px, 24dvh, 260px) var(--pwa-main-inset-end) 48px var(--pwa-main-inset-start); text-align: center; }
 .pwa-root .pwa-workspace-state-icon { display: grid; place-items: center; color: var(--pwa-secondary); }
+/* 空态说明里的进行中状态：只有动态图标用运行色，文字保持中性色。 */
+.pwa-root .pwa-workspace-state-busy { display: inline-flex; align-items: center; gap: var(--pwa-space-status); }
+.pwa-root .pwa-workspace-state-busy > svg { flex: 0 0 auto; color: var(--pwa-running); }
 /* 间距只由各元素的上外边距负责：图标到标题 16、标题到说明 8，说明到命令块、操作或列表 16。 */
 .pwa-root .pwa-workspace-state .pwa-workspace-state-icon + h2 { margin-top: 16px; }
 .pwa-root .pwa-workspace-state h2 { max-width: var(--pwa-reading-width); margin: 8px 0 0; color: var(--pwa-ink); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
@@ -246,7 +251,6 @@
 .pwa-root .pwa-choose-pi-list .pwa-nav-link-section { color: var(--pwa-secondary); }
 
 /* 本地历史的只读说明条替换输入区。 */
-.pwa-root .pwa-read-only-bar { box-sizing: border-box; margin: var(--pwa-space-composer) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) var(--pwa-main-bottom-gap) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-secondary); background: var(--pwa-panel); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 
 /* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }
@@ -293,7 +297,6 @@
   .pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); align-items: center; padding-top: var(--pwa-safe-top); padding-bottom: 0; padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
   .pwa-root .pwa-title-bar-heading { display: none; }
   /* 已连接时只显示圆点，把宽度留给会话名；文字仍供读屏，其他状态照常显示。 */
-  .pwa-root .pwa-title-bar .pwa-connection.online .pwa-connection-label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .pwa-root .pwa-session-trigger { min-width: 0; min-height: var(--pwa-hit-target); flex: 1 1 auto; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 0; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: transparent; font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
   .pwa-root .pwa-session-trigger:focus-visible { outline: none; }
   .pwa-root .pwa-session-trigger-icon { position: relative; width: var(--pwa-hit-target); height: var(--pwa-hit-target); flex: 0 0 var(--pwa-hit-target); display: grid; place-items: center; border-radius: 50%; color: var(--pwa-secondary); }
@@ -304,7 +307,6 @@
   .pwa-root .pwa-session-trigger-icon .pwa-notice-dot { position: absolute; top: 9px; right: 9px; }
   .pwa-root .pwa-session-trigger-copy { min-width: 0; display: grid; text-align: left; }
   .pwa-root .pwa-session-trigger-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pwa-root .pwa-read-only-bar { font-size: var(--pwa-text-body); }
   /* 桌面极矮窗口的提示条留白收紧只服务桌面两行标题区；移动单行顶栏保持 4/6。 */
   .pwa-app-shell[data-compact-height="very-short"] .pwa-main-notices:has(> .pwa-status-error) .pwa-runtime-notice { margin-top: 4px; padding-block: 6px; }
   /* 移动顶栏只保留导航入口、连接状态与「更多」，把宽度留给会话名。 */

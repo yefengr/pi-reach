@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { MessageComposer } from "./message-composer";
-import { PwaConnectionBanner } from "./pwa-app-actions";
+import { PwaStatusError } from "./pwa-app-actions";
 import { PwaAppShell } from "./pwa-app-shell";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
 
@@ -32,7 +32,7 @@ const composerProps: ComponentProps<typeof MessageComposer> = {
 
 let setNotice: (visible: boolean) => void = noop;
 
-/** 使用真实工作区与输入组件，仅控制顶部连接提示是否显示。 */
+/** 使用真实工作区与输入组件，仅控制顶部占布局的局部错误条是否显示。 */
 function Harness({ initialNotice = false }: { initialNotice?: boolean }) {
   const [notice, set] = useState(initialNotice);
   useLayoutEffect(() => { setNotice = set; }, [set]);
@@ -40,9 +40,7 @@ function Harness({ initialNotice = false }: { initialNotice?: boolean }) {
     <PwaWorkspaceLayout
       navigation={navigation}
       titleBar={{ title: "Session", showTitle: true }}
-      historyMode={false}
-      connectionBanner={notice ? <PwaConnectionBanner kind="relay" connection="retrying" /> : null}
-      toast={null}
+      toast={notice ? <PwaStatusError message="Could not load earlier history." onDismiss={noop} /> : null}
       operationNotifications={null}
       settingsRoute={settingsRoute}
       onOpenSettings={noop}

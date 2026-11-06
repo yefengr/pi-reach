@@ -7,7 +7,7 @@ import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion"
 import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
-import { PwaConnectionBanner } from "./pwa-app-actions";
+import { PwaStatusError } from "./pwa-app-actions";
 
 const scope = { session_id: "viewport-session", leaf_id: "generation" };
 const paragraphs = (prefix: string, count = 18) => Array.from({ length: count }, (_, index) => `${prefix} paragraph ${index}: content that stays available while reading.`).join("\n\n");
@@ -601,16 +601,16 @@ test.each([1280, 390])("running tool members keep following without reversal and
   } finally { await screen.unmount(); }
 });
 
-test("a connection banner entering and fading out above the list keeps the reading row in place", async () => {
-  let setKind!: (kind: "relay" | null) => void;
+test("a local error bar entering and fading out above the list keeps the reading row in place", async () => {
+  let setMessage!: (message: string | null) => void;
   let viewport!: TimelineViewport;
   const items = [answer("first", paragraphs("First")), answer("second", paragraphs("Second")), answer("third", paragraphs("Third"))];
   function Harness() {
-    const [kind, setBannerKind] = useState<"relay" | null>(null);
-    setKind = setBannerKind;
+    const [message, setErrorMessage] = useState<string | null>(null);
+    setMessage = setErrorMessage;
     viewport = useTimelineViewport(items);
     return <main className="pwa-main" style={{ width: "100vw", height: 600, display: "flex", flexDirection: "column" }}>
-      <div className="pwa-main-notices"><PwaConnectionBanner kind={kind} connection="retrying" /></div>
+      <div className="pwa-main-notices"><PwaStatusError message={message} onDismiss={() => setErrorMessage(null)} /></div>
       <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} />
     </main>;
   }
@@ -627,13 +627,13 @@ test("a connection banner entering and fading out above the list keeps the readi
     const before = offset(row, list);
 
     // 提示条占布局：列表变矮一次，阅读行按锚点保持在原处。
-    flushSync(() => setKind("relay"));
+    flushSync(() => setMessage("Could not update local history."));
     await settleLayout();
-    expect(document.querySelector(".pwa-connection-banner")).not.toBeNull();
+    expect(document.querySelector(".pwa-status-error")).not.toBeNull();
     expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
 
-    flushSync(() => setKind(null));
-    await expect.poll(() => document.querySelector(".pwa-connection-banner"), { timeout: 2000 }).toBeNull();
+    flushSync(() => setMessage(null));
+    await expect.poll(() => document.querySelector(".pwa-status-error"), { timeout: 2000 }).toBeNull();
     await settleLayout();
     expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
     expect(viewport.followingOutput).toBe(false);

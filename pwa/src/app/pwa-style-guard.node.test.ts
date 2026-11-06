@@ -83,6 +83,7 @@ const ALIGN = "负外边距让文字或图标与内容左缘对齐，或抵消�
 const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-sr-only", property: "margin", values: [-1], reason: OPTICAL },
   { file: "app/globals.css", selector: ".pwa-message-list", property: "--pwa-timeline-pad-bottom", values: [88], reason: "消息区底部为浮动「最新」入口预留" },
+  { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-composer-hint-action", property: "margin-block", values: [-10], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back", property: "margin-left", values: [-8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-pairing-head", property: "margin", values: [-10], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-field-error svg", property: "margin-top", values: [1], reason: OPTICAL },
@@ -92,7 +93,6 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-app-shell[data-compact-height] .pwa-runtime-notice-description", property: "margin", values: [-1], reason: OPTICAL },
   { file: "app/workspace-shell.css", selector: ".pwa-root[data-sidebar-collapsed] .pwa-title-bar", property: "padding-left", values: [56], reason: "收起侧栏后标题区避让展开入口（8＋44＋4），另加左安全区" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-workspace-state", property: "padding", values: [260], reason: "主区空状态顶部 clamp(48px, 24dvh, 260px) 的上限" },
-  { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-title-bar .pwa-connection.online .pwa-connection-label", property: "margin", values: [-1], reason: OPTICAL },
   { file: "components/pwa/attachment-cards.css", selector: ".pwa-attachment-meta", property: "gap", values: [3], reason: "附件卡片 58 高的领域密度" },
   { file: "components/pwa/published-files.css", selector: ".pwa-root .pwa-published-placeholder", property: "padding", values: [20], reason: "媒体占位区留白" },
   { file: "components/pwa/published-files.css", selector: ".pwa-root .pwa-file-image-stage", property: "padding", values: [20], reason: "图片舞台留白，避免图片贴边" },

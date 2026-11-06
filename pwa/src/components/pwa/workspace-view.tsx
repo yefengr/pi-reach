@@ -11,7 +11,6 @@ import { BrandMark } from "@/components/pwa/brand-mark";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { RunningIndicator } from "./running-indicator";
-import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 
 export { displayDevice } from "@/components/pwa/workspace-device-control";
 export { displayPi } from "@/components/pwa/session-title";
@@ -24,13 +23,6 @@ const navigationNavLinkClassNames = {
   description: "pwa-nav-link-description",
   section: "pwa-nav-link-section",
 } as const;
-
-export function ConnectionStatus({ state, retryAttempt = 0 }: { state: ConnectionViewState; retryAttempt?: number }) {
-  const { t } = useI18n();
-  const label = state === "online" ? t.connection.connected : state === "connecting" ? t.connection.connecting : state === "retrying" ? t.connection.reconnecting : state === "no_network" ? t.connection.noNetwork : t.connection.offline;
-  const busy = state === "connecting" || state === "retrying";
-  return <span className={`pwa-connection ${state}`} title={label} aria-label={label} data-retry-attempt={state === "retrying" ? retryAttempt : undefined}>{busy ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : <span className="pwa-status-dot" aria-hidden="true" />}<span className="pwa-connection-label">{label}</span></span>;
-}
 
 /** 移动导航中选中、待导航退出后执行的切换目标。 */
 export type NavigationSwitchTarget =

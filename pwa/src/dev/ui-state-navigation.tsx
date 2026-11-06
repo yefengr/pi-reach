@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Button, NativeSelect } from "@mantine/core";
-import { DesktopSidebar, ConnectionStatus, type ConnectionViewState, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
+import { DesktopSidebar, type ConnectionViewState, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { SessionSheet } from "@/components/pwa/session-sheet";
 import { WorkspaceTitleBar } from "@/components/pwa/workspace-title-bar";
 import { SessionActionsMenu } from "@/components/pwa/session-actions-menu";
@@ -74,7 +74,6 @@ export function UiStateNavigation({ enabled, settingsOpen, children, onSceneChan
       <div className="pwa-main">
         {enabled ? <WorkspaceTitleBar title={title} prefix="pi-reach" showTitle={Boolean(endpoint || selectedHistoryId)} navigationExpanded={sheetOpen}
           onOpenNavigation={button => { setOrigin(button); setSheetOpen(true); }}
-          status={<ConnectionStatus state={connection} retryAttempt={2} />}
           onRefresh={() => setNotice("已演示刷新，未重新加载页面或连接远程服务。")}
           moreMenu={<SessionActionsMenu info={{ name: title, cwd: endpoint?.cwd, computer: selectedDevice?.nickname ?? "未配对电脑", status: "仅本页演示" }} />} /> : null}
         {enabled && notice ? <p className="pwa-ui-states-local-result" role="status">{notice}</p> : null}

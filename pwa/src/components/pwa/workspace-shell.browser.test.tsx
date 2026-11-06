@@ -29,7 +29,7 @@ function ShellHarness({ composer = false }: { composer?: boolean }) {
   const [draft, setDraft] = useState("");
   const { route, openSettings, closeSettings } = useSettingsRoute();
   const viewport = useTimelineViewport(items);
-  return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "pi-reach", prefix: "pi-reach", showTitle: true }} historyMode={false} toast={null} settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={() => <button onClick={closeSettings}>Return to workspace</button>} overlays={null} closeBackgroundOverlay={(close) => close()}>
+  return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "pi-reach", prefix: "pi-reach", showTitle: true }} toast={null} settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={() => <button onClick={closeSettings}>Return to workspace</button>} overlays={null} closeBackgroundOverlay={(close) => close()}>
     <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} isLive />
     <textarea aria-label="Draft" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
     {composer ? <ReadOnlyComposer notice="Read-only history" modelName="test-model" thinking="medium" /> : null}

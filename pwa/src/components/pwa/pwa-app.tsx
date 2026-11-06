@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@mantine/core";
-import { MessageComposer } from "@/components/pwa/message-composer";
+import { MessageComposer, ReadOnlyComposer } from "@/components/pwa/message-composer";
 import { useSessionActions } from "@/lib/pwa/use-session-actions";
-import { compactionTerminalKind, currentRunGroup, OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint, stopHasEnded, type CompactionActivity, type CompactionNotice } from "@/lib/pwa/operation-feedback";
+import { compactionTerminalKind, currentRunGroup, OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint, stopHasEnded, type CompactionActivity, type CompactionNotice, type OperationHint } from "@/lib/pwa/operation-feedback";
 import type { ModelListStatus } from "./composer-command-menu";
 import { RenamePairingDialog } from "@/components/pwa/rename-pairing-dialog";
 import { ConfirmActionDialog } from "@/components/pwa/confirm-action-dialog";
@@ -14,17 +13,18 @@ import { isQueuedMessage, QueuedMessagesPanel } from "@/components/pwa/queued-me
 import { decodeBase64 } from "@/lib/pi-reach/encoding";
 import { describeStartupFailure, StartupErrorView, StartupLoading, type StartupError } from "@/components/pwa/pwa-startup";
 import { PairingDialog } from "@/components/pwa/pairing-dialog";
-import { connectionBannerTiming, PwaConnectionBanner, PwaMessageActions, PwaStatusError, type PwaConnectionBannerKind } from "@/components/pwa/pwa-app-actions";
+import { PwaMessageActions, PwaStatusError } from "@/components/pwa/pwa-app-actions";
+import { CONNECTION_HINT_TIMING, connectionHint, type ConnectionHintStage, type ConnectionIssueKind } from "@/lib/pwa/connection-hint";
 import { focusedElement, runConfirmAction, useConfirmationOverlay, type ConfirmActionRequest } from "@/components/pwa/pwa-confirm-actions";
 import { SettingsPage } from "@/components/pwa/settings-page";
 import { reloadWorkspace, useSettingsRoute } from "@/lib/pwa/settings-route";
 import { SessionActionsMenu } from "@/components/pwa/session-actions-menu";
-import { ConnectionStatus, cwdName, displayDevice, type ConnectionViewState, type NavigationSwitchTarget, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
+import { cwdName, displayDevice, type ConnectionViewState, type NavigationSwitchTarget, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { useSwitchOutFade } from "@/components/pwa/use-switch-out-fade";
 import { displayPi } from "@/components/pwa/session-title";
 import { PwaWorkspaceLayout } from "@/components/pwa/pwa-workspace-layout";
 import { PwaOperationNotifications, PwaToastProvider, useToast } from "@/components/pwa/pwa-operation-notifications";
-import { ChooseComputerWorkspace, ChoosePiWorkspace, HistoryConversation, NoPiWorkspace, TimelineWorkspace, UnpairedWorkspace, useDelayedVisibility, WorkspaceSkeleton } from "@/components/pwa/workspace-content";
+import { ChooseComputerWorkspace, ChoosePiWorkspace, ConnectionIssueWorkspace, HistoryConversation, NoPiWorkspace, TimelineWorkspace, UnpairedWorkspace, useDelayedVisibility, WorkspaceSkeleton } from "@/components/pwa/workspace-content";
 import type { WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-bar";
 import { PeerChannel } from "@/lib/pi-reach/peer-channel";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
@@ -103,7 +103,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const [identity, setIdentity] = useState<OwnerKeyPair | null>(null); const [devices, setDevices] = useState<PwaDeviceRecord[]>([]);
   const [connection, setConnection] = useState<ConnectionViewState>("offline");
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
-  const [connectionFeedback, setConnectionFeedback] = useState<PwaConnectionBannerKind | null>(null);
+  const [connectionFeedback, setConnectionFeedback] = useState<ConnectionIssueKind | null>(null);
   const [sessionRestartToken, setSessionRestartToken] = useState(0);
   const [defaultRelayUrl, setDefaultRelayUrl] = useState("");
   const [relayUrl, setRelayUrl] = useState(""); const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
@@ -417,7 +417,6 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     onlineRef,
     relayStatus,
     relayVersion,
-    retryAttempt,
     generation: relayConnectionGeneration,
     reconnectNow: reconnectRelayNow,
     resubscribe: resubscribeRelay,
@@ -1163,27 +1162,31 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   // 未打开会话时（没有在线 Pi、等待选择或等待快照），标题区与连接提示条只反映 Relay 与网络；没有可连接的 Pi 不是连接故障。
   const liveSessionShown = selectedHistory === null && Boolean(activeDevice && displayEndpoint);
   const displayConnection = liveSessionShown ? connection : relayStatus;
-  const rawConnectionBannerKind: PwaConnectionBannerKind | null = selectedHistory !== null || exitedDisplay !== null
+  const rawConnectionIssue: ConnectionIssueKind | null = selectedHistory !== null || exitedDisplay !== null
     ? null
     : displayConnection === "no_network"
       ? "network"
       : displayConnection === "offline" || displayConnection === "retrying" || displayConnection === "connecting" && connectionFeedback
         ? "relay"
         : liveSessionShown ? connectionFeedback : null;
-  // 断线超过 10 秒才显示提示条；其间只在会话标题区显示重连状态。
-  const connectionBannerDue = useDelayedVisibility(rawConnectionBannerKind !== null, connectionBannerTiming.delayMs, 0);
-  // 曾经在线后断线、且提示条出现过时，恢复连接后以 Toast 提示「连接已恢复」；首次连接不提示。
-  const connectionBannerShownRef = useRef(false);
+  // 连接问题在输入区提示行（未打开会话时为主区空态）呈现（ADR-20261105）：3 秒内的抖动不提示，
+  // 3 秒后说明正在重连，10 秒后说明原因并提供立即重试；标题区不再显示连接状态。
+  const connectionReconnectingDue = useDelayedVisibility(rawConnectionIssue !== null, CONNECTION_HINT_TIMING.reconnectingMs, 0);
+  const connectionRetryDue = useDelayedVisibility(rawConnectionIssue !== null, CONNECTION_HINT_TIMING.retryMs, 0);
+  const connectionIssue = connectionReconnectingDue ? rawConnectionIssue : null;
+  const connectionStage: ConnectionHintStage | null = connectionIssue === null ? null : connectionRetryDue ? "retry" : "reconnecting";
+  // 曾经在线后断线、且出现过「无法连接」提示时，恢复连接后以 Toast 提示「连接已恢复」；首次连接不提示。
+  const connectionIssueShownRef = useRef(false);
   const everOnlineRef = useRef(false);
-  const connectionBannerVisible = connectionBannerDue && rawConnectionBannerKind !== null;
+  const connectionIssueVisible = connectionRetryDue && rawConnectionIssue !== null;
   useEffect(() => {
-    if (connectionBannerVisible) { if (everOnlineRef.current) connectionBannerShownRef.current = true; return; }
+    if (connectionIssueVisible) { if (everOnlineRef.current) connectionIssueShownRef.current = true; return; }
     if (displayConnection === "online") everOnlineRef.current = true;
-    if (connectionBannerShownRef.current && displayConnection === "online") {
-      connectionBannerShownRef.current = false;
+    if (connectionIssueShownRef.current && displayConnection === "online") {
+      connectionIssueShownRef.current = false;
       operationNotifications.notify(getMessages().connection.restored);
     }
-  }, [connectionBannerVisible, displayConnection, operationNotifications]);
+  }, [connectionIssueVisible, displayConnection, operationNotifications]);
   const { completedEndpointIds, completedDeviceIds } = useBackgroundCompletionNotices({
     devices, endpoints, snapshotDeviceIds, viewingEndpoint: selectedHistory === null ? activeEndpoint : null,
   });
@@ -1206,23 +1209,27 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const canAttach = !newSessionPending && connection === "online" && attachments.snapshot.capability.status === "supported" && !attachments.snapshot.active;
   if (startupState === "loading") return <StartupLoading />;
   if (startupState === "error") return <StartupErrorView error={startupError} onRetry={() => window.location.reload()} />;
-  // 选择其他 Pi：只有一个在线时直接进入，多个时回到主区选择列表。
-  const chooseOtherPi = () => { if (onlinePis.length === 1) openLiveEndpoint(onlinePis[0]!.endpointId); else setExitedEndpoint(null); };
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
   const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, historyListStatus, onRetryHistory: () => { void refreshHistory(); }, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, deviceActivity, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
-  const connectionStatus = <ConnectionStatus state={displayConnection} retryAttempt={retryAttempt} />;
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;
   const titleBar: PwaWorkspaceTitleBar = {
     ...(selectedHistory
       ? { title: historySessionTitle(selectedHistory), prefix: cwdName(historyEndpoint?.cwd), showTitle: true, moreMenu: <SessionActionsMenu info={{ name: historySessionTitle(selectedHistory), cwd: historyEndpoint?.cwd ?? null, computer: computerName, status: t.common.readOnly }} /> }
       : activeDevice && displayEndpoint
-        ? { title: displayPi(displayEndpoint), prefix: cwdName(displayEndpoint.cwd), showTitle: true, status: exitedDisplay ? <span className="pwa-connection offline"><span className="pwa-status-dot" aria-hidden="true" />{t.workspace.exited}</span> : connectionStatus, moreMenu: <SessionActionsMenu info={{ name: displayPi(displayEndpoint), cwd: displayEndpoint.cwd ?? null, computer: computerName, status: exitedDisplay ? t.workspace.exited : displayEndpoint.working ? t.actions.running : t.actions.idle }} /> }
+        ? { title: displayPi(displayEndpoint), prefix: cwdName(displayEndpoint.cwd), showTitle: true, moreMenu: <SessionActionsMenu info={{ name: displayPi(displayEndpoint), cwd: displayEndpoint.cwd ?? null, computer: computerName, status: exitedDisplay ? t.workspace.exited : displayEndpoint.working ? t.actions.running : t.actions.idle }} /> }
         // 没有配对或未选中电脑时，移动顶栏显示品牌名（不翻译），不把「导航」当标题。
-        : { title: activeDevice ? computerName : "Pi Reach", showTitle: false, status: devices.length > 0 ? connectionStatus : null }),
+        : { title: activeDevice ? computerName : "Pi Reach", showTitle: false }),
     navigationNotice: completedEndpointIds.size > 0,
   };
-  const connectionBannerKind = connectionBannerDue ? rawConnectionBannerKind : null;
+  const connectionHintView = connectionHint(connectionIssue, connectionStage, displayConnection === "connecting" || displayConnection === "retrying", {
+    reconnecting: t.connection.reconnectingHint, relayAutoRetrying: t.connection.relayAutoRetrying, unavailable: t.connection.unavailable, networkWaiting: t.connection.networkWaiting,
+  });
+  const retryDisabled = retryPending || displayConnection === "connecting";
+  const composerConnectionHint: OperationHint | null = connectionHintView ? {
+    text: connectionHintView.text, tone: "neutral", busy: connectionHintView.busy,
+    action: connectionHintView.retry ? { label: t.connection.retryNow, onAction: retryCurrentSession, disabled: retryDisabled } : undefined,
+  } : null;
   // 新会话无消息时显示目录 · 模型 · 思考级别，发送前就能确认对象；缺哪项省略哪项。
   const emptySessionContext = displayEndpoint
     ? [cwdName(displayEndpoint.cwd), currentModel?.name ?? displayEndpoint.model ?? null, displayEndpoint.thinking ? t.commands.thinkingLevelValue(activeThinking) : null].filter(Boolean).join(" · ") || null
@@ -1234,8 +1241,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const mainContent = selectedHistory
     ? <HistoryConversation sourceKey={JSON.stringify(["history", selectedHistory.id])} onReadingChange={onToolReading} items={timelineItems} savedEvents={timelineHistory?.events ?? NO_EVENTS} hasEarlier={hasEarlier} loadingEarlier={loadingEarlier} loadEarlierFailed={loadEarlierFailed} onLoadEarlier={loadEarlierTimeline} loading={timelineHistory?.status === "loading"} viewport={{ messageListRef, bottomSentinelRef, handleScroll, followingOutput, latestEntryVisible, showLatest }} modelName={selectedHistory.model ?? null} thinking={safeThinkingLevel(selectedHistory.thinking)} />
     : activeDevice && displayEndpoint
-      ? <TimelineWorkspace timeline={liveTimeline} footer={<>{exitedDisplay ? <div className="pwa-read-only-bar" role="note"><span>{t.workspace.exitedNote}</span>{onlinePis.length > 0 ? <Button variant="transparent" type="button" onClick={chooseOtherPi}>{t.workspace.chooseOtherPi}</Button> : null}</div> : <><PwaMessageActions show={connection === "offline" || catchupFailed || latestEntryVisible} showRetry={connection === "offline" || catchupFailed} showLatest={latestEntryVisible} unreadOutput={unreadOutput} onRetry={() => { if (catchupFailed) void retryCatchup(); else retryCurrentSession(); }} onLatest={showLatest} /><MessageComposer queuedMessages={<QueuedMessagesPanel items={visibleTimelineItems} onCommit={reportQueueCommit} isOnline={connection === "online" && !newSessionPending} isWorking={displayEndpoint.working === true} runtimeRef={timelineRuntimeRef} channelRef={channelRef} applyChange={applyTimelineChange} onError={setError} />} attachments={attachments.items} canAttach={canAttach} sendingAttachments={attachments.snapshot.active} attachmentNotice={attachments.notice} operationHint={operationNotice} isOnline={connection === "online"} isWorking={displayEndpoint.working === true} stopping={stopRequest !== null} draft={draft} onDraftChange={changeComposerDraft} onSend={sendMessage} onStop={stopCurrentTask} onAddFiles={attachments.addFiles} onRemoveAttachment={attachments.remove} onRetryAttachment={attachments.retry} commandModels={models} commandModelsStatus={modelsStatus} commandCurrentModel={currentModel} commandCurrentModelFallback={displayEndpoint.model ?? null} commandThinking={activeThinking} commandPendingAction={pendingAction?.action ?? null} onNewSession={requestNewSession} onCompactSession={compactCurrentSession} onSetModel={setComposerModel} onSetThinking={setComposerThinking} onCommandsOpen={requestModels} /></>}</>} />
-      : skeletonVisible || mainLoading
+      ? <TimelineWorkspace timeline={liveTimeline} footer={<>{exitedDisplay ? <ReadOnlyComposer notice={t.workspace.exitedNote} modelName={currentModel?.name ?? displayEndpoint.model ?? null} thinking={activeThinking} /> : <><PwaMessageActions show={catchupFailed || latestEntryVisible} showRetry={catchupFailed} showLatest={latestEntryVisible} unreadOutput={unreadOutput} onRetry={() => { void retryCatchup(); }} onLatest={showLatest} /><MessageComposer queuedMessages={<QueuedMessagesPanel items={visibleTimelineItems} onCommit={reportQueueCommit} isOnline={connection === "online" && !newSessionPending} isWorking={displayEndpoint.working === true} runtimeRef={timelineRuntimeRef} channelRef={channelRef} applyChange={applyTimelineChange} onError={setError} />} attachments={attachments.items} canAttach={canAttach} sendingAttachments={attachments.snapshot.active} attachmentNotice={attachments.notice} operationHint={operationNotice} connectionHint={composerConnectionHint} isOnline={connection === "online"} isWorking={displayEndpoint.working === true} stopping={stopRequest !== null} draft={draft} onDraftChange={changeComposerDraft} onSend={sendMessage} onStop={stopCurrentTask} onAddFiles={attachments.addFiles} onRemoveAttachment={attachments.remove} onRetryAttachment={attachments.retry} commandModels={models} commandModelsStatus={modelsStatus} commandCurrentModel={currentModel} commandCurrentModelFallback={displayEndpoint.model ?? null} commandThinking={activeThinking} commandPendingAction={pendingAction?.action ?? null} onNewSession={requestNewSession} onCompactSession={compactCurrentSession} onSetModel={setComposerModel} onSetThinking={setComposerThinking} onCommandsOpen={requestModels} /></>}</>} />
+      : devices.length > 0 && connectionIssue !== null && connectionStage !== null
+        ? <ConnectionIssueWorkspace kind={connectionIssue} stage={connectionStage} busy={connectionHintView?.busy ?? false} onRetry={retryCurrentSession} retryDisabled={retryDisabled} />
+        : skeletonVisible || mainLoading
         ? <WorkspaceSkeleton visible={skeletonVisible} />
         : devices.length === 0
           ? <UnpairedWorkspace onPair={openPairing} />
@@ -1244,7 +1253,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
             : placeholderKind === "choose-pi"
               ? <ChoosePiWorkspace endpoints={onlinePis} completedEndpointIds={completedEndpointIds} onSelect={openLiveEndpoint} />
               : <NoPiWorkspace onViewHistory={openLatestHistory} />;
-  return <PublishedFilesProvider value={fileView}><PwaWorkspaceLayout navigation={navigation} titleBar={titleBar} historyMode={selectedHistory !== null} connectionBanner={<PwaConnectionBanner kind={connectionBannerKind} connection={displayConnection} onRetry={retryCurrentSession} retryDisabled={retryPending} />} toast={<PwaStatusError message={selectedHistory ? historyError : error} onDismiss={() => { if (selectedHistory) setHistoryError(null); else setError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage viewportDiagnostics viewportDiagnosticsOnline={sessionOnline && selectedHistory === null} onShowShortcuts={onShowShortcuts} relayUrl={relayUrl} defaultRelayUrl={defaultRelayUrl} relayVersion={relayVersion} relayStatus={relayStatus} extensionVersion={extensionVersion} extensionStatus={connection} extensionTarget={sessionOnline && activeDevice && activeEndpoint ? `${displayDevice(activeDevice)} · ${displayPi(activeEndpoint)}` : null} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
+  return <PublishedFilesProvider value={fileView}><PwaWorkspaceLayout navigation={navigation} titleBar={titleBar} connectionState={displayConnection} toast={<PwaStatusError message={selectedHistory ? historyError : error} onDismiss={() => { if (selectedHistory) setHistoryError(null); else setError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage viewportDiagnostics viewportDiagnosticsOnline={sessionOnline && selectedHistory === null} onShowShortcuts={onShowShortcuts} relayUrl={relayUrl} defaultRelayUrl={defaultRelayUrl} relayVersion={relayVersion} relayStatus={relayStatus} extensionVersion={extensionVersion} extensionStatus={connection} extensionTarget={sessionOnline && activeDevice && activeEndpoint ? `${displayDevice(activeDevice)} · ${displayPi(activeEndpoint)}` : null} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
     <PairingDialog opened={pairing.state !== "idle"} connecting={pairing.state === "pairing"} error={pairing.error} onSubmit={(code) => { void pairing.pairFromCode(code); }} onClearError={pairing.clearError} onClose={pairing.close} focusOrigin={pairingFocusOrigin} focusFallbackSelectors={[".pwa-session-trigger"]} />
     <ConfirmActionDialog action={confirmAction?.kind === "remove-pairing" ? { kind: "remove-pairing", label: confirmAction.label } : confirmAction} fetchingFiles={fileView.active && (confirmAction?.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id))} pending={confirmPending} error={confirmError} onConfirm={() => { void confirmRequestedAction(); }} onClose={() => { if (!confirmPendingRef.current) { setConfirmAction(null); setConfirmError(null); } }} onExitTransitionEnd={finishConfirmationTransition} /></>} closeBackgroundOverlay={closeBackgroundOverlay}>{mainContent}</PwaWorkspaceLayout></PublishedFilesProvider>;
 }

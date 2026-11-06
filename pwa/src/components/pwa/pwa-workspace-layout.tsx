@@ -27,9 +27,9 @@ function focusable(element: HTMLElement | null): element is HTMLElement {
 type PwaWorkspaceLayoutProps = {
   navigation: WorkspaceNavigationProps;
   titleBar: Omit<WorkspaceTitleBarProps, "onOpenNavigation" | "navigationExpanded">;
-  historyMode: boolean;
+  /** 当前连接状态，只反映到主区的 data-connection 上；界面不再在标题区显示连接状态（ADR-20261105）。 */
+  connectionState?: string;
   children: ReactNode;
-  connectionBanner?: ReactNode;
   toast: ReactNode;
   operationNotifications?: ReactNode;
   settingsRoute: SettingsRoute;
@@ -44,9 +44,8 @@ type PwaWorkspaceLayoutProps = {
 export function PwaWorkspaceLayout({
   navigation,
   titleBar,
-  historyMode,
+  connectionState,
   children,
-  connectionBanner,
   toast,
   operationNotifications,
   settingsRoute,
@@ -310,10 +309,9 @@ export function PwaWorkspaceLayout({
       <ActionIcon ref={sidebarToggleRef} className="pwa-sidebar-toggle" type="button" aria-label={toggleLabel} title={`${toggleLabel} (${shortcutLabel("toggleSidebar")})`} aria-keyshortcuts={shortcutLabel("toggleSidebar").replaceAll(" ", "").replace("⌘", "Meta").replace("Ctrl", "Control")} aria-expanded={!sidebarCollapsed} aria-controls="pwa-desktop-navigation" onPointerDown={(event) => { if (event.pointerType === "mouse") event.preventDefault(); }} onClick={toggleSidebar}>
         {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
       </ActionIcon>
-      <main ref={setMainElement} className="pwa-main">
+      <main ref={setMainElement} className="pwa-main" data-connection={connectionState}>
         <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={presentNavigation} />
         <div ref={noticesRef} className="pwa-main-notices">
-          {historyMode ? null : connectionBanner}
           {toast}
           {operationNotifications}
           <PwaRuntimeNoticeSlot />

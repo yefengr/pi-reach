@@ -69,16 +69,17 @@ export const zh: Messages = {
     cancelFetching: "这也将取消尚未完成的文件获取。",
   },
   connection: {
-    relayRetrying: "无法连接 Relay，正在重试…",
-    connected: "已连接",
-    connecting: "正在连接…",
-    reconnecting: "重新连接中…",
-    noNetwork: "无网络",
-    offline: "离线",
-    networkUnavailable: "网络不可用，请检查网络连接。",
     unavailable: "无法连接，请重试。",
     retryNow: "立即重试",
     restored: "连接已恢复",
+    // 输入区提示行与主区空态（断线 3 秒后、10 秒后、无网络）。
+    reconnectingHint: "正在重新连接…",
+    relayAutoRetrying: "无法连接 Relay，正在自动重试…",
+    networkWaiting: "网络不可用，恢复后自动重新连接",
+    relayUnreachableTitle: "无法连接 Relay",
+    autoRetrying: "正在自动重试…",
+    networkUnavailableTitle: "网络不可用",
+    networkWaitingBody: "恢复后自动重新连接",
   },
   navigation: {
     workspace: "工作区",
@@ -130,8 +131,7 @@ export const zh: Messages = {
   },
   workspace: {
     exited: "已退出",
-    exitedNote: "这个 Pi 已退出，会话记录已保存在本地历史。",
-    chooseOtherPi: "选择其他 Pi",
+    exitedNote: "这个 Pi 已退出，会话记录已保存在本地历史",
     sessionSwitched: "Pi 已切换到新会话",
     savedConversation: "已保存的会话",
     unpairedTitle: "还没有配对的电脑",
@@ -148,7 +148,7 @@ export const zh: Messages = {
     chooseComputerBody: "从导航中选择一台已配对的电脑。",
     newSessionHint: "向 Pi 发送消息开始。",
     loading: "正在加载…",
-    readOnlyNote: "这是本地保存的历史会话，只读。",
+    readOnlyNote: "这是本地保存的历史记录，只能阅读",
   },
 
   settings: {
@@ -272,7 +272,6 @@ export const zh: Messages = {
     fetchUpgrade: "查看原件需要升级电脑端扩展", originalChanged: "电脑上的原件已被修改，无法获取",
   },
   composer: {
-    sendAfterReconnect: "连接恢复后才能发送",
     addImage: "添加图片",
     chooseImage: "选择图片",
     useCamera: "使用相机",
@@ -281,7 +280,7 @@ export const zh: Messages = {
     imageAttachment: "图片附件",
     removeImage: "移除图片",
     placeholder: "向 Pi 发送消息…",
-    readOnlyPlaceholder: "历史会话不能发送消息",
+    readOnlyPlaceholder: "无法发送消息",
     stoppingTask: "正在停止当前任务",
     stopTask: "停止当前任务",
     send: "发送消息",

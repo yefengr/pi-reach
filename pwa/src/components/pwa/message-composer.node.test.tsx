@@ -43,8 +43,12 @@ test("renders the opened Mantine attachment menu", () => {
   expect(html).toContain("bottom:auto");
 });
 
+const reconnectingHint = { text: "Reconnecting…", tone: "neutral" as const, busy: true };
+
 test("keeps offline text editable and places its one hint and the attachments inside the card above the text", () => {
-  const html = renderComposer({ isOnline: false, canAttach: false, attachments: [attachment] });
+  // 断线 3 秒内的抖动不提示：只有应用层给出连接提示时才出现提示行（ADR-20261105）。
+  expect(renderComposer({ isOnline: false, canAttach: false })).not.toContain("pwa-composer-hint-line");
+  const html = renderComposer({ isOnline: false, canAttach: false, attachments: [attachment], connectionHint: reconnectingHint });
   expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain('disabled=""');
   expect(button(html, "Pi commands")).toContain('disabled=""');
   expect(button(html, "Send message")).toContain('disabled=""');
@@ -53,9 +57,10 @@ test("keeps offline text editable and places its one hint and the attachments in
   expect(html.indexOf("pwa-composer-hint-line")).toBeGreaterThan(card);
   expect(html.indexOf("pwa-composer-hint-line")).toBeLessThan(html.indexOf("pwa-attachment-tiles"));
   expect(html.indexOf("pwa-attachment-tiles")).toBeLessThan(html.indexOf("<textarea"));
-  const explicit = renderComposer({ isOnline: false, attachmentNotice: "Uploads paused" });
+  // 附件提示优先于连接提示，同一时刻只有一行。
+  const explicit = renderComposer({ isOnline: false, attachmentNotice: "Uploads paused", connectionHint: reconnectingHint });
   expect(explicit).toContain("Uploads paused");
-  expect(explicit).not.toContain("You can send once");
+  expect(explicit).not.toContain("Reconnecting…");
 });
 
 test("locks adding/text/sending during upload without disabling individual cancellation", () => {

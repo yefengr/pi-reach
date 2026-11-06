@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { PwaConnectionBannerKind } from "@/components/pwa/pwa-app-actions";
+import type { ConnectionIssueKind } from "@/lib/pwa/connection-hint";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
 import { RelayClient } from "@/lib/pi-reach/relay-client";
 import type { ControlFrame, OwnerKeyPair } from "@/lib/pi-reach/types";
@@ -19,7 +19,7 @@ type UseRelayConnectionOptions = {
   onAllEndpointsOffline: () => void;
   onRetryFinished: () => void;
   setConnection: Dispatch<SetStateAction<ConnectionViewState>>;
-  setConnectionFeedback: Dispatch<SetStateAction<PwaConnectionBannerKind | null>>;
+  setConnectionFeedback: Dispatch<SetStateAction<ConnectionIssueKind | null>>;
 };
 
 /** Maintains the Owner Relay transport while session channels remain app-owned. */

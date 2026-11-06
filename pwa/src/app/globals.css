@@ -202,20 +202,19 @@ body:has(.pwa-root) { overflow: hidden; }
  */
 .pwa-chat-footer { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; position: absolute; right: 0; bottom: 0; left: 0; z-index: var(--pwa-z-composer); pointer-events: none; }
 /*
- * 消息列表与输入区之间不硬切。footer 上提 overlap，列表延伸到输入区最上方不透明表面的上沿以下一个该表面圆角高度：
- * 有排队抽屉时为抽屉（radius-xl），否则为输入框卡片（radius-composer）；提示行与附件都在卡片内，不改变最上方表面。
- * footer 上沿起画「透明 → 底色」渐变（表面之下、列表之上），正文在表面上方 --pwa-composer-fade 内开始淡出，从圆角两侧滑到表面下方。
- * 列表底部留白同步加 overlap，停在底部时内容不进入渐隐。只读说明条（.pwa-composer 的直接子级提示）没有底色，此时不重叠，
- * 只在 footer 上方挂同样高度的渐隐。footer 与表单自身不接收指针，渐隐区内仍可滚动与选中列表。
- * 紧凑高度与输入框预算受限（data-composer-budget）时底部留白只有 8，两者都不加，避免淡化最后一行；
+ * 消息列表与输入区之间不硬切（输入区浮在列表之上，见 .pwa-chat-footer）：自输入区最上方的不透明表面（有排队抽屉时为抽屉 radius-xl，
+ * 否则为输入框卡片 radius-composer）上方 --pwa-composer-fade 起画「透明 → 底色」渐变，到该表面上沿以下一个其圆角高度为止（--pwa-composer-overlap），
+ * 正文从圆角两侧滑到表面下方并淡出，再往下为底色（.pwa-chat-footer::after）。提示行与附件都在卡片内，不改变最上方表面。
+ * footer 与表单自身不接收指针，渐隐区内仍可滚动与选中列表。
+ * 紧凑高度与输入框预算受限（data-composer-budget）时底部留白只有 8，不画渐隐，避免淡化最后一行；
  * 这两种状态写进启用条件，不靠后续规则覆盖（:has 选择器的优先级更高）。
  */
-.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-composer)); --pwa-composer-lead: var(--pwa-composer-fade); }
-.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):has(.pwa-queued-messages:not([data-presence="leaving"])):not(:has(.pwa-composer > .pwa-composer-hint)) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-xl)); }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-composer)); --pwa-composer-lead: var(--pwa-composer-fade); }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):has(.pwa-queued-messages:not([data-presence="leaving"])) { --pwa-composer-overlap: calc(var(--pwa-composer-fade) + var(--pwa-radius-xl)); }
 .pwa-chat-footer::before { content: ""; position: absolute; z-index: -1; right: 0; bottom: 100%; left: 0; height: var(--pwa-composer-fade); background: var(--pwa-composer-fade-gradient); pointer-events: none; }
 /* 渐隐以下为不透明底色，遮住从输入区下方穿过的正文；底色区接收指针，避免点到被盖住的内容。 */
 .pwa-chat-footer::after { content: ""; position: absolute; z-index: -1; top: var(--pwa-composer-overlap, 0px); right: 0; bottom: 0; left: 0; background: var(--pwa-bg); pointer-events: auto; }
-.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card):not(:has(.pwa-composer > .pwa-composer-hint)) .pwa-chat-footer::before { top: 0; bottom: auto; height: var(--pwa-composer-overlap); }
+.pwa-app-shell:not([data-compact-height]) .pwa-main:not([data-composer-budget]):has(.pwa-composer-card) .pwa-chat-footer::before { top: 0; bottom: auto; height: var(--pwa-composer-overlap); }
 .pwa-app-shell[data-compact-height] .pwa-chat-footer::before,
 .pwa-main[data-composer-budget] .pwa-chat-footer::before { content: none; }
 /* 重叠时卡片上方留出整段渐隐高度（--pwa-composer-lead）；「最新」入口按原位置（卡片上沿以上 space-composer）补偿 footer 上沿的上移。 */
@@ -230,10 +229,13 @@ body:has(.pwa-root) { overflow: hidden; }
  * 子项 min-height 为 0 才能被收拢。时长由各包裹层的 --pwa-composer-grow-in／out 指定，默认沿用折叠。
  * 减少动态效果时全局规则取消尺寸过渡，只剩透明度淡化。
  */
-.pwa-composer-grow { display: grid; grid-template-rows: 1fr; min-width: 0; transition: grid-template-rows var(--pwa-composer-grow-in, var(--pwa-duration-collapse-in)) var(--pwa-ease-content); }
-.pwa-composer-grow > * { min-height: 0; }
+.pwa-composer-grow { display: grid; grid-template-rows: 1fr; grid-template-columns: minmax(0, 1fr); min-width: 0; transition: grid-template-rows var(--pwa-composer-grow-in, var(--pwa-duration-collapse-in)) var(--pwa-ease-content); }
+/* 列宽不随内容撑开：提示行等单行内容过长时按自身规则省略，不把右侧操作挤出卡片。 */
+.pwa-composer-grow > * { min-width: 0; min-height: 0; }
 .pwa-composer-grow[data-presence="leaving"] { grid-template-rows: 0fr; transition-duration: var(--pwa-composer-grow-out, var(--pwa-duration-collapse-out)); }
 @starting-style { .pwa-composer-grow { grid-template-rows: 0fr; } }
+/* 输入框的固定内容（如只读说明）随输入框一同出现，不单独过渡。 */
+.pwa-composer-grow[data-instant], .pwa-composer-grow[data-instant] > * { transition: none; }
 /*
  * 浮动入口与局部提示的进出（DESIGN「动效」）：出现淡入（toast 时长、进入曲线），离开淡出（fade 时长、退出曲线），
  * 离开期间由 usePresence 设置 inert 与 aria-hidden。占布局的提示条只淡化、高度一次到位；
@@ -505,31 +507,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-loading p span { color: var(--pwa-secondary); }
 .pwa-loading-mark { display: block; margin: 0 auto; color: var(--pwa-ink); }
 
-.pwa-connection-banner {
-  order: 2;
-  --alert-radius: var(--pwa-radius-md) !important;
-  align-self: center;
-  flex: 0 0 auto;
-  width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter)));
-  margin: 8px auto 0;
-  padding: 8px 12px;
-  border: 1px solid var(--alert-bd);
-  border-radius: var(--pwa-radius-md);
-  color: var(--alert-color);
-  background: var(--alert-bg);
-  box-shadow: none;
-  font-size: var(--pwa-text-meta);
-  line-height: var(--pwa-leading-ui);
-}
-.pwa-connection-banner-relay { --alert-bg: var(--pwa-running-wash) !important; --alert-color: var(--pwa-running) !important; --alert-bd: var(--pwa-running-line) !important; }
-.pwa-connection-banner-network { --alert-bg: var(--pwa-error-wash) !important; --alert-color: var(--pwa-error) !important; --alert-bd: var(--pwa-error-line) !important; }
-.pwa-connection-banner .pwa-connection-banner-wrapper { align-items: center; gap: 8px; }
-.pwa-connection-banner .pwa-connection-banner-icon { flex: 0 0 auto; margin: 0; color: inherit; }
-.pwa-connection-banner .pwa-connection-banner-body { min-width: 0; }
-.pwa-connection-banner .pwa-connection-banner-message { color: inherit; font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
-.pwa-connection-banner-content { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
-.pwa-connection-banner-content > span { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
-.pwa-connection-banner .pwa-connection-retry { flex: 0 0 auto; min-width: var(--pwa-hit-target); min-height: var(--pwa-hit-target); }
 
 .pwa-runtime-notice {
   --alert-radius: var(--pwa-radius-md) !important;
@@ -594,10 +571,6 @@ body:has(.pwa-root) { overflow: hidden; }
 
 /* 密度取应用壳的实际可见高度；软键盘不改变 layout viewport 时也使用同一套规则。 */
 .pwa-app-shell[data-compact-height] .pwa-message-list { --pwa-timeline-pad-top: 8px; --pwa-timeline-pad-bottom: 8px; }
-.pwa-app-shell[data-compact-height] .pwa-connection-banner { margin-top: 0; padding-block: 0; font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
-.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-wrapper { gap: 8px; }
-.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-icon svg { width: 16px; height: 16px; }
-.pwa-app-shell[data-compact-height] .pwa-connection-banner .pwa-connection-banner-message { font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-app-shell[data-compact-height] .pwa-runtime-notice { margin-top: 4px; padding-block: 6px; }
 .pwa-app-shell[data-compact-height] .pwa-runtime-notice-content { gap: 6px; }
 .pwa-app-shell[data-compact-height] .pwa-runtime-notice-description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
@@ -626,7 +599,6 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-root .pwa-settings-back-label { display: none; }
   .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); }
   .pwa-startup-card { padding: 24px 16px; }
-  .pwa-connection-banner { margin-top: 6px; padding: 8px 12px; }
   .pwa-runtime-notice { margin-top: 6px; padding: 10px 6px 10px 12px; }
   .pwa-runtime-notice .pwa-runtime-notice-body,
   .pwa-runtime-notice .pwa-runtime-notice-message { display: block; }

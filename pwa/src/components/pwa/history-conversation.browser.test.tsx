@@ -264,7 +264,8 @@ test("keeps attachment cards whose metadata falls just outside the rendered wind
 test("keeps the live composer layout disabled and shows the last known model only when it is saved", async () => {
   const known = await renderHistory({ modelName: "Saved model", thinking: "high" });
   try {
-    await expect.element(known.getByRole("note")).toHaveTextContent("It's read-only.");
+    // 只读说明在输入框卡片内的提示行（ADR-20261105）。
+    await expect.poll(() => document.querySelector(".pwa-composer-card .pwa-composer-hint")?.textContent ?? "").toContain("It's read-only.");
     await expect.element(known.getByRole("textbox")).toBeDisabled();
     const model = known.getByRole("button", { name: "Model and thinking settings, current Saved model, thinking level high" });
     await expect.element(model).toBeDisabled();
