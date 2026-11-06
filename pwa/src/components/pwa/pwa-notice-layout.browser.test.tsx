@@ -17,7 +17,7 @@ function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; ini
   const rootRef = useRef<HTMLDivElement>(null);
   const noticesRef = useRef<HTMLDivElement>(null);
   useMainNoticesSpace(rootRef, noticesRef);
-  return <PwaAppShell runtimeNotice={notice && <ServiceWorkerNotice installPrompt unsupported={false} onInstall={() => {}} onDismiss={() => setNotice(false)} />}>
+  return <PwaAppShell runtimeNotice={notice && <ServiceWorkerNotice onDismiss={() => setNotice(false)} />}>
     <div ref={rootRef} className="pwa-root">
       <div className="pwa-layout"><div className="pwa-desktop-navigation"><aside className="pwa-sidebar">
         <div className="pwa-navigation-scroll">Sessions</div>
@@ -57,8 +57,8 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   // Toast 是标题区下方的浮层，另见 pwa-operation-notifications 测试。
   expect(document.querySelectorAll(".pwa-root")).toHaveLength(1);
   const desktop = width >= 768;
-  // 安装提示位于导航底部（ADR-20261105）：移动布局不显示侧栏，提示随之不可见，打开移动导航后才出现。
-  if (desktop) await expect.element(screen.getByRole("status", { name: "Install Pi Reach" })).toBeVisible();
+  // 运行时提示位于导航底部（ADR-20261105）：移动布局不显示侧栏，提示随之不可见，打开移动导航后才出现。
+  if (desktop) await expect.element(screen.getByRole("status", { name: "Offline app mode unavailable" })).toBeVisible();
   else await expect.poll(() => document.querySelector(".pwa-runtime-notice")).not.toBeNull();
   // Portal 挂载通知后，再等布局观察器完成输入区预算与阅读区同步。
   for (let frame = 0; frame < 6; frame += 1) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -100,7 +100,7 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
     expect(runtimeBox.right).toBeLessThanOrEqual(sidebarBox.right);
     expect(runtimeBox.bottom).toBeLessThanOrEqual(document.querySelector(".pwa-sidebar-foot")!.getBoundingClientRect().top);
   }
-  for (const name of desktop ? ["Install app", "Dismiss PWA notice"] : []) {
+  for (const name of desktop ? ["Dismiss PWA notice"] : []) {
     const button = screen.getByRole("button", { name, exact: true }).element();
     const box = button.getBoundingClientRect();
     expect(box.width).toBeGreaterThanOrEqual(44);

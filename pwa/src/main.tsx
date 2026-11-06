@@ -5,6 +5,7 @@ import "@mantine/notifications/styles.css";
 import "./app/globals.css";
 import { PwaApp } from "@/components/pwa/pwa-app";
 import { PwaAppShell } from "@/components/pwa/pwa-app-shell";
+import { PwaInstallProvider } from "@/components/pwa/pwa-install";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { installHairlineDetection } from "@/lib/ui/hairline";
@@ -38,9 +39,11 @@ if (reviewPath === "/app/ui-review") {
   appRoot.render(
     <StrictMode>
       <PwaUiProvider>
-        <PwaAppShell runtimeNotice={<ServiceWorkerRegister />}>
-          <PwaApp />
-        </PwaAppShell>
+        <PwaInstallProvider>
+          <PwaAppShell runtimeNotice={<ServiceWorkerRegister />}>
+            <PwaApp />
+          </PwaAppShell>
+        </PwaInstallProvider>
       </PwaUiProvider>
     </StrictMode>,
   );

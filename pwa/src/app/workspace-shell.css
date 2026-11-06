@@ -189,14 +189,13 @@
 .pwa-root .pwa-session-sheet-foot .pwa-button { min-width: 0; width: 100%; justify-content: flex-start; padding-inline: 10px; }
 .pwa-root .pwa-sidebar-foot .pwa-button .mantine-Button-inner,
 .pwa-root .pwa-session-sheet-foot .pwa-button .mantine-Button-inner { justify-content: flex-start; }
-/* 安装与浏览器能力提示位于导航底部、电脑入口上方（ADR-20261105）：surface 卡片与导航 panel 底区分，导航较窄，内容纵向排列。 */
+/* 浏览器能力提示位于导航底部、电脑入口上方（ADR-20261105）：surface 卡片与导航 panel 底区分，导航较窄，内容纵向排列。 */
 .pwa-root .pwa-navigation-notice-slot { flex: 0 0 auto; min-width: 0; min-height: 0; }
 .pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice { --alert-bg: var(--pwa-surface) !important; width: auto; max-width: none; margin: 8px 0 0; padding: 10px 6px 10px 12px; border-radius: var(--pwa-radius-lg); }
 .pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice .pwa-runtime-notice-body,
 .pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice .pwa-runtime-notice-message { display: block; }
 .pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice .pwa-runtime-notice-title { margin-bottom: 4px; }
 .pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice-content { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
-.pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice-actions { width: 100%; justify-content: flex-start; }
 
 /* 会话「更多」的只读信息弹层：完整会话名换行，原生只读路径字段支持键盘选择与复制。
    名称／路径／元数据是多行只读信息块，行距按「标题与说明」4。 */
@@ -216,7 +215,8 @@
 .pwa-root .pwa-workspace-body { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
 .pwa-root .pwa-workspace-column { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* 桌面标题区始终贴顶并避让安全区：首行对齐共享 48px 顶栏带，最小高 64px；字号变大时自然撑高。 */
-.pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); }
+/* 左内边距与侧栏列宽同时长、同曲线过渡：收展时标题只朝一个方向移动，不先反向跳到收起入口的避让位置。 */
+.pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); transition: padding-left var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }
 /* 首行文字的中心落在 48px 顶栏带中央；行距按 2px，第二行是普通项目文本。 */
 .pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; align-content: start; gap: var(--pwa-space-pair); padding-top: calc((var(--pwa-topbar-height) - var(--pwa-text-title) * var(--pwa-leading-ui)) / 2); }
@@ -270,6 +270,23 @@
 /* 未配对空状态的命令块：panel 底、高 44，右侧复制按钮。 */
 .pwa-root .pwa-command-block { display: inline-flex; align-items: center; gap: 4px; min-height: var(--pwa-hit-target); margin-top: 16px; padding-left: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-panel); }
 .pwa-root .pwa-command-block code { padding: 0; color: var(--pwa-ink); background: transparent; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
+/*
+ * 首次使用流程（ADR-20261106「安装引导」）：一屏一步，沿用空态结构，图标上方为步骤进度。
+ * 顶部改为固定 48，换步时标题与操作不随内容高度上下跳动。
+ */
+.pwa-root .pwa-workspace-state.pwa-onboarding { padding-top: 48px; }
+.pwa-root .pwa-onboarding-progress { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); font-variant-numeric: tabular-nums; }
+.pwa-root .pwa-onboarding-dots { display: inline-flex; gap: 4px; }
+.pwa-root .pwa-onboarding-dots > span { width: 6px; height: 6px; border-radius: 50%; background: var(--pwa-line); }
+.pwa-root .pwa-onboarding-dots > span[data-reached] { background: var(--pwa-accent); }
+.pwa-root .pwa-onboarding-mark { display: grid; color: var(--pwa-ink); }
+/* 换步后焦点落在标题上，与设置页标题一致：指针操作不显示轮廓，键盘操作显示。 */
+.pwa-root .pwa-onboarding h2:focus { outline: none; }
+.pwa-root .pwa-onboarding h2:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 2px; border-radius: var(--pwa-radius-xs); }
+/* 手动添加的步骤：panel 底的左对齐列表，说明到列表 16。 */
+.pwa-root .pwa-onboarding .pwa-install-steps { width: fit-content; max-width: min(var(--pwa-reading-width), 100%); margin-top: 16px; padding: 12px 16px; border-radius: var(--pwa-radius-md); background: var(--pwa-panel); }
+/* 主操作在上、文字按钮在下，纵向相距 8。 */
+.pwa-root .pwa-onboarding-actions { display: grid; justify-items: center; gap: 8px; margin-top: 16px; }
 /* 选择 Pi：有边界的可点行，悬停 hover、按下 neutral-active，右侧箭头提示可进入。 */
 .pwa-root .pwa-choose-pi-list { width: min(var(--pwa-reading-width), 100%); display: grid; gap: 8px; margin-top: 16px; text-align: left; }
 .pwa-root .pwa-choose-pi-list .pwa-nav-session { min-height: 56px; margin: 0; padding: 8px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); }
@@ -320,7 +337,7 @@
   /* 移动顶栏：菜单图标与会话名共同构成导航入口，不显示 Logo；避开状态栏。 */
   /* 移动端回到单行 48px 顶栏，项目行随标题区隐藏；安全区叠加在上内边距，内容垂直居中。 */
   .pwa-root .pwa-title-bar,
-  .pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); align-items: center; padding-top: var(--pwa-safe-top); padding-bottom: 0; padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
+  .pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); align-items: center; padding-top: var(--pwa-safe-top); padding-bottom: 0; padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); transition: none; }
   .pwa-root .pwa-title-bar-heading { display: none; }
   /* 已连接时只显示圆点，把宽度留给会话名；文字仍供读屏，其他状态照常显示。 */
   .pwa-root .pwa-session-trigger { min-width: 0; min-height: var(--pwa-hit-target); flex: 1 1 auto; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 0; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: transparent; font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }

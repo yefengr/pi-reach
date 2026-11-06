@@ -1,7 +1,9 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode, type Ref } from "react";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { Button } from "@mantine/core";
-import { ChevronRight, CloudOff, Computer, History, Link2, LoaderCircle, Radio, WifiOff } from "lucide-react";
+import { ChevronRight, CloudOff, Computer, Download, History, Link2, LoaderCircle, Radio, WifiOff } from "lucide-react";
+import { BrandMark } from "@/components/pwa/brand-mark";
+import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "@/components/pwa/pwa-install";
 import type { ConnectionHintStage, ConnectionIssueKind } from "@/lib/pwa/connection-hint";
 import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 import { OnlinePiRow } from "@/components/pwa/workspace-view";
@@ -69,11 +71,24 @@ export function HistoryConversation({ sourceKey, onReadingChange, items, savedEv
   />;
 }
 
+type WorkspaceEmptyStateProps = {
+  icon: ReactNode;
+  title: string;
+  children?: ReactNode;
+  detail?: ReactNode;
+  action?: ReactNode;
+  /** 首次使用流程的步骤进度，位于图标上方。 */
+  progress?: ReactNode;
+  /** 流程换步时把焦点交给新标题，读屏从标题开始读新的一步。 */
+  headingRef?: Ref<HTMLHeadingElement>;
+};
+
 /** 主区空状态：阅读列中部偏上，图标、标题、一行说明，最多一个操作。 */
-function WorkspaceEmptyState({ icon, title, children, detail, action }: { icon: ReactNode; title: string; children?: ReactNode; detail?: ReactNode; action?: ReactNode }) {
-  return <div className="pwa-workspace-state">
+function WorkspaceEmptyState({ icon, title, children, detail, action, progress, headingRef }: WorkspaceEmptyStateProps) {
+  return <div className={progress ? "pwa-workspace-state pwa-onboarding" : "pwa-workspace-state"}>
+    {progress}
     <span className="pwa-workspace-state-icon" aria-hidden="true">{icon}</span>
-    <h2>{title}</h2>
+    <h2 ref={headingRef} tabIndex={headingRef ? -1 : undefined}>{title}</h2>
     {children ? <p>{children}</p> : null}
     {detail}
     {action}
@@ -86,14 +101,75 @@ function CopyCommand({ command }: { command: string }) {
   return <div className="pwa-command-block"><code>{command}</code><CopyButton className="pwa-command-copy-button" text={command} label={t.workspace.copyCommand} /></div>;
 }
 
+/**
+ * 未配对：浏览器标签页中可以安装时是两步的首次使用流程，一屏只做一件事——先安装，再配对
+ * （ADR-20261106「安装引导」）；已从主屏幕、程序坞或应用窗口打开时只有配对。
+ */
 export function UnpairedWorkspace({ onPair }: { onPair: () => void }) {
   const { t } = useI18n();
+  const { offer, deferred, setDeferred, install } = usePwaInstall();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const pairRef = useRef<HTMLButtonElement>(null);
+  // 换步或安装完成后，被点按的按钮随旧的一步卸载：换步时焦点交给新标题，安装后交给「开始配对」。
+  const focusAfterChangeRef = useRef<"heading" | "pair" | null>(null);
+  useEffect(() => {
+    const target = focusAfterChangeRef.current;
+    focusAfterChangeRef.current = null;
+    if (target === "heading") headingRef.current?.focus({ preventScroll: true });
+    if (target === "pair") pairRef.current?.focus();
+  }, [offer, deferred]);
+
+  if (offer && !deferred) return <InstallStep
+    offer={offer}
+    headingRef={headingRef}
+    onInstall={() => { focusAfterChangeRef.current = "pair"; void install(); }}
+    onContinue={() => { focusAfterChangeRef.current = "heading"; setDeferred(true); }}
+  />;
+
+  const n = t.install;
+  const pairButton = <Button ref={pairRef} type="button" onClick={onPair}>{t.workspace.startPairing}</Button>;
   return <WorkspaceEmptyState
     icon={<Link2 size={24} />}
-    title={t.workspace.unpairedTitle}
+    title={offer ? n.pairTitle : t.workspace.unpairedTitle}
     detail={<CopyCommand command={PAIR_COMMAND} />}
-    action={<Button type="button" onClick={onPair}>{t.workspace.startPairing}</Button>}
+    action={offer
+      ? <div className="pwa-onboarding-actions">
+        {pairButton}
+        <Button type="button" variant="transparent" onClick={() => { focusAfterChangeRef.current = "heading"; setDeferred(false); }}>{n.backToInstall}</Button>
+      </div>
+      : pairButton}
+    progress={offer ? <OnboardingProgress step={2} /> : undefined}
+    headingRef={offer ? headingRef : undefined}
   >{t.workspace.unpairedBody}</WorkspaceEmptyState>;
+}
+
+const ONBOARDING_STEPS = 2;
+
+/** 步骤进度：圆点加「第 N 步，共 2 步」，已到达的步骤圆点为 accent。 */
+function OnboardingProgress({ step }: { step: number }) {
+  const n = useI18n().t.install;
+  return <div className="pwa-onboarding-progress">
+    <span className="pwa-onboarding-dots" aria-hidden="true">
+      {Array.from({ length: ONBOARDING_STEPS }, (_, index) => <span key={index} data-reached={index < step ? "" : undefined} />)}
+    </span>
+    {n.stepOf(step, ONBOARDING_STEPS)}
+  </div>;
+}
+
+function InstallStep({ offer, headingRef, onInstall, onContinue }: { offer: InstallOffer; headingRef: Ref<HTMLHeadingElement>; onInstall: () => void; onContinue: () => void }) {
+  const n = useI18n().t.install;
+  const { title, lead } = useInstallCopy(offer);
+  return <WorkspaceEmptyState
+    icon={<span className="pwa-onboarding-mark"><BrandMark size={24} /></span>}
+    title={title}
+    detail={<InstallSteps offer={offer} thenPair />}
+    action={<div className="pwa-onboarding-actions">
+      {offer === "prompt" ? <Button type="button" leftSection={<Download size={16} />} onClick={onInstall}>{n.install}</Button> : null}
+      <Button type="button" variant="transparent" onClick={onContinue}>{n.useInBrowser}</Button>
+    </div>}
+    progress={<OnboardingProgress step={1} />}
+    headingRef={headingRef}
+  >{lead}</WorkspaceEmptyState>;
 }
 
 export function NoPiWorkspace({ onViewHistory }: { onViewHistory?: () => void }) {

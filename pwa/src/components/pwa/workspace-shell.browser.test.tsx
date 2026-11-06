@@ -223,6 +223,31 @@ test("preserves the visible message anchor through both sidebar transitions", as
   expect(Math.abs(offset() - initialOffset)).toBeLessThanOrEqual(2);
 });
 
+test("moves the session title in one direction while the sidebar collapses and expands", async () => {
+  const screen = await mount();
+  const titleBar = document.querySelector<HTMLElement>(".pwa-title-bar")!;
+  const layout = document.querySelector<HTMLElement>(".pwa-layout")!;
+  const name = titleBar.querySelector<HTMLElement>(".pwa-title-bar-name")!;
+  await settleLayout();
+  const sample = async (label: string) => {
+    const samples = [name.getBoundingClientRect().left];
+    // 同步派发点击，从切换前一帧开始采样，避免异步点击晚到掩盖第一帧的跳动。
+    (screen.getByRole("button", { name: label }).element() as HTMLElement).click();
+    for (let frame = 0; frame < 120 && (frame === 0 || [titleBar, layout].some((element) => element.getAnimations().length > 0)); frame += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      samples.push(name.getBoundingClientRect().left);
+    }
+    return samples.map(Math.round);
+  };
+  const collapse = await sample("Collapse sidebar");
+  expect(collapse.length).toBeGreaterThan(3);
+  expect(collapse.every((left, index) => index === 0 || left <= collapse[index - 1])).toBe(true);
+  expect(collapse.at(-1)).toBeLessThan(collapse[0]);
+  const expand = await sample("Expand sidebar");
+  expect(expand.every((left, index) => index === 0 || left >= expand[index - 1])).toBe(true);
+  expect(expand.at(-1)).toBe(collapse[0]);
+});
+
 test("keeps mobile navigation independent from desktop preference and shows both lists", async () => {
   localStorage.setItem("pi-reach-sidebar-collapsed", "true");
   await page.viewport(390, 844);

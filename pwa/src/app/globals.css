@@ -411,6 +411,15 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-row-chevron { flex: 0 0 auto; color: var(--pwa-secondary); }
 /* 操作分组：内边距 16，按钮纵向排列、相距 8（相邻独立按钮）。 */
 .pwa-root .pwa-settings-group-actions { padding: 16px; display: grid; justify-items: start; gap: 8px; }
+/* 应用分区：内边距 16，名称与说明 2（复用单选行主副文字），说明到步骤或安装按钮 16。 */
+.pwa-root .pwa-settings-install { padding: 16px; display: grid; justify-items: start; gap: 16px; }
+/* 设置分组内的步骤与行标题同为列表字号。 */
+.pwa-root .pwa-settings-install .pwa-install-steps { margin: 0; font-size: var(--pwa-text-list); }
+/* 手动添加的步骤：首次打开与设置页共用；序号与正文 8，步骤之间 8。 */
+.pwa-root .pwa-install-steps { min-width: 0; display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); text-align: left; }
+.pwa-root .pwa-install-steps li { min-width: 0; display: flex; gap: 8px; }
+.pwa-root .pwa-install-step-number { flex: 0 0 auto; color: var(--pwa-secondary); font-variant-numeric: tabular-nums; }
+.pwa-root .pwa-install-step-icon { display: inline-block; margin-inline-start: 4px; vertical-align: text-bottom; color: var(--pwa-accent); }
 /* 表单分组：内边距 16，标签到输入框 8（输入组件自带），输入项到主操作 16。 */
 .pwa-root .pwa-settings-form { padding: 16px; display: grid; justify-items: start; gap: var(--pwa-space-md); }
 .pwa-root .pwa-settings-form .pwa-field { width: 100%; }
@@ -531,7 +540,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-runtime-notice .pwa-runtime-notice-message,
 .pwa-runtime-notice-content { display: contents; }
 .pwa-runtime-notice-description { grid-column: 1; min-width: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; }
-.pwa-runtime-notice-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pwa-runtime-notice .pwa-runtime-notice-dismiss { flex: 0 0 var(--pwa-hit-target); align-self: center; width: var(--pwa-hit-target); min-width: var(--pwa-hit-target); height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); margin: -4px -4px -4px 4px; border: 1px solid transparent; border-radius: var(--pwa-radius-md); color: var(--pwa-secondary); }
 @media (hover: hover) { .pwa-runtime-notice .pwa-runtime-notice-dismiss:hover:not(:disabled) { border-color: var(--pwa-line); color: var(--pwa-ink); background: var(--pwa-hover); } }
 /*
@@ -587,7 +595,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-app-shell[data-wide-compact] .pwa-runtime-notice-fallback .pwa-runtime-notice .pwa-runtime-notice-body { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
 .pwa-app-shell[data-wide-compact] .pwa-runtime-notice-fallback .pwa-runtime-notice .pwa-runtime-notice-message,
 .pwa-app-shell[data-wide-compact] .pwa-runtime-notice-fallback .pwa-runtime-notice-content { display: contents; }
-.pwa-app-shell[data-wide-compact] .pwa-runtime-notice-fallback .pwa-runtime-notice-actions { width: auto; }
 
 @keyframes pwa-rotate { to { transform: rotate(360deg); } }
 
@@ -609,7 +616,6 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-runtime-notice .pwa-runtime-notice-message { display: block; }
   .pwa-runtime-notice .pwa-runtime-notice-title { margin-bottom: 4px; }
   .pwa-runtime-notice-content { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
-  .pwa-runtime-notice-actions { width: 100%; justify-content: flex-start; }
   /* 居中弹窗不贴边，距屏幕边缘取 16 与安全区中的较大值，不相加。 */
   :root .mantine-Modal-root { --modal-x-offset: max(16px, var(--pwa-safe-left), var(--pwa-safe-right)); }
   .pwa-pairing-dialog,
