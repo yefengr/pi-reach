@@ -24,6 +24,7 @@ const items: TimelineViewItem[] = Array.from({ length: 5 }, (_, index) => ({
 }));
 
 class ViewportMock extends EventTarget {
+  width = window.innerWidth;
   height = window.innerHeight;
   offsetTop = 0;
   scale = 1;
@@ -388,10 +389,12 @@ test("keeps the mobile Composer bottom gap on focus without a touch screen", asy
 });
 
 // Linux 无头 Chromium 关闭触控模拟后无法恢复 pointer／hover 媒体特性，触控用例放在文件末尾，避免影响其他用例。
-test("keeps a fixed small gap in a touch browser tab and drops it on focus only in the standalone app", async () => {
+test("keeps a fixed small gap in a touch browser tab and docks only in the standalone app while the soft keyboard is open", async () => {
   await page.viewport(390, 844);
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await expect.poll(() => matchMedia("(any-pointer: coarse)").matches).toBe(true);
+  const viewport = new ViewportMock();
+  vi.stubGlobal("visualViewport", viewport);
   const view = await renderWorkspace();
   const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
   const bottom = () => getComputedStyle(composer).paddingBottom;
@@ -417,23 +420,31 @@ test("keeps a fixed small gap in a touch browser tab and drops it on focus only 
     expect(bottom()).toBe("24px");
     // 主屏 PWA 未聚焦时卡片下方留有 24，保留完整投影。
     expect(shadow()).toBe(fullShadow);
-    // 软键盘与辅助栏贴住底边，聚焦期间不再为 Home 指示条留白；收起按输入区内增减的高度过渡，
-    // 等 iOS 整页上推过半（延迟 keyboard-lag）再以较快的 collapse-out 收起；失焦恢复以 collapse-in 进行、不延迟。
+    // 只聚焦、可视高度不变（外接键盘）时不停靠。
     view.input.focus({ preventScroll: true });
+    await finishCssTransitions();
+    expect(bottom()).toBe("24px");
+    expect(shadow()).toBe(fullShadow);
+    // 可视高度明显变矮即软键盘弹出；键盘到位与停靠是两个独立动作：脚本在最后一次变化后等 keyboard-lag 才标记 open，
+    // 停靠以 drawer 进行、CSS 不设延迟，阴影同一时长；键盘收起或失焦即以 drawer-out 抬起。
+    viewport.change({ height: 415 });
+    expect(document.documentElement.dataset.softKeyboard).toBe("opening");
+    expect(bottom()).toBe("24px");
+    await expect.poll(() => document.documentElement.dataset.softKeyboard, { timeout: 2000 }).toBe("open");
     expect(getComputedStyle(composer).transitionProperty).toBe("padding-bottom");
-    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-out"));
-    expect(getComputedStyle(composer).transitionDelay).toBe(seconds("--pwa-duration-keyboard-lag"));
-    expect(getComputedStyle(card).transitionDelay).toBe(`0s, ${seconds("--pwa-duration-keyboard-lag")}`);
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-drawer"));
+    expect(getComputedStyle(composer).transitionDelay).toBe("0s");
+    expect(getComputedStyle(card).transitionDuration).toBe(`${seconds("--pwa-duration-fade")}, ${seconds("--pwa-duration-drawer")}`);
     await finishCssTransitions();
     expect(bottom()).toBe("0px");
     // 卡片底边即可见区域底边，投影改为只向上方和两侧散开，不在底边被截断。
-    expect(shadow()).not.toBe(fullShadow);
     expect(shadow()).toBe(dockedShadow);
     await settle();
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     view.input.blur();
-    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-in"));
-    expect(getComputedStyle(composer).transitionDelay).toBe("0s");
+    expect(document.documentElement.hasAttribute("data-soft-keyboard")).toBe(false);
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-drawer-out"));
+    viewport.change({ height: 844 });
     await finishCssTransitions();
     expect(bottom()).toBe("24px");
     expect(shadow()).toBe(fullShadow);

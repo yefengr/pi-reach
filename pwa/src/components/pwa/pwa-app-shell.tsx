@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo
 import { PwaOperationNotifications, PwaToastProvider } from "@/components/pwa/pwa-operation-notifications";
 import { createOperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { useViewportDensity } from "@/lib/pwa/use-viewport-density";
+import { useSoftKeyboard } from "@/lib/pwa/use-soft-keyboard";
 import "@/app/workspace-viewport.css";
 
 type PwaRuntimeNoticeContextValue = {
@@ -36,6 +37,7 @@ export function PwaRuntimeNoticePortal({ children }: { children: ReactNode }) {
 export function PwaAppShell({ children, runtimeNotice }: { children: ReactNode; runtimeNotice: ReactNode }) {
   const shellRef = useRef<HTMLDivElement>(null);
   useViewportDensity(shellRef);
+  useSoftKeyboard();
   const fallbackId = useId();
   const [fallbackTarget, setFallbackTarget] = useState<HTMLDivElement | null>(null);
   const [toastFallbackTarget, setToastFallbackTarget] = useState<HTMLDivElement | null>(null);

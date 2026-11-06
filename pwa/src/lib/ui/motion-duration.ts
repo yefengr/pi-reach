@@ -15,7 +15,7 @@ export const PWA_MOTION_FALLBACK_MS = {
   "--pwa-duration-collapse-in": 400,
   "--pwa-duration-collapse-out": 280,
   "--pwa-duration-collapse-settle": 400,
-  "--pwa-duration-keyboard-lag": 450,
+  "--pwa-duration-keyboard-lag": 350,
   "--pwa-duration-image-in": 400,
   "--pwa-duration-image-out": 280,
   "--pwa-duration-toast": 400,

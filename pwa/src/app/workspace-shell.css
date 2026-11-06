@@ -58,18 +58,18 @@
     .pwa-root .pwa-composer .pwa-composer-card { box-shadow: var(--pwa-shadow-composer-docked); }
   }
 }
-/* 主屏 PWA 触屏移动布局下输入框聚焦时，软键盘与系统辅助栏贴住屏幕底边，不再需要为 Home 指示条留白：输入区底部留白收为 0，失焦后恢复；
-   卡片底边随之成为可见区域底边，聚焦期间改用贴底阴影。只看聚焦、不检测键盘（软键盘仍交给浏览器），接外接键盘时同样收起，是已接受的取舍。
-   键盘到位与输入区落座是两个独立动作（DESIGN「编排」）：iOS 整页上推的起始时机每次不同，固定延迟无法稳定与之重叠，重叠不足时两段首尾相接、
-   看起来像冲过头再落回。留白与阴影延迟 keyboard-lag，等上推结束并停顿片刻再以 collapse-out 收起；失焦恢复以 collapse-in 进行、不延迟。
-   留白消失属离开、出现属进入，离开更快（DESIGN「动效」）。减少动态效果时只保留颜色与透明度过渡，二者一次到位。 */
+/* 主屏 PWA 触屏移动布局下，输入框聚焦且软键盘到位（根节点 data-soft-keyboard="open"，按可视窗口高度判断，见 use-soft-keyboard）时，
+   软键盘与系统辅助栏贴住屏幕底边，不再需要为 Home 指示条留白：输入区停靠，底部留白收为 0、改用贴底阴影；键盘收起或失焦即抬起。
+   外接键盘只聚焦、可视高度不变，不触发。键盘到位与停靠是两个独立动作（DESIGN「编排」）：等待由脚本在可视高度最后一次变化后计时，
+   CSS 不设延迟。停靠与抬起按侧栏的进入与离开取 drawer／drawer-out，阴影与位移同一时长与曲线，从朝下投影平滑过渡为朝上；
+   减少动态效果时只保留颜色与透明度过渡，二者一次到位。 */
 @media (display-mode: standalone) {
   @media (any-pointer: coarse), (hover: none) {
     @media (max-width: 767.98px) {
-      .pwa-root .pwa-composer { transition: padding-bottom var(--pwa-duration-collapse-in) var(--pwa-ease-content); }
-      .pwa-root .pwa-composer .pwa-composer-card { box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard), box-shadow var(--pwa-duration-collapse-in) var(--pwa-ease-content); }
-      .pwa-root .pwa-composer:has(.pwa-composer-input:focus) { padding-bottom: 0; transition-duration: var(--pwa-duration-collapse-out); transition-delay: var(--pwa-duration-keyboard-lag); }
-      .pwa-root .pwa-composer:has(.pwa-composer-input:focus) .pwa-composer-card { box-shadow: var(--pwa-shadow-composer-docked); transition-duration: var(--pwa-duration-fade), var(--pwa-duration-collapse-out); transition-delay: 0s, var(--pwa-duration-keyboard-lag); }
+      .pwa-root .pwa-composer { transition: padding-bottom var(--pwa-duration-drawer-out) var(--pwa-ease-content); }
+      .pwa-root .pwa-composer .pwa-composer-card { box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard), box-shadow var(--pwa-duration-drawer-out) var(--pwa-ease-content); }
+      :root[data-soft-keyboard="open"] .pwa-root .pwa-composer:has(.pwa-composer-input:focus) { padding-bottom: 0; transition-duration: var(--pwa-duration-drawer); }
+      :root[data-soft-keyboard="open"] .pwa-root .pwa-composer:has(.pwa-composer-input:focus) .pwa-composer-card { box-shadow: var(--pwa-shadow-composer-docked); transition-duration: var(--pwa-duration-fade), var(--pwa-duration-drawer); }
     }
   }
 }
