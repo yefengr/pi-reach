@@ -83,13 +83,13 @@
  * 在 Composer 中收在输入框卡片后方：左右各内缩 8，下沿以一个 Composer 圆角高度压在卡片之后；
  * 卡片层级更高，聚焦边框不覆盖抽屉。被压住的部分只是底衬，内容区在其上方滚动。
  */
-/* 抽屉放在高度包裹层内：包裹层只给出已露出的高度，抽屉不随之拉伸，超出部分压在不透明的卡片之后。 */
+/* 输入区内的抽屉放在高度包裹层内：包裹层只给出已露出的高度，抽屉不随之拉伸，超出部分压在不透明的卡片之后；单独渲染时（如样式测试）不压入卡片。 */
 .pwa-queued-messages-slot {
   --pwa-composer-grow-in: var(--pwa-duration-drawer);
   --pwa-composer-grow-out: var(--pwa-duration-drawer-out);
 }
 
-.pwa-queued-messages-slot > .pwa-queued-messages {
+.pwa-composer > .pwa-queued-messages-slot > .pwa-queued-messages {
   align-self: start;
   margin: 0 8px calc(-1 * var(--pwa-radius-composer));
   padding-bottom: var(--pwa-radius-composer);
@@ -102,12 +102,12 @@
  * 输入区浮在列表之上，高度变化不再改变列表高度，停在底部时列表随之逐帧贴底。
  */
 @starting-style {
-  .pwa-queued-messages-slot > .pwa-queued-messages {
+  .pwa-composer > .pwa-queued-messages-slot > .pwa-queued-messages {
     opacity: 0;
   }
 }
 
-.pwa-queued-messages-slot > .pwa-queued-messages[data-presence="leaving"] {
+.pwa-composer > .pwa-queued-messages-slot > .pwa-queued-messages[data-presence="leaving"] {
   opacity: 0;
   transition-duration: var(--pwa-duration-drawer-out);
 }
