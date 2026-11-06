@@ -418,12 +418,12 @@ test("keeps a fixed small gap in a touch browser tab and drops it on focus only 
     // 主屏 PWA 未聚焦时卡片下方留有 24，保留完整投影。
     expect(shadow()).toBe(fullShadow);
     // 软键盘与辅助栏贴住底边，聚焦期间不再为 Home 指示条留白；收起按输入区内增减的高度过渡，
-    // 并等 iOS 整页上推基本结束（延迟 collapse-out）再开始，收起键盘时不延迟。
+    // 等 iOS 整页上推过半（延迟 keyboard-lag）再以较快的 collapse-out 收起；失焦恢复以 collapse-in 进行、不延迟。
     view.input.focus({ preventScroll: true });
     expect(getComputedStyle(composer).transitionProperty).toBe("padding-bottom");
-    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-in"));
-    expect(getComputedStyle(composer).transitionDelay).toBe(seconds("--pwa-duration-collapse-out"));
-    expect(getComputedStyle(card).transitionDelay).toBe(`0s, ${seconds("--pwa-duration-collapse-out")}`);
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-out"));
+    expect(getComputedStyle(composer).transitionDelay).toBe(seconds("--pwa-duration-keyboard-lag"));
+    expect(getComputedStyle(card).transitionDelay).toBe(`0s, ${seconds("--pwa-duration-keyboard-lag")}`);
     await finishCssTransitions();
     expect(bottom()).toBe("0px");
     // 卡片底边即可见区域底边，投影改为只向上方和两侧散开，不在底边被截断。
@@ -432,7 +432,7 @@ test("keeps a fixed small gap in a touch browser tab and drops it on focus only 
     await settle();
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     view.input.blur();
-    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-out"));
+    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-in"));
     expect(getComputedStyle(composer).transitionDelay).toBe("0s");
     await finishCssTransitions();
     expect(bottom()).toBe("24px");
