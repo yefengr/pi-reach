@@ -4,7 +4,6 @@ import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
-import { PwaConnectionBanner } from "./pwa-app-actions";
 import { useToast } from "./pwa-operation-notifications";
 import { ServiceWorkerNotice } from "./service-worker-register";
 import { SettingsPage } from "./settings-page";
@@ -12,7 +11,7 @@ import { useSettingsRoute } from "@/lib/pwa/settings-route";
 import { isAppleKeyboard, shortcutLabel } from "@/lib/pwa/keyboard-shortcuts";
 import { ConfirmActionDialog } from "./confirm-action-dialog";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
-import { ConnectionStatus, type WorkspaceNavigationProps } from "./workspace-view";
+import type { WorkspaceNavigationProps } from "./workspace-view";
 import { UnpairedWorkspace } from "./workspace-content";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
@@ -40,14 +39,14 @@ type LayoutHarnessProps = {
   rejectClose?: boolean;
   historyMode?: boolean;
   runtimeNotice?: boolean;
-  connectionBanner?: "relay" | "network";
+  toastTrigger?: boolean;
   title?: string;
   unpaired?: boolean;
   computers?: Pick<WorkspaceNavigationProps, "devices" | "activeDeviceId" | "pairingPresence">;
   savedHistory?: TimelineSessionSummary[];
 };
 
-function LayoutHarness({ events, rejectClose = false, historyMode = false, runtimeNotice = false, connectionBanner, title = "Main Pi", unpaired = false, computers, savedHistory = history }: LayoutHarnessProps) {
+function LayoutHarness({ events, rejectClose = false, historyMode = false, runtimeNotice = false, toastTrigger = false, title = "Main Pi", unpaired = false, computers, savedHistory = history }: LayoutHarnessProps) {
   const [count, setCount] = useState(0);
   const [noticeVisible, setNoticeVisible] = useState(runtimeNotice);
   const { route, openSettings, closeSettings } = useSettingsRoute();
@@ -73,9 +72,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
 
   return <PwaAppShell runtimeNotice={noticeVisible && <ServiceWorkerNotice installPrompt unsupported={false} onInstall={() => {}} onDismiss={() => setNoticeVisible(false)} />}><PwaWorkspaceLayout
     navigation={navigation}
-    titleBar={unpaired ? { title: "Navigation", showTitle: false } : historyMode ? { title: "Saved Pi", showTitle: true } : { title, showTitle: true, status: <ConnectionStatus state="online" /> }}
-    historyMode={historyMode}
-    connectionBanner={connectionBanner ? <PwaConnectionBanner kind={connectionBanner} connection="retrying" onRetry={() => events.push("retry")} /> : null}
+    titleBar={unpaired ? { title: "Navigation", showTitle: false } : historyMode ? { title: "Saved Pi", showTitle: true } : { title, showTitle: true }}
     toast={unpaired ? null : <div data-testid="toast">Toast</div>}
     settingsRoute={route}
     onSettingsBack={closeSettings}
@@ -84,7 +81,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
     overlays={<ConfirmActionDialog action={confirmOpen ? { kind: "clear-local-data" } : null} pending={false} error={null} onConfirm={() => {}} onClose={() => setConfirmOpen(false)} />}
     closeBackgroundOverlay={(close) => { events.push("close-request"); if (!rejectClose) close(); }}
   >
-    {connectionBanner ? <ToastTrigger events={events} /> : null}{unpaired ? <UnpairedWorkspace onPair={navigation.onPair} /> : <button type="button" data-testid="stateful-child" onClick={() => setCount((value) => value + 1)}>Child count {count}</button>}
+    {toastTrigger ? <ToastTrigger events={events} /> : null}{unpaired ? <UnpairedWorkspace onPair={navigation.onPair} /> : <button type="button" data-testid="stateful-child" onClick={() => setCount((value) => value + 1)}>Child count {count}</button>}
   </PwaWorkspaceLayout></PwaAppShell>;
 }
 
@@ -294,27 +291,26 @@ test("keeps the toggle in the header band and on top throughout both sidebar tra
 });
 
 const toastCases = [
-  { width: 1280, height: 844, banner: "relay", long: false, safeTop: 0 },
-  { width: 1280, height: 844, banner: "network", long: true, safeTop: 0 },
-  { width: 844, height: 390, banner: "relay", long: true, safeTop: 0 },
-  { width: 390, height: 844, banner: "relay", long: false, safeTop: 0 },
-  { width: 390, height: 844, banner: "network", long: true, safeTop: 0 },
-  { width: 390, height: 844, banner: "relay", long: true, safeTop: 47 },
-  { width: 390, height: 600, banner: "relay", long: true, safeTop: 47 },
+  { width: 1280, height: 844, long: false, safeTop: 0 },
+  { width: 1280, height: 844, long: true, safeTop: 0 },
+  { width: 844, height: 390, long: true, safeTop: 0 },
+  { width: 390, height: 844, long: false, safeTop: 0 },
+  { width: 390, height: 844, long: true, safeTop: 0 },
+  { width: 390, height: 844, long: true, safeTop: 47 },
+  { width: 390, height: 600, long: true, safeTop: 47 },
 ] as const;
 
-test.each(toastCases)("keeps the $width×$height toast (long: $long, safe top: $safeTop) clear of the $banner banner and runtime notice", async ({ width, height, banner, long, safeTop }) => {
+// 连接问题已移入输入区（ADR-20261105），主区提示区只剩局部错误与运行时提示。
+test.each(toastCases)("keeps the $width×$height toast (long: $long, safe top: $safeTop) clear of the title bar and runtime notice", async ({ width, height, long, safeTop }) => {
   await page.viewport(width, height);
   try {
     const events: string[] = [];
-    const screen = await renderLayout({ events, connectionBanner: banner, runtimeNotice: true });
+    const screen = await renderLayout({ events, toastTrigger: true, runtimeNotice: true });
     if (safeTop) {
       // 渲染后才出现的安全区只让标题区变高，用来验证提示区位移时 Toast 仍会重新避让。
       document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
       await expect.poll(() => Math.round(document.querySelector(".pwa-title-bar")!.getBoundingClientRect().height)).toBe(48 + safeTop);
     }
-    const retry = screen.getByRole("button", { name: "Retry now" });
-    await expect.element(retry).toBeVisible();
     await expect.element(screen.getByRole("status", { name: "Install Pi Reach" })).toBeVisible();
     await screen.getByRole("button", { name: long ? "Show long toast" : "Show toast" }).click();
     await expect.poll(() => document.querySelector(".pwa-operation-notification")?.isConnected).toBe(true);
@@ -327,24 +323,14 @@ test.each(toastCases)("keeps the $width×$height toast (long: $long, safe top: $
     expect(box.left).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(width);
     expect(box.bottom).toBeLessThanOrEqual(height);
-    const message = document.querySelector<HTMLElement>(".pwa-connection-banner-content > span")!;
-    const covered = [message, retry.element(), document.querySelector<HTMLElement>(".pwa-runtime-notice")!, document.querySelector<HTMLElement>(".pwa-title-bar")!];
+    const covered = [document.querySelector<HTMLElement>(".pwa-runtime-notice")!, document.querySelector<HTMLElement>(".pwa-title-bar")!];
     for (const element of covered) expect(overlaps(box, element.getBoundingClientRect()), element.className).toBe(false);
     const main = document.querySelector(".pwa-main")!.getBoundingClientRect();
     expect(box.left).toBeGreaterThanOrEqual(main.left + 15.5);
     expect(box.right).toBeLessThanOrEqual(main.right - 15.5);
     expect(Math.abs((box.left + box.right) / 2 - (main.left + main.right) / 2)).toBeLessThanOrEqual(1);
     if (width >= 768) expect(overlaps(box, document.querySelector(".pwa-desktop-navigation")!.getBoundingClientRect())).toBe(false);
-    const text = message.getBoundingClientRect();
-    expect(message.contains(document.elementFromPoint(text.left + 4, text.top + text.height / 2))).toBe(true);
-
-    const button = retry.element().getBoundingClientRect();
-    for (const y of [button.top + 2, button.top + button.height / 2, button.bottom - 2]) {
-      expect(retry.element().contains(document.elementFromPoint(button.left + button.width / 2, y))).toBe(true);
-    }
-    await page.screenshot({ path: `../../../.vitest/screenshots/toast-banner-${width}x${height}-${banner}-${long ? "long" : "short"}-top${safeTop}.png` });
-    await retry.click();
-    expect(events).toContain("retry");
+    await page.screenshot({ path: `../../../.vitest/screenshots/toast-notices-${width}x${height}-${long ? "long" : "short"}-top${safeTop}.png` });
     if (long) {
       const action = screen.getByRole("button", { name: "Undo" });
       const actionBox = action.element().getBoundingClientRect();

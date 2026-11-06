@@ -54,14 +54,16 @@ test.each(["offline", "reconnecting"] as const)("%s prevents send and explicitly
   const composer = input();
   await userEvent.fill(composer, "恢复后仍保留");
   await choose(state);
-  expect(document.querySelector(".pwa-connection-banner")).not.toBeNull();
+  // 连接问题在输入框提示行说明（ADR-20261105）。
+  const connectionText = state === "offline" ? "网络不可用" : "无法连接 Relay";
+  await expect.poll(() => document.querySelector(".pwa-composer-hint")?.textContent ?? "").toContain(connectionText);
   expect(send().disabled).toBe(true);
   expect(document.querySelector(".pwa-composer-stop")).toBeNull();
   composer.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   expect(document.querySelector(".pwa-composer-hint")?.textContent).not.toContain("已演示发送");
   expect(composer.value).toBe("恢复后仍保留");
   await page.getByRole("button", { name: "演示恢复连接", exact: true }).click();
-  await expect.poll(() => document.querySelector(".pwa-connection-banner")).toBeNull();
+  await expect.poll(() => document.querySelector(".pwa-composer-hint")?.textContent ?? "").not.toContain(connectionText);
   expect(input()).toBe(composer);
   expect(send().disabled).toBe(false);
   await userEvent.click(send());

@@ -21,8 +21,10 @@ export type CompactionActivity = { sessionId: string; status: "running" | "compl
 /** 本地、不持久化的时间线提示；afterSeq 为发生时的最后一条正式记录。 */
 export type CompactionNotice = { id: string; sessionId: string; afterSeq: number; kind: "failed" | "cancelled" | "unknown" };
 
+/** 输入区提示行的文字操作（如连接问题的「立即重试」）。 */
+export type OperationHintAction = { label: string; onAction: () => void; disabled?: boolean };
 /** 输入区提示行：进行中的操作只由旋转图标表达，文字保持中性色。 */
-export type OperationHint = { text: string; tone: "running" | "neutral"; busy: boolean };
+export type OperationHint = { text: string; tone: "running" | "neutral"; busy: boolean; action?: OperationHintAction };
 type OperationHintMessages = {
   creatingSession: string; openingSession: string; compacting: string;
   compactCancelled: string; compactFailed: string; unknown: string;

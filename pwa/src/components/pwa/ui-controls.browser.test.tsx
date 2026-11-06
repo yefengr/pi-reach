@@ -7,7 +7,6 @@ import { ActionIcon, Badge, Button, Select, Stack, Text, TextInput, Title } from
 import { DesktopSidebar, WorkspaceHistorySection } from "./workspace-view";
 import { ChoosePiWorkspace, UnpairedWorkspace } from "./workspace-content";
 import { StartupErrorView } from "./pwa-startup";
-import { PwaConnectionBanner } from "./pwa-app-actions";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 
@@ -275,9 +274,9 @@ test("disabled command rows use secondary text instead of transparency", async (
   } finally { await screen.unmount(); }
 });
 
-test("startup and compact notices keep icons on the 16/20/24 scale and the mobile gutter", async () => {
+test("startup notices keep icons on the 16/20/24 scale and the mobile gutter", async () => {
   await page.viewport(390, 844);
-  let screen = await renderPwa(<StartupErrorView error={null} onRetry={() => {}} />);
+  const screen = await renderPwa(<StartupErrorView error={null} onRetry={() => {}} />);
   const icon = document.querySelector(".pwa-startup-icon")!.getBoundingClientRect();
   expect([Math.round(icon.width), Math.round(icon.height)]).toEqual([48, 48]);
   expect(getComputedStyle(document.querySelector(".pwa-startup-card")!).paddingLeft).toBe("16px");
@@ -285,10 +284,6 @@ test("startup and compact notices keep icons on the 16/20/24 scale and the mobil
   const title = document.querySelector(".pwa-startup-card h1")!.getBoundingClientRect();
   const description = document.querySelector(".pwa-startup-card h1 + p")!.getBoundingClientRect();
   expect(Math.round(description.top - title.bottom)).toBe(8);
-  await screen.unmount();
-  screen = await renderPwa(<div className="pwa-app-shell" data-compact-height="short"><PwaConnectionBanner kind="relay" connection="retrying" onRetry={() => {}} /></div>);
-  const svg = document.querySelector(".pwa-connection-banner-icon svg")!.getBoundingClientRect();
-  expect([Math.round(svg.width), Math.round(svg.height)]).toEqual([16, 16]);
   await screen.unmount();
   await page.viewport(1280, 900);
 });

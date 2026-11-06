@@ -5,7 +5,7 @@ import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { MessageComposer } from "./message-composer";
 import { PwaAppShell, PwaRuntimeNoticeSlot } from "./pwa-app-shell";
-import { PwaConnectionBanner, PwaStatusError } from "./pwa-app-actions";
+import { PwaStatusError } from "./pwa-app-actions";
 import { ServiceWorkerNotice } from "./service-worker-register";
 import { WorkspaceTitleBar } from "./workspace-title-bar";
 
@@ -18,12 +18,12 @@ function NoticeLayoutHarness({ onSend, initialDraft }: { onSend: () => void; ini
       <div className="pwa-layout"><div className="pwa-desktop-navigation"><aside className="pwa-sidebar">Sessions</aside></div><main className="pwa-main">
         <WorkspaceTitleBar title="Pi Reach" prefix="pi-reach" showTitle navigationExpanded={false} onOpenNavigation={() => {}} onRefresh={() => {}} />
         <div className="pwa-main-notices">
-          <PwaConnectionBanner kind="relay" connection="retrying" onRetry={() => {}} />
           <PwaStatusError message={error} onDismiss={() => setError(null)} />
           <PwaRuntimeNoticeSlot />
         </div>
         <div className="pwa-message-list">Current session output</div>
         <div className="pwa-chat-footer"><MessageComposer
+          connectionHint={{ text: "Can't reach Relay. Retrying automatically…", tone: "neutral", busy: true, action: { label: "Retry now", onAction: () => {} } }}
           attachments={[]} canAttach={false} sendingAttachments={false} isOnline isWorking={false} stopping={false}
           draft={draft} onDraftChange={setDraft} onSend={onSend} onStop={() => {}}
           onAddFiles={() => {}} onRemoveAttachment={() => {}} onRetryAttachment={() => {}}
@@ -86,7 +86,8 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
     expect(target.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))).toBe(true);
   }
   const composerBox = composer.getBoundingClientRect();
-  expect(document.querySelector(".pwa-connection-banner")).not.toBeNull();
+  // 连接问题已移入输入框提示行（ADR-20261105）；重试仍须完整可点。
+  expect(document.querySelector(".pwa-composer-hint-action")).not.toBeNull();
   const retry = screen.getByRole("button", { name: "Retry now" }).element();
   const retryBox = retry.getBoundingClientRect();
   expect(retryBox.height).toBeGreaterThanOrEqual(44);
@@ -120,7 +121,7 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   const contentBox = contentRange.getBoundingClientRect();
   expect(contentBox.bottom).toBeLessThanOrEqual(listBox.bottom);
   expect(list.contains(document.elementFromPoint(contentBox.x + contentBox.width / 2, contentBox.y + contentBox.height / 2))).toBe(true);
-  for (const notice of document.querySelectorAll(".pwa-runtime-notice,.pwa-connection-banner,.pwa-status-error")) {
+  for (const notice of document.querySelectorAll(".pwa-runtime-notice,.pwa-status-error")) {
     const box = notice.getBoundingClientRect();
     expect(box.bottom <= composerBox.top || box.top >= composerBox.bottom, JSON.stringify({ notice: notice.className, noticeBox: box.toJSON(), composerBox: composerBox.toJSON() })).toBe(true);
   }

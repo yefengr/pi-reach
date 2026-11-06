@@ -83,8 +83,10 @@ type MessageComposerProps = {
   canAttach: boolean;
   sendingAttachments: boolean;
   attachmentNotice?: string | null;
-  /** 新建、停止与配置确认的进行中提示；与输入约束共用一行，优先级高于附件与断线提示。 */
+  /** 新建、停止与配置确认的进行中提示；与输入约束共用一行，优先级高于附件与连接提示。 */
   operationHint?: OperationHint | null;
+  /** 连接问题（断线 3 秒后、10 秒后或无网络）；由应用层按断线时长给出，优先级最低。 */
+  connectionHint?: OperationHint | null;
   isOnline: boolean;
   isWorking: boolean;
   stopping: boolean;
@@ -136,6 +138,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
   sendingAttachments,
   attachmentNotice,
   operationHint = null,
+  connectionHint = null,
   isOnline,
   isWorking,
   stopping,
@@ -270,9 +273,9 @@ const MessageComposerContent = memo(function MessageComposerContent({
   // 运行中有草稿时显示发送，消息进入 Extension 队列；草稿为空才把按钮让给停止。
   const showStop = isOnline && isWorking && !hasMessage;
   const addDisabled = !canAttach || sendingAttachments || newSessionPending;
-  const notice = attachmentNotice || (!isOnline ? t.composer.sendAfterReconnect : null);
-  // 操作状态是当前最具体、最短命的一行，压过附件与断线提示；它结束后约束提示自动恢复。
-  const hint = operationHint ?? (notice ? { text: notice, tone: "neutral" as const, busy: false } : null);
+  // 操作状态是当前最具体、最短命的一行，压过附件与连接提示；它结束后约束提示自动恢复。
+  // 断线的短暂抖动不提示：连接提示由应用层在断线 3 秒后才给出，期间发送按钮仍按 isOnline 不可用。
+  const hint = operationHint ?? (attachmentNotice ? { text: attachmentNotice, tone: "neutral" as const, busy: false } : connectionHint);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -510,14 +513,15 @@ type ReadOnlyComposerProps = {
   thinking: ThinkingLevel;
 };
 
-/** 只读历史的输入区：与在线输入框同一结构和样式，所有控件禁用，提示区说明只读原因。 */
+/** 只读历史与已退出 Pi 的输入区：与在线输入框同一结构和样式，所有控件禁用，卡片内提示行说明不能发送的原因。 */
 export function ReadOnlyComposer({ notice, modelName, thinking }: ReadOnlyComposerProps) {
   const { t } = useI18n();
   const modelLabel = modelName ? t.commands.modelChipLabel(modelName, thinking) : null;
   return (
     <div className="pwa-composer">
-      <p className="pwa-composer-hint" role="note">{notice}</p>
       <div className="pwa-composer-card">
+        {/* 与在线输入框同一外观，只换卡片内提示行（ADR-20261105）。 */}
+        <ComposerHint hint={{ text: notice, tone: "neutral", busy: false }} />
         <Textarea className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value="" placeholder={t.composer.readOnlyPlaceholder} aria-label={t.composer.readOnlyPlaceholder} disabled rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">

@@ -3,7 +3,6 @@ import { flushSync } from "react-dom";
 import { Button } from "@mantine/core";
 import { MessageComposer } from "@/components/pwa/message-composer";
 import { MessageList } from "@/components/pwa/message-list";
-import { PwaConnectionBanner } from "@/components/pwa/pwa-app-actions";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "@/components/pwa/published-files-context";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
@@ -80,7 +79,6 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
   const uploading = state === "uploading" && conversation.uploads.some(item => item.status !== "complete");
   return <PublishedFilesProvider value={files}>
     <GalleryConversationControls state={state} conversation={conversation} onResult={setResult} />
-    {!conversation.online ? <PwaConnectionBanner kind={state === "offline" ? "network" : "relay"} connection={state === "offline" ? "no_network" : "retrying"} /> : null}
     {state === "files" ? <div className="pwa-ui-states-actions"><Button variant="default" disabled={states.get("reading")?.phase === "ready"} onClick={() => {
       if (!assets.current) return;
       const next = new Map(currentStates.current);
@@ -91,6 +89,9 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
       {state === "history" ? <GalleryHistory items={conversation.items} /> : <GalleryTimeline key={`${state}:${epoch}`} state={state} conversation={conversation} />}
       <div className="pwa-chat-footer" ref={initializeAssets} hidden={state === "history"} inert={state === "history"} style={state === "history" ? { display: "none" } : undefined}>
         <MessageComposer enterSends={true} draft={draft} onDraftChange={setDraft} attachmentNotice={conversation.online ? result : null}
+          connectionHint={conversation.online ? null : state === "offline"
+            ? { text: "网络不可用，恢复后自动重新连接", tone: "neutral", busy: false }
+            : { text: "无法连接 Relay，正在自动重试…", tone: "neutral", busy: true, action: { label: "立即重试", onAction: () => setResult("已演示立即重试；不连接远程服务。") } }}
           attachments={state === "uploading" ? conversation.uploads : state === "failure" && attachmentVisible ? [attachment] : []} canAttach={false} sendingAttachments={uploading}
           isOnline={conversation.online} isWorking={conversation.running} stopping={false}
           onSend={() => setResult("已演示发送，草稿保留；未发送到 Pi。")} onStop={() => setResult("已演示停止；通过上方控件切换状态。")}

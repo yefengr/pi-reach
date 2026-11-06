@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PwaConnectionBanner, PwaMessageActions, PwaStatusError } from "./pwa-app-actions";
+import { PwaMessageActions, PwaStatusError } from "./pwa-app-actions";
 import { PwaUiProvider } from "./pwa-ui-provider";
 
 function renderActions(unreadOutput = 3): string {
@@ -25,37 +25,6 @@ test("renders Mantine message and toast actions with their semantics", () => {
   expect(html).toMatch(/Message could not be sent\. Check the connection and try again\./);
   expect(html).not.toMatch(/Relay is not connected/);
   expect(html).toMatch(/aria-label="Dismiss"/);
-});
-
-test("renders readable, passive connection banners with status semantics", () => {
-  const html = renderToStaticMarkup(
-    <PwaUiProvider>
-      <PwaConnectionBanner kind="relay" connection="retrying" />
-      <PwaConnectionBanner kind="network" connection="no_network" />
-      <PwaConnectionBanner kind="relay" connection="offline" />
-    </PwaUiProvider>,
-  );
-
-  expect(html.match(/role="status"/g)).toHaveLength(3);
-  expect(html).toMatch(/reach Relay\. Retrying…/);
-  expect(html).toMatch(/Network unavailable\. Check your connection\./);
-  expect(html).toMatch(/Connection unavailable\. Try again\./);
-  expect(html).not.toMatch(/<button/);
-  expect(html).not.toMatch(/Dismiss|Close/);
-});
-
-test.each([
-  ["retrying", false, false],
-  ["offline", false, false],
-  ["connecting", true, false],
-  ["no_network", true, false],
-  ["retrying", true, true],
-] as const)("renders the retry action for %s with disabled=%s and explicit lock=%s", (connection, disabled, retryDisabled) => {
-  const html = renderToStaticMarkup(<PwaUiProvider><PwaConnectionBanner kind={connection === "no_network" ? "network" : "relay"} connection={connection} onRetry={() => {}} retryDisabled={retryDisabled} /></PwaUiProvider>);
-  expect(html).toContain("Retry now");
-  const button = html.match(/<button\b[^>]*>/)?.[0];
-  expect(button).toBeDefined();
-  expect(/\bdisabled(?:=|\s|>)/.test(button!)).toBe(disabled);
 });
 
 test("renders Latest when output is unread-free", () => {

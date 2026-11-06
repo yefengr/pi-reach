@@ -20,7 +20,7 @@ import { DELIVERY_STATUS_RETRY_DELAYS_MS } from "@/lib/pwa/delivery-query-retry"
 import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
 import { PwaApp } from "./pwa-app";
 import { viewportDiagnosticCapture } from "@/lib/pwa/timeline-viewport-diagnostics";
-import { connectionBannerTiming } from "./pwa-app-actions";
+import { CONNECTION_HINT_TIMING } from "@/lib/pwa/connection-hint";
 import { useComposerAutosize } from "./use-composer-autosize";
 import { RELAY_PROBE_TIMEOUT_MS } from "@/lib/pwa/use-relay-connection";
 import { safeProtocolFeedbackMessage } from "@/lib/pwa/feedback-messages";
@@ -290,11 +290,15 @@ afterEach(() => {
   window.history.replaceState(null, "");
 });
 
+/** 标题区不再显示连接状态（ADR-20261105）；主区以 data-connection 反映当前连接。 */
+const connectionState = () => document.querySelector(".pwa-main")?.getAttribute("data-connection") ?? null;
+
 beforeEach(async () => {
   fixtureMetadata.content = "https://pi-reach-relay.yefengr.cn";
   document.head.append(fixtureMetadata);
-  // 连接提示条默认在断线 10 秒后出现；集成测试立即显示，延迟本身由 use-delayed-visibility 测试覆盖。
-  connectionBannerTiming.delayMs = 0;
+  // 连接提示默认在断线 3 秒、10 秒后分两档出现；集成测试直接进入第二档，分档本身由 connection-hint 测试覆盖。
+  CONNECTION_HINT_TIMING.reconnectingMs = 0;
+  CONNECTION_HINT_TIMING.retryMs = 0;
   vi.mocked(loadTimeline).mockClear();
   vi.mocked(useComposerAutosize).mockClear();
   window.localStorage.removeItem("pi-reach-sidebar-collapsed");
@@ -1121,7 +1125,7 @@ test("disconnect keeps a started compaction in the timeline only", async () => {
     expect(document.querySelector(".pwa-compaction-notice")).not.toBeNull();
     // 时间线已经说明同一件事；输入区最多保留断线约束，不重复压缩未确认。
     expect(document.querySelector(".pwa-composer-hint")?.textContent ?? "").not.toContain("Compaction not confirmed");
-    expect(document.querySelector(".pwa-composer-hint")?.textContent).toContain("You can send once the connection is back.");
+    await expect.poll(() => document.querySelector(".pwa-composer-hint")?.textContent ?? "").toMatch(/Can't reach Relay\. Retrying automatically…|Connection unavailable\. Try again\./);
   } finally { await screen.unmount(); }
 });
 
@@ -2397,7 +2401,7 @@ test("published files: verified ready result survives a short disconnect without
     const save = screen.getByRole("link", { name: "Save file", exact: true });
     expect(save.element().getAttribute("download")).toBe("report.txt");
     relayHarness.instances[0]!.emitState("closed");
-    await expect.poll(() => screen.getByLabelText("Connected", { exact: true }).query()).toBeNull();
+    await expect.poll(connectionState).not.toBe("online");
     await expect.element(save).toBeVisible();
     expect(save.element().getAttribute("href")).toBe(url);
     await screen.getByRole("button", { name: "View", exact: true }).click();
@@ -2416,7 +2420,7 @@ test("published files: verified ready result survives a short disconnect without
     await expect.poll(() => channelHarness.channels.length).toBe(2);
     const resumed = channelHarness.channels[1]!;
     resumed.emit(readyFrame(resumed, "session-1", 1));
-    await expect.element(screen.getByLabelText("Connected", { exact: true })).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
     await expect.element(save).toBeVisible();
     expect(save.element().getAttribute("href")).toBe(url);
     expect(resumed.frames.some(frame => frame.type === "file_open" || frame.type === "file_read")).toBe(false);
@@ -2493,7 +2497,7 @@ test("published files: an open reader survives live updates and a short disconne
     emitEvent(channel, { ...numberedEvents(1, 2)[0]!, event_id: "same-scope-update" });
     await expect.element(screen.getByText("Record 2", { exact: true })).toBeInTheDocument();
     relayHarness.instances[0]!.emitState("closed");
-    await expect.poll(() => screen.getByLabelText("Connected", { exact: true }).query()).toBeNull();
+    await expect.poll(connectionState).not.toBe("online");
     await expect.element(reader).toBeVisible();
     expect(reader.element()).toBe(element);
     await expect.element(screen.getByText("Complete published report", { exact: true })).toBeVisible();
@@ -2911,7 +2915,7 @@ test("a failed branch check is retried against the same saved record on the next
 
     const relay = relayHarness.instances[0]!;
     relay.emitState("closed");
-    await expect.poll(() => screen.getByLabelText("Connected", { exact: true }).query()).toBeNull();
+    await expect.poll(connectionState).not.toBe("online");
     relay.emitState("open");
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-1", metadata: { kind: "interactive", name: "Test Pi", cwd: "/workspace" } }] });
     await expect.poll(() => channelHarness.channels.length).toBe(2);
@@ -3028,14 +3032,13 @@ test("keeps Relay feedback aligned until the recovered live session is ready", a
     if (!relay || !initialChannel) throw new Error("Expected an initial Relay and session channel.");
     initialChannel.emit(readyFrame(initialChannel, "session-1"));
     await flushMicrotasks();
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
 
     vi.useFakeTimers();
     fakeTimers = true;
     relay.emitError(new Error());
-    await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).toBeVisible();
-    await expect.element(screen.getByLabelText("Reconnecting…")).toBeVisible();
-    await expect.element(screen.getByLabelText("Connected")).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Can't reach Relay. Retrying automatically…", { exact: true })).toBeVisible();
+    await expect.poll(connectionState).not.toBe("online");
     expect(document.querySelector(".pwa-status-error")).toBeNull();
 
     relay.emitState("closed");
@@ -3056,19 +3059,19 @@ test("keeps Relay feedback aligned until the recovered live session is ready", a
 
     initialChannel.emit(readyFrame(initialChannel, "stale-session"));
     await flushMicrotasks();
-    await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Can't reach Relay. Retrying automatically…", { exact: true })).toBeVisible();
 
     recoveredChannel.emit({
       ...readyFrame(recoveredChannel, "session-2"),
       in_reply_to: "stale-session-hello",
     });
     await flushMicrotasks();
-    await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Can't reach Relay. Retrying automatically…", { exact: true })).toBeVisible();
 
     recoveredChannel.emit(readyFrame(recoveredChannel, "session-2"));
     await flushMicrotasks();
-    await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).not.toBeInTheDocument();
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
+    await expect.element(screen.getByText("Can't reach Relay. Retrying automatically…", { exact: true })).not.toBeInTheDocument();
+    await expect.poll(connectionState).toBe("online");
     // 提示条出现过，恢复后以 Toast 提示一次「连接已恢复」。
     await expect.element(screen.getByText("Connection restored", { exact: true })).toBeVisible();
   } finally {
@@ -3087,13 +3090,11 @@ test("changes network feedback to reconnecting when the browser returns online",
     await flushMicrotasks();
 
     window.dispatchEvent(new Event("offline"));
-    await expect.element(screen.getByText("Network unavailable. Check your connection.", { exact: true })).toBeVisible();
-    await expect.element(screen.getByLabelText("No network")).toBeVisible();
+    await expect.element(screen.getByText("Network unavailable. Reconnects when it's back.", { exact: true })).toBeVisible();
 
     window.dispatchEvent(new Event("online"));
-    await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).toBeVisible();
-    await expect.element(screen.getByText("Network unavailable. Check your connection.", { exact: true })).not.toBeInTheDocument();
-    await expect.element(screen.getByLabelText("No network")).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Can't reach Relay. Retrying automatically…", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Network unavailable. Reconnects when it's back.", { exact: true })).not.toBeInTheDocument();
   } finally {
     await screen.unmount();
   }
@@ -3264,7 +3265,8 @@ test("shows readable connection feedback when the Owner Relay rejects a connecti
   try {
     await vi.waitFor(() => expect(relayHarness.instances[0]?.connectCalls).toBe(1));
     relayHarness.rejectConnect?.(new Error("connect rejected"));
-    await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).toBeVisible();
+    // 尚未打开会话，连接问题由主区空态说明（ADR-20261105）。
+    await expect.element(screen.getByRole("heading", { name: "Can't reach Relay" })).toBeVisible();
     await expect.element(screen.getByText("connect rejected", { exact: true })).not.toBeInTheDocument();
   } finally {
     await screen.unmount();
@@ -3304,10 +3306,12 @@ test("does not reconnect after a session channel failure closes Relay intentiona
   expect(relay?.connectCalls).toBe(1);
   vi.useFakeTimers();
   try {
-    await expect.element(screen.getByText("Loading…", { exact: true })).toBeInTheDocument();
     await expect.element(screen.getByText("Test Pi", { exact: true })).not.toBeInTheDocument();
     vi.advanceTimersByTime(30_000);
     expect(relay?.connectCalls).toBe(1);
+    // 主动关闭后不自动重连；尚未打开会话，主区空态说明 Relay 不可用并提供手动重试（ADR-20261105）。
+    await expect.element(screen.getByRole("heading", { name: "Can't reach Relay" })).toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Retry now" })).toBeInTheDocument();
   } finally {
     vi.useRealTimers();
     await screen.unmount();
@@ -3478,8 +3482,8 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     const historyTrigger = screen.getByRole("button", { name: "Open navigation" });
     await expect.element(historyTrigger).toHaveTextContent("Saved session note");
     await expect.element(historyTrigger).not.toHaveTextContent("Read only");
-    await expect.element(screen.getByRole("note")).toHaveTextContent("This is a session saved in this browser. It's read-only.");
-    const historyInput = screen.getByRole("textbox", { name: "You can't send messages in saved history" });
+    await expect.poll(() => document.querySelector(".pwa-composer-card .pwa-composer-hint")?.textContent ?? "").toBe("This is a session saved in this browser. It's read-only.");
+    const historyInput = screen.getByRole("textbox", { name: "Can't send messages" });
     await expect.element(historyInput).toBeDisabled();
     for (const name of ["Add attachments", "Pi commands", "Send message"]) await expect.element(screen.getByRole("button", { name, exact: true })).toBeDisabled();
     expect(document.querySelector(".pwa-composer-stop")).toBeNull();
@@ -3531,12 +3535,12 @@ test("hides live connection feedback while reading local history", async () => {
   const screen = await renderOnlineApp(renderWorkspaceApp);
   try {
     window.dispatchEvent(new Event("offline"));
-    await expect.element(screen.getByText("Network unavailable. Check your connection.", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Network unavailable. Reconnects when it's back.", { exact: true })).toBeVisible();
 
     await screen.getByRole("button", { name: "Open navigation" }).click();
     await screen.getByRole("button", { name: /Offline history note/ }).click();
-    await expect.element(screen.getByRole("note")).toHaveTextContent("It's read-only.");
-    await expect.element(screen.getByText("Network unavailable. Check your connection.", { exact: true })).not.toBeInTheDocument();
+    await expect.poll(() => document.querySelector(".pwa-composer-card .pwa-composer-hint")?.textContent ?? "").toContain("It's read-only.");
+    await expect.element(screen.getByText("Network unavailable. Reconnects when it's back.", { exact: true })).not.toBeInTheDocument();
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
@@ -3699,7 +3703,7 @@ test.each(["protocol_upgrade_required", "unsupported_type", "internal_error"])('
     const infoRequest = channel.frames.find((frame) => frame.type === "extension_info_request");
     expect(infoRequest).toMatchObject({ channel_id: channel.channelId, session_id: "session-1", leaf_id: "generation-session-1" });
     channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: infoRequest?.id, code, message: "diagnostic failure" });
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
     expect(document.querySelector(".pwa-status-toast")).toBeNull();
     const input = screen.getByPlaceholder("Message your agent…");
     await expect.element(input).toBeEnabled();
@@ -3921,13 +3925,13 @@ test("keeps a stable session channel across reset and session replacement, with 
   thirdChannel?.emit({ protocol_version: 2, type: "bye", session_id: "session-3", leaf_id: "generation-session-3", reason: "peer_stop" });
   await flushMicrotasks();
   expect(channelHarness.channels).toHaveLength(3);
-  await expect.element(screen.getByLabelText("Offline")).toBeVisible();
+  await expect.poll(connectionState).toBe("offline");
   const modelRequestsBeforeRetry = thirdChannel?.frames.filter((frame) => frame.type === "list_models").length ?? 0;
-  // 桌面没有信息入口；离线重试仍走既有输入区操作条，不额外请求模型列表。
+  // 桌面没有信息入口；离线重试走输入框提示行的「立即重试」，不额外请求模型列表。
   await expect.element(screen.getByRole("button", { name: "Session details" })).not.toBeInTheDocument();
   expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   expect(thirdChannel?.frames.filter((frame) => frame.type === "list_models")).toHaveLength(modelRequestsBeforeRetry);
-  await screen.getByRole("button", { name: "Try again" }).click();
+  await screen.getByRole("button", { name: "Retry now" }).click();
   await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(4));
   expect(channelHarness.channels[3]?.channelId).toBe(firstChannel?.channelId);
   await screen.unmount();
@@ -4113,7 +4117,7 @@ test("returns to the live session when the same Pi runtime reappears after a Rel
     const initialChannel = channelHarness.channels[0]!;
     initialChannel.emit(readyFrame(initialChannel, "session-1"));
     await flushMicrotasks();
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
 
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [] });
     await expect.element(screen.getByText("This Pi has exited. The conversation is saved in local history.")).toBeVisible();
@@ -4127,7 +4131,7 @@ test("returns to the live session when the same Pi runtime reappears after a Rel
     const recovered = channelHarness.channels[1]!;
     recovered.emit(readyFrame(recovered, "session-1"));
     await flushMicrotasks();
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
     await expect.element(screen.getByText("This Pi has exited. The conversation is saved in local history.")).not.toBeInTheDocument();
   } finally {
     await screen.unmount();
@@ -4162,15 +4166,14 @@ test("shows the Relay status instead of a connection failure while no Pi is onli
     const relay = relayHarness.instances[0]!;
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [] });
     await expect.element(screen.getByRole("heading", { name: "No Pi online" })).toBeVisible();
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
-    // 提示条延迟在测试中为 0；等待一轮计时器后仍不应出现 Relay 故障提示。
+    await expect.poll(connectionState).toBe("online");
+    // 连接提示延迟在测试中为 0；等待一轮计时器后仍不应出现 Relay 故障空态。
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(document.querySelector(".pwa-connection-banner")).toBeNull();
-    expect(document.querySelector(".pwa-title-bar .pwa-connection.offline")).toBeNull();
+    expect(document.querySelector(".pwa-workspace-state-busy")).toBeNull();
 
-    // 真正的 Relay 断线仍按原规则提示。
+    // 真正的 Relay 断线仍会提示；没有打开会话时由主区空态说明（ADR-20261105）。
     relay.emitState("closed");
-    await expect.element(screen.getByText("Can't reach Relay. Retrying…", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { name: "Can't reach Relay" })).toBeVisible();
   } finally {
     await screen.unmount();
   }
@@ -4191,10 +4194,9 @@ test("shows the Relay status while waiting for the user to choose a Pi", async (
       ],
     });
     await expect.element(screen.getByRole("heading", { name: "2 Pi online" })).toBeVisible();
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(document.querySelector(".pwa-title-bar .pwa-connection.connecting")).toBeNull();
-    expect(document.querySelector(".pwa-connection-banner")).toBeNull();
+    expect(document.querySelector(".pwa-workspace-state-busy")).toBeNull();
   } finally {
     await screen.unmount();
   }
@@ -4587,23 +4589,6 @@ test("does not return a queued message that Pi already read", async () => {
     channel.emit(queuedStateFrame([], "queue-2"));
     await new Promise((resolve) => setTimeout(resolve, 50));
     await expect.element(screen.getByRole("textbox")).toHaveValue("");
-  } finally {
-    await screen.unmount();
-  }
-});
-
-test.each([[1280, false], [390, true]])("shows the connected state as a dot only on phones at %ipx", async (width, dotOnly) => {
-  await page.viewport(width, 844);
-  const screen = await renderOnlineApp(renderWorkspaceApp);
-  try {
-    const channel = channelHarness.channels[0]!;
-    channel.emit(readyFrame(channel, "session-1"));
-    await flushMicrotasks();
-    await expect.element(screen.getByLabelText("Connected")).toBeVisible();
-    const label = document.querySelector<HTMLElement>(".pwa-title-bar .pwa-connection.online .pwa-connection-label")!;
-    // 手机上已连接时只显示圆点，文字仅供读屏；桌面保持圆点＋文字。
-    if (dotOnly) expect(label.getBoundingClientRect().width).toBeLessThanOrEqual(1);
-    else expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
   } finally {
     await screen.unmount();
   }

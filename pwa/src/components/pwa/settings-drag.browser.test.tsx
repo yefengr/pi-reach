@@ -29,7 +29,7 @@ function Harness() {
   const { route, openSettings, closeSettings } = useSettingsRoute();
   useLayoutEffect(() => { enterSettings = () => flushSync(() => openSettings({ kind: "workspace" })); }, [openSettings]);
   return <PwaUiProvider><PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout
-    navigation={navigation} titleBar={{ title: "Swipe Pi", showTitle: true }} historyMode={false} toast={null}
+    navigation={navigation} titleBar={{ title: "Swipe Pi", showTitle: true }} toast={null}
     settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings}
     renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage onShowShortcuts={onShowShortcuts} relayUrl={device.relayUrl} defaultRelayUrl={device.relayUrl} relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => {}} onResetLayout={() => {}} />}
     overlays={null}

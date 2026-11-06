@@ -55,7 +55,7 @@ function Harness() {
   const { requestConfirmation, closeBackgroundOverlay, finishConfirmationTransition } = useConfirmationOverlay(setConfirmation, setError, pendingRef);
   useLayoutEffect(() => { showConfirmation = () => flushSync(() => requestConfirmation({ kind: "clear-local-data" })); }, [requestConfirmation]);
   return <PwaUiProvider><PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout
-    navigation={navigation} titleBar={{ title: "Swipe Pi", showTitle: true }} historyMode={false} toast={null}
+    navigation={navigation} titleBar={{ title: "Swipe Pi", showTitle: true }} toast={null}
     settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings}
     renderSettings={() => <p>Settings</p>}
     overlays={<ConfirmActionDialog action={confirmation?.kind === "clear-local-data" ? { kind: "clear-local-data" } : null} pending={false} onConfirm={() => {}} onClose={() => setConfirmation(null)} onExitTransitionEnd={finishConfirmationTransition} />}

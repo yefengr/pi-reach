@@ -4,8 +4,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import { cdp } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
-import { PwaConnectionBanner, PwaMessageActions, PwaStatusError } from "./pwa-app-actions";
-import type { ConnectionViewState } from "./workspace-view";
+import { PwaMessageActions, PwaStatusError } from "./pwa-app-actions";
+import { ComposerHint } from "./composer-hint";
+import type { OperationHint } from "@/lib/pwa/operation-feedback";
 
 type ActionsState = { latest: boolean; retry: boolean; unread: number };
 
@@ -92,24 +93,27 @@ test("Retry enters on its own without replaying Latest", async () => {
   } finally { await screen.unmount(); }
 });
 
-let setBanner!: (state: { kind: "relay" | null; connection: ConnectionViewState }) => void;
-function Banner() {
-  const [state, setState] = useState<{ kind: "relay" | null; connection: ConnectionViewState }>({ kind: "relay", connection: "retrying" });
-  useLayoutEffect(() => { setBanner = setState; }, []);
-  return <div className="pwa-root"><PwaConnectionBanner kind={state.kind} connection={state.connection} onRetry={() => {}} /></div>;
+let setHint!: (hint: OperationHint | null) => void;
+const RETRYING_HINT: OperationHint = { text: "Can't reach Relay. Retrying automatically…", tone: "neutral", busy: true, action: { label: "Retry now", onAction: () => {} } };
+function ConnectionHint() {
+  const [hint, setState] = useState<OperationHint | null>(RETRYING_HINT);
+  useLayoutEffect(() => { setHint = setState; }, []);
+  return <div className="pwa-root"><div className="pwa-composer-card"><ComposerHint hint={hint} /></div></div>;
 }
 
-test("the connection banner keeps its reconnecting text while it fades out after recovery", async () => {
-  const screen = await renderPwa(<Banner />);
+// 连接问题已移入输入框提示行（ADR-20261105）：恢复后提示行收拢并淡出，期间保留断线时的文字与操作外观，但不可再操作。
+test("the connection hint keeps its reconnecting text while it collapses after recovery", async () => {
+  const screen = await renderPwa(<ConnectionHint />);
   try {
-    const banner = document.querySelector<HTMLElement>(".pwa-connection-banner")!;
-    await expect.poll(() => opacity(banner)).toBe(1);
-    flushSync(() => setBanner({ kind: null, connection: "online" }));
-    expect(document.querySelector(".pwa-connection-banner")).toBe(banner);
-    expect(banner.textContent).toContain("Can't reach Relay. Retrying…");
-    expect(banner.dataset.presence).toBe("leaving");
-    expect(banner.inert).toBe(true);
-    await expect.poll(() => document.querySelector(".pwa-connection-banner"), { timeout: fadeMs() + 1000 }).toBeNull();
+    const line = document.querySelector<HTMLElement>(".pwa-composer-hint-line")!;
+    await expect.poll(() => opacity(line)).toBe(1);
+    flushSync(() => setHint(null));
+    expect(document.querySelector(".pwa-composer-hint-line")).toBe(line);
+    expect(line.textContent).toContain("Can't reach Relay. Retrying automatically…");
+    expect(line.dataset.presence).toBe("leaving");
+    expect(line.closest<HTMLElement>(".pwa-composer-hint-slot")!.inert).toBe(true);
+    expect(line.querySelector(".pwa-composer-hint-action")).toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-composer-hint-line"), { timeout: 2000 }).toBeNull();
   } finally { await screen.unmount(); }
 });
 

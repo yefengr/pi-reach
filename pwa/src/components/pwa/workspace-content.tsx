@@ -1,7 +1,9 @@
 import { useMemo, type ReactNode } from "react";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { Button } from "@mantine/core";
-import { ChevronRight, Computer, History, Link2, Radio } from "lucide-react";
+import { ChevronRight, CloudOff, Computer, History, Link2, LoaderCircle, Radio, WifiOff } from "lucide-react";
+import type { ConnectionHintStage, ConnectionIssueKind } from "@/lib/pwa/connection-hint";
+import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
 import { OnlinePiRow } from "@/components/pwa/workspace-view";
 import { MessageList } from "@/components/pwa/message-list";
 import { ReadOnlyComposer } from "@/components/pwa/message-composer";
@@ -101,6 +103,22 @@ export function NoPiWorkspace({ onViewHistory }: { onViewHistory?: () => void })
     title={t.workspace.noPiTitle}
     action={onViewHistory ? <Button variant="transparent" type="button" leftSection={<History size={16} />} onClick={onViewHistory}>{t.workspace.viewHistory}</Button> : undefined}
   >{t.workspace.noPiBody}</WorkspaceEmptyState>;
+}
+
+/**
+ * 未打开会话时的连接问题（ADR-20261105）：此时没有输入框，说明放在主区空态。
+ * Relay 断线 3 秒后说明正在重连，10 秒后说明自动重试并提供立即重试；无网络时只说明恢复后自动重连。
+ */
+export function ConnectionIssueWorkspace({ kind, stage, busy, onRetry, retryDisabled }: { kind: ConnectionIssueKind; stage: ConnectionHintStage; busy: boolean; onRetry: () => void; retryDisabled: boolean }) {
+  const { t } = useI18n();
+  if (kind === "network") return <WorkspaceEmptyState icon={<WifiOff size={24} />} title={t.connection.networkUnavailableTitle}>{t.connection.networkWaitingBody}</WorkspaceEmptyState>;
+  const retry = stage === "retry";
+  const body = retry ? (busy ? t.connection.autoRetrying : t.connection.unavailable) : t.connection.reconnectingHint;
+  return <WorkspaceEmptyState
+    icon={<CloudOff size={24} />}
+    title={t.connection.relayUnreachableTitle}
+    action={retry ? <Button variant="default" type="button" disabled={retryDisabled} onClick={onRetry}>{t.connection.retryNow}</Button> : undefined}
+  ><span className="pwa-workspace-state-busy" role="status">{busy || !retry ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : null}{body}</span></WorkspaceEmptyState>;
 }
 
 export function ChooseComputerWorkspace() {
