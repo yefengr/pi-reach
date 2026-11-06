@@ -326,8 +326,6 @@
   /* 新发送气泡从下方进入、折叠内容收起时上移的距离，乘以 --pwa-motion-shift。 */
   --pwa-message-shift: 12px;
   --pwa-collapse-shift: 8px;
-  /* 排队抽屉从输入框卡片背后滑出的距离上限，取 min(自身高度, 该值)：矮抽屉完整藏在卡片后，高抽屉不从卡片下沿露出。 */
-  --pwa-queue-drawer-shift: 48px;
   /* 密度按输入能力而非视口宽度决定；混合设备保持可触控。 */
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;

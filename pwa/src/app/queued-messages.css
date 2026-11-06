@@ -83,26 +83,32 @@
  * 在 Composer 中收在输入框卡片后方：左右各内缩 8，下沿以一个 Composer 圆角高度压在卡片之后；
  * 卡片层级更高，聚焦边框不覆盖抽屉。被压住的部分只是底衬，内容区在其上方滚动。
  */
-.pwa-composer > .pwa-queued-messages {
+/* 输入区内的抽屉放在高度包裹层内：包裹层只给出已露出的高度，抽屉不随之拉伸，超出部分压在不透明的卡片之后；单独渲染时（如样式测试）不压入卡片。 */
+.pwa-queued-messages-slot {
+  --pwa-composer-grow-in: var(--pwa-duration-drawer);
+  --pwa-composer-grow-out: var(--pwa-duration-drawer-out);
+}
+
+.pwa-composer > .pwa-queued-messages-slot > .pwa-queued-messages {
+  align-self: start;
   margin: 0 8px calc(-1 * var(--pwa-radius-composer));
   padding-bottom: var(--pwa-radius-composer);
-  transition: transform var(--pwa-duration-drawer) var(--pwa-ease-content), opacity var(--pwa-duration-drawer) var(--pwa-ease-content);
+  transition: opacity var(--pwa-duration-drawer) var(--pwa-ease-content);
 }
 
 /*
- * 进出（DESIGN「输入区内的增减」）：出现时从卡片背后向上滑出并淡入；清空时当场脱离布局（脚本按当前位置改为绝对定位），
- * 布局高度一次收回，副本滑回卡片背后并淡出后再移除。只用位移与透明度，不逐帧改变输入区高度；位移取 min(自身高度, --pwa-queue-drawer-shift)。
+ * 进出（DESIGN「输入区内的增减」）：包裹层高度从 0 伸展，抽屉上沿随之升起，未露出的部分仍在卡片背后，
+ * 看上去是从卡片背后向上滑出，同时淡入；清空时包裹层收回，抽屉沉回卡片背后并淡出，结束后移除。
+ * 输入区浮在列表之上，高度变化不再改变列表高度，停在底部时列表随之逐帧贴底。
  */
 @starting-style {
-  .pwa-composer > .pwa-queued-messages {
+  .pwa-composer > .pwa-queued-messages-slot > .pwa-queued-messages {
     opacity: 0;
-    transform: translateY(calc(min(100%, var(--pwa-queue-drawer-shift)) * var(--pwa-motion-shift)));
   }
 }
 
-.pwa-composer > .pwa-queued-messages[data-presence="leaving"] {
+.pwa-composer > .pwa-queued-messages-slot > .pwa-queued-messages[data-presence="leaving"] {
   opacity: 0;
-  transform: translateY(calc(min(100%, var(--pwa-queue-drawer-shift)) * var(--pwa-motion-shift)));
   transition-duration: var(--pwa-duration-drawer-out);
 }
 

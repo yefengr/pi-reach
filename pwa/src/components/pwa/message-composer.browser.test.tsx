@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { finishCssTransitions } from "@/test/browser/motion";
 import { Drawer, Modal } from "@mantine/core";
 import { ENTER_SENDS_STORAGE_KEY, isAppleKeyboard, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { page, userEvent } from "vitest/browser";
@@ -1287,6 +1288,8 @@ test("the in-card hint sits 13px below the card edge and 14px above the text", a
   await page.viewport(390, 844);
   const screen = await renderPwa(<ComposerHarness operationHint={{ text: "Creating a new session…", tone: "neutral", busy: false }} />);
   try {
+    // 提示行随出现过渡高度，等过渡结束再量静止几何。
+    await finishCssTransitions();
     const card = document.querySelector<HTMLElement>(".pwa-composer-card")!.getBoundingClientRect();
     const text = document.querySelector<HTMLElement>(".pwa-composer-hint span")!.getBoundingClientRect();
     const input = document.querySelector<HTMLElement>(".pwa-composer-input")!;

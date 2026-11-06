@@ -225,6 +225,16 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-chat-footer > .pwa-composer { pointer-events: none; }
 .pwa-composer > * { pointer-events: auto; }
 /*
+ * 输入区内的增减（DESIGN「动效」）：输入区浮在列表之上，增减不再改变列表高度，排队抽屉、提示行与附件行的高度随进出过渡。
+ * 包裹层以 grid 行高 1fr ↔ 0fr 伸缩：出现由 @starting-style 从 0 起，离开（data-presence="leaving"）收回到 0；
+ * 子项 min-height 为 0 才能被收拢。时长由各包裹层的 --pwa-composer-grow-in／out 指定，默认沿用折叠。
+ * 减少动态效果时全局规则取消尺寸过渡，只剩透明度淡化。
+ */
+.pwa-composer-grow { display: grid; grid-template-rows: 1fr; min-width: 0; transition: grid-template-rows var(--pwa-composer-grow-in, var(--pwa-duration-collapse-in)) var(--pwa-ease-content); }
+.pwa-composer-grow > * { min-height: 0; }
+.pwa-composer-grow[data-presence="leaving"] { grid-template-rows: 0fr; transition-duration: var(--pwa-composer-grow-out, var(--pwa-duration-collapse-out)); }
+@starting-style { .pwa-composer-grow { grid-template-rows: 0fr; } }
+/*
  * 浮动入口与局部提示的进出（DESIGN「动效」）：出现淡入（toast 时长、进入曲线），离开淡出（fade 时长、退出曲线），
  * 离开期间由 usePresence 设置 inert 与 aria-hidden。占布局的提示条只淡化、高度一次到位；
  * 浮在内容上的入口另从下方位移进出。不支持 starting-style 时直接显示，属于安全降级。

@@ -214,7 +214,9 @@
  * 卡片内提示（DESIGN「Composer」）：位于附件与文本框之上，与文本框左缘对齐；距卡片上沿 13、距正文 14，提示归属卡片而非贴着正文。进出沿用 .pwa-presence：出现淡入、隐藏淡出后再移除，
  * 高度一次到位，不逐帧改变布局。本端发送过渡期间（footer 带 data-own-send）淡出中的副本直接隐藏，不与输入区回缩争抢高度。
  */
-.pwa-chat-footer[data-own-send] .pwa-composer-hint-line[data-presence="leaving"] { display: none; }
+.pwa-chat-footer[data-own-send] .pwa-composer-hint-slot[data-presence="leaving"] { display: none; }
+/* 提示行随包裹层收拢时裁切，不溢出到正文上。 */
+.pwa-root .pwa-composer-hint-slot > .pwa-composer-hint-line { overflow: hidden; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0; padding: 2px 0 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > svg { flex: 0 0 auto; }
