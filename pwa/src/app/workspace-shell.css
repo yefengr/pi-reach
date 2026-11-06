@@ -167,6 +167,14 @@
 .pwa-root .pwa-session-sheet-foot .pwa-button { min-width: 0; width: 100%; justify-content: flex-start; padding-inline: 10px; }
 .pwa-root .pwa-sidebar-foot .pwa-button .mantine-Button-inner,
 .pwa-root .pwa-session-sheet-foot .pwa-button .mantine-Button-inner { justify-content: flex-start; }
+/* 安装与浏览器能力提示位于导航底部、电脑入口上方（ADR-20261105）：surface 卡片与导航 panel 底区分，导航较窄，内容纵向排列。 */
+.pwa-root .pwa-navigation-notice-slot { flex: 0 0 auto; min-width: 0; min-height: 0; }
+.pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice { --alert-bg: var(--pwa-surface) !important; width: auto; max-width: none; margin: 8px 0 0; padding: 10px 6px 10px 12px; border-radius: var(--pwa-radius-lg); }
+.pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice .pwa-runtime-notice-body,
+.pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice .pwa-runtime-notice-message { display: block; }
+.pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice .pwa-runtime-notice-title { margin-bottom: 4px; }
+.pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice-content { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
+.pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice-actions { width: 100%; justify-content: flex-start; }
 
 /* 会话「更多」的只读信息弹层：完整会话名换行，原生只读路径字段支持键盘选择与复制。
    名称／路径／元数据是多行只读信息块，行距按「标题与说明」4。 */
@@ -195,17 +203,13 @@
 /* 右侧操作按首行 48px 带垂直居中，不随两行整体高度下移。 */
 .pwa-root .pwa-title-bar-actions { flex: 0 0 auto; display: flex; align-items: center; min-height: var(--pwa-topbar-height); }
 .pwa-root .pwa-session-trigger { display: none; }
-/* 提示区自身避让主区贴边一侧的安全区，内部提示条仍按 gutter 居中。 */
-.pwa-root .pwa-main-notices { flex: 0 0 auto; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
-/* 连接提示条、Toast 与操作通知与阅读列同宽，位于会话标题区下方。 */
-.pwa-root .pwa-main-notices > .pwa-status-error { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); max-width: none; }
-/* 工作区内的运行时提示条 Portal 到提示区槽位，提示区已避让安全区，这里只留 gutter；
-   启动与故障态挂在应用壳顶层的备用槽位，仍按 globals.css 自行扣除左右安全区。 */
-.pwa-root .pwa-main-notices .pwa-runtime-notice { width: min(var(--pwa-reading-width), calc(100% - 2 * var(--pwa-gutter))); }
-/* 桌面极矮窗口（高度 ≤ 450）且主区同时有局部错误时，两行标题区与输入区已占满高度：
-   同一张运行时提示条把上下留白从 4/6 收到 0/4，回收 8px 给消息列表的正文阅读空间。
-   移动端（主布局断点以内）不套用这条桌面收紧，在下方媒体块里恢复原密度；提示内容、按钮与生命周期不变。 */
-.pwa-app-shell[data-compact-height="very-short"] .pwa-main-notices:has(> .pwa-status-error) .pwa-runtime-notice { margin-top: 0; padding-block: 4px; }
+/*
+ * 主区提示区浮在会话标题区下方、不占布局（ADR-20261105）：不设 top，停在流式布局中的原位置（标题区下沿）；
+ * 只承载局部错误卡片。提示区自身避让主区贴边一侧的安全区，卡片按 gutter 居中；
+ * 布局脚本把提示区放到标题区下沿，按其高度同步消息列表的顶部留白并保持阅读位置，Toast 落在提示区下沿之下。
+ */
+.pwa-root .pwa-main-notices { position: absolute; z-index: var(--pwa-z-composer); right: 0; left: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); pointer-events: none; }
+.pwa-root .pwa-main-notices > * { pointer-events: auto; }
 /* 输入约束与操作状态共用一行；进行中只由旋转图标表达，文字保持中性色。 */
 .pwa-root .pwa-composer-hint { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 8px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-hint > svg { flex: 0 0 auto; }
@@ -308,7 +312,6 @@
   .pwa-root .pwa-session-trigger-copy { min-width: 0; display: grid; text-align: left; }
   .pwa-root .pwa-session-trigger-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 桌面极矮窗口的提示条留白收紧只服务桌面两行标题区；移动单行顶栏保持 4/6。 */
-  .pwa-app-shell[data-compact-height="very-short"] .pwa-main-notices:has(> .pwa-status-error) .pwa-runtime-notice { margin-top: 4px; padding-block: 6px; }
   /* 移动顶栏只保留导航入口、连接状态与「更多」，把宽度留给会话名。 */
   .pwa-root .pwa-title-bar .pwa-title-bar-refresh { display: none; }
 }

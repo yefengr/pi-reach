@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect } from "react";
 import { Notifications } from "@mantine/notifications";
 import { usePwaMotionDuration } from "./use-pwa-motion";
+import { observeWrappedText } from "@/lib/ui/wrapped-text";
 import type { OperationNotificationController } from "@/lib/pwa/operation-notifications";
 
 type PwaOperationNotificationsProps = {
@@ -48,6 +49,32 @@ export function PwaOperationNotifications({ controller, target }: PwaOperationNo
       document.removeEventListener("focusout", onFocusOut);
     };
   }, [controller]);
+
+  // 正文换行时圆角改为 16（ADR-20261105）。Toast 由 Mantine 渲染、取不到 ref：每次通知变化后的下一帧找到正文并观察尺寸。
+  useEffect(() => {
+    const observed = new Map<HTMLElement, () => void>();
+    let frame = 0;
+    const sync = () => {
+      frame = 0;
+      const root = target ?? document.querySelector(".pwa-root");
+      const texts = new Set<HTMLElement>();
+      for (const card of root?.querySelectorAll<HTMLElement>(".pwa-operation-notifications .pwa-operation-notification") ?? []) {
+        // 带操作的 Toast 正文与操作同行，只看文字本身，44 高的操作按钮不算换行。
+        const text = card.querySelector<HTMLElement>(".pwa-toast-text") ?? card.querySelector<HTMLElement>(".pwa-operation-notification-message");
+        if (text) texts.add(text);
+      }
+      for (const [text, stop] of observed) if (!texts.has(text)) { stop(); observed.delete(text); }
+      for (const text of texts) if (!observed.has(text)) observed.set(text, observeWrappedText(text, ".pwa-operation-notification"));
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(sync); };
+    schedule();
+    const unsubscribe = controller.store.subscribe(schedule);
+    return () => {
+      unsubscribe();
+      cancelAnimationFrame(frame);
+      for (const stop of observed.values()) stop();
+    };
+  }, [controller, target]);
 
   // Mantine Portal 切换 target 时需要重建；DOM 元素作为 React key 会统一字符串化成 [object HTMLDivElement]。
   return <Notifications

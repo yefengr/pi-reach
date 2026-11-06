@@ -32,7 +32,7 @@ const composerProps: ComponentProps<typeof MessageComposer> = {
 
 let setNotice: (visible: boolean) => void = noop;
 
-/** 使用真实工作区与输入组件，仅控制顶部占布局的局部错误条是否显示。 */
+/** 使用真实工作区与输入组件，仅控制标题区下方浮动的局部错误卡片是否显示。 */
 function Harness({ initialNotice = false }: { initialNotice?: boolean }) {
   const [notice, set] = useState(initialNotice);
   useLayoutEffect(() => { setNotice = set; }, [set]);
@@ -106,20 +106,17 @@ test("showing a notice switches the composer from six lines to the constrained b
     expect(before.inputHeight).toBe(before.inputMaxHeight);
 
     flushSync(() => setNotice(true));
-    await expect.poll(() => geometry().listTop, { timeout: 3_000 }).toBeGreaterThan(before.listTop);
-    const shown = geometry();
-    expect(shown.mainHeight).toBe(before.mainHeight);
-    expect(shown.bodyHeight).toBe(before.bodyHeight - (shown.listTop - before.listTop));
-    // 主区与输入区自身尺寸没变，只有工作区剩余高度变小，预算必须随之收紧。
+    // 局部错误浮在列表之上（ADR-20261105）：列表位置与工作区高度不变，只有顶部留白增加，预算必须随之收紧。
     await expect.poll(() => geometry(), { timeout: 3_000 }).toMatchObject({ budget: "constrained" });
     const constrained = geometry();
-    expect(constrained.space).toBe(shown.space);
+    expect(constrained).toMatchObject({ mainHeight: before.mainHeight, bodyHeight: before.bodyHeight, listTop: before.listTop });
+    const errorHeight = Math.round(document.querySelector(".pwa-status-error")!.getBoundingClientRect().height);
+    expect(constrained.listPaddingTop).toBe(8 + 8 + errorHeight);
     expect(constrained.inputMaxHeight).toBeLessThan(before.inputMaxHeight);
     expect(constrained.inputHeight).toBe(constrained.inputMaxHeight);
     expect(constrained.overflowY).toBe("auto");
 
     flushSync(() => setNotice(false));
-    await expect.poll(() => geometry().listTop, { timeout: 3_000 }).toBe(before.listTop);
     await expect.poll(() => geometry(), { timeout: 3_000 }).toMatchObject({ budget: null });
     const restored = geometry();
     expect(restored).toMatchObject({

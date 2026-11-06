@@ -6,10 +6,10 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { PwaDesktopNavigation } from "@/components/pwa/pwa-desktop-chrome";
 import { PwaMobileNavigation } from "@/components/pwa/pwa-mobile-chrome";
-import { PwaRuntimeNoticeSlot } from "@/components/pwa/pwa-app-shell";
 import { WorkspaceTitleBar, type WorkspaceTitleBarProps } from "@/components/pwa/workspace-title-bar";
 import { usePageTransition } from "@/components/pwa/use-page-transition";
 import { useSidebarWidth } from "./use-sidebar-width";
+import { useMainNoticesSpace } from "./use-main-notices-space";
 import { SIDEBAR_MIN_WIDTH } from "@/lib/ui/sidebar-width";
 import { useWorkspaceDrag } from "@/components/pwa/use-workspace-drag";
 import { useNavigationDrag } from "@/components/pwa/use-navigation-drag";
@@ -196,24 +196,7 @@ export function PwaWorkspaceLayout({
     drag: workspaceDrag.drag,
   });
 
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    const notices = noticesRef.current;
-    if (!root || !notices) return;
-    // Toast 挂在根节点上，按主区居中并落在主区提示下方，避免压到侧栏或连接提示。
-    const measure = () => {
-      const base = root.getBoundingClientRect();
-      const box = notices.getBoundingClientRect();
-      root.style.setProperty("--pwa-main-notices-bottom", `${box.bottom - base.top}px`);
-      root.style.setProperty("--pwa-main-center", `${box.left + box.width / 2 - base.left}px`);
-      root.style.setProperty("--pwa-main-width", `${box.width}px`);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    // 标题区变高（含安全区内边距）时提示区整体下移但自身尺寸不变，也需要重新测量。
-    for (const element of [notices, root, notices.parentElement, notices.previousElementSibling]) if (element) observer.observe(element, { box: "border-box" });
-    return () => observer.disconnect();
-  }, []);
+  useMainNoticesSpace(rootRef, noticesRef);
 
   useLayoutEffect(() => {
     if (settingsRoute.change === 0) return;
@@ -314,7 +297,6 @@ export function PwaWorkspaceLayout({
         <div ref={noticesRef} className="pwa-main-notices">
           {toast}
           {operationNotifications}
-          <PwaRuntimeNoticeSlot />
         </div>
         <div className="pwa-workspace-body"><div className="pwa-workspace-column">{children}</div></div>
       </main>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
@@ -8,6 +8,7 @@ import { useTimelineViewport, type TimelineViewport } from "@/lib/pwa/use-timeli
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { MessageList } from "./message-list";
 import { PwaStatusError } from "./pwa-app-actions";
+import { useMainNoticesSpace } from "./use-main-notices-space";
 
 const scope = { session_id: "viewport-session", leaf_id: "generation" };
 const paragraphs = (prefix: string, count = 18) => Array.from({ length: count }, (_, index) => `${prefix} paragraph ${index}: content that stays available while reading.`).join("\n\n");
@@ -601,7 +602,7 @@ test.each([1280, 390])("running tool members keep following without reversal and
   } finally { await screen.unmount(); }
 });
 
-test("a local error bar entering and fading out above the list keeps the reading row in place", async () => {
+test("a floating local error entering and fading out above the list keeps the reading row in place", async () => {
   let setMessage!: (message: string | null) => void;
   let viewport!: TimelineViewport;
   const items = [answer("first", paragraphs("First")), answer("second", paragraphs("Second")), answer("third", paragraphs("Third"))];
@@ -609,10 +610,13 @@ test("a local error bar entering and fading out above the list keeps the reading
     const [message, setErrorMessage] = useState<string | null>(null);
     setMessage = setErrorMessage;
     viewport = useTimelineViewport(items);
-    return <main className="pwa-main" style={{ width: "100vw", height: 600, display: "flex", flexDirection: "column" }}>
-      <div className="pwa-main-notices"><PwaStatusError message={message} onDismiss={() => setErrorMessage(null)} /></div>
+    const rootRef = useRef<HTMLDivElement>(null);
+    const noticesRef = useRef<HTMLDivElement>(null);
+    useMainNoticesSpace(rootRef, noticesRef);
+    return <div ref={rootRef} className="pwa-root" style={{ height: 600 }}><main className="pwa-main" style={{ position: "relative", width: "100vw", height: 600, display: "flex", flexDirection: "column" }}>
+      <div ref={noticesRef} className="pwa-main-notices"><PwaStatusError message={message} onDismiss={() => setErrorMessage(null)} /></div>
       <MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} />
-    </main>;
+    </main></div>;
   }
   const screen = await renderPwa(<Harness />);
   try {
@@ -625,16 +629,21 @@ test("a local error bar entering and fading out above the list keeps the reading
     await settleLayout();
     expect(viewport.followingOutput).toBe(false);
     const before = offset(row, list);
+    const listTop = Math.round(list.getBoundingClientRect().top);
+    const paddingTop = Number.parseFloat(getComputedStyle(list).paddingTop);
 
-    // 提示条占布局：列表变矮一次，阅读行按锚点保持在原处。
+    // 局部错误浮在列表之上（ADR-20261105）：列表不动，只增加顶部留白；阅读行按锚点保持在原处，被卡片盖住也不移动。
     flushSync(() => setMessage("Could not update local history."));
     await settleLayout();
-    expect(document.querySelector(".pwa-status-error")).not.toBeNull();
+    const card = document.querySelector(".pwa-status-error")!;
+    expect(Math.round(list.getBoundingClientRect().top)).toBe(listTop);
+    expect(Number.parseFloat(getComputedStyle(list).paddingTop)).toBe(paddingTop + 8 + Math.round(card.getBoundingClientRect().height));
     expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
 
     flushSync(() => setMessage(null));
     await expect.poll(() => document.querySelector(".pwa-status-error"), { timeout: 2000 }).toBeNull();
     await settleLayout();
+    expect(Number.parseFloat(getComputedStyle(list).paddingTop)).toBe(paddingTop);
     expect(Math.round(Math.abs(offset(row, list) - before))).toBeLessThanOrEqual(1);
     expect(viewport.followingOutput).toBe(false);
   } finally { await screen.unmount(); }

@@ -8,6 +8,7 @@ import { historySessionTitle } from "@/lib/pwa/history-preview";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 import type { DeviceActivity, PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { BrandMark } from "@/components/pwa/brand-mark";
+import { PwaRuntimeNoticeSlot } from "@/components/pwa/pwa-app-shell";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { RunningIndicator } from "./running-indicator";
@@ -181,13 +182,16 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
   </section>;
 }
 
-/** 桌面与移动导航共用底部入口：当前电脑选择器与设置操作同行固定。 */
+/** 桌面与移动导航共用底部入口：当前电脑选择器与设置操作同行固定；其上方是安装与浏览器能力提示的展示位置。 */
 export function WorkspaceNavigationFooter({ devices, activeDeviceId, pairingPresence, deviceActivity, onPair, onSelectDevice, onRename, onRemove, onSettings, variant = "desktop", collapsed, autoFocusSettings = false, className = "pwa-sidebar-foot", onOverlayChange }: WorkspaceNavigationFooterProps) {
   const { t } = useI18n();
-  return <div className={className}>
+  return <>
+    <PwaRuntimeNoticeSlot className="pwa-navigation-notice-slot" />
+    <div className={className}>
     <WorkspaceDeviceControl key={variant === "desktop" ? `pwa-device-picker-${collapsed}` : undefined} devices={devices} activeDeviceId={activeDeviceId} pairingPresence={pairingPresence} deviceActivity={deviceActivity} onPair={onPair} onSelectDevice={onSelectDevice} onRename={onRename} onRemove={onRemove} variant={variant} onOverlayChange={onOverlayChange} />
     <ActionIcon className="pwa-nav-settings" type="button" data-autofocus={autoFocusSettings || undefined} onClick={onSettings} aria-label={t.navigation.openSettings} title={t.navigation.settings}><Settings size={20} /></ActionIcon>
-  </div>;
+    </div>
+  </>;
 }
 
 export function WorkspaceNavigationContent({ devices, endpoints, history, historyListStatus, onRetryHistory, activeDeviceId, activeEndpointId, selectedHistoryId, snapshotReady, pairingPresence = {}, deviceActivity, completedEndpointIds, onPair, onSettings, onSelectDevice, onSelectEndpoint, onSelectHistory, onRename, onRemove, idPrefix = "pwa-navigation", collapsed = false }: WorkspaceNavigationContentProps) {

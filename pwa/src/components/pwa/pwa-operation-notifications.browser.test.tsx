@@ -133,6 +133,29 @@ test("plain toasts close after four seconds unless hovered, and wait behind an e
   } finally { await screen.unmount(); }
 }, 20_000);
 
+const WRAPPING_TOAST = "The model change could not be confirmed because the connection dropped while Pi was replying; check the computer and try again.";
+
+// 单行时为 Toast 圆角（胶囊），正文换行后改为 16（ADR-20261105）；带操作时只看正文，44 高的操作不算换行。
+test("a toast keeps the toast radius on one line and switches to 16 once its text wraps", async () => {
+  const controller = createOperationNotificationController();
+  const screen = await render(<Harness controller={controller} />);
+  const radius = () => getComputedStyle(document.querySelector(".pwa-operation-notification")!).borderTopLeftRadius;
+  try {
+    controller.notify("Settings saved");
+    await expect.element(screen.getByText("Settings saved")).toBeVisible();
+    await expect.poll(radius).toBe("22px");
+    controller.notify(WRAPPING_TOAST, { kind: "info" });
+    await expect.element(screen.getByText(WRAPPING_TOAST)).toBeVisible();
+    await expect.poll(radius).toBe("16px");
+    controller.notify("New version available", { action: { label: "Refresh", onClick: () => {} } });
+    await expect.element(screen.getByRole("button", { name: "Refresh" })).toBeVisible();
+    await expect.poll(radius).toBe("22px");
+    controller.notify(WRAPPING_TOAST, { kind: "info", action: { label: "Undo", onClick: () => {} } });
+    await expect.element(screen.getByRole("button", { name: "Undo" })).toBeVisible();
+    await expect.poll(radius).toBe("16px");
+  } finally { await screen.unmount(); }
+});
+
 test("toast actions keep a 44px touch target without growing the card", async () => {
   const controller = createOperationNotificationController();
   const screen = await render(<Harness controller={controller} />);

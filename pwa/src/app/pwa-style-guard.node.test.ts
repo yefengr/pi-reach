@@ -39,7 +39,7 @@ const RADIUS_VALUE = /^(?:0|50%|inherit|var\(--pwa-radius-(?:xs|md|lg|xl)\))$/;
 /** 专用圆角 token → 允许使用的「文件 | 选择器」。 */
 const DEDICATED_RADII = new Map([
   ["var(--pwa-radius-composer)", ["app/globals.css | .pwa-composer-card"]],
-  ["var(--pwa-radius-toast)", ["app/globals.css | .pwa-operation-notifications .pwa-operation-notification"]],
+  ["var(--pwa-radius-toast)", ["app/globals.css | .pwa-operation-notifications .pwa-operation-notification", "app/globals.css | .pwa-status-error"]],
   ["var(--pwa-radius-pill)", [
     "app/globals.css | .pwa-ui-scope .pwa-button.pwa-latest-button",
     "app/workspace-navigation.css | .pwa-root .pwa-presence-label, .pwa-root .pwa-current-label",
@@ -89,8 +89,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-field-error svg", property: "margin-top", values: [1], reason: OPTICAL },
   { file: "app/globals.css", selector: ".pwa-pairing-methods", property: "margin", values: [-8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-runtime-notice .pwa-runtime-notice-dismiss", property: "margin", values: [-4], reason: ALIGN },
-  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-status-error-dismiss", property: "margin", values: [-6, -8], reason: ALIGN },
-  { file: "app/globals.css", selector: ".pwa-app-shell[data-compact-height] .pwa-runtime-notice-description", property: "margin", values: [-1], reason: OPTICAL },
+  { file: "app/globals.css", selector: ".pwa-app-shell[data-compact-height] .pwa-runtime-notice-fallback .pwa-runtime-notice-description", property: "margin", values: [-1], reason: OPTICAL },
   { file: "app/workspace-shell.css", selector: ".pwa-root[data-sidebar-collapsed] .pwa-title-bar", property: "padding-left", values: [56], reason: "收起侧栏后标题区避让展开入口（8＋44＋4），另加左安全区" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-workspace-state", property: "padding", values: [260], reason: "主区空状态顶部 clamp(48px, 24dvh, 260px) 的上限" },
   { file: "components/pwa/attachment-cards.css", selector: ".pwa-attachment-meta", property: "gap", values: [3], reason: "附件卡片 58 高的领域密度" },
