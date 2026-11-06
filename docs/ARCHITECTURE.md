@@ -139,7 +139,8 @@ Relay 断开不影响正在阅读的历史；附件元数据与缺口标记按�
 | 一次性全局反馈（Toast） | 每个 PWA Shell 持有独立的 [`OperationNotificationController`](../pwa/src/lib/pwa/operation-notifications.ts)，由 `PwaToastProvider` 共享给工作区 `PwaApp` 与入口级 `ServiceWorkerRegister`，唯一通知展示组件随工作区根节点定位，在启动／故障态使用 Shell fallback；单独挂载组件时使用各自控制器。控制器管理单槽 Toast：操作失败不自动消失，匹配成功回执、手动关闭或对应会话/实例清理撤销；普通反馈（已复制、设置已保存、连接已恢复、配对成功）4 秒后自动关闭，悬停或聚焦暂停，错误期间排队。Service Worker 更新状态由注册组件持有，更新提示通过同一控制器显示持久可关闭的「刷新」操作 Toast，普通提示不会挤掉待处理更新，错误结束后更新可恢复；旧实例回调不能写入新实例。 |
 | 设置页路由 | [`useSettingsRoute`](../pwa/src/lib/pwa/settings-route.ts) 以 history state 持有设置页记录及其来源（工作区或已展开的移动导航与滚动位置）；页内返回与浏览器后退统一由 `popstate` 恢复。工作区在设置页期间保持挂载（隐藏且 `inert`），会话、草稿与阅读位置不重建。 |
 | 表单、确认、历史加载与消息投递 | 各领域组件及 timeline 状态继续持有错误与重试条件；`PwaStatusError` 仍用于现有局部错误，不是全局操作通知的统一状态容器；它浮在主区标题区下方，工作区布局把提示区高度同步为消息列表顶部留白并通知时间线视口保持阅读位置。 |
-| 安装与浏览器能力 | [`ServiceWorkerRegister`](../pwa/src/components/pwa/service-worker-register.tsx) 保持 React 入口级挂载，持有浏览器事件；安装／能力 `Alert` 的 Portal 只在应用壳顶部与工作区导航底部间迁移展示位置，不重置注册生命周期；桌面侧栏与移动导航各登记一个位置，取最后登记且仍挂载的一个。 |
+| 安装 | [`PwaInstallProvider`](../pwa/src/components/pwa/pwa-install.tsx) 在 React 入口级挂载，持有 `beforeinstallprompt`／`appinstalled` 与手动添加的判断，以及本次打开期间的「先在浏览器中使用」；未配对主区与设置页通过同一 Context 读取，不随工作区或设置页切换重置。 |
+| 浏览器能力 | [`ServiceWorkerRegister`](../pwa/src/components/pwa/service-worker-register.tsx) 保持 React 入口级挂载，持有 Service Worker 注册与更新；能力 `Alert` 的 Portal 只在应用壳顶部与工作区导航底部间迁移展示位置，不重置注册生命周期；桌面侧栏与移动导航各登记一个位置，取最后登记且仍挂载的一个。 |
 
 ## 会话数据流
 

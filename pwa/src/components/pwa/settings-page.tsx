@@ -1,12 +1,13 @@
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
-import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Globe, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
+import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
 import type { PwaTextSize } from "@/lib/ui/text-size";
 import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
 import { CopyButton } from "@/components/pwa/copy-button";
+import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "@/components/pwa/pwa-install";
 import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
 import { version as pwaVersion } from "../../../package.json";
@@ -93,6 +94,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
         </Button>
         <h1 id="pwa-settings-title" className="pwa-settings-title" ref={titleRef} tabIndex={-1}>{s.title}</h1>
       </header>
+      <InstallSettingsSection />
       <section className="pwa-settings-section" aria-labelledby="pwa-appearance-heading">
         <h2 id="pwa-appearance-heading" className="pwa-settings-section-title">{s.appearance}</h2>
         <Radio.Group aria-label={s.appearance} name="pwa-appearance" value={appearance} onChange={(next) => setAppearance(next as PwaAppearance)}>
@@ -169,6 +171,32 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
     </div>
   </div>;
+}
+
+/** 「应用」分区：只在浏览器标签页中可以安装时出现，安装后整个分区随之消失（ADR-20261106「安装引导」）。 */
+function InstallSettingsSection() {
+  const { offer, install } = usePwaInstall();
+  if (!offer) return null;
+  return <InstallSettingsContent offer={offer} onInstall={async () => {
+    await install();
+    // 安装按钮随分区卸载，焦点交还页面标题，读屏从页首继续。
+    document.getElementById("pwa-settings-title")?.focus({ preventScroll: true });
+  }} />;
+}
+
+function InstallSettingsContent({ offer, onInstall }: { offer: InstallOffer; onInstall: () => Promise<void> }) {
+  const n = useI18n().t.install;
+  const { title, lead } = useInstallCopy(offer);
+  return <section className="pwa-settings-section" aria-labelledby="pwa-install-heading">
+    <h2 id="pwa-install-heading" className="pwa-settings-section-title">{n.settingsSection}</h2>
+    <div className="pwa-settings-group pwa-settings-install">
+      <span className="pwa-settings-choice-text"><strong>{title}</strong><small>{lead}</small></span>
+      {offer === "prompt"
+        ? <Button variant="default" type="button" leftSection={<Download size={16} />} onClick={() => void onInstall()}>{n.install}</Button>
+        : <InstallSteps offer={offer} thenPair={false} />}
+    </div>
+    <p className="pwa-settings-section-description pwa-settings-footnote">{n.settingsHint}</p>
+  </section>;
 }
 
 /** 分组列表中的单选行：行首为可见的单选圆点，其后为图标与主副文字（DESIGN「设置页」）。 */

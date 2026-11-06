@@ -15,7 +15,7 @@ type PwaRuntimeNoticeContextValue = {
 const PwaRuntimeNoticeContext = createContext<PwaRuntimeNoticeContextValue | null>(null);
 
 /**
- * 安装与浏览器能力提示的工作区展示位置，位于导航底部（ADR-20261105）。桌面侧栏与移动导航各有一个：
+ * 浏览器能力提示的工作区展示位置，位于导航底部（ADR-20261105）。桌面侧栏与移动导航各有一个：
  * 移动导航打开时后登记，提示移入其中；关闭后回到侧栏位置（移动布局不显示侧栏，提示随之不可见）。
  */
 export function PwaRuntimeNoticeSlot({ className }: { className?: string }) {

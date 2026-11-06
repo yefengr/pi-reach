@@ -72,7 +72,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
     onRemove: (target) => events.push(`remove:${target.id}`),
   };
 
-  return <PwaAppShell runtimeNotice={noticeVisible && <ServiceWorkerNotice installPrompt unsupported={false} onInstall={() => {}} onDismiss={() => setNoticeVisible(false)} />}><PwaWorkspaceLayout
+  return <PwaAppShell runtimeNotice={noticeVisible && <ServiceWorkerNotice onDismiss={() => setNoticeVisible(false)} />}><PwaWorkspaceLayout
     navigation={navigation}
     titleBar={unpaired ? { title: "Navigation", showTitle: false } : historyMode ? { title: "Saved Pi", showTitle: true } : { title, showTitle: true }}
     toast={unpaired ? null : statusError ? <PwaStatusError message={statusError} onDismiss={() => {}} /> : null}
@@ -359,7 +359,7 @@ test.each(toastCases)("keeps the $width×$height toast (long: $long, safe top: $
 test.each([1280, 390])("keeps the notice below navigation/settings and confirmation overlays at $0px", async (width) => {
   await page.viewport(width, 844);
   const screen = await renderLayout({ events: [], runtimeNotice: true });
-  const notice = screen.getByRole("status", { name: "Install Pi Reach" });
+  const notice = screen.getByRole("status", { name: "Offline app mode unavailable" });
   // 移动布局的提示在导航底部，导航打开后才可见。
   if (width === 390) await expect.poll(() => document.querySelector(".pwa-runtime-notice")).not.toBeNull();
   else await expect.element(notice).toBeVisible();
@@ -424,8 +424,8 @@ test("preserves one main and the stateful workspace child through boundary and d
   expect(trigger).not.toBeNull();
   expect(document.querySelectorAll("main")).toHaveLength(1);
   expect(document.querySelectorAll(".pwa-root")).toHaveLength(1);
-  await expect.element(screen.getByRole("status", { name: "Install Pi Reach" })).toBeVisible();
-  // 安装提示位于侧栏底部、电脑入口上方（ADR-20261105）。
+  await expect.element(screen.getByRole("status", { name: "Offline app mode unavailable" })).toBeVisible();
+  // 运行时提示位于侧栏底部、电脑入口上方（ADR-20261105）。
   const noticeSlot = document.querySelector(".pwa-desktop-navigation .pwa-navigation-notice-slot");
   expect(document.querySelector(".pwa-runtime-notice")!.parentElement).toBe(noticeSlot);
   expect(noticeSlot!.nextElementSibling!.classList.contains("pwa-sidebar-foot")).toBe(true);
@@ -457,7 +457,7 @@ test("shows saved history without realtime status in the title area", async () =
 
   await expect.element(screen.getByRole("heading", { level: 1, name: "Saved Pi" })).toBeVisible();
   await expect.element(screen.getByLabelText("Connected")).not.toBeInTheDocument();
-  await expect.element(screen.getByRole("status", { name: "Install Pi Reach" })).toBeVisible();
+  await expect.element(screen.getByRole("status", { name: "Offline app mode unavailable" })).toBeVisible();
   const slot = document.querySelector(".pwa-navigation-notice-slot")!;
   const close = screen.getByRole("button", { name: "Dismiss PWA notice" });
   close.element().focus();
@@ -1547,7 +1547,7 @@ test.each([767, 390])("keyboard shortcuts remain inactive in mobile layout at %i
 });
 
 // 移动布局不显示侧栏：导航打开时抽屉后登记插槽，提示移入抽屉底部；关闭后回到侧栏位置。
-test("moves the install notice into the mobile navigation while it is open", async () => {
+test("moves the runtime notice into the mobile navigation while it is open", async () => {
   await page.viewport(390, 844);
   const screen = await renderLayout({ events: [], runtimeNotice: true });
   const sidebarSlot = document.querySelector(".pwa-desktop-navigation .pwa-navigation-notice-slot");
@@ -1557,17 +1557,17 @@ test("moves the install notice into the mobile navigation while it is open", asy
 
   await screen.getByRole("button", { name: "Open navigation" }).click();
   await expect.poll(() => placedIn(document.querySelector(".pwa-session-sheet .pwa-navigation-notice-slot"))).toBe(true);
-  await expect.element(screen.getByRole("status", { name: "Install Pi Reach" })).toBeVisible();
+  await expect.element(screen.getByRole("status", { name: "Offline app mode unavailable" })).toBeVisible();
   const sheet = document.querySelector(".pwa-session-sheet")!.getBoundingClientRect();
   const notice = document.querySelector(".pwa-runtime-notice")!.getBoundingClientRect();
   expect(notice.left).toBeGreaterThanOrEqual(sheet.left);
   expect(notice.right).toBeLessThanOrEqual(sheet.right);
   expect(notice.bottom).toBeLessThanOrEqual(document.querySelector(".pwa-session-sheet-foot")!.getBoundingClientRect().top);
-  const install = screen.getByRole("button", { name: "Install app", exact: true }).element();
+  const dismiss = screen.getByRole("button", { name: "Dismiss PWA notice", exact: true }).element();
   // 抽屉滑入期间按钮仍在移动，等落定后再按坐标命中。
   await expect.poll(() => {
-    const box = install.getBoundingClientRect();
-    return install.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    const box = dismiss.getBoundingClientRect();
+    return dismiss.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
   }).toBe(true);
 
   await screen.getByRole("button", { name: "Close navigation" }).click();

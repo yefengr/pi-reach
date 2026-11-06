@@ -6,36 +6,17 @@ import { renderPwa } from "@/test/browser/render";
 import { PwaAppShell, PwaRuntimeNoticeSlot } from "./pwa-app-shell";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { ServiceWorkerNotice, ServiceWorkerRegister } from "./service-worker-register";
-import type { InstallGuide } from "@/lib/pwa/install-guide";
 
 const { refreshPwaApp } = vi.hoisted(() => ({ refreshPwaApp: vi.fn() }));
 
 vi.mock("@/lib/pwa/service-worker-update", () => ({ refreshPwaApp }));
 
-type NoticeHarnessProps = {
-  installPrompt?: boolean;
-  unsupported?: boolean;
-  installGuide?: InstallGuide | null;
-  onInstall?: () => void;
-  onDismiss?: () => void;
-};
-
-function NoticeHarness({
-  installPrompt = false,
-  unsupported = false,
-  installGuide = null,
-  onInstall = () => {},
-  onDismiss = () => {},
-}: NoticeHarnessProps) {
+function NoticeHarness({ onDismiss = () => {} }: { onDismiss?: () => void }) {
   const [visible, setVisible] = useState(true);
   if (!visible) return null;
 
   return (
     <ServiceWorkerNotice
-      installPrompt={installPrompt}
-      unsupported={unsupported}
-      installGuide={installGuide}
-      onInstall={onInstall}
       onDismiss={() => {
         onDismiss();
         setVisible(false);
@@ -93,30 +74,9 @@ function restoreServiceWorkerApi() {
   }
 }
 
-const IPHONE_SAFARI_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
-
-/** 模拟 iPhone Safari；`standalone` 表示已从主屏幕打开。 */
-function emulateIphoneSafari({ standalone = false } = {}) {
-  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPHONE_SAFARI_USER_AGENT);
-  vi.spyOn(navigator, "maxTouchPoints", "get").mockReturnValue(5);
-  const matchMedia = window.matchMedia.bind(window);
-  vi.spyOn(window, "matchMedia").mockImplementation((query) => (
-    query === "(display-mode: standalone)" ? { ...matchMedia(query), matches: standalone } : matchMedia(query)
-  ));
-}
-
 function removeServiceWorkerApi() {
   Reflect.deleteProperty(navigator, "serviceWorker");
   return Reflect.deleteProperty(navigatorPrototype, "serviceWorker");
-}
-
-function createInstallPrompt(outcome: "accepted" | "dismissed") {
-  const prompt = vi.fn(async () => {});
-  const event = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), {
-    prompt,
-    userChoice: Promise.resolve({ outcome }),
-  });
-  return { event, prompt };
 }
 
 // Vite 编译时替换 NODE_ENV；生产生命周期通过 NODE_ENV=production 单独运行。
@@ -150,29 +110,8 @@ afterEach(async () => {
   await page.viewport(1280, 900);
 });
 
-test("renders an accessible install notice and routes install and dismiss actions", async () => {
-  const onInstall = vi.fn();
-  const onDismiss = vi.fn();
-  const screen = await renderPwa(
-    <NoticeHarness installPrompt onInstall={onInstall} onDismiss={onDismiss} />,
-  );
-  const notice = screen.getByRole("status");
-
-  await expect.element(notice).toBeVisible();
-  await expect.element(screen.getByText("Install Pi Reach")).toBeVisible();
-  await expect.element(screen.getByText("Open this workspace from your device launcher.")).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
-
-  await screen.getByRole("button", { name: "Install app" }).click();
-  expect(onInstall).toHaveBeenCalledTimes(1);
-
-  await screen.getByRole("button", { name: "Dismiss PWA notice" }).click();
-  expect(onDismiss).toHaveBeenCalledTimes(1);
-  await expect.element(notice).not.toBeInTheDocument();
-});
-
 test("keeps the notice dismiss action at a 44px touch target", async () => {
-  const screen = await renderPwa(<NoticeHarness unsupported />);
+  const screen = await renderPwa(<NoticeHarness />);
   const dismiss = screen.getByRole("button", { name: "Dismiss PWA notice" });
   await expect.element(dismiss).toBeVisible();
   const rect = dismiss.element().getBoundingClientRect();
@@ -184,7 +123,7 @@ test("keeps the notice dismiss action at a 44px touch target", async () => {
 test("runtime notice keeps the reading width in the shell fallback", async () => {
   // 启动与故障态没有 .pwa-root，提示条落在应用壳 fallback，仍需读取全局阅读列宽。
   const screen = await render(
-    <PwaUiProvider><PwaAppShell runtimeNotice={<NoticeHarness installPrompt />}>
+    <PwaUiProvider><PwaAppShell runtimeNotice={<NoticeHarness />}>
       <div className="pwa-loading">Loading</div>
     </PwaAppShell></PwaUiProvider>,
   );
@@ -195,44 +134,9 @@ test("runtime notice keeps the reading width in the shell fallback", async () =>
   }
 });
 
-test("guides iOS and Mac Safari users to add Pi Reach manually without an install action", async () => {
-  const onDismiss = vi.fn();
-  const iosScreen = await renderPwa(<NoticeHarness installGuide="ios" onDismiss={onDismiss} />);
-  await expect.element(iosScreen.getByText("Add to Home Screen", { exact: true })).toBeVisible();
-  await expect.element(iosScreen.getByText(/from your browser's Share menu/)).toBeVisible();
-  await expect.element(iosScreen.getByRole("button", { name: "Install app" })).not.toBeInTheDocument();
-  await iosScreen.getByRole("button", { name: "Dismiss PWA notice" }).click();
-  expect(onDismiss).toHaveBeenCalledTimes(1);
-  await expect.element(iosScreen.getByRole("status")).not.toBeInTheDocument();
-  await iosScreen.unmount();
-
-  const macScreen = await renderPwa(<NoticeHarness installGuide="mac-safari" />);
-  await expect.element(macScreen.getByText("Add to Dock", { exact: true })).toBeVisible();
-  await expect.element(macScreen.getByText(/choose File > Add to Dock/)).toBeVisible();
-  await expect.element(macScreen.getByRole("button", { name: "Install app" })).not.toBeInTheDocument();
-});
-
-test("lets unsupported mode and a real install prompt take precedence over the manual guide", async () => {
-  const unsupportedScreen = await renderPwa(<NoticeHarness unsupported installGuide="ios" />);
-  await expect.element(unsupportedScreen.getByText("Offline app mode unavailable")).toBeVisible();
-  await expect.element(unsupportedScreen.getByText("Add to Home Screen", { exact: true })).not.toBeInTheDocument();
-  await unsupportedScreen.unmount();
-
-  const installScreen = await renderPwa(<NoticeHarness installPrompt installGuide="mac-safari" />);
-  await expect.element(installScreen.getByText("Install Pi Reach")).toBeVisible();
-  await expect.element(installScreen.getByRole("button", { name: "Install app" })).toBeVisible();
-  await expect.element(installScreen.getByText("Add to Dock", { exact: true })).not.toBeInTheDocument();
-});
-
-test("does not put update actions into the persistent install notice", async () => {
-  const screen = await renderPwa(<NoticeHarness installPrompt />);
-  await expect.element(screen.getByText("Install Pi Reach")).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
-});
-
 test("shows only Dismiss when offline app mode is unsupported", async () => {
   const onDismiss = vi.fn();
-  const screen = await renderPwa(<NoticeHarness unsupported onDismiss={onDismiss} />);
+  const screen = await renderPwa(<NoticeHarness onDismiss={onDismiss} />);
 
   await expect.element(screen.getByText("Offline app mode unavailable")).toBeVisible();
   await expect.element(screen.getByText(/cannot provide PWA offline startup/)).toBeVisible();
@@ -244,17 +148,9 @@ test("shows only Dismiss when offline app mode is unsupported", async () => {
   await expect.element(screen.getByRole("status")).not.toBeInTheDocument();
 });
 
-test("keeps install actions independently routed", async () => {
-  const onInstall = vi.fn();
-  const screen = await renderPwa(<NoticeHarness installPrompt onInstall={onInstall} />);
-  await screen.getByRole("button", { name: "Install app" }).click();
-  expect(onInstall).toHaveBeenCalledTimes(1);
-  await expect.element(screen.getByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
-});
-
-test("keeps the mobile runtime notice and all actions inside a 390 by 844 viewport", async () => {
+test("keeps the mobile runtime notice and its dismiss action inside a 390 by 844 viewport", async () => {
   await page.viewport(390, 844);
-  const screen = await renderPwa(<NoticeHarness installPrompt />);
+  const screen = await renderPwa(<NoticeHarness />);
   const notice = screen.getByRole("status");
   await expect.element(notice).toBeVisible();
   const noticeRect = notice.element().getBoundingClientRect();
@@ -265,7 +161,7 @@ test("keeps the mobile runtime notice and all actions inside a 390 by 844 viewpo
   expect(noticeRect.bottom).toBeLessThanOrEqual(window.innerHeight);
   expect(notice.element().scrollWidth).toBeLessThanOrEqual(notice.element().clientWidth);
 
-  for (const name of ["Install app", "Dismiss PWA notice"]) {
+  for (const name of ["Dismiss PWA notice"]) {
     const action = screen.getByRole("button", { name });
     await expect.element(action).toBeVisible();
     const rect = action.element().getBoundingClientRect();
@@ -274,15 +170,6 @@ test("keeps the mobile runtime notice and all actions inside a 390 by 844 viewpo
     expect(rect.top).toBeGreaterThanOrEqual(noticeRect.top);
     expect(rect.bottom).toBeLessThanOrEqual(noticeRect.bottom);
   }
-});
-
-test("gives unsupported runtime text priority while retaining the install action", async () => {
-  const screen = await renderPwa(<NoticeHarness unsupported installPrompt />);
-
-  await expect.element(screen.getByText("Offline app mode unavailable")).toBeVisible();
-  await expect.element(screen.getByText(/cannot provide PWA offline startup/)).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Install app" })).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
 });
 
 productionTest("registers the production service worker at the app scope and reports an existing waiting worker", async () => {
@@ -362,95 +249,35 @@ productionTest("shows unsupported runtime notice for a missing API and a rejecte
   }
 });
 
-productionTest("clears captured install prompts after either choice and after installation completes", async () => {
-  const { register } = installServiceWorker(createRegistration());
-  const screen = await renderPwa(<ServiceWorkerRegister />);
-
-  try {
-    await waitForRegistration(register);
-    for (const outcome of ["accepted", "dismissed"] as const) {
-      const installPrompt = createInstallPrompt(outcome);
-      window.dispatchEvent(installPrompt.event);
-      await expect.element(screen.getByRole("button", { name: "Install app" })).toBeVisible();
-      expect(installPrompt.event.defaultPrevented).toBe(true);
-
-      await screen.getByRole("button", { name: "Install app" }).click();
-      expect(installPrompt.prompt).toHaveBeenCalledTimes(1);
-      await expect.element(screen.getByRole("status")).not.toBeInTheDocument();
-    }
-
-    const installedPrompt = createInstallPrompt("accepted");
-    window.dispatchEvent(installedPrompt.event);
-    await expect.element(screen.getByRole("button", { name: "Install app" })).toBeVisible();
-    window.dispatchEvent(new Event("appinstalled"));
-    await expect.element(screen.getByRole("status")).not.toBeInTheDocument();
-    expect(installedPrompt.prompt).not.toHaveBeenCalled();
-  } finally {
-    await screen.unmount();
-  }
-});
-
-productionTest("keeps a dismissed notice hidden for the mount while allowing a remount to show a new event", async () => {
-  const { register } = installServiceWorker(createRegistration());
+productionTest("keeps a dismissed notice hidden for the mount and shows it again on the next open", async () => {
+  expect(removeServiceWorkerApi()).toBe(true);
   const firstScreen = await renderPwa(<ServiceWorkerRegister />);
 
   try {
-    await waitForRegistration(register);
-    const firstPrompt = createInstallPrompt("accepted");
-    window.dispatchEvent(firstPrompt.event);
     await expect.element(firstScreen.getByRole("status")).toBeVisible();
     await firstScreen.getByRole("button", { name: "Dismiss PWA notice" }).click();
     await expect.element(firstScreen.getByRole("status")).not.toBeInTheDocument();
-
-    const ignoredPrompt = createInstallPrompt("accepted");
-    window.dispatchEvent(ignoredPrompt.event);
-    expect(ignoredPrompt.event.defaultPrevented).toBe(true);
-    await expect.element(firstScreen.getByRole("status")).not.toBeInTheDocument();
   } finally {
     await firstScreen.unmount();
   }
 
   const remountedScreen = await renderPwa(<ServiceWorkerRegister />);
   try {
-    await waitForRegistration(register, 2);
-    const remountedPrompt = createInstallPrompt("dismissed");
-    window.dispatchEvent(remountedPrompt.event);
-    await expect.element(remountedScreen.getByRole("button", { name: "Install app" })).toBeVisible();
+    await expect.element(remountedScreen.getByText("Offline app mode unavailable")).toBeVisible();
   } finally {
     await remountedScreen.unmount();
   }
 });
 
-productionTest("shows the iOS guide in a browser tab, hides it for the mount on dismissal and again on the next open", async () => {
-  emulateIphoneSafari();
-  const { register } = installServiceWorker(createRegistration());
-  const firstScreen = await renderPwa(<ServiceWorkerRegister />);
-
-  try {
-    await waitForRegistration(register);
-    await expect.element(firstScreen.getByText("Add to Home Screen", { exact: true })).toBeVisible();
-    await firstScreen.getByRole("button", { name: "Dismiss PWA notice" }).click();
-    await expect.element(firstScreen.getByRole("status")).not.toBeInTheDocument();
-  } finally {
-    await firstScreen.unmount();
-  }
-
-  const remountedScreen = await renderPwa(<ServiceWorkerRegister />);
-  try {
-    await waitForRegistration(register, 2);
-    await expect.element(remountedScreen.getByText("Add to Home Screen", { exact: true })).toBeVisible();
-  } finally {
-    await remountedScreen.unmount();
-  }
-});
-
-productionTest("does not show the iOS guide once opened from the Home Screen", async () => {
-  emulateIphoneSafari({ standalone: true });
+productionTest("leaves install prompts to the install state instead of the runtime notice", async () => {
   const { register } = installServiceWorker(createRegistration());
   const screen = await renderPwa(<ServiceWorkerRegister />);
 
   try {
     await waitForRegistration(register);
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
     await expect.element(screen.getByRole("status")).not.toBeInTheDocument();
   } finally {
     await screen.unmount();
@@ -483,19 +310,16 @@ productionTest("keeps an existing update request while its Toast moves from the 
 
 productionTest("does not reset dismissal or register again when the shell workspace slot appears", async () => {
   const { register } = installServiceWorker(createRegistration());
+  register.mockRejectedValueOnce(new Error("registration rejected"));
   const screen = await render(<ServiceWorkerShellHarness />);
 
   try {
     await waitForRegistration(register);
-    const prompt = createInstallPrompt("accepted");
-    window.dispatchEvent(prompt.event);
     await expect.element(screen.getByRole("status")).toBeVisible();
     await screen.getByRole("button", { name: "Dismiss PWA notice" }).click();
     await expect.element(screen.getByRole("status")).not.toBeInTheDocument();
 
     await screen.getByRole("button", { name: "Show workspace slot" }).click();
-    const ignoredPrompt = createInstallPrompt("dismissed");
-    window.dispatchEvent(ignoredPrompt.event);
     await expect.element(screen.getByRole("status")).not.toBeInTheDocument();
     expect(register).toHaveBeenCalledTimes(1);
   } finally {
@@ -503,8 +327,10 @@ productionTest("does not reset dismissal or register again when the shell worksp
   }
 });
 
-productionTest("does not steal focus when an install prompt appears and restores its source on dismissal", async () => {
+productionTest("does not steal focus when the unsupported notice appears and restores its source on dismissal", async () => {
   const { register } = installServiceWorker(createRegistration());
+  let rejectRegistration: (error: Error) => void = () => {};
+  register.mockReturnValueOnce(new Promise((_, reject) => { rejectRegistration = reject; }));
   const screen = await renderPwa(<><button type="button">Workspace action</button><ServiceWorkerRegister /></>);
 
   try {
@@ -513,8 +339,7 @@ productionTest("does not steal focus when an install prompt appears and restores
     source.element().focus();
     await expect.element(source).toHaveFocus();
 
-    const prompt = createInstallPrompt("accepted");
-    window.dispatchEvent(prompt.event);
+    rejectRegistration(new Error("registration rejected"));
     await expect.element(screen.getByRole("status")).toBeVisible();
     await expect.element(source).toHaveFocus();
 
@@ -525,50 +350,7 @@ productionTest("does not steal focus when an install prompt appears and restores
   }
 });
 
-productionTest("restores focus after installing when refresh remains available", async () => {
-  const { register } = installServiceWorker(createRegistration({ waiting: createWorker() }));
-  const screen = await renderPwa(<><button type="button">Workspace action</button><ServiceWorkerRegister /></>);
-
-  try {
-    await waitForRegistration(register);
-    const source = screen.getByRole("button", { name: "Workspace action" });
-    const prompt = createInstallPrompt("accepted");
-    window.dispatchEvent(prompt.event);
-    const install = screen.getByRole("button", { name: "Install app" });
-    await expect.element(install).toBeVisible();
-    source.element().focus();
-    install.element().focus();
-    await expect.element(install).toHaveFocus();
-
-    await install.click();
-    await expect.element(screen.getByRole("button", { name: "Refresh" })).toBeVisible();
-    await expect.element(source).toHaveFocus();
-  } finally {
-    await screen.unmount();
-  }
-});
-
-productionTest("does not move refresh or Toast close focus for appinstalled when no install prompt is available", async () => {
-  installServiceWorker(createRegistration({ waiting: createWorker() }));
-  const screen = await renderPwa(<ServiceWorkerRegister />);
-
-  try {
-    const refresh = screen.getByRole("button", { name: "Refresh" });
-    await expect.element(refresh).toBeVisible();
-    refresh.element().focus();
-    window.dispatchEvent(new Event("appinstalled"));
-    await expect.element(refresh).toHaveFocus();
-
-    const dismiss = screen.getByRole("button", { name: "Dismiss operation notification" });
-    dismiss.element().focus();
-    window.dispatchEvent(new Event("appinstalled"));
-    await expect.element(dismiss).toHaveFocus();
-  } finally {
-    await screen.unmount();
-  }
-});
-
-productionTest("removes registration and window listeners on unmount so stale events cannot update it", async () => {
+productionTest("removes registration listeners on unmount so stale events cannot update it", async () => {
   const registration = createRegistration();
   const removeUpdateFound = vi.spyOn(registration, "removeEventListener");
   const staleWorker = createWorker("installing");
@@ -579,15 +361,11 @@ productionTest("removes registration and window listeners on unmount so stale ev
   await waitForRegistration(register);
   await screen.unmount();
 
-  const stalePrompt = createInstallPrompt("accepted");
-  window.dispatchEvent(stalePrompt.event);
   registration.installing = staleWorker;
   registration.dispatchEvent(new Event("updatefound"));
   staleWorker.state = "installed";
   staleWorker.dispatchEvent(new Event("statechange"));
-  window.dispatchEvent(new Event("appinstalled"));
 
-  expect(stalePrompt.event.defaultPrevented).toBe(false);
   expect(removeUpdateFound).toHaveBeenCalledWith("updatefound", expect.any(Function));
   expect(workerStateListener).not.toHaveBeenCalled();
 });

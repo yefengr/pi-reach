@@ -1,18 +1,11 @@
-import { Alert, Button } from "@mantine/core";
-import { Download } from "lucide-react";
+import { Alert } from "@mantine/core";
 import { useCallback, useEffect, useRef, useState, type FocusEvent } from "react";
 import { PwaOperationNotifications, PwaToastProvider, useToast } from "@/components/pwa/pwa-operation-notifications";
 import { createOperationNotificationController, type OperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { PwaRuntimeNoticePortal } from "@/components/pwa/pwa-app-shell";
 import { refreshPwaApp } from "@/lib/pwa/service-worker-update";
-import { detectInstallGuide, readInstallGuideEnvironment, type InstallGuide } from "@/lib/pwa/install-guide";
 import { useI18n } from "@/lib/i18n";
 import { presenceProps, usePresence } from "./use-presence";
-
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 const DEV_SW_CLEANUP_KEY = "pi-reach-dev-sw-cleanup-v1";
 const NOTICE_FOCUS_FALLBACK_SELECTORS = [
@@ -40,40 +33,19 @@ function hasOpenDialog(): boolean {
   ));
 }
 
-type NoticeView = { unsupported: boolean; install: boolean; guide: InstallGuide | null };
-const sameNoticeView = (left: NoticeView, right: NoticeView) => (
-  left.unsupported === right.unsupported && left.install === right.install && left.guide === right.guide
-);
-
 type ServiceWorkerNoticeProps = {
-  installPrompt: boolean;
-  unsupported: boolean;
-  /** 无法调起系统安装时的手动添加引导；能力不支持或可直接安装时不显示。 */
-  installGuide?: InstallGuide | null;
-  onInstall: () => void;
   onDismiss: () => void;
-  onFocusRecoveryReady?: (restore: (() => void) | null) => void;
-  /** 关闭或条件消失后的淡出阶段：保留最后的内容，不可交互。 */
+  /** 关闭后的淡出阶段：保留最后的内容，不可交互。 */
   leaving?: boolean;
 };
 
-export function ServiceWorkerNotice({
-  installPrompt,
-  unsupported,
-  installGuide = null,
-  onInstall,
-  onDismiss,
-  onFocusRecoveryReady,
-  leaving = false,
-}: ServiceWorkerNoticeProps) {
+/** 浏览器不支持离线应用模式的持久提示；安装引导在首次打开与设置页（ADR-20261106「安装引导」）。 */
+export function ServiceWorkerNotice({ onDismiss, leaving = false }: ServiceWorkerNoticeProps) {
   const noticeRef = useRef<HTMLDivElement | null>(null);
   const priorFocusRef = useRef<HTMLElement | null>(null);
   const focusWithinNoticeRef = useRef(false);
   const { t } = useI18n();
   const n = t.pwaNotice;
-  const guide = unsupported || installPrompt ? null : installGuide;
-  const title = unsupported ? n.unsupportedTitle : guide === "ios" ? n.iosGuideTitle : guide === "mac-safari" ? n.macSafariGuideTitle : n.installTitle;
-  const description = unsupported ? n.unsupportedBody : guide === "ios" ? n.iosGuideBody : guide === "mac-safari" ? n.macSafariGuideBody : n.installBody;
 
   const restoreFocus = useCallback(() => {
     const notice = noticeRef.current;
@@ -96,15 +68,6 @@ export function ServiceWorkerNotice({
     if (target) target.focus({ preventScroll: true });
     focusWithinNoticeRef.current = false;
   }, []);
-
-  useEffect(() => {
-    onFocusRecoveryReady?.(() => {
-      const removesNotice = !unsupported;
-      const removesFocusedInstall = document.activeElement?.matches("[data-pwa-install]");
-      if (installPrompt && (removesNotice || removesFocusedInstall)) restoreFocus();
-    });
-    return () => onFocusRecoveryReady?.(null);
-  }, [installPrompt, unsupported, onFocusRecoveryReady, restoreFocus]);
 
   const capturePriorFocus = (event: FocusEvent<HTMLDivElement>) => {
     const previous = event.relatedTarget;
@@ -134,7 +97,7 @@ export function ServiceWorkerNotice({
     role="status"
     aria-live="polite"
     aria-atomic="true"
-    title={title}
+    title={n.unsupportedTitle}
     withCloseButton
     closeButtonLabel={n.dismiss}
     onClose={dismiss}
@@ -142,10 +105,7 @@ export function ServiceWorkerNotice({
     onBlurCapture={clearNoticeFocus}
   >
     <div className="pwa-runtime-notice-content">
-      <span className="pwa-runtime-notice-description">{description}</span>
-      <div className="pwa-runtime-notice-actions">
-        {installPrompt ? <Button data-pwa-install variant="default" type="button" onClick={onInstall} leftSection={<Download size={16} />}>{n.install}</Button> : null}
-      </div>
+      <span className="pwa-runtime-notice-description">{n.unsupportedBody}</span>
     </div>
   </Alert></PwaRuntimeNoticePortal>;
 }
@@ -167,19 +127,13 @@ function StandaloneServiceWorkerRegister() {
 
 function ServiceWorkerRegisterContent({ notifications }: { notifications: OperationNotificationController }) {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [updateVersion, setUpdateVersion] = useState(0);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState(0);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
   const [unsupported, setUnsupported] = useState(false);
-  const [installGuide, setInstallGuide] = useState<InstallGuide | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [updateRequested, setUpdateRequested] = useState(false);
   const updateRequestedRef = useRef(false);
-  const noticeFocusRecoveryRef = useRef<(() => void) | null>(null);
-  const setNoticeFocusRecovery = useCallback((restore: (() => void) | null) => {
-    noticeFocusRecoveryRef.current = restore;
-  }, []);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") {
@@ -192,26 +146,11 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
       return;
     }
 
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    };
-    const onAppInstalled = () => {
-      noticeFocusRecoveryRef.current?.();
-      setInstallPrompt(null);
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onAppInstalled);
-
     if (!("serviceWorker" in navigator)) {
       queueMicrotask(() => setUnsupported(true));
-      return () => {
-        window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-        window.removeEventListener("appinstalled", onAppInstalled);
-      };
+      return;
     }
 
-    queueMicrotask(() => setInstallGuide(detectInstallGuide(readInstallGuideEnvironment())));
     let disposed = false;
     let currentRegistration: ServiceWorkerRegistration | null = null;
     const inspectWaitingWorker = () => {
@@ -242,8 +181,6 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
 
     return () => {
       disposed = true;
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onAppInstalled);
       currentRegistration?.removeEventListener("updatefound", onUpdateFound);
     };
   }, []);
@@ -265,29 +202,10 @@ function ServiceWorkerRegisterContent({ notifications }: { notifications: Operat
     }, () => setDismissedUpdateVersion(updateVersion));
   }, [applyUpdate, dismissedUpdateVersion, notifications, updateNotice, updateRequested, updateVersion]);
 
-  // 更新提示使用独立的操作 Toast；安装、手动添加引导与浏览器能力提示仍在文档流 Alert 中。
-  const showNotice = !dismissed && (unsupported || Boolean(installPrompt) || installGuide !== null);
-  // 关闭或安装后淡出，淡出期间保留原有标题与操作。
-  const notice = usePresence(showNotice ? { unsupported, install: Boolean(installPrompt), guide: installGuide } : null, sameNoticeView);
+  // 更新提示使用独立的操作 Toast；浏览器能力提示仍在文档流 Alert 中，关闭后淡出。
+  const notice = usePresence(!dismissed && unsupported ? true : null);
   if (process.env.NODE_ENV !== "production") return null;
-  const view = notice.rendered;
-  if (!view) return null;
+  if (!notice.rendered) return null;
 
-  const install = async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    noticeFocusRecoveryRef.current?.();
-    setInstallPrompt(null);
-  };
-
-  return <ServiceWorkerNotice
-    installPrompt={view.install}
-    unsupported={view.unsupported}
-    installGuide={view.guide}
-    leaving={notice.leaving}
-    onInstall={() => void install()}
-    onDismiss={() => setDismissed(true)}
-    onFocusRecoveryReady={setNoticeFocusRecovery}
-  />;
+  return <ServiceWorkerNotice leaving={notice.leaving} onDismiss={() => setDismissed(true)} />;
 }

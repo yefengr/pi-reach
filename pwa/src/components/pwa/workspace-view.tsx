@@ -182,7 +182,7 @@ export function WorkspaceHistorySection({ activeDevice, history, selectedHistory
   </section>;
 }
 
-/** 桌面与移动导航共用底部入口：当前电脑选择器与设置操作同行固定；其上方是安装与浏览器能力提示的展示位置。 */
+/** 桌面与移动导航共用底部入口：当前电脑选择器与设置操作同行固定；其上方是浏览器能力提示的展示位置。 */
 export function WorkspaceNavigationFooter({ devices, activeDeviceId, pairingPresence, deviceActivity, onPair, onSelectDevice, onRename, onRemove, onSettings, variant = "desktop", collapsed, autoFocusSettings = false, className = "pwa-sidebar-foot", onOverlayChange }: WorkspaceNavigationFooterProps) {
   const { t } = useI18n();
   return <>
