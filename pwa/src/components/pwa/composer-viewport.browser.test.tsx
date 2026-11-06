@@ -396,20 +396,27 @@ test("keeps a fixed small gap in a touch browser tab and drops it on focus only 
   const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
   const bottom = () => getComputedStyle(composer).paddingBottom;
   const seconds = (token: string) => `${parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) / 1000}s`;
-  // 浏览器标签页：下方紧接浏览器工具栏，留白固定为 8，聚焦时不变也不过渡，避免与工具栏伸缩叠加位移。
+  const card = composer.querySelector<HTMLElement>(".pwa-composer-card")!;
+  const shadow = () => getComputedStyle(card).boxShadow;
+  const fullShadow = "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px 6px 20px 0px";
+  const dockedShadow = "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px -6px 20px -6px";
+  // 浏览器标签页：下方紧接浏览器工具栏，可见区域在卡片下方 8 处结束。留白固定为 8，
+  // 投影始终向上散开不被截断；聚焦时两者都不变、不过渡，避免与工具栏伸缩叠加位移。
   expect(bottom()).toBe("8px");
+  expect(shadow()).toBe(dockedShadow);
   view.input.focus({ preventScroll: true });
   expect(getComputedStyle(composer).transitionDuration).toBe("0s");
+  expect(getComputedStyle(card).transitionProperty).toBe("border-color");
   expect(bottom()).toBe("8px");
+  expect(shadow()).toBe(dockedShadow);
   view.input.blur();
   const standalone = applyStandaloneRules();
   try {
     // 主屏 PWA 的留白带过渡，切到 24 也要等过渡结束。
     await finishCssTransitions();
     expect(bottom()).toBe("24px");
-    const card = composer.querySelector<HTMLElement>(".pwa-composer-card")!;
-    const shadow = () => getComputedStyle(card).boxShadow;
-    const fullShadow = shadow();
+    // 主屏 PWA 未聚焦时卡片下方留有 24，保留完整投影。
+    expect(shadow()).toBe(fullShadow);
     // 软键盘与辅助栏贴住底边，聚焦期间不再为 Home 指示条留白；收起按输入区内增减的高度过渡，
     // 并等 iOS 整页上推基本结束（延迟 collapse-out）再开始，收起键盘时不延迟。
     view.input.focus({ preventScroll: true });
@@ -421,7 +428,7 @@ test("keeps a fixed small gap in a touch browser tab and drops it on focus only 
     expect(bottom()).toBe("0px");
     // 卡片底边即可见区域底边，投影改为只向上方和两侧散开，不在底边被截断。
     expect(shadow()).not.toBe(fullShadow);
-    expect(shadow()).toBe("rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px -6px 20px -6px");
+    expect(shadow()).toBe(dockedShadow);
     await settle();
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     view.input.blur();
