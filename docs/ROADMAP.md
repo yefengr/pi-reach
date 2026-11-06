@@ -6,7 +6,6 @@
 
 | 事项 | 状态 | 当前边界与下一步 |
 | --- | --- | --- |
-| [输入区浮层与提示重新设计](plans/active/20261105-floating-composer-and-notices.md) | 进行中 | 2026-11-05 由 BACKLOG 移入，决策见 [ADR-20261105](adr/20261105-floating-composer-and-notices.md)：输入区浮于消息列表之上，顶部不再有占布局的提示条，连接与只读状态移入输入区提示行。P0 可评审原型见 [`docs/prototypes/20261105-floating-composer-notices/`](prototypes/20261105-floating-composer-notices/page.html)。P1 结构（输入区改为浮层、列表底部留白跟随输入区高度，观感不变）已提交 Pull Request，待 CI 与 staging 真机验收。下一步：P2 过渡、P3 提示分别提交，DESIGN 随各阶段同步。 |
 | [边框、分隔与圆角参照 iOS 的调整](plans/active/20261101-ios-borders-spacing.md) | 待验收 | 已随 PR #171 合并（透明度后续调整见 PR #173），决策见 [ADR-20261101](adr/20261101-hairline-concentric-radii.md)，规则已同步 DESIGN。待验收：Safari 与 iOS 真机可见度。 |
 | [会话输出连续性与 Working 兜底](plans/active/20261030-stream-output-continuity.md) | 待验收 | 已随 PR #162 合并并发布，决策见 [ADR](adr/20261030-stream-output-continuity.md)。待验收：真机录屏对比。 |
 | [时间线视口协调层重构](plans/active/20261022-timeline-viewport-coordinator.md) | 待验收 | 协调层、留白优先、软键盘原生处理与前插位置保护已分别随 PR #134、#135、#136、#139、#146 合并。待验收：设备上的跟随、软键盘与前插复验，不以合并或自动化通过替代关闭。 |
@@ -25,6 +24,7 @@
 
 | 事项 | 状态 | 交付范围与遗留边界 |
 | --- | --- | --- |
+| [输入区浮层与提示重新设计](plans/completed/20261105-floating-composer-and-notices.md) | 已完成 | 决策见 [ADR-20261105](adr/20261105-floating-composer-and-notices.md)：输入区浮于消息列表之上，列表底部留白跟随输入区高度；输入区内的增减改为高度过渡；顶部不再有占布局的提示条，连接与只读状态移入输入区提示行，局部错误改为浮动卡片，安装提示移到导航底部。P1–P3 经 PR #190–#193 合并到 `main`，DESIGN 与 ARCHITECTURE 已随各阶段同步，2026-11-06 iOS 真机验收通过；尚未发布到生产（`pwa-v0.0.35` 不含）。验收中发现的排队插入停在「插入中…」由 #194 修复，软键盘弹出时的输入区停靠与标题区取舍另见 PR #195。 |
 | [内容与空间过渡的时长、曲线与编排复核](plans/completed/20261031-motion-content-space.md) | 已完成 | 动效分为「操作反馈」与「内容与空间」两层，内容层参照 iOS 无回弹弹簧（[ADR-20261031](adr/20261031-motion-layers-ios-spring.md)）：气泡与新行、展开收起、Toast、Modal、浮动入口、侧栏、图片、Drawer、设置页与跟手收尾改用弹簧并按 0.8 倍校准时长，松手接住手指速度；编排改为先后进行（空会话首条消息、正文接在过程组后、本轮结束），并按三次真机录屏修正发送衔接与短对话收起。随 PR #165（`075f6f1`）、#167（`afad8a3`）合并，尚未发布到生产；跟手收尾、减少动态效果、Android／桌面与旧浏览器降级并入下次发布候选的真机验收。遗留的长对话收起短促下移见 [BACKLOG](BACKLOG.md#长对话中过程组自动收起后的短促下移)。 |
 | [浮动入口与局部提示的进出动效](plans/completed/20261027-floating-notice-motion.md) | 已完成 | `usePresence` 与 `.pwa-presence` 覆盖「最新」「重试」、连接提示条、局部错误条与运行时提示条，占布局提示条只淡化（B1）；随 PR #148（`a819b6c`）合并，`pwa-v0.0.30` 发布到生产。出现时长与曲线后由 [ADR-20261031](adr/20261031-motion-layers-ios-spring.md) 取代。P3 真机验收未单独进行，并入内容与空间过渡复核的发布候选验收；iOS 17.5 以前的 `@starting-style` 降级未实测。 |
 | [动效规范整理与一致性修复](plans/completed/20261027-motion-spec-cleanup.md) | 已完成 | P1 规范结构、位移与 `reduced` token、公共取值函数与守卫（PR #149），P2 Toast 离开 140ms（PR #150），随 `pwa-v0.0.30` 发布到生产。Toast 离开时长后由 [ADR-20261031](adr/20261031-motion-layers-ios-spring.md) 改为 200ms；P2 的展厅对照与真机复核未单独进行，并入内容与空间过渡复核的发布候选验收。 |
