@@ -401,18 +401,29 @@ test("drops the mobile Composer bottom gap while the input is focused on a touch
     // 触屏移动布局的留白带过渡，切到主屏 PWA 的 24 也要等过渡结束。
     await finishCssTransitions();
     expect(bottom()).toBe("24px");
-    // 软键盘与辅助栏贴住底边，聚焦期间不再为 Home 指示条留白；收起按输入区内增减的高度过渡。
+    const card = composer.querySelector<HTMLElement>(".pwa-composer-card")!;
+    const shadow = () => getComputedStyle(card).boxShadow;
+    const fullShadow = shadow();
+    // 软键盘与辅助栏贴住底边，聚焦期间不再为 Home 指示条留白；收起按输入区内增减的高度过渡，
+    // 并等 iOS 整页上推基本结束（延迟 collapse-out）再开始，收起键盘时不延迟。
     view.input.focus({ preventScroll: true });
     expect(getComputedStyle(composer).transitionProperty).toBe("padding-bottom");
     expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-in"));
+    expect(getComputedStyle(composer).transitionDelay).toBe(seconds("--pwa-duration-collapse-out"));
+    expect(getComputedStyle(card).transitionDelay).toBe(`0s, ${seconds("--pwa-duration-collapse-out")}`);
     await finishCssTransitions();
     expect(bottom()).toBe("0px");
+    // 卡片底边即可见区域底边，投影会被截断，只留接触层。
+    expect(shadow()).not.toBe(fullShadow);
+    expect(shadow()).toBe("rgba(0, 0, 0, 0.12) 0px 1px 2px 0px");
     await settle();
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     view.input.blur();
     expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-collapse-out"));
+    expect(getComputedStyle(composer).transitionDelay).toBe("0s");
     await finishCssTransitions();
     expect(bottom()).toBe("24px");
+    expect(shadow()).toBe(fullShadow);
     await settle();
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     // 桌面布局不受影响。

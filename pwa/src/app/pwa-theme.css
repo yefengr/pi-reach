@@ -38,6 +38,8 @@
   --pwa-shadow-color: #00000014;
   --pwa-shadow-contact-color: #0000001F;
   --pwa-shadow-composer: 0 1px 2px var(--pwa-shadow-contact-color), 0 6px 20px var(--pwa-shadow-color);
+  /* 触屏输入框聚焦、卡片贴住键盘辅助栏时只留接触层：投影会伸到可见区域之外被截断。 */
+  --pwa-shadow-composer-docked: 0 1px 2px var(--pwa-shadow-contact-color);
   /* 常驻导航比临时浮层更轻：接触层 8%、投影 4%，不改变浮层与 Composer 的阴影。 */
   --pwa-shadow-sidebar: 0 1px 2px #00000014, 0 2px 8px #0000000A;
   /* 文字选区：主色 20%，半透明以随气泡、代码块等底色变化，文字保持原色。 */
@@ -98,6 +100,7 @@
   --pwa-shadow-color: #00000047;
   --pwa-shadow-contact-color: #00000052;
   --pwa-shadow-composer: none;
+  --pwa-shadow-composer-docked: none;
   --pwa-shadow-sidebar: none;
   --pwa-selection: #98B8E63D;
   --pwa-complete: #95CBA8;
@@ -158,6 +161,7 @@
     --pwa-shadow-color: #00000047;
     --pwa-shadow-contact-color: #00000052;
     --pwa-shadow-composer: none;
+    --pwa-shadow-composer-docked: none;
     --pwa-shadow-sidebar: none;
     --pwa-selection: #98B8E63D;
     --pwa-complete: #95CBA8;
