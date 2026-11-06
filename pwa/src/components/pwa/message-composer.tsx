@@ -521,7 +521,7 @@ export function ReadOnlyComposer({ notice, modelName, thinking }: ReadOnlyCompos
     <div className="pwa-composer">
       <div className="pwa-composer-card">
         {/* 与在线输入框同一外观，只换卡片内提示行（ADR-20261105）。 */}
-        <ComposerHint hint={{ text: notice, tone: "neutral", busy: false }} />
+        <ComposerHint hint={{ text: notice, tone: "neutral", busy: false }} instant />
         <Textarea className="pwa-textarea" classNames={{ root: "pwa-composer-textarea", input: "pwa-composer-input" }} resize="none" value="" placeholder={t.composer.readOnlyPlaceholder} aria-label={t.composer.readOnlyPlaceholder} disabled rows={1} />
         <div className="pwa-composer-footer">
           <div className="pwa-composer-tools">

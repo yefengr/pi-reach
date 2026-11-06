@@ -22,7 +22,8 @@ const composerProps: ComponentProps<typeof MessageComposer> = {
 afterEach(async () => { await page.viewport(1280, 900); });
 
 // 断线 10 秒后，「立即重试」放在输入框卡片顶部的提示行（ADR-20261105）。
-test.each([{ width: 1280, height: 900 }, { width: 390, height: 844 }])("keeps the hint-line retry visible, keyboard accessible and inside the card at $width", async ({ width, height }) => {
+// 320 宽与较宽的字体下文字放不下时，提示文字省略，「立即重试」仍完整留在卡片内。
+test.each([{ width: 1280, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 640 }])("keeps the hint-line retry visible, keyboard accessible and inside the card at $width", async ({ width, height }) => {
   await page.viewport(width, height);
   const onRetry = vi.fn();
   const hint = { text: "Can't reach Relay. Retrying automatically…", tone: "neutral" as const, busy: true, action: { label: "Retry now", onAction: onRetry } };

@@ -229,10 +229,13 @@ body:has(.pwa-root) { overflow: hidden; }
  * 子项 min-height 为 0 才能被收拢。时长由各包裹层的 --pwa-composer-grow-in／out 指定，默认沿用折叠。
  * 减少动态效果时全局规则取消尺寸过渡，只剩透明度淡化。
  */
-.pwa-composer-grow { display: grid; grid-template-rows: 1fr; min-width: 0; transition: grid-template-rows var(--pwa-composer-grow-in, var(--pwa-duration-collapse-in)) var(--pwa-ease-content); }
-.pwa-composer-grow > * { min-height: 0; }
+.pwa-composer-grow { display: grid; grid-template-rows: 1fr; grid-template-columns: minmax(0, 1fr); min-width: 0; transition: grid-template-rows var(--pwa-composer-grow-in, var(--pwa-duration-collapse-in)) var(--pwa-ease-content); }
+/* 列宽不随内容撑开：提示行等单行内容过长时按自身规则省略，不把右侧操作挤出卡片。 */
+.pwa-composer-grow > * { min-width: 0; min-height: 0; }
 .pwa-composer-grow[data-presence="leaving"] { grid-template-rows: 0fr; transition-duration: var(--pwa-composer-grow-out, var(--pwa-duration-collapse-out)); }
 @starting-style { .pwa-composer-grow { grid-template-rows: 0fr; } }
+/* 输入框的固定内容（如只读说明）随输入框一同出现，不单独过渡。 */
+.pwa-composer-grow[data-instant], .pwa-composer-grow[data-instant] > * { transition: none; }
 /*
  * 浮动入口与局部提示的进出（DESIGN「动效」）：出现淡入（toast 时长、进入曲线），离开淡出（fade 时长、退出曲线），
  * 离开期间由 usePresence 设置 inert 与 aria-hidden。占布局的提示条只淡化、高度一次到位；
