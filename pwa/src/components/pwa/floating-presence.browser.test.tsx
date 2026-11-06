@@ -144,6 +144,19 @@ test("a dismissed error fades out with its text, and its dismiss button cannot b
   } finally { await screen.unmount(); }
 });
 
+// 与 Toast 同族：单行为 Toast 圆角，正文换行后改为 16（ADR-20261105）。
+test("a local error card switches between the toast radius and 16 as its text wraps", async () => {
+  const screen = await renderPwa(<StatusError onDismiss={() => {}} />);
+  const radius = () => getComputedStyle(document.querySelector(".pwa-status-error")!).borderTopLeftRadius;
+  try {
+    await expect.poll(radius).toBe("22px");
+    flushSync(() => setError("Too many queued messages or attachments. Existing messages were kept. Reconnect after the queue gets smaller."));
+    await expect.poll(radius).toBe("16px");
+    flushSync(() => setError("Could not update local history."));
+    await expect.poll(radius).toBe("22px");
+  } finally { await screen.unmount(); }
+});
+
 test("reduced motion keeps only the fade, without the shift", async () => {
   await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   const screen = await renderPwa(<Actions onLatest={() => {}} />);

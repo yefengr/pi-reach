@@ -1,5 +1,5 @@
 import { Portal } from "@mantine/core";
-import { createContext, useCallback, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PwaOperationNotifications, PwaToastProvider } from "@/components/pwa/pwa-operation-notifications";
 import { createOperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { useViewportDensity } from "@/lib/pwa/use-viewport-density";
@@ -7,20 +7,23 @@ import "@/app/workspace-viewport.css";
 
 type PwaRuntimeNoticeContextValue = {
   target: HTMLElement | null;
-  setWorkspaceTarget: (target: HTMLElement | null) => void;
+  /** 登记一个工作区展示位置，返回撤销函数；多个位置同时存在时取最后登记的一个。 */
+  registerWorkspaceTarget: (target: HTMLElement) => () => void;
 };
 
 const PwaRuntimeNoticeContext = createContext<PwaRuntimeNoticeContextValue | null>(null);
 
-export function PwaRuntimeNoticeSlot() {
+/**
+ * 安装与浏览器能力提示的工作区展示位置，位于导航底部（ADR-20261105）。桌面侧栏与移动导航各有一个：
+ * 移动导航打开时后登记，提示移入其中；关闭后回到侧栏位置（移动布局不显示侧栏，提示随之不可见）。
+ */
+export function PwaRuntimeNoticeSlot({ className }: { className?: string }) {
   const id = useId();
-  const context = useContext(PwaRuntimeNoticeContext);
-  const setWorkspaceTarget = context?.setWorkspaceTarget;
-  const setSlot = useCallback((target: HTMLDivElement | null) => {
-    setWorkspaceTarget?.(target);
-  }, [setWorkspaceTarget]);
+  const register = useContext(PwaRuntimeNoticeContext)?.registerWorkspaceTarget;
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => (slot && register ? register(slot) : undefined), [register, slot]);
 
-  return <div id={id} ref={setSlot} className="pwa-runtime-notice-slot" />;
+  return <div id={id} ref={setSlot} className={className ?? "pwa-runtime-notice-slot"} />;
 }
 
 export function PwaRuntimeNoticePortal({ children }: { children: ReactNode }) {
@@ -36,14 +39,16 @@ export function PwaAppShell({ children, runtimeNotice }: { children: ReactNode; 
   const fallbackId = useId();
   const [fallbackTarget, setFallbackTarget] = useState<HTMLDivElement | null>(null);
   const [toastFallbackTarget, setToastFallbackTarget] = useState<HTMLDivElement | null>(null);
-  const [workspaceTarget, setWorkspaceTarget] = useState<HTMLElement | null>(null);
+  const [workspaceTargets, setWorkspaceTargets] = useState<readonly HTMLElement[]>([]);
+  const workspaceTarget = workspaceTargets.at(-1) ?? null;
   const [notifications] = useState(createOperationNotificationController);
-  const registerWorkspaceTarget = useCallback((target: HTMLElement | null) => {
-    setWorkspaceTarget((current) => current === target ? current : target);
+  const registerWorkspaceTarget = useCallback((target: HTMLElement) => {
+    setWorkspaceTargets((current) => [...current.filter((item) => item !== target), target]);
+    return () => setWorkspaceTargets((current) => current.filter((item) => item !== target));
   }, []);
   const context = useMemo(() => ({
     target: workspaceTarget ?? fallbackTarget,
-    setWorkspaceTarget: registerWorkspaceTarget,
+    registerWorkspaceTarget,
   }), [fallbackTarget, registerWorkspaceTarget, workspaceTarget]);
 
   const toastTarget = workspaceTarget?.closest<HTMLElement>(".pwa-root")

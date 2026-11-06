@@ -1,7 +1,8 @@
 import { ActionIcon, Button } from "@mantine/core";
-import { ArrowDownToLine, RefreshCw, X } from "lucide-react";
+import { ArrowDownToLine, CircleAlert, RefreshCw, X } from "lucide-react";
 import { localizeFeedback, safeFeedbackMessage } from "@/lib/pwa/feedback-messages";
 import { useI18n } from "@/lib/i18n";
+import { observeWrappedText } from "@/lib/ui/wrapped-text";
 import { presenceProps, usePresence } from "./use-presence";
 
 type MessageActionsProps = {
@@ -35,6 +36,9 @@ export function PwaMessageActions({ show, showRetry, showLatest, unreadOutput, o
   );
 }
 
+// 正文换行时卡片圆角改为 16（ADR-20261105）。
+const observeStatusErrorText = (text: HTMLSpanElement | null) => text ? observeWrappedText(text, ".pwa-status-error") : undefined;
+
 export function PwaStatusError({ message, onDismiss }: StatusErrorProps) {
   const { t, locale } = useI18n();
   const safeMessage = safeFeedbackMessage(message);
@@ -44,7 +48,8 @@ export function PwaStatusError({ message, onDismiss }: StatusErrorProps) {
 
   return (
     <div className="pwa-status-error pwa-presence" role="status" {...presenceProps(presence)}>
-      <span>{presence.rendered}</span>
+      <CircleAlert className="pwa-status-error-icon" size={16} aria-hidden="true" />
+      <span ref={observeStatusErrorText}>{presence.rendered}</span>
       <ActionIcon className="pwa-status-error-dismiss" type="button" onClick={onDismiss} aria-label={t.common.dismiss}>
         <X size={16} />
       </ActionIcon>

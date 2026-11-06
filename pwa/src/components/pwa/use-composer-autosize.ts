@@ -28,8 +28,10 @@ function availableInputHeight(input: HTMLTextAreaElement, sixLines: number, mini
   const bodyLine = pixels(listStyle.getPropertyValue("--pwa-text-body")) * pixels(listStyle.getPropertyValue("--pwa-leading-body"));
   const latest = footer.querySelector<HTMLElement>(".pwa-message-actions");
   const latestHeight = latest?.getBoundingClientRect().height ?? 0;
-  const compactReadingSpace = Math.ceil(bodyLine + 2 * COMPACT_READING_PADDING + latestHeight);
-  const normalReadingSpace = bodyLine + pixels(listStyle.getPropertyValue("--pwa-timeline-pad-top")) + pixels(listStyle.getPropertyValue("--pwa-timeline-pad-bottom")) + latestHeight;
+  // 局部错误浮在列表顶部、不改变列表位置，它占用的顶部留白同样要从阅读空间中扣除。
+  const topNotices = pixels(listStyle.getPropertyValue("--pwa-top-notices-space"));
+  const compactReadingSpace = Math.ceil(bodyLine + 2 * COMPACT_READING_PADDING + latestHeight + topNotices);
+  const normalReadingSpace = bodyLine + pixels(listStyle.getPropertyValue("--pwa-timeline-pad-top")) + pixels(listStyle.getPropertyValue("--pwa-timeline-pad-bottom")) + latestHeight + topNotices;
   // 从真实布局扣除顶栏/通知及 footer 的非文字高度，附件与队列变化自然计入预算。
   const footerChrome = ownSendFooterChrome(input) ?? footer.getBoundingClientRect().height - input.getBoundingClientRect().height;
   const space = main.getBoundingClientRect().bottom - list.getBoundingClientRect().top - footerChrome;
@@ -97,9 +99,10 @@ export function useComposerAutosize(inputRef: RefObject<HTMLTextAreaElement | nu
     const observer = new ResizeObserver(schedule);
     const main = input.closest<HTMLElement>(".pwa-main");
     const footer = input.closest<HTMLElement>(".pwa-chat-footer");
-    // 顶部标题与提示条出现/消失只改变工作区剩余高度，主区、footer 与输入区自身尺寸不变，需一并观察。
+    // 标题区变高只改变工作区剩余高度；局部错误浮在列表上，只改变提示区自身尺寸。两者都不改变主区、footer 与输入区，需一并观察。
     const body = input.closest<HTMLElement>(".pwa-workspace-body");
-    for (const element of [input, main, footer, body]) if (element) observer.observe(element);
+    const notices = main?.querySelector<HTMLElement>(".pwa-main-notices");
+    for (const element of [input, main, footer, body, notices]) if (element) observer.observe(element);
     window.addEventListener("resize", schedule);
     return () => {
       cancelAnimationFrame(frame);

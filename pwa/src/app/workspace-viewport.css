@@ -1,7 +1,7 @@
 /* 由实际可用空间决定阅读留白，不依赖布局断点或物理屏幕高度。 */
 /* 直接覆盖留白而不改尾部留白变量：输入框预算按这两个变量判断是否受限，改写会让预算来回切换。 */
 .pwa-app-shell .pwa-main[data-composer-budget] .pwa-message-list {
-  padding-top: 8px;
+  padding-top: calc(8px + var(--pwa-top-notices-space, 0px));
   padding-bottom: calc(8px + var(--pwa-chat-footer-space, 0px));
   scroll-padding-bottom: calc(8px + var(--pwa-chat-footer-space, 0px));
 }

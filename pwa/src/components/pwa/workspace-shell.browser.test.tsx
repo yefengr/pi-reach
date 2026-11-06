@@ -275,13 +275,16 @@ test("aligns the sidebar bottom with the real composer card across safe areas an
       document.querySelector(".pwa-root")!.setAttribute("data-sidebar-resizing", "");
       expect(getComputedStyle(separator, "::before").backgroundColor).toBe("rgba(0, 0, 0, 0)");
       document.querySelector(".pwa-root")!.removeAttribute("data-sidebar-resizing");
-      // very-short 且主区有局部错误：输入区与侧栏同步收到 4 + 安全区底部留白。
+      // 局部错误浮在标题区下方、不占布局（ADR-20261105）：极矮窗口出现错误时，输入区与侧栏的底部留白都不变。
       document.querySelector<HTMLElement>(".pwa-app-shell")!.dataset.compactHeight = "very-short";
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const gaps = [readGap(".pwa-desktop-navigation"), readGap(".pwa-composer-card")];
       const error = document.createElement("div");
       error.className = "pwa-status-error";
       document.querySelector<HTMLElement>(".pwa-main-notices")!.append(error);
-      await expect.poll(() => readGap(".pwa-desktop-navigation")).toBe(4 + safeBottom);
-      await expect.poll(() => readGap(".pwa-composer-card")).toBe(4 + safeBottom);
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      expect([readGap(".pwa-desktop-navigation"), readGap(".pwa-composer-card")]).toEqual(gaps);
+      expect(gaps[0]).toBe(gaps[1]);
     } finally {
       await screen.unmount();
       document.documentElement.style.removeProperty("--pwa-safe-bottom");
