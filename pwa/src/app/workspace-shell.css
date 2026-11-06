@@ -86,8 +86,14 @@
   transition: grid-template-columns var(--pwa-sidebar-motion) var(--pwa-ease-content);
 }
 .pwa-root[data-sidebar-collapsed] .pwa-layout { grid-template-columns: 0px minmax(0, 1fr); }
+/* 会话标题区的滚动边缘分隔贯穿整个窗口，从悬浮侧栏下方穿过：主区裁剪溢出，侧栏列这一段由布局层补画，
+   高度取布局脚本测得的标题区下沿；主区随收起滑入时盖住这一段，与标题区自身的分隔首尾相接。 */
+.pwa-root .pwa-layout::before { content: ""; position: absolute; top: calc(var(--pwa-title-bar-bottom, 0px) - var(--pwa-hairline)); left: 0; width: var(--pwa-sidebar-span); border-bottom: var(--pwa-hairline) solid var(--pwa-separator); opacity: 0; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-layout:has(.pwa-message-list[data-scroll-edge])::before { opacity: 1; }
 
+/* 定位后按文档顺序盖住布局层补画的分隔。 */
 .pwa-root .pwa-desktop-navigation {
+  position: relative;
   width: var(--pwa-sidebar-width);
   min-height: 0;
   margin-top: var(--pwa-safe-top);
@@ -216,7 +222,8 @@
 .pwa-root .pwa-workspace-body { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
 .pwa-root .pwa-workspace-column { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* 桌面标题区始终贴顶并避让安全区：首行对齐共享 48px 顶栏带，最小高 64px；字号变大时自然撑高。 */
-.pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); }
+/* 左内边距与侧栏列宽同时长、同曲线过渡：收展时标题只朝一个方向移动，不先反向跳到收起入口的避让位置。 */
+.pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); transition: padding-left var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }
 /* 首行文字的中心落在 48px 顶栏带中央；行距按 2px，第二行是普通项目文本。 */
 .pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; align-content: start; gap: var(--pwa-space-pair); padding-top: calc((var(--pwa-topbar-height) - var(--pwa-text-title) * var(--pwa-leading-ui)) / 2); }
@@ -311,6 +318,7 @@
   /* 移动主区贴满屏幕，不做卡片；内部按各侧安全区避让。 */
   .pwa-root { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-main-safe-right: var(--pwa-safe-right); --pwa-main-safe-bottom: var(--pwa-safe-bottom); --pwa-status-backdrop: var(--pwa-bg); transition: none; }
   .pwa-root .pwa-layout { display: flex; transition: none; background: var(--pwa-bg); }
+  .pwa-root .pwa-layout::before { content: none; }
   .pwa-root .pwa-main { flex: 1 1 auto; margin: 0; border-radius: 0; touch-action: pan-y; transition: none; }
   .pwa-root .pwa-workspace-state { touch-action: pan-y; }
   .pwa-root .pwa-settings-view { touch-action: pan-y; }
@@ -320,7 +328,7 @@
   /* 移动顶栏：菜单图标与会话名共同构成导航入口，不显示 Logo；避开状态栏。 */
   /* 移动端回到单行 48px 顶栏，项目行随标题区隐藏；安全区叠加在上内边距，内容垂直居中。 */
   .pwa-root .pwa-title-bar,
-  .pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); align-items: center; padding-top: var(--pwa-safe-top); padding-bottom: 0; padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); }
+  .pwa-root[data-sidebar-collapsed] .pwa-title-bar { min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); align-items: center; padding-top: var(--pwa-safe-top); padding-bottom: 0; padding-right: calc(4px + var(--pwa-safe-right)); padding-left: calc(4px + var(--pwa-safe-left)); transition: none; }
   .pwa-root .pwa-title-bar-heading { display: none; }
   /* 已连接时只显示圆点，把宽度留给会话名；文字仍供读屏，其他状态照常显示。 */
   .pwa-root .pwa-session-trigger { min-width: 0; min-height: var(--pwa-hit-target); flex: 1 1 auto; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 0; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: transparent; font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }

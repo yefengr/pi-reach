@@ -5,6 +5,7 @@ import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
  * 同步主区提示区（局部错误卡片）的几何到工作区根节点。
  * Toast 挂在根节点上，按主区居中并落在提示区下方，避免压到侧栏或卡片。
  * 提示区浮在列表之上（ADR-20261105）：其高度同步为列表顶部留白，并通知时间线视口保持阅读位置，正文不被推开。
+ * 标题区下沿另写入 --pwa-title-bar-bottom，供布局层在侧栏下方补画同高的滚动边缘分隔。
  */
 export function useMainNoticesSpace(rootRef: RefObject<HTMLElement | null>, noticesRef: RefObject<HTMLElement | null>) {
   useLayoutEffect(() => {
@@ -17,6 +18,8 @@ export function useMainNoticesSpace(rootRef: RefObject<HTMLElement | null>, noti
       const title = notices.previousElementSibling;
       const top = `${title instanceof HTMLElement ? title.offsetTop + title.offsetHeight : 0}px`;
       if (notices.style.top !== top) notices.style.top = top;
+      // 主区在桌面布局中与布局层顶边对齐，相对主区的下沿即布局层坐标。
+      root.style.setProperty("--pwa-title-bar-bottom", top);
       const base = root.getBoundingClientRect();
       const box = notices.getBoundingClientRect();
       root.style.setProperty("--pwa-main-notices-bottom", `${box.bottom - base.top}px`);

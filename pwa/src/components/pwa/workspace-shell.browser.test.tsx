@@ -223,6 +223,62 @@ test("preserves the visible message anchor through both sidebar transitions", as
   expect(Math.abs(offset() - initialOffset)).toBeLessThanOrEqual(2);
 });
 
+test("continues the title scroll edge beneath the floating sidebar to the window edge", async () => {
+  const screen = await mount();
+  const layout = document.querySelector<HTMLElement>(".pwa-layout")!;
+  const titleBar = document.querySelector<HTMLElement>(".pwa-title-bar")!;
+  const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+  const segment = () => getComputedStyle(layout, "::before");
+  const opacities = () => [segment().opacity, getComputedStyle(titleBar, "::after").opacity];
+  const segmentBottom = () => Math.round(layout.getBoundingClientRect().top + parseFloat(segment().top) + parseFloat(segment().borderBottomWidth));
+  await settleLayout();
+  // 列表在顶部时两段都不画；离开顶部后与标题区分隔一起淡入。滚动边缘由应用级 useScrollIndicator 写入，这里直接切换。
+  await expect.poll(opacities).toEqual(["0", "0"]);
+  list.toggleAttribute("data-scroll-edge", true);
+  await expect.poll(opacities).toEqual(["1", "1"]);
+  // 补画段从窗口左缘画到主区起点，底边与标题区分隔同高；侧栏定位后按文档顺序盖在它上面。
+  expect(segment().left).toBe("0px");
+  expect(Math.round(parseFloat(segment().width))).toBe(Math.round(titleBar.getBoundingClientRect().left));
+  expect(segmentBottom()).toBe(Math.round(titleBar.getBoundingClientRect().bottom));
+  expect(getComputedStyle(document.querySelector(".pwa-desktop-navigation")!).position).toBe("relative");
+  // 字号变大撑高标题区时，补画段随布局脚本测得的下沿同步下移。
+  const initialBottom = segmentBottom();
+  document.documentElement.dataset.pwaTextSize = "xlarge";
+  await expect.poll(() => Math.round(titleBar.getBoundingClientRect().bottom)).toBeGreaterThan(initialBottom);
+  await expect.poll(segmentBottom).toBe(Math.round(titleBar.getBoundingClientRect().bottom));
+  // 收起后主区贴到窗口左缘，标题区分隔自身即贯穿全宽。
+  await screen.getByRole("button", { name: "Collapse sidebar" }).click();
+  await settleLayout();
+  expect(Math.round(titleBar.getBoundingClientRect().left)).toBe(0);
+  await page.viewport(390, 844);
+  await expect.poll(() => segment().content).toBe("none");
+});
+
+test("moves the session title in one direction while the sidebar collapses and expands", async () => {
+  const screen = await mount();
+  const titleBar = document.querySelector<HTMLElement>(".pwa-title-bar")!;
+  const layout = document.querySelector<HTMLElement>(".pwa-layout")!;
+  const name = titleBar.querySelector<HTMLElement>(".pwa-title-bar-name")!;
+  await settleLayout();
+  const sample = async (label: string) => {
+    const samples = [name.getBoundingClientRect().left];
+    // 同步派发点击，从切换前一帧开始采样，避免异步点击晚到掩盖第一帧的跳动。
+    (screen.getByRole("button", { name: label }).element() as HTMLElement).click();
+    for (let frame = 0; frame < 120 && (frame === 0 || [titleBar, layout].some((element) => element.getAnimations().length > 0)); frame += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      samples.push(name.getBoundingClientRect().left);
+    }
+    return samples.map(Math.round);
+  };
+  const collapse = await sample("Collapse sidebar");
+  expect(collapse.length).toBeGreaterThan(3);
+  expect(collapse.every((left, index) => index === 0 || left <= collapse[index - 1])).toBe(true);
+  expect(collapse.at(-1)).toBeLessThan(collapse[0]);
+  const expand = await sample("Expand sidebar");
+  expect(expand.every((left, index) => index === 0 || left >= expand[index - 1])).toBe(true);
+  expect(expand.at(-1)).toBe(collapse[0]);
+});
+
 test("keeps mobile navigation independent from desktop preference and shows both lists", async () => {
   localStorage.setItem("pi-reach-sidebar-collapsed", "true");
   await page.viewport(390, 844);
