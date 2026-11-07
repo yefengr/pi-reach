@@ -6,7 +6,7 @@
 
 - React、Vite、TypeScript；依赖版本以 [`package.json`](package.json) 和锁文件为准，Node 版本以根 `.node-version` 为准。
 - Mantine core/hooks 提供基础组件与交互能力；业务 CSS 承担布局、响应式及项目样式。Tailwind 只提供 preflight 与入口，业务组件不使用其间距、颜色和圆角工具类。
-- Dexie 管理 IndexedDB；Serwist 与 Vite 构建集成；ZXing 用于二维码扫描，react-markdown/remark-gfm 用于消息展示。
+- Dexie 管理 IndexedDB；Serwist 与 Vite 构建集成；jsQR 用于二维码扫描，react-markdown/remark-gfm 用于消息展示。
 - Vitest 分 Node 与 Browser Mode；Playwright 承担跨模块 E2E。
 - 包管理器使用根 pnpm workspace；依赖 catalog、`allowBuilds` 和 overrides 以 [`../pnpm-workspace.yaml`](../pnpm-workspace.yaml) 为准。使用根 `pnpm-lock.yaml`，不创建子项目锁文件，不另用 npm/yarn 安装。
 
