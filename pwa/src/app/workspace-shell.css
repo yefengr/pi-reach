@@ -59,17 +59,18 @@
   }
 }
 /* 主屏 PWA 触屏移动布局下，输入框聚焦且软键盘到位（根节点 data-soft-keyboard="open"，按可视窗口高度判断，见 use-soft-keyboard）时，
-   软键盘与系统辅助栏贴住屏幕底边，不再需要为 Home 指示条留白：输入区停靠，底部留白收为 0、改用贴底阴影；键盘收起或失焦即抬起。
-   外接键盘只聚焦、可视高度不变，不触发。键盘到位与停靠是两个独立动作（DESIGN「编排」）：等待由脚本在可视高度最后一次变化后计时，
-   CSS 不设延迟。停靠与抬起按侧栏的进入与离开取 drawer／drawer-out，阴影与位移同一时长与曲线，从朝下投影平滑过渡为朝上；
+   软键盘与系统辅助栏贴住屏幕底边，不再需要为 Home 指示条留白：输入区停靠，整体下移一个底部留白、卡片贴住可见区底边，改用贴底阴影；
+   键盘收起或失焦即抬起。停靠用位移而不改留白：输入区布局高度不变，消息列表的底部留白与可滚动范围随之不变，跟随最新时也不随输入区
+   一起下沉。外接键盘只聚焦、可视高度不变，不触发。停靠并入系统上推：脚本检测到键盘即标记，停靠以 keyboard-dock 与剩余的上推同时
+   结束，CSS 不设延迟；抬起与键盘收起同时开始，取 drawer-out。阴影与位移同一时长与曲线，从朝下投影平滑过渡为朝上；
    减少动态效果时只保留颜色与透明度过渡，二者一次到位。 */
 @media (display-mode: standalone) {
   @media (any-pointer: coarse), (hover: none) {
     @media (max-width: 767.98px) {
-      .pwa-root .pwa-composer { transition: padding-bottom var(--pwa-duration-drawer-out) var(--pwa-ease-content); }
+      .pwa-root .pwa-chat-footer { transition: transform var(--pwa-duration-drawer-out) var(--pwa-ease-content); }
       .pwa-root .pwa-composer .pwa-composer-card { box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard), box-shadow var(--pwa-duration-drawer-out) var(--pwa-ease-content); }
-      :root[data-soft-keyboard="open"] .pwa-root .pwa-composer:has(.pwa-composer-input:focus) { padding-bottom: 0; transition-duration: var(--pwa-duration-drawer); }
-      :root[data-soft-keyboard="open"] .pwa-root .pwa-composer:has(.pwa-composer-input:focus) .pwa-composer-card { box-shadow: var(--pwa-shadow-composer-docked); transition-duration: var(--pwa-duration-fade), var(--pwa-duration-drawer); }
+      :root[data-soft-keyboard="open"] .pwa-root .pwa-chat-footer:has(.pwa-composer-input:focus) { transform: translateY(var(--pwa-main-bottom-gap)); transition-duration: var(--pwa-duration-keyboard-dock); }
+      :root[data-soft-keyboard="open"] .pwa-root .pwa-chat-footer:has(.pwa-composer-input:focus) .pwa-composer-card { box-shadow: var(--pwa-shadow-composer-docked); transition-duration: var(--pwa-duration-fade), var(--pwa-duration-keyboard-dock); }
     }
   }
 }

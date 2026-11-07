@@ -1,13 +1,12 @@
 import { useLayoutEffect } from "react";
-import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 
 /** 可视高度比同宽度的无键盘基准矮出这么多才认定软键盘弹出；浏览器工具栏伸缩只有几十 px，iPad 外接键盘的快捷栏约 55px。 */
 const KEYBOARD_MIN_HEIGHT = 120;
 export const SOFT_KEYBOARD_ATTRIBUTE = "data-soft-keyboard";
 export const SOFT_KEYBOARD_BASELINE_KEY = "pi-reach-soft-keyboard-baselines";
 
-/** opening：已检测到键盘，等待键盘到位；open：键盘到位后的停顿已结束，输入区可以停靠。 */
-export type SoftKeyboardState = "opening" | "open";
+/** open：已检测到软键盘，输入区随即停靠。 */
+export type SoftKeyboardState = "open";
 type Baselines = Record<string, number>;
 
 const TEXT_INPUT_TYPES = new Set(["text", "search", "url", "tel", "email", "password", "number"]);
@@ -36,8 +35,8 @@ function writeBaselines(baselines: Baselines) {
  * 基准：没有可编辑元素聚焦时键盘必然收起，此时的可视高度即该显示模式与可视宽度下的无键盘基准，每次读到都覆盖，
  * 过时的值随之纠正；按显示模式与宽度存入本地，键盘开着时旋转到新宽度也有基准可比。以宽度而非屏幕方向区分：
  * 键盘只改变高度，旋转与分屏必然改变宽度，且宽高在同一次 resize 中更新。
- * 时机：iOS 在整页上推开始时一次变到终点、之后不再报告进度，安卓可能随键盘逐步缩小；统一在可视高度最后一次变化后
- * 等 keyboard-lag（上推约 250ms 加约 100ms 停顿）再由 opening 转为 open。页面缩放时可视尺寸与键盘无关，不更新判断。
+ * 时机：iOS 在整页上推开始的那一帧把可视高度一次变到终点，脚本约在上推开始后 50ms 读到，之后不再有进度；检测到即标记，
+ * 输入区以 keyboard-dock 停靠，与剩余的上推同时结束，停靠并入上推、不再单独出现。页面缩放时可视尺寸与键盘无关，不更新判断。
  * 只标记浏览器平移页面的情形（布局视口不变、只缩小可视窗口，如 iOS）：浏览器缩小布局视口时（安卓 Chrome 执行
  * interactive-widget=resizes-content），外壳已随视口贴住键盘，输入区无需停靠，不打标记。
  */
@@ -45,15 +44,7 @@ export function observeSoftKeyboard(root: HTMLElement): () => void {
   const viewport = window.visualViewport;
   if (!viewport) return () => {};
   const baselines = readBaselines();
-  let timer: number | null = null;
-  const clearTimer = () => {
-    if (timer !== null) window.clearTimeout(timer);
-    timer = null;
-  };
-  const close = () => {
-    clearTimer();
-    root.removeAttribute(SOFT_KEYBOARD_ATTRIBUTE);
-  };
+  const close = () => root.removeAttribute(SOFT_KEYBOARD_ATTRIBUTE);
   const update = (event?: Event) => {
     if (viewport.scale !== 1) return;
     const mode = window.matchMedia("(display-mode: standalone)").matches ? "standalone" : "browser";
@@ -77,14 +68,9 @@ export function observeSoftKeyboard(root: HTMLElement): () => void {
       close();
       return;
     }
-    // 已停靠后键盘高度再变化（切换表情键盘等）不重新停靠；等待中每次变化都重新计时。
+    // 已停靠后键盘高度再变化（切换表情键盘等）不重复写入。
     if (root.getAttribute(SOFT_KEYBOARD_ATTRIBUTE) === "open") return;
-    root.setAttribute(SOFT_KEYBOARD_ATTRIBUTE, "opening" satisfies SoftKeyboardState);
-    clearTimer();
-    timer = window.setTimeout(() => {
-      timer = null;
-      root.setAttribute(SOFT_KEYBOARD_ATTRIBUTE, "open" satisfies SoftKeyboardState);
-    }, readPwaMotionDuration("--pwa-duration-keyboard-lag"));
+    root.setAttribute(SOFT_KEYBOARD_ATTRIBUTE, "open" satisfies SoftKeyboardState);
   };
   update();
   viewport.addEventListener("resize", update);

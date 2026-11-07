@@ -400,6 +400,9 @@ test("keeps a fixed small gap in a touch browser tab and docks only in the stand
   const bottom = () => getComputedStyle(composer).paddingBottom;
   const seconds = (token: string) => `${parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) / 1000}s`;
   const card = composer.querySelector<HTMLElement>(".pwa-composer-card")!;
+  const footer = composer.closest<HTMLElement>(".pwa-chat-footer")!;
+  const shift = () => getComputedStyle(footer).transform;
+  const footerSpace = () => view.list.style.getPropertyValue("--pwa-chat-footer-space");
   const shadow = () => getComputedStyle(card).boxShadow;
   const fullShadow = "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px 6px 20px 0px";
   const dockedShadow = "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px -6px 20px -6px";
@@ -425,30 +428,41 @@ test("keeps a fixed small gap in a touch browser tab and docks only in the stand
     await finishCssTransitions();
     expect(bottom()).toBe("24px");
     expect(shadow()).toBe(fullShadow);
-    // 可视高度明显变矮即软键盘弹出；键盘到位与停靠是两个独立动作：脚本在最后一次变化后等 keyboard-lag 才标记 open，
-    // 停靠以 drawer 进行、CSS 不设延迟，阴影同一时长；键盘收起或失焦即以 drawer-out 抬起。
+    // 可视高度明显变矮即软键盘弹出；停靠并入系统上推：脚本检测到即标记 open，停靠以 keyboard-dock 进行、CSS 不设延迟，
+    // 阴影同一时长；键盘收起或失焦即以 drawer-out 抬起。
+    await settle();
+    expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
+    const followingTop = view.list.scrollTop;
+    const restingSpace = footerSpace();
+    const restingCardBottom = Math.round(card.getBoundingClientRect().bottom);
     viewport.change({ height: 415 });
-    expect(document.documentElement.dataset.softKeyboard).toBe("opening");
-    expect(bottom()).toBe("24px");
-    await expect.poll(() => document.documentElement.dataset.softKeyboard, { timeout: 2000 }).toBe("open");
-    expect(getComputedStyle(composer).transitionProperty).toBe("padding-bottom");
-    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-drawer"));
-    expect(getComputedStyle(composer).transitionDelay).toBe("0s");
-    expect(getComputedStyle(card).transitionDuration).toBe(`${seconds("--pwa-duration-fade")}, ${seconds("--pwa-duration-drawer")}`);
+    expect(document.documentElement.dataset.softKeyboard).toBe("open");
+    expect(getComputedStyle(footer).transitionProperty).toBe("transform");
+    expect(getComputedStyle(footer).transitionDuration).toBe(seconds("--pwa-duration-keyboard-dock"));
+    expect(getComputedStyle(footer).transitionDelay).toBe("0s");
+    expect(getComputedStyle(card).transitionDuration).toBe(`${seconds("--pwa-duration-fade")}, ${seconds("--pwa-duration-keyboard-dock")}`);
     await finishCssTransitions();
-    expect(bottom()).toBe("0px");
+    // 停靠以位移把卡片整体下移一个底部留白，贴住可见区底边；留白本身不变。
+    expect(bottom()).toBe("24px");
+    expect(Math.round(card.getBoundingClientRect().bottom) - restingCardBottom).toBe(24);
     // 卡片底边即可见区域底边，投影改为只向上方和两侧散开，不在底边被截断。
     expect(shadow()).toBe(dockedShadow);
+    // 输入区布局高度不变：列表底部留白与滚动位置都不变，跟随最新时消息不随输入区一起下沉。
     await settle();
+    expect(footerSpace()).toBe(restingSpace);
+    expect(Math.round(view.list.scrollTop)).toBe(Math.round(followingTop));
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     view.input.blur();
     expect(document.documentElement.hasAttribute("data-soft-keyboard")).toBe(false);
-    expect(getComputedStyle(composer).transitionDuration).toBe(seconds("--pwa-duration-drawer-out"));
+    expect(getComputedStyle(footer).transitionDuration).toBe(seconds("--pwa-duration-drawer-out"));
     viewport.change({ height: 844 });
     await finishCssTransitions();
-    expect(bottom()).toBe("24px");
+    expect(shift()).toBe("none");
+    expect(Math.round(card.getBoundingClientRect().bottom)).toBe(restingCardBottom);
     expect(shadow()).toBe(fullShadow);
     await settle();
+    expect(footerSpace()).toBe(restingSpace);
+    expect(Math.round(view.list.scrollTop)).toBe(Math.round(followingTop));
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
     // 桌面布局不受影响。
     await page.viewport(1280, 844);

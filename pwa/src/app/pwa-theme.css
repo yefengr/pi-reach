@@ -308,9 +308,9 @@
   --pwa-duration-collapse-out: 280ms;
   /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
   --pwa-duration-collapse-settle: 400ms;
-  /* 只由脚本计时（use-soft-keyboard）：可视高度最后一次变化后等待，iOS 整页上推约 250ms 加约 100ms 停顿，再让主屏 PWA 输入区停靠，
-     键盘到位与停靠成为两个独立动作。不随减少动态效果替换：停靠仍等键盘到位，只是不再过渡。 */
-  --pwa-duration-keyboard-lag: 350ms;
+  /* 主屏 PWA 输入区随软键盘停靠：脚本约在 iOS 整页上推（约 250ms）开始后 50ms 检测到键盘并立即停靠，停靠与剩余的上推同时结束，
+     并入上推、不单独出现。抬起仍按 drawer-out，与键盘收起同时开始。 */
+  --pwa-duration-keyboard-dock: 200ms;
   --pwa-duration-image-in: 400ms;
   --pwa-duration-image-out: 280ms;
   --pwa-duration-toast: 400ms;
@@ -407,6 +407,7 @@
     --pwa-duration-page-out: var(--pwa-duration-reduced);
     --pwa-duration-drawer: var(--pwa-duration-reduced);
     --pwa-duration-drawer-out: var(--pwa-duration-reduced);
+    --pwa-duration-keyboard-dock: var(--pwa-duration-reduced);
     --pwa-duration-switch-out: var(--pwa-duration-reduced);
     --pwa-duration-modal-in: var(--pwa-duration-reduced);
     --pwa-duration-modal-out: var(--pwa-duration-reduced);
