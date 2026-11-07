@@ -281,6 +281,8 @@ export const zh: Messages = {
     removeImage: "移除图片",
     placeholder: "向 Pi 发送消息…",
     readOnlyPlaceholder: "无法发送消息",
+    historyRecovering: "正在同步记录，暂不能发送",
+    historyRecoveryFailed: "记录同步失败，请重试",
     stoppingTask: "正在停止当前任务",
     stopTask: "停止当前任务",
     send: "发送消息",

@@ -34,6 +34,15 @@ test("renders Mantine textarea, attachment menu and a disabled empty Send", () =
   expect(html).toContain('accept="image/*"');
 });
 
+test("history recovery disables Send without locking the draft or Stop", () => {
+  const html = renderComposer({ draft: "Keep this draft", sendReady: false });
+  expect(button(html, "Send message")).toContain('disabled=""');
+  expect(html).toContain("Keep this draft</textarea>");
+  expect(html.match(/<textarea[^>]*>/)?.[0]).not.toMatch(/disabled|readOnly/);
+  expect(button(renderComposer({ isWorking: true, sendReady: false }), "Stop current task")).not.toContain('disabled=""');
+  expect(button(renderComposer({ draft: "Ready" }), "Send message")).not.toContain('disabled=""');
+});
+
 test("renders the opened Mantine attachment menu", () => {
   const html = renderToStaticMarkup(<PwaUiProvider><ComposerAttachmentMenu disabled={false} opened onChange={() => {}} onChooseFiles={() => {}} onUseCamera={() => {}} withinPortal={false} /></PwaUiProvider>);
   expect(button(html, "Add attachments")).toContain('aria-expanded="true"');
