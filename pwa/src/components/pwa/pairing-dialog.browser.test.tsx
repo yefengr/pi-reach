@@ -4,25 +4,12 @@ import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { PairingDialog } from "./pairing-dialog";
 
-type MockReader = {
-  decodeFromConstraints: ReturnType<typeof vi.fn>;
-};
-
 const desktopUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/134.0.0.0 Safari/537.36";
 
-const zxing = vi.hoisted(() => {
-  const decodeFromConstraints = vi.fn();
-  const BrowserQRCodeReader = vi.fn(function MockBrowserQRCodeReader(this: MockReader) {
-    this.decodeFromConstraints = decodeFromConstraints;
-  });
-
-  return { BrowserQRCodeReader, decodeFromConstraints };
-});
-
-vi.mock("@zxing/browser", () => ({ BrowserQRCodeReader: zxing.BrowserQRCodeReader }));
+let getUserMedia: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  zxing.decodeFromConstraints.mockClear();
+  getUserMedia = vi.spyOn(navigator.mediaDevices, "getUserMedia").mockImplementation(() => new Promise<MediaStream>(() => {}));
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue(desktopUserAgent);
   vi.spyOn(navigator, "maxTouchPoints", "get").mockReturnValue(0);
 });
@@ -53,12 +40,12 @@ test("desktop pairing submits the code from a standard form dialog without start
   expect(document.querySelector('.pwa-pairing-dialog input[type="file"]')).toBeNull();
   await expect.element(screen.getByRole("button", { name: "Pair", exact: true })).toBeDisabled();
   await expect.element(input).toHaveFocus();
-  expect(zxing.decodeFromConstraints).not.toHaveBeenCalled();
+  expect(getUserMedia).not.toHaveBeenCalled();
 
   await input.fill("K7MP");
   await screen.getByRole("button", { name: "Pair", exact: true }).click();
   expect(onSubmit).toHaveBeenCalledWith("K7MP");
-  expect(zxing.decodeFromConstraints).not.toHaveBeenCalled();
+  expect(getUserMedia).not.toHaveBeenCalled();
 });
 
 const pairingViewports = [
@@ -103,7 +90,7 @@ test.each(pairingViewports.flatMap((viewport) => ["light", "dark"].map((scheme) 
       // 连接中保留表单但暂不可用，不启动摄像头。
       expect(dialog.element().querySelector("video")).toBeNull();
       await expect.element(screen.getByRole("textbox", { name: "Pairing code" })).toBeDisabled();
-      expect(zxing.decodeFromConstraints).not.toHaveBeenCalled();
+      expect(getUserMedia).not.toHaveBeenCalled();
 
       await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
       // 加载指示器表达状态，减少动态效果时照常运行。

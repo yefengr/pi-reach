@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import { useI18n } from "@/lib/i18n";
-
-function stopControls(controls: IScannerControls | null, stoppedControls: WeakSet<IScannerControls>) {
-  if (!controls || stoppedControls.has(controls)) return;
-  stoppedControls.add(controls);
-  controls.stop();
-}
+import { startQrCameraSession } from "@/lib/pwa/qr-camera";
 
 /** 浏览器是否提供摄像头接口；实际权限在切换到扫码时才请求。 */
 export function cameraSupported(): boolean {
@@ -24,7 +18,6 @@ type QrCameraProps = {
  */
 export function QrCamera({ onScan, onUnavailable }: QrCameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const controlsRef = useRef<IScannerControls | null>(null);
   const onScanRef = useRef(onScan);
   const onUnavailableRef = useRef(onUnavailable);
   const { t } = useI18n();
@@ -36,39 +29,14 @@ export function QrCamera({ onScan, onUnavailable }: QrCameraProps) {
   }, [onScan, onUnavailable]);
 
   useEffect(() => {
-    const state = { active: true, claimed: false };
-    const stoppedControls = new WeakSet<IScannerControls>();
-    const handleControls = (controls: IScannerControls) => {
-      if (!state.active || state.claimed) {
-        stopControls(controls, stoppedControls);
-        return false;
-      }
-      controlsRef.current = controls;
-      return true;
-    };
-    void new BrowserQRCodeReader()
-      .decodeFromConstraints(
-        { audio: false, video: { facingMode: { ideal: "environment" } } },
-        videoRef.current ?? undefined,
-        (result, decodeError, controls) => {
-          if (!handleControls(controls)) return;
-          if (result) {
-            if (state.claimed) return;
-            state.claimed = true;
-            stopControls(controlsRef.current, stoppedControls);
-            onScanRef.current(result.getText());
-            return;
-          }
-          if (decodeError && decodeError.name !== "NotFoundException" && state.active && !state.claimed) setUnreadable(true);
-        },
-      )
-      .then((controls) => { handleControls(controls); })
-      .catch(() => { if (state.active && !state.claimed) onUnavailableRef.current(); });
-    return () => {
-      state.active = false;
-      stopControls(controlsRef.current, stoppedControls);
-      controlsRef.current = null;
-    };
+    const video = videoRef.current;
+    if (!video) return;
+    return startQrCameraSession({
+      video,
+      onScan: (value) => onScanRef.current(value),
+      onUnavailable: () => onUnavailableRef.current(),
+      onUnreadable: () => setUnreadable(true),
+    });
   }, []);
 
   return <section className="pwa-scanner" aria-label={t.pairing.scanLabel}>
