@@ -2606,7 +2606,9 @@ function historyRequests(channel: { frames: ClientFrame[] }): Extract<ClientFram
 }
 /** 补齐后会核对本地原最新一条是否仍在当前分支；回应它，并确认请求只取这一条。 */
 async function answerBranchCheck(channel: { channelId: string; frames: ClientFrame[]; emit: (frame: unknown) => void }, sessionId: string, event: TimelineEvent) {
-  await vi.waitFor(() => expect(historyRequests(channel).at(-1)).toMatchObject({ before: event.event_seq! + 1, limit: 1 }));
+  await vi.waitFor(() => {
+    expect(historyRequests(channel).at(-1)).toMatchObject({ before: event.event_seq! + 1, limit: 1 });
+  }, { timeout: 5_000 });
   channel.emit(recentHistoryFrame(channel, sessionId, [event]));
 }
 
@@ -2935,6 +2937,119 @@ test("a failed branch check is retried against the same saved record on the next
     await expect.poll(listText).toContain("Branch 1");
     expect(listText()).not.toContain("Record 1");
     await vi.waitFor(async () => expect((await (await openPwaDatabase()).events.toArray()).map((record) => record.eventId).sort()).toEqual(branch.map((event) => event.event_id).sort()));
+  } finally { await screen.unmount(); }
+});
+
+test.each([false, true])("history recovery keeps drafts and blocks all sends until retry success (attachments=%s)", async withAttachment => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1", 80));
+    await expect.poll(() => historyRequests(channel).length).toBe(1);
+    const textbox = screen.getByRole("textbox", { name: /Message your agent/i });
+    await textbox.fill("Keep this local draft");
+    if (withAttachment) {
+      await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+      const files = new DataTransfer();
+      files.items.add(new File(["Synthetic attachment"], "local.txt", { type: "text/plain" }));
+      const input = document.querySelector<HTMLInputElement>('.pwa-composer input[type="file"][multiple]')!;
+      input.files = files.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await expect.element(screen.getByRole("button", { name: "Remove local.txt" })).toBeVisible();
+    }
+    const input = textbox.element() as HTMLTextAreaElement;
+    const send = screen.getByRole("button", { name: "Send message" });
+    const attempt = () => {
+      (send.element() as HTMLButtonElement).click();
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true }));
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true, cancelable: true }));
+      input.form!.requestSubmit();
+    };
+    const submissions = () => channel.frames.filter(frame => frame.type === "user_message" || frame.type === "attachment_begin");
+    await expect.element(send).toBeDisabled();
+    await expect.element(screen.getByText("Syncing records. Sending is unavailable.")).toBeVisible();
+    attempt();
+    expect(submissions()).toHaveLength(0);
+    const first = historyRequests(channel)[0]!;
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: first.id, code: "internal_error", message: "private history failure" });
+    await expect.element(screen.getByText("Record sync failed. Retry to send messages.")).toBeVisible();
+    await textbox.fill("Edited draft after failure");
+    attempt();
+    expect(submissions()).toHaveLength(0);
+    await expect.element(textbox).toHaveValue("Edited draft after failure");
+    await expect.element(screen.getByText("Could not load the conversation. Try again.")).toBeVisible();
+    await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
+    await expect.poll(() => historyRequests(channel).length).toBe(2);
+    await expect.element(screen.getByText("Syncing records. Sending is unavailable.")).toBeVisible();
+    await expect.element(screen.getByText("Record sync failed. Retry to send messages.")).not.toBeInTheDocument();
+    expect(document.querySelector('.pwa-composer-hint[data-tone="running"] .pwa-spin')).not.toBeNull();
+    await expect.poll(() => document.querySelector(".pwa-message-actions button")).toBeNull();
+    await expect.element(screen.getByRole("button", { name: "Retry loading earlier records", exact: true })).not.toBeInTheDocument();
+    await expect.element(textbox).toHaveValue("Edited draft after failure");
+    if (withAttachment) await expect.element(screen.getByRole("button", { name: "Remove local.txt" })).toBeVisible();
+    attempt();
+    expect(submissions()).toHaveLength(0);
+    // 过期响应不得清除当前可恢复错误或开放提交。
+    channel.emit({ ...recentHistoryFrame(channel, "session-1", numberedEvents(30, 51)), in_reply_to: first.id });
+    await expect.element(send).toBeDisabled();
+    await expect.element(screen.getByText("Could not load the conversation. Try again.")).toBeVisible();
+    channel.emit(recentHistoryFrame(channel, "session-1", numberedEvents(30, 51)));
+    await expect.element(send).toBeEnabled();
+    await expect.element(screen.getByText("Could not load the conversation. Try again.")).not.toBeInTheDocument();
+    await expect.element(textbox).toHaveValue("Edited draft after failure");
+    await send.click();
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "user_message").length).toBe(1);
+    if (withAttachment) expect(channel.frames.some(frame => frame.type === "attachment_begin")).toBe(true);
+  } finally { await screen.unmount(); }
+});
+
+test("history recovery success does not clear an unrelated protocol error", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1", 2));
+    await expect.poll(() => historyRequests(channel).length).toBe(1);
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: historyRequests(channel)[0]!.id, code: "internal_error", message: "history failure" });
+    await expect.element(screen.getByText("Could not load the conversation. Try again.")).toBeVisible();
+    channel.emitMalformed("private protocol details");
+    await expect.element(screen.getByText("Pi could not process this request. Try again.")).toBeVisible();
+    await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
+    await expect.poll(() => historyRequests(channel).length).toBe(2);
+    channel.emit(recentHistoryFrame(channel, "session-1", numberedEvents(2)));
+    await expect.poll(() => document.querySelectorAll(".pwa-message-list article").length).toBe(2);
+    await screen.getByRole("textbox", { name: /Message your agent/i }).fill("Local ready draft");
+    await expect.element(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+    await expect.element(screen.getByText("Pi could not process this request. Try again.")).toBeVisible();
+    expect(document.body.textContent).not.toContain("private protocol details");
+    expect(document.body.textContent).not.toContain("Could not load the conversation. Try again.");
+  } finally { await screen.unmount(); }
+});
+
+test("history recovery dismisses only the displayed error source without unlocking sending", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1", 2));
+    await expect.poll(() => historyRequests(channel).length).toBe(1);
+    const textbox = screen.getByRole("textbox", { name: /Message your agent/i });
+    await textbox.fill("Draft survives dismissals");
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: historyRequests(channel)[0]!.id, code: "internal_error", message: "history failure" });
+    await expect.element(screen.getByText("Could not load the conversation. Try again.")).toBeVisible();
+    channel.emitMalformed("private protocol details");
+    await expect.element(screen.getByText("Pi could not process this request. Try again.")).toBeVisible();
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-status-error-dismiss")!);
+    await expect.element(screen.getByText("Could not load the conversation. Try again.")).toBeVisible();
+    await expect.element(screen.getByText("Pi could not process this request. Try again.")).not.toBeInTheDocument();
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-status-error-dismiss")!);
+    await expect.poll(() => document.querySelector(".pwa-status-error")).toBeNull();
+    await expect.element(screen.getByText("Record sync failed. Retry to send messages.")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Retry loading earlier records", exact: true })).toBeVisible();
+    await expect.element(textbox).toHaveValue("Draft survives dismissals");
+    await expect.element(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    (textbox.element() as HTMLTextAreaElement).form!.requestSubmit();
+    expect(channel.frames.filter(frame => frame.type === "user_message" || frame.type === "attachment_begin")).toHaveLength(0);
+    expect(historyRequests(channel)).toHaveLength(1);
   } finally { await screen.unmount(); }
 });
 
@@ -4872,6 +4987,83 @@ test("short disconnect resumes the same attachment batch through a new capabilit
     await flushMicrotasks();
     expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
   } finally { await screen.unmount(); }
+});
+
+test.each(["history window", "required persistence"] as const)("attachment recovery waits for %s before handing off the original batch", async (waitingFor) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  const actual = await vi.importActual<typeof import("@/lib/pwa/timeline-store")>("@/lib/pwa/timeline-store");
+  const db = await openPwaDatabase();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let persistenceEntered = false;
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Resume only after history is durable");
+    pasteAttachments(input.element(), new File(["original recovery bytes"], "history-resume.txt", { type: "text/plain" }));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    const begin = channel.frames.find((frame) => frame.type === "attachment_begin");
+    if (!begin || begin.type !== "attachment_begin") throw new Error("Expected the original upload");
+    const original = channelHarness.uploads.get(begin.upload_id)!;
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.element(screen.getByText("Connection lost. Uploads will resume after reconnecting.", { exact: true })).toBeVisible();
+    relay.emitState("open");
+    relay.emitControl(onlineEndpointsFrame());
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1", 2));
+    await expect.poll(() => historyRequests(resumed).length).toBe(1);
+    expect(historyRequests(resumed)[0]).toMatchObject({ before: 3, limit: 2 });
+    await expect.element(screen.getByText("Syncing records. Sending is unavailable.")).toBeVisible();
+    // 实时队列更新也经过同一自动入口，不能在历史窗口完成前恢复原批次。
+    resumed.emit(queuedStateFrame([], "attachment-recovery-waiting"));
+    channelHarness.finishReplies[0]?.();
+    await queueCommitFrames();
+    await expect.element(input).toHaveValue("Resume only after history is durable");
+    await expect.element(input).toHaveAttribute("readonly");
+    await expect.element(screen.getByRole("group", { name: /^history-resume\.txt/ })).toBeVisible();
+    expect(resumed.frames.some((frame) => frame.type === "attachment_capabilities_request" || frame.type === "attachment_status_request" || frame.type === "user_message")).toBe(false);
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+    if (waitingFor === "required persistence") {
+      vi.mocked(mergeTimelineEvents).mockImplementationOnce(async (...args) => {
+        persistenceEntered = true;
+        await gate;
+        return actual.mergeTimelineEvents(...args);
+      });
+    }
+    resumed.emit(recentHistoryFrame(resumed, "session-1", numberedEvents(2)));
+    if (waitingFor === "required persistence") {
+      await expect.poll(() => persistenceEntered).toBe(true);
+      // 网络已给出 final_chunk，但真实 IndexedDB 写入尚未释放，仍不可交接。
+      resumed.emit(queuedStateFrame([], "attachment-recovery-persisting"));
+      await queueCommitFrames();
+      await expect.element(screen.getByText("Syncing records. Sending is unavailable.")).toBeVisible();
+      await expect.element(input).toHaveValue("Resume only after history is durable");
+      await expect.element(input).toHaveAttribute("readonly");
+      await expect.element(screen.getByRole("group", { name: /^history-resume\.txt/ })).toBeVisible();
+      expect(await db.events.count()).toBe(0);
+      expect(resumed.frames.some((frame) => frame.type === "attachment_capabilities_request" || frame.type === "attachment_status_request" || frame.type === "user_message")).toBe(false);
+      release();
+    }
+    await expect.poll(() => resumed.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(resumed.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({
+      text: "Resume only after history is durable", attachment_ids: [original.descriptor.attachment_id],
+    });
+    expect(resumed.frames.filter((frame) => frame.type === "attachment_status_request")).toEqual([expect.objectContaining({ upload_id: begin.upload_id })]);
+    expect(resumed.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "attachment_chunk")).toBe(false);
+    await expect.poll(() => db.events.count()).toBe(2);
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(0);
+    channelHarness.finishReplies[0]?.();
+    resumed.emit(queuedStateFrame([], "attachment-recovery-finished"));
+    await queueCommitFrames();
+    expect(resumed.frames.filter((frame) => frame.type === "user_message")).toHaveLength(1);
+    expect(resumed.frames.filter((frame) => frame.type === "attachment_capabilities_request")).toHaveLength(1);
+    expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+  } finally { release(); await screen.unmount(); }
 });
 
 test("invalid attachment lease retry keeps content and asks to select files again without resending", async () => {

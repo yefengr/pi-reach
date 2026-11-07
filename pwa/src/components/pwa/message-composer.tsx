@@ -89,6 +89,8 @@ type MessageComposerProps = {
   /** 连接问题（断线 3 秒后、10 秒后或无网络）；由应用层按断线时长给出，优先级最低。 */
   connectionHint?: OperationHint | null;
   isOnline: boolean;
+  /** 历史恢复未完成时仍允许编辑草稿，但不接受任何提交入口。 */
+  sendReady?: boolean;
   isWorking: boolean;
   stopping: boolean;
   draft: string;
@@ -141,6 +143,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
   operationHint = null,
   connectionHint = null,
   isOnline,
+  sendReady = true,
   isWorking,
   stopping,
   draft,
@@ -282,7 +285,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (sendPendingRef.current || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)) return;
+    if (sendPendingRef.current || !sendReady || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)) return;
     sendPendingRef.current = true;
     try {
       await onSend();
@@ -351,7 +354,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
       || hasKeyboardOverlay()) return;
     const plainEnter = !event.metaKey && !event.ctrlKey;
     if (!(plainEnter ? enterSends : isPrimaryModifier(nativeEvent))) return;
-    if (!isOnline || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)) return;
+    if (!sendReady || !isOnline || sendingAttachments || !hasMessage || (attachments.length > 0 && !canAttach)) return;
     // 仍由表单统一校验并发发送和权限；空草稿已在上方返回，快捷键不会触发运行中的停止按钮。
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
@@ -503,7 +506,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
                 />
               </Menu.Dropdown>
             </Menu>
-            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" onMouseDown={keepComposerFocus} disabled={!isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
+            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" onMouseDown={keepComposerFocus} disabled={!sendReady || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
           </div>
         </div>
       </div>

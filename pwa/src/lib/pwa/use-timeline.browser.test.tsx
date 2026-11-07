@@ -23,13 +23,15 @@ vi.mock("./timeline-store", () => ({
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
 type Timeline = ReturnType<typeof useTimeline>;
 const report = vi.fn();
+const recoveryReport = vi.fn();
+const recoveryClear = vi.fn();
 const branchMismatch = vi.fn();
 let api: Timeline;
 // 与应用一致：endpoint working 只控制运行/等待展示，不决定一轮是否结束。
 let piRunning = false;
-function Harness() {
+function Harness({ recovery = false }: { recovery?: boolean }) {
   const channelRef = useRef<PeerChannel | null>(null);
-  const timeline = useTimeline({ channelRef, reportHistoryFailure: report });
+  const timeline = useTimeline({ channelRef, reportHistoryFailure: report, ...(recovery ? { reportRecoveryFailure: recoveryReport, clearRecoveryFailure: recoveryClear } : {}) });
   useLayoutEffect(() => { api = timeline; });
   return <PwaUiProvider><div className="pwa-root"><div style={{ display: "flex", flexDirection: "column", height: 400 }}><MessageList items={timeline.items} hasEarlier={timeline.hasEarlier} loadingEarlier={timeline.loadingEarlier} onLoadEarlier={timeline.loadEarlier} loadEarlierFailed={timeline.loadEarlierFailed} autoLoadEarlier={!timeline.followingOutput} listRef={timeline.messageListRef} bottomSentinelRef={timeline.bottomSentinelRef} onScroll={timeline.handleScroll} reconnectPhase={timeline.reconnectPhase} running={piRunning} /></div></div></PwaUiProvider>;
 }
@@ -53,7 +55,7 @@ function reply(frames: ClientFrame[], records: TimelineEvent[], target = scope) 
 function sequences() { return api.items.flatMap((item) => item.kind === "event" ? [item.event.event_seq] : []); }
 // 固定机制时钟，避免弹簧起步与尾段的亚像素位移被整数 scrollTop 采样掩盖。
 beforeEach(pinMechanismMotion);
-afterEach(async () => { unpinMechanismMotion(); piRunning = false; vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); await page.viewport(1280, 900); });
+afterEach(async () => { unpinMechanismMotion(); piRunning = false; vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(loadTimeline).mockReset().mockResolvedValue([]); vi.mocked(mergeTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(replaceTimelineEvents).mockReset().mockResolvedValue(undefined); vi.mocked(latestTimelineEvent).mockReset().mockResolvedValue(null); branchMismatch.mockClear(); vi.mocked(discardTimelineEventsAfter).mockReset().mockResolvedValue(undefined); vi.mocked(ensureTimelineBranchCheckpoint).mockReset().mockResolvedValue(null); vi.mocked(clearTimelineBranchCheckpoint).mockReset().mockResolvedValue(undefined); report.mockClear(); recoveryReport.mockClear(); recoveryClear.mockClear(); await page.viewport(1280, 900); });
 
 test("complete empty queue snapshots notify React independently of stream display changes", async () => {
   const screen = await render(<Harness />);
@@ -373,6 +375,86 @@ test("preserves a reader's anchor through a small catchup on mobile", async () =
     await expect.poll(() => sequences().length).toBe(22);
     await expect.poll(() => Math.abs(article.getBoundingClientRect().top - list.getBoundingClientRect().top - offset)).toBeLessThanOrEqual(1);
     expect(api.followingOutput).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("history recovery owns errors until atomic persistence succeeds and keeps unrelated queue errors", async () => {
+  const screen = await render(<Harness recovery />);
+  try {
+    const frames = start(40);
+    await expect.poll(() => frames.length).toBe(1);
+    api.historyLoaderRef.current!.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: frames[0]!.id, code: "internal_error", message: "history failed" });
+    await expect.poll(() => api.catchupFailed).toBe(true);
+    expect(recoveryReport).toHaveBeenLastCalledWith("history failed");
+    expect(report).not.toHaveBeenCalled();
+    expect(api.runtimeRef.current.replacing).toBe(true);
+    const clears = recoveryClear.mock.calls.length;
+    let release!: () => void;
+    vi.mocked(mergeTimelineEvents).mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+    const retry = api.retryCatchup();
+    expect(await api.retryCatchup()).toBe(false);
+    await expect.poll(() => frames.length).toBe(2);
+    reply(frames, events(11, 40));
+    await expect.poll(() => typeof release).toBe("function");
+    expect(api.runtimeRef.current.replacing).toBe(true);
+    expect(api.runtimeRef.current.sendUser("Keep local")).toBeNull();
+    expect(recoveryClear).toHaveBeenCalledTimes(clears);
+    api.applyTimelineChange({ items: api.runtimeRef.current.currentItems(), observed: [], committed: [], unknown: [], pendingCapacityExceeded: true });
+    expect(report).toHaveBeenCalledTimes(1);
+    release();
+    expect(await retry).toBe(true);
+    await expect.poll(() => api.catchupFailed).toBe(false);
+    expect(api.runtimeRef.current.replacing).toBe(false);
+    expect(recoveryClear).toHaveBeenCalledTimes(clears + 1);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(api.runtimeRef.current.sendUser("Synthetic ready send")).not.toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("history recovery persistence failure stays gated and retries without refetching", async () => {
+  const screen = await render(<Harness recovery />);
+  try {
+    vi.mocked(mergeTimelineEvents).mockRejectedValueOnce(new Error("quota"));
+    const frames = start(2);
+    await expect.poll(() => frames.length).toBe(1);
+    const clears = recoveryClear.mock.calls.length;
+    reply(frames, events(1, 2));
+    await expect.poll(() => api.catchupFailed).toBe(true);
+    expect(recoveryReport).toHaveBeenLastCalledWith("Could not update local history.");
+    expect(report).not.toHaveBeenCalled();
+    expect(recoveryClear).toHaveBeenCalledTimes(clears);
+    expect(api.runtimeRef.current.sendUser("not ready")).toBeNull();
+    expect(await api.retryCatchup()).toBe(true);
+    expect(frames).toHaveLength(1);
+    expect(recoveryClear).toHaveBeenCalledTimes(clears + 1);
+    expect(api.runtimeRef.current.replacing).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("history recovery scope changes isolate old persistence success and failure", async () => {
+  const screen = await render(<Harness recovery />);
+  try {
+    let release!: () => void;
+    vi.mocked(mergeTimelineEvents).mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+    const old = start(1);
+    const oldLoader = api.historyLoaderRef.current!;
+    await expect.poll(() => old.length).toBe(1);
+    reply(old, events(1, 1));
+    await expect.poll(() => typeof release).toBe("function");
+    api.disconnect();
+    const nextScope = { ...scope, sessionId: "next-recovery" };
+    const next = start(2, nextScope);
+    await expect.poll(() => next.length).toBe(1);
+    api.historyLoaderRef.current!.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: next[0]!.id, code: "internal_error", message: "new failure" });
+    await expect.poll(() => api.catchupFailed).toBe(true);
+    const clears = recoveryClear.mock.calls.length;
+    release();
+    expect(oldLoader.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: old[0]!.id, code: "internal_error", message: "late failure" })).toBe(false);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(recoveryClear).toHaveBeenCalledTimes(clears);
+    expect(recoveryReport).toHaveBeenCalledTimes(1);
+    expect(recoveryReport).toHaveBeenLastCalledWith("new failure");
+    expect(api.catchupFailed).toBe(true);
   } finally { await screen.unmount(); }
 });
 
@@ -820,6 +902,83 @@ test.each(["disconnect", "clearTimeline", "switchLive", "startLive", "unmount"] 
 });
 
 const checkpoint50 = { eventSeq: 50, eventId: "session-50" };
+
+test("delayed checkpoint preparation blocks ordinary pagination only until verification starts", async () => {
+  const screen = await render(<DisplayHarness onDisplay={vi.fn()} />);
+  try {
+    const initial = start(80);
+    await expect.poll(() => initial.length).toBe(1);
+    reply(initial, events(51, 80));
+    await expect.poll(() => api.catchingUp).toBe(false);
+    api.disconnect();
+
+    let release!: (checkpoint: typeof checkpoint50) => void;
+    vi.mocked(ensureTimelineBranchCheckpoint).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const frames = start(80);
+    await expect.poll(() => typeof release).toBe("function");
+    await expect.poll(() => api.catchingUp).toBe(false);
+    const reads = vi.mocked(loadTimeline).mock.calls.length;
+    flushSync(() => api.loadEarlier());
+    expect(frames).toHaveLength(0);
+    expect(vi.mocked(loadTimeline)).toHaveBeenCalledTimes(reads);
+    expect(api.loadingEarlier).toBe(false);
+
+    release(checkpoint50);
+    await expect.poll(() => frames.length).toBe(1);
+    expect(frames[0]).toMatchObject({ before: 51, limit: 1 });
+    // 请求已发出但尚未回应：普通分页必须进入现有 verification 队列，不能继续被初始化门禁静默挡住。
+    flushSync(() => api.loadEarlier());
+    expect(api.loadingEarlier).toBe(true);
+    expect(frames).toHaveLength(1);
+    reply(frames, events(50, 50));
+    await expect.poll(() => frames.length).toBe(2);
+    expect(frames[1]).toMatchObject({ before: 51, limit: 50 });
+    reply(frames, events(1, 50));
+    await expect.poll(() => sequences().length).toBe(80);
+    await expect.poll(() => api.loadingEarlier).toBe(false);
+    expect(branchMismatch).not.toHaveBeenCalled();
+    expect(vi.mocked(clearTimelineBranchCheckpoint)).toHaveBeenCalledTimes(1);
+  } finally { await screen.unmount(); }
+});
+
+test("an old checkpoint callback cannot release a newer connection's preparation gate", async () => {
+  const screen = await render(<DisplayHarness onDisplay={vi.fn()} />);
+  try {
+    const initial = start(80);
+    await expect.poll(() => initial.length).toBe(1);
+    reply(initial, events(51, 80));
+    await expect.poll(() => api.catchingUp).toBe(false);
+
+    let releaseOld!: (checkpoint: typeof checkpoint50) => void;
+    let releaseNew!: (checkpoint: null) => void;
+    vi.mocked(ensureTimelineBranchCheckpoint)
+      .mockImplementationOnce(() => new Promise(resolve => { releaseOld = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { releaseNew = resolve; }));
+    const old = start(80);
+    await expect.poll(() => typeof releaseOld).toBe("function");
+    await expect.poll(() => api.catchingUp).toBe(false);
+    api.disconnect();
+    const current = start(80);
+    releaseOld(checkpoint50);
+    await expect.poll(() => typeof releaseNew).toBe("function");
+    await expect.poll(() => api.catchingUp).toBe(false);
+    flushSync(() => api.loadEarlier());
+    expect(old).toHaveLength(0);
+    expect(current).toHaveLength(0);
+    expect(api.loadingEarlier).toBe(false);
+
+    // 无检查点的跳过路径也须释放门禁，允许用户重新发起分页。
+    releaseNew(null);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    flushSync(() => api.loadEarlier());
+    await expect.poll(() => current.length).toBe(1);
+    expect(current[0]).toMatchObject({ before: 51, limit: 50 });
+    reply(current, events(1, 50));
+    await expect.poll(() => sequences().length).toBe(80);
+    expect(branchMismatch).not.toHaveBeenCalled();
+    expect(vi.mocked(clearTimelineBranchCheckpoint)).not.toHaveBeenCalled();
+  } finally { await screen.unmount(); }
+});
 
 test("checks the latest saved record against the current branch after catching up", async () => {
   vi.mocked(ensureTimelineBranchCheckpoint).mockResolvedValue(checkpoint50);

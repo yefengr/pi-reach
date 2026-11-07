@@ -278,6 +278,8 @@ export const en = {
     removeImage: "Remove image",
     placeholder: "Message your agent…",
     readOnlyPlaceholder: "Can't send messages",
+    historyRecovering: "Syncing records. Sending is unavailable.",
+    historyRecoveryFailed: "Record sync failed. Retry to send messages.",
     stoppingTask: "Stopping current task",
     stopTask: "Stop current task",
     send: "Send message",
