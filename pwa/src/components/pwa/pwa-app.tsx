@@ -273,6 +273,18 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   }, t.attachments);
   const attachmentComposer = attachments.composer;
   const addAttachmentFiles = attachments.addFiles;
+  const connectReadyAttachments = useCallback(() => {
+    const runtime = timelineRuntimeRef.current;
+    const scope = runtime.currentScope;
+    const channel = channelRef.current;
+    const context = channelContextRef.current;
+    if (!scope || !channel || channel.closed || context?.channel !== channel || connectionRef.current !== "online" || selectedHistoryRef.current !== null) return;
+    if (scope.channelId !== channel.channelId || scope.deviceId !== context.deviceId || scope.endpointId !== context.endpointId || scope.runtimeInstanceId !== context.runtimeInstanceId) return;
+    const snapshot = attachmentComposer.snapshot();
+    // 初始能力发现不发送消息；只有同目标的原批次可能在 connect 中同步交接，必须等待恢复提交。
+    if (snapshot.active && snapshot.target === attachmentTargetKey(scope) && (!sendReadyRef.current || runtime.replacing)) return;
+    attachmentComposer.connect(scope, (request) => channel.send(request));
+  }, [attachmentComposer, timelineRuntimeRef]);
   const { controller: fileController, readyRef: filesReadyRef, view: fileView, onToolReading } = useSessionFiles({
     ready: connection === "online" && selectedHistory === null && !catchingUp && !catchupFailed && !reconnectPhase,
     items: timelineItems, runtimeRef: timelineRuntimeRef, channelRef, setReading: setReadingDetails,
@@ -663,9 +675,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
         invalidateTimelineScope();
         restartSession();
       } });
-      // 握手即已在线；上传状态回执可能先于 React commit 到达，不能读上一帧的 connecting。
+      // 无批次时允许先发现能力；原批次的恢复交接等 React 提交真实就绪后再尝试。
       connectionRef.current = "online";
-      attachmentComposer.connect(scope, (request) => context.channel.send(request));
+      connectReadyAttachments();
       setLiveSession({ deviceId: context.deviceId, endpointId: context.endpointId, sessionId: frame.session_id });
       rememberSessionDetails(scope);
       sendModelsRequest(scope, context.channel);
@@ -762,12 +774,14 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
         applyTimelineChange(applied, reset);
         const stop = stopRequestRef.current;
         if (stop && stopHasEnded(stop, applied.items)) { setStopRequest(null); operationNotifications.clearStop(); }
-        const scope = timelineRuntimeRef.current.currentScope;
-        if (scope) attachmentComposer.connect(scope, (request) => context.channel.send(request));
+        connectReadyAttachments();
       },
       receiveRealtimeOutput, setError: reportSessionFailure, setLastSyncedAt, onHistoryChanged: refreshHistory,
     });
-  }, [attachmentComposer, fileController, filesReadyRef, applyTimelineChange, confirmConfiguration, disconnectSession, finishRetry, fragmentAssemblerRef, handleActionReply, historyLoaderRef, invalidateTimelineScope, observeSession, operationNotifications, pendingActionRef, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionDetails, reportSessionFailure, resetActions, restartSession, sendExtensionInfoRequest, sendModelsRequest, setLastSyncedAt, setPendingAction, setStopRequest, startLive, stopRequestRef, timelineRuntimeRef]);
+  }, [attachmentComposer, connectReadyAttachments, fileController, filesReadyRef, applyTimelineChange, confirmConfiguration, disconnectSession, finishRetry, fragmentAssemblerRef, handleActionReply, historyLoaderRef, invalidateTimelineScope, observeSession, operationNotifications, pendingActionRef, receiveRealtimeOutput, refreshHistory, relayRef, rememberSessionDetails, reportSessionFailure, resetActions, restartSession, sendExtensionInfoRequest, sendModelsRequest, setLastSyncedAt, setPendingAction, setStopRequest, startLive, stopRequestRef, timelineRuntimeRef]);
+
+  // bridge、草稿范围与就绪 refs 均已在前面的 layout effects 更新，允许能力回调同步完成原批次交接。
+  useLayoutEffect(() => { connectReadyAttachments(); }, [connectReadyAttachments, sendReady, connection, liveSession]);
 
   useEffect(() => {
     if (!modelsRequestId) return;

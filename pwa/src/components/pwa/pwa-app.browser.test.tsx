@@ -4989,6 +4989,83 @@ test("short disconnect resumes the same attachment batch through a new capabilit
   } finally { await screen.unmount(); }
 });
 
+test.each(["history window", "required persistence"] as const)("attachment recovery waits for %s before handing off the original batch", async (waitingFor) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  const actual = await vi.importActual<typeof import("@/lib/pwa/timeline-store")>("@/lib/pwa/timeline-store");
+  const db = await openPwaDatabase();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let persistenceEntered = false;
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Resume only after history is durable");
+    pasteAttachments(input.element(), new File(["original recovery bytes"], "history-resume.txt", { type: "text/plain" }));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    const begin = channel.frames.find((frame) => frame.type === "attachment_begin");
+    if (!begin || begin.type !== "attachment_begin") throw new Error("Expected the original upload");
+    const original = channelHarness.uploads.get(begin.upload_id)!;
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.element(screen.getByText("Connection lost. Uploads will resume after reconnecting.", { exact: true })).toBeVisible();
+    relay.emitState("open");
+    relay.emitControl(onlineEndpointsFrame());
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-1", 2));
+    await expect.poll(() => historyRequests(resumed).length).toBe(1);
+    expect(historyRequests(resumed)[0]).toMatchObject({ before: 3, limit: 2 });
+    await expect.element(screen.getByText("Syncing records. Sending is unavailable.")).toBeVisible();
+    // 实时队列更新也经过同一自动入口，不能在历史窗口完成前恢复原批次。
+    resumed.emit(queuedStateFrame([], "attachment-recovery-waiting"));
+    channelHarness.finishReplies[0]?.();
+    await queueCommitFrames();
+    await expect.element(input).toHaveValue("Resume only after history is durable");
+    await expect.element(input).toHaveAttribute("readonly");
+    await expect.element(screen.getByRole("group", { name: /^history-resume\.txt/ })).toBeVisible();
+    expect(resumed.frames.some((frame) => frame.type === "attachment_capabilities_request" || frame.type === "attachment_status_request" || frame.type === "user_message")).toBe(false);
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+    if (waitingFor === "required persistence") {
+      vi.mocked(mergeTimelineEvents).mockImplementationOnce(async (...args) => {
+        persistenceEntered = true;
+        await gate;
+        return actual.mergeTimelineEvents(...args);
+      });
+    }
+    resumed.emit(recentHistoryFrame(resumed, "session-1", numberedEvents(2)));
+    if (waitingFor === "required persistence") {
+      await expect.poll(() => persistenceEntered).toBe(true);
+      // 网络已给出 final_chunk，但真实 IndexedDB 写入尚未释放，仍不可交接。
+      resumed.emit(queuedStateFrame([], "attachment-recovery-persisting"));
+      await queueCommitFrames();
+      await expect.element(screen.getByText("Syncing records. Sending is unavailable.")).toBeVisible();
+      await expect.element(input).toHaveValue("Resume only after history is durable");
+      await expect.element(input).toHaveAttribute("readonly");
+      await expect.element(screen.getByRole("group", { name: /^history-resume\.txt/ })).toBeVisible();
+      expect(await db.events.count()).toBe(0);
+      expect(resumed.frames.some((frame) => frame.type === "attachment_capabilities_request" || frame.type === "attachment_status_request" || frame.type === "user_message")).toBe(false);
+      release();
+    }
+    await expect.poll(() => resumed.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(resumed.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({
+      text: "Resume only after history is durable", attachment_ids: [original.descriptor.attachment_id],
+    });
+    expect(resumed.frames.filter((frame) => frame.type === "attachment_status_request")).toEqual([expect.objectContaining({ upload_id: begin.upload_id })]);
+    expect(resumed.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "attachment_chunk")).toBe(false);
+    await expect.poll(() => db.events.count()).toBe(2);
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(0);
+    channelHarness.finishReplies[0]?.();
+    resumed.emit(queuedStateFrame([], "attachment-recovery-finished"));
+    await queueCommitFrames();
+    expect(resumed.frames.filter((frame) => frame.type === "user_message")).toHaveLength(1);
+    expect(resumed.frames.filter((frame) => frame.type === "attachment_capabilities_request")).toHaveLength(1);
+    expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+  } finally { release(); await screen.unmount(); }
+});
+
 test("invalid attachment lease retry keeps content and asks to select files again without resending", async () => {
   const { screen, channel, list } = await renderReadyTimeline(renderWorkspaceApp);
   try {
