@@ -25,6 +25,7 @@ type ComposerHarnessProps = {
   initialDraft?: string;
   initialWorking?: boolean;
   canAttach?: boolean;
+  sendReady?: boolean;
   keyboardPreferences?: boolean;
   enterSends?: boolean;
   attachmentNotice?: string;
@@ -51,6 +52,7 @@ function ComposerHarness({
   initialDraft = "",
   initialWorking = false,
   canAttach = true,
+  sendReady = true,
   keyboardPreferences = false,
   enterSends,
   attachmentNotice,
@@ -68,6 +70,7 @@ function ComposerHarness({
   onSetThinking = () => {},
 }: ComposerHarnessProps) {
   const [draft, setDraft] = useState(initialDraft);
+  const [ready, setReady] = useState(sendReady);
   const [attachments, setAttachments] = useState<ComposerAttachmentItem[]>([]);
   const [isOnline, setIsOnline] = useState(true);
   const [isWorking, setIsWorking] = useState(initialWorking);
@@ -83,6 +86,7 @@ function ComposerHarness({
   return (
     <>
       <button type="button">Outside composer</button>
+      <button type="button" data-testid="composer-ready" hidden onClick={() => setReady(true)} />
       {keyboardPreferences ? <KeyboardPreferenceControls /> : null}
       <button type="button" data-testid="composer-set-draft" hidden onClick={() => setDraft("Continue this task")} />
       <button type="button" data-testid="composer-toggle-working" hidden onClick={() => setIsWorking((current) => !current)} />
@@ -99,6 +103,7 @@ function ComposerHarness({
         attachmentNotice={attachmentNotice}
         operationHint={operationHint}
         isOnline={isOnline}
+        sendReady={ready}
         isWorking={isWorking}
         stopping={stopping}
         draft={draft}
@@ -146,6 +151,32 @@ describe("desktop composer sending shortcuts", () => {
   afterEach(async () => {
     localStorage.removeItem(ENTER_SENDS_STORAGE_KEY);
     await page.viewport(1280, 900);
+  });
+
+  test.each([true, false])("history recovery blocks mouse, Enter and native submit while keeping the draft editable (Enter=%s)", async enterSends => {
+    let sends = 0;
+    const screen = await renderPwa(<ComposerHarness initialDraft="Local draft" sendReady={false} enterSends={enterSends} onSend={() => { sends += 1; }} />);
+    const textbox = screen.getByRole("textbox");
+    const input = textbox.element() as HTMLTextAreaElement;
+    await textbox.fill("Edited local draft");
+    const send = screen.getByRole("button", { name: "Send message" });
+    await expect.element(send).toBeDisabled();
+    (send.element() as HTMLButtonElement).click();
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(primaryEnter);
+    input.form!.requestSubmit();
+    input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    dispatchEnter(input, { isComposing: true });
+    input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+    expect(sends).toBe(0);
+    expect(input.value.trim()).toBe("Edited local draft");
+    expect(input.readOnly).toBe(false);
+    screen.getByTestId("composer-ready").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect.element(send).toBeEnabled();
+    await send.click();
+    expect(sends).toBe(1);
   });
 
   test("sends Enter and primary Enter through native submit without inserting a newline", async () => {

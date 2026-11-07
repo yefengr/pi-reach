@@ -12,7 +12,7 @@ type HistoryChunkFrame = Extract<ServerFrame, { type: "session_history_chunk" }>
 type SessionSyncFrame = Extract<ClientFrame, { type: "session_sync" }>;
 type HarnessOverrides = Partial<Pick<
   TimelineHistoryLoaderOptions,
-  "headSeq" | "boundary" | "send" | "load" | "persist" | "requestId" | "timeoutMs" | "currentLeafId"
+  "headSeq" | "boundary" | "send" | "load" | "persist" | "requestId" | "timeoutMs" | "maxDurationMs" | "currentLeafId"
 >>;
 
 const scope: TimelineScope = {
@@ -103,6 +103,129 @@ async function flushMicrotasks(): Promise<void> {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+test("history recovery accepts continuing valid chunks beyond the old total timeout", async () => {
+  vi.useFakeTimers();
+  const harness = createHarness({ timeoutMs: 15_000 });
+  const operation = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  await vi.advanceTimersByTimeAsync(10_000);
+  harness.loader.receive({
+    protocol_version: 2, type: "session_history_chunk", target_channel_id: scope.channelId,
+    in_reply_to: "request-1", session_id: scope.sessionId, leaf_id: scope.leafId,
+    chunk_index: 0, events: numberedEvents(1, 40), fragments: [], final_chunk: false,
+  });
+  await vi.advanceTimersByTimeAsync(10_000);
+  harness.loader.receive({
+    protocol_version: 2, type: "session_history_chunk", target_channel_id: scope.channelId,
+    in_reply_to: "request-1", session_id: scope.sessionId, leaf_id: scope.leafId,
+    chunk_index: 1, events: numberedEvents(41, 40), fragments: [], final_chunk: true, eos: true,
+  });
+  expect(await operation).toBe(true);
+  expect(harness.onError).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+function pendingChunk(index = 0): HistoryChunkFrame {
+  return {
+    protocol_version: 2, type: "session_history_chunk", target_channel_id: scope.channelId,
+    in_reply_to: "request-1", session_id: scope.sessionId, leaf_id: scope.leafId,
+    chunk_index: index, events: [], fragments: [], final_chunk: false,
+  };
+}
+
+test("history recovery times out after the last valid progress and ignores unrelated frames", async () => {
+  vi.useFakeTimers();
+  const harness = createHarness();
+  const operation = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  await vi.advanceTimersByTimeAsync(20);
+  expect(harness.loader.receive(pendingChunk())).toBe(true);
+  await vi.advanceTimersByTimeAsync(20);
+  expect(harness.loader.receive({ ...pendingChunk(1), in_reply_to: "other" })).toBe(false);
+  expect(harness.loader.receive({ ...pendingChunk(1), leaf_id: "other" })).toBe(false);
+  await vi.advanceTimersByTimeAsync(5);
+  expect(await operation).toBe(false);
+  expect(harness.onError).toHaveBeenLastCalledWith("History request timed out.");
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("history recovery never renews its independent maximum duration", async () => {
+  vi.useFakeTimers();
+  const harness = createHarness({ timeoutMs: 25, maxDurationMs: 60 });
+  const operation = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  for (let index = 0; index < 2; index++) {
+    await vi.advanceTimersByTimeAsync(20);
+    harness.loader.receive(pendingChunk(index));
+  }
+  await vi.advanceTimersByTimeAsync(20);
+  expect(await operation).toBe(false);
+  expect(harness.onError).toHaveBeenLastCalledWith("History request exceeded its maximum duration.");
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test.each(["duplicate", "conflict", "invalid"] as const)("history recovery keeps %s chunks terminal and clears both timers", async kind => {
+  vi.useFakeTimers();
+  const harness = createHarness();
+  const operation = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  harness.loader.receive(pendingChunk());
+  const chunk = kind === "invalid" ? { ...pendingChunk(1), chunk_index: -1 }
+    : kind === "conflict" ? { ...pendingChunk(), events: numberedEvents(1, 1) } : pendingChunk();
+  harness.loader.receive(chunk);
+  expect(await operation).toBe(false);
+  expect(harness.onError).toHaveBeenLastCalledWith("History response was invalid.");
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test.each([0, -1, 1.5, NaN, Infinity])("history recovery falls back from invalid timeout options %s", async invalid => {
+  vi.useFakeTimers();
+  const harness = createHarness({ timeoutMs: invalid, maxDurationMs: invalid });
+  const operation = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  await vi.advanceTimersByTimeAsync(14_999);
+  expect(harness.onError).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await operation).toBe(false);
+  expect(harness.onError).toHaveBeenLastCalledWith("History request timed out.");
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("history recovery uses the default hard limit even with continuous progress", async () => {
+  vi.useFakeTimers();
+  const harness = createHarness({ timeoutMs: 20_000, maxDurationMs: 0 });
+  const operation = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  for (let index = 0; index < 17; index++) {
+    await vi.advanceTimersByTimeAsync(10_000);
+    harness.loader.receive(pendingChunk(index));
+  }
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(await operation).toBe(false);
+  expect(harness.onError).toHaveBeenLastCalledWith("History request exceeded its maximum duration.");
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test.each(["dispose", "synchronous completion", "synchronous failure"] as const)("history recovery leaves no timer after %s", async mode => {
+  vi.useFakeTimers();
+  const harness = createHarness(mode === "dispose" ? {} : { send: frame => {
+    if (mode === "synchronous completion") loader.receive(historyFrame(frame.id));
+    else loader.receive({ protocol_version: 2, type: "protocol_error", in_reply_to: frame.id, code: "internal_error", message: "failed" });
+    return true;
+  } });
+  const loader = harness.loader;
+  const operation = loader.loadEarlier();
+  await flushMicrotasks();
+  if (mode === "dispose") {
+    expect(vi.getTimerCount()).toBe(2);
+    loader.dispose();
+  }
+  expect(await operation).toBe(mode === "synchronous completion");
+  expect(vi.getTimerCount()).toBe(0);
+  await vi.advanceTimersByTimeAsync(200_000);
+  expect(harness.onError).toHaveBeenCalledTimes(mode === "synchronous failure" ? 1 : 0);
 });
 
 test("releases loading after timeout and retries the same range without accepting the old response", async () => {

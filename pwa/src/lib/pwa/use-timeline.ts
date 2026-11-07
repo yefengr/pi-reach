@@ -34,6 +34,8 @@ type StartLiveOptions = {
 type UseTimelineOptions = {
   channelRef: MutableRef<PeerChannel | null>;
   reportHistoryFailure: (message: string) => void;
+  reportRecoveryFailure?: (message: string) => void;
+  clearRecoveryFailure?: () => void;
 };
 
 /** 只读历史的本地读取：events 是本地保存的全部正式记录，供附件推算与缺口标记。 */
@@ -65,7 +67,7 @@ function recentContiguousEvents(events: readonly TimelineEvent[]): TimelineEvent
  * 在线会话与只读历史共用的时间线：同一个运行时投影、向前翻页与视口协调。
  * 在线会话经 Relay 握手与补齐；只读历史只读本地记录，不连接、不能发送。
  */
-export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOptions) {
+export function useTimeline({ channelRef, reportHistoryFailure, reportRecoveryFailure = reportHistoryFailure, clearRecoveryFailure }: UseTimelineOptions) {
   const [items, setItems] = useState<TimelineViewItem[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<number>();
   const [history, setHistory] = useState<TimelineHistoryState | null>(null);
@@ -93,6 +95,8 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
   const onHistoryChangedRef = useRef<(() => void) | null>(null);
   // 当前连接补齐成功后待执行的分支核对；每个连接只执行一次。
   const branchCheckRef = useRef<(() => Promise<void>) | null>(null);
+  // 仅桥接检查点初始化到 loader.verification 建立之前的空隙；恢复重试不受此门禁影响。
+  const branchCheckPreparingRef = useRef<number | null>(null);
   const forceAuthoritativeReplacementRef = useRef(false);
   const replacementRequiresReplaceRef = useRef(false);
   const persistenceEpochRef = useRef(0);
@@ -168,6 +172,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     // 暂存页已由 loader 持久化；换会话或断线后由新连接重新计算范围，不再前插到新视图。
     releaseEarlier();
     historyLoaderRef.current = null;
+    branchCheckPreparingRef.current = null;
   }, [releaseEarlier]);
 
   const finishReplacement = useCallback(async (generation: number): Promise<boolean> => {
@@ -183,7 +188,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
           : mergeTimelineEvents(scope, stagedEvents));
         if (!persisted) return false;
       } catch {
-        if (generation === contextGenerationRef.current) reportHistoryFailure("Could not update local history.");
+        if (generation === contextGenerationRef.current) reportRecoveryFailure("Could not update local history.");
         return false;
       }
       if (generation !== contextGenerationRef.current || !runtimeRef.current.replacing) return false;
@@ -213,7 +218,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
       return true;
     }
     return false;
-  }, [channelRef, renderChange, reportHistoryFailure, resetOutputFollowing]);
+  }, [channelRef, renderChange, reportRecoveryFailure, resetOutputFollowing]);
 
   const runBranchCheck = useCallback(() => {
     const check = branchCheckRef.current;
@@ -223,9 +228,16 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
 
   const startLive = useCallback(({ scope, headSeq, send, onHistoryChanged, onBranchMismatch }: StartLiveOptions) => {
     const generation = ++contextGenerationRef.current;
+    clearRecoveryFailure?.();
     streamDisplay.cancel();
     clearTransitionTimer();
     disposeLoader();
+    branchCheckPreparingRef.current = generation;
+    const releaseBranchCheckPreparation = () => {
+      if (generation === contextGenerationRef.current && branchCheckPreparingRef.current === generation) {
+        branchCheckPreparingRef.current = null;
+      }
+    };
     // 握手即离开只读历史；运行时不会把历史投影当作增量基线。
     setHistory(null);
     replacementGateRef.current = false;
@@ -299,11 +311,12 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
           const replacing = runtimeRef.current.replacing;
           applyTimelineChange(change);
           if (replacing) return;
+          if (!catchingUpRef.current) clearRecoveryFailure?.();
           setLastSyncedAt(Date.now());
           onHistoryChanged();
         },
         immediate: () => runtimeRef.current.replacing,
-        onError: reportHistoryFailure,
+        onError: reportRecoveryFailure,
       }),
     });
     historyLoaderRef.current = loader;
@@ -321,21 +334,28 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     // 避免继续向前加载时把两个分支拼在一起。核对放在补齐之后，不拖慢打开。检查点持久化在本地、核对通过才清除：
     // 请求失败或中途断线时留到下次连接，不让本次补齐写入的当前分支记录顶替它而使核对误判通过。
     branchCheckRef.current = async () => {
-      if (!await checkpointReady || await localAhead || generation !== contextGenerationRef.current) return;
-      const pending = checkpoint;
-      if (!pending) return;
-      // 检查点超出当前 head（此前已因序号回退删去其记录），不可能在当前分支上。
-      if (pending.eventSeq > headSeq) {
-        onBranchMismatch();
-        return;
+      try {
+        if (!await checkpointReady || await localAhead || generation !== contextGenerationRef.current) return;
+        const pending = checkpoint;
+        if (!pending) return;
+        // 检查点超出当前 head（此前已因序号回退删去其记录），不可能在当前分支上。
+        if (pending.eventSeq > headSeq) {
+          onBranchMismatch();
+          return;
+        }
+        const verification = loader.fetchEventId(pending.eventSeq);
+        // fetchEventId 已同步建立 verification，后续普通分页交回 loader 串行，不等网络核对结束。
+        releaseBranchCheckPreparation();
+        const remoteId = await verification;
+        if (remoteId === null || generation !== contextGenerationRef.current) return;
+        if (remoteId !== pending.eventId) {
+          onBranchMismatch();
+          return;
+        }
+        await clearTimelineBranchCheckpoint(scope, pending).catch(() => {});
+      } finally {
+        releaseBranchCheckPreparation();
       }
-      const remoteId = await loader.fetchEventId(pending.eventSeq);
-      if (remoteId === null || generation !== contextGenerationRef.current) return;
-      if (remoteId !== pending.eventId) {
-        onBranchMismatch();
-        return;
-      }
-      await clearTimelineBranchCheckpoint(scope, pending).catch(() => {});
     };
 
     const loadPreparedRange = async () => {
@@ -363,11 +383,13 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
           setCatchupFailed(true);
           return;
         }
+        clearRecoveryFailure?.();
         runBranchCheck();
         return;
       }
       catchingUpRef.current = false;
       setCatchingUp(false);
+      clearRecoveryFailure?.();
       runBranchCheck();
     };
 
@@ -385,7 +407,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     // 暂存期间保持旧投影可见；失败时保留暂存门禁，重试成功后再提交。
     void loadPreparedRange();
     return prepared.plan;
-  }, [applyTimelineChange, attachEarlier, clearTransitionTimer, disposeLoader, earlierHandlers, finishReplacement, renderChange, reportHistoryFailure, runBranchCheck, setEarlierFailed, streamDisplay]);
+  }, [applyTimelineChange, attachEarlier, clearRecoveryFailure, clearTransitionTimer, disposeLoader, earlierHandlers, finishReplacement, renderChange, reportHistoryFailure, reportRecoveryFailure, runBranchCheck, setEarlierFailed, streamDisplay]);
 
   const retryCatchup = useCallback(async (): Promise<boolean> => {
     const failed = failedCatchupRef.current;
@@ -408,13 +430,14 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     if (succeeded) {
       failedCatchupRef.current = null;
       setCatchupFailed(false);
+      clearRecoveryFailure?.();
       runBranchCheck();
     } else {
       failedCatchupRef.current = failed;
       setCatchupFailed(true);
     }
     return succeeded;
-  }, [finishReplacement, runBranchCheck, setEarlierFailed]);
+  }, [clearRecoveryFailure, finishReplacement, runBranchCheck, setEarlierFailed]);
 
   const { busy: earlierBusy, request: requestEarlier } = earlier;
   const loadEarlier = useCallback(() => {
@@ -423,6 +446,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
       void retryCatchup();
       return;
     }
+    if (branchCheckPreparingRef.current !== null) return;
     requestEarlier();
   }, [earlierBusy, earlierSourceRef, requestEarlier, retryCatchup]);
 
@@ -430,6 +454,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     // 只读历史没有连接可断；Relay 断开不能撤下正在阅读的历史。
     if (runtimeRef.current.readOnlyView) return;
     contextGenerationRef.current += 1;
+    clearRecoveryFailure?.();
     persistenceEpochRef.current = beginTimelinePersistenceEpoch(runtimeRef.current);
     clearTransitionTimer();
     disposeLoader();
@@ -446,17 +471,18 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     fragmentAssemblerRef.current?.reset();
     fragmentAssemblerRef.current = null;
     applyTimelineChange(runtimeRef.current.markDisconnected(), true);
-  }, [applyTimelineChange, clearTransitionTimer, disposeLoader, setEarlierFailed]);
+  }, [applyTimelineChange, clearRecoveryFailure, clearTransitionTimer, disposeLoader, setEarlierFailed]);
 
   /** 离开只读历史：撤下投影与分页器。在线会话的 disconnect 不处理历史，见上。 */
   const closeHistory = useCallback(() => {
     if (!runtimeRef.current.readOnlyView) return;
     contextGenerationRef.current += 1;
+    clearRecoveryFailure?.();
     releaseEarlier();
     setEarlierFailed(false);
     setHistory(null);
     applyTimelineChange(runtimeRef.current.detachLive(), true);
-  }, [applyTimelineChange, releaseEarlier, setEarlierFailed]);
+  }, [applyTimelineChange, clearRecoveryFailure, releaseEarlier, setEarlierFailed]);
 
   const invalidateScope = useCallback(() => {
     forceAuthoritativeReplacementRef.current = true;
@@ -540,6 +566,7 @@ export function useTimeline({ channelRef, reportHistoryFailure }: UseTimelineOpt
     contextGenerationRef.current += 1;
     clearTransitionTimer();
     streamDisplay.cancel();
+    branchCheckPreparingRef.current = null;
     earlierSourceRef.current?.dispose();
   }, [clearTransitionTimer, earlierSourceRef, streamDisplay]);
 

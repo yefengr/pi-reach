@@ -9,6 +9,7 @@ import type { TimelineEarlierSource } from "./timeline-local-pager";
 /** 向前加载一页的记录数；只读历史的分页沿用同一页大小。 */
 export const TIMELINE_PAGE_SIZE = 80;
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_MAX_DURATION_MS = 180_000;
 const CANCELLED = Symbol("timeline-history-loader-cancelled");
 
 type Cancelled = typeof CANCELLED;
@@ -27,6 +28,7 @@ type ActiveRequest = {
   deferred: Deferred<HistoryWindowResult>;
   settled: boolean;
   timer: ReturnType<typeof setTimeout> | null;
+  maxTimer: ReturnType<typeof setTimeout> | null;
 };
 type PageOperation = {
   token: number;
@@ -52,7 +54,10 @@ export type TimelineHistoryLoaderOptions = {
   requestId?: () => string;
   /** 发请求时读取的当前 leaf：实时事件会推进 tip，Extension 按 Pi 当前 leaf 校验，沿用握手时的 leaf 会被当作分支变化。 */
   currentLeafId?: () => string | null;
+  /** 没有收到新合法分片的最长等待时间。 */
   timeoutMs?: number;
+  /** 单次请求的总等待上限，不随进度续期。 */
+  maxDurationMs?: number;
 };
 
 class TimelineHistoryLoaderError extends Error {
@@ -118,6 +123,7 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
   private readonly scope: RuntimeTimelineScope;
   private readonly headSeq: number;
   private readonly timeoutMs: number;
+  private readonly maxDurationMs: number;
   private readonly requestId: () => string;
   private readonly currentLeafId: () => string | null;
   private boundary: number;
@@ -140,6 +146,9 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
     this.timeoutMs = options.timeoutMs !== undefined && Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
       ? options.timeoutMs
       : DEFAULT_TIMEOUT_MS;
+    this.maxDurationMs = options.maxDurationMs !== undefined && Number.isSafeInteger(options.maxDurationMs) && options.maxDurationMs > 0
+      ? options.maxDurationMs
+      : DEFAULT_MAX_DURATION_MS;
     this.emitState(false);
   }
 
@@ -239,7 +248,12 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
     ) return false;
 
     const result = request.assembler.accept(frame);
-    if (result.status === "pending" || result.status === "ignored") return true;
+    if (result.status === "pending") {
+      // 同步 send 回调可能先于计时器初始化到达；发送成功后统一开始计时。
+      if (request.maxTimer !== null) this.resetIdleTimer(page, request);
+      return true;
+    }
+    if (result.status === "ignored") return true;
     if (result.status === "discarded") {
       this.rejectRequest(request, new TimelineHistoryLoaderError("History response was invalid."));
       return true;
@@ -320,6 +334,7 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
       deferred: createDeferred<HistoryWindowResult>(),
       settled: false,
       timer: null,
+      maxTimer: null,
     };
     page.request = request;
 
@@ -343,12 +358,13 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
       if (page.request === request) page.request = null;
       throw new TimelineHistoryLoaderError("Relay is not connected.");
     }
-    if (!request.settled) {
-      request.timer = setTimeout(() => {
+    if (!request.settled && this.isCurrent(page)) {
+      request.maxTimer = setTimeout(() => {
         if (this.isCurrent(page) && page.request === request) {
-          this.rejectRequest(request, new TimelineHistoryLoaderError("History request timed out."));
+          this.rejectRequest(request, new TimelineHistoryLoaderError("History request exceeded its maximum duration."));
         }
-      }, this.timeoutMs);
+      }, this.maxDurationMs);
+      this.resetIdleTimer(page, request);
     }
 
     let result: HistoryWindowResult | Cancelled;
@@ -461,10 +477,22 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
     request.deferred.reject(error);
   }
 
+  private resetIdleTimer(page: PageOperation, request: ActiveRequest): void {
+    if (request.settled || !this.isCurrent(page) || page.request !== request) return;
+    if (request.timer !== null) clearTimeout(request.timer);
+    request.timer = setTimeout(() => {
+      if (this.isCurrent(page) && page.request === request) {
+        this.rejectRequest(request, new TimelineHistoryLoaderError("History request timed out."));
+      }
+    }, this.timeoutMs);
+  }
+
   private clearRequest(request: ActiveRequest | null): void {
-    if (!request || request.timer === null) return;
-    clearTimeout(request.timer);
+    if (!request) return;
+    if (request.timer !== null) clearTimeout(request.timer);
+    if (request.maxTimer !== null) clearTimeout(request.maxTimer);
     request.timer = null;
+    request.maxTimer = null;
   }
 
   private fail(page: PageOperation, message: string): void {
