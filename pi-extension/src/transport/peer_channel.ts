@@ -5,6 +5,7 @@ import {
   type ServerFrame,
 } from "../protocol/v2/index.js";
 import type { RelayClient } from "./relay_client.js";
+import { MAX_TOOL_DETAILS_QUEUE_BYTES } from "@pi-reach/protocol/session";
 
 import { decodeRoute, decodeRoutePayload, parseJson, type RouteFrame, type RoutePurpose } from "@pi-reach/protocol/outer";
 export type { RouteFrame, RoutePurpose } from "@pi-reach/protocol/outer";
@@ -47,7 +48,7 @@ export class V2PeerChannel implements V2Channel {
   sendV2(msg: ServerFrame): boolean {
     try {
       const ct = Buffer.from(encodeServerFrameV2(msg)).toString("base64");
-      this.relay.send(JSON.stringify({
+      const line = JSON.stringify({
         type: "route",
         purpose: msg.type === "pair_ok" || msg.type === "pair_error" ? "pairing" : "session",
         device_id: this.host.deviceId,
@@ -55,7 +56,11 @@ export class V2PeerChannel implements V2Channel {
         runtime_instance_id: this.host.runtimeInstanceId,
         target_owner_id: this.ownerId,
         ct,
-      } satisfies RouteFrame));
+      } satisfies RouteFrame);
+      if (msg.type === "tool_details_chunk" && (this.relay.bufferedAmount ?? 0) + Buffer.byteLength(line) > MAX_TOOL_DETAILS_QUEUE_BYTES) {
+        return false;
+      }
+      this.relay.send(line);
       return true;
     } catch {
       if (msg.type === "timeline_event" && msg.event.kind === "run_end") console.warn("[pi-reach] run_end send failed", {

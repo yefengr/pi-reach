@@ -1,8 +1,10 @@
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
 import { getMessages } from "@/lib/i18n";
 import { timelineToolKey } from "@/lib/pwa/timeline-presentation";
+import { isToolSummary } from "@/lib/pwa/tool-details-inline";
+import type { ToolDetailsContent } from "@pi-reach/protocol/session";
 
-export type ToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }>;
+export type ToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }> | (Omit<ToolDetailsContent, "status"> & { kind: "tool"; tool_call_id: string; session_id: string; group_id: string; leaf_id: string | null; status: "running" | "complete" | "error" | "interrupted"; truncated: boolean });
 export type ToolStatus = "running" | "complete" | "error" | "interrupted" | "unknown";
 export type ToolKind = "read" | "command" | "search" | "edit" | "write" | "generic";
 export type ToolIconKind = "file" | "terminal" | "search" | "edit" | "write" | "tool";
@@ -86,7 +88,8 @@ function genericLabel(tool: string): string {
  * 专用视图仅在工具名和必要参数同时明确时启用，避免把同名但不同语义的工具误分类。
  */
 export function toolAction(value: ToolValue): ToolAction {
-  const { tool, args } = value;
+  const { tool } = value;
+  const args = isToolSummary(value) ? value.summary : toolInput(value);
   const path = stringField(args, PATH_KEYS);
   const command = stringField(args, COMMAND_KEYS);
   const query = stringField(args, QUERY_KEYS);
@@ -114,10 +117,11 @@ export function toolAction(value: ToolValue): ToolAction {
 export function toolHeaderSummary(value: ToolValue): string {
   const action = toolAction(value);
   const detail = action.detail.replace(/[\r\n\t]+/g, " ").trim();
-  if (action.kind !== "read" || !isRecord(value.args)) return detail;
+  const args = isToolSummary(value) ? value.summary : toolInput(value);
+  if (action.kind !== "read" || !isRecord(args)) return detail;
 
-  const offset = readLineOffset(value);
-  const limit = value.args.limit;
+  const offset = isToolSummary(value) ? value.summary.offset : readLineOffset(value);
+  const limit = args.limit;
   if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
     const start = offset ?? 1;
     const end = start + (limit - 1);
@@ -138,16 +142,16 @@ export function toolInput(value: ToolValue): unknown {
 }
 
 export function toolResult(value: ToolValue): unknown {
-  if (isToolPartial(value)) return value.blocks ?? value.delta;
+  if (isToolPartial(value)) return "blocks" in value ? value.blocks ?? value.delta : undefined;
   return "result" in value ? value.result : undefined;
 }
 
 export function toolError(value: ToolValue): string | undefined {
-  return !isToolPartial(value) && value.status === "error" ? value.error : undefined;
+  return !isToolPartial(value) && value.status === "error" && "error" in value ? value.error : undefined;
 }
 
 export function toolWasTruncated(value: ToolValue): boolean {
-  return !isToolPartial(value) && value.truncated;
+  return !isToolPartial(value) && "truncated" in value && value.truncated;
 }
 
 const OUTPUT_IMAGE_PLACEHOLDER = "[image data omitted; rendered in Output]";
@@ -327,7 +331,8 @@ export function toolReaderCall(value: ToolValue): string | undefined {
 
 function parametersBlock(value: ToolValue): ToolContentBlock | undefined {
   if (toolInput(value) === undefined) return undefined;
-  return { kind: "text", text: typeof value.args === "string" ? value.args : safeJsonText(value.args, INPUT_IMAGE_PLACEHOLDER), style: "json", label: getMessages().tools.parameters };
+  const args = toolInput(value);
+  return { kind: "text", text: typeof args === "string" ? args : safeJsonText(args, INPUT_IMAGE_PLACEHOLDER), style: "json", label: getMessages().tools.parameters };
 }
 
 function requestedToolDiff(value: ToolValue): string | undefined {
@@ -347,6 +352,8 @@ function requestedToolDiff(value: ToolValue): string | undefined {
  * 详情阅读器已在首块原样列出全部参数，传 input: false 只保留真实结果，避免同一内容出现两次。
  */
 export function toolContentBlocks(value: ToolValue, { input: withInput = true }: { input?: boolean } = {}): ToolContentBlock[] {
+  if (isToolSummary(value)) return [{ kind: "text", text: getMessages().tools.detailsNotLoaded, style: "notice" }];
+  const args = toolInput(value);
   const action = toolAction(value);
   const output = toolResult(value);
   const error = toolError(value);
@@ -358,8 +365,8 @@ export function toolContentBlocks(value: ToolValue, { input: withInput = true }:
   const diff = action.kind === "edit" ? reliableToolDiff(value) : undefined;
   const requested = withInput && action.kind === "edit" && !diff ? requestedToolDiff(value) : undefined;
   const matches = action.kind === "search" ? searchMatches(value) : undefined;
-  if (withInput && action.kind === "write" && !error && toolStatus(value) !== "interrupted" && isRecord(value.args) && typeof value.args.content === "string") {
-    blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
+  if (withInput && action.kind === "write" && !error && toolStatus(value) !== "interrupted" && isRecord(args) && typeof args.content === "string") {
+    blocks.push({ kind: "text", text: args.content, style: "code", path: action.detail });
   }
   if (matches !== undefined) {
     blocks.push({ kind: "text", text: matches.length ? matches.map((match) => `${match.path}${match.line === undefined ? "" : `:${match.line}`}\n${match.text}`).join("\n") : getMessages().tools.noMatches, style: "plain", label: getMessages().tools.searchResults });
@@ -384,8 +391,8 @@ export function toolContentBlocks(value: ToolValue, { input: withInput = true }:
   }
   if (diff) blocks.push({ kind: "text", text: diff, style: "diff", label: getMessages().tools.returnedDiff });
   if (requested !== undefined) blocks.push({ kind: "text", text: requested, style: "diff", label: getMessages().tools.requestedChanges });
-  if (withInput && action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(value.args) && typeof value.args.content === "string") {
-    blocks.push({ kind: "text", text: value.args.content, style: "code", path: action.detail });
+  if (withInput && action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(args) && typeof args.content === "string") {
+    blocks.push({ kind: "text", text: args.content, style: "code", path: action.detail });
   }
   const parameters = withInput && action.kind === "generic" ? parametersBlock(value) : undefined;
   if (parameters) blocks.unshift(parameters);

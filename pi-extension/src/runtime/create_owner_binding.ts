@@ -27,6 +27,7 @@ export function createOwnerBinding(options: CreateOwnerBindingOptions): OwnerBin
   let service!: TimelineV2Service;
   service = new TimelineV2Service({ sessionManager: manager, senderRef: ownerId,
     extensionVersion: options.extensionVersion, runtime,
+    onToolDetailFrame: (frame) => channel.sendV2(frame),
     onAttachmentReplay: (frame) => attachments.replay(frame, ownerId, manager, runtime),
     onAttachmentStatus: (clientRequestId) => attachments.status(ownerId, clientRequestId, manager, runtime),
     onDeliveryStage: (clientRequestId) => delivery.lookup(ownerId, service, clientRequestId),

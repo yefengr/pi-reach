@@ -17,6 +17,7 @@ import { TimelineHistoryPager } from "./history.js";
 import { TimelineRequestScope } from "./request_scope.js";
 import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js";
 import type { UserDeliveryRejection } from "./user_delivery_binding.js";
+import { ToolDetailService } from "./tool_detail_service.js";
 
 export type V2ActionFrame = Extract<
   ClientFrame,
@@ -35,6 +36,7 @@ export type V2ServiceOptions = {
   onAttachmentReplay?: (frame: Extract<ClientFrame, { type: "user_message" }>) => AttachmentReplay;
   onAttachmentStatus?: (clientRequestId: string) => AttachmentReplay;
   onDeliveryStage?: (clientRequestId: string) => "queued" | "in_flight" | null;
+  onToolDetailFrame?: (frame: ServerFrame) => boolean;
   onCancel?: () => boolean;
   onAction?: (frame: V2ActionFrame) => void;
   onQueueSnapshot?: () => ServerFrame[];
@@ -61,6 +63,8 @@ export class TimelineV2Service {
   private readonly runtime: TimelineRuntime;
   private readonly options: V2ServiceOptions;
   private readonly requestChannels = new Map<string, string>();
+  private readonly detailChannels = new Set<string>();
+  private readonly details: ToolDetailService;
 
   constructor(options: V2ServiceOptions) {
     this.sessionManager = options.sessionManager;
@@ -70,6 +74,9 @@ export class TimelineV2Service {
     this.state = new V2SessionState({ sessionId: options.sessionManager.getSessionId(), leafId: options.sessionManager.getLeafId() ?? null });
     this.runtime = options.runtime;
     this.options = options;
+    this.details = new ToolDetailService(this.runtime,
+      (frame) => this.detailChannels.has(frame.channel_id) && !this.requestScope.invalidReason(frame.channel_id, { sessionId: frame.session_id, leafId: frame.leaf_id }),
+      options.onToolDetailFrame);
     this.pager = new TimelineHistoryPager(
       this.sessionManager,
       (manager) => this.runtime.recover(manager),
@@ -111,11 +118,15 @@ export class TimelineV2Service {
     return frames;
   }
 
+  dispose(): void { this.details.dispose(); this.detailChannels.clear(); }
+
   reset(reason: "branch_changed" | "session_replaced"): ServerFrame[] {
+    this.details.dispose();
     return this.state.snapshot().channels.map((channel) => this.requestScope.resetFrame(channel.channelId, reason));
   }
 
   refreshScope(): boolean {
+    this.details.dispose();
     this.requestScope.invalidate();
     const sessionId = this.sessionId;
     const leafId = this.leafId;
@@ -128,8 +139,23 @@ export class TimelineV2Service {
   handle(frame: ClientFrame): ServerFrame[] {
     switch (frame.type) {
       case "session_hello":
+        if (frame.tool_details !== 1) {
+          this.detailChannels.delete(frame.channel_id);
+          this.details.closeChannel(frame.channel_id);
+          return [this.error(frame.id, "protocol_upgrade_required", "Refresh this page to enable tool details.", frame.channel_id)];
+        }
         return [this.ready(frame), ...receiptReplayFrames(this.state.snapshot().records, { senderRef: this.senderRef, channelId: frame.channel_id,
           sessionId: this.sessionId, leafId: this.leafId }, (id) => this.requestChannels.get(id)), ...this.currentQueueSnapshot()];
+      case "tool_details_open": {
+        const error = this.ensureReady(frame);
+        return error ? [error] : this.details.open(frame);
+      }
+      case "tool_details_close": {
+        const error = this.ensureReady(frame);
+        if (error) return [error];
+        this.details.close(frame.channel_id, frame.subscription_id);
+        return [];
+      }
       case "extension_info_request":
         return this.handleExtensionInfo(frame);
       case "pair_request":
@@ -236,9 +262,16 @@ export class TimelineV2Service {
     { ...(updated.messageId ? { message_id: updated.messageId } : {}), ...(updated.groupId ? { group_id: updated.groupId } : {}) })];
   }
 
-  partial(partial: TimelinePartial): V2Broadcast | null {
-    if (partial.session_id !== this.sessionId || partial.leaf_id !== this.leafId) return null;
-    return partial as V2Broadcast;
+  partial(partial: TimelinePartial): V2Broadcast | null { return this.partialFrames(partial)[0] ?? null; }
+
+  partialFrames(partial: TimelinePartial): V2Broadcast[] {
+    if (partial.session_id !== this.sessionId || partial.leaf_id !== this.leafId) return [];
+    if (partial.kind !== "tool" || !("representation" in partial)) return [partial as V2Broadcast];
+    return this.summaryChannels().map((id) => ({ ...partial, target_channel_id: id }));
+  }
+
+  private summaryChannels(): string[] {
+    return [...this.detailChannels].filter((id) => !this.requestScope.invalidReason(id, {}));
   }
 
   publish(event: TimelineEvent): V2Broadcast | null {
@@ -264,6 +297,9 @@ export class TimelineV2Service {
       leaf_id: this.leafId,
       event: parsed.data,
     };
+    if (parsed.data.kind === "tool" && "representation" in parsed.data) {
+      return this.summaryChannels().map((id) => ({ ...complete, target_channel_id: id }));
+    }
     if (new TextEncoder().encode(JSON.stringify(complete)).byteLength <= MAX_FRAME_BYTES) return [complete];
     const bytes = new TextEncoder().encode(JSON.stringify(parsed.data));
     const frames: V2Broadcast[] = [];
@@ -284,6 +320,8 @@ export class TimelineV2Service {
   }
 
   private ready(frame: Extract<ClientFrame, { type: "session_hello" }>): ServerFrame {
+    this.details.closeChannel(frame.channel_id);
+    this.detailChannels.add(frame.channel_id);
     this.state.hello(this.senderRef, frame.channel_id);
     this.requestScope.hello(frame.channel_id);
     const headSeq = this.runtime.recover(this.sessionManager).at(-1)?.event_seq ?? 0;
@@ -295,6 +333,7 @@ export class TimelineV2Service {
       session_id: this.sessionId,
       leaf_id: this.leafId,
       self_sender_ref: this.senderRef,
+      tool_details: 1,
       head_seq: headSeq,
     };
   }
@@ -320,6 +359,7 @@ export class TimelineV2Service {
   private handlePing(frame: Extract<ClientFrame, { type: "ping" }>): ServerFrame[] {
     const error = this.ensureReady(frame);
     if (error) return [error];
+    this.details.renew(frame.channel_id);
     return this.direct(frame.channel_id, { type: "pong", in_reply_to: frame.id });
   }
 
@@ -535,7 +575,7 @@ export class TimelineV2Service {
   validateRequest(frame: ClientFrame): ServerFrame | null { return this.ensureReady(frame); }
 
   private ensureReady(frame: ClientFrame): ServerFrame | null {
-    if (!("channel_id" in frame) || !this.state.get(this.senderRef, frame.channel_id)) {
+    if (!("channel_id" in frame) || !this.detailChannels.has(frame.channel_id) || !this.state.get(this.senderRef, frame.channel_id)) {
       return this.error("id" in frame ? frame.id : "v2", "invalid_channel", "session_hello required", "channel_id" in frame ? frame.channel_id : undefined);
     }
     const reason = this.requestScope.invalidReason(frame.channel_id, {

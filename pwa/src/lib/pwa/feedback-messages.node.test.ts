@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { safeConfirmationError, safeFeedbackMessage, safeProtocolFeedbackMessage } from "./feedback-messages";
+import { localizeFeedback, safeConfirmationError, safeFeedbackMessage, safeProtocolFeedbackMessage } from "./feedback-messages";
 
 test.each([
   "DOMException: IndexedDB failed",
@@ -40,6 +40,7 @@ test.each([
   ["invalid_leaf", "This session is out of date. Reconnect and try again."],
   ["too_large", "This message is too large to send."],
   ["unsupported_type", "This operation is not supported. Update Pi and try again."],
+  ["protocol_upgrade_required", "Refresh Pi Reach to update this app and reconnect."],
   ["invalid_message", "Pi rejected this message. Check it and try again."],
   ["internal_error", "Pi could not process this request. Try again."],
   ["unknown-code", "Pi could not process this request. Try again."],
@@ -48,6 +49,13 @@ test.each([
 ])("classifies protocol code %s and survives the final Toast boundary", (code, message) => {
   expect(safeProtocolFeedbackMessage(code)).toBe(message);
   expect(safeFeedbackMessage(safeProtocolFeedbackMessage(code))).toBe(message);
+});
+
+test("upgrade feedback is localized and never forwards arbitrary server error text", () => {
+  const message = safeProtocolFeedbackMessage("protocol_upgrade_required");
+  expect(localizeFeedback(message, "zh-CN")).toBe("请刷新 Pi Reach，更新页面后重新连接。");
+  expect(localizeFeedback(message, "en")).toBe(message);
+  expect(safeFeedbackMessage(`${message} SYNTHETIC_SERVER_DETAIL`, "protocol")).toBe("Pi could not process this request. Try again.");
 });
 
 test("keeps send and local-history feedback specific through the final Toast boundary", () => {

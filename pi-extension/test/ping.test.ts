@@ -111,7 +111,7 @@ async function pairUp(): Promise<PairContext> {
 
   const channelId = "channel-owner-1";
   const sendsBeforeHello = relayRef.current!.send.mock.calls.length;
-  relayRef.current!.emit("message", routeLine(ownerId, { protocol_version: 2, type: "session_hello", id: "hello-owner-1", channel_id: channelId }));
+  relayRef.current!.emit("message", routeLine(ownerId, { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-owner-1", channel_id: channelId }));
   let ready: Extract<ServerFrame, { type: "session_ready" }> | undefined;
   await vi.waitFor(() => {
     ready = relayRef.current!.send.mock.calls.slice(sendsBeforeHello).map((call) => decodeSent(call[0] as string)).find((sent) => sent.frame.type === "session_ready")?.frame as Extract<ServerFrame, { type: "session_ready" }> | undefined;

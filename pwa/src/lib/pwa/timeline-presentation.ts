@@ -19,8 +19,8 @@ function timelineGroupKey(value: Grouped): string {
 }
 
 // leaf 随普通消息提交推进；工具身份与正式结果匹配规则一致，只由会话、轮次和调用 ID 决定。
-export function timelineToolKey(value: TimelineToolValue): string {
-  return JSON.stringify([value.session_id, value.group_id, value.tool_call_id]);
+export function timelineToolKey(value: Pick<TimelineToolValue, "session_id" | "group_id" | "tool_call_id"> & { tool_ref?: { call_entry_id: string } }): string {
+  return JSON.stringify([value.session_id, value.group_id, value.tool_call_id, ...(value.tool_ref ? [value.tool_ref.call_entry_id] : [])]);
 }
 
 function blockKey(groupKey: string, messageId: string, type: "text" | "thinking", index: number): string {

@@ -175,7 +175,7 @@ async function main() {
   const channelB = id("channel-b");
   const helloB = id("hello-b");
   const bHelloCursor = sequenceOf(await request(ownerPorts.b, "/state"));
-  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: helloB, channel_id: channelB } } });
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_hello", tool_details: 1, id: helloB, channel_id: channelB } } });
   const readyState = await waitFor("session_ready", async () => {
     const state = await request(ownerPorts.b, "/state");
     return eventAfter(state, bHelloCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === helloB) ? state : null;
@@ -211,7 +211,7 @@ async function main() {
   const channelC = id("channel-c");
   const helloC = id("hello-c");
   const cHelloCursor = sequenceOf(await request(ownerPorts.c, "/state"));
-  await request(ownerPorts.c, "/frame", { method: "POST", capability: ownerCCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: helloC, channel_id: channelC } } });
+  await request(ownerPorts.c, "/frame", { method: "POST", capability: ownerCCapability, body: { frame: { protocol_version: 2, type: "session_hello", tool_details: 1, id: helloC, channel_id: channelC } } });
   const ownerCReady = await waitFor("owner-c session_ready", async () => {
     const state = await request(ownerPorts.c, "/state");
     return eventAfter(state, cHelloCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === helloC) ? state : null;
@@ -236,7 +236,7 @@ async function main() {
   const reboundChannelB = id("channel-b-after-new");
   const reboundHelloB = id("hello-b-after-new");
   const bReboundCursor = sequenceOf(await request(ownerPorts.b, "/state"));
-  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: reboundHelloB, channel_id: reboundChannelB } } });
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_hello", tool_details: 1, id: reboundHelloB, channel_id: reboundChannelB } } });
   const ownerBRebound = await waitFor("owner-b rebound session", async () => {
     const state = await request(ownerPorts.b, "/state");
     return eventAfter(state, bReboundCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === reboundHelloB) ? state : null;
@@ -249,7 +249,7 @@ async function main() {
   const reboundChannelC = id("channel-c-after-new");
   const reboundHelloC = id("hello-c-after-new");
   const cReboundCursor = sequenceOf(await request(ownerPorts.c, "/state"));
-  await request(ownerPorts.c, "/frame", { method: "POST", capability: ownerCCapability, body: { frame: { protocol_version: 2, type: "session_hello", id: reboundHelloC, channel_id: reboundChannelC } } });
+  await request(ownerPorts.c, "/frame", { method: "POST", capability: ownerCCapability, body: { frame: { protocol_version: 2, type: "session_hello", tool_details: 1, id: reboundHelloC, channel_id: reboundChannelC } } });
   const ownerCRebound = await waitFor("owner-c rebound session", async () => {
     const state = await request(ownerPorts.c, "/state");
     return eventAfter(state, cReboundCursor, (frame) => frame.type === "session_ready" && frame.in_reply_to === reboundHelloC) ? state : null;

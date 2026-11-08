@@ -96,7 +96,7 @@ test("keeps the published file source path out of realtime tool partials while t
 
   expect(partials.some((partial) => partial.status === "running")).toBe(true);
   expect(partials.some((partial) => partial.status === "delta")).toBe(true);
-  expect(partials.every((partial) => JSON.stringify(partial).includes('"args":{}'))).toBe(true);
+  expect(partials.every((partial) => "representation" in partial && partial.representation === "summary" && !("args" in partial))).toBe(true);
   expect(JSON.stringify(partials)).not.toContain(join(path, "成果.txt"));
 
   const sessionText = await readFile(manager.getSessionFile()!, "utf8");

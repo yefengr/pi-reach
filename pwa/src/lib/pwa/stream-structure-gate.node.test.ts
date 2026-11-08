@@ -70,7 +70,7 @@ test("a following row waits until the text before it has been revealed", () => {
   let items = withTool.items;
   for (let frame = 0; frame < 120 && !ids(items).includes("tool:a"); frame += 1) items = buffer.advance(16).items;
   const shown = items.find(item => item.kind === "partial" && item.partial.kind === "assistant");
-  expect(shown?.kind === "partial" ? shown.partial.delta : undefined).toBe(long);
+  expect(shown?.kind === "partial" && "delta" in shown.partial ? shown.partial.delta : undefined).toBe(long);
   expect(ids(items)).toContain("tool:a");
 });
 
@@ -80,7 +80,7 @@ test("a gated text lane does not consume its text before it is shown", () => {
   buffer.ingest([user("g"), tool("a", "g"), text("m1", "g", body)]);
   // 门控期间推进的时间不能提前放出排队正文。
   const shown = buffer.advance(STRUCTURE_GAP_MS).items.find(item => item.kind === "partial" && item.partial.kind === "assistant");
-  expect(shown?.kind === "partial" ? shown.partial.delta?.length : 0).toBeLessThan(body.length / 2);
+  expect(shown?.kind === "partial" && "delta" in shown.partial ? shown.partial.delta?.length : 0).toBeLessThan(body.length / 2);
 });
 
 test("run_end waits for every row and tool hold of its turn", () => {
@@ -144,7 +144,7 @@ test("an own message entering the timeline lets the previous reply finish its ta
   // 新气泡立即显示；上一条回复不被一次补完，继续按节奏放出。
   expect(ids(change.items)).toContain("pending:r");
   const reply = change.items.find(item => item.kind === "partial");
-  expect(reply?.kind === "partial" ? reply.partial.delta?.length : 0).toBeLessThan(long.length);
+  expect(reply?.kind === "partial" && "delta" in reply.partial ? reply.partial.delta?.length : 0).toBeLessThan(long.length);
 });
 
 test("a message expected to queue does not flush the running reply", () => {
@@ -153,7 +153,7 @@ test("a message expected to queue does not flush the running reply", () => {
   buffer.ingest([user("g"), text("m1", "g", long)]);
   const queued: TimelinePending = { kind: "pending", id: "pending:q", clientRequestId: "q", requestId: "a", text: "later", createdAt: 2, delivery: "pending", queueExpected: true };
   const reply = buffer.ingest([user("g"), text("m1", "g", long), queued]).items.find(item => item.kind === "partial");
-  expect(reply?.kind === "partial" ? reply.partial.delta?.length : 0).toBeLessThan(long.length);
+  expect(reply?.kind === "partial" && "delta" in reply.partial ? reply.partial.delta?.length : 0).toBeLessThan(long.length);
 });
 
 const SETTLE_MS = PWA_MOTION_FALLBACK_MS["--pwa-duration-collapse-settle"];
@@ -186,14 +186,14 @@ test("text right after a process row waits for the group to collapse, then revea
   const waiting = reply(buffer.advance(STRUCTURE_GAP_MS).items);
   // 等待期间正文已到达但不显示文字，投影带等待标记供过程组先收起。
   expect(waiting).toMatchObject({ awaitingSettle: true });
-  expect(waiting?.partial.delta).toBe("");
+  expect(waiting?.partial).toMatchObject({ delta: "" });
   expect(buffer.hasPending()).toBe(true);
   const { waited, view } = untilRevealed(buffer);
   expect(waited).toBeGreaterThanOrEqual(SETTLE_MS - 16);
   expect(waited).toBeLessThanOrEqual(SETTLE_MS + 16);
   expect(view?.awaitingSettle).toBeUndefined();
   // 等待标记与首批字素在同一快照交接，正文不会短暂消失。
-  expect(view?.partial.delta).toBe("He");
+  expect(view?.partial).toMatchObject({ delta: "He" });
 });
 
 test("text after a thinking block of the same message also waits", () => {
@@ -211,7 +211,7 @@ test("text that opens a turn or follows other text does not wait", () => {
   buffer.ingest([user("g"), text("m1", "g", "First reply")]);
   const first = reply(buffer.advance(16).items);
   expect(first?.awaitingSettle).toBeUndefined();
-  expect(first?.partial.delta).not.toBe("");
+  expect(first?.partial).not.toMatchObject({ delta: "" });
 });
 
 test("leading whitespace does not start the wait; the first visible character does", () => {
@@ -223,7 +223,7 @@ test("leading whitespace does not start the wait; the first visible character do
   buffer.ingest([user("g"), toolDone("a", "g"), text("m1", "g", "\nVisible")]);
   expect(reply(buffer.advance(16).items)).toMatchObject({ awaitingSettle: true });
   // 等待结束时越过前导空白，首个可见字随交接一起出现。
-  expect(untilRevealed(buffer).view?.partial.delta).toBe("\nVi");
+  expect(untilRevealed(buffer).view?.partial).toMatchObject({ delta: "\nVi" });
 });
 
 test("run_end waits until the settled text has been revealed", () => {
@@ -236,7 +236,7 @@ test("run_end waits until the settled text has been revealed", () => {
   expect(ids(ended.items)).not.toContain("end-g");
   let items = ended.items;
   for (let frame = 0; frame < 80 && !ids(items).includes("end-g"); frame += 1) items = buffer.advance(16).items;
-  expect(reply(items)?.partial.delta).toBe("Done");
+  expect(reply(items)?.partial).toMatchObject({ delta: "Done" });
   expect(ids(items)).toContain("end-g");
 });
 
@@ -248,7 +248,7 @@ test("reset and foreground flush reveal waiting text at once", () => {
   expect(reply(buffer.advance(STRUCTURE_GAP_MS).items)).toMatchObject({ awaitingSettle: true });
   const flushed = reply(buffer.flush().items);
   expect(flushed?.awaitingSettle).toBeUndefined();
-  expect(flushed?.partial.delta).toBe("Hello");
+  expect(flushed?.partial).toMatchObject({ delta: "Hello" });
 });
 
 function assistant(id: string, group: string, body: string): TimelineViewItem {

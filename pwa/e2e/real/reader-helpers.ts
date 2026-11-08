@@ -1,4 +1,5 @@
 import { expect, type ElementHandle, type Locator, type Page } from "playwright/test";
+import { expectLiveSessionConnected } from "./session-ready-helpers";
 
 const STREAM_TRIGGER = "E2E stream tool fixture";
 const FILE_NAME = "report-中文.md";
@@ -102,7 +103,7 @@ async function verifySavedHistory(page: Page, newDraft: string): Promise<void> {
   await expect(online).toHaveCount(1);
   await online.click();
   await expect(online).toHaveAttribute("aria-current", "true");
-  await expect(page.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expectLiveSessionConnected(page, 60_000);
   await expect(composer).toBeEditable();
   await expect(composer).toHaveValue(newDraft);
 }

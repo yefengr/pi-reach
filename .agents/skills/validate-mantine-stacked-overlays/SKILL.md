@@ -29,6 +29,7 @@ description: 在 Pi Reach PWA 中实现或审查 Mantine Modal、Drawer、Menu�
 ## Pitfalls
 
 - 截图、SSR 无 Dialog HTML、隐藏角色查询或焦点提前返回，都不能单独证明退出结束、组件实例常驻或同步门禁已释放；等真实 DOM 卸载或明确退出信号。
+- 异步详情取消与 Drawer 退出不是同一时刻。取消订阅时直接清空已展示正文，会在退出中闪回“加载中”；退出展示可保留最后匹配身份的快照。更换选择、作用域或 controller 时保留旧快照又会形成跨上下文闪现，不能为平滑退出削弱原有身份隔离。
 - 阅读器 history 标记可能早于 Portal 挂载。系统返回测试先等真实 Dialog 可见，再触发返回；返回后先等 history 标记清除，再确认 DOM 卸载。否则把尚未挂载误判为已关闭，提前 cleanup 可触发第二次 `history.back()` 并退出测试页面。
 - `renderPwa` 提供测试根，真实 PwaApp 集成路径不得再套额外同名 `.pwa-root`；核对实际父节点。Mantine 可能重写 `aria-labelledby`，先查真实可访问名称，再限定容器或精确定位。
 - 浏览器点击不保证触发器先成为 `document.activeElement`；验证回焦前显式 focus，再 click。短 accessible name 可能匹配关闭按钮，不猜定位器。

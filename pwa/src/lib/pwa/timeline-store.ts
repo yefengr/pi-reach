@@ -1,4 +1,5 @@
 import Dexie from "dexie";
+import { preserveToolInline } from "./tool-details-inline";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { getPwaDatabase, timelineEventPreview, type PwaTimelineBranchCheckpoint, type PwaTimelineEventRecord, type PwaTimelineSessionRecord } from "./db";
 import { compareSavedTimelineEvents } from "./timeline-order";
@@ -107,7 +108,11 @@ function finalRecordsById(
 ): Map<string, PwaTimelineEventRecord> {
   const byEventId = new Map(existing.map((record) => [record.eventId, record]));
   for (const record of incoming) {
-    if (shouldReplaceRecord(byEventId.get(record.eventId), record)) byEventId.set(record.eventId, record);
+    const previous = byEventId.get(record.eventId);
+    if (shouldReplaceRecord(previous, record)) {
+      const event = preserveToolInline(previous?.event, record.event);
+      byEventId.set(record.eventId, event === record.event ? record : { ...record, event });
+    }
   }
   return byEventId;
 }
@@ -163,6 +168,8 @@ async function clearScopeInTransaction(scope: TimelineScope): Promise<void> {
   await Promise.all([
     db.events.where("[deviceId+endpointId+sessionId]").equals(scopeWhere(scope)).delete(),
     db.sessions.delete(makeTimelineScopeId(scope)),
+    db.toolDetails.where("deviceId").equals(scope.deviceId)
+      .filter(record => record.endpointId === scope.endpointId && record.sessionId === scope.sessionId).delete(),
   ]);
 }
 
@@ -389,13 +396,15 @@ export async function replaceTimelineEvents(scope: TimelineScope, events: readon
   const records = mergeTimelineRecords([], incoming);
   await db.transaction("rw", [db.events, db.sessions], async () => {
     const existingSession = await db.sessions.get(makeTimelineScopeId(scope));
+    const previous = await db.events.bulkGet(records.map(record => record.id));
+    const retained = records.map((record, index) => ({ ...record, event: preserveToolInline(previous[index]?.event, record.event) }));
     await db.events.where("[deviceId+endpointId+sessionId]").equals(scopeWhere(scope)).delete();
-    if (records.length > 0) await db.events.bulkPut(records);
-    await db.sessions.put(summarizeSession(scope, records, existingSession));
+    if (retained.length > 0) await db.events.bulkPut(retained);
+    await db.sessions.put(summarizeSession(scope, retained, existingSession));
   });
 }
 
 export async function clearScope(scope: TimelineScope): Promise<void> {
   const db = getPwaDatabase();
-  await db.transaction("rw", [db.events, db.sessions], () => clearScopeInTransaction(scope));
+  await db.transaction("rw", [db.events, db.sessions, db.toolDetails], () => clearScopeInTransaction(scope));
 }

@@ -92,6 +92,8 @@ export class RelayClient extends EventEmitter {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
+  get bufferedAmount(): number { return this.ws?.bufferedAmount ?? 0; }
+
   send(line: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("relay: not connected");

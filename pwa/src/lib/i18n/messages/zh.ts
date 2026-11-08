@@ -517,6 +517,13 @@ export const zh: Messages = {
     noToolSelected: "未选择工具",
     closeReader: "关闭工具详情",
     noDetails: "未选择工具详情。",
+    detailsNotLoaded: "详情尚未加载，打开后获取。",
+    detailsLoading: "正在获取工具详情…",
+    detailsOffline: "此浏览器未保存完整详情，连接原 Pi 后可查看。",
+    detailsUnavailable: "工具详情暂不可用，不影响会话。",
+    detailsInvalid: "工具详情校验失败。",
+    detailsTooLarge: "工具详情超过支持的大小。",
+    detailsPreview: "当前为实时预览，保存后的最终结果就绪时会自动显示。",
   },
   operations: {
     dismiss: "关闭操作提示",

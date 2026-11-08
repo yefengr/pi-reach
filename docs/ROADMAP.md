@@ -6,6 +6,7 @@
 
 | 事项 | 状态 | 当前边界与下一步 |
 | --- | --- | --- |
+| [工具调用轻量同步与详情按需获取](plans/active/20261107-history-payload-optimization.md) | 进行中 | 两端摘要、按需原生详情、运行订阅与独立有界缓存已在工作树实现；目标自动化、冻结差异独立复核及受控合成性能对比已有证据。保留现有分页、思考／回复流、本地只读历史来源、发送门禁与 `run_end`。协议 E2E 通过；既有连接检查与附件旧操作已获准校准，静态检查、断言矩阵、独立复核及标准双 Owner 浏览器 E2E（2 passed）通过。旧已加载页面刷新前通用错误的 U1 边界已获用户确认；下一步完成 PR／CI 与真机验收，尚未合并或正式发布。 |
 | [边框、分隔与圆角参照 iOS 的调整](plans/active/20261101-ios-borders-spacing.md) | 待验收 | 已随 PR #171 合并（透明度后续调整见 PR #173），决策见 [ADR-20261101](adr/20261101-hairline-concentric-radii.md)，规则已同步 DESIGN。待验收：Safari 与 iOS 真机可见度。 |
 | [会话输出连续性与 Working 兜底](plans/active/20261030-stream-output-continuity.md) | 待验收 | 已随 PR #162 合并并发布，决策见 [ADR](adr/20261030-stream-output-continuity.md)。待验收：真机录屏对比。 |
 | [时间线视口协调层重构](plans/active/20261022-timeline-viewport-coordinator.md) | 待验收 | 协调层、留白优先、软键盘原生处理与前插位置保护已分别随 PR #134、#135、#136、#139、#146 合并。待验收：设备上的跟随、软键盘与前插复验，不以合并或自动化通过替代关闭。 |

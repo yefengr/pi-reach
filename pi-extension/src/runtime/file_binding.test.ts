@@ -37,7 +37,7 @@ async function fixture() {
   }
   const files = new FileBinding({ runtimeId: "runtime", getManager: () => manager, getBinding: (owner) => bindings.get(owner) });
   cleanup.push(() => files.reader.dispose());
-  const hello = (owner: string, channel: string) => bindings.get(owner)!.service.handle({ protocol_version: 2, type: "session_hello", id: `hello-${channel}`, channel_id: channel });
+  const hello = (owner: string, channel: string) => bindings.get(owner)!.service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: `hello-${channel}`, channel_id: channel });
   const open = (channel: string, id = "open", session = manager.getSessionId()) => ({ protocol_version: 2 as const, type: "file_open" as const, id, channel_id: channel, session_id: session, publication_id: publication });
   return { files, bindings, manager, hello, open, source };
 }

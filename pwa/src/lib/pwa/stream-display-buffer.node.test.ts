@@ -33,7 +33,7 @@ function toolEvent(id: string, group: string, toolCallId: string): TimelineViewI
 }
 
 function text(item: TimelineViewItem | undefined): string | undefined {
-  return item?.kind === "partial" ? item.partial.delta : undefined;
+  return item?.kind === "partial" && "delta" in item.partial ? item.partial.delta : undefined;
 }
 
 test("delivery query, failure and evidence metadata publish urgently without changing streaming progress", () => {
@@ -340,7 +340,7 @@ test("exposes epochs on every thinking view, never on the wire partial or non-th
   expect(projectTimeline(projected).entries.filter(entry => entry.kind === "thinking").map(entry => entry.thinkingTextEpoch)).toEqual([epoch(projected[0])]);
   const noThinking = blocksPartial([{ type: "text", text: "Answer" }]);
   const toolBlocks = partial("t", "g", "Text", "tool");
-  if (toolBlocks.kind !== "partial") throw new Error("invalid fixture");
+  if (toolBlocks.kind !== "partial" || !("delta" in toolBlocks.partial)) throw new Error("invalid fixture");
   toolBlocks.partial.blocks = [{ type: "thinking", text: "Tool thought" }];
   expect(buffer.reset([noThinking, toolBlocks]).items.map(epoch)).toEqual([undefined, undefined]);
 });
@@ -541,7 +541,7 @@ test("immediate streams never segment text for init, append, replacement, reset 
   expect(text(buffer.ingest([partial("tool", "g", "tool output extended", "tool")]).items[0])).toBe("tool output extended");
   expect(text(buffer.ingest([partial("tool", "g", "tool replaced", "tool")]).items[0])).toBe("tool replaced");
   const blocks = buffer.ingest([blocksPartial([{ type: "text", text: "Answer" }, { type: "thinking", text: "**Thought**" }])]);
-  expect(blocks.items[0]?.kind === "partial" && blocks.items[0].partial.blocks?.map(block => block.text)).toEqual(["Answer", "**Thought**"]);
+  expect(blocks.items[0]?.kind === "partial" && "blocks" in blocks.items[0].partial && blocks.items[0].partial.blocks?.map(block => block.text)).toEqual(["Answer", "**Thought**"]);
   buffer.ingest([blocksPartial([{ type: "text", text: "Answer more" }, { type: "thinking", text: "**Thought** continues" }])]);
   buffer.ingest([blocksPartial([{ type: "text", text: "Replaced" }])]);
   buffer.advance();
@@ -578,7 +578,7 @@ test("paced lanes segment on demand, keep the displayed prefix and never resegme
   const segmentsAfterDrain = segment.mock.calls.length;
   const immediate = buffer.ingest([blocksPartial([{ type: "text", text: "answer plus tail" }])]);
   const blocks = immediate.items[0];
-  if (blocks?.kind !== "partial" || blocks.partial.blocks === undefined) throw new Error("invalid fixture");
+  if (blocks?.kind !== "partial" || !("blocks" in blocks.partial) || blocks.partial.blocks === undefined) throw new Error("invalid fixture");
   expect(blocks.partial.blocks.map(block => block.text)).toEqual(["answer plus tail"]);
   expect(buffer.hasPending()).toBe(false);
   buffer.advance();
@@ -597,7 +597,7 @@ test("mixed lanes keep immediate text whole while only the paced lane builds a c
   expect(text(change.items[0])).toBe("pl");
   expect(text(change.items[1])).toBe("tool output");
   const blocks = change.items[2];
-  if (blocks?.kind !== "partial" || blocks.partial.blocks === undefined) throw new Error("invalid fixture");
+  if (blocks?.kind !== "partial" || !("blocks" in blocks.partial) || blocks.partial.blocks === undefined) throw new Error("invalid fixture");
   expect(blocks.partial.blocks.map(block => block.text)).toEqual(["Blocks answer"]);
   expect(segment.mock.calls.length).toBeLessThanOrEqual(1);
   while (buffer.hasPending()) buffer.advance();

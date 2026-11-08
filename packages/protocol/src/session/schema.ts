@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PROTOCOL_VERSION } from "../constants.js";
+import { boundedJsonByteLength } from "./json-budget.js";
 
 export { PROTOCOL_VERSION } from "../constants.js";
 export const PROTOCOL_VERSION_V2 = PROTOCOL_VERSION;
@@ -14,6 +15,18 @@ export const MAX_ID_CHARS = 256;
 export const MAX_STRING_CHARS = 1024 * 1024;
 export const MAX_TEXT_CHARS = MAX_STRING_CHARS;
 export const MAX_ARRAY_ITEMS = 4096;
+export const TOOL_DETAILS_CAPABILITY = 1;
+export const MAX_TOOL_SUMMARY_BYTES = 4096;
+export const MAX_TOOL_PREVIEW_BYTES = 64 * 1024;
+export const MAX_TOOL_PREVIEWS_BYTES = 512 * 1024;
+export const MAX_TOOL_PREVIEWS = 8;
+export const MAX_TOOL_DETAIL_SUBSCRIPTIONS = 16;
+export const TOOL_DETAIL_LEASE_MS = 30_000;
+export const TOOL_DETAIL_KEEPALIVE_MS = 10_000;
+export const MAX_TOOL_DETAILS_BYTES = 8 * 1024 * 1024;
+export const MAX_TOOL_DETAILS_QUEUE_BYTES = 16 * 1024 * 1024;
+export const MAX_TOOL_DETAILS_CACHE_BYTES = 16 * 1024 * 1024;
+export const MAX_TOOL_DETAILS_CACHE_ENTRIES = 64;
 
 export type JsonValue =
   | null
@@ -127,6 +140,67 @@ const assistantEventShape = {
 };
 export const timelineAssistantEventSchema = strictObject(assistantEventShape);
 
+export const toolRefSchema = strictObject({ call_entry_id: idSchema, tool_call_id: idSchema });
+export type ToolRef = z.infer<typeof toolRefSchema>;
+
+export const toolSummarySchema = strictObject({
+  action: z.enum(["read", "write", "edit", "execute", "search", "other"]),
+  command: z.string().max(512).optional(),
+  path: z.string().max(512).optional(),
+  query: z.string().max(512).optional(),
+  offset: positiveIntSchema.optional(),
+  limit: positiveIntSchema.optional(),
+}).refine((value) => boundedJsonByteLength(value, MAX_TOOL_SUMMARY_BYTES) !== null, "tool summary exceeds byte budget");
+export type ToolSummary = z.infer<typeof toolSummarySchema>;
+
+const summaryToolFields = {
+  tool_call_id: idSchema,
+  tool: idSchema,
+  representation: z.literal("summary"),
+  summary: toolSummarySchema,
+  tool_ref: toolRefSchema,
+};
+function matchingToolRef(value: { tool_call_id: string; tool_ref: ToolRef }, ctx: z.RefinementCtx): void {
+  if (value.tool_call_id !== value.tool_ref.tool_call_id) {
+    ctx.addIssue({ code: "custom", path: ["tool_ref", "tool_call_id"], message: "tool reference must match the call" });
+  }
+}
+export const timelineSummaryToolEventSchema = strictObject({
+  ...groupedTimelineBaseShape,
+  kind: z.literal("tool"),
+  ...summaryToolFields,
+  status: z.enum(["complete", "error", "interrupted"]),
+}).superRefine(matchingToolRef);
+
+// 详情允许保存的较长字符串；整个文档先过预算门禁，再进入递归 schema。
+const toolDetailsJsonSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
+  z.null(), z.boolean(), finiteNumber, z.string().max(MAX_TOOL_DETAILS_BYTES),
+  z.array(toolDetailsJsonSchema).max(MAX_ARRAY_ITEMS),
+  z.record(z.string().max(MAX_ID_CHARS), toolDetailsJsonSchema),
+]));
+export const toolDetailsContentSchema = z.unknown().superRefine((value, ctx) => {
+  if (boundedJsonByteLength(value, MAX_TOOL_DETAILS_BYTES) === null) {
+    ctx.addIssue({ code: "custom", message: "tool details exceed JSON budget" });
+  }
+}).pipe(strictObject({
+  tool_ref: toolRefSchema,
+  tool: idSchema,
+  source: z.enum(["preview", "session"]),
+  status: z.enum(["preparing", "running", "complete", "error", "interrupted"]),
+  args: toolDetailsJsonSchema,
+  result: toolDetailsJsonSchema.optional(),
+  error: z.string().max(MAX_TOOL_DETAILS_BYTES).optional(),
+  limited: z.boolean(),
+}).superRefine((value, ctx) => {
+  const active = value.status === "preparing" || value.status === "running";
+  if ((value.source === "preview") !== active) ctx.addIssue({ code: "custom", path: ["source"], message: "source must match lifecycle phase" });
+  if (value.source === "session" && value.limited) ctx.addIssue({ code: "custom", path: ["limited"], message: "limited content is a preview, not a final result" });
+  if (value.source === "session" && value.status === "complete" && value.result === undefined) {
+    ctx.addIssue({ code: "custom", path: ["result"], message: "complete details require the saved result" });
+  }
+}));
+export type ToolDetailsContent = z.infer<typeof toolDetailsContentSchema>;
+
 const completeToolEventSchema = strictObject({
   ...groupedTimelineBaseShape,
   kind: z.literal("tool"),
@@ -161,6 +235,7 @@ const interruptedToolEventSchema = strictObject({
   error: z.never().optional(),
 });
 export const timelineToolEventSchema = z.union([
+  timelineSummaryToolEventSchema,
   completeToolEventSchema,
   errorToolEventSchema,
   interruptedToolEventSchema,
@@ -229,6 +304,13 @@ export const timelinePartialSchema = z.union([
   }),
   strictObject({
     ...partialBaseShape,
+    ...summaryToolFields,
+    target_channel_id: channelIdSchema.optional(),
+    status: z.enum(["preparing", "running", "delta"]),
+    kind: z.literal("tool"),
+  }).superRefine(matchingToolRef),
+  strictObject({
+    ...partialBaseShape,
     // preparing：模型仍在生成该调用（参数可能不完整），尚未开始执行；只有工具 partial 使用。
     status: z.enum(["preparing", "running", "delta"]),
     kind: z.literal("tool"),
@@ -292,6 +374,7 @@ export const CLIENT_FRAME_TYPES = [
   "queued_message_clear", "queued_message_steer", "approve_tool", "extension_info_request",
   "attachment_capabilities_request", "attachment_begin", "attachment_chunk", "attachment_finish", "attachment_status_request", "attachment_cancel", "attachment_discard",
   "file_open", "file_attachment_open", "file_read", "file_close",
+  "tool_details_open", "tool_details_close",
 ] as const;
 export const SERVER_FRAME_TYPES = [
   "pair_ok", "pair_error", "session_ready", "user_message_started", "user_message_status", "timeline_event",
@@ -300,6 +383,7 @@ export const SERVER_FRAME_TYPES = [
   "extension_info",
   "attachment_capabilities", "attachment_state", "attachment_error", "attachment_discarded",
   "file_opened", "file_chunk", "file_closed", "file_error",
+  "tool_details_chunk", "tool_details_error",
 ] as const;
 export type ClientFrameType = (typeof CLIENT_FRAME_TYPES)[number];
 export type ServerFrameType = (typeof SERVER_FRAME_TYPES)[number];

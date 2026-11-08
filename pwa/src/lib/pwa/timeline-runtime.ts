@@ -3,7 +3,8 @@ import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/sch
 import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_MESSAGE_BYTES, attachmentDescriptorSchema, type AttachmentDescriptor } from "../pi-reach/protocol-v2/schema";
 import { parseTimelineEventV2, parseTimelinePartialV2 } from "../pi-reach/protocol-v2/codec";
 import { TIMELINE_RECENT_LIMIT } from "./timeline-reconnect";
-import { matchesFormalMessage, partialMessageIdentity } from "./timeline-identity";
+import { partialMessageIdentity } from "./timeline-identity";
+import { isToolSummary, matchesToolFormalMessage as matchesFormalMessage, preserveToolInline } from "./tool-details-inline";
 import { createTimelineReplacement, type TimelineReplacementBranch } from "./timeline-replacement";
 import {
   DEFAULT_TIMELINE_PENDING_LIMITS,
@@ -177,7 +178,7 @@ function applyQueueInFlight(pending: Pending, editable: boolean): void {
 function mergePartial(previous: TimelinePartial | undefined, next: TimelinePartial): TimelinePartial {
   // 调用开始执行后不退回准备中：迟到的准备帧只可能携带更旧的参数。
   if (previous?.kind === "tool" && previous.status !== "preparing" && next.kind === "tool" && next.status === "preparing") return previous;
-  if (!previous || ("blocks" in next && next.blocks !== undefined)) return next;
+  if (!previous || isToolSummary(next) || isToolSummary(previous) || ("blocks" in next && next.blocks !== undefined)) return next;
   if (next.delta === undefined) return { ...next, ...(previous.delta === undefined ? {} : { delta: previous.delta }) };
   return { ...next, delta: `${previous.delta ?? ""}${next.delta}` };
 }
@@ -1047,6 +1048,8 @@ export class TimelineRuntime {
     return { protocol_version: 2, type: "user_message", id: requestId, channel_id: scope.channelId, session_id: scope.sessionId, leaf_id: scope.leafId, client_request_id: clientRequestId, text, ...(images?.length ? { images } : {}), ...(attachmentIds?.length ? { attachment_ids: [...attachmentIds] } : {}) };
   }
   private commitParsed(event: TimelineEvent): void {
+    const previous = this.events.get(event.event_id) ?? this.replacement?.previousEvents.find(candidate => candidate.event_id === event.event_id);
+    event = preserveToolInline(previous, event);
     this.events.set(event.event_id, event);
     if (event.event_seq !== undefined) this.liveHeadSeq = Math.max(this.liveHeadSeq ?? 0, event.event_seq);
     if (event.kind === "user") this.reconcileUserMessage(event.message_id);

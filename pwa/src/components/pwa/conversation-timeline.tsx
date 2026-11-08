@@ -28,6 +28,7 @@ import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 
 type ConversationTimelineProps = {
+  sourceKey?: string;
   items: readonly TimelineViewItem[];
   live: boolean;
   /** 每一轮的结束时间与状态，仅来自正式 run_end。 */
@@ -191,7 +192,7 @@ function useIdlePartials(entries: readonly PresentationEntry[], idle: boolean): 
   return keys;
 }
 
-export function ConversationTimeline({ items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, enterInitialPending = false, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
+export function ConversationTimeline({ sourceKey, items, live, completions, running = false, compacting = false, notices = NO_NOTICES, listRef, onReadingChange, renderRecord, enterInitialPending = false, gapBefore = NO_GAPS, gapAtEnd = false }: ConversationTimelineProps) {
   const { changeSelection, acceptsSelection } = useReaderIntent();
   const process = useReaderSelection<ProcessReaderSelection>();
   const summary = useReaderSelection<{ key: string; sessionId: string; trigger: HTMLButtonElement }>();
@@ -396,7 +397,7 @@ export function ConversationTimeline({ items, live, completions, running = false
     {rows}
     {gapAtEnd || projectedGapAtEnd ? <GapNotice /> : null}
     {compacting ? <CompactionStatus /> : slotPresent ? <TurnActivitySlot working={workingVisible} /> : null}
-    {reader && readerEntry?.kind === "tool" ? <ToolReader key={reader.generation} value={readerEntry.value}
+    {reader && readerEntry?.kind === "tool" ? <ToolReader key={reader.generation} sourceKey={sourceKey} value={readerEntry.value}
       status={effectiveProcessStatus(readerEntry, view.entries, activity) as Exclude<ReturnType<typeof effectiveProcessStatus>, "neutral">}
       opened={reader.opened} onClose={() => process.close(reader.token)} onExitTransitionEnd={() => finishReader(reader.token, reader.selection)} /> : null}
     {reader && readerEntry?.kind === "thinking" ? <ThinkingReader key={reader.generation} entry={readerEntry}

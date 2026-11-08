@@ -476,7 +476,7 @@ describe("plan/63 SDK timeline contracts", () => {
     });
     runtime.attach(sessionManager);
     service = new TimelineV2Service({ sessionManager, runtime, senderRef: "self", extensionVersion: "1.2.3", onUserMessage: () => false });
-    const ready = service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" })[0]!;
+    const ready = service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" })[0]!;
     if (ready.type !== "session_ready") throw new Error("Expected session_ready");
     browser.beginLive({ deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: ready.session_id, leafId: ready.leaf_id, selfSenderRef: ready.self_sender_ref, channelId: "channel" }, ready.head_seq);
     const extensionFactory: ExtensionFactory = (pi) => {
@@ -517,7 +517,7 @@ describe("plan/63 SDK timeline contracts", () => {
       expect(browser.formalEvents().filter((event) => event.kind === "tool")).toHaveLength(2);
       expect(browser.formalEvents().some((event) => event.kind === "run_end")).toBe(false);
       expect(runCompletions(browser.formalEvents()).size).toBe(0);
-      expect(partialIds).toEqual(new Set(["tool:delivery-first", "tool:delivery-second"]));
+      expect([...partialIds].sort()).toEqual([expect.stringMatching(/^tool:[^:]+:delivery-first$/), expect.stringMatching(/^tool:[^:]+:delivery-second$/)]);
       finalGate.release.resolve(undefined);
       await task;
       await nextMacrotask();
@@ -580,19 +580,25 @@ describe("plan/63 SDK timeline contracts", () => {
     try {
       await waitFor(gate.started.promise, "local tool snapshots");
       expect(runtime.getPublishedEvents().filter((event) => event.kind === "tool")).toEqual([]);
-      expect(partials).toEqual([
-        expect.objectContaining({ kind: "tool", status: "running", tool_call_id: "streaming-call", args: { path: "README.md" } }),
-        expect.objectContaining({ blocks: [{ type: "text", text: "first" }] }),
-        expect.objectContaining({ blocks: [{ type: "text", text: "first second" }] }),
-      ]);
+      expect(partials).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: "tool", status: "running", tool_call_id: "streaming-call", representation: "summary" }),
+        expect.objectContaining({ kind: "tool", status: "delta", representation: "summary" }),
+      ]));
+      expect(partials.every((partial) => !("args" in partial) && !("blocks" in partial))).toBe(true);
       gate.release.resolve(undefined);
       await task;
       await nextMacrotask();
       const tools = runtime.getPublishedEvents().filter((event) => event.kind === "tool");
-      expect(tools).toEqual([expect.objectContaining({ tool_call_id: "streaming-call", args: { path: "README.md" }, status: fail ? "error" : "complete" })]);
+      expect(tools).toEqual([expect.objectContaining({ tool_call_id: "streaming-call", representation: "summary", status: fail ? "error" : "complete" })]);
       expect(new TimelineRuntime().recover(sessionManager).filter((event) => event.kind === "tool")).toEqual(tools);
-      expect(new Set(partials.map((partial) => partial.partial_id))).toEqual(new Set(["tool:streaming-call"]));
-      expect(partials.at(-1)).toMatchObject({ blocks: [{ type: "text", text: fail ? "local tool failure" : "final result" }] });
+      expect(new Set(partials.map((partial) => partial.partial_id)).size).toBe(1);
+      const formal = tools[0]!;
+      if (!("tool_ref" in formal)) throw new Error("Expected native reference");
+      expect(partials[0]?.partial_id).toBe(`tool:${formal.tool_ref.call_entry_id}:streaming-call`);
+      expect(runtime.details(formal.tool_ref, formal.group_id)).toMatchObject({ content: {
+        source: "session", limited: false, args: { path: "README.md" },
+        result: [{ type: "text", text: fail ? "local tool failure" : "final result" }],
+      } });
       const markers = sessionManager.getBranch().filter((entry) => entry.type === "custom" && entry.customType === PI_REACH_MARKER);
       // user、两条 assistant、toolResult 各一个 marker，另有一个本轮结束 marker。
       expect(markers).toHaveLength(5);

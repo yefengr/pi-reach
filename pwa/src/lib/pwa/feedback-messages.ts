@@ -19,6 +19,7 @@ const protocolErrorMessages: Record<string, string> = {
   invalid_leaf: "This session is out of date. Reconnect and try again.",
   too_large: "This message is too large to send.",
   unsupported_type: "This operation is not supported. Update Pi and try again.",
+  protocol_upgrade_required: "Refresh Pi Reach to update this app and reconnect.",
   invalid_message: "Pi rejected this message. Check it and try again.",
 };
 
@@ -94,6 +95,7 @@ const zhFeedback: Record<string, string> = {
   "This session is out of date. Reconnect and try again.": "当前会话已过期，请重新连接后重试。",
   "This message is too large to send.": "这条消息太大，无法发送。",
   "This operation is not supported. Update Pi and try again.": "不支持此操作，请更新 Pi 后重试。",
+  "Refresh Pi Reach to update this app and reconnect.": "请刷新 Pi Reach，更新页面后重新连接。",
   "Pi rejected this message. Check it and try again.": "Pi 拒绝了这条消息，请检查后重试。",
   "Message could not be sent. Check the connection and try again.": "消息未能发送，请检查连接后重试。",
   "Could not read this conversation. Update Pi and try again.": "无法读取这个会话，请更新 Pi 后重试。",

@@ -318,7 +318,7 @@ beforeEach(async () => {
   channelHarness.finishReplies.length = 0;
   channelHarness.uploads.clear();
   const db = await openPwaDatabase();
-  await db.transaction("rw", [db.identities, db.devices, db.endpoints, db.events, db.sessions, db.settings], async () => {
+  await db.transaction("rw", [db.identities, db.devices, db.endpoints, db.events, db.sessions, db.settings, db.toolDetails], async () => {
     await Promise.all([
       db.identities.clear(),
       db.devices.clear(),
@@ -326,6 +326,7 @@ beforeEach(async () => {
       db.events.clear(),
       db.sessions.clear(),
       db.settings.clear(),
+      db.toolDetails.clear(),
     ]);
   });
   const identity = await generateOwnerKeyPair();
@@ -481,6 +482,102 @@ function readyFrame(channel: { channelId: string; frames: Array<{ type: string; 
     head_seq: headSeq,
   };
 }
+
+test("tool-details negotiation retries the current legacy hello only once", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    const hellos = () => channel.frames.filter(frame => frame.type === "session_hello");
+    const legacy = hellos()[0]!;
+    expect(legacy).not.toHaveProperty("tool_details");
+    const reject = (requestId: string) => channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: requestId, code: "protocol_upgrade_required", message: "SYNTHETIC_RAW_SERVER_DETAIL" });
+    reject("unrelated-synthetic-request");
+    await flushMicrotasks();
+    expect(hellos()).toHaveLength(1);
+    reject(legacy.id);
+    await expect.poll(() => hellos().length).toBe(2);
+    const retry = hellos()[1]!;
+    expect(retry).toMatchObject({ tool_details: 1, channel_id: channel.channelId });
+    expect(retry.id).not.toBe(legacy.id);
+    reject(legacy.id);
+    reject(retry.id);
+    await flushMicrotasks();
+    expect(hellos()).toHaveLength(2);
+    expect(document.body.textContent).not.toContain("SYNTHETIC_RAW_SERVER_DETAIL");
+    channel.emit({ ...readyFrame(channel, "synthetic-negotiated"), in_reply_to: retry.id, tool_details: 1 });
+    await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeVisible();
+    reject(retry.id);
+    await flushMicrotasks();
+    expect(hellos()).toHaveLength(2);
+    expect(channel.frames.filter(frame => frame.type === "tool_details_open")).toHaveLength(0);
+  } finally { await screen.unmount(); }
+});
+
+test("tool-details negotiation ignores other errors and obsolete completed hello IDs", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    const hello = channel.frames.find(frame => frame.type === "session_hello")!;
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: hello.id, code: "unsupported_type", message: "SYNTHETIC_RAW_SERVER_DETAIL" });
+    await flushMicrotasks();
+    expect(channel.frames.filter(frame => frame.type === "session_hello")).toHaveLength(1);
+    channel.emit(readyFrame(channel, "synthetic-legacy-ready"));
+    await expect.element(screen.getByRole("textbox", { name: /Message your agent/i })).toBeVisible();
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: hello.id, code: "protocol_upgrade_required", message: "SYNTHETIC_RAW_SERVER_DETAIL" });
+    await flushMicrotasks();
+    expect(channel.frames.filter(frame => frame.type === "session_hello")).toHaveLength(1);
+    expect(document.body.textContent).not.toContain("SYNTHETIC_RAW_SERVER_DETAIL");
+  } finally { await screen.unmount(); }
+});
+
+test("tool-details app integration opens restored summaries only on explicit selection and stores final details separately", async () => {
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    const hello = channel.frames.find(frame => frame.type === "session_hello")!;
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: hello.id, code: "protocol_upgrade_required", message: "SYNTHETIC capability negotiation" });
+    await expect.poll(() => channel.frames.filter(frame => frame.type === "session_hello").length).toBe(2);
+    const retry = channel.frames.findLast(frame => frame.type === "session_hello")!;
+    const ready = { ...readyFrame(channel, "session-1", 1), in_reply_to: retry.id, tool_details: 1 };
+    channel.emit(ready);
+    channel.emit(queuedStateFrame([], "synthetic-tool-queue"));
+    await expect.poll(() => channel.frames.findLast(frame => frame.type === "session_sync")).toBeTruthy();
+    const sync = channel.frames.findLast(frame => frame.type === "session_sync")!;
+    const toolRef = { call_entry_id: "synthetic-call-entry", tool_call_id: "synthetic-tool-call" };
+    const event: TimelineEvent = { event_id: "synthetic-tool-result", event_seq: 1, session_id: ready.session_id, leaf_id: ready.leaf_id, group_id: "synthetic-tool-group", timestamp: 1,
+      kind: "tool", tool: "read", tool_call_id: toolRef.tool_call_id, tool_ref: toolRef, representation: "summary", summary: { action: "read", path: "synthetic.txt" }, status: "complete" };
+    channel.emit({ protocol_version: 2, type: "session_history_chunk", target_channel_id: channel.channelId, in_reply_to: sync.id,
+      session_id: ready.session_id, leaf_id: ready.leaf_id, chunk_index: 0, events: [event], fragments: [], final_chunk: true, eos: true });
+    await expect.poll(() => document.querySelector("button.pwa-process-head")).not.toBeNull();
+    const opens = () => channel.frames.filter(frame => frame.type === "tool_details_open");
+    expect(opens()).toHaveLength(0);
+    await userEvent.click(document.querySelector<HTMLButtonElement>("button.pwa-process-head")!);
+    await expect.poll(() => document.querySelector(".pwa-tool-card .pwa-tool-action")).not.toBeNull();
+    expect(opens()).toHaveLength(0);
+    await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!);
+    await expect.poll(() => opens().length).toBe(1);
+    const request = opens()[0]!;
+    expect(request).toMatchObject({ session_id: ready.session_id, group_id: event.group_id, tool_ref: toolRef });
+    // 完整正文只存在于明确标记的合成详情帧，不回填常规历史事件。
+    const content = { tool_ref: toolRef, tool: "read", source: "session", status: "complete", args: { path: "synthetic.txt" }, result: [{ type: "text", text: "SYNTHETIC_TOOL_APP_FINAL" }], limited: false };
+    const bytes = new TextEncoder().encode(JSON.stringify(content));
+    const sha256 = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(byte => byte.toString(16).padStart(2, "0")).join("");
+    channel.emit({ protocol_version: 2, type: "tool_details_chunk", target_channel_id: channel.channelId, in_reply_to: request.id,
+      session_id: request.session_id, leaf_id: request.leaf_id, group_id: request.group_id, tool_ref: request.tool_ref, revision: 1, index: 0,
+      data_base64: encodeBase64(bytes), final: true, total_bytes: bytes.length, sha256 });
+    await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll .pwa-reader-text")?.textContent).toBe("SYNTHETIC_TOOL_APP_FINAL");
+    const db = await openPwaDatabase();
+    await expect.poll(() => db.toolDetails.count()).toBe(1);
+    const stored = await db.events.toArray();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.event).toMatchObject({ representation: "summary", tool_ref: toolRef });
+    expect(stored[0]!.event).not.toHaveProperty("args");
+    expect(stored[0]!.event).not.toHaveProperty("result");
+    expect(opens()).toHaveLength(1);
+    await screen.getByRole("button", { name: "Close tool details", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll")).toBeNull();
+  } finally { await screen.unmount(); }
+});
 
 function extensionInfoFrame(channel: { channelId: string; frames: Array<{ type: string; id: string }> }, version: string) {
   return {

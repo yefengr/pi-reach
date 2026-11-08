@@ -13,6 +13,9 @@ import { recoverToolCalls, ToolLifecycleTracker, toolPartial, toolTimelineEvent,
 import { systemTimelineEvent } from "./system_event.js";
 import { preparingCall, ToolPreparation, type PreparingCall } from "./tool_preparation.js";
 import { collectPublications } from "../files/publications.js";
+import type { ToolRef } from "@pi-reach/protocol/session";
+import { previewContent, toolDetailStore } from "./tool_detail_store.js";
+import { sessionToolDetails, type DetailResult } from "./tool_detail_source.js";
 
 export const TIMELINE_MARKER = "pi-reach:timeline-v2" as const;
 
@@ -97,7 +100,9 @@ export class TimelineRuntime {
   private readonly publications: TimelinePublications;
   private readonly toolAssociations = new ToolLifecycleTracker<Correlation>();
   private readonly toolPreparation = new ToolPreparation(call => this.publishPreparing(call));
-  private readonly preparingContext = new Map<string, { groupId: string; correlation: Correlation }>();
+  private readonly preparingContext = new Map<string, { groupId: string; correlation: Correlation; callEntryId: string }>();
+  private readonly detailPrefix = `${randomUUID()}:`;
+  private readonly toolPartialWatermarks = new WeakMap<object, { leafId: string | null; status: TimelinePartial["status"] }>();
   private sessionManager: SessionManager | null = null;
   private epoch = 0;
   private activeGroupId: string | null = null;
@@ -112,7 +117,14 @@ export class TimelineRuntime {
     this.onPartial = options.onPartial;
     this.publications = new TimelinePublications((event, correlation) => {
       options.onPublished?.(event, correlation);
-      if (event.kind === "tool") this.toolAssociations.complete(event.tool_call_id);
+      if (event.kind === "tool") {
+        this.toolAssociations.complete(event.tool_call_id, "tool_ref" in event ? event.tool_ref : undefined);
+        if ("tool_ref" in event) {
+          const preparing = this.preparingContext.get(event.tool_call_id);
+          if (preparing?.callEntryId === event.tool_ref.call_entry_id) this.toolPreparation.close(event.tool_call_id);
+          toolDetailStore.remove(this.detailKey(event.tool_ref));
+        }
+      }
     });
   }
 
@@ -225,6 +237,7 @@ export class TimelineRuntime {
 
   private clearPreparation(): void {
     this.toolAssociations.clear();
+    toolDetailStore.clearPrefix(this.detailPrefix);
     this.toolPreparation.clear();
     this.preparingContext.clear();
   }
@@ -278,20 +291,26 @@ export class TimelineRuntime {
       this.publishPartial(pending, "thinking", contentIndex, "delta", update.delta);
     } else if (update.type === "toolcall_start" || update.type === "toolcall_delta") {
       const call = preparingCall(update.partial.content[update.contentIndex]);
-      if (call) this.prepareTool(pending, call);
+      if (call) this.prepareTool(pending, call, false, (update.partial.content[update.contentIndex] as { arguments?: unknown }).arguments);
     } else if (update.type === "toolcall_end") {
       this.toolAssociations.indexAssistantContent([update.toolCall], {
         groupId: pending.marker.group_id,
+        callEntryId: pending.marker.event_id,
         correlation: { ...pending.correlation },
       });
       const call = preparingCall(update.toolCall);
-      if (call) this.prepareTool(pending, call, true);
+      if (call) this.prepareTool(pending, call, true, update.toolCall.arguments);
     }
   }
 
   /** 模型仍在生成调用：以准备中 partial 提前显示工具行，执行开始后由同一 partial_id 原位转为运行。 */
-  private prepareTool(pending: PendingMessage, call: PreparingCall, final = false): void {
-    this.preparingContext.set(call.id, { groupId: pending.marker.group_id, correlation: { ...pending.correlation } });
+  private prepareTool(pending: PendingMessage, call: PreparingCall, final = false, args?: unknown): void {
+    const previous = this.preparingContext.get(call.id);
+    if (previous && previous.callEntryId !== pending.marker.event_id) this.toolPreparation.reopen(call.id);
+    if (this.toolPreparation.isClosed(call.id)) return;
+    this.preparingContext.set(call.id, { groupId: pending.marker.group_id, callEntryId: pending.marker.event_id, correlation: { ...pending.correlation } });
+    const ref = { call_entry_id: pending.marker.event_id, tool_call_id: call.id };
+    toolDetailStore.put(this.detailKey(ref), previewContent({ tool_ref: ref, tool: call.tool, status: "preparing" }, args));
     this.toolPreparation.update(call, final);
   }
 
@@ -299,7 +318,8 @@ export class TimelineRuntime {
     const context = this.preparingContext.get(call.id);
     const sessionId = this.sessionId;
     if (!context || !sessionId) return;
-    const partial = toolPartial(call.id, { ...context, tool: call.tool, args: call.args }, { sessionId, leafId: this.leafId }, undefined, true);
+    const toolRef = { call_entry_id: context.callEntryId, tool_call_id: call.id };
+    const partial = toolPartial(call.id, { ...context, tool: call.tool, summary: call.summary, toolRef }, { sessionId, leafId: this.leafId }, undefined, true);
     if (partial) this.onPartial?.(partial, { ...context.correlation });
   }
 
@@ -314,6 +334,7 @@ export class TimelineRuntime {
       this.toolPreparation.settle();
       this.toolAssociations.indexAssistantContent(this.asMessageRecord(message)?.content, {
         groupId: pending.marker.group_id,
+        callEntryId: pending.marker.event_id,
         correlation: { ...pending.correlation },
       });
     }
@@ -380,12 +401,15 @@ export class TimelineRuntime {
 
   onToolExecutionStart(event: ToolExecutionStartEvent, sessionManager: SessionManager): void {
     if (this.sessionManager !== sessionManager || !this.active) return;
-    const fallback = this.activeGroupId ? {
+    const preparing = this.preparingContext.get(event.toolCallId);
+    const fallback = this.activeGroupId && preparing ? {
       groupId: this.activeGroupId,
+      callEntryId: preparing.callEntryId,
       correlation: this.currentCorrelation() ?? { origin: "unknown" as const, delivery: "unknown" as const },
     } : undefined;
     this.toolPreparation.close(event.toolCallId);
-    this.toolAssociations.start(event.toolCallId, event.toolName, event.args, fallback);
+    const association = this.toolAssociations.start(event.toolCallId, event.toolName, event.args, fallback);
+    if (association) toolDetailStore.put(this.detailKey(association.toolRef), previewContent({ tool_ref: association.toolRef, tool: association.tool, status: "running" }, event.args));
     this.publishToolPartial(event.toolCallId);
   }
 
@@ -404,8 +428,38 @@ export class TimelineRuntime {
     const sessionId = this.sessionId;
     const leafId = this.leafId;
     if (!association || !sessionId) return;
+    if (result !== undefined) {
+      const previous = toolDetailStore.get(this.detailKey(association.toolRef));
+      toolDetailStore.put(this.detailKey(association.toolRef), previewContent({ tool_ref: association.toolRef, tool: association.tool, status: "running" }, previous?.args ?? "[preview unavailable]", (result as { content?: unknown } | null)?.content));
+    }
     const partial = toolPartial(toolCallId, association, { sessionId, leafId }, result);
-    if (partial) this.onPartial?.(partial, { ...association.correlation });
+    const previous = this.toolPartialWatermarks.get(association);
+    // 输出变化已走独立详情快照；摘要状态未变时不再向所有页面重复广播。
+    if (previous?.leafId === leafId && previous.status === partial.status) return;
+    this.toolPartialWatermarks.set(association, { leafId, status: partial.status });
+    this.onPartial?.(partial, { ...association.correlation });
+  }
+
+  detailKey(ref: ToolRef): string { return this.detailPrefix + JSON.stringify([this.sessionId, ref.call_entry_id, ref.tool_call_id]); }
+
+  details(ref: ToolRef, groupId: string): DetailResult {
+    const manager = this.sessionManager;
+    if (!manager) return { code: "unavailable", terminal: true };
+    const active = this.toolAssociations.find(ref);
+    const preparing = this.preparingContext.get(ref.tool_call_id);
+    const isPreparing = preparing?.callEntryId === ref.call_entry_id && preparing.groupId === groupId
+      && !this.toolPreparation.isClosed(ref.tool_call_id);
+    // 高频预览不重建历史；正式发布会移除运行关联，随后才从原生记录读取最终内容。
+    if (active?.groupId === groupId || isPreparing) {
+      if (!manager.getBranch().some((entry) => entry.id === ref.call_entry_id)) return { code: "not_found", terminal: true };
+      const preview = toolDetailStore.get(this.detailKey(ref));
+      return preview ? { content: preview } : { code: "unavailable", terminal: !this.active };
+    }
+    const event = this.recover(manager).find((event) => event.kind === "tool" && "tool_ref" in event
+      && event.tool_ref.call_entry_id === ref.call_entry_id && event.tool_ref.tool_call_id === ref.tool_call_id && event.group_id === groupId);
+    if (!event) return { code: "not_found", terminal: true };
+    const final = sessionToolDetails(manager, ref);
+    return "content" in final ? final : { ...final, terminal: true };
   }
 
   recover(sessionManager: SessionManager): TimelineEvent[] {

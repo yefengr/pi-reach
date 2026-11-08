@@ -96,7 +96,7 @@ test("real SDK child lifecycle cannot steal the primary Relay or its remote mess
     const identity = processEndpointIdentity();
     const send = (inner: unknown) => relay.emit("message", JSON.stringify({ type: "route", purpose: "session", device_id: Buffer.alloc(32, 1).toString("base64"), endpoint_id: identity.endpointId, runtime_instance_id: identity.runtimeInstanceId, source_owner_id: owners[0]!.remote_epk, ct: Buffer.from(JSON.stringify(inner)).toString("base64") }));
     const frames = () => relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from(JSON.parse(line).ct, "base64").toString("utf8")));
-    send({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "primary-channel" });
+    send({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "primary-channel" });
     await vi.waitFor(() => expect(frames().some((frame) => frame.type === "session_ready")).toBe(true));
     const ready = frames().find((frame) => frame.type === "session_ready")!;
     child = await createSession(modelRuntime, primary.sessionManager.getSessionId());

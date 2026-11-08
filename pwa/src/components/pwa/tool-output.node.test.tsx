@@ -5,7 +5,7 @@ import { ToolOutput } from "./tool-output";
 import { reliableToolDiff, toolHasOverflow } from "./tool-presentation";
 
 const base = { event_id: "event", session_id: "s", leaf_id: "g", group_id: "group", timestamp: 0, kind: "tool" as const, tool_call_id: "call", status: "complete" as const, truncated: false };
-function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool" }> {
+function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool"; status: "complete"; args: JsonValue }> {
   return { ...base, tool, args, result };
 }
 const render = (value: Parameters<typeof ToolOutput>[0]["value"], preview = true) => renderToStaticMarkup(<ToolOutput value={value} preview={preview} />);

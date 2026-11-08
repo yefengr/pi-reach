@@ -252,6 +252,7 @@ function detachOwner(ownerId: string): void {
   const binding = activeOwners.get(ownerId);
   if (!binding) return;
   files.closeOwner(ownerId);
+  binding.service.dispose();
   userDelivery.clearOwner(ownerId, binding.service);
   try { binding.channel.detach(); } catch { /* best effort */ }
   activeOwners.delete(ownerId);
@@ -288,10 +289,7 @@ function ensureTimeline(sessionManager: SessionManager): TimelineRuntime {
       prepareStarted: (started, manager, runtime) => attachmentRuntime.current?.started(started, manager, runtime) ?? started,
       onStarted: (started) => userDelivery.onStarted(started),
       onPartial: (partial) => {
-        broadcastV2((service) => {
-          const frame = service.partial(partial);
-          return frame ? [frame] : [];
-        });
+        broadcastV2((service) => service.partialFrames(partial));
       },
       onPublished: (event, correlation) => {
         broadcastV2((service) => service.publishFrames(event));

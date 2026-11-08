@@ -70,15 +70,17 @@ device_id
 
 | 拥有者 | 持久或内存 | 用途 |
 | --- | --- | --- |
-| 浏览器 `PwaDatabase` | IndexedDB 持久化 | Owner identity、device pairing、endpoint metadata、正式 timeline 和设置。 |
-| 浏览器 `TimelineRuntime` | 页面内存 | pending、partial、当前实时 channel 与滚动状态。 |
+| 浏览器 `PwaDatabase` | IndexedDB 持久化 | Owner identity、device pairing、endpoint metadata、正式 timeline、独立的有界工具详情缓存和设置。 |
+| 浏览器 `TimelineRuntime` | 页面内存 | 正式投影、pending、partial、当前实时 channel 与滚动状态。 |
+| 浏览器 `ToolDetailsController` | 页面内存 | 当前显式阅读选择、详情分片校验与订阅；不参与正式历史或发送就绪。 |
 | Host / Extension | 本机持久化 | device identity、Owner pairing/ACL、Relay 配置。 |
-| Host 的 Pi session | Pi 本机状态 | 当前 session/branch 与正式历史的权威来源。 |
+| Extension 工具详情状态 | 进程内存 | 最新有界运行预览与定向订阅，不另存权威最终结果。 |
+| Host 的 Pi session | Pi 本机状态 | 当前 session/branch、正式历史与已保存工具详情的权威来源。 |
 | Relay registry | 内存 | 实时 endpoint、ACL、Owner 订阅、连接与短期 pairing offer。 |
 
 组件版本不写入 IndexedDB。PWA 版本来自当前 bundle 编译时使用的本包版本；Relay 版本由 `useRelayConnection` 持有，扩展版本由 `PwaApp` 持有，分别随当前连接和会话清理，不从配对记录恢复。版本上报契约见[Protocol v2](reference/protocol/protocol-v2.md#relay-control-frames)，展示规则见[设置页](DESIGN.md#设置页)。
 
-浏览器数据库名为 `pi-reach`，定义由 [`db.ts`](../pwa/src/lib/pwa/db.ts) 维护。IndexedDB v11 使用 `events` 和 `sessions` 表；正式历史的稳定分区键为：
+浏览器数据库名为 `pi-reach`，定义由 [`db.ts`](../pwa/src/lib/pwa/db.ts) 维护。正式历史使用 `events` 和 `sessions` 表，按需取得的最终工具详情使用独立的 `toolDetails` 表；正式历史的稳定分区键为：
 
 ```text
 device_id + endpoint_id + session_id
@@ -87,6 +89,8 @@ device_id + endpoint_id + session_id
 `leaf_id` 是当前 branch tip 元数据，不进入持久主键；`runtime_instance_id` 只用于实时 stale gate。`events` 以稳定 `event_id` 覆盖，冗余保存 `event_seq` 和是否可生成预览，并为稳定 session 下的序号、时间与预览来源建立复合索引。`sessions` 在同一事务中维护事件数、首末时间、预览及其来源事件；历史导航直接读取摘要。普通事件合入只查询相同 event ID、相同序号、首末事件和最新预览，不随 session 长度加载全部正文；只有 branch reset 或同一 session 的 `head_seq` 低于内存中已保留或本地已保存的记录时，才完整替换当前 session 投影（无需取历史时只删除超出 `head_seq` 的本地记录）；重连缺口过大、Pi 重启或切回旧会话只把显示窗口移到最新处，新取得的记录合入本地，不删除本浏览器已保存的更早记录。合并依赖的本地记录可能属于断线期间被放弃的分支，补齐写入前先在 `sessions` 记录中保存待核对检查点（本地原最新一条的序号与 `event_id`，已有未核对通过的检查点时沿用），补齐后取该序号的权威事件核对，不一致时按 branch reset 重新握手并整段替换；核对请求失败或中途断线时保留检查点，下次连接仍核对它，核对通过或整段替换后才清除。
 
 PWA 只保存已收到的正式事件；pending 和 partial 不写入正式事件表。下线不会删除正式 timeline，只有用户移除 pairing 或清除本地数据才删除关联数据。
+
+工具详情缓存不是第二份正式历史。它只保存已完成校验的原生最终详情，按 Owner、device、endpoint、session、group 与稳定原生工具引用隔离，不把临时 runtime、channel 或 leaf 放入持久身份。缓存独立按容量与使用顺序回收；常规事件不会被详情正文回填。清会话、移除配对和清数据会同步清理详情缓存，写入与清理共享事务边界，晚到写入不能重建孤立详情。旧正式事件已有的真正完整 inline 内容继续保留；省略或截断记录不被当作完整原件。
 
 endpoint metadata 可以落盘，但不是 presence。`use-endpoint-registry.ts` 持久化时移除 `online`，读取缓存时也不能把 metadata 当作在线证明。
 
@@ -100,6 +104,8 @@ endpoint metadata 可以落盘，但不是 presence。`use-endpoint-registry.ts`
 | [`use-active-endpoint-selection.ts`](../pwa/src/lib/pwa/use-active-endpoint-selection.ts) | 当前电脑、用户选择与 0/1/N endpoint 选择。 |
 | [`use-device-pairing.ts`](../pwa/src/lib/pwa/use-device-pairing.ts) | 八位 pairing code 的解析、target 解析和配对写入。 |
 | [`timeline-store.ts`](../pwa/src/lib/pwa/timeline-store.ts) | 正式 timeline scope 的持久化、会话名称与模型保存、读取和历史摘要。 |
+| [`tool-details.ts`](../pwa/src/lib/pwa/tool-details.ts) 与 [`use-tool-details.ts`](../pwa/src/lib/pwa/use-tool-details.ts) | 显式阅读选择、当前作用域下的详情获取、完整快照校验、取消与可见性恢复。 |
+| [`tool-details-cache.ts`](../pwa/src/lib/pwa/tool-details-cache.ts) | 独立的最终工具详情缓存、身份与容量校验、按使用顺序回收。 |
 | [`use-history-session-details.ts`](../pwa/src/lib/pwa/use-history-session-details.ts) | 将已握手的活动会话与 Pi 报告的名称、模型和思考级别关联，变化时顺序保存，供只读历史显示。 |
 | [`workspace-view.tsx`](../pwa/src/components/pwa/workspace-view.tsx) | 电脑、活动 Pi 与本地历史导航。 |
 | [`session-sheet.tsx`](../pwa/src/components/pwa/session-sheet.tsx) | 移动端导航 Drawer。 |
@@ -139,6 +145,7 @@ Relay 断开不影响正在阅读的历史；附件元数据与缺口标记按�
 | 一次性全局反馈（Toast） | 每个 PWA Shell 持有独立的 [`OperationNotificationController`](../pwa/src/lib/pwa/operation-notifications.ts)，由 `PwaToastProvider` 共享给工作区 `PwaApp` 与入口级 `ServiceWorkerRegister`，唯一通知展示组件随工作区根节点定位，在启动／故障态使用 Shell fallback；单独挂载组件时使用各自控制器。控制器管理单槽 Toast：操作失败不自动消失，匹配成功回执、手动关闭或对应会话/实例清理撤销；普通反馈（已复制、设置已保存、连接已恢复、配对成功）4 秒后自动关闭，悬停或聚焦暂停，错误期间排队。Service Worker 更新状态由注册组件持有，更新提示通过同一控制器显示持久可关闭的「刷新」操作 Toast，普通提示不会挤掉待处理更新，错误结束后更新可恢复；旧实例回调不能写入新实例。 |
 | 设置页路由 | [`useSettingsRoute`](../pwa/src/lib/pwa/settings-route.ts) 以 history state 持有设置页记录及其来源（工作区或已展开的移动导航与滚动位置）；页内返回与浏览器后退统一由 `popstate` 恢复。工作区在设置页期间保持挂载（隐藏且 `inert`），会话、草稿与阅读位置不重建。 |
 | 表单、确认、历史加载与消息投递 | 各领域组件及 timeline 状态继续持有错误与重试条件；`PwaStatusError` 仍用于现有局部错误，不是全局操作通知的统一状态容器；它浮在主区标题区下方，工作区布局把提示区高度同步为消息列表顶部留白并通知时间线视口保持阅读位置。 |
+| 工具详情 | `ToolDetailsController` 持有加载、预览、最终结果和失败状态，阅读器负责局部呈现与显式重试。详情请求使用独立 ID 命名空间；对应通用错误和 pong 在进入聊天反馈前被消费，不改变工具执行状态、`run_end` 或发送门禁。 |
 | 安装 | [`PwaInstallProvider`](../pwa/src/components/pwa/pwa-install.tsx) 在 React 入口级挂载，持有 `beforeinstallprompt`／`appinstalled` 与手动添加的判断，以及本次打开期间的「先在浏览器中使用」；未配对主区与设置页通过同一 Context 读取，不随工作区或设置页切换重置。 |
 | 浏览器能力 | [`ServiceWorkerRegister`](../pwa/src/components/pwa/service-worker-register.tsx) 保持 React 入口级挂载，持有 Service Worker 注册与更新；能力 `Alert` 的 Portal 只在应用壳顶部与工作区导航底部间迁移展示位置，不重置注册生命周期；桌面侧栏与移动导航各登记一个位置，取最后登记且仍挂载的一个。 |
 
@@ -151,6 +158,14 @@ Relay 断开不影响正在阅读的历史；附件元数据与缺口标记按�
 5. PWA 发送文本、会话附件或受限 typed action；附件先上传原件，再通过文件 ID 提交消息。Extension 把用户文字与本地文件清单交给当前 Pi session。Relay 只转发，不提供离线队列。
 
 事件字段、分组、错误码、尺寸限制和合流不变量见[会话协议](reference/protocol/protocol-v2.md)，本文不复制 wire schema。
+
+## 工具摘要与按需详情
+
+工具准备、运行、完成及历史恢复使用相同的轻量工具表示：保留身份、顺序、工具名、状态、有界摘要与稳定原生引用，不携带完整大参数、结果正文或图片 Base64。摘要在 Extension 源头提取，不先复制或序列化完整工具结果。模型思考与助手回复继续走原有流式链路。工具详情能力在握手中协商；未协商的旧页面不会收到新工具摘要，具体兼容边界见[协议说明](reference/protocol/protocol-v2.md#工具摘要与按需详情)。
+
+进入视口、悬停、恢复历史或展开过程组都不获取详情。用户明确打开后，Extension 才按稳定原生引用查找当前合法分支上的调用：已保存详情只读 Pi 原生消息，不重新执行工具、重读文件或接受任意文件路径；运行中只提供最新有界预览，更新以完整替换快照交付，正式结果保存后自动切换到原件。它不保存无限增长的中间日志，也不为 Relay 或电脑增加内容存储、图片服务或 HTTP 下载接口；`publish_file` 的本机源路径继续隐藏。
+
+PWA 通过独立控制器校验分片顺序、编码、字节数、SHA-256、内容结构与工具身份，再交给既有 `ReaderShell` 和阅读选择逻辑。关闭意图立即取消订阅并阻断迟到响应和可见性恢复；退出动画可保留最后一次匹配身份的展示快照，换选择、作用域、来源或控制器时立即撤下旧正文。离线与本地只读历史只使用已有完整 inline 或有效最终详情缓存，缓存未命中时明确不可用，不暗中建立远程连接。详情预算与缓存边界见[会话协议](reference/protocol/protocol-v2.md#工具摘要与按需详情)，不代表浏览器或整个 Pi 进程的内存峰值。
 
 ## 流式显示队列
 

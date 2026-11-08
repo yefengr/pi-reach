@@ -233,7 +233,7 @@ describe("Protocol v2 server frames", () => {
     expectCode(() => decodeServerFrameV2({ ...version, type: "extension_info", ...direct, in_reply_to: "I1", version: "1.2.3", extra: true }), "schema");
     expectCode(() => decodeClientFrameV2({ ...version, type: "extension_info", ...direct, in_reply_to: "I1", version: "1.2.3" }), "direction");
     expectCode(() => decodeServerFrameV2({ ...version, type: "cancelled", ...direct, in_reply_to: "X2", target_id: "R1" }), "schema");
-    expectCode(() => decodeServerFrameV2({ ...version, type: "timeline_event", ...session, event: userEvent({ event_seq: 1 }), target_channel_id: "C1" }), "schema");
+    expect(decodeServerFrameV2({ ...version, type: "timeline_event", ...session, event: userEvent({ event_seq: 1 }), target_channel_id: "C1" })).toMatchObject({ type: "timeline_event", target_channel_id: "C1" });
     expectCode(() => decodeServerFrameV2({ ...version, type: "bye", ...session, target_channel_id: "C1", reason: "shutdown" }), "schema");
     expectCode(() => decodeServerFrameV2({ ...version, type: "protocol_error", ...direct, code: "invalid_message", message: "bad", extra: true }), "schema");
     expectCode(() => decodeServerFrameV2({ ...version, type: "extension_ui_request", ...direct, id: "UI1", method: "select", title: "Pick", options: ["one"] }), "unsupported");

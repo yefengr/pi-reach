@@ -1,5 +1,6 @@
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
-import { matchesFormalMessage, partialMessageIdentity } from "./timeline-identity";
+import { partialMessageIdentity } from "./timeline-identity";
+import { isToolSummary, matchesToolFormalMessage as matchesFormalMessage } from "./tool-details-inline";
 import { nonStreamTokens, partialText, sameItems, sameNonStreamTokens, type NonStreamToken } from "./stream-display-items";
 import { StreamStructureGate } from "./stream-structure-gate";
 import type { TimelinePartialView, TimelinePending, TimelineViewItem } from "./timeline-runtime";
@@ -63,7 +64,7 @@ export type StreamDisplayBufferChange = {
 };
 
 function hasBlocks(partial: TimelinePartial): boolean {
-  return partial.blocks !== undefined;
+  return "blocks" in partial && partial.blocks !== undefined;
 }
 
 function streamsImmediately(partial: TimelinePartial): boolean {
@@ -79,8 +80,8 @@ function samePartialState(previous: TimelinePartial, next: TimelinePartial): boo
 }
 
 function blocksExtend(previous: TimelinePartial, next: TimelinePartial): boolean {
-  const before = previous.blocks;
-  const after = next.blocks;
+  const before = "blocks" in previous ? previous.blocks : undefined;
+  const after = "blocks" in next ? next.blocks : undefined;
   if (before === undefined || after === undefined || before.length > after.length) return false;
   // 每个展示条目单独解析；不能用 join 后的文本判定块边界是否保留。
   return before.every((block, index) => (block.type === "text" || block.type === "thinking")
@@ -127,7 +128,7 @@ function appendLaneText(state: StreamState, targetText: string): void {
 }
 
 function projectedPartial(state: StreamState): TimelinePartialView {
-  const partial = hasBlocks(state.partial.partial)
+  const partial = isToolSummary(state.partial.partial) || hasBlocks(state.partial.partial)
     ? state.partial.partial
     : { ...state.partial.partial, delta: state.visibleText };
   const presentsThinking = (partial.kind === "assistant" || partial.kind === "thinking")
@@ -345,9 +346,9 @@ export class StreamDisplayBuffer {
       ? blocksExtend(existing.partial.partial, partial.partial) : textExtends);
     // 新 block（包括空思考块）是结构变化，纯块正文增长则合并提交。
     const urgent = !appendOnly || !samePartialState(existing.partial.partial, partial.partial)
-      || partial.partial.blocks?.length !== existing.partial.partial.blocks?.length;
+      || ("blocks" in partial.partial ? partial.partial.blocks?.length : undefined) !== ("blocks" in existing.partial.partial ? existing.partial.partial.blocks?.length : undefined);
     const argsChanged = existing.partial.partial.kind === "tool" && partial.partial.kind === "tool"
-      && existing.partial.partial.args !== partial.partial.args;
+      && (isToolSummary(existing.partial.partial) || isToolSummary(partial.partial) ? existing.partial.partial !== partial.partial : existing.partial.partial.args !== partial.partial.args);
     let needsSnapshot = urgent || argsChanged;
     if (!appendOnly) existing.thinkingTextEpoch = {};
     if (targetChanged && immediate) {

@@ -828,7 +828,7 @@ function displayPartial(delta: string, mode: "assistant" | "thinking" | "blocks"
 }
 function displayText(items: TimelineViewItem[]): string | undefined {
   const item = items[0];
-  return item?.kind === "partial" ? item.partial.blocks?.map(block => block.text).join("\n") ?? item.partial.delta : undefined;
+  return item?.kind === "partial" && ("blocks" in item.partial || "delta" in item.partial) ? item.partial.blocks?.map(block => block.text).join("\n") ?? item.partial.delta : undefined;
 }
 
 test.each(["assistant", "thinking", "blocks", "tool"] as const)("hook coalesces %s frame bursts into one latest display commit per frame", async mode => {

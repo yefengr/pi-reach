@@ -22,7 +22,7 @@ describe("attachment routing", () => {
       channel_id: "channel", session_id: manager.getSessionId(), leaf_id: manager.getLeafId() } as const);
     try {
       expect(await handleAttachmentFrame(store, service, "owner-a", capabilities())).toMatchObject([{ code: "invalid_channel" }]);
-      service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+      service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" });
       const [caps] = await handleAttachmentFrame(store, service, "owner-a", capabilities());
       if (caps?.type !== "attachment_capabilities") throw new Error("missing capabilities");
       const common = { protocol_version: 2 as const, id: "request", channel_id: "channel",
@@ -35,7 +35,7 @@ describe("attachment routing", () => {
       expect(await handleAttachmentFrame(store, service, "owner-a", { ...common, upload_scope: "wrong", type: "attachment_status_request" })).toMatchObject([{ code: "invalid_scope" }]);
       await handleAttachmentFrame(store, service, "owner-a", { ...common, type: "attachment_chunk", offset: 0, data_base64: bytes.toString("base64") });
       service = create();
-      service.handle({ protocol_version: 2, type: "session_hello", id: "hello-again", channel_id: "channel" });
+      service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-again", channel_id: "channel" });
       manager.appendCustomEntry("test-leaf", {});
       expect(store.scopeFor(manager.getSessionId())).toBe(caps.upload_scope);
       expect(await handleAttachmentFrame(store, service, "owner-a", { ...common, type: "attachment_status_request" })).toMatchObject([{ received_bytes: bytes.length }]);

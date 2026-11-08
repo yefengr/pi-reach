@@ -5,7 +5,8 @@ import { PwaUiProvider } from "./pwa-ui-provider";
 import { ToolCard } from "./tool-card";
 import { processGroupSummary } from "./process-group-state";
 import type { Messages } from "@/lib/i18n";
-import type { ToolStatus, ToolValue } from "./tool-presentation";
+import type { ToolStatus } from "./tool-presentation";
+import type { TimelineToolValue as ToolValue } from "@/lib/pwa/timeline-presentation";
 import { en } from "@/lib/i18n/messages/en";
 import { zh } from "@/lib/i18n/messages/zh";
 
