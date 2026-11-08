@@ -4,7 +4,9 @@ import { Modal, Button } from "@mantine/core";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { PUBLISHED_FILE_TYPE, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import { PUBLISHED_FILE_TYPE, type ClientFrame, type PublishedFileDescriptor, type ToolDetailsContent } from "@pi-reach/protocol/session";
+import { ToolDetailsController } from "@/lib/pwa/tool-details";
+import { ToolDetailsProvider, type ToolDetailsView } from "./tool-details-context";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { PwaUiProvider } from "./pwa-ui-provider";
@@ -32,9 +34,10 @@ const initialItems = [tool("read", "read"), publication(), tool("check", "bash")
 const pin = vi.fn();
 const unpin = vi.fn();
 const send = vi.fn();
-type Controls = { top: () => void; append: () => void; changeScope: () => void; replaceSession: () => void; setRows: (items: TimelineViewItem[]) => void; ready: () => void; };
-function Harness({ controls, pending = false }: { controls: Ref<Controls>; pending?: boolean }) {
+type Controls = { top: () => void; append: () => void; changeScope: () => void; replaceSession: () => void; setRows: (items: TimelineViewItem[]) => void; setDetails: (details: ToolDetailsView) => void; ready: () => void; };
+function Harness({ controls, pending = false, details }: { controls: Ref<Controls>; pending?: boolean; details?: ToolDetailsView }) {
   const [draft, setDraft] = useState("");
+  const [detailsView, setDetails] = useState(details);
   const [items, setItems] = useState(initialItems);
   const [scopeToken, setScope] = useState<object>({});
   const [top, setTop] = useState(false);
@@ -57,16 +60,18 @@ function Harness({ controls, pending = false }: { controls: Ref<Controls>; pendi
     changeScope: () => setScope({}),
     replaceSession: () => { setScope({}); setItems([tool("different", "find")]); },
     setRows: setItems,
+    setDetails,
     ready: () => { flushSync(() => setReady(true)); deferred.finish(); },
   }), [deferred]);
+  const timeline = <PublishedFilesProvider value={view}><MessageList sourceKey={detailsView?.sourceKey} items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onReadingChange={viewport.setReadingDetails} /></PublishedFilesProvider>;
   return <PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout navigation={navigation} titleBar={{ title: "Reader drawer", prefix: "Pi Reach", showTitle: true }} toast={null} settingsRoute={{ open: false, origin: null, animate: false, change: 0 }} onOpenSettings={() => {}} onSettingsBack={() => {}} renderSettings={() => null} overlays={<Modal opened={top} onClose={() => setTop(false)} title="Top confirmation" portalProps={{ target: ".pwa-root" }}><Button onClick={() => setTop(false)}>Dismiss</Button></Modal>} closeBackgroundOverlay={close => close()}>
-    <PublishedFilesProvider value={view}><MessageList items={items} hasEarlier={false} listRef={viewport.messageListRef} bottomSentinelRef={viewport.bottomSentinelRef} onScroll={viewport.handleScroll} onReadingChange={viewport.setReadingDetails} /></PublishedFilesProvider>
+    {detailsView ? <ToolDetailsProvider value={detailsView}>{timeline}</ToolDetailsProvider> : timeline}
     <MessageComposer draft={draft} onDraftChange={setDraft} attachments={[]} canAttach={false} sendingAttachments={false} onAddFiles={() => {}} onRemoveAttachment={() => {}} onRetryAttachment={() => {}} isOnline isWorking={false} stopping={false} onSend={send} onStop={() => {}} commandModels={[]} commandCurrentModel={null} commandCurrentModelFallback="Model" commandThinking="medium" commandPendingAction={null} onNewSession={() => {}} onCompactSession={() => {}} onSetModel={() => {}} onSetThinking={() => {}} onCommandsOpen={() => {}} />
   </PwaWorkspaceLayout></PwaAppShell>;
 }
-async function mount(pending = false) {
+async function mount(pending = false, details?: ToolDetailsView) {
   const controls = createRef<Controls>();
-  const screen = await render(<PwaUiProvider><Harness controls={controls} pending={pending} /></PwaUiProvider>);
+  const screen = await render(<PwaUiProvider><Harness controls={controls} pending={pending} details={details} /></PwaUiProvider>);
   return { screen, controls };
 }
 const draft = () => document.querySelector<HTMLTextAreaElement>(".pwa-composer textarea")!;
@@ -86,6 +91,25 @@ async function openTool(index = 0) {
   await expect.poll(() => toolReader()).not.toBeNull();
   await settle();
 }
+const summaryRef = { call_entry_id: "synthetic-entry", tool_call_id: "synthetic-call" };
+const summaryRow: TimelineViewItem = { kind: "partial", createdAt: 2, partial: { ...base, protocol_version: 2, type: "timeline_partial", kind: "tool", partial_id: "synthetic-summary", tool_call_id: summaryRef.tool_call_id, tool_ref: summaryRef, tool: "read", representation: "summary", summary: { action: "read", path: "synthetic.txt" }, status: "running" } };
+function detailsFixture() {
+  const frames: ClientFrame[] = [];
+  const cache = { get: vi.fn(async () => undefined), put: vi.fn(async () => {}) };
+  let closeWhileMounted = false;
+  const controller = new ToolDetailsController(cache);
+  const view: ToolDetailsView = { controller, sourceKey: "synthetic-live-source", online: true,
+    scope: { ownerId: "synthetic-owner", deviceId: "synthetic-device", endpointId: "synthetic-endpoint", sessionId: base.session_id },
+    connection: () => ({ channelId: "synthetic-channel", sessionId: base.session_id, leafId: base.leaf_id, runtimeInstanceId: "synthetic-runtime", send: frame => { frames.push(frame); if (frame.type === "tool_details_close") closeWhileMounted = dialog() !== null; return true; } }),
+  };
+  return { controller, view, cache, frames, opens: () => frames.filter(frame => frame.type === "tool_details_open"), closeWhileMounted: () => closeWhileMounted };
+}
+async function pushDetails(controller: ToolDetailsController, request: Extract<ClientFrame, { type: "tool_details_open" }>, source: "preview" | "session", revision: number, text: string) {
+  const content: ToolDetailsContent = { tool_ref: request.tool_ref, tool: "read", source, status: source === "preview" ? "running" : "complete", args: { path: "synthetic.txt" }, result: [{ type: "text", text }], limited: source === "preview" };
+  const bytes = new TextEncoder().encode(JSON.stringify(content));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  controller.receive({ protocol_version: 2, type: "tool_details_chunk", target_channel_id: request.channel_id, in_reply_to: request.id, session_id: request.session_id, leaf_id: request.leaf_id, group_id: request.group_id, tool_ref: request.tool_ref, revision, index: 0, data_base64: btoa(String.fromCharCode(...bytes)), final: true, total_bytes: bytes.length, sha256: Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("") });
+}
 beforeEach(async () => {
   localStorage.removeItem("pi-reach-sidebar-collapsed");
   pin.mockClear(); unpin.mockClear(); send.mockClear();
@@ -96,6 +120,121 @@ afterEach(async () => {
   document.documentElement.style.removeProperty("--pwa-safe-left");
   document.documentElement.style.removeProperty("--pwa-safe-right");
   document.documentElement.style.removeProperty("--pwa-safe-top");
+  document.documentElement.style.removeProperty("--pwa-duration-drawer-out");
+});
+
+test("summary readers do not prefetch and atomically follow preview to saved session snapshots", async () => {
+  const fixture = detailsFixture();
+  const { screen, controls } = await mount(false, fixture.view);
+  try {
+    flushSync(() => controls.current!.setRows([summaryRow]));
+    expect(fixture.opens()).toHaveLength(0);
+    await userEvent.click(document.querySelector<HTMLButtonElement>("button.pwa-process-head")!);
+    expect(fixture.opens()).toHaveLength(0);
+    await openTool();
+    await expect.poll(() => fixture.opens().length).toBe(1);
+    const request = fixture.opens()[0]!;
+    const body = toolReader()!;
+    await pushDetails(fixture.controller, request, "preview", 1, "SYNTHETIC_PREVIEW");
+    await expect.poll(() => body.querySelector(".pwa-reader-text")?.textContent).toBe("SYNTHETIC_PREVIEW");
+    expect(fixture.cache.put).not.toHaveBeenCalled();
+    // 中间 revision 可以被源头合并，不要求逐帧送达。
+    await pushDetails(fixture.controller, request, "session", 3, "SYNTHETIC_FINAL");
+    await expect.poll(() => body.querySelector(".pwa-reader-text")?.textContent).toBe("SYNTHETIC_FINAL");
+    expect(toolReader()).toBe(body);
+    expect(fixture.opens()).toHaveLength(1);
+    expect(fixture.cache.put).toHaveBeenCalledOnce();
+    await screen.getByRole("button", { name: "Close tool details", exact: true }).click();
+    await expect.poll(dialog).toBeNull();
+  } finally { fixture.controller.cancel(); await screen.unmount(); }
+});
+test("summary reader close intent cancels before Drawer exit and blocks late snapshots or visible resume", async () => {
+  // 给退出内容与身份隔离断言留出稳定窗口，不依赖 CI 中的短动画时序。
+  document.documentElement.style.setProperty("--pwa-duration-drawer-out", "1000ms");
+  const fixture = detailsFixture();
+  const visibility = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+  const { screen, controls } = await mount(false, fixture.view);
+  try {
+    flushSync(() => controls.current!.setRows([summaryRow]));
+    await openTool();
+    await expect.poll(() => fixture.opens().length).toBe(1);
+    const request = fixture.opens()[0]!;
+    await pushDetails(fixture.controller, request, "preview", 1, "SYNTHETIC_PREVIEW");
+    await expect.poll(() => fixture.controller.getSnapshot().phase).toBe("ready");
+    await screen.getByRole("button", { name: "Close tool details", exact: true }).click();
+    expect(fixture.frames).toContainEqual(expect.objectContaining({ type: "tool_details_close", subscription_id: request.id }));
+    expect(fixture.closeWhileMounted()).toBe(true);
+    expect(toolReader()?.textContent).toContain("SYNTHETIC_PREVIEW");
+    visibility.mockReturnValue(true); document.dispatchEvent(new Event("visibilitychange"));
+    visibility.mockReturnValue(false); document.dispatchEvent(new Event("visibilitychange"));
+    await pushDetails(fixture.controller, request, "session", 2, "SYNTHETIC_LATE_RESULT");
+    expect(fixture.controller.getSnapshot().phase).toBe("idle");
+    expect(fixture.opens()).toHaveLength(1);
+    expect(fixture.cache.put).not.toHaveBeenCalled();
+    expect(toolReader()?.textContent).toContain("SYNTHETIC_PREVIEW");
+    expect(toolReader()?.textContent).not.toContain("SYNTHETIC_LATE_RESULT");
+    flushSync(() => controls.current!.setDetails({ ...fixture.view, online: false }));
+    expect(toolReader()?.textContent).toContain("SYNTHETIC_PREVIEW");
+    flushSync(() => controls.current!.setDetails({ ...fixture.view, online: true }));
+    expect(toolReader()?.textContent).toContain("SYNTHETIC_PREVIEW");
+    expect(fixture.opens()).toHaveLength(1);
+    flushSync(() => controls.current!.setDetails({ ...fixture.view, scope: { ...fixture.view.scope!, endpointId: "synthetic-next-endpoint" } }));
+    expect(toolReader()?.textContent).not.toContain("SYNTHETIC_PREVIEW");
+    expect(fixture.opens()).toHaveLength(1);
+    await expect.poll(dialog).toBeNull();
+  } finally { visibility.mockRestore(); fixture.controller.cancel(); await screen.unmount(); }
+});
+test("background watching cancels, visible resumes only current selection, and offline or missing scope never fetches", async () => {
+  const fixture = detailsFixture();
+  const visibility = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+  const { screen, controls } = await mount(false, fixture.view);
+  try {
+    flushSync(() => controls.current!.setRows([summaryRow]));
+    await openTool();
+    await expect.poll(() => fixture.opens().length).toBe(1);
+    visibility.mockReturnValue(true); document.dispatchEvent(new Event("visibilitychange"));
+    expect(fixture.frames.at(-1)).toMatchObject({ type: "tool_details_close", subscription_id: fixture.opens()[0]!.id });
+    visibility.mockReturnValue(false); document.dispatchEvent(new Event("visibilitychange"));
+    await expect.poll(() => fixture.opens().length).toBe(2);
+    expect(fixture.opens()[1]!.id).not.toBe(fixture.opens()[0]!.id);
+    flushSync(() => controls.current!.setDetails({ ...fixture.view, online: false }));
+    await expect.poll(() => fixture.controller.getSnapshot().error).toBe("offline");
+    const count = fixture.opens().length;
+    visibility.mockReturnValue(true); document.dispatchEvent(new Event("visibilitychange"));
+    visibility.mockReturnValue(false); document.dispatchEvent(new Event("visibilitychange"));
+    await expect.poll(() => fixture.controller.getSnapshot().error).toBe("offline");
+    expect(fixture.opens()).toHaveLength(count);
+    flushSync(() => controls.current!.setDetails({ ...fixture.view, scope: null, online: false }));
+    const reads = fixture.cache.get.mock.calls.length;
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(fixture.cache.get.mock.calls.length).toBe(reads);
+    expect(fixture.opens()).toHaveLength(count);
+    await screen.getByRole("button", { name: "Close tool details", exact: true }).click();
+    await expect.poll(dialog).toBeNull();
+  } finally { visibility.mockRestore(); fixture.controller.cancel(); await screen.unmount(); }
+});
+test("summary selection changes immediately hide old content and retry uses only the current identity", async () => {
+  const fixture = detailsFixture();
+  const { screen, controls } = await mount(false, fixture.view);
+  try {
+    flushSync(() => controls.current!.setRows([summaryRow]));
+    await openTool();
+    await expect.poll(() => fixture.opens().length).toBe(1);
+    const oldRequest = fixture.opens()[0]!;
+    await pushDetails(fixture.controller, oldRequest, "preview", 1, "SYNTHETIC_OLD_SELECTION");
+    await expect.poll(() => toolReader()?.textContent).toContain("SYNTHETIC_OLD_SELECTION");
+    flushSync(() => controls.current!.setDetails({ ...fixture.view, scope: { ...fixture.view.scope!, endpointId: "synthetic-next-endpoint" } }));
+    expect(toolReader()?.textContent).not.toContain("SYNTHETIC_OLD_SELECTION");
+    await expect.poll(() => fixture.opens().length).toBe(2);
+    const request = fixture.opens()[1]!;
+    fixture.controller.receive({ protocol_version: 2, type: "tool_details_error", target_channel_id: request.channel_id, in_reply_to: request.id, session_id: request.session_id, leaf_id: request.leaf_id, group_id: request.group_id, tool_ref: request.tool_ref, revision: 1, code: "busy", terminal: true, retryable: true });
+    await screen.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect.poll(() => fixture.opens().length).toBe(3);
+    await pushDetails(fixture.controller, oldRequest, "session", 2, "SYNTHETIC_LATE_SELECTION");
+    expect(toolReader()?.textContent).not.toContain("SYNTHETIC_LATE_SELECTION");
+    await screen.getByRole("button", { name: "Close tool details", exact: true }).click();
+    await expect.poll(dialog).toBeNull();
+  } finally { fixture.controller.cancel(); await screen.unmount(); }
 });
 
 test("desktop opens the reader as a 720px modal Drawer instead of a second column", async () => {

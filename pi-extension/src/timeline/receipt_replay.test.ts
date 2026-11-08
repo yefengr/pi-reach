@@ -9,7 +9,7 @@ import { decodeServerFrameV2 as decodePwaServerFrameV2 } from "../../../pwa/src/
 import { TimelineRuntime as PwaTimelineRuntime, type TimelineScope as PwaTimelineScope } from "../../../pwa/src/lib/pwa/timeline-runtime.ts";
 
 function hello(channelId = "channel-1", id = "hello-1"): Extract<ClientFrame, { type: "session_hello" }> {
-  return { protocol_version: 2, type: "session_hello", id, channel_id: channelId };
+  return { protocol_version: 2, type: "session_hello", tool_details: 1, id, channel_id: channelId };
 }
 
 function user(leafId: string | null, overrides: Partial<Extract<ClientFrame, { type: "user_message" }>> = {}): Extract<ClientFrame, { type: "user_message" }> {

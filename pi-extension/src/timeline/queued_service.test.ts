@@ -28,7 +28,7 @@ function harness(idle = false) {
   });
   return { service, send, sendFrames, binding, manager, runtime };
 }
-const hello: ClientFrame = { protocol_version: 2, type: "session_hello", id: "hello", channel_id: "c" };
+const hello: ClientFrame = { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "c" };
 const user: Extract<ClientFrame, { type: "user_message" }> = { protocol_version: 2, type: "user_message", id: "wire", client_request_id: "q", channel_id: "c", leaf_id: null, text: "later", images: [{ mime: "image/png", data: "abc" }] };
 const steer: Extract<ClientFrame, { type: "queued_message_steer" }> = { protocol_version: 2, type: "queued_message_steer", id: "insert", target_id: "q", channel_id: "c", leaf_id: null };
 function lastSnapshot(frames: ServerFrame[]) { return frames.findLast((frame) => frame.type === "queued_message_state"); }

@@ -1,86 +1,70 @@
 import { expect, test } from "vitest";
-import { encodeServerFrameV2 as encodeExtensionFrame, type ServerFrame as ExtensionFrame } from "../../../../pi-extension/src/protocol/v2/index";
-import { toolPartial, toolTimelineEvent } from "../../../../pi-extension/src/timeline/tool_lifecycle";
-import { decodeServerFrameV2 } from "../pi-reach/protocol-v2/codec";
+import { decodeServerFrameV2, encodeServerFrameV2 } from "../pi-reach/protocol-v2/codec";
+import type { ServerFrame, TimelineEvent } from "@pi-reach/protocol/session";
 import { TimelineRuntime, type TimelineScope } from "./timeline-runtime";
 import { StreamDisplayBuffer } from "./stream-display-buffer";
 import { TOOL_MIN_RUNNING_MS } from "./stream-structure-gate";
 import { projectTimeline } from "./timeline-presentation";
-import { processGroups } from "@/components/pwa/process-groups";
+import { preserveToolInline, hasCompleteToolInline } from "./tool-details-inline";
+import { mergeTimelineRecords } from "./timeline-store";
+import type { PwaTimelineEventRecord } from "./db";
+import { toolContentBlocks, toolHeaderSummary, toolReaderArguments } from "@/components/pwa/tool-presentation";
 
 const scope: TimelineScope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: "session", leafId: "generation", selfSenderRef: "self", channelId: "channel" };
-const association = { groupId: "group", tool: "read", args: { path: "README.md" }, correlation: null };
+const base = { session_id: "session", leaf_id: "generation", group_id: "group", kind: "tool" as const, tool_call_id: "call", tool: "read", representation: "summary" as const, summary: { action: "read" as const, path: "synthetic.txt", offset: 2, limit: 3 }, tool_ref: { call_entry_id: "entry-a", tool_call_id: "call" } };
+const partial = (entry = "entry-a"): Extract<ServerFrame, { type: "timeline_partial" }> => ({ ...base, tool_ref: { ...base.tool_ref, call_entry_id: entry }, partial_id: `tool:${entry}`, protocol_version: 2, type: "timeline_partial", status: "running", target_channel_id: "channel" });
+const event: TimelineEvent = { ...base, event_id: "tool-result", timestamp: 2, event_seq: 2, status: "complete" };
+function receive(runtime: TimelineRuntime, frame: ServerFrame) { return runtime.receive(decodeServerFrameV2(encodeServerFrameV2(frame))); }
 
-// 使用生产 Extension 构造器和两端 codec，避免模拟器把错误帧掩盖成可用数据。
-test.each([false, true])("Extension tool snapshots reach PWA and settle independently (error=%s)", (fail) => {
-  const runtime = new TimelineRuntime();
-  runtime.setScope(scope);
+test("summary wire reaches PWA without inline arguments or result and settles independently", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
   const buffer = new StreamDisplayBuffer();
-  const receive = (frame: ExtensionFrame) => buffer.ingest(runtime.receive(decodeServerFrameV2(encodeExtensionFrame(frame))).items);
-  receive(toolPartial("call-a", association, scope)!);
-  receive(toolPartial("call-b", association, scope)!);
-  for (const text of ["first", "first second", ""]) {
-    const change = receive(toolPartial("call-a", association, scope, { content: [{ type: "text", text }] })!);
-    const partials = change.items.filter((item) => item.kind === "partial");
-    expect(partials).toHaveLength(2);
-    expect(partials.find((item) => item.partial.kind === "tool" && item.partial.tool_call_id === "call-a")?.partial.blocks).toEqual([{ type: "text", text }]);
-    expect(change.hasPending).toBe(false);
-  }
-  const event = {
-    ...toolTimelineEvent(
-      { event_id: "event-a", session_id: scope.sessionId, leaf_id: scope.leafId, timestamp: 2 },
-      association.groupId,
-      { toolCallId: "call-a", toolName: "read", content: [{ type: "text", text: fail ? "read failed" : "final output" }], isError: fail },
-      association,
-    ),
-    event_seq: 2,
+  buffer.ingest(receive(runtime, partial()).items);
+  buffer.ingest(receive(runtime, partial("entry-b")).items);
+  buffer.ingest(receive(runtime, { protocol_version: 2, type: "timeline_event", session_id: "session", leaf_id: "generation", target_channel_id: "channel", event }).items);
+  const settled = buffer.advance(TOOL_MIN_RUNNING_MS).items;
+  expect(settled.filter(item => item.kind === "partial")).toEqual([expect.objectContaining({ partial: expect.objectContaining({ tool_ref: { call_entry_id: "entry-b", tool_call_id: "call" } }) })]);
+  expect(settled).toContainEqual({ kind: "event", event });
+  expect(event).not.toHaveProperty("args"); expect(event).not.toHaveProperty("result");
+});
+test("native entry participates in display identity; ordinary leaf advancement does not", () => {
+  const runtime = new TimelineRuntime(); runtime.setScope(scope);
+  const before = projectTimeline(receive(runtime, partial()).items);
+  const after = projectTimeline(receive(runtime, { protocol_version: 2, type: "timeline_event", session_id: "session", leaf_id: "descendant", target_channel_id: "channel", event: { ...event, leaf_id: "descendant" } }).items, before);
+  expect(after.entries[0].key).toBe(before.entries[0].key);
+  const parallel = projectTimeline([{ kind: "partial", createdAt: 0, partial: partial() }, { kind: "partial", createdAt: 0, partial: partial("entry-b") }]);
+  expect(new Set(parallel.entries.map(entry => entry.key)).size).toBe(2);
+});
+test("summary presentation shows bounded descriptors without inventing empty args", () => {
+  expect(toolHeaderSummary(event)).toBe("synthetic.txt · L2–4");
+  expect(toolReaderArguments(event)).toBeUndefined();
+  expect(toolContentBlocks(event)).toEqual([expect.objectContaining({ style: "notice" })]);
+  expect(JSON.stringify(toolContentBlocks(event))).not.toContain("{}");
+});
+test("new summary preserves a complete legacy inline event in runtime and saved merges", () => {
+  const inline: TimelineEvent = { event_id: event.event_id, timestamp: 2, event_seq: 2, session_id: "session", leaf_id: "generation", group_id: "group", kind: "tool", tool_call_id: "call", tool: "read", args: { path: "synthetic.txt" }, status: "complete", result: "SYNTHETIC_SAVED_RESULT", truncated: false };
+  expect(hasCompleteToolInline(inline)).toBe(true);
+  expect(preserveToolInline(inline, event)).toHaveProperty("result", "SYNTHETIC_SAVED_RESULT");
+  const runtime = new TimelineRuntime(); runtime.setScope(scope); runtime.commit(inline);
+  expect(runtime.commit(event).items).toContainEqual(expect.objectContaining({ event: expect.objectContaining({ result: "SYNTHETIC_SAVED_RESULT" }) }));
+  const record = (value: TimelineEvent): PwaTimelineEventRecord => ({ id: "record", eventId: value.event_id, eventSeq: value.event_seq, deviceId: "device", endpointId: "endpoint", sessionId: "session", leafId: "generation", timestamp: 2, event: value });
+  expect(mergeTimelineRecords([record(inline)], [record(event)])[0].event).toHaveProperty("result", "SYNTHETIC_SAVED_RESULT");
+  expect(hasCompleteToolInline({ ...inline, truncated: true })).toBe(false);
+  expect(hasCompleteToolInline({ ...inline, result: [{ type: "image", omitted: true }] })).toBe(false);
+  expect(preserveToolInline({ ...inline, truncated: true }, event)).toBe(event);
+});
+test("complete legacy JSON with many small values is preserved without a scan cutoff", () => {
+  const inline: TimelineEvent = {
+    event_id: event.event_id, timestamp: 2, event_seq: 2, session_id: "session", leaf_id: "generation", group_id: "group",
+    kind: "tool", tool_call_id: "call", tool: "read", status: "complete", truncated: false,
+    args: { values: Array.from({ length: 60 }, () => Array.from({ length: 2000 }, (_, index) => index)) },
+    result: [{ type: "text", text: "SYNTHETIC_SAVED_ORIGINAL" }],
   };
-  receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: scope.leafId, event });
-  // 最短运行展示期结束后正式结果接管；另一个调用的实时输出不受影响。
-  const settled = buffer.advance(TOOL_MIN_RUNNING_MS);
-  expect(settled.items.filter((item) => item.kind === "partial")).toEqual([
-    expect.objectContaining({ partial: expect.objectContaining({ tool_call_id: "call-b" }) }),
-  ]);
-  expect(settled.items).toContainEqual({ kind: "event", event });
-});
-
-test("tool identity survives the leaf advancing between live output and its formal result", () => {
-  const runtime = new TimelineRuntime();
-  runtime.setScope(scope);
-  const receive = (frame: ExtensionFrame) => runtime.receive(decodeServerFrameV2(encodeExtensionFrame(frame))).items;
-  const running = projectTimeline(receive(toolPartial("call-a", association, scope, {
-    content: [{ type: "text", text: "Live output" }],
-  })!));
-  const runningGroups = processGroups(running.entries, new Set());
-  const result = toolTimelineEvent(
-    { event_id: "result-a", session_id: scope.sessionId, leaf_id: "result-leaf", timestamp: 2 },
-    association.groupId,
-    { toolCallId: "call-a", content: [{ type: "text", text: "Final output" }] },
-    association,
-  );
-  const settled = projectTimeline(receive({ protocol_version: 2, type: "timeline_event", session_id: scope.sessionId, leaf_id: "result-leaf", event: { ...result, event_seq: 2 } }), running);
-  expect(settled.entries).toHaveLength(1);
-  expect(settled.entries[0]).toMatchObject({ key: running.entries[0]!.key, value: { status: "complete", leaf_id: "result-leaf" } });
-  expect(processGroups(settled.entries, new Set(), runningGroups)[0]!.key).toBe(runningGroups[0]!.key);
-});
-
-test("large live output stays decodable and images never become preview text", () => {
-  const partial = toolPartial("large", association, scope, {
-    content: [{ type: "text", text: "😀".repeat(100_000) }, { type: "image", data: "image-payload", mimeType: "image/png" }],
-  });
-  expect(partial).not.toBeNull();
-  const frame = decodeServerFrameV2(encodeExtensionFrame(partial!));
-  expect(frame.type).toBe("timeline_partial");
-  if (frame.type !== "timeline_partial") throw new Error("Expected a tool preview");
-  const text = frame.blocks?.map((block) => block.text).join("") ?? "";
-  expect(text).toContain("Live preview truncated");
-  expect(text).not.toContain("image-payload");
-  expect(text).not.toContain("\uFFFD");
-});
-
-test("oversized live arguments do not prevent the running indicator", () => {
-  const partial = toolPartial("large-args", { ...association, args: { content: "x".repeat(2 * 1024 * 1024) } }, scope);
-  expect(partial).not.toBeNull();
-  expect(partial).not.toHaveProperty("args");
-  expect(decodeServerFrameV2(encodeExtensionFrame(partial!))).toMatchObject({ kind: "tool", status: "running" });
+  expect(hasCompleteToolInline(inline)).toBe(true);
+  const preserved = preserveToolInline(inline, { ...event, leaf_id: "descendant", event_seq: 3 });
+  expect(preserved).not.toHaveProperty("representation");
+  expect("args" in preserved ? preserved.args : null).toBe(inline.args);
+  expect(preserved).toHaveProperty("result", inline.result);
+  expect(preserved.leaf_id).toBe("descendant");
+  expect(preserved.event_seq).toBe(3);
 });

@@ -1,4 +1,5 @@
 import Dexie, { type Table } from "dexie";
+import type { ToolDetailsCacheRecord } from "./tool-details-cache";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
 
 const DATABASE_NAME = "pi-reach";
@@ -112,6 +113,7 @@ export class PwaDatabase extends Dexie {
   events!: Table<PwaTimelineEventRecord, string>;
   sessions!: Table<PwaTimelineSessionRecord, string>;
   settings!: Table<PwaSettingRecord, string>;
+  toolDetails!: Table<ToolDetailsCacheRecord, string>;
 
   private openFailure: PwaDatabaseError | null = null;
   private readonly openFailureListeners = new Set<(error: PwaDatabaseError) => void>();
@@ -215,6 +217,7 @@ export class PwaDatabase extends Dexie {
         });
       }
     });
+    this.version(12).stores({ toolDetails: "id, deviceId, usedAt" });
   }
 
   onOpenFailure(listener: (error: PwaDatabaseError) => void): () => void {
@@ -286,9 +289,10 @@ export async function listPwaEndpoints(deviceId: string): Promise<PwaEndpointRec
 
 export async function removePwaDeviceData(deviceId: string, deviceRecordId: string, activeEndpointSettingKey?: string): Promise<void> {
   const db = getPwaDatabase();
-  await db.transaction("rw", [db.devices, db.endpoints, db.events, db.sessions, db.settings], async () => {
+  await db.transaction("rw", [db.devices, db.endpoints, db.events, db.sessions, db.settings, db.toolDetails], async () => {
     await Promise.all([
       db.devices.delete(deviceRecordId),
+      db.toolDetails.where("deviceId").equals(deviceId).delete(),
       db.endpoints.where("deviceId").equals(deviceId).delete(),
       db.events.where("deviceId").equals(deviceId).delete(),
       db.sessions.where("deviceId").equals(deviceId).delete(),
@@ -299,9 +303,10 @@ export async function removePwaDeviceData(deviceId: string, deviceRecordId: stri
 
 export async function clearPwaData(): Promise<void> {
   const db = getPwaDatabase();
-  await db.transaction("rw", [db.identities, db.devices, db.endpoints, db.events, db.sessions, db.settings], async () => {
+  await db.transaction("rw", [db.identities, db.devices, db.endpoints, db.events, db.sessions, db.settings, db.toolDetails], async () => {
     await Promise.all([
       db.identities.clear(),
+      db.toolDetails.clear(),
       db.devices.clear(),
       db.endpoints.clear(),
       db.events.clear(),

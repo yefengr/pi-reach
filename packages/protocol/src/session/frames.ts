@@ -8,6 +8,11 @@ import {
   headSequenceSchema,
   idSchema,
   MAX_ARRAY_ITEMS,
+  MAX_FRAGMENT_BYTES,
+  MAX_TOOL_DETAILS_BYTES,
+  TOOL_DETAILS_CAPABILITY,
+  positiveIntSchema,
+  toolRefSchema,
   imageMimeSchema,
   pairingCodeSchema,
   protocolVersionSchema,
@@ -67,7 +72,7 @@ const fileResponse = { ...directResponse, in_reply_to: idSchema, session_id: idS
 const safeOffsetSchema = z.number().int().nonnegative().finite().max(Number.MAX_SAFE_INTEGER);
 
 export const pairRequestFrameSchema = strictObject({ ...protocol, type: z.literal("pair_request"), id: idSchema, code: pairingCodeSchema, device_name: textSchema });
-export const sessionHelloFrameSchema = strictObject({ ...protocol, type: z.literal("session_hello"), id: idSchema, channel_id: channelIdSchema });
+export const sessionHelloFrameSchema = strictObject({ ...protocol, type: z.literal("session_hello"), id: idSchema, channel_id: channelIdSchema, tool_details: z.literal(TOOL_DETAILS_CAPABILITY).optional() });
 export const extensionInfoRequestFrameSchema = strictObject({ ...protocol, type: z.literal("extension_info_request"), id: idSchema, ...channelRequest });
 export const userMessageFrameSchema = strictObject({ ...protocol, type: z.literal("user_message"), id: idSchema, ...channelRequest, client_request_id: idSchema, text: textSchema, images: z.array(wireImageSchema).max(1).optional(), attachment_ids: attachmentIdsSchema.optional(), streaming_behavior: z.literal("steer").optional() }).superRefine((frame, ctx) => {
   if (frame.images !== undefined && frame.attachment_ids !== undefined) {
@@ -106,7 +111,7 @@ export const fileCloseFrameSchema = strictObject({ ...fileChannelRequest, type: 
 
 export const pairOkFrameSchema = strictObject({ ...protocol, type: z.literal("pair_ok"), in_reply_to: idSchema, session_name: textSchema, session_started_at: timestampSchema, endpoint_id: idSchema, harness: harnessSchema.optional(), hostname: textSchema.optional() });
 export const pairErrorFrameSchema = strictObject({ ...protocol, type: z.literal("pair_error"), in_reply_to: idSchema, code: z.enum(["token_expired", "token_consumed", "token_unknown", "internal_error"]), message: textSchema.min(1) });
-export const sessionReadyFrameSchema = strictObject({ ...directResponse, type: z.literal("session_ready"), in_reply_to: idSchema, session_id: idSchema, leaf_id: leafIdSchema, head_seq: headSequenceSchema, self_sender_ref: idSchema });
+export const sessionReadyFrameSchema = strictObject({ ...directResponse, type: z.literal("session_ready"), in_reply_to: idSchema, session_id: idSchema, leaf_id: leafIdSchema, head_seq: headSequenceSchema, self_sender_ref: idSchema, tool_details: z.literal(TOOL_DETAILS_CAPABILITY).optional() });
 export const extensionInfoFrameSchema = strictObject({ ...directResponse, type: z.literal("extension_info"), in_reply_to: idSchema, version: idSchema });
 
 const startedMessageSchema = strictObject({ id: idSchema, group_id: idSchema, blocks: z.array(userBlockSchema).max(MAX_ARRAY_ITEMS), origin: z.enum(["pwa", "extension", "unknown"]), sender_ref: idSchema.optional(), delivery: z.enum(["normal", "queued", "unknown"]) }).superRefine((message, ctx) => {
@@ -126,7 +131,7 @@ export const userMessageStatusFrameSchema = z.union([
   strictObject({ ...userMessageStatusBase, status: z.literal("not_found") }),
 ]);
 
-export const timelineEventFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("timeline_event"), event: wireTimelineEventSchema });
+export const timelineEventFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("timeline_event"), target_channel_id: channelIdSchema.optional(), event: wireTimelineEventSchema });
 export const timelinePartialFrameSchema = timelinePartialSchema;
 export const timelineEventFragmentFrameSchema = strictObject({ ...ownerBroadcast, type: z.literal("timeline_event_fragment"), event_id: idSchema, index: z.number().int().nonnegative().finite(), data_base64: timelineEventFragmentSchema.shape.data_base64, final: z.boolean() });
 
@@ -237,8 +242,23 @@ export const fileChunkFrameSchema = z.union([
 export const fileClosedFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_closed"), transfer_id: idSchema });
 export const fileErrorFrameSchema = strictObject({ ...fileResponse, type: z.literal("file_error"), transfer_id: idSchema.optional(), code: fileErrorCodeSchema });
 
-export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageStatusRequestFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileAttachmentOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema]);
-export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, compactionActivityFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema, fileOpenedFrameSchema, fileChunkFrameSchema, fileClosedFrameSchema, fileErrorFrameSchema]);
+export const toolDetailsOpenFrameSchema = strictObject({ ...channelRequest, type: z.literal("tool_details_open"), id: idSchema, group_id: idSchema, tool_ref: toolRefSchema });
+export const toolDetailsCloseFrameSchema = strictObject({ ...channelRequest, type: z.literal("tool_details_close"), id: idSchema, subscription_id: idSchema });
+const toolDetailsResponse = { ...directResponse, in_reply_to: idSchema, session_id: idSchema, leaf_id: leafIdSchema, group_id: idSchema, tool_ref: toolRefSchema, revision: positiveIntSchema.min(1) };
+const toolDetailsChunk = { ...toolDetailsResponse, type: z.literal("tool_details_chunk"), index: positiveIntSchema, data_base64: timelineEventFragmentSchema.shape.data_base64 };
+export const toolDetailsChunkFrameSchema = z.union([
+  strictObject({ ...toolDetailsChunk, final: z.literal(false) }),
+  strictObject({ ...toolDetailsChunk, final: z.literal(true), total_bytes: positiveIntSchema.min(1).max(MAX_TOOL_DETAILS_BYTES), sha256: fileSha256Schema }),
+]).superRefine((frame, ctx) => {
+  const length = canonicalBase64ByteLength(frame.data_base64);
+  if (length === null || length > MAX_FRAGMENT_BYTES) {
+    ctx.addIssue({ code: "custom", path: ["data_base64"], message: "invalid tool details fragment" });
+  }
+});
+export const toolDetailsErrorFrameSchema = strictObject({ ...toolDetailsResponse, type: z.literal("tool_details_error"), code: z.enum(["not_found", "unavailable", "too_large", "busy", "cancelled"]), terminal: z.boolean(), retryable: z.boolean() });
+
+export const clientFrameSchema = z.union([pairRequestFrameSchema, sessionHelloFrameSchema, extensionInfoRequestFrameSchema, userMessageFrameSchema, userMessageStatusRequestFrameSchema, userMessageObservedFrameSchema, sessionSyncFrameSchema, pingFrameSchema, cancelFrameSchema, sessionNewFrameSchema, sessionCompactFrameSchema, modelSetFrameSchema, thinkingSetFrameSchema, listModelsFrameSchema, queuedMessageSetFrameSchema, queuedMessageClearFrameSchema, queuedMessageSteerFrameSchema, approveToolFrameSchema, attachmentCapabilitiesRequestFrameSchema, attachmentBeginFrameSchema, attachmentChunkFrameSchema, attachmentFinishFrameSchema, attachmentStatusRequestFrameSchema, attachmentCancelFrameSchema, attachmentDiscardFrameSchema, fileOpenFrameSchema, fileAttachmentOpenFrameSchema, fileReadFrameSchema, fileCloseFrameSchema, toolDetailsOpenFrameSchema, toolDetailsCloseFrameSchema]);
+export const serverFrameSchema = z.union([pairOkFrameSchema, pairErrorFrameSchema, sessionReadyFrameSchema, extensionInfoFrameSchema, userMessageStartedFrameSchema, userMessageStatusFrameSchema, timelineEventFrameSchema, timelinePartialFrameSchema, timelineEventFragmentFrameSchema, sessionHistoryChunkFrameSchema, protocolErrorFrameSchema, resetFrameSchema, pongFrameSchema, cancelledFrameSchema, actionOkFrameSchema, actionErrorFrameSchema, compactionActivityFrameSchema, modelsListFrameSchema, queuedMessageStateFrameSchema, byeFrameSchema, attachmentCapabilitiesFrameSchema, attachmentStateFrameSchema, attachmentErrorFrameSchema, attachmentDiscardedFrameSchema, fileOpenedFrameSchema, fileChunkFrameSchema, fileClosedFrameSchema, fileErrorFrameSchema, toolDetailsChunkFrameSchema, toolDetailsErrorFrameSchema]);
 
 export const ClientFrameSchema = clientFrameSchema;
 export const ServerFrameSchema = serverFrameSchema;

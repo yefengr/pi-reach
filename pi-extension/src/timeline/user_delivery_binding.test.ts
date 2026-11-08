@@ -14,7 +14,7 @@ function nextMacrotask(): Promise<void> {
 }
 
 function hello(channelId = "channel-1"): Extract<ClientFrame, { type: "session_hello" }> {
-  return { protocol_version: 2, type: "session_hello", id: "hello-1", channel_id: channelId };
+  return { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-1", channel_id: channelId };
 }
 
 function user(leafId: string | null): Extract<ClientFrame, { type: "user_message" }> {

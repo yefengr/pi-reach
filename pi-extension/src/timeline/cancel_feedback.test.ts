@@ -8,7 +8,7 @@ function setup() {
   const runtime = new TimelineRuntime();
   const abort = vi.fn(() => true);
   const service = new TimelineV2Service({ sessionManager: session, runtime, senderRef: "owner", extensionVersion: "test", onUserMessage: () => true, onCancel: abort });
-  service.handle({ protocol_version: 2, type: "session_hello", channel_id: "channel", id: "hello" });
+  service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, channel_id: "channel", id: "hello" });
   const cancel = (groupId: string) => service.handle({ protocol_version: 2, type: "cancel", id: "cancel", channel_id: "channel", session_id: session.getSessionId(), leaf_id: session.getLeafId(), group_id: groupId });
   const start = () => {
     runtime.onAgentStart();

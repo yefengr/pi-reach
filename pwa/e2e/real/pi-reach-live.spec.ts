@@ -6,6 +6,7 @@ import { expect, test, type BrowserContext, type Page, type TestInfo } from "pla
 import { verifyPublishedFiles } from "./published-file-helpers";
 import { verifyReaderDrawerLive } from "./reader-helpers";
 import { installDeliveryRecoveryProbe, verifyMessageDeliveryRecovery, verifyReceiptReplayRecovery } from "./delivery-recovery-helpers";
+import { expectLiveSessionConnected, expectLiveSessionDisconnected } from "./session-ready-helpers";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const COMPOSE_FILE = "docker/e2e/compose.yml";
@@ -146,7 +147,7 @@ async function pairOwner(page: Page, pairingCode: string): Promise<void> {
   // 输满 8 位有效字符后自动提交。
   await pairingDialog.getByRole("textbox", { name: "Pairing code" }).fill(pairingCode);
   await expect(pairingDialog).toHaveCount(0, { timeout: 30_000 });
-  await expect(page.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expectLiveSessionConnected(page, 30_000);
 }
 
 async function openLegacyPage(context: BrowserContext): Promise<Page | null> {
@@ -335,8 +336,12 @@ async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: str
     ...originals,
     { name: "removed-before-send.txt", mimeType: "text/plain", buffer: Buffer.from("not uploaded") },
   ]);
-  await page.getByRole("button", { name: "Show all (4)", exact: true }).click();
-  await page.getByRole("button", { name: "Remove removed-before-send.txt", exact: true }).click();
+  const attachments = page.locator("form.pwa-composer").getByRole("region", { name: "Attachments", exact: true });
+  await expect(attachments.getByRole("group")).toHaveCount(4);
+  const remove = attachments.getByRole("button", { name: "Remove removed-before-send.txt", exact: true });
+  await remove.click();
+  await expect(attachments.getByRole("group")).toHaveCount(3);
+  await expect(remove).toHaveCount(0);
   expect(await originalDigests()).toEqual(before);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect.poll(async () => (await originalDigests()).length, { timeout: 60_000 }).toBe(before.length + originals.length);
@@ -352,7 +357,7 @@ async function verifyOriginalUpload(page: Page, otherOwner: Page, sessionId: str
   // 本地确定性 provider 只驱动真实 Pi 生命周期，不调用模型或验证理解与推理。
   await Promise.all([page.reload({ waitUntil: "domcontentloaded" }), otherOwner.reload({ waitUntil: "domcontentloaded" })]);
   for (const owner of [page, otherOwner]) {
-    await expect(owner.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expectLiveSessionConnected(owner, 60_000);
     await expect(owner.locator('.pwa-message.user:not(.pending) .pwa-attachment-card')).toHaveCount(originals.length, { timeout: 60_000 });
     await expect(owner.locator('.pwa-message.user:not(.pending) img[alt="image-original.png"]')).toBeVisible();
     expect(await owner.locator('.pwa-message.user').allTextContents()).not.toEqual(expect.arrayContaining([expect.stringContaining('/home/pi')]));
@@ -378,8 +383,7 @@ test("recovers a lost delivery receipt after Owner reconnection without another 
     const previous = await readHostState();
     if (!previous.sessionId) throw new Error("Interactive session identity is unavailable.");
     const session = await startFreshSession(page, previous.sessionId);
-    await Promise.all([expect(page.getByLabel("Connected", { exact: true })).toBeVisible(),
-      expect(otherOwner.getByLabel("Connected", { exact: true })).toBeVisible()]);
+    await Promise.all([expectLiveSessionConnected(page), expectLiveSessionConnected(otherOwner)]);
     const recovery = { page, otherOwner, probe, otherProbe, sessionId: session.sessionId!, runCompose };
     await verifyMessageDeliveryRecovery(recovery);
     await verifyReceiptReplayRecovery(recovery);
@@ -425,7 +429,7 @@ test("pairs two browser Owners, verifies live work panels and exact originals, a
     // 保留 Docker 历史卷，只用产品动作创建独立验收会话，避免旧附件混入计数。
     const attachmentSession = await startFreshSession(ownerAPage, beforeSession.sessionId!);
     for (const owner of [ownerAPage, ownerBPage]) {
-      await expect(owner.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 });
+      await expectLiveSessionConnected(owner, 60_000);
       await expect(owner.locator('.pwa-message.user')).toHaveCount(0, { timeout: 60_000 });
     }
     await verifyOriginalUpload(ownerAPage, ownerBPage, attachmentSession.sessionId!);
@@ -458,20 +462,17 @@ test("pairs two browser Owners, verifies live work panels and exact originals, a
       previousSessionId => startFreshSession(ownerAPage, previousSessionId),
     );
     expect(afterSessionId).not.toBe(attachmentSession.sessionId);
-    await Promise.all([
-      expect(ownerAPage.getByLabel("Connected", { exact: true })).toBeVisible(),
-      expect(ownerBPage.getByLabel("Connected", { exact: true })).toBeVisible(),
-    ]);
+    await Promise.all([expectLiveSessionConnected(ownerAPage), expectLiveSessionConnected(ownerBPage)]);
 
-    const ownerADisconnected = ownerAPage.getByLabel("Connected", { exact: true }).waitFor({ state: "detached", timeout: 30_000 });
-    const ownerBDisconnected = ownerBPage.getByLabel("Connected", { exact: true }).waitFor({ state: "detached", timeout: 30_000 });
+    const ownerADisconnected = expectLiveSessionDisconnected(ownerAPage, 30_000);
+    const ownerBDisconnected = expectLiveSessionDisconnected(ownerBPage, 30_000);
     const hostDisconnected = waitForHostState("Relay disconnect", (state) => state.ready !== true, 30_000);
     await Promise.all([runCompose(["restart", "relay"]), ownerADisconnected, ownerBDisconnected, hostDisconnected]);
 
     await waitForHostState("Relay reconnection", (state) => state.ready === true && state.relay === "connected", 60_000);
     await Promise.all([
-      expect(ownerAPage.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 }),
-      expect(ownerBPage.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 }),
+      expectLiveSessionConnected(ownerAPage, 60_000),
+      expectLiveSessionConnected(ownerBPage, 60_000),
     ]);
 
     await Promise.all([
@@ -479,8 +480,8 @@ test("pairs two browser Owners, verifies live work panels and exact originals, a
       ownerBPage.reload({ waitUntil: "domcontentloaded" }),
     ]);
     await Promise.all([
-      expect(ownerAPage.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 }),
-      expect(ownerBPage.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 }),
+      expectLiveSessionConnected(ownerAPage, 60_000),
+      expectLiveSessionConnected(ownerBPage, 60_000),
     ]);
 
     await Promise.all([expectLiveVersions(ownerAPage), expectLiveVersions(ownerBPage)]);

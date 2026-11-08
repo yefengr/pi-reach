@@ -1,33 +1,10 @@
-import type { JsonValue } from "../protocol/v2/index.js";
-import { jsonValue } from "./tool_lifecycle.js";
+import type { ToolSummary } from "@pi-reach/protocol/session";
+import { toolSummary } from "./tool_summary.js";
 
 /** 参数生成期间的发布间隔：首帧立即发布，之后每个调用最多每 100ms 一帧，避免逐 token 刷帧。 */
 export const TOOL_PREPARATION_THROTTLE_MS = 100;
-/**
- * 准备中参数里单个字符串的上限：准备阶段只用于显示工具名与命令／路径摘要，
- * 写入大文件时不随每帧重复发送整段内容；完整参数在开始执行时由运行帧送达。
- */
-export const TOOL_PREPARATION_STRING_CHARS = 2048;
-const PREPARATION_TRUNCATED = "…";
-
-function previewJson(value: JsonValue): JsonValue {
-  if (typeof value === "string") {
-    if (value.length <= TOOL_PREPARATION_STRING_CHARS) return value;
-    let end = TOOL_PREPARATION_STRING_CHARS;
-    const last = value.charCodeAt(end - 1);
-    if (last >= 0xD800 && last <= 0xDBFF) end -= 1;
-    return value.slice(0, end) + PREPARATION_TRUNCATED;
-  }
-  if (Array.isArray(value)) return value.map(previewJson);
-  if (value === null || typeof value !== "object") return value;
-  const result: Record<string, JsonValue> = {};
-  for (const [key, item] of Object.entries(value)) {
-    Object.defineProperty(result, key, { value: previewJson(item), enumerable: true, configurable: true, writable: true });
-  }
-  return result;
-}
-
-export type PreparingCall = Readonly<{ id: string; tool: string; args: JsonValue }>;
+export const TOOL_PREPARATION_STRING_CHARS = 512;
+export type PreparingCall = Readonly<{ id: string; tool: string; summary: ToolSummary }>;
 
 type Slot = { latest: PreparingCall; lastAt: number; timer: ReturnType<typeof setTimeout> | null };
 
@@ -36,7 +13,7 @@ export function preparingCall(block: unknown): PreparingCall | null {
   if (!block || typeof block !== "object") return null;
   const call = block as { type?: unknown; id?: unknown; name?: unknown; arguments?: unknown };
   if (call.type !== "toolCall" || typeof call.id !== "string" || !call.id || typeof call.name !== "string" || !call.name) return null;
-  return { id: call.id, tool: call.name, args: previewJson(jsonValue(call.arguments ?? {})) };
+  return { id: call.id, tool: call.name, summary: toolSummary(call.name, call.arguments) };
 }
 
 /**
@@ -53,7 +30,10 @@ export class ToolPreparation {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** final 用于 toolcall_end：立即发布完整参数，不再等待节流窗口。 */
+  isClosed(id: string): boolean { return this.closed.has(id); }
+  reopen(id: string): void { this.cancel(id); this.closed.delete(id); }
+
+  /** final 用于 toolcall_end：立即发布最终摘要，不再等待节流窗口。 */
   update(call: PreparingCall, final = false): void {
     if (this.closed.has(call.id)) return;
     const slot = this.slots.get(call.id);

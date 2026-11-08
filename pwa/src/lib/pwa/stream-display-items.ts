@@ -1,5 +1,6 @@
 import type { TimelineEvent, TimelinePartial } from "../pi-reach/protocol-v2/schema";
 import type { TimelinePending, TimelineViewItem } from "./timeline-runtime";
+import { isToolSummary } from "./tool-details-inline";
 
 /** 显示快照的条目比较：区分需要立即提交的状态变化与可按节奏合并的正文增长。 */
 
@@ -29,6 +30,7 @@ export type NonStreamToken =
   };
 
 export function partialText(partial: TimelinePartial): string {
+  if (isToolSummary(partial)) return "";
   if (partial.blocks !== undefined) return partial.blocks.map((block) => block.text).join("\n");
   return partial.delta ?? "";
 }
@@ -68,7 +70,7 @@ function sameItem(a: TimelineViewItem, b: TimelineViewItem): boolean {
       && a.insertionNoticeDismissed === b.insertionNoticeDismissed
       && a.images === b.images;
   }
-  if (a.kind === "partial" && b.kind === "partial") return partialText(a.partial) === partialText(b.partial) && a.awaitingSettle === b.awaitingSettle;
+  if (a.kind === "partial" && b.kind === "partial") return (a.partial.kind === "tool" || b.partial.kind === "tool" ? a.partial === b.partial : partialText(a.partial) === partialText(b.partial)) && a.awaitingSettle === b.awaitingSettle;
   return false;
 }
 

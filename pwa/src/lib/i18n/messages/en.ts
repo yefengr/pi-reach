@@ -513,6 +513,13 @@ export const en = {
     noToolSelected: "No tool selected",
     closeReader: "Close tool details",
     noDetails: "No tool details selected.",
+    detailsNotLoaded: "Details have not been loaded. Open to fetch them.",
+    detailsLoading: "Loading tool details…",
+    detailsOffline: "Complete details are not saved in this browser. Connect to the original Pi to view them.",
+    detailsUnavailable: "Tool details are unavailable. The conversation is unaffected.",
+    detailsInvalid: "Tool details could not be verified.",
+    detailsTooLarge: "Tool details exceed the supported size.",
+    detailsPreview: "Live preview; the saved final result will appear when available.",
   },
   operations: {
     dismiss: "Dismiss operation notification",

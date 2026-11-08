@@ -47,7 +47,7 @@ describe("attachment delivery integration", () => {
         if (scenario === "expired_lease") store.resetScope(manager.getSessionId());
         if (scenario === "removed_file") await rm(path);
       }
-      service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+      service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" });
       const frame: Extract<ClientFrame, { type: "user_message" }> = { protocol_version: 2, type: "user_message",
         id: "attempt-1", client_request_id: "request", channel_id: "channel", leaf_id: manager.getLeafId(),
         text: "", attachment_ids: [attachmentId] };
@@ -89,7 +89,7 @@ describe("attachment delivery integration", () => {
     service = new TimelineV2Service({ sessionManager: manager, runtime, senderRef: "owner", extensionVersion: "1",
       onUserMessage: (frame, correlation) => binding.submit(frame, correlation, { ownerId: "owner", service,
         sessionId: manager.getSessionId(), leafId: manager.getLeafId(), clientRequestId: frame.client_request_id }) });
-    service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+    service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" });
     const frame: Extract<ClientFrame, { type: "user_message" }> = { protocol_version: 2, type: "user_message",
       id: "attempt-1", client_request_id: "request", channel_id: "channel", leaf_id: manager.getLeafId(), text: "", attachment_ids: ["attachment"] };
     try {
@@ -141,7 +141,7 @@ describe("attachment delivery integration", () => {
         onQueuedMessageClear: (id) => binding.clearQueued("owner", service, id),
         onQueuedMessageSteer: (id) => binding.steerQueued("owner", service, id).kind });
       targets.set("owner", { service, sessionId: manager.getSessionId(), leafId: manager.getLeafId() });
-      service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+      service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" });
       return service;
     };
     try {
@@ -269,7 +269,7 @@ describe("attachment delivery integration", () => {
       onAttachmentReplay: (frame) => adapter.replay(frame, "owner", manager, runtime),
       onUserMessage: (frame, correlation) => binding.submit(frame, correlation, { ownerId: "owner", service,
         sessionId: manager.getSessionId(), leafId: manager.getLeafId(), clientRequestId: frame.client_request_id }) });
-    service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+    service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" });
     try {
       const scope = { ownerId: "owner", sessionId: manager.getSessionId(), uploadScope: store.scopeFor(manager.getSessionId()) };
       await store.begin(scope, { uploadId: "file", fileName: "data.bin", mimeType: "application/octet-stream", byteLength: 0,

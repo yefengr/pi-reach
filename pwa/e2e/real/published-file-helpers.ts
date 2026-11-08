@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { expect, type Locator, type Page, type TestInfo } from "playwright/test";
 import { expectTextReader, waitForReaderHistoryClear } from "./reader-helpers";
+import { expectLiveSessionConnected } from "./session-ready-helpers";
 
 const TRIGGER = "E2E publish file fixtures";
 const ROOT = "/workspace/pi-reach-published-files";
@@ -195,7 +196,7 @@ export async function verifyPublishedFiles(
 
   for (const [index, owner] of owners.entries()) {
     await owner.reload({ waitUntil: "domcontentloaded" });
-    await expect(owner.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expectLiveSessionConnected(owner, 60_000);
     expect(await verifyOwner(owner, files, testInfo, `owner-${index}-reload`)).toEqual(ownerIds[index]);
   }
 
@@ -215,7 +216,7 @@ export async function verifyPublishedFiles(
     await expect(onlinePi).toHaveCount(1, { timeout: 60_000 });
     await onlinePi.click();
     await expect(onlinePi).toHaveAttribute("aria-current", "true");
-    await expect(owner.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expectLiveSessionConnected(owner, 60_000);
     expect(await verifyOwner(owner, files, testInfo, `owner-${index}-native-resume`)).toEqual(ownerIds[index]);
   }
 }

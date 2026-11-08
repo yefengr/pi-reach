@@ -15,7 +15,7 @@ function partial(text: string, mode: "assistant" | "thinking" | "blocks" | "tool
 }
 function text(items: TimelineViewItem[]): string | undefined {
   const item = items[0];
-  return item?.kind === "partial" ? item.partial.blocks?.map(block => block.text).join("\n") ?? item.partial.delta : undefined;
+  return item?.kind === "partial" && ("blocks" in item.partial || "delta" in item.partial) ? item.partial.blocks?.map(block => block.text).join("\n") ?? item.partial.delta : undefined;
 }
 function fixture() {
   vi.useFakeTimers();

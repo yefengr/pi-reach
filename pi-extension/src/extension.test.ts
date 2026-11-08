@@ -479,7 +479,7 @@ describe("Pi Reach endpoint extension", () => {
     relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "extension_info_request", id: "info-early", channel_id: "channel-info", session_id: manager.getSessionId(), leaf_id: manager.getLeafId() ?? null }, "session"));
     await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "protocol_error", code: "invalid_channel", in_reply_to: "info-early" })));
 
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "info-hello", channel_id: "channel-info" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "info-hello", channel_id: "channel-info" }, "session"));
     await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "session_ready" })));
     const ready = frames().find((frame) => frame.type === "session_ready")!;
     expect(ready).not.toHaveProperty("extension_version");
@@ -497,7 +497,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")!({}, context);
     await _connectForTest(context);
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-tools", channel_id: "channel-tools" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-tools", channel_id: "channel-tools" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     relay.send.mockClear();
     const assistant = { role: "assistant", timestamp: 1, stopReason: "toolUse", content: [{ type: "toolCall", id: "wire-call", name: "read", arguments: { path: "README.md" } }] };
@@ -526,11 +526,12 @@ describe("Pi Reach endpoint extension", () => {
       return decodeServerFrameV2(Buffer.from(outer.ct, "base64").toString("utf8"));
     });
     expect(frames.filter((frame) => frame.type === "timeline_partial")).toEqual([
-      expect.objectContaining({ kind: "tool", status: "running", args: { path: "README.md" }, partial_id: "tool:wire-call" }),
-      expect.objectContaining({ blocks: [{ type: "text", text: "preview" }] }),
-      expect.objectContaining({ blocks: [{ type: "text", text: "complete output" }] }),
+      expect.objectContaining({ kind: "tool", status: "running", summary: { action: "read", path: "README.md" }, target_channel_id: "channel-tools" }),
+      expect.objectContaining({ representation: "summary", status: "delta", target_channel_id: "channel-tools" }),
     ]);
-    expect(frames).toContainEqual(expect.objectContaining({ type: "timeline_event", event: expect.objectContaining({ kind: "tool", tool_call_id: "wire-call", args: { path: "README.md" }, result: result.content }) }));
+    expect(frames).toContainEqual(expect.objectContaining({ type: "timeline_event", target_channel_id: "channel-tools", event: expect.objectContaining({ kind: "tool", tool_call_id: "wire-call", representation: "summary", summary: { action: "read", path: "README.md" } }) }));
+    expect(JSON.stringify(frames)).not.toContain("complete output");
+    expect(JSON.stringify(frames)).not.toContain("preview");
     const formal = frames.filter((frame) => frame.type === "timeline_event");
     expect(formal.map((frame) => [frame.event.kind, frame.event.event_seq])).toEqual([["assistant", 1], ["tool", 2], ["run_end", 3]]);
     expect(formal.at(-1)?.event.group_id).toBe(formal[0]?.event.group_id);
@@ -545,7 +546,7 @@ describe("Pi Reach endpoint extension", () => {
     primary.handlers.get("session_start")!({ reason: "startup" }, context);
     await _connectForTest(context);
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "primary-hello", channel_id: "primary-channel" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "primary-hello", channel_id: "primary-channel" }, "session"));
     const frames = () => relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from(JSON.parse(line).ct, "base64").toString("utf8")));
     await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "session_ready" })));
     const ready = frames().find((frame) => frame.type === "session_ready")!;
@@ -586,7 +587,7 @@ describe("Pi Reach endpoint extension", () => {
     primary.handlers.get("session_start")!({ reason: "startup" }, context);
     await _connectForTest(context);
     const relay = relays.at(-1)!;
-    const hello = (id: string) => relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id, channel_id: "handoff-channel" }, "session"));
+    const hello = (id: string) => relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id, channel_id: "handoff-channel" }, "session"));
     const frames = () => relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from(JSON.parse(line).ct, "base64").toString("utf8")));
     hello("old-hello");
     await vi.waitFor(() => expect(frames().some((frame) => frame.type === "session_ready")).toBe(true));
@@ -987,7 +988,7 @@ describe("Pi Reach endpoint extension", () => {
 
     relay.emit("message", inbound(processEndpointIdentity(), request));
     await vi.waitFor(() => expect(pairingTokenState.completion).not.toBeNull());
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-active", channel_id: "channel-active" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-active", channel_id: "channel-active" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalledTimes(3));
     const ready = readyFrame(relay);
     relay.emit("message", inbound(processEndpointIdentity(), request));
@@ -1134,8 +1135,8 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-b", channel_id: "channel-b" }, "session", ownerB));
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-c", channel_id: "channel-c" }, "session", ownerC));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-b", channel_id: "channel-b" }, "session", ownerB));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-c", channel_id: "channel-c" }, "session", ownerC));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalledTimes(4));
     const readyFrames = relay.send.mock.calls.map(([line]) => {
       const outbound = JSON.parse(line) as { target_owner_id: string; ct: string };
@@ -1186,7 +1187,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-b", channel_id: "channel-b" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-b", channel_id: "channel-b" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     const ready = readyFrame(relay);
     relay.send.mockClear();
@@ -1212,7 +1213,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-b", channel_id: "channel-b" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-b", channel_id: "channel-b" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     const listenersBeforeRevoke = relay.listenerCount("message");
     relay.send.mockImplementationOnce(() => { throw new Error("send unavailable"); });
@@ -1234,7 +1235,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, context);
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     const ready = readyFrame(relay);
     const frames = () => relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from((JSON.parse(line) as { ct: string }).ct, "base64")));
@@ -1259,8 +1260,8 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, context);
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-a", channel_id: "a" }, "session"));
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-b", channel_id: "b" }, "session", ownerB));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-a", channel_id: "a" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-b", channel_id: "b" }, "session", ownerB));
     await vi.waitFor(() => expect(_getActivePeerCountForTest()).toBe(2));
     relay.send.mockClear();
     for (const reason of ["manual", "threshold", "overflow"]) {
@@ -1295,7 +1296,7 @@ describe("Pi Reach endpoint extension", () => {
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
     relay.emit("message", inbound(processEndpointIdentity(), {
-      protocol_version: 2, type: "session_hello", id: "hello-1", channel_id: "channel-1",
+      protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-1", channel_id: "channel-1",
     }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     const ready = readyFrame(relay);
@@ -1345,7 +1346,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: oldManager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-1", channel_id: "channel-1" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-1", channel_id: "channel-1" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     relay.send.mockClear();
     pi.handlers.get("session_shutdown")?.({ reason: "new" });
@@ -1367,7 +1368,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-1", channel_id: "channel-1" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-1", channel_id: "channel-1" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     const ready = readyFrame(relay);
     relay.send.mockClear();
@@ -1388,7 +1389,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-1", channel_id: "channel-1" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-1", channel_id: "channel-1" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     const ready = readyFrame(relay);
     relay.send.mockClear();
@@ -1411,7 +1412,7 @@ describe("Pi Reach endpoint extension", () => {
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
-    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", id: "hello-1", channel_id: "channel-1" }, "session"));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello-1", channel_id: "channel-1" }, "session"));
     await vi.waitFor(() => expect(relay.send).toHaveBeenCalled());
     const ready = readyFrame(relay);
     relay.send.mockClear();

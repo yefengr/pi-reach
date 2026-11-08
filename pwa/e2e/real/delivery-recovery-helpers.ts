@@ -1,4 +1,5 @@
 import { expect, type Page, type WebSocketRoute } from "playwright/test";
+import { expectLiveSessionConnected } from "./session-ready-helpers";
 
 /** 观测只保留关联 ID 与计数；仅延迟无正文的查询状态帧，不打印 ct 或 Owner 凭据。 */
 type FrameIdentity = { type: string; id?: string; replyTo?: string; clientRequestId?: string; channelId?: string; status?: string; messageId?: string };
@@ -136,7 +137,7 @@ export async function verifyMessageDeliveryRecovery(input: DeliveryRecoveryInput
   await probe.reconnectOwner();
   await expect.poll(() => probe.snapshot().replayedReceipts).toBeGreaterThan(0);
   await expect.poll(() => probe.snapshot().queriedOnNewConnection).toBe(true);
-  await expect(page.getByLabel("Connected", { exact: true })).toBeVisible();
+  await expectLiveSessionConnected(page);
   await expect.poll(() => probe.snapshot().queryReplyHeld).toBe(true);
   expect(probe.snapshot()).toMatchObject({ queryStatus: "committed", queryHasMessage: true });
   const check = page.getByRole("button", { name: "Check status", exact: true });
@@ -167,7 +168,7 @@ export async function verifyReceiptReplayRecovery(input: DeliveryRecoveryInput) 
   await expect(otherOwner.locator(".pwa-message.user:not(.pending)").filter({ hasText: text })).toHaveCount(1);
   await expect.poll(() => probe.snapshot().droppedReceipts).toBeGreaterThan(0);
   await probe.reconnectOwner();
-  await expect(page.getByLabel("Connected", { exact: true })).toBeVisible();
+  await expectLiveSessionConnected(page);
   await expect.poll(() => probe.snapshot().replayedReceipts).toBeGreaterThan(0);
   await expect(page.locator(".pwa-message.user").filter({ hasText: text })).toHaveCount(1);
   await expect(page.locator(".pwa-message.user.pending")).toHaveCount(0);

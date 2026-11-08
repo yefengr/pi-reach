@@ -27,7 +27,7 @@ test("owner factory preserves legacy image queue and fail-closed upload default"
     extensionVersion: "1", delivery, attachments: new AttachmentDelivery(store), onFrame: vi.fn(), onTurn });
   target = binding;
   try {
-    binding.service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+    binding.service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" });
     expect(binding.service.handle({ protocol_version: 2, type: "user_message", id: "wire", channel_id: "channel",
       leaf_id: manager.getLeafId(), client_request_id: "request", text: "legacy",
       images: [{ mime: "image/png", data: "eA==" }] })).toMatchObject([

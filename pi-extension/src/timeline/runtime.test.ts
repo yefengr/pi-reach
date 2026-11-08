@@ -83,11 +83,10 @@ describe("TimelineRuntime", () => {
       content: [{ type: "text", text: big }, { type: "image", mimeType: "image/png", data: big }],
     } as never);
     const tool = runtime.recover(session).find((event) => event.kind === "tool");
-    expect(tool).toMatchObject({ status: "complete", truncated: true });
-    const result = (tool as { result: Array<Record<string, unknown>> }).result;
-    expect((result[0]!.text as string).length).toBe(1024 * 1024);
-    expect(result[1]).toEqual({ type: "image", mime_type: "image/png", omitted: true, byte_length: Math.floor(big.length * 3 / 4) });
-    expect(((tool as { args: { note: string } }).args.note).length).toBe(1024 * 1024);
+    expect(tool).toMatchObject({ status: "complete", representation: "summary", summary: { action: "read" } });
+    expect(tool).not.toHaveProperty("args");
+    expect(tool).not.toHaveProperty("result");
+    expect(Buffer.byteLength(JSON.stringify(tool))).toBeLessThan(4096);
   });
 
   test("binds ALS correlation to the message object and publishes a committed user event after persistence", async () => {
@@ -348,7 +347,7 @@ describe("TimelineRuntime", () => {
     expect(runtime.getPublishedEvents()[0]).toMatchObject({ kind: "assistant", blocks: [{ type: "text", text: "After call" }, { type: "thinking", text: "Next thought" }] });
   });
 
-  test("publishes stable tool lifecycle partials with JSON-safe args and snapshot blocks", () => {
+  test("publishes stable tool summaries without repeating unchanged output updates", () => {
     const session = SessionManager.inMemory(process.cwd());
     const otherSession = SessionManager.inMemory(process.cwd());
     const partials: Array<{ partial: TimelinePartial; correlation: Correlation }> = [];
@@ -435,61 +434,13 @@ describe("TimelineRuntime", () => {
       partialResult: { content: [{ type: "text", text: "wrong session" }] },
     } as never, otherSession);
 
-    expect(partials).toEqual([
-      {
-        // toolcall_end 先以准备中发布完整参数，执行开始后同一 partial_id 转为运行。
-        partial: expect.objectContaining({
-          partial_id: "tool:call-live",
-          group_id: marker?.group_id,
-          kind: "tool",
-          tool_call_id: "call-live",
-          tool: "read",
-          args: { path: "README.md", limit: 20 },
-          status: "preparing",
-        }),
-        correlation,
-      },
-      {
-        partial: expect.objectContaining({
-          partial_id: "tool:call-live",
-          group_id: marker?.group_id,
-          kind: "tool",
-          tool_call_id: "call-live",
-          tool: "read",
-          args: { path: "README.md", limit: 20, unsupported: null },
-          status: "running",
-        }),
-        correlation,
-      },
-      {
-        partial: expect.objectContaining({
-          partial_id: "tool:call-live",
-          status: "delta",
-          blocks: [{ type: "text", text: "first snapshot" }],
-        }),
-        correlation,
-      },
-      {
-        partial: expect.objectContaining({ partial_id: "tool:call-live", status: "delta", blocks: [] }),
-        correlation,
-      },
-      {
-        partial: expect.objectContaining({
-          partial_id: "tool:call-live",
-          status: "delta",
-          blocks: [{ type: "text", text: "replacement snapshot" }],
-        }),
-        correlation,
-      },
-      {
-        partial: expect.objectContaining({
-          partial_id: "tool:call-live",
-          status: "delta",
-          blocks: [{ type: "text", text: "final snapshot" }],
-        }),
-        correlation,
-      },
-    ]);
+    expect(partials).toEqual(["preparing", "running", "delta"].map((status) => ({
+      partial: expect.objectContaining({ partial_id: `tool:${marker!.id}:call-live`, group_id: marker!.group_id,
+        kind: "tool", tool_call_id: "call-live", tool: "read", representation: "summary",
+        tool_ref: { call_entry_id: marker!.id, tool_call_id: "call-live" },
+        summary: { action: "read", path: "README.md", limit: 20 }, status }), correlation,
+    })));
+    expect(partials.every(({ partial }) => !("args" in partial) && !("blocks" in partial))).toBe(true);
     expect(partials.every(({ partial }) => partial.leaf_id === session.getLeafId())).toBe(true);
     expect(markerEntries(session)).toHaveLength(1);
     expect(runtime.getPublishedEvents().some((event) => event.kind === "tool")).toBe(false);
@@ -502,7 +453,7 @@ describe("TimelineRuntime", () => {
       args: {},
       partialResult: { content: [{ type: "text", text: "after reset" }] },
     } as never, otherSession);
-    expect(partials).toHaveLength(6);
+    expect(partials).toHaveLength(3);
   });
 
   test("splits oversized deltas without breaking surrogate pairs", () => {
@@ -567,12 +518,12 @@ describe("TimelineRuntime", () => {
       // 首帧立即发布；窗口内的增量只保留最新一帧，窗口结束时补发。
       expect(partials.map(partial => partial.status)).toEqual(["preparing"]);
       vi.advanceTimersByTime(TOOL_PREPARATION_THROTTLE_MS);
-      expect(partials.at(-1)).toMatchObject({ partial_id: "tool:call-stream", group_id: marker!.group_id, status: "preparing", args: { command: "ls -1" } });
+      expect(partials.at(-1)).toMatchObject({ partial_id: `tool:${marker!.id}:call-stream`, group_id: marker!.group_id, status: "preparing", summary: { action: "execute", command: "ls -1" } });
       update("toolcall_delta", "ls -1 &&");
       const toolCall = { type: "toolCall", id: "call-stream", name: "bash", arguments: { command: "ls -1 && pwd" } };
       runtime.onMessageUpdate({ type: "message_update", message: { ...assistant, content: [toolCall] }, assistantMessageEvent: { type: "toolcall_end", contentIndex: 0, toolCall, partial: { ...assistant, content: [toolCall] } } } as never, session);
       // toolcall_end 不等节流窗口，立即发布完整参数。
-      expect(partials.at(-1)).toMatchObject({ status: "preparing", args: { command: "ls -1 && pwd" } });
+      expect(partials.at(-1)).toMatchObject({ status: "preparing", summary: { action: "execute", command: "ls -1 && pwd" } });
       const beforeExecution = partials.length;
       update("toolcall_delta", "late");
       runtime.onToolExecutionStart({ type: "tool_execution_start", toolCallId: "call-stream", toolName: "bash", args: { command: "ls -1 && pwd" } } as never, session);
@@ -597,9 +548,9 @@ describe("TimelineRuntime", () => {
     const content = "x".repeat(TOOL_PREPARATION_STRING_CHARS * 4);
     const message = { ...assistant, content: [{ type: "toolCall", id: "call-write", name: "write", arguments: { path: "big.txt", content } }] };
     runtime.onMessageUpdate({ type: "message_update", message, assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: message } } as never, session);
-    const args = partials[0]?.kind === "tool" ? partials[0].args as { path: string; content: string } : undefined;
-    expect(args?.path).toBe("big.txt");
-    expect(args?.content.length).toBeLessThanOrEqual(TOOL_PREPARATION_STRING_CHARS + 1);
+    expect(partials[0]).toMatchObject({ representation: "summary", summary: { action: "write", path: "big.txt" } });
+    expect(partials[0]).not.toHaveProperty("args");
+    expect(JSON.stringify(partials[0])).not.toContain(content);
   });
 
   test("waits for a tool call ID before publishing a preparing partial", () => {
@@ -643,7 +594,7 @@ describe("TimelineRuntime", () => {
     expect(runtime.getPublishedEvents()).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "assistant", status: "complete" }),
       expect.objectContaining({ kind: "provider_error", message: "provider failed" }),
-      expect.objectContaining({ kind: "tool", status: "complete", result: expect.anything() }),
+      expect.objectContaining({ kind: "tool", status: "complete", representation: "summary" }),
     ]));
   });
 
@@ -713,15 +664,15 @@ describe("TimelineRuntime", () => {
         kind: "tool",
         tool_call_id: "call-fallback",
         tool: "custom-tool",
-        args: { retained: true },
+        summary: { action: "other" }, representation: "summary",
         status: "complete",
       }),
     ]));
     const recovered = new TimelineRuntime().recover(session);
     expect(recovered).toEqual(expect.arrayContaining([
-      expect.objectContaining({ tool_call_id: "call-success", args: { path: "src/index.ts" } }),
-      expect.objectContaining({ tool_call_id: "call-error", args: { command: "exit 1" }, error: "failed" }),
-      expect.objectContaining({ tool_call_id: "call-fallback", args: { retained: true } }),
+      expect.objectContaining({ tool_call_id: "call-success", summary: { action: "read", path: "src/index.ts" } }),
+      expect.objectContaining({ tool_call_id: "call-error", summary: { action: "execute", command: "exit 1" }, status: "error" }),
+      expect.objectContaining({ tool_call_id: "call-fallback", summary: { action: "other" } }),
     ]));
   });
 
@@ -839,8 +790,8 @@ describe("TimelineRuntime", () => {
       kind: "tool",
       tool_call_id: "call-recovered",
       tool: "grep",
-      args: { pattern: "TimelineRuntime", path: "src" },
-      status: "complete",
+      summary: { action: "search", query: "TimelineRuntime", path: "src" },
+      representation: "summary", status: "complete",
     }));
     expect(markerEntries(session)).toHaveLength(2);
 
@@ -862,7 +813,9 @@ describe("TimelineRuntime", () => {
       session.appendMessage(toolMessage({ toolCallId: "reused" }) as never);
     }
     const recovered = new TimelineRuntime().recover(session).filter((event) => event.kind === "tool");
-    expect(recovered.map((event) => event.args)).toEqual([{ path: "first.txt" }, { path: "second.txt" }]);
+    expect(recovered.map((event) => "summary" in event && event.summary)).toEqual([{ action: "read", path: "first.txt" }, { action: "read", path: "second.txt" }]);
+    expect(recovered[0] && "tool_ref" in recovered[0] && recovered[0].tool_ref.call_entry_id)
+      .not.toBe(recovered[1] && "tool_ref" in recovered[1] && recovered[1].tool_ref.call_entry_id);
   });
 
   test("does not publish deferred tool results after a session reset", async () => {

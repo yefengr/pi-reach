@@ -165,7 +165,7 @@ test("uses a Mantine cancel action only for cancelable queued messages", () => {
 
 test("summarizes running tools in the group header without mounting raw args", () => {
   // 分属不同轮次，各自成组；运行中的工具在折叠的组头显示自己的标题。
-  const running = (tool: string, id: string, args: Extract<TimelinePartial, { kind: "tool" }>["args"]): TimelinePartial => ({
+  const running = (tool: string, id: string, args: Exclude<Extract<TimelinePartial, { kind: "tool" }>, { representation: "summary" }>["args"]): TimelinePartial => ({
     protocol_version: 2, type: "timeline_partial", session_id: "session-1", leaf_id: "history-1", group_id: `group-${id}`, kind: "tool", partial_id: `tool:${id}`, tool_call_id: id, tool, args, status: "running",
   });
   const html = renderList([

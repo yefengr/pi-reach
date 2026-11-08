@@ -22,7 +22,7 @@ async function setup() {
   const manager = SessionManager.inMemory(root);
   const service = new TimelineV2Service({ sessionManager: manager, senderRef: "owner", extensionVersion: "1",
     runtime: new TimelineRuntime(), onUserMessage: () => false });
-  service.handle({ protocol_version: 2, type: "session_hello", id: "hello", channel_id: "channel" });
+  service.handle({ protocol_version: 2, type: "session_hello", tool_details: 1, id: "hello", channel_id: "channel" });
   const scope = { deviceId: "device", endpointId: "endpoint", runtimeInstanceId: "runtime", sessionId: manager.getSessionId(),
     selfSenderRef: "owner", channelId: "channel", leafId: manager.getLeafId() };
   const attachmentScope = { ownerId: "owner", sessionId: scope.sessionId, uploadScope: store.scopeFor(scope.sessionId) };

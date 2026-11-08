@@ -1,6 +1,8 @@
 import { Fragment, useLayoutEffect, useRef } from "react";
+import { Button } from "@mantine/core";
 import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
 import { ReaderShell } from "./reader-shell";
+import { useToolDetails } from "@/lib/pwa/use-tool-details";
 import { ToolImage } from "./tool-output";
 import { toolContentBlocks, toolError, toolReaderArguments, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
@@ -8,6 +10,7 @@ import { READER_FOLLOW_THRESHOLD_PX } from "./reader-shared";
 import "./tool-reader.css";
 
 type ToolReaderProps = {
+  sourceKey?: string;
   value: ToolValue | null;
   status?: ToolStatus;
   opened: boolean;
@@ -42,8 +45,12 @@ function StatusIcon({ status }: { status: ReturnType<typeof toolStatus> }) {
  * 工具详情阅读器：桌面为右侧 Drawer，移动端全屏。
  * 打开时压入一条历史记录，系统返回关闭阅读器而不离开会话。
  */
-export function ToolReader({ value, status: statusOverride, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
+export function ToolReader({ value: sourceValue, sourceKey, status: statusOverride, opened, onClose, onExitTransitionEnd }: ToolReaderProps) {
   const { t } = useI18n();
+  const details = useToolDetails(sourceValue, opened, sourceKey);
+  const value = details.value;
+  const close = () => { details.cancel?.(); onClose(); };
+  const detailNotice = details.state.error === "offline" ? t.tools.detailsOffline : details.state.error === "invalid" ? t.tools.detailsInvalid : details.state.error === "too_large" ? t.tools.detailsTooLarge : details.state.error ? t.tools.detailsUnavailable : t.tools.detailsLoading;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followRef = useRef(true);
 
@@ -55,7 +62,7 @@ export function ToolReader({ value, status: statusOverride, opened, onClose, onE
     if (scroll && followRef.current) scroll.scrollTop = scroll.scrollHeight;
   }, [outputKey]);
 
-  const status = value ? toolStatus(value, statusOverride) : "unknown";
+  const status = value ? toolStatus(value, details.state.content?.source === "session" ? undefined : statusOverride) : "unknown";
   // 参数对象可以拆成名称与值两部分：只有名称加重，长参数块不会整块压过输出正文。
   const callArguments = value ? toolReaderArguments(value) : undefined;
   // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
@@ -67,7 +74,7 @@ export function ToolReader({ value, status: statusOverride, opened, onClose, onE
   const title = value?.tool ?? t.tools.noToolSelected;
   const statusLabel = status === "unknown" ? t.timeline.unknown : t.tools.status[status];
 
-  return <ReaderShell opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd}
+  return <ReaderShell opened={opened} onClose={close} onExitTransitionEnd={onExitTransitionEnd}
     title={title} closeLabel={t.tools.closeReader} historyKey="piReachToolReader" describedBy="pwa-tool-reader-description"
     actions={<>
       <span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}`} title={statusLabel}><StatusIcon status={status} /><span className="pwa-sr-only">{statusLabel}</span></span>
@@ -76,7 +83,8 @@ export function ToolReader({ value, status: statusOverride, opened, onClose, onE
           const target = event.currentTarget;
           followRef.current = target.scrollHeight - target.scrollTop - target.clientHeight <= READER_FOLLOW_THRESHOLD_PX;
         }}>
-          {value === null ? <p className="pwa-tool-empty">{t.tools.noDetails}</p> : <>
+          {details.pending ? <><p className="pwa-tool-notice" role="status">{detailNotice}</p>{details.state.phase === "error" && details.state.retryable !== false ? <Button variant="subtle" onClick={details.retry}>{t.common.retry}</Button> : null}</> : value === null ? <p className="pwa-tool-empty">{t.tools.noDetails}</p> : <>
+            {details.state.content?.source === "preview" ? <p className="pwa-tool-notice" role="status">{details.state.error ? detailNotice : t.tools.detailsPreview}</p> : null}
             {callArguments
               ? <pre className="pwa-tool-reader-command">{callArguments.map(({ name, value: argument }, index) => <Fragment key={`${name}:${index}`}><span className="pwa-tool-reader-arg-name">{name}:</span>{` ${argument}`}{index < callArguments.length - 1 ? "\n" : null}</Fragment>)}</pre>
               : callText ? <pre className="pwa-tool-reader-command">{callText}</pre> : null}

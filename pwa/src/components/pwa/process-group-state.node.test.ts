@@ -8,7 +8,7 @@ import { observeProcessEntries, timelineActivity } from "./timeline-activity";
 import { processGroupState, processGroupSummary, type ProcessStatus } from "./process-group-state";
 
 const scope = { session_id: "s", leaf_id: "l", group_id: "g" };
-const tool = (key: string, terminal?: "complete" | "error" | "interrupted", name = "bash", args: NonNullable<ToolEntry["value"]["args"]> = { command: key }): ToolEntry => ({ kind: "tool", key, value: terminal === undefined ? {
+const tool = (key: string, terminal?: "complete" | "error" | "interrupted", name = "bash", args: NonNullable<Extract<ToolEntry["value"], { args?: unknown }>["args"]> = { command: key }): ToolEntry => ({ kind: "tool", key, value: terminal === undefined ? {
   ...scope, protocol_version: 2, type: "timeline_partial", kind: "tool", partial_id: key, tool_call_id: key, tool: name, args, status: "running",
 } : {
   ...scope, kind: "tool", event_id: key, timestamp: 100, tool_call_id: key, tool: name, args, truncated: false,

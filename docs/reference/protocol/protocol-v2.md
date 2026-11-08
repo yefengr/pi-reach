@@ -204,9 +204,9 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - 单 frame JSON UTF-8：最大 `2 MiB`。
 - 单 history chunk：最大 `512 KiB`。
 - 单 fragment 解码后：最大 `50 KiB`。
-- 一个未完成 timeline/history 逻辑窗口：最大 `32 MiB`；文件获取使用独立的有界缓冲。
-- ID：1-256 字符。
-- 普通字符串：最大 `1 MiB`。
+- 一个未完成 timeline/history 逻辑窗口：最大 `32 MiB`；文件获取与工具详情分别使用独立的有界缓冲。
+- ID：1-256 个 UTF-16 code unit。
+- 普通 string/text：最多 1,048,576 个 UTF-16 code unit，不是编码后的字节上限；frame 的 UTF-8 字节限制仍单独生效。工具详情允许较长字符串，但整份 JSON 受下文 8 MiB 预算约束。
 - 数组：最大 4096 项。
 - 时间戳：非负有限数。
 - `event_seq`：正式时间线事件使用从 1 开始的连续安全整数；它用于历史范围与缓存缺口判断，`event_id` 仍用于事件去重。
@@ -258,6 +258,8 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `file_attachment_open`
 - `file_read`
 - `file_close`
+- `tool_details_open`
+- `tool_details_close`
 
 `session_sync.before` 是排他的正式事件序号上界：`null` 表示从当前末尾开始，数字表示只返回序号小于该值的事件；`limit` 为 1 到 80 的整数，省略时默认 80。历史响应的最后一个 chunk 在仍有更早事件时携带数字 `next_before`，没有更早事件时携带 `eos=true`。
 
@@ -275,6 +277,8 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `file_chunk`
 - `file_closed`
 - `file_error`
+- `tool_details_chunk`
+- `tool_details_error`
 - `user_message_started`
 - `user_message_status`
 - `timeline_event`
@@ -292,9 +296,9 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `queued_message_state`
 - `bye`
 
-扩展版本通过独立诊断请求获取，不改变 `session_hello` / `session_ready` 的握手格式。PWA 收到匹配的 `session_ready` 后，发送一次 `extension_info_request`，携带 `id`、`channel_id`、当前 `session_id` 和 `leaf_id`；扩展按既有 ready、channel 和会话边界校验后，返回定向 `extension_info`，携带 `target_channel_id`、`in_reply_to` 和 `version`（1–256 字符的非空字符串）。版本在扩展模块加载时固定，表示 Pi Reach 扩展版本，而非 Pi coding agent 的版本。
+扩展版本通过独立诊断请求获取；该诊断功能本身不增加 `session_hello` / `session_ready` 字段。PWA 收到匹配的 `session_ready` 后，发送一次 `extension_info_request`，携带 `id`、`channel_id`、当前 `session_id` 和 `leaf_id`；扩展按既有 ready、channel 和会话边界校验后，返回定向 `extension_info`，携带 `target_channel_id`、`in_reply_to` 和 `version`（1–256 字符的非空字符串）。版本在扩展模块加载时固定，表示 Pi Reach 扩展版本，而非 Pi coding agent 的版本。
 
-PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，断开或切换后清除，不读取配对缓存兜底。匹配版本查询的 `protocol_error` 只影响版本展示；旧扩展不支持查询或查询失败时显示「版本不可用」，不阻断聊天或触发重连。不轮询、不重试，也不主动推送新 inner frame 给未查询的页面。先部署 PWA 再发布扩展的顺序保持不变，新旧页面与扩展仍可使用原有握手建立会话。同一 Owner 的回复会到达其所有连接；旧页面若与新页面同时在线，可能因不认识新诊断响应而显示协议提示，但不改变握手或连接状态。
+PWA 只接受当前有效连接、channel、runtime 和匹配请求的结果，断开或切换后清除，不读取配对缓存兜底。匹配版本查询的 `protocol_error` 只影响版本展示；旧扩展不支持查询或查询失败时显示「版本不可用」，不阻断聊天或触发重连。不轮询、不重试，也不主动推送新 inner frame 给未查询的页面。先部署 PWA 再发布扩展的顺序保持不变；工具摘要模式另有下文的能力协商，不因诊断请求独立而省略。同一 Owner 的回复会到达其所有连接；旧页面若与新页面同时在线，可能因不认识新诊断响应而显示协议提示，但不改变握手或连接状态。
 
 ## 操作反馈
 
@@ -378,12 +382,51 @@ PWA 在完成会话握手和历史同步后获取文件。Extension 每次打开
 
 PWA 同时最多一个获取任务和一片在途，请求超时 15 秒。完成原件长度和 SHA-256 校验后才显示图片或提供保存链接；完整内容只留在 64 MiB 页面缓存，阅读器使用的内容被 pin，预算不足时拒绝准入。短断线保留完整结果，刷新、切换目标或离开页面不保证保留；不写 IndexedDB、Service Worker 或后台任务，不自动重试或续传。具体自动预览、受限文本阅读和保存手势见[当前设计](../../DESIGN.md#组件规则)。
 
+## 工具摘要与按需详情
+
+### 能力与轻量记录
+
+`session_hello` 与 `session_ready` 可携带 `tool_details: 1`。新 PWA 首次发送不含该字段的原样 hello，以连接旧 Extension；新 Extension 对未声明能力的 hello 返回 `protocol_upgrade_required`，不登记 ready，也不发送新工具历史。新 PWA 仅对当前 hello 的该回复补发一次含能力的 hello，ready 回显能力后进入摘要模式；其他失败不无限重试或降级。
+
+新模式的正式 tool event 和工具 partial 使用 `representation: "summary"`，携带 `summary` 与 `tool_ref`，不携带完整 `args`、`result` 或图片正文。`summary` 包含操作类型，以及必要的有界 command、path、query、offset、limit；每个字符串最多 512 个 code unit，摘要 JSON 不超过 4 KiB。`tool_ref = {call_entry_id, tool_call_id}` 以原生 assistant 调用的 marker/entry 身份和工具调用 ID 定位原件，且引用内外的 `tool_call_id` 一致；不能仅凭工具调用 ID 查询。
+
+Extension 仅向已协商 channel 定向发送工具摘要；PWA 先过滤发给其他 channel 的定向帧，再严格解码属于自己的帧。新 PWA 仍可读取旧 Extension 的既有 v2 inline 工具事件，但该组合没有源头轻量化收益。新 Extension 不向未协商页面回退发送完整工具结果。已经加载的旧页面可能只有通用错误提示，需要刷新到新版；服务端升级错误码不保证旧 JavaScript 已有专用升级文案。
+
+### 打开、更新与关闭
+
+| frame | 字段与语义 |
+| --- | --- |
+| `tool_details_open` | ready-only direct request，继承 channel/session/leaf 作用域，另带 `group_id`、`tool_ref`；请求 `id` 同时标识本次订阅。 |
+| `tool_details_close` | 相同 direct request 边界，`subscription_id` 指向要取消的 open `id`；旧关闭不得取消新的阅读选择。 |
+| `tool_details_chunk` | 定向响应，以 `in_reply_to` 关联 open，携带 session/leaf/group/ref、`revision`、从 0 连续递增的 `index` 与 canonical `data_base64`。最后一片 `final=true`，另带整份 JSON 的 `total_bytes`、SHA-256；非最后片不含这些终态字段。 |
+| `tool_details_error` | 相同响应身份，`code` 为 `not_found`、`unavailable`、`too_large`、`busy` 或 `cancelled`；`terminal` 表示订阅是否结束，`retryable` 表示是否允许重试。 |
+
+每份更新是 revision 递增的完整替换快照，不是追加日志。PWA 逐片核验当前连接、阅读选择、工具引用、revision/index、Base64、UTF-8、总字节数、SHA-256 与严格内容 schema，完整校验后再替换正文。新快照可以覆盖尚未完成的旧快照；合并与节流不保证回放所有中间帧。
+
+详情文档的 `source=preview` 对应 preparing/running，`source=session` 对应已保存的 complete/error/interrupted；`args` 必填，result/error 按实际保存内容提供。正式 complete 必须包含保存的 result，session 文档不能带 `limited=true`。原件只取自当前合法分支的 Pi 原生消息，不执行工具、不重读文件、不接受任意本机路径；`publish_file` 的源路径隐藏规则不变。
+
+运行订阅通过现有 ping 续租。关闭意图立即取消，切选择、作用域、权限变化与断连也清理订阅；租期只兜底未被直接观察的失联，不代替主动关闭。终态保存后自动发送原生最终详情并释放订阅。详情专用请求 ID 使用独立命名空间，对应 `protocol_error` 与 pong 不进入聊天失败路径。详情失败、受限或超限不修改工具成败、正式事件、发送门禁或 `run_end`。
+
+### 独立预算与缓存
+
+数值定义见[共享协议常量](../../../packages/protocol/src/session/schema.ts)，JSON 预算在完整序列化前检查，不先为超大对象分配完整 JSON 副本。
+
+| 资源 | 边界 |
+| --- | --- |
+| 最新运行预览 | 单调用 64 KiB；全进程合计 512 KiB、最多 8 份，不累计旧快照。 |
+| 活跃订阅 | 每 channel 1 份；跨 Owner 全进程最多 16 份，10 秒续租、30 秒过期。 |
+| 正式详情 | 整份 JSON UTF-8 最大 8 MiB；单片仍受 50 KiB、单 frame 仍受 2 MiB 上限约束。超限报错，不截成假的完整结果。 |
+| 详情发送预算 | 16 MiB，计入 Base64、扇出与底层 WebSocket 等待发送的数据。 |
+| PWA 最终缓存 | 16 MiB、最多 64 项，按使用顺序回收；仅缓存通过校验的 session 最终详情。 |
+
+这些是内容、队列或缓存预算，不是整个进程、浏览器或图片解码的内存峰值。详情缓存按 Owner/device/endpoint/session/group/native ref 隔离，不以临时 runtime/channel/leaf 为持久身份，不回填正式工具事件；移除配对、清会话或清数据时一并清理，并以事务阻止晚到写入重建孤立缓存。已有完整 v2 inline 记录不会被摘要擦除，omitted/truncated 记录不冒充完整原件。本地只读历史与离线阅读只使用已有内容或缓存，未命中不自动建立远端连接。
+
 ## Timeline 不变量
 
 - `TimelineEvent` 是实时正式事件与历史事件的唯一 shape；正式事件携带连续的正整数 `event_seq`。
 - `session_ready.head_seq` 是该连接建立时 Extension 当前正式事件的最大序号；PWA 只显示连接后收到且 `event_seq > head_seq` 的实时事件，历史事件通过 `session_sync` 显式加载。
 - `timeline_partial` 只表示实时可变状态，不进入 marker、SessionManager 或 IndexedDB。
-- 工具 `timeline_partial` 的 `status` 为 `preparing`（模型仍在生成该调用，参数可能不完整，尚未执行）、`running`（已开始执行）或 `delta`（执行中的输出快照）；正文与思考 partial 只使用 `running`、`delta`。同一调用的准备与执行共用 `partial_id`（`tool:<tool_call_id>`）：Extension 在 `toolcall_start`／`toolcall_delta` 时按调用节流发布准备中参数，`toolcall_end` 立即发布参数，开始执行后不再发布准备中；准备中参数只用于显示摘要，单个字符串截至 2048 字符，完整参数随执行开始的运行帧送达；PWA 也不允许状态从执行退回准备中。运行结束时仍为准备中的调用从未执行，PWA 不再显示，与刷新后的历史一致。旧 PWA 不认识 `preparing`，会拒收该帧并显示协议提示，因此必须先部署 PWA 再发布 Extension。
+- 工具 `timeline_partial` 的 `status` 为 `preparing`（模型仍在生成该调用，参数可能不完整，尚未执行）、`running`（已开始执行）或 `delta`（执行期间更新）；正文与思考 partial 只使用 `running`、`delta`。同一调用的准备与执行共用 `partial_id`（`tool:<tool_call_id>`）：准备阶段沿用已有节流，调用生成完成时立即发布摘要，开始执行后不再发布准备中；协商后的工具 partial 均只带有界摘要与引用，不随运行帧发送完整参数或输出。完整预览只沿已打开的定向详情订阅更新；PWA 不允许状态从执行退回准备中。运行结束时仍为准备中的调用从未执行，PWA 不再显示，与刷新后的历史一致。未协商页面按上述能力边界隔离，发布仍先 PWA、后 Extension。
 - 正式 user event 满足 `event_id === message_id`。
 - `origin=pwa` 必须携带 `sender_ref`；非 PWA origin 禁止携带。
 - tool event 的 `complete | error | interrupted` 字段组合互斥。
@@ -408,6 +451,6 @@ too_large
 internal_error
 ```
 
-PWA 与 Pi Extension 必须使用相容的 Protocol v2 契约；独立附件或诊断能力不足只使对应功能不可用，不构成协议降级。v2 timeline 不读取旧 cursor、旧 wire shape 或历史 timeline 数据，也不提供 v1 双栈或 fallback。
+PWA 与 Pi Extension 必须使用相容的 Protocol v2 契约；独立附件或诊断能力不足只使对应功能不可用，不构成协议降级。v2 timeline 不读取旧 cursor、旧 wire shape 或历史 timeline 数据，也不提供 v1 双栈或 fallback。既有 v2 inline 工具事件与新增 summary 变体同属当前共享 schema，不是 v1 回退；工具摘要能力未协商时按上文拒绝新模式握手。
 
 未知 frame、未知字段、方向错误、缺少版本、v1 或未知版本都必须 fail closed。任何一端不得根据旧字段猜测 endpoint、runtime、channel 或 session。兼容读取旧 `daemon` metadata 不构成这一规则的例外。
