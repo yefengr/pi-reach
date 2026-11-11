@@ -107,7 +107,11 @@ export class ActivityFollowTransition {
  * - 收起时钟结束后进入保持：临时空间随后续内容填入逐步减少，内容填满（自然底部到达保持位置）即结束。
  * - release：没有后续内容可填（本轮已结束或空闲时收起）时，收起结束后以同一时长与曲线平滑移到 target 再释放空间；
  *   收起尚未结束时调用会等收起结束再开始。
+ * - lift：组头已在可见区上方时（组比一屏高），原位不动会让收起后屏幕只剩空白。收起期间以实际收起时长与同一曲线
+ *   把位置上移 lift，组头随收拢滑回可见区；只保留其余高度作为空白。用户接管后停止带回。
  */
+export type CollapseLift = Readonly<{ distance: number; duration: number }>;
+
 export class CollapseHoldTransition {
   readonly list: HTMLDivElement;
   private duration: number;
@@ -117,12 +121,16 @@ export class CollapseHoldTransition {
   private top: number;
   /** 当前保留的临时空间；收起结束后只减不增。 */
   private extra = 0;
+  /** 收起期间带回组头的终点与时钟；没有带回或已被用户接管时为 null。 */
+  private lift: { target: number; clock: FollowMotionClock } | null = null;
 
-  constructor(list: HTMLDivElement, from: number, private readonly target: () => number, duration: number, private reserve: number) {
+  constructor(list: HTMLDivElement, from: number, private readonly target: () => number, duration: number, private reserve: number, lift?: CollapseLift) {
     this.list = list;
     this.duration = duration;
     this.clock = new FollowMotionClock(list, duration);
     this.top = from;
+    // 带回只用实际收起时长，不含保持时钟的兜底余量，组头与收拢同时到位。
+    if (lift && lift.distance > 0) this.lift = { target: from - lift.distance, clock: new FollowMotionClock(list, lift.duration) };
     activityOwners.set(list, this);
     this.keepReachable(this.reserve);
   }
@@ -183,9 +191,19 @@ export class CollapseHoldTransition {
     if (this.phase === "hold") this.startRelease();
   }
 
-  /** 发送等其他过程接管滚动后：以实际位置为准只缩减空间，空间用完返回 true。 */
-  track(top: number): boolean {
+  /**
+   * 发送或用户接管滚动后：以实际位置为准只缩减空间，空间用完返回 true。
+   * 传入 now 时按收起时钟区分阶段：收起的 CSS 过渡尚未结束时仍保留全部待收回高度，
+   * 否则随后的收缩会让浏览器逐帧钳制位置；收起结束后才开始缩减，已 release 的转入收回阶段（交回后才推进）。
+   */
+  track(top: number, now?: number): boolean {
     this.top = top;
+    this.stopLift();
+    if (now !== undefined && this.phase === "collapse") {
+      if (!this.clock.sample(now).finished) { this.keepReachable(this.reserve); return false; }
+      this.phase = "hold";
+      if (this.released) this.startRelease();
+    }
     return this.keepReachable() <= 0;
   }
 
@@ -195,10 +213,25 @@ export class CollapseHoldTransition {
     this.phase = "release";
   }
 
+  private stopLift() {
+    this.lift?.clock.cancel();
+    this.lift = null;
+  }
+
+  /** 按带回时钟上移；全部待收回高度仍保留，上移量不超过收回量，任一帧都可达。 */
+  private advanceLift(now: number) {
+    const lift = this.lift;
+    if (!lift) return;
+    const step = lift.clock.sample(now);
+    this.top = step.finished ? lift.target : this.top + (lift.target - this.top) * step.fraction;
+    if (step.finished) this.stopLift();
+  }
+
   advance(now: number): { top: number; finished: boolean } {
     if (this.phase === "collapse") {
       // 持续的 CSS 收起逐帧补足会落后一帧被浏览器钳制，收起期间固定保留全部待收回高度。
       const step = this.clock.sample(now);
+      this.advanceLift(now);
       this.keepReachable(this.reserve);
       if (!step.finished) return { top: this.top, finished: false };
       this.phase = "hold";
@@ -216,6 +249,7 @@ export class CollapseHoldTransition {
 
   finish() {
     this.clock.cancel();
+    this.stopLift();
     if (activityOwners.get(this.list) === this) activityOwners.delete(this.list);
     this.extra = 0;
     this.clear();

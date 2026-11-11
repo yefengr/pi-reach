@@ -806,7 +806,7 @@ test("own-send scroll is interruptible without a later frame reclaiming the read
   } finally { await h.screen.unmount(); }
 });
 
-test.each(["tap", "toward-latest", "read-earlier"])("touch %s pauses the send and either direction transfers ownership", async action => {
+test.each(["tap", "toward-latest", "read-earlier"])("touch %s pauses the send and only reading earlier ends following", async action => {
   const h = await harness({ draft: "One\nTwo\nThree\nFour" });
   try {
     const clock = layoutClock();
@@ -817,12 +817,14 @@ test.each(["tap", "toward-latest", "read-earlier"])("touch %s pauses the send an
       if (action !== "tap") touch("touchmove", action === "read-earlier" ? 120 : 80);
       touch("touchend", 100, true);
     });
-    expect(h.viewport().followingOutput).toBe(action === "tap");
+    // 朝最新方向拖动与轻点一样不算回看：暂停期间不写位置，静止后继续跟随。
+    const keepsFollowing = action !== "read-earlier";
+    expect(h.viewport().followingOutput).toBe(keepsFollowing);
     const stopped = h.list.scrollTop;
     clock.step(160);
     expect(h.list.scrollTop).toBe(stopped);
     clock.step(260); stepFrames(clock, 276, 600);
-    if (action === "tap") expect(gap(h.list)).toBeLessThanOrEqual(1);
+    if (keepsFollowing) expect(gap(h.list)).toBeLessThanOrEqual(1);
     else expect(h.list.scrollTop).toBe(stopped);
   } finally { await h.screen.unmount(); }
 });

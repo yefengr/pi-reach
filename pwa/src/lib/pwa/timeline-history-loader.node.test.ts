@@ -459,3 +459,64 @@ test("sends each history request with the current leaf and accepts only response
   expect(harness.loader.receive({ ...historyFrame("request-1"), leaf_id: "advanced" })).toBe(true);
   expect(await page).toBe(true);
 });
+
+function upgradeRequired(requestId: string): ServerFrame {
+  return { protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: requestId, code: "protocol_upgrade_required", message: "Protocol v2 is required" };
+}
+
+test("loads a 160-event page in one request", async () => {
+  const harness = createHarness({ headSeq: 200 });
+  const page = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent)).toEqual([expect.objectContaining({ id: "request-1", before: 201, limit: 160 })]);
+  harness.loader.receive(historyFrame("request-1", numberedEvents(41, 160)));
+  expect(await page).toBe(true);
+  expect(harness.onPage).toHaveBeenCalledWith(numberedEvents(41, 160));
+});
+
+test("an extension that only accepts 80 events gets the same page in 80-event requests from then on", async () => {
+  const harness = createHarness({ headSeq: 400 });
+  const first = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  expect(harness.loader.receive(upgradeRequired("request-1"))).toBe(true);
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent).at(-1)).toMatchObject({ id: "request-2", before: 401, limit: 80 });
+  harness.loader.receive(historyFrame("request-2", numberedEvents(321, 80)));
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent).at(-1)).toMatchObject({ id: "request-3", before: 321, limit: 80 });
+  harness.loader.receive(historyFrame("request-3", numberedEvents(241, 80)));
+  expect(await first).toBe(true);
+  expect(harness.onPage).toHaveBeenLastCalledWith(numberedEvents(241, 160));
+  expect(harness.onError).not.toHaveBeenCalled();
+
+  // 降级只发生一次，后续页直接按 80 拆分。
+  const second = harness.loader.loadEarlier();
+  await flushMicrotasks();
+  expect(sessionSyncFrames(harness.sent).at(-1)).toMatchObject({ id: "request-4", before: 241, limit: 80 });
+  harness.loader.receive(historyFrame("request-4", numberedEvents(161, 80)));
+  await flushMicrotasks();
+  harness.loader.receive(historyFrame("request-5", numberedEvents(81, 80)));
+  expect(await second).toBe(true);
+  expect(harness.onPage).toHaveBeenLastCalledWith(numberedEvents(81, 160));
+});
+
+test("other errors and a repeated upgrade refusal still fail the page without retrying", async () => {
+  const other = createHarness({ headSeq: 200 });
+  const failed = other.loader.loadEarlier();
+  await flushMicrotasks();
+  other.loader.receive({ protocol_version: 2, type: "protocol_error", target_channel_id: scope.channelId, in_reply_to: "request-1", code: "invalid_cursor", message: "bad cursor" });
+  expect(await failed).toBe(false);
+  expect(sessionSyncFrames(other.sent)).toHaveLength(1);
+  expect(other.onError).toHaveBeenCalledWith("bad cursor");
+
+  const repeated = createHarness({ headSeq: 200 });
+  const refused = repeated.loader.loadEarlier();
+  await flushMicrotasks();
+  repeated.loader.receive(upgradeRequired("request-1"));
+  await flushMicrotasks();
+  repeated.loader.receive(upgradeRequired("request-2"));
+  expect(await refused).toBe(false);
+  expect(sessionSyncFrames(repeated.sent)).toHaveLength(2);
+  expect(repeated.onError).toHaveBeenCalledTimes(1);
+  expect(repeated.onPage).not.toHaveBeenCalled();
+});

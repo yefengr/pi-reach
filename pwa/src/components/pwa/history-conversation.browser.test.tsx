@@ -71,7 +71,7 @@ test("opens saved history at the latest content and restores the reading row wit
   expect(api.followingOutput).toBe(true);
 
   userScrollTo(0);
-  await expect.poll(() => renderedRecords().length).toBe(110);
+  await expect.poll(() => renderedRecords().length).toBe(190);
   // 离顶部足够远，切回时不会再触发自动展开。
   userScrollTo(2000);
   await expect.poll(() => api.followingOutput).toBe(false);
@@ -80,12 +80,12 @@ test("opens saved history at the latest content and restores the reading row wit
   const shown = api.historyShownCount()!;
   const top = list().scrollTop;
   expect(position.following).toBe(false);
-  expect(shown).toBe(110);
+  expect(shown).toBe(190);
   await first.unmount();
 
   const second = await renderHistory({ saved: savedRecords(200), restore: { shown, position } });
   try {
-    await expect.poll(() => renderedRecords().length).toBe(110);
+    await expect.poll(() => renderedRecords().length).toBe(190);
     await expect.poll(() => Math.abs(list().scrollTop - top)).toBeLessThanOrEqual(1);
   } finally { await second.unmount(); }
 });
@@ -101,12 +101,10 @@ test("renders only the latest records of a long history and expands earlier page
 
     const distance = list().scrollHeight;
     userScrollTo(0);
-    await expect.poll(() => renderedRecords().length).toBe(110);
-    expect(renderedRecords()[0]).toBe("Saved record 91");
+    await expect.poll(() => renderedRecords().length).toBe(190);
+    expect(renderedRecords()[0]).toBe("Saved record 11");
     expect(Math.abs(list().scrollHeight - list().scrollTop - distance)).toBeLessThanOrEqual(1);
 
-    userScrollTo(0);
-    await expect.poll(() => renderedRecords().length).toBe(190);
     userScrollTo(0);
     await expect.poll(() => renderedRecords().length).toBe(200);
     await expect.element(screen.getByRole("button", { name: "Load more", exact: true })).not.toBeInTheDocument();
@@ -119,7 +117,7 @@ test("keeps the load more button as a keyboard entry", async () => {
     await expect.poll(() => renderedRecords().length).toBe(30);
     // 直接触发按钮：定位器点击会先把按钮滚入视野，接近顶部时自动加载已抢先完成。
     screen.getByRole("button", { name: "Load more", exact: true }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    await expect.poll(() => renderedRecords().length).toBe(110);
+    await expect.poll(() => renderedRecords().length).toBe(190);
   } finally { await screen.unmount(); }
 });
 
@@ -150,10 +148,10 @@ test("fills a history shorter than one screen and keeps following its end", asyn
   await page.viewport(1280, 2400);
   const screen = await renderHistory({ saved: savedRecords(200), height: 2400 });
   try {
-    await expect.poll(() => renderedRecords().length).toBe(110);
+    await expect.poll(() => renderedRecords().length).toBe(190);
     expect(list().scrollHeight).toBeGreaterThan(list().clientHeight);
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    expect(renderedRecords()).toHaveLength(110);
+    expect(renderedRecords()).toHaveLength(190);
     expect(api.followingOutput).toBe(true);
     await expect.poll(() => fromBottom()).toBeLessThanOrEqual(1);
   } finally { await screen.unmount(); }

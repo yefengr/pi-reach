@@ -1,14 +1,28 @@
 import { chatFooterOf, syncChatFooterSpace } from "./chat-footer-space";
+import type { ViewportInputDirection, ViewportLift } from "./timeline-viewport-coordinator";
 
 export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
 const EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty-slot";
 const TOUCH_READ_THRESHOLD = 4;
+const UPWARD_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
+const DOWNWARD_KEYS = new Set(["ArrowDown", "PageDown", "End"]);
+
+function keyDirection(event: KeyboardEvent): ViewportInputDirection | null {
+  if (UPWARD_KEYS.has(event.key)) return "up";
+  if (DOWNWARD_KEYS.has(event.key)) return "down";
+  if (event.key === " ") return event.shiftKey ? "up" : "down";
+  return null;
+}
 type Events = {
   geometry(activity: boolean, added?: number): void;
-  /** 过程组开始收起：removed 为预计收回的高度，duration 为收起时长加兜底，live 为本轮仍在运行；只是预期，不是位置终点。 */
-  collapse(removed: number, duration: number, live: boolean): void;
+  /**
+   * 过程组开始收起：removed 为预计收回的高度，duration 为收起时长加兜底，live 为本轮仍在运行；只是预期，不是位置终点。
+   * lift 为组头在可见区上方的距离与实际收起时长。
+   */
+  collapse(removed: number, duration: number, live: boolean, lift?: ViewportLift): void;
   resize(): void;
-  interrupt(): void;
+  /** 明确的滚动输入及其方向；down 表示内容朝最新方向移动。 */
+  interrupt(direction: ViewportInputDirection): void;
   input(): void;
   /** 任何触摸（含拖动）、滚轮、按键或指针输入；只表示用户正在接管位置，不判断方向。 */
   engage(): void;
@@ -34,22 +48,27 @@ export class TimelineViewportObservers {
     const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
     const geometry = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail : null;
-      if (detail?.reason === "collapse") { events.collapse(finite(detail.removed), finite(detail.duration), detail.live === true); return; }
+      if (detail?.reason === "collapse") {
+        const lift = detail.lift && typeof detail.lift === "object" ? { distance: finite(detail.lift.distance), duration: finite(detail.lift.duration) } : undefined;
+        events.collapse(finite(detail.removed), finite(detail.duration), detail.live === true, lift);
+        return;
+      }
       const added = typeof detail?.added === "number" && Number.isFinite(detail.added) ? Math.max(0, detail.added) : 0;
       events.geometry(detail?.reason === "activity", added);
     };
     const input = (event: Event) => { if (event.target instanceof HTMLTextAreaElement) events.input(); };
-    const wheel = (event: WheelEvent) => { events.engage(); if (event.deltaY !== 0) events.interrupt(); };
+    const wheel = (event: WheelEvent) => { events.engage(); if (event.deltaY !== 0) events.interrupt(event.deltaY < 0 ? "up" : "down"); };
     const key = (event: KeyboardEvent) => {
-      if (!["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) return;
-      events.engage(); events.interrupt();
+      const direction = keyDirection(event);
+      if (!direction) return;
+      events.engage(); events.interrupt(direction);
     };
     let pointerHeld = false;
     let touchHeld = false;
     const held = () => events.touch(pointerHeld || touchHeld);
     const pointer = (event: PointerEvent) => {
       events.engage();
-      if (event.pointerType === "mouse" && event.target === list) { pointerHeld = true; held(); events.interrupt(); }
+      if (event.pointerType === "mouse" && event.target === list) { pointerHeld = true; held(); events.interrupt("unknown"); }
     };
     const pointerEnd = () => { if (pointerHeld) { pointerHeld = false; held(); } };
     let touch: { id: number; y: number } | null = null;
@@ -65,7 +84,9 @@ export class TimelineViewportObservers {
       events.engage();
       const first = event.touches[0];
       if (event.touches.length !== 1 || first.identifier !== touch?.id) { touch = null; return; }
-      if (Math.abs(first.clientY - touch.y) > TOUCH_READ_THRESHOLD) { touch = null; events.interrupt(); }
+      // 手指向下拖动让内容向上回看；手指向上拖动朝最新方向。
+      const moved = first.clientY - touch.y;
+      if (Math.abs(moved) > TOUCH_READ_THRESHOLD) { touch = null; events.interrupt(moved > 0 ? "up" : "down"); }
     };
     const end = (event: TouchEvent) => { touch = null; touchHeld = event.touches.length > 0; held(); };
     const main = list.closest(".pwa-main");

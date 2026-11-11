@@ -16,6 +16,10 @@ export const MAX_STRING_CHARS = 1024 * 1024;
 export const MAX_TEXT_CHARS = MAX_STRING_CHARS;
 export const MAX_ARRAY_ITEMS = 4096;
 export const TOOL_DETAILS_CAPABILITY = 1;
+/** `session_sync.limit` 的上限；旧 Extension 只接受 80，超出时以 `protocol_upgrade_required` 拒绝。 */
+export const MAX_SESSION_SYNC_LIMIT = 160;
+/** 旧 Extension 接受的 `session_sync.limit` 上限，也是省略 `limit` 时的默认值。 */
+export const LEGACY_SESSION_SYNC_LIMIT = 80;
 export const MAX_TOOL_SUMMARY_BYTES = 4096;
 export const MAX_TOOL_PREVIEW_BYTES = 64 * 1024;
 export const MAX_TOOL_PREVIEWS_BYTES = 512 * 1024;

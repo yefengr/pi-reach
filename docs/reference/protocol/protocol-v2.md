@@ -261,7 +261,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `tool_details_open`
 - `tool_details_close`
 
-`session_sync.before` 是排他的正式事件序号上界：`null` 表示从当前末尾开始，数字表示只返回序号小于该值的事件；`limit` 为 1 到 80 的整数，省略时默认 80。历史响应的最后一个 chunk 在仍有更早事件时携带数字 `next_before`，没有更早事件时携带 `eos=true`。
+`session_sync.before` 是排他的正式事件序号上界：`null` 表示从当前末尾开始，数字表示只返回序号小于该值的事件；`limit` 为 1 到 160 的整数，省略时默认 80。旧 Extension 只接受 1 到 80，收到更大的 `limit` 时以 `protocol_upgrade_required` 拒绝；PWA 收到这一回复时，对当前历史加载器只降级一次，此后每次不超过 80 条并重发同一段，其他错误或降级后的再次拒绝不重试。历史响应的最后一个 chunk 在仍有更早事件时携带数字 `next_before`，没有更早事件时携带 `eos=true`。
 
 ### Extension -> PWA
 

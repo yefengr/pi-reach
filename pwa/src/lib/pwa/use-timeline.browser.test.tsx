@@ -654,7 +654,7 @@ test("an earlier page that arrives while a finger is down is held until the scro
     list.dispatchEvent(new TouchEvent("touchstart", { touches: [finger] }));
     list.scrollTop = 0;
     await expect.poll(() => syncs(frames).length).toBe(2);
-    reply(frames, events(91, 170));
+    reply(frames, events(11, 170));
     // 手指未抬起：这一页暂存，不改动滚动几何，顶部仍按加载中显示，也不继续请求更早的页。
     await new Promise((resolve) => setTimeout(resolve, SCROLL_IDLE_MS + 100));
     expect(sequences()).toHaveLength(30);
@@ -662,7 +662,7 @@ test("an earlier page that arrives while a finger is down is held until the scro
     expect(syncs(frames)).toHaveLength(2);
 
     list.dispatchEvent(new TouchEvent("touchend"));
-    await expect.poll(() => sequences().length).toBe(110);
+    await expect.poll(() => sequences().length).toBe(190);
   } finally { await screen.unmount(); }
 });
 
@@ -683,10 +683,10 @@ test("auto-loads earlier history near the top only after the reader leaves the l
 
     list.scrollTop = 0;
     await expect.poll(() => syncs(frames).length).toBe(2);
-    expect([syncs(frames)[1]!.before, syncs(frames)[1]!.limit]).toEqual([171, 80]);
+    expect([syncs(frames)[1]!.before, syncs(frames)[1]!.limit]).toEqual([171, 160]);
     await expect.element(screen.getByText("Loading records…")).toBeInTheDocument();
-    reply(frames, events(91, 170));
-    await expect.poll(() => sequences().length).toBe(110);
+    reply(frames, events(11, 170));
+    await expect.poll(() => sequences().length).toBe(190);
 
     // 用户主动滚回顶部伴随输入事件；没有输入的跳顶会被当作系统覆盖前插位置而恢复。
     list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
@@ -702,7 +702,7 @@ test("auto-loads earlier history near the top only after the reader leaves the l
 
     await screen.getByRole("button", { name: "Retry loading earlier records", exact: true }).click();
     await expect.poll(() => syncs(frames).length).toBe(4);
-    expect([syncs(frames)[3]!.before, syncs(frames)[3]!.limit]).toEqual([91, 80]);
+    expect([syncs(frames)[3]!.before, syncs(frames)[3]!.limit]).toEqual([11, 10]);
 
     // 断线销毁 loader 后不保留失败状态，否则离线时仍显示无效的重试。
     const retried = syncs(frames)[3]!;
@@ -740,8 +740,8 @@ test("a read-only history opens at its newest saved records and pages earlier on
     expect(sequences()).toHaveLength(30);
 
     list.dispatchEvent(new TouchEvent("touchend"));
-    await expect.poll(() => sequences().length).toBe(110);
-    expect(api.historyShownCount()).toBe(110);
+    await expect.poll(() => sequences().length).toBe(190);
+    expect(api.historyShownCount()).toBe(190);
     // 只读：不写回本地，也没有 Relay 加载器。
     expect(vi.mocked(mergeTimelineEvents)).not.toHaveBeenCalled();
     expect(api.historyLoaderRef.current).toBeNull();

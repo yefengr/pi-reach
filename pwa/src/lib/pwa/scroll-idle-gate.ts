@@ -8,13 +8,15 @@ export interface ScrollIdleClock {
 }
 
 /**
- * 记录触摸与滚动活动，把会改动滚动几何的工作推迟到手势、惯性与回弹结束后执行。
+ * 记录触摸、输入与滚动活动，把会改动滚动几何的工作推迟到手势、惯性与回弹结束后执行。
  * iOS 在这些阶段由系统滚动线程持有位置，期间写入的 scrollTop 会被覆盖，或与手势逐帧来回争夺（录屏中的重影）。
+ * 静止的判定与时间线视口的输入暂停一致：按下、抬起与不产生滚动的输入（如到顶后的滚轮）都重新计时；
+ * 否则工作会在视口仍暂停写入时执行，前插的内容因此来不及补偿阅读位置。
  * 不引用 DOM；只保留最近一次请求。
  */
 export class ScrollIdleGate {
   private touching = false;
-  private lastScroll = Number.NEGATIVE_INFINITY;
+  private lastActivity = Number.NEGATIVE_INFINITY;
   private pending: (() => void) | null = null;
   private timer: number | null = null;
 
@@ -22,12 +24,18 @@ export class ScrollIdleGate {
 
   touch(active: boolean): void {
     this.touching = active;
+    this.lastActivity = this.clock.now();
     if (!active) this.check();
   }
 
   /** 只记时间；等待中的定时器到期后按最新时间重新判断。 */
   scrolled(): void {
-    this.lastScroll = this.clock.now();
+    this.lastActivity = this.clock.now();
+  }
+
+  /** 触摸、滚轮、按键或指针输入；即使位置没有变化也重新计时。 */
+  engaged(): void {
+    this.lastActivity = this.clock.now();
   }
 
   /** 已静止时同步执行；返回的取消函数只撤销这一次请求。 */
@@ -55,7 +63,7 @@ export class ScrollIdleGate {
     this.timer = null;
     // 手指仍按着时不计时，抬起由 touch(false) 重新判断。
     if (this.touching) return;
-    const wait = this.lastScroll + SCROLL_IDLE_MS - this.clock.now();
+    const wait = this.lastActivity + SCROLL_IDLE_MS - this.clock.now();
     if (wait > 0) {
       this.timer = this.clock.setTimeout(() => { this.timer = null; this.check(); }, wait);
       return;

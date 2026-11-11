@@ -2,15 +2,17 @@ import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
   encodeServerFrameV2,
   getUtf8ByteLengthV2,
+  LEGACY_SESSION_SYNC_LIMIT,
   MAX_FRAGMENT_DECODE_BYTES,
   MAX_HISTORY_CHUNK_BYTES,
+  MAX_SESSION_SYNC_LIMIT,
   MAX_WINDOW_DECODE_BYTES,
   TimelineEventSchema,
   type ServerFrame,
   type TimelineEvent,
 } from "../protocol/v2/index.js";
 
-const DEFAULT_EVENTS_PER_PAGE = 80;
+const DEFAULT_EVENTS_PER_PAGE = LEGACY_SESSION_SYNC_LIMIT;
 type RecoveryFn = (sessionManager: SessionManager) => readonly TimelineEvent[];
 type HistorySyncRequest = { requestId: string; targetChannelId: string; leafId: string | null; before: number | null; limit?: number };
 type Snapshot = { sessionId: string; leafId: string | null; branchEntryIds: readonly string[] };
@@ -47,7 +49,7 @@ export class TimelineHistoryPager {
 
   private validateRequest(request: HistorySyncRequest): ServerFrame | null {
     if (request.before !== null && (!Number.isSafeInteger(request.before) || request.before < 1)) return this.protocolError(request, "invalid_cursor", "history boundary must be a positive safe integer or null");
-    if (request.limit !== undefined && (!Number.isInteger(request.limit) || request.limit < 1 || request.limit > 80)) return this.protocolError(request, "invalid_cursor", "history limit must be an integer from 1 through 80");
+    if (request.limit !== undefined && (!Number.isInteger(request.limit) || request.limit < 1 || request.limit > MAX_SESSION_SYNC_LIMIT)) return this.protocolError(request, "invalid_cursor", `history limit must be an integer from 1 through ${MAX_SESSION_SYNC_LIMIT}`);
     return null;
   }
 

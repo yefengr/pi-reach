@@ -688,17 +688,19 @@ test("the first row covered by a floating local error scrolls out below the card
 });
 
 /** 同轮的长过程组：16 个已完成工具在运行中默认展开，超过一屏；正式 run_end 到达时自动收起并出现完成时间。 */
-function collapsingRun(options: { reply?: boolean; runningLast?: boolean } = {}) {
+function collapsingRun(options: { reply?: boolean; runningLast?: boolean; toolCount?: number } = {}) {
   const history = answer("live-output", paragraphs("Earlier", 30));
   const tool = (id: string): TimelineViewItem => ({ kind: "event", event: {
     ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id,
     tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok",
   } });
-  const tools = Array.from({ length: 16 }, (_, index) => tool(`t${index}`));
+  const toolCount = options.toolCount ?? 16;
+  const tools = Array.from({ length: toolCount }, (_, index) => tool(`t${index}`));
   // 最后一个调用仍在运行时，后续正文已出现也不收起；它结束后才让位。
+  const last = `t${toolCount - 1}`;
   const runningTail: TimelineViewItem = { kind: "partial", createdAt: 1, partial: {
-    ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: "tool:t15",
-    kind: "tool", tool_call_id: "t15", tool: "read", args: { path: "t15.ts" }, status: "running",
+    ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${last}`,
+    kind: "tool", tool_call_id: last, tool: "read", args: { path: `${last}.ts` }, status: "running",
   } };
   const runningTools = options.runningLast ? [...tools.slice(0, -1), runningTail] : tools;
   const reply: TimelineViewItem[] = options.reply ? [{ kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text: paragraphs("Reply", 30) }] } }] : [];
@@ -871,7 +873,7 @@ test("a following collapse keeps the group head in place while the space waits f
   } finally { await screen.unmount(); }
 });
 
-test("in a long conversation the group head stays put in every frame of the collapse and the reply fills the space below", async () => {
+test("in a long conversation the hidden group head slides into view with the collapse and the reply fills the space below", async () => {
   await page.viewport(390, 844);
   const run = collapsingRun({ runningLast: true });
   const { screen, list, update, viewport } = await renderTimeline(run.running);
@@ -879,16 +881,50 @@ test("in a long conversation the group head stays put in every frame of the coll
     expect(bottomGap(list)).toBeLessThanOrEqual(1);
     const headButton = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
     const head = () => Math.round(headButton.getBoundingClientRect().top);
-    const start = head();
+    const visibleTop = () => Math.round(list.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(list).paddingTop));
+    // 前提：组头已在列表顶边之上，原位不动会一直看不到。
+    expect(head()).toBeLessThan(Math.round(list.getBoundingClientRect().top));
     const done = run.ended.filter(item => item.kind !== "event" || item.event.kind !== "run_end");
     const reply = (text: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text }] } });
-    const held = await sampleCollapse(list, () => update([...done, reply("Short start.")]), head, 400, true);
+    const held = await sampleCollapse(list, () => update([...done, reply("Short start.")]), head, 600, true);
     expect(headButton.getAttribute("aria-expanded")).toBe("false");
-    for (const top of held) expect(Math.abs(top - start)).toBeLessThanOrEqual(1);
+    // 随收起单调滑入，落在列表开头内容的位置。
+    for (let index = 1; index < held.length; index += 1) expect(held[index]!).toBeGreaterThanOrEqual(held[index - 1]! - 1);
+    expect(Math.abs(held.at(-1)! - visibleTop())).toBeLessThanOrEqual(2);
     // 正文越过让出的空间后恢复普通跟随，临时空白随之释放。
     update([...done, reply(paragraphs("Reply", 30))]);
     await expect.poll(() => list.hasAttribute("data-timeline-hold")).toBe(false);
     await expect.poll(() => bottomGap(list)).toBeLessThanOrEqual(1);
+    expect(viewport().followingOutput).toBe(true);
+  } finally { await screen.unmount(); }
+});
+
+test("a following collapse of a group taller than the screen brings its head back into view in one continuous motion", async () => {
+  await page.viewport(390, 844);
+  const run = collapsingRun({ runningLast: true, toolCount: 40 });
+  const { screen, list, update, viewport } = await renderTimeline(run.running);
+  try {
+    expect(bottomGap(list)).toBeLessThanOrEqual(1);
+    const headButton = list.querySelector<HTMLButtonElement>("button.pwa-process-head")!;
+    const head = () => Math.round(headButton.getBoundingClientRect().top);
+    const visibleTop = () => Math.round(list.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(list).paddingTop));
+    // 前提：组比一屏高，组头已在可见区上方；按原位不动的规则，收起后屏幕上只剩空白。
+    const start = head();
+    expect(start).toBeLessThan(visibleTop() - 100);
+    const done = run.ended.filter(item => item.kind !== "event" || item.event.kind !== "run_end");
+    const reply: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text: "Short start." }] } };
+    const samples = await sampleCollapse(list, () => update([...done, reply]), head, 600, true);
+    expect(headButton.getAttribute("aria-expanded")).toBe("false");
+    // 组头随收起单调下移，没有一帧跨过大半段距离，结束时落在可见区顶部。
+    const travel = samples.at(-1)! - start;
+    expect(travel).toBeGreaterThan(100);
+    for (let index = 1; index < samples.length; index += 1) {
+      expect(samples[index]!).toBeGreaterThanOrEqual(samples[index - 1]! - 1);
+      expect(samples[index]! - samples[index - 1]!).toBeLessThanOrEqual(travel / 2);
+    }
+    expect(new Set(samples).size).toBeGreaterThan(3);
+    expect(Math.abs(samples.at(-1)! - visibleTop())).toBeLessThanOrEqual(2);
+    await expect.element(screen.getByText("Short start.")).toBeVisible();
     expect(viewport().followingOutput).toBe(true);
   } finally { await screen.unmount(); }
 });

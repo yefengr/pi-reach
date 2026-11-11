@@ -60,6 +60,34 @@ describe("ScrollIdleGate", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  test("a release after the finger stopped still waits a full idle window", () => {
+    const f = fixture();
+    const run = vi.fn();
+    f.gate.touch(true);
+    f.gate.scrolled();
+    f.advance(SCROLL_IDLE_MS * 2);
+    f.gate.defer(run);
+    f.gate.touch(false);
+    expect(run).not.toHaveBeenCalled();
+    f.advance(SCROLL_IDLE_MS - 1);
+    expect(run).not.toHaveBeenCalled();
+    f.advance(1);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  test("input without scroll movement keeps the gate closed until it goes quiet", () => {
+    const f = fixture();
+    const run = vi.fn();
+    f.gate.engaged();
+    f.gate.defer(run);
+    f.advance(SCROLL_IDLE_MS - 50);
+    f.gate.engaged();
+    f.advance(SCROLL_IDLE_MS - 1);
+    expect(run).not.toHaveBeenCalled();
+    f.advance(1);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   test("cancel and dispose drop the pending work and its timer", () => {
     const f = fixture();
     const cancelled = vi.fn();
@@ -84,6 +112,7 @@ describe("ScrollIdleGate", () => {
     f.gate.defer(newer);
     cancelOlder();
     f.gate.touch(false);
+    f.advance(SCROLL_IDLE_MS);
     expect(older).not.toHaveBeenCalled();
     expect(newer).toHaveBeenCalledTimes(1);
   });

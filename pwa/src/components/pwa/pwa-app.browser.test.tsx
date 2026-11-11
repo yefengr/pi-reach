@@ -2959,13 +2959,9 @@ test.each([[1280, 900], [390, 844]])("fills recent and earlier missing ranges wi
       expect([request.before, request.limit]).toEqual(expected);
       channel.emit(recentHistoryFrame(channel, "session-1", all.filter((event) => event.event_seq! < request.before! && event.event_seq! >= request.before! - request.limit!)));
     }
-    await expect.poll(() => list.querySelectorAll("article").length).toBe(111);
-    await expect.poll(() => live.getBoundingClientRect().bottom).toBeGreaterThan(list.getBoundingClientRect().top);
-    // 用户翻页的结果等滚动静止才插入；输入区进出的高度过渡期间列表会被动钳制滚动位置，按钮可能稍后才恢复。
-    await expect.element(button).toBeInTheDocument();
-    // 直接触发按钮：定位器点击会先滚到顶部，自动加载可能已抢先开始；两条路径都只能加载一次。
-    button.element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    // 一页覆盖剩余的 130 条：两段缺口各补一次，重复点击不产生重叠加载，之后没有更早的页。
     await expect.poll(() => list.querySelectorAll("article").length).toBe(161);
+    await expect.poll(() => live.getBoundingClientRect().bottom).toBeGreaterThan(list.getBoundingClientRect().top);
     expect(channel.frames.filter((frame) => frame.type === "session_sync")).toHaveLength(4);
     await expect.element(button).not.toBeInTheDocument();
   } finally { await screen.unmount(); }
@@ -5371,8 +5367,9 @@ test("opens long saved history behind a loading state with its latest page and k
     expect(screen.getByText("No records to display.", { exact: true }).query()).toBeNull();
     release();
     await expect.poll(records).toBe(30);
+    // 一页即展开全部 150 条，返回时仍按展开后的范围恢复（默认只显示 30 条）。
     screen.getByRole("button", { name: "Load more", exact: true }).element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    await expect.poll(records).toBe(110);
+    await expect.poll(records).toBe(150);
 
     // 离顶部超过两屏的提前量，恢复位置时不触发自动展开。用户滚动伴随输入事件，阅读位置按屏幕顶部那一行保存。
     const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
@@ -5383,7 +5380,7 @@ test("opens long saved history behind a loading state with its latest page and k
     await selectPi("Test Pi");
     await expect.poll(records).toBe(0);
     await openHistoryRow();
-    await expect.poll(records).toBe(110);
+    await expect.poll(records).toBe(150);
     await expect.poll(() => Math.abs(document.querySelector<HTMLDivElement>(".pwa-message-list")!.scrollTop - 2400)).toBeLessThanOrEqual(1);
   } finally { release(); await screen.unmount(); }
 });

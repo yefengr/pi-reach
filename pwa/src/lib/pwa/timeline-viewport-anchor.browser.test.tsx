@@ -138,3 +138,66 @@ test("does not jump to unrelated content when the anchored row disappears", () =
   expect(list.scrollTop).toBe(100);
   list.remove();
 });
+
+/** 自上而下排列的子元素，每个 20px；第 firstVisible 个的顶边对齐列表顶边（100）。 */
+function stackedChildren(list: HTMLDivElement, count: number, firstVisible: number, make: (index: number) => HTMLElement = () => {
+  const row = document.createElement("article");
+  row.dataset.viewportRow = "row";
+  return row;
+}): { children: HTMLElement[]; measured: () => number } {
+  let measured = 0;
+  const children = Array.from({ length: count }, (_, index) => {
+    const child = make(index);
+    const top = 100 + (index - firstVisible) * 20;
+    vi.spyOn(child, "getBoundingClientRect").mockImplementation(() => { measured += 1; return rect(top, top + 20); });
+    return child;
+  });
+  list.append(...children);
+  return { children, measured: () => measured };
+}
+
+test("finds the first visible row of a long list without measuring every row above it", () => {
+  const list = viewportList();
+  const { children, measured } = stackedChildren(list, 1000, 900, (index) => {
+    const row = document.createElement("article");
+    row.dataset.viewportRow = `row-${index}`;
+    return row;
+  });
+  const anchor = captureTimelineViewportAnchor(list);
+  expect(anchor?.rowElement).toBe(children[900]);
+  expect(anchor?.rowLocator?.key).toBe("row-900");
+  // 逐行查找要测量前 900 行；二分只需十余次，再加可见行内的少量测量。
+  expect(measured()).toBeLessThan(40);
+  list.remove();
+});
+
+test("skips non-row, hidden and boxless children around the viewport edge exactly like a full scan", () => {
+  const list = viewportList();
+  const { children } = stackedChildren(list, 60, 40, (index) => {
+    const edge = index >= 40 && index <= 42;
+    const child = document.createElement(index === 40 || (!edge && index % 3 === 0) ? "p" : "article");
+    if (child.tagName === "ARTICLE") child.dataset.viewportRow = `row-${index}`;
+    if (index === 41) child.setAttribute("aria-hidden", "true");
+    return child;
+  });
+  // 首个进入视口的是第 40 个（非语义行），第 41 个被隐藏，第 42 个才是锚点行。
+  expect(captureTimelineViewportAnchor(list)?.rowElement).toBe(children[42]);
+  // 不占布局的子元素（如 display: none）报告 0 尺寸，不能误导二分把可见行当成在视口上方。
+  const boxless = document.createElement("article");
+  boxless.dataset.viewportRow = "boxless";
+  vi.spyOn(boxless, "getBoundingClientRect").mockReturnValue(rect(0, 0));
+  list.insertBefore(boxless, children[45]!);
+  expect(captureTimelineViewportAnchor(list)?.rowElement).toBe(children[42]);
+  list.remove();
+});
+
+test("returns no anchor when only non-row children are on screen", () => {
+  const list = viewportList();
+  stackedChildren(list, 30, 10, (index) => {
+    const child = document.createElement(index >= 10 && index < 20 ? "p" : "article");
+    if (index < 10 || index >= 20) child.dataset.viewportRow = `row-${index}`;
+    return child;
+  });
+  expect(captureTimelineViewportAnchor(list)).toBeNull();
+  list.remove();
+});

@@ -132,7 +132,7 @@ test("accepts the closed client catalog, including queue and approval frames", (
   expectCode(() => decodeClientFrameV2({ ...version, type: "queued_message_steer", id: "N10", ...channel }), "schema");
   expectCode(() => decodeClientFrameV2({ ...version, type: "session_sync", id: "Y3", ...channel, before: "NEXT", limit: 80 }), "schema");
   expectCode(() => decodeClientFrameV2({ ...version, type: "session_sync", id: "Y4", ...channel, before: 1, limit: 0 }), "schema");
-  expectCode(() => decodeClientFrameV2({ ...version, type: "session_sync", id: "Y5", ...channel, before: 1, limit: 81 }), "schema");
+  expectCode(() => decodeClientFrameV2({ ...version, type: "session_sync", id: "Y5", ...channel, before: 1, limit: 161 }), "schema");
 });
 
 test("accepts server frames while rejecting old wrappers and direction drift", () => {

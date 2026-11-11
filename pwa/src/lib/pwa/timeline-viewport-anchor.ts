@@ -44,6 +44,28 @@ function findLocatedRow(list: HTMLDivElement, locator: RowLocator): HTMLElement 
     && element.getAttribute(locator.attribute) === locator.key && isUsableElement(list, element)) ?? null;
 }
 
+const hasBox = (rect: DOMRect) => rect.width > 0 || rect.height > 0;
+
+/**
+ * 列表直接子元素都在文档流中自上而下排列，底边随位置单调递增；二分找到第一个底边进入视口的子元素，
+ * 长会话中每次滚动不必从第一行逐行测量。没有布局盒的子元素（如 display: none）报告 0 尺寸、位置不可比较，
+ * 取区间内其后最近的有盒子元素代替；其前的子元素仍由调用方从返回位置起按原条件逐个判断。
+ */
+function firstChildReachingViewport(children: HTMLCollection, listTop: number): number {
+  let low = 0;
+  let high = children.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    let probe = middle;
+    let rect = children[probe]!.getBoundingClientRect();
+    while (!hasBox(rect) && probe + 1 < high) rect = children[++probe]!.getBoundingClientRect();
+    if (!hasBox(rect)) { high = middle; continue; }
+    if (rect.bottom <= listTop) low = probe + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 export function captureTimelineViewportAnchor(
   list: HTMLDivElement,
   preserveScrollTopFallback = false,
@@ -52,7 +74,18 @@ export function captureTimelineViewportAnchor(
   const listBottom = list.clientHeight > 0 ? listTop + list.clientHeight : Number.POSITIVE_INFINITY;
   const visible = (element: HTMLElement) => isVisibleInList(list, element, listTop, listBottom);
   // 先确定可见行，避免为了找正文跳过视口顶部的折叠工具或 Thinking。
-  const rowElement = [...list.children].find((child): child is HTMLElement => child instanceof HTMLElement && child.matches(CONTENT_ROW_SELECTOR) && visible(child));
+  const children = list.children;
+  let rowElement: HTMLElement | null = null;
+  for (let index = firstChildReachingViewport(children, listTop); index < children.length && rowElement === null; index += 1) {
+    const child = children[index];
+    if (!(child instanceof HTMLElement)) continue;
+    if (child.matches(CONTENT_ROW_SELECTOR) && visible(child)) rowElement = child;
+    else {
+      // 越过视口底边后不会再有可见行。
+      const rect = child.getBoundingClientRect();
+      if (hasBox(rect) && rect.top >= listBottom) break;
+    }
+  }
   if (!rowElement) return null;
   const element = [...rowElement.querySelectorAll<HTMLElement>(READABLE_BLOCK_SELECTOR)].find(visible) ?? rowElement;
   return {

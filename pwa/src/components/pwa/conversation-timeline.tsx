@@ -127,37 +127,41 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
       rows.push(<CompactionNoticeRow key={`compaction:${notice.id}`} notice={notice} />);
     }
   };
-  let segmentGroup: string | undefined;
-  let hasOutput = false;
-  let interrupted = false;
-  const closeSegment = () => {
-    const completion = segmentGroup === undefined ? undefined : completions?.get(segmentGroup);
-    if (segmentGroup !== undefined && completion && hasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={interrupted} groupId={segmentGroup} entering={meta.entering(segmentGroup)} afterSettle={meta.afterSettle(segmentGroup)} />);
-  };
-  for (const entry of entries) {
-    const groupId = entryGroupId(entry);
-    if (groupId !== segmentGroup) {
-      closeSegment();
-      segmentGroup = groupId;
-      hasOutput = false;
-      interrupted = false;
-    }
-    // 先结束上一轮（补上完成时间），再插入发生在两轮之间的本地提示。
+  const turns = turnEnds(entries);
+  entries.forEach((entry, index) => {
+    // 上一轮的完成时间已在其最后一条之后输出，再插入发生在两轮之间的本地提示。
     flushNotices(entry.seq ?? Infinity);
-    if (isPiOutputEntry(entry)) hasOutput = true;
-    if (entry.kind === "text" && entry.interrupted) interrupted = true;
     if (gapKeys.has(entry.key)) rows.push(<GapNotice key={`gap:${entry.key}`} />);
     // 过程组成员相邻且以缺口、本地提示与轮次断开，组在首个成员处整体输出。
     const group = groupOf.get(entry.key);
-    if (group !== undefined) {
-      if (group.entries[0]!.key === entry.key) rows.push(renderGroup(group));
-      continue;
-    }
-    rows.push(render(entry));
-  }
-  closeSegment();
+    if (group === undefined) rows.push(render(entry));
+    else if (group.entries[0]!.key === entry.key) rows.push(renderGroup(group));
+    const groupId = entryGroupId(entry);
+    const turn = groupId === undefined ? undefined : turns.get(groupId);
+    const completion = groupId === undefined ? undefined : completions?.get(groupId);
+    if (groupId === undefined || turn?.last !== index || !turn.output || !completion) return;
+    rows.push(<TurnMeta key={`turn:${groupId}`} completion={completion} interrupted={turn.interrupted} groupId={groupId} entering={meta.entering(groupId)} afterSettle={meta.afterSettle(groupId)} />);
+  });
   flushNotices(Infinity);
   return rows;
+}
+
+/**
+ * 每轮最后一条的位置、是否有 Pi 输出与是否中断。完成时间只在这里输出一次：
+ * 压缩摘要等不带轮次的记录会把同一轮隔开，按连续段输出会重复，重复的 key 还会让 React 在更新中残留旧节点。
+ */
+function turnEnds(entries: readonly PresentationEntry[]): Map<string, { last: number; output: boolean; interrupted: boolean }> {
+  const turns = new Map<string, { last: number; output: boolean; interrupted: boolean }>();
+  entries.forEach((entry, index) => {
+    const groupId = entryGroupId(entry);
+    if (groupId === undefined) return;
+    const turn = turns.get(groupId) ?? { last: index, output: false, interrupted: false };
+    turn.last = index;
+    if (isPiOutputEntry(entry)) turn.output = true;
+    if (entry.kind === "text" && entry.interrupted) turn.interrupted = true;
+    turns.set(groupId, turn);
+  });
+  return turns;
 }
 
 const sameGroups = (left: readonly ProcessGroupModel[], right: readonly ProcessGroupModel[]) =>
@@ -236,15 +240,28 @@ export function ConversationTimeline({ sourceKey, items, live, completions, runn
     if (!list) return;
     let removed = 0;
     let duration = 0;
+    // 最靠下的收起组决定画面：它的组头已在可见区上方（组比一屏高）时，收起期间要把它带回。
+    let lowest: { top: number; duration: number } | null = null;
     for (const [key, expanded] of next) {
       if (expanded || previous.get(key) !== true) continue;
       const root = [...list.querySelectorAll<HTMLElement>(":scope > [data-timeline-key]")].find(node => node.dataset.timelineKey === key);
       removed += root?.querySelector<HTMLElement>(":scope > .pwa-process-details")?.getBoundingClientRect().height ?? 0;
       // 保持期覆盖同一提交里最长的退出：自动收起比手动收起慢。
-      duration = Math.max(duration, isSettleCollapse(states.get(key)!) ? settleDuration : collapseDuration);
+      const exit = isSettleCollapse(states.get(key)!) ? settleDuration : collapseDuration;
+      duration = Math.max(duration, exit);
+      const top = root?.getBoundingClientRect().top;
+      if (top !== undefined && (lowest === null || top > lowest.top)) lowest = { top, duration: exit };
     }
+    if (removed <= 0) return;
+    // 只有组头被遮住（在列表顶边或浮动提示占位之上）才带回；落在顶部留白里仍算可见，维持原位不动。
+    // 带回后与列表开头的内容同一位置：顶部内边距含留白与浮动提示占位。
+    const style = getComputedStyle(list);
+    const padding = Number.parseFloat(style.paddingTop) || 0;
+    const listTop = list.getBoundingClientRect().top;
+    const covered = listTop + padding - (Number.parseFloat(style.getPropertyValue("--pwa-timeline-pad-top")) || 0);
+    const lift = lowest === null || lowest.top >= covered ? undefined : { distance: listTop + padding - lowest.top, duration: lowest.duration };
     // live：本轮仍在运行（活动区在），收起后让出的空白留给随后的输出填入。
-    if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: duration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS, live: slotPresent } }));
+    list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: duration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS, live: slotPresent, lift } }));
   });
   // 只有活动区的出现与收起改变高度；其中 Working 的显隐只改透明度，不通知视口。
   const previousSlot = useRef(slotPresent);

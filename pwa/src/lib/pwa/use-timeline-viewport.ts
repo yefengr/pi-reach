@@ -80,11 +80,12 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     const valid = () => enabledRef.current && messageListRef.current === list && layoutRef.current === layout;
     observersRef.current = new TimelineViewportObservers(list, {
       geometry: (activity, added) => { if (valid()) core.notify(activity ? "activity" : "geometry", true, activity ? added : 0); },
-      collapse: (removed, duration, live) => { if (valid()) core.collapse(removed, duration, live); },
+      collapse: (removed, duration, live, lift) => { if (valid()) core.collapse(removed, duration, live, lift); },
       resize: () => { if (valid()) core.notify("resize"); },
-      interrupt: () => { if (valid()) core.interrupt(); },
+      interrupt: (direction) => { if (valid()) core.interrupt(direction); },
       input: () => { if (valid()) core.input(); },
-      engage: () => { if (valid()) core.engage(); },
+      // 门禁在视口之后记时：同一事件里门禁的时间不早于输入暂停，暂存的前插不会在视口仍暂停写入时放行。
+      engage: () => { if (valid()) { core.engage(); idleGate.engaged(); } },
       touch: (active) => { if (!valid()) return; core.touch(active); idleGate.touch(active); latestEntry.touch(active); },
     });
   }, [core, idleGate, latestEntry]);
@@ -131,8 +132,8 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   const receiveRealtimeOutput = useCallback((key: string) => { bind(); core.output(key); }, [bind, core]);
   const handleScroll = useCallback((nearBottom: boolean) => {
     bind();
-    idleGate.scrolled();
     core.scroll(nearBottom);
+    idleGate.scrolled();
     const list = layoutRef.current?.list;
     if (list) latestEntry.scrolled(list.scrollHeight - list.scrollTop - list.clientHeight, list.clientHeight);
   }, [bind, core, idleGate, latestEntry]);

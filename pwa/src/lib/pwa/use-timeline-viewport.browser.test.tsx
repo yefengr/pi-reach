@@ -169,7 +169,8 @@ test.each(["up", "down", "key-up", "key-down", "touch-up", "touch-down", "scroll
         : direction.startsWith("key") ? new KeyboardEvent("keydown", { key: direction === "key-up" ? "ArrowUp" : "ArrowDown" })
           : new WheelEvent("wheel", { deltaY: direction === "up" ? -20 : 20 }));
     });
-    expect(viewport().followingOutput).toBe(false);
+    // 向下是朝最新方向：打断发送但不算回看；向上与方向未知的滚动条按回看处理。
+    expect(viewport().followingOutput).toBe(direction.endsWith("down"));
     list.scrollTop = direction.endsWith("up") ? 80 : 120;
     flushSync(() => viewport().handleScroll(false));
     const writes = scrollTo.mock.calls.length;
@@ -469,6 +470,29 @@ test("a drag already under way when the prepend lands is never pulled back to th
     scrollTop = 470;
     viewport().handleScroll(false);
     expect(list.scrollTop).toBe(470);
+  } finally { await screen.unmount(); }
+});
+
+test("a page held for scroll idle waits out a still finger's release and wheel input without movement", async () => {
+  const { screen, list, viewport } = await renderViewport();
+  try {
+    viewport().captureSessionPosition();
+    list.dispatchEvent(new TouchEvent("touchstart", { touches: [new Touch({ identifier: 1, target: list, clientY: 100 })] }));
+    viewport().handleScroll(false);
+    // 手指拖到位后停住超过静止窗口再抬起，没有惯性：抬起本身也要重新计时，否则前插落在视口仍暂停写入时。
+    await new Promise(resolve => setTimeout(resolve, 260));
+    const released = vi.fn();
+    viewport().whenScrollIdle(released);
+    list.dispatchEvent(new TouchEvent("touchend", { touches: [] }));
+    expect(released).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(released).toHaveBeenCalled(), { timeout: 1000 });
+
+    // 已到顶后滚轮仍在输入，位置不变也没有 scroll 事件，同样不放行。
+    const wheeled = vi.fn();
+    list.dispatchEvent(new WheelEvent("wheel", { deltaY: -20 }));
+    viewport().whenScrollIdle(wheeled);
+    expect(wheeled).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(wheeled).toHaveBeenCalled(), { timeout: 1000 });
   } finally { await screen.unmount(); }
 });
 

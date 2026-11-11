@@ -152,7 +152,7 @@ describe("shared session protocol fixture contract", () => {
     ]) expectCode(() => decodeServerFrameV2({ ...base, ...details }), "schema");
   });
 
-  test("defaults session_sync limit to 80 and rejects values outside 1..80", () => {
+  test("defaults session_sync limit to 80 and rejects values outside 1..160", () => {
     const frameWithoutLimit: Extract<ClientFrame, { type: "session_sync" }> = {
       ...version,
       type: "session_sync",
@@ -163,7 +163,8 @@ describe("shared session protocol fixture contract", () => {
     const decoded = decodeClientFrameV2(frameWithoutLimit);
     expect(decoded).toMatchObject({ type: "session_sync", limit: 80 });
     expectCode(() => decodeClientFrameV2({ ...decoded, limit: 0 }), "schema");
-    expectCode(() => decodeClientFrameV2({ ...decoded, limit: 81 }), "schema");
+    expect(decodeClientFrameV2({ ...decoded, limit: 160 })).toMatchObject({ limit: 160 });
+    expectCode(() => decodeClientFrameV2({ ...decoded, limit: 161 }), "schema");
   });
 });
 
