@@ -9,6 +9,7 @@ import { ChoosePiWorkspace, UnpairedWorkspace } from "./workspace-content";
 import { StartupErrorView } from "./pwa-startup";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 function SelectHarness({ disabled = false }: { disabled?: boolean }) {
   const [value, setValue] = useState("endpoint-main");
@@ -110,7 +111,7 @@ test("Select remains within a 390 by 844 viewport", async () => {
   expect(rect.height).toBeGreaterThanOrEqual(44);
 });
 
-test("the desktop empty navigation pairing action retains a 44px touch target", async () => {
+test("the desktop empty navigation pairing action keeps the regular button height", async () => {
   await page.viewport(1280, 720);
   const screen = await renderPwa(
     <DesktopSidebar
@@ -134,7 +135,8 @@ test("the desktop empty navigation pairing action retains a 44px touch target", 
   await expect.element(pairing).toBeVisible();
   const rect = pairing.element().getBoundingClientRect();
   expect(rect.width).toBeGreaterThanOrEqual(44);
-  expect(rect.height).toBeGreaterThanOrEqual(44);
+  // 常规按钮：纯细指针 36，存在粗指针时 44（DESIGN「按钮尺寸」）。
+  expect(rect.height).toBeGreaterThanOrEqual(minimumControlHeight(pairing.element()));
 });
 
 test.each(["light", "dark"] as const)("direct Mantine controls preserve variants, state labels, and touch targets in %s mode", async (scheme) => {
@@ -153,7 +155,7 @@ test.each(["light", "dark"] as const)("direct Mantine controls preserve variants
       const button = screen.getByRole("button", { name, exact: true }).element();
       expect(button).toHaveClass("pwa-button");
       expect(button).toHaveAttribute("data-variant", variant);
-      expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumControlHeight(button));
     }
     for (const name of ["Default icon", "Primary icon", "Disabled icon"]) {
       const icon = screen.getByRole("button", { name }).element();
@@ -279,7 +281,14 @@ test("startup notices keep icons on the 16/20/24 scale and the mobile gutter", a
   const screen = await renderPwa(<StartupErrorView error={null} onRetry={() => {}} />);
   const icon = document.querySelector(".pwa-startup-icon")!.getBoundingClientRect();
   expect([Math.round(icon.width), Math.round(icon.height)]).toEqual([48, 48]);
-  expect(getComputedStyle(document.querySelector(".pwa-startup-card")!).paddingLeft).toBe("16px");
+  const card = document.querySelector<HTMLElement>(".pwa-startup-card")!;
+  expect(getComputedStyle(card).paddingLeft).toBe("16px");
+  // 嵌入式卡片：bg 上的 card 底、圆角 12、不描边（DESIGN「卡片」）。
+  const fill = document.createElement("span");
+  fill.style.backgroundColor = "var(--pwa-card)";
+  card.append(fill);
+  expect([getComputedStyle(card).borderTopWidth, getComputedStyle(card).borderRadius, getComputedStyle(card).backgroundColor]).toEqual(["0px", "12px", getComputedStyle(fill).backgroundColor]);
+  fill.remove();
   // 大号标题引出的独立说明与主区空状态同为 8。
   const title = document.querySelector(".pwa-startup-card h1")!.getBoundingClientRect();
   const description = document.querySelector(".pwa-startup-card h1 + p")!.getBoundingClientRect();

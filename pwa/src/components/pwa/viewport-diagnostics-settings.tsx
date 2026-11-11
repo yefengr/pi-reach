@@ -38,7 +38,7 @@ export function ViewportDiagnosticsSettings({ online }: { online: boolean }) {
   };
   return <section className="pwa-settings-section" aria-labelledby="pwa-viewport-diagnostics-heading">
     <h2 id="pwa-viewport-diagnostics-heading" className="pwa-settings-section-title">{s.title}</h2>
-    <Stack gap="xs" className="pwa-settings-group pwa-settings-diagnostics">
+    <Stack gap="xs" className="pwa-card pwa-settings-group pwa-settings-diagnostics">
       <p className="pwa-settings-section-description" role="status">{s[state.phase]}</p>
       {!online ? <p className="pwa-settings-section-description">{s.offline}</p> : null}
       <div className="pwa-settings-actions">

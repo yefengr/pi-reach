@@ -107,7 +107,7 @@ export function cwdName(cwd?: string | null): string | null {
 }
 
 /** 在线 Pi 行：会话名与目录在左，右侧固定状态槽按整行居中；缺少目录时不补替代文案。 */
-export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = "desktop", trailing }: { endpoint: PwaEndpointRecord; current: boolean; completed: boolean; onSelect: () => void; variant?: NavigationVariant; trailing?: ReactNode }) {
+export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = "desktop", trailing, className }: { endpoint: PwaEndpointRecord; current: boolean; completed: boolean; onSelect: () => void; variant?: NavigationVariant; trailing?: ReactNode; className?: string }) {
   const { t } = useI18n();
   const directory = cwdName(endpoint.cwd);
   // 运行优先于后台完成提醒；提醒记录本身不清除，运行结束后完成点自动恢复。
@@ -117,7 +117,7 @@ export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = 
       ? <span className="pwa-notice-dot" role="img" aria-label={t.navigation.newReply} title={t.navigation.newReply} />
       : null;
   return <NavLink
-    className={`pwa-nav-session${variant === "sheet" ? " pwa-sheet-room" : ""}`}
+    className={`pwa-nav-session${variant === "sheet" ? " pwa-sheet-room" : ""}${className ? ` ${className}` : ""}`}
     classNames={navigationNavLinkClassNames}
     component="button"
     type="button"

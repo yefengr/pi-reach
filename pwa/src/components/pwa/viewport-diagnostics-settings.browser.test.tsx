@@ -5,6 +5,7 @@ import { renderPwa } from "@/test/browser/render";
 import { viewportDiagnosticCapture, recordViewportDiagnostic } from "@/lib/pwa/timeline-viewport-diagnostics";
 import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
 import { getMessages, setLanguagePreference } from "@/lib/i18n";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 function finishCapture() {
   for (let index = 0; index < 256; index++) recordViewportDiagnostic({ following: true, paused: false, unread: 0,
@@ -75,7 +76,7 @@ test("download URLs retain their bounded consumption window through clear and un
   } finally { vi.useRealTimers(); if (!unmounted) await screen.unmount(); }
 });
 
-test("synthetic completed diagnostic report stays reachable with 44px actions at 390px", async () => {
+test("synthetic completed diagnostic report stays reachable with full-height actions at 390px", async () => {
   setLanguagePreference("zh");
   await page.viewport(390, 844);
   const screen = await renderPwa(<div className="pwa-settings-view"><div className="pwa-settings-page"><div className="pwa-settings-inner">
@@ -91,8 +92,9 @@ test("synthetic completed diagnostic report stays reachable with 44px actions at
     expect(copyIcons).toHaveLength(2);
     expect([...copyIcons].filter((icon) => getComputedStyle(icon).opacity === "1")).toHaveLength(1);
     for (const name of ["准备下一次发送", "清除诊断", "复制诊断 JSON", "保存诊断 JSON"]) {
-      const rect = screen.getByRole("button", { name, exact: true }).element().getBoundingClientRect();
-      expect(Math.round(rect.height)).toBeGreaterThanOrEqual(44);
+      const action = screen.getByRole("button", { name, exact: true }).element();
+      const rect = action.getBoundingClientRect();
+      expect(Math.round(rect.height)).toBeGreaterThanOrEqual(minimumControlHeight(action));
       expect(Math.round(rect.width)).toBeGreaterThanOrEqual(44);
       expect(Math.round(rect.left)).toBeGreaterThanOrEqual(0);
       expect(Math.round(rect.right)).toBeLessThanOrEqual(390);

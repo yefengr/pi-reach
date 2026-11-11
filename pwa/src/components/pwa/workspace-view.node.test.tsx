@@ -195,7 +195,7 @@ test("12px connection spinners override the global stroke to match 16px icons", 
 
   for (const html of statuses) {
     expect(spinner(html)).toContain('width="12"');
-    expect(spinner(html)).toContain('stroke-width="2.4"');
+    expect(spinner(html)).toContain('stroke-width="3"');
   }
 });
 

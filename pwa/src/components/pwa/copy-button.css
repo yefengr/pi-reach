@@ -1,4 +1,4 @@
-.pwa-copy-icons { display: grid; place-items: center; flex: none; width: 16px; height: 16px; }
+.pwa-copy-icons { display: grid; place-items: center; flex: none; width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); }
 .pwa-copy-icons > svg { grid-area: 1 / 1; transition: opacity var(--pwa-duration-feedback, var(--pwa-duration-fade)) var(--pwa-ease-standard); }
 .pwa-copy-icons .pwa-copy-icon-check { opacity: 0; }
 .pwa-copy-icons[data-copied] .pwa-copy-icon-copy { opacity: 0; }

@@ -5,6 +5,7 @@ import { renderPwa } from "@/test/browser/render";
 import { SettingsPage } from "./settings-page";
 import { setLanguagePreference } from "@/lib/i18n";
 import { resetTextSizeStateForTest, setSystemBodyProbeForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const relayUrl = "https://relay.example.test";
 const defaultRelayUrl = "https://relay.default.test";
@@ -104,6 +105,17 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   expect(Math.round(group.getBoundingClientRect().top - appearance.querySelector("h2")!.getBoundingClientRect().bottom)).toBe(8);
   expect(Math.round(appearance.querySelector(".pwa-settings-footnote")!.getBoundingClientRect().top - group.getBoundingClientRect().bottom)).toBe(6);
   expect(getComputedStyle(group).borderRadius).toBe("12px");
+  // 分组是公共的嵌入式卡片：不描边，底色为 grouped-bg 上的 surface（DESIGN「卡片」）。
+  for (const card of document.querySelectorAll<HTMLElement>(".pwa-settings-group")) {
+    const style = getComputedStyle(card);
+    expect(card.classList.contains("pwa-card")).toBe(true);
+    expect([style.borderTopWidth, style.boxShadow, style.borderRadius]).toEqual(["0px", "none", "12px"]);
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "var(--pwa-surface)";
+    card.append(probe);
+    expect(style.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+    probe.remove();
+  }
   for (const row of document.querySelectorAll<HTMLElement>(".pwa-settings-row")) expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   const back = screen.getByRole("button", { name: "Back to workspace" }).element();
   const title = screen.getByRole("heading", { level: 1, name: "Settings" }).element();
@@ -123,7 +135,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
     const action = screen.getByRole("button", { name });
     action.element().scrollIntoView({ block: "nearest" });
     await expect.element(action).toBeVisible();
-    expect(action.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(action.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumControlHeight(action.element()));
   }
   const about = document.querySelector<HTMLElement>('[aria-labelledby="pwa-about-heading"]')!;
   about.scrollIntoView({ block: "end" });

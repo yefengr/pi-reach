@@ -7,7 +7,7 @@ import { describe, expect, test } from "vitest";
 import { CONTENT_ENTER_OPACITY } from "@/components/pwa/use-timeline-enter-fade";
 import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 import { piReachTheme } from "@/lib/ui/pi-reach-theme";
-import { ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
+import { ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 const SOURCE_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -21,7 +21,8 @@ const MOTION_TOKEN_READ = /getPropertyValue\(\s*["'`]--pwa-(?:duration|ease)-/g;
 const DESKTOP_MIN_WIDTH = 768;
 /** 16 按钮内与状态行、20 图标按钮与导航、24 大尺寸；12 只经具名常量出现。 */
 const ICON_SIZES = new Set(["16", "20", "24", "SMALL_SPINNER_SIZE"]);
-const ICON_STROKES = new Set(["ICON_STROKE_WIDTH", "SMALL_SPINNER_STROKE"]);
+// 线宽只由 LucideProvider 注入的全局值决定，单个图标不另写。
+const ICON_STROKES = new Set(["ICON_STROKE_WIDTH"]);
 
 function sourceFiles(directory: string, extensions: string[]): string[] {
   return readdirSync(directory).flatMap((name) => {
@@ -118,7 +119,12 @@ describe("script token guard", () => {
   });
 
   test("Lucide icons use the documented sizes and named stroke widths", () => {
-    expect([ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE]).toEqual([1.8, 12, 2.4]);
+    expect([ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE]).toEqual([1.5, 12]);
+    // 样式改写图标尺寸时同步改写线宽：每组 --pwa-icon-* 的线宽须等于 实际线宽 × 24 ÷ 尺寸，与脚本注入的实际线宽一致。
+    const sizes = [...THEME.matchAll(/--pwa-icon-(inline|control):\s*(\d+)px;\s*--pwa-icon-\1-stroke:\s*([\d.]+);/g)];
+    expect(sizes.map((match) => `${match[1]} ${match[2]}`)).toEqual(["inline 16", "control 20", "inline 18", "inline 20", "control 22"]);
+    for (const [, , size, stroke] of sizes) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH * 24 / Number(size), 3);
+    expect(THEME.match(/--pwa-icon-[a-z-]+:/g)).toHaveLength(sizes.length * 2);
     const offenders = sourceFiles(SOURCE_ROOT, [".tsx"]).sort().flatMap((path) => {
       const text = readFileSync(path, "utf8");
       const file = relative(SOURCE_ROOT, path);

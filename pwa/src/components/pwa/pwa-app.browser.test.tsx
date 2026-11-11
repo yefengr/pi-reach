@@ -4802,7 +4802,7 @@ test("does not return a queued message that Pi already read", async () => {
   }
 });
 
-test("lists running Pis first as bordered rows while waiting for a choice", async () => {
+test("lists running Pis first as card rows while waiting for a choice", async () => {
   const db = await openPwaDatabase();
   await db.settings.delete(`active_endpoint:${makePwaDeviceId("owner-device-key")}`);
   const screen = await renderWorkspaceApp();
@@ -4821,7 +4821,10 @@ test("lists running Pis first as bordered rows while waiting for a choice", asyn
     expect(rows.map((row) => row.textContent ?? "")).toEqual([expect.stringContaining("Zulu running Pi"), expect.stringContaining("Alpha idle Pi")]);
     for (const row of rows) {
       expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(56);
-      expect(getComputedStyle(row).borderTopWidth).toBe("1px");
+      // 嵌入式卡片只靠底色差成形，不描边（DESIGN「卡片」）。
+      expect(row.classList.contains("pwa-card")).toBe(true);
+      expect([getComputedStyle(row).borderTopWidth, getComputedStyle(row).borderRadius]).toEqual(["0px", "8px"]);
+      expect(getComputedStyle(row).backgroundColor).not.toBe(getComputedStyle(document.querySelector(".pwa-root")!).backgroundColor);
       expect(row.querySelector(".pwa-nav-link-section svg")).not.toBeNull();
     }
   } finally {

@@ -3,6 +3,7 @@ import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { getMessages, setLanguagePreference } from "@/lib/i18n";
 import { UiReviewStageAPage } from "./ui-review-stage-a";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const root = () => document.querySelector<HTMLElement>(".pwa-stage-a")!;
 const cell = (testId: string) => root().querySelector<HTMLElement>(`[data-testid="${testId}"]`)!.closest<HTMLElement>(".pwa-review-compare-cell")!;
@@ -73,9 +74,9 @@ test("candidate press shrinks the drawing layer while the hit area stays put", a
   expect(pressRules("baseline").some((rule) => rule.transform === "none")).toBe(true);
   // 两列控件几何一致：按压只作用于绘制层，不改变点击区。
   const geometry = ["baseline", "candidate"].map((variant) => [...cell(`stage-a-press-${variant}`).querySelectorAll<HTMLElement>("button")]
-    .map((button) => { const box = button.getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height)]; }));
+    .map((button) => { const box = button.getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height), minimumControlHeight(button)]; }));
   expect(geometry[1]).toEqual(geometry[0]);
-  expect(geometry[0].every(([width, height]) => width >= 44 && height >= 44)).toBe(true);
+  expect(geometry[0].every(([width, height, minimum]) => width >= 44 && height >= minimum)).toBe(true);
 });
 
 test("historical press specimens keep baseline layers still and avoid doubling candidate scale", async () => {

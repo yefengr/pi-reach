@@ -17,6 +17,7 @@ import { UnpairedWorkspace } from "./workspace-content";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 import { applyStandaloneRules } from "@/test/browser/standalone";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const device: PwaDeviceRecord = {
   id: "device:office",
@@ -607,7 +608,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
       expect(headingRect.top).toBeLessThan(mainRect.top + mainRect.height * 0.6);
       expect(icon.getBoundingClientRect().width).toBe(24);
       expect(empty.querySelector(".pwa-zero-mark")).toBeNull();
-      expect(buttonRect.height).toBeGreaterThanOrEqual(44);
+      expect(buttonRect.height).toBeGreaterThanOrEqual(minimumControlHeight(pair.element()));
       expect(pair.element().getAttribute("data-variant")).toBe("filled");
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({ path: `../../../.vitest/screenshots/empty-main-${width}x${height}-${scheme}.png` });
@@ -629,7 +630,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
       expect(container.element().querySelector(".pwa-nav-section")).toBeNull();
       const navigationPair = container.getByRole("button", { name: "Pair a computer", exact: true });
       const navigationPairRect = navigationPair.element().getBoundingClientRect();
-      expect(navigationPairRect.height).toBeGreaterThanOrEqual(44);
+      expect(navigationPairRect.height).toBeGreaterThanOrEqual(minimumControlHeight(navigationPair.element()));
       expect(container.element().scrollWidth).toBeLessThanOrEqual(container.element().clientWidth);
       await page.screenshot({ path: `../../../.vitest/screenshots/empty-navigation-${width}x${height}-${scheme}.png` });
       navigationPair.element().focus();

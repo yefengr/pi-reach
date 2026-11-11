@@ -52,7 +52,7 @@
 .pwa-turn-activity-working { display: inline-flex; align-items: center; gap: var(--pwa-space-status); opacity: 0; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-turn-activity[data-working] .pwa-turn-activity-working { opacity: 1; }
 /* 图标固定 16px 方槽，槽与文字由活动区整行居中；旋转只作用在槽内的 svg，不移动文字或行高。 */
-.pwa-working-icon { box-sizing: border-box; display: inline-grid; place-items: center; flex: 0 0 auto; width: 16px; height: 16px; }
+.pwa-working-icon { box-sizing: border-box; display: inline-grid; place-items: center; flex: 0 0 auto; width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); }
 /* Working 不可见时不绘制旋转，避免透明度为 0 时仍持续消耗合成帧。 */
 .pwa-turn-activity:not([data-working]) .pwa-turn-activity-working .pwa-spin { animation-play-state: paused; }
 /* 压缩终态是本地提示，不是会话记录；固定 44px 行高，与进行中行切换时不跳动。 */

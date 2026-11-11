@@ -12,6 +12,8 @@
   --pwa-panel: #F7F7F7;
   /* 设置页分组列表的页面底：浅色用 panel 衬出 surface 分组；深色 panel 与 surface 过近，改用 bg。 */
   --pwa-grouped-bg: var(--pwa-panel);
+  /* 嵌在 bg 上的卡片底，只由 .pwa-card 引用：只靠底色差成形，不描边；分组列表页（grouped-bg）上改为 surface。 */
+  --pwa-card: var(--pwa-panel);
   --pwa-message: #F2F2F2;
   --pwa-hover: #EBEBEB;
   --pwa-selected: #E5E5E5;
@@ -76,6 +78,7 @@
   --pwa-surface: #2D2D2D;
   --pwa-panel: #282828;
   --pwa-grouped-bg: var(--pwa-bg);
+  --pwa-card: var(--pwa-surface);
   --pwa-message: #353535;
   --pwa-hover: #353535;
   --pwa-selected: #3A3A3A;
@@ -137,6 +140,7 @@
     --pwa-surface: #2D2D2D;
     --pwa-panel: #282828;
     --pwa-grouped-bg: var(--pwa-bg);
+    --pwa-card: var(--pwa-surface);
     --pwa-message: #353535;
     --pwa-hover: #353535;
     --pwa-selected: #3A3A3A;
@@ -237,6 +241,16 @@
   --pwa-leading-code: 1.55;
   --pwa-weight-regular: 400;
   --pwa-weight-strong: 600;
+
+  /*
+   * 图标：行内图标（TSX 中 size 16）随字号档位放大，图标按钮内的图标（size 20）在触控设备上加大。
+   * *-stroke 是换算回 24 画布的线宽（1.5 × 24 ÷ 尺寸），使实际线宽保持 lib/ui/icon-metrics.ts 的 1.5px；
+   * 写成算好的数值而不用 calc()，由守卫校验与尺寸对应。
+   */
+  --pwa-icon-inline: 16px;
+  --pwa-icon-inline-stroke: 2.25;
+  --pwa-icon-control: 20px;
+  --pwa-icon-control-stroke: 1.8;
 
   /* 叠层自下而上（DESIGN「叠层」）：全部叠层 Portal 到 .pwa-root，与工作区固定元素共用同一层叠上下文。 */
   --pwa-z-composer: 3;
@@ -357,6 +371,8 @@
   --pwa-topbar-height: 48px;
   /* 最小点击区（DESIGN「按钮尺寸」）；同高的行、输入框与操作槽共用，不随字号档位缩放。 */
   --pwa-hit-target: 44px;
+  /* 常规按钮与文字按钮的高度：默认按触控取 44，纯细指针时为 36（见 pwa-controls.css）。 */
+  --pwa-button-height: 44px;
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
   /* 横屏刘海与圆角的左右安全区；只由实际贴住该屏幕边缘的布局层使用，同一边不重复叠加（见 DESIGN「安全区」）。 */
   --pwa-safe-left: env(safe-area-inset-left, 0px);
@@ -375,6 +391,8 @@
   --pwa-text-page: 28px;
   --pwa-text-heading: 22px;
   --pwa-text-subheading: 20px;
+  --pwa-icon-inline: 18px;
+  --pwa-icon-inline-stroke: 2;
 }
 
 :root[data-pwa-text-size="xlarge"] {
@@ -386,6 +404,8 @@
   --pwa-text-page: 32px;
   --pwa-text-heading: 24px;
   --pwa-text-subheading: 22px;
+  --pwa-icon-inline: 20px;
+  --pwa-icon-inline-stroke: 1.8;
 }
 
 /*
@@ -400,6 +420,8 @@
     --pwa-text-page: 28px;
     --pwa-text-heading: 22px;
     --pwa-text-subheading: 20px;
+    --pwa-icon-control: 22px;
+    --pwa-icon-control-stroke: 1.636;
   }
 
   :root[data-pwa-text-size="large"] {

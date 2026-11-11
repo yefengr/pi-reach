@@ -29,5 +29,5 @@ export function StartupLoading() {
 
 export function StartupErrorView({ error, onRetry }: { error: StartupError | null; onRetry: () => void }) {
   const { t } = useI18n();
-  return <main className="pwa-startup-error"><div className="pwa-startup-card"><span className="pwa-startup-icon"><WifiOff size={24} /></span><span className="pwa-kicker">{t.startup.kicker}</span><h1>{error?.title || t.startup.unavailableTitle}</h1><p>{error?.message || t.startup.unavailableBody}</p>{error?.action ? <p className="pwa-startup-action-note">{error.action}</p> : null}<div className="pwa-startup-actions"><Button type="button" onClick={onRetry} leftSection={<RefreshCw size={16} />}>{t.startup.reload}</Button></div></div></main>;
+  return <main className="pwa-startup-error"><div className="pwa-card pwa-startup-card"><span className="pwa-startup-icon"><WifiOff size={24} /></span><span className="pwa-kicker">{t.startup.kicker}</span><h1>{error?.title || t.startup.unavailableTitle}</h1><p>{error?.message || t.startup.unavailableBody}</p>{error?.action ? <p className="pwa-startup-action-note">{error.action}</p> : null}<div className="pwa-startup-actions"><Button type="button" onClick={onRetry} leftSection={<RefreshCw size={16} />}>{t.startup.reload}</Button></div></div></main>;
 }

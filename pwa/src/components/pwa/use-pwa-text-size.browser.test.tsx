@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { cdp } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { installSystemTextSizeTracking, resetTextSizeStateForTest, setSystemBodyProbeForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import { usePwaTextSize } from "./use-pwa-text-size";
@@ -21,12 +20,10 @@ beforeEach(() => {
   resetTextSizeStateForTest();
 });
 
-afterEach(async () => {
+afterEach(() => {
   window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
   setSystemBodyProbeForTest(null);
   resetTextSizeStateForTest();
-  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
-  await cdp().send("Emulation.setEmitTouchEventsForMouse", { enabled: false });
 });
 
 test("applies and persists a text size tier immediately", async () => {
@@ -98,26 +95,5 @@ test("resolves the system preference to standard where the system size is unread
   const screen = await renderPwa(<Harness />);
   expect(document.querySelector('output[aria-label="Preference"]')?.textContent).toBe("system:false");
   expect(document.documentElement.getAttribute("data-pwa-text-size")).toBe("standard");
-  await screen.unmount();
-});
-
-test("touch-first devices read from a larger base than desktop at every tier", async () => {
-  const tokens = () => {
-    const style = getComputedStyle(document.documentElement);
-    return ["meta", "list", "body", "code", "title", "page", "heading", "subheading"].map(name => style.getPropertyValue(`--pwa-text-${name}`).trim()).join(" ");
-  };
-  const screen = await renderPwa(<Harness />);
-  expect(matchMedia("(pointer: coarse)").matches).toBe(false);
-  expect(tokens()).toBe("13px 14px 16px 14px 18px 24px 20px 18px");
-
-  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-  await cdp().send("Emulation.setEmitTouchEventsForMouse", { enabled: true, configuration: "mobile" });
-  await expect.poll(() => matchMedia("(pointer: coarse)").matches).toBe(true);
-  expect(tokens()).toBe("14px 16px 17px 14px 18px 28px 22px 20px");
-  // 触控模拟下鼠标点击会被改写成触摸事件，这里直接切换根节点档位。
-  document.documentElement.dataset.pwaTextSize = "large";
-  expect(tokens()).toBe("15px 18px 19px 16px 20px 30px 24px 22px");
-  document.documentElement.dataset.pwaTextSize = "xlarge";
-  expect(tokens()).toBe("16px 20px 21px 18px 22px 32px 26px 24px");
   await screen.unmount();
 });

@@ -72,6 +72,7 @@
     --pwa-menu-row-padding: 4px;
     --pwa-navigation-row-padding: 4px;
     --pwa-menu-visual-inset: 2px;
+    --pwa-button-height: 36px;
   }
 }
 /* 大窗口不代表只有鼠标：有任一粗指针就保持可触控密度。 */
@@ -80,6 +81,7 @@
     --pwa-menu-row-padding: 6px;
     --pwa-navigation-row-padding: 6px;
     --pwa-menu-visual-inset: 0px;
+    --pwa-button-height: var(--pwa-hit-target);
   }
 }
 

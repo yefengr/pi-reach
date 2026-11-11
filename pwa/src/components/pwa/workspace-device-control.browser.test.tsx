@@ -6,6 +6,7 @@ import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "./wo
 import { renderPwa } from "@/test/browser/render";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { DeviceActivity } from "@/lib/pwa/pwa-view-model";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const currentDevice: PwaDeviceRecord = {
   id: "device:current",
@@ -271,7 +272,7 @@ test("unpaired desktop footer pairs directly without opening a chooser", async (
   const screen = await renderPwa(<WorkspaceDeviceControl devices={[]} activeDeviceId={null} pairingPresence={{}} variant="desktop" onPair={() => events.push("pair")} onSelectDevice={() => {}} onRename={() => {}} onRemove={() => {}} />);
   const pair = screen.getByRole("button", { name: "Pair a computer" });
   await expect.element(pair).toBeVisible();
-  expect(Math.round(pair.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(pair.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(minimumControlHeight(pair.element()));
   await pair.click();
   expect(events).toEqual(["pair"]);
   expect(document.querySelector(".pwa-device-popover")).toBeNull();
@@ -361,7 +362,7 @@ test("mobile chooser is a compact z220 bottom Drawer with reachable actions and 
   ]) {
     const box = action.element().getBoundingClientRect();
     expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(minimumControlHeight(action.element()));
   }
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   await page.screenshot({ path: "../../../.vitest/screenshots/workspace-device-control-320x568.png" });

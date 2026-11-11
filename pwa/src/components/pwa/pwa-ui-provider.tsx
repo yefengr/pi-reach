@@ -25,7 +25,7 @@ export function PwaUiProvider({ children, colorSchemeManager = appearanceManager
       defaultColorScheme="auto"
     >
       <PwaAppearanceProvider>
-        <LucideProvider strokeWidth={ICON_STROKE_WIDTH}>
+        <LucideProvider strokeWidth={ICON_STROKE_WIDTH} absoluteStrokeWidth>
           <div ref={pressScopeRef} className="pwa-ui-scope">{children}</div>
         </LucideProvider>
       </PwaAppearanceProvider>

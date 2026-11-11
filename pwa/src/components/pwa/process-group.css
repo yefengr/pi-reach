@@ -4,10 +4,10 @@
 
 /* 组头复用折叠按钮的 44px 点击区、悬停与焦点；无提示时保持三列，箭头始终贴右。 */
 .pwa-root .pwa-process-group .pwa-process-head {
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: var(--pwa-icon-inline) minmax(0, 1fr) auto;
   font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui);
 }
-.pwa-root .pwa-process-group .pwa-process-head:has(.pwa-process-alert) { grid-template-columns: 16px minmax(0, 1fr) auto auto; }
+.pwa-root .pwa-process-group .pwa-process-head:has(.pwa-process-alert) { grid-template-columns: var(--pwa-icon-inline) minmax(0, 1fr) auto auto; }
 .pwa-root .pwa-process-group .pwa-process-copy { min-width: 0; display: flex; align-items: center; gap: var(--pwa-space-xs); overflow: hidden; white-space: nowrap; }
 /* 当前活动换人时文案淡入；组头高度不变。 */
 .pwa-root .pwa-process-group .pwa-process-copy-swap { animation: pwa-row-enter var(--pwa-duration-fade) var(--pwa-ease-standard); }
@@ -27,8 +27,8 @@
 .pwa-root .pwa-process-group .pwa-process-thinking-heading { color: var(--pwa-secondary); font-style: italic; }
 .pwa-root .pwa-process-group .pwa-process-more { flex: none; color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 
-/* 状态槽固定 16px，不随标题或计数伸缩。 */
-.pwa-root .pwa-process-group .pwa-process-status-slot { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--pwa-secondary); }
+/* 状态槽与行内图标同宽（标准档 16px，随字号档位放大），不随标题或计数伸缩。 */
+.pwa-root .pwa-process-group .pwa-process-status-slot { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); display: inline-flex; align-items: center; justify-content: center; color: var(--pwa-secondary); }
 .pwa-root .pwa-process-group .pwa-process-status-slot > svg { flex: none; }
 .pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-running { color: var(--pwa-running); }
 /* 准备中：模型仍在生成调用，图标保持转动但用中性色，与真正执行区分。 */
@@ -52,7 +52,7 @@
 .pwa-root .pwa-process-group .pwa-process-entry + .pwa-process-entry::before {
   content: "";
   position: absolute;
-  left: 7.5px;
+  left: calc(var(--pwa-icon-inline) / 2 - 0.5px);
   top: -8px;
   width: 1px;
   height: 16px;
@@ -82,8 +82,8 @@
 .pwa-root .pwa-process-group .pwa-thinking-tail-action:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 
 /* 工具明细：状态图标移到左侧图标列，状态文字留给读屏，现有 aria-label 不变。 */
-.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action { grid-template-columns: 16px minmax(0, 1fr); }
-.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status { grid-area: 1 / 1; justify-content: center; min-width: 16px; }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action { grid-template-columns: var(--pwa-icon-inline) minmax(0, 1fr); }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status { grid-area: 1 / 1; justify-content: center; min-width: var(--pwa-icon-inline); }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status > span { display: none; }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action-copy { grid-area: 1 / 2; }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action-copy strong { max-width: 45%; font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
@@ -98,7 +98,7 @@
   min-width: 0;
   min-height: var(--pwa-hit-target);
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: var(--pwa-icon-inline) minmax(0, 1fr);
   align-items: center;
   gap: var(--pwa-space-xs);
   padding: 4px 6px 4px 0;
@@ -122,7 +122,7 @@
 .pwa-root .pwa-process-group .pwa-thinking-tail {
   box-sizing: border-box;
   height: calc(var(--pwa-text-list) * var(--pwa-leading-ui));
-  margin: 0 0 4px calc(16px + var(--pwa-space-xs));
+  margin: 0 0 4px calc(var(--pwa-icon-inline) + var(--pwa-space-xs));
   overflow: hidden;
   display: flex;
   justify-content: flex-end;

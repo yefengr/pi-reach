@@ -294,9 +294,9 @@
 .pwa-root .pwa-onboarding .pwa-install-steps { width: fit-content; max-width: min(var(--pwa-reading-width), 100%); margin-top: 16px; padding: 12px 16px; border-radius: var(--pwa-radius-md); background: var(--pwa-panel); }
 /* 主操作在上、文字按钮在下，纵向相距 8。 */
 .pwa-root .pwa-onboarding-actions { display: grid; justify-items: center; gap: 8px; margin-top: 16px; }
-/* 选择 Pi：有边界的可点行，悬停 hover、按下 neutral-active，右侧箭头提示可进入。 */
+/* 选择 Pi：卡片底的可点行（不描边），悬停 hover、按下 neutral-active，右侧箭头提示可进入。 */
 .pwa-root .pwa-choose-pi-list { width: min(var(--pwa-reading-width), 100%); display: grid; gap: 8px; margin-top: 16px; text-align: left; }
-.pwa-root .pwa-choose-pi-list .pwa-nav-session { min-height: 56px; margin: 0; padding: 8px 12px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-md); background: var(--pwa-surface); }
+.pwa-root .pwa-choose-pi-list .pwa-nav-session { min-height: 56px; margin: 0; padding: 8px 12px; }
 .pwa-root .pwa-choose-pi-list .pwa-nav-session:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
 .pwa-root .pwa-choose-pi-list .pwa-nav-link-section { color: var(--pwa-secondary); }
 

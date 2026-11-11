@@ -388,4 +388,19 @@ describe("CSS static guard", () => {
       .map((entry) => `${keyOf(entry)}: ${entry.value}`);
     expect(offenders).toEqual([]);
   });
+
+  test("embedded cards take their fill and shape from the shared card rule", () => {
+    // 卡片底只由公共规则引用，页面只改写 token；各卡片的布局类不再自己写底色、描边或圆角。
+    const production = all.filter((entry) => !entry.file.startsWith("dev/") && entry.file !== THEME_FILE);
+    expect(production.filter((entry) => entry.value.includes("var(--pwa-card)")).map(keyOf)).toEqual([
+      "app/globals.css | :is(.pwa-root, .pwa-startup-error) .pwa-card | background",
+    ]);
+    expect(production.filter((entry) => entry.property === "--pwa-card").map((entry) => `${keyOf(entry)}: ${entry.value}`)).toEqual([
+      "app/globals.css | .pwa-root .pwa-settings-page | --pwa-card: var(--pwa-surface)",
+    ]);
+    const layoutOnly = [".pwa-root .pwa-settings-group", ".pwa-startup-card", ".pwa-root .pwa-choose-pi-list .pwa-nav-session"];
+    const offenders = production.filter((entry) => layoutOnly.includes(entry.selector) && /^(?:background(?:-color)?|border(?:-radius)?|box-shadow)$/.test(entry.property)).map(keyOf);
+    expect(layoutOnly.every((selector) => production.some((entry) => entry.selector === selector))).toBe(true);
+    expect(offenders).toEqual([]);
+  });
 });

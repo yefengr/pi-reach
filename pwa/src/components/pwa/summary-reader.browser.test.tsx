@@ -183,8 +183,10 @@ test("mobile summary reuses right-swipe close and status-bar safe-area layout", 
     expect(Math.round(header.getBoundingClientRect().height)).toBe(72);
     const scroll = reader.querySelector<HTMLElement>(".pwa-summary-reader-scroll")!;
     expect(getComputedStyle(scroll).touchAction).toBe("pan-y");
-    expect(getComputedStyle(scroll).fontSize).toBe("16px");
-    expect(getComputedStyle(scroll).lineHeight).toBe("26.4px");
+    // 触控模拟下主指针为粗指针，正文取触控基准 17px（DESIGN「字号与行高」）。
+    expect(matchMedia("(pointer: coarse)").matches).toBe(true);
+    expect(getComputedStyle(scroll).fontSize).toBe("17px");
+    expect(getComputedStyle(scroll).lineHeight).toBe("28.05px");
     await expect.poll(() => reader.hasAttribute("data-pwa-moving")).toBe(false);
     await touchDrag(touchOrigin(scroll, 80, 32), 200, 0);
     await closed();

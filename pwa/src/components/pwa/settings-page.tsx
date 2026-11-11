@@ -101,7 +101,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-appearance-heading">
         <h2 id="pwa-appearance-heading" className="pwa-settings-section-title">{s.appearance}</h2>
         <Radio.Group aria-label={s.appearance} name="pwa-appearance" value={appearance} onChange={(next) => setAppearance(next as PwaAppearance)}>
-          <div className="pwa-settings-group">
+          <div className="pwa-card pwa-settings-group">
             <SettingsChoice value="system" icon={<Monitor size={20} />} title={s.system} hint={s.systemHint} />
             <SettingsChoice value="light" icon={<Sun size={20} />} title={s.light} hint={s.lightHint} />
             <SettingsChoice value="dark" icon={<Moon size={20} />} title={s.dark} hint={s.darkHint} />
@@ -112,7 +112,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-text-size-heading">
         <h2 id="pwa-text-size-heading" className="pwa-settings-section-title">{s.textSize}</h2>
         <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSizePreference)}>
-          <div className="pwa-settings-group">
+          <div className="pwa-card pwa-settings-group">
             {textSizeFollowsSystem ? <SettingsChoice value="system" icon={<Smartphone size={20} />} title={s.textSizeSystem} hint={s.textSizeSystemHint} /> : null}
             <SettingsChoice value="standard" icon={<Type size={20} />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
             <SettingsChoice value="large" icon={<ALargeSmall size={20} />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
@@ -124,7 +124,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
         <Radio.Group aria-label={s.language} name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
-          <div className="pwa-settings-group">
+          <div className="pwa-card pwa-settings-group">
             <SettingsChoice value="system" icon={<Globe size={20} />} title={s.followBrowser} hint={s.followBrowserHint} />
             <SettingsChoice value="zh" icon={<LanguageGlyph lang="zh-CN">中</LanguageGlyph>} title={s.chinese} hint={s.chineseHint} lang="zh-CN" />
             <SettingsChoice value="en" icon={<LanguageGlyph lang="en">En</LanguageGlyph>} title={s.english} hint={s.englishHint} lang="en" />
@@ -134,7 +134,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-keyboard-heading">
         <h2 id="pwa-keyboard-heading" className="pwa-settings-section-title">{s.keyboard}</h2>
-        <div className="pwa-settings-group">
+        <div className="pwa-card pwa-settings-group">
           <Switch className="pwa-settings-row pwa-keyboard-setting" size="md" labelPosition="left" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
           <UnstyledButton className="pwa-settings-row pwa-settings-row-button" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>
             <span className="pwa-settings-row-label">{t.shortcuts.title}</span>
@@ -145,7 +145,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-connection-heading">
         <h2 id="pwa-connection-heading" className="pwa-settings-section-title">{s.connection}</h2>
-        <form className="pwa-settings-group pwa-settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <form className="pwa-card pwa-settings-group pwa-settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <TextInput className="pwa-input pwa-field" label={s.relayUrl} value={value} onChange={(event) => setValue(event.target.value)} placeholder={defaultRelayUrl} spellCheck={false} autoCapitalize="none" autoCorrect="off" inputMode="url" />
           <Button type="submit" loading={saving}>{s.save}</Button>
         </form>
@@ -153,7 +153,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-browser-data-heading">
         <h2 id="pwa-browser-data-heading" className="pwa-settings-section-title">{s.browserData}</h2>
-        <div className="pwa-settings-group pwa-settings-group-actions">
+        <div className="pwa-card pwa-settings-group pwa-settings-group-actions">
           <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
           <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
@@ -166,7 +166,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
           <h2 id="pwa-about-heading" className="pwa-settings-section-title">{s.about}</h2>
           <CopyButton text={versionInfo} label={s.copyVersionInfo} />
         </div>
-        <dl className="pwa-settings-group pwa-settings-versions">
+        <dl className="pwa-card pwa-settings-group pwa-settings-versions">
           <div className="pwa-settings-row"><dt>PWA</dt><dd data-version="pwa">{pwaVersion}</dd></div>
           <div className="pwa-settings-row"><dt>Relay</dt><dd data-version="relay">{relayVersionText}</dd></div>
           <div className="pwa-settings-row"><dt>{s.extension}</dt><dd data-version="extension">{extensionVersionText}</dd></div>
@@ -193,7 +193,7 @@ function InstallSettingsContent({ offer, onInstall }: { offer: InstallOffer; onI
   const { title, lead } = useInstallCopy(offer);
   return <section className="pwa-settings-section" aria-labelledby="pwa-install-heading">
     <h2 id="pwa-install-heading" className="pwa-settings-section-title">{n.settingsSection}</h2>
-    <div className="pwa-settings-group pwa-settings-install">
+    <div className="pwa-card pwa-settings-group pwa-settings-install">
       <span className="pwa-settings-choice-text"><strong>{title}</strong><small>{lead}</small></span>
       {offer === "prompt"
         ? <Button variant="default" type="button" leftSection={<Download size={16} />} onClick={() => void onInstall()}>{n.install}</Button>
