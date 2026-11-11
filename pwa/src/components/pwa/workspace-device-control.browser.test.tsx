@@ -99,10 +99,10 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   const panel = document.querySelector<HTMLElement>(".pwa-device-popover")!;
   expect(panel).not.toBeNull();
   expect(panel.closest(".pwa-root")).not.toBeNull();
-  // 与菜单共用同一组进入过渡：方向由实际 data-position 推导，顶部面板从下方 4px 归位。
+  // 与菜单共用同一组进入过渡：原点由实际 data-position 推导，顶部面板从下沿（触发按钮一侧）展开。
   expect(panel.getAttribute("data-position")).toMatch(/^top/);
-  expect(getComputedStyle(panel).getPropertyValue("--pwa-menu-shift-y").trim()).toBe("4px");
-  expect(parseFloat(getComputedStyle(panel).transitionDuration)).toBe(0.16);
+  expect(Math.round(parseFloat(getComputedStyle(panel).transformOrigin.split(" ")[1]))).toBe(Math.round(panel.offsetHeight));
+  expect(parseFloat(getComputedStyle(panel).transitionDuration)).toBe(0.24);
   await expect.poll(() => Math.round(panel.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(triggerNode.getBoundingClientRect().top));
   expect(Number(getComputedStyle(panel).zIndex)).toBe(220);
   const current = screen.getByRole("button", { name: /Current computer with an intentionally very long local name ONLINE/ });
@@ -288,7 +288,8 @@ test("desktop management panel routes rename, remove, and pair after it closes",
   // 菜单项与其他菜单同规格：最小高 44、左右内边距 12，加面板内边距 4 后文字距面板边缘 16。
   const renameItem = screen.getByRole("menuitem", { name: "Rename Travel Mac" }).element();
   expect(getComputedStyle(renameItem).paddingLeft).toBe("12px");
-  expect(Math.round(renameItem.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  // 菜单从触发按钮缩放展开，进入结束后再量命中区。
+  await expect.poll(() => Math.round(renameItem.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await screen.getByRole("menuitem", { name: "Rename Travel Mac" }).click();
   await expect.poll(() => events).toEqual(["rename:device:next"]);
   await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();

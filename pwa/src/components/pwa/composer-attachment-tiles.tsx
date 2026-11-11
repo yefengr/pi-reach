@@ -7,6 +7,7 @@ import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { attachmentSizeLabel, type ComposerAttachmentItem } from "./attachment-cards";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import { detachInPlace, useLeavingItems, withLeavingItems } from "./use-leaving-items";
+import { FLIP_KEY_ATTRIBUTE, useFlipLayout } from "./use-flip-layout";
 import { hideDuringOwnSend, presenceProps, usePresence } from "./use-presence";
 import "./composer-attachment-tiles.css";
 
@@ -66,7 +67,7 @@ function AttachmentTile({ item, onRemove, onRetry, disabled, leaving = false }: 
   return <Tooltip label={tip} position="top" offset={8} zIndex="var(--pwa-z-workspace-float)" classNames={{ tooltip: "pwa-attachment-tile-tip" }}
     events={{ hover: true, focus: true, touch: false }} portalProps={{ target: ".pwa-root" }} floatingStrategy="fixed" middlewares={middlewares}
     transitionProps={{ transition: "fade", duration: fadeDuration }}>
-    <div ref={tileRef} className="pwa-attachment-tile" data-status={item.status} role="group"
+    <div ref={tileRef} className="pwa-attachment-tile" {...{ [FLIP_KEY_ATTRIBUTE]: item.id }} data-status={item.status} role="group"
       {...(leaving ? { "data-presence": "leaving", inert: true, "aria-hidden": true } : {})} aria-label={status ? `${item.fileName}，${status}` : item.status === "complete" ? t.attachments.ready(item.fileName) : item.fileName}>
       <span className="pwa-attachment-tile-face">
         <TileFace item={item} />
@@ -96,11 +97,13 @@ function AttachmentTile({ item, onRemove, onRetry, disabled, leaving = false }: 
 export function ComposerAttachmentTiles({ items, onRemove, onRetry, disabled = false }: Props) {
   const { t } = useI18n();
   const slotRef = useRef<HTMLDivElement>(null);
+  const tilesRef = useRef<HTMLElement>(null);
+  useFlipLayout(tilesRef);
   const row = usePresence(items.length ? items : null, Object.is, { exit: "--pwa-duration-collapse-out", skipExit: () => hideDuringOwnSend(slotRef.current) });
   const leaving = useLeavingItems(items);
   const shown = row.rendered ?? [];
   if (!shown.length) return null;
-  return <div ref={slotRef} className="pwa-composer-grow pwa-attachment-tiles-slot" {...presenceProps(row)}><section className="pwa-attachment-tiles" aria-label={t.attachments.title} {...presenceProps(row)}>
+  return <div ref={slotRef} className="pwa-composer-grow pwa-attachment-tiles-slot" {...presenceProps(row)}><section ref={tilesRef} className="pwa-attachment-tiles" aria-label={t.attachments.title} {...presenceProps(row)}>
     {withLeavingItems(shown, row.leaving ? [] : leaving).map(({ item, leaving: isLeaving }) =>
       <AttachmentTile key={item.id} item={item} onRemove={onRemove} onRetry={onRetry} disabled={disabled} leaving={isLeaving} />)}
   </section></div>;

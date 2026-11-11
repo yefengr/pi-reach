@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, projectedCommit, trackedDistance, type SwipeDirection, type SwipeState } from "./swipe-gesture";
+import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, overscrollDistance, projectedCommit, rubberBand, trackedDistance, type SwipeDirection, type SwipeState } from "./swipe-gesture";
 
 const point = (x: number, time: number, y = 0, pointerId = 1) => ({ x, y, time, pointerId });
 const start = (direction: SwipeDirection = "right") => beginSwipe(IDLE_SWIPE, point(0, 0), direction, "touch", true);
@@ -75,6 +75,24 @@ test("tracked distance is clamped at zero when reversing and ignores non-trackin
   expect(trackedDistance(state, point(-30, 20))).toBe(0);
   expect(trackedDistance(IDLE_SWIPE, point(50, 20))).toBe(0);
   expect(trackedDistance(moveSwipe(start(), point(0, 10, 20)), point(80, 20))).toBe(0);
+});
+
+test("overscroll distance keeps the reverse sign that tracked distance clamps", () => {
+  let state = start();
+  state = moveSwipe(state, point(14, 10));
+  expect(overscrollDistance(state, point(-30, 20))).toBe(-44);
+  expect(overscrollDistance(state, point(64, 20))).toBe(50);
+  expect(overscrollDistance(IDLE_SWIPE, point(-30, 20))).toBe(0);
+});
+
+test("rubber band follows the iOS formula, approaches but never reaches the dimension", () => {
+  expect(rubberBand(0, 100)).toBe(0);
+  expect(rubberBand(-10, 100)).toBe(0);
+  expect(rubberBand(10, 0)).toBe(0);
+  expect(rubberBand(100, 100)).toBeCloseTo((1 - 1 / 1.55) * 100, 6);
+  expect(rubberBand(20, 100)).toBeLessThan(20);
+  expect(rubberBand(1e6, 100)).toBeLessThan(100);
+  expect(rubberBand(200, 100)).toBeGreaterThan(rubberBand(100, 100));
 });
 
 test("finish reports the tracked release distance", () => {

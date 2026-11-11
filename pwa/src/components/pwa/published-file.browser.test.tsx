@@ -9,7 +9,7 @@ import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { renderPwa } from "@/test/browser/render";
 import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import { PublishedFile } from "./published-file";
-import { IMAGE_MAX_ZOOM, IMAGE_PULL_DISMISS_PX } from "./published-image-gesture";
+import { IMAGE_MAX_ZOOM, IMAGE_PULL_DISMISS_PX, IMAGE_UNDERZOOM_LIMIT } from "./published-image-gesture";
 import { pointerAt } from "@/test/browser/swipe";
 import { MessageList } from "./message-list";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "./published-files-context";
@@ -708,14 +708,19 @@ test.each([1280, 390])("image zoom preserves 8px screen-space corners through th
     expect(parseFloat(getComputedStyle(picture).height)).toBeGreaterThan(16);
     expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
     const stepsToLimit = Math.ceil(Math.log(IMAGE_MAX_ZOOM) / Math.log(1.5));
+    // 缩放按钮以 image-zoom 过渡；屏幕圆角在过渡结束后核对。
+    const settled = () => expect.poll(() => picture.getAnimations().length).toBe(0);
     for (let step = 0; step < stepsToLimit; step += 1) {
       await h.screen.getByRole("button", { name: "Zoom in" }).click();
+      await settled();
       expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
     }
     expect(new DOMMatrix(getComputedStyle(picture).transform).a).toBe(IMAGE_MAX_ZOOM);
     await h.screen.getByRole("button", { name: "Zoom out" }).click();
+    await settled();
     expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
     await h.screen.getByRole("button", { name: "Reset zoom" }).click();
+    await settled();
     expect(new DOMMatrix(getComputedStyle(picture).transform).a).toBe(1);
     expect(getComputedStyle(picture).borderRadius).toBe("8px");
     expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
@@ -741,6 +746,7 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   expect(h.unpin).toHaveBeenCalledTimes(1);
   await h.screen.getByRole("button", { name: "Zoom in" }).click();
   const stage = document.querySelector<HTMLDivElement>(".pwa-file-image-stage")!;
+  await expect.poll(() => stage.querySelector("img")!.getAnimations().length).toBe(0);
   expect(screenImageRadii(stage.querySelector("img")!)).toEqual(Array(8).fill(8));
   const pointer = (type: string, id: number, x: number, y: number) => stage.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, pointerType: "touch", clientX: x, clientY: y }));
   // 合成事件没有 UA 活跃指针，单独屏蔽 capture；真实指针捕获由浏览器负责。
@@ -789,6 +795,9 @@ test("a double tap zooms the image around the tapped point and the next double t
   tap(rest.x + 20, rest.y, 2000);
   tap(rest.x + 20, rest.y, 2150);
   await expect.poll(() => picture.style.transform).toBe("translate(-20px, 0px) scale(2)");
+  // 双击以 image-zoom 过渡到目标倍率，结束后落点保持不动。
+  expect(picture.getAnimations().length).toBeGreaterThan(0);
+  await expect.poll(() => picture.getAnimations().length).toBe(0);
   expect(Math.round(centre().x)).toBe(Math.round(rest.x - 20));
   await expect.element(h.screen.getByRole("button", { name: "Reset zoom" })).toHaveTextContent("200%");
   tap(x, y, 3000);
@@ -799,6 +808,28 @@ test("a double tap zooms the image around the tapped point and the next double t
   tap(x + 60, y, 4150);
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(picture.style.transform).toBe("translate(0px, 0px) scale(1)");
+  await h.screen.unmount();
+});
+
+test("pinching below the original size follows with resistance and springs back on release", async () => {
+  const { h, stage, picture, x, y } = await openImageReader();
+  flushSync(() => {
+    pointerAt(stage, "pointerdown", x - 100, y, 0, { pointerId: 1, isPrimary: true });
+    pointerAt(stage, "pointerdown", x + 100, y, 0, { pointerId: 2, isPrimary: false });
+  });
+  // 两指距离缩到一半：越过原始大小的部分带阻尼，不按手指比例缩到 0.5。
+  flushSync(() => { pointerAt(stage, "pointermove", x - 50, y, 50, { pointerId: 1, isPrimary: true }); pointerAt(stage, "pointermove", x + 50, y, 50, { pointerId: 2, isPrimary: false }); });
+  // 指针移动是连续事件，提交不随 flushSync 同步完成。
+  await expect.poll(() => new DOMMatrix(getComputedStyle(picture).transform).a).toBeLessThan(1);
+  const scale = new DOMMatrix(getComputedStyle(picture).transform).a;
+  expect(scale).toBeGreaterThan(1 - IMAGE_UNDERZOOM_LIMIT);
+  expect(scale).toBeGreaterThan(0.5);
+  flushSync(() => pointerAt(stage, "pointerup", x - 50, y, 100, { pointerId: 1, isPrimary: true }));
+  await expect.poll(() => picture.style.transform).toBe("translate(0px, 0px) scale(1)");
+  expect(picture.getAnimations().length).toBeGreaterThan(0);
+  await expect.poll(() => picture.getAnimations().length).toBe(0);
+  flushSync(() => pointerAt(stage, "pointerup", x + 50, y, 120, { pointerId: 2, isPrimary: false }));
+  expect(document.querySelector(".pwa-file-reader")).not.toBeNull();
   await h.screen.unmount();
 });
 
@@ -843,6 +874,7 @@ test("a zoomed image pans under one finger instead of pulling down, and an upwar
   expect(picture.style.translate).toBe("");
   expect(document.querySelector(".pwa-file-reader")).not.toBeNull();
   await h.screen.getByRole("button", { name: "Zoom in" }).click();
+  await expect.poll(() => picture.getAnimations().length).toBe(0);
   flushSync(() => {
     pointerAt(stage, "pointerdown", x, y, 1000);
     pointerAt(stage, "pointermove", x, y + 14, 1050);

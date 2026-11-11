@@ -32,7 +32,8 @@ type DrawerSwipeCloseOptions = {
 export function useDrawerSwipeClose({ surface, opened, direction, requestClose, skipExit, resetSkipExit }: DrawerSwipeCloseOptions): { drag: SwipeDragHandlers; canSwipe: () => boolean } {
   const duration = usePwaMotionDuration("--pwa-duration-drawer");
   const exitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
-  const latest = useRef({ surface, opened, requestClose, skipExit, resetSkipExit, duration, exitDuration });
+  const overscrollDuration = usePwaMotionDuration("--pwa-duration-overscroll");
+  const latest = useRef({ surface, opened, requestClose, skipExit, resetSkipExit, duration, exitDuration, overscrollDuration });
   const dragRef = useRef<SwipeDrag | null>(null);
   const draggedSurfaceRef = useRef<HTMLElement | null>(null);
   const phaseRef = useRef<Phase>("idle");
@@ -41,7 +42,7 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
   const previousOpenedRef = useRef(opened);
   const [requestSeq, setRequestSeq] = useState(0);
   useLayoutEffect(() => {
-    latest.current = { surface, opened, requestClose, skipExit, resetSkipExit, duration, exitDuration };
+    latest.current = { surface, opened, requestClose, skipExit, resetSkipExit, duration, exitDuration, overscrollDuration };
   });
 
   const release = useCallback((drag: SwipeDrag) => {
@@ -104,8 +105,9 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
   }, []);
 
   const handlers = useMemo<SwipeDragHandlers>(() => ({
+    overscroll: direction === "down",
     start() {
-      const { surface: element, opened: isOpen, duration: enter, exitDuration: exit } = latest.current;
+      const { surface: element, opened: isOpen, duration: enter, exitDuration: exit, overscrollDuration: overscroll } = latest.current;
       if (!element || !isOpen || dragRef.current || phaseRef.current !== "idle" || pwaMotionShiftDisabled(element)) return false;
       const overlay = element.closest(".mantine-Drawer-root")?.querySelector<HTMLElement>(".pwa-scrim");
       const extent = () => surfaceExtent(element, direction);
@@ -117,6 +119,8 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
         extent,
         // 终点是关闭：走完用离开时长，回弹回到打开用进入时长。
         duration: (toEnd) => toEnd ? exit : enter,
+        // 底部面板向上拖越过原位时带阻尼跟随；左右贴边的全屏 Drawer 越界会露出空隙，保持硬停。
+        overscroll: direction === "down" ? overscroll : undefined,
       });
       element.setAttribute(DRAWER_DRAGGING_ATTRIBUTE, "");
       draggedSurfaceRef.current = element;

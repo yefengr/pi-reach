@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import type { SwipeDrag } from "./swipe-drag";
 import { pwaContentEasing, pwaMotionShiftDisabled, pwaReleaseEasing, usePwaMotionDuration } from "./use-pwa-motion";
+import { pwaRedirectEasing } from "@/lib/ui/motion";
 
 export { usePwaMotionDuration } from "./use-pwa-motion";
 
@@ -20,10 +21,24 @@ type PageTransitionOptions = {
 
 /* 已由 --pwa-motion-shift 全局 token 判定，不再单独读取媒体查询。 */
 
+/** 在途动画的速度采样间隔：约一帧。 */
+const VELOCITY_SAMPLE_MS = 16;
+
+/** 在途位移动画此刻的水平速度（像素／毫秒）：把动画倒回一帧量一次位置再恢复，不改变它的播放。 */
+function runningVelocity(animations: Animation[], element: HTMLElement, left: number): number {
+  const animation = animations.find((candidate) => candidate.effect instanceof KeyframeEffect && candidate.effect.target === element);
+  const time = animation?.currentTime;
+  if (!animation || animation.playState !== "running" || typeof time !== "number" || time <= VELOCITY_SAMPLE_MS) return 0;
+  animation.currentTime = time - VELOCITY_SAMPLE_MS;
+  const earlier = element.getBoundingClientRect().left;
+  animation.currentTime = time;
+  return (left - earlier) / VELOCITY_SAMPLE_MS;
+}
+
 /**
  * 设置页覆盖滑入／滑出（page／page-out，内容曲线），与右侧 Drawer 同一模型：工作区保持原位，
  * 设置层从右滑入并盖住工作区，遮罩同步淡入；返回时反向。
- * 中途再次切换从设置层与遮罩的当前状态继续，不从头重播。减少动态效果时改为交叉淡化。
+ * 中途再次切换从设置层与遮罩的当前状态继续，不从头重播，并沿用当前速度先减速再折返。减少动态效果时改为交叉淡化。
  */
 export function usePageTransition({ open, change, animate, rootRef, workspaceRef, settingsRef, scrimRef, onSettled }: PageTransitionOptions) {
   const enterDuration = usePwaMotionDuration("--pwa-duration-page");
@@ -74,13 +89,20 @@ export function usePageTransition({ open, change, animate, rootRef, workspaceRef
       ];
     } else {
       const width = root.clientWidth;
-      const settingsStart = inFlight ? settings.getBoundingClientRect().left - root.getBoundingClientRect().left : open ? width : 0;
+      const settingsLeft = settings.getBoundingClientRect().left;
+      const settingsStart = inFlight ? settingsLeft - root.getBoundingClientRect().left : open ? width : 0;
       const scrimStart = scrim && inFlight ? Number(getComputedStyle(scrim).opacity) : open ? 0 : 1;
+      // 按钮或系统返回打断在途转场：取设置层此刻的速度接续；跟手拖动的交接另有松手速度。
+      const carried = !handOff && drag === null ? runningVelocity(running, settings, settingsLeft) : 0;
       cancelInFlight();
       const settingsEnd = open ? 0 : width;
       const remaining = Math.abs(settingsEnd - settingsStart);
-      const velocity = handOff && remaining > 0 ? handOff.velocity / remaining : 0;
-      const timing = { duration, easing: pwaReleaseEasing(root, velocity, duration), fill: "forwards" as const };
+      const toward = Math.sign(settingsEnd - settingsStart);
+      // 返回时越过起点会在右侧露出工作区，越过量不超过设置层距左缘的距离；进入时越过的部分仍在屏幕外。
+      const easing = handOff && remaining > 0 ? pwaReleaseEasing(root, handOff.velocity / remaining, duration)
+        : carried !== 0 && remaining > 0 ? pwaRedirectEasing(root, carried * toward / remaining, duration, open ? Infinity : settingsStart / remaining)
+          : pwaReleaseEasing(root, 0, duration);
+      const timing = { duration, easing, fill: "forwards" as const };
       animations = [settings.animate([{ transform: `translateX(${settingsStart}px)` }, { transform: `translateX(${settingsEnd}px)` }], timing)];
       if (scrim) animations.push(scrim.animate([{ opacity: scrimStart }, { opacity: open ? 1 : 0 }], timing));
     }

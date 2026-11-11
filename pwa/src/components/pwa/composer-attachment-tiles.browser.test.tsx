@@ -76,7 +76,7 @@ test("draws a 36px ring with the percentage for uploads and lets a failed tile r
   }
 });
 
-test("a new tile fades in; a removed tile fades out in place while the others take its space at once", async () => {
+test("a new tile fades in; a removed tile fades out in place while the others slide into its space", async () => {
   const two = [{ ...file, id: "a", fileName: "a.txt" }, { ...file, id: "b", fileName: "b.txt" }];
   const tree = (items: ComposerAttachmentItem[]) => <PwaUiProvider><div className="pwa-root"><Card><ComposerAttachmentTiles items={items} onRemove={() => {}} /></Card></div></PwaUiProvider>;
   const screen = await renderPwa(<Card><ComposerAttachmentTiles items={two.slice(0, 1)} onRemove={() => {}} /></Card>);
@@ -90,12 +90,14 @@ test("a new tile fades in; a removed tile fades out in place while the others ta
     const firstLeft = Math.round(first.getBoundingClientRect().left);
 
     await screen.rerender(tree(two.slice(1)));
-    // 离开的方块脱离布局、原位淡出，不可操作；后面的方块当场补位。
+    // 离开的方块脱离布局、原位淡出，不可操作；后面的方块从原位置滑到空出的位置。
     expect(first.getAttribute("data-presence")).toBe("leaving");
     expect(first.hasAttribute("inert")).toBe(true);
     expect(getComputedStyle(first).position).toBe("absolute");
     expect(Math.round(first.getBoundingClientRect().left)).toBe(firstLeft);
-    expect(Math.round(second.getBoundingClientRect().left)).toBeLessThan(secondLeft);
+    expect(Math.round(second.getBoundingClientRect().left)).toBe(secondLeft);
+    expect(second.getAnimations().length).toBeGreaterThan(0);
+    await expect.poll(() => Math.round(second.getBoundingClientRect().left)).toBe(firstLeft);
     await expect.poll(() => document.querySelector('.pwa-attachment-tile[data-presence="leaving"]')).toBeNull();
 
     // 移除最后一件：整行原位淡出，高度暂留到淡出结束后一次收回；附件行在卡片内部，没有可退回的背后。

@@ -178,8 +178,8 @@ test("closes desktop computer portals and returns nested menu focus to the sideb
   await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
   // 面板宽度按侧栏内容宽计算，不再等于底部入口宽度。
   const sidebarFrame = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!.getBoundingClientRect();
-  const popover = document.querySelector<HTMLElement>(".pwa-device-popover")!.getBoundingClientRect();
-  expect(Math.round(popover.width)).toBe(Math.round(sidebarFrame.width - 16));
+  // 面板从触发按钮缩放展开，进入结束后再量宽度。
+  await expect.poll(() => Math.round(document.querySelector<HTMLElement>(".pwa-device-popover")!.getBoundingClientRect().width)).toBe(Math.round(sidebarFrame.width - 16));
   await screen.getByRole("button", { name: "Computer actions for MacBook Pro" }).click();
   const rename = screen.getByRole("menuitem", { name: "Rename MacBook Pro" });
   await expect.element(rename).toBeVisible();

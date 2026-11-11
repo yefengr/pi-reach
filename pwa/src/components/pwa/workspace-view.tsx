@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { ActionIcon, Button, NavLink } from "@mantine/core";
 import { Bot, History, LoaderCircle, Settings } from "lucide-react";
 import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "@/components/pwa/workspace-device-control";
@@ -12,6 +12,7 @@ import { PwaRuntimeNoticeSlot } from "@/components/pwa/pwa-app-shell";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { RunningIndicator } from "./running-indicator";
+import { FLIP_KEY_ATTRIBUTE, useFlipLayout } from "./use-flip-layout";
 
 export { displayDevice } from "@/components/pwa/workspace-device-control";
 export { displayPi } from "@/components/pwa/session-title";
@@ -118,6 +119,7 @@ export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = 
       : null;
   return <NavLink
     className={`pwa-nav-session${variant === "sheet" ? " pwa-sheet-room" : ""}${className ? ` ${className}` : ""}`}
+    {...{ [FLIP_KEY_ATTRIBUTE]: endpoint.id }}
     classNames={navigationNavLinkClassNames}
     component="button"
     type="button"
@@ -138,9 +140,12 @@ function SkeletonRows() {
 
 export function WorkspaceRunningPiSection({ activeDevice, endpoints, activeEndpointId, selectedHistoryId, snapshotReady, completedEndpointIds, onSelectEndpoint, headingId, variant = "desktop" }: WorkspaceRunningPiSectionProps) {
   const { t } = useI18n();
+  const sectionRef = useRef<HTMLElement>(null);
+  // Pi 上线或离线时其余行平滑补位。
+  useFlipLayout(sectionRef);
   if (!activeDevice) return null;
   const activePis = endpoints.filter((endpoint) => endpoint.deviceId === activeDevice.deviceId && endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right)));
-  return <section className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={!snapshotReady || undefined}>
+  return <section ref={sectionRef} className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={!snapshotReady || undefined}>
     <div className={sectionHeadingClassName(variant)} id={headingId}><Bot size={16} /><span>{t.navigation.onlinePi}</span>{snapshotReady ? <small className="pwa-tabular">{activePis.length}</small> : null}</div>
     {!snapshotReady ? <><span className="pwa-sr-only">{t.navigation.checkingPi}</span><SkeletonRows /></> : activePis.length === 0 ? <p className="pwa-nav-empty">{t.navigation.noPiOnline}</p> : activePis.map((endpoint) => <OnlinePiRow
       key={endpoint.id}

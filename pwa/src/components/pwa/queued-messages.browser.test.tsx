@@ -477,7 +477,7 @@ test("an emptied drawer sinks back behind the card while its space collapses, al
   }
 });
 
-test("a row entering the drawer fades in; a leaving row fades out in place while the rest take its space at once", async () => {
+test("a row entering the drawer fades in; a leaving row fades out in place while the rest slide into its space", async () => {
   await page.viewport(390, 844);
   const three = [1, 2, 3].map((n) => queuedItem({ id: `row-${n}`, text: `Row ${n}`, waiting: true }));
   const tree = (items: QueuedMessageView[]) => <PwaUiProvider><div className="pwa-root"><QueuedMessages items={items} isOnline onInsert={() => {}} onCancel={() => {}} /></div></PwaUiProvider>;
@@ -501,9 +501,12 @@ test("a row entering the drawer fades in; a leaving row fades out in place while
     expect(leaving.textContent).toContain("Row 2");
     expect(leaving.hasAttribute("inert")).toBe(true);
     expect(getComputedStyle(leaving).position).toBe("absolute");
-    // 后面的行当场补位，列表高度一次收回。
+    // 列表高度一次收回；后面的行从原位置滑到空出的位置。
     expect(Math.round(list.getBoundingClientRect().height)).toBeLessThan(full);
-    expect(Math.round(added.getBoundingClientRect().top)).toBeLessThan(third);
+    expect(Math.round(added.getBoundingClientRect().top)).toBe(third);
+    expect(added.getAnimations().length).toBeGreaterThan(0);
+    await expect.poll(() => Math.round(added.getBoundingClientRect().top)).toBeLessThan(third);
+    await expect.poll(() => added.getAnimations().length).toBe(0);
     await expect.poll(() => document.querySelector('.pwa-queued-message[data-presence="leaving"]')).toBeNull();
     expect(document.querySelectorAll(".pwa-queued-message")).toHaveLength(2);
   } finally {

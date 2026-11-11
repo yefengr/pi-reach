@@ -1337,8 +1337,8 @@ describe("TimelineViewportCoordinator", () => {
     f.core.userRead();
     f.reenter(() => f.core.scroll(false));
     f.core.latest();
-    // 假布局视口高 50：先瞬时到 950，再平滑到内容高度 1050；中途同步回执不能退出跟随。
-    expect(f.writes.slice(-2)).toEqual([950, 1050]);
+    // 假布局视口高 50：先瞬时到 950，再平滑到可滚动的底部 1000（平滑写入按已测量范围夹取）；中途同步回执不能退出跟随。
+    expect(f.writes.slice(-2)).toEqual([950, 1000]);
     expect(f.core.state).toMatchObject({ following: true, mode: "follow" });
   });
 
@@ -1353,7 +1353,7 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.core.state.following).toBe(true);
     const before = f.writes.length;
     f.setNow(1000); f.step(1000);
-    expect(f.writes.slice(before)).toEqual([950, 1050]);
+    expect(f.writes.slice(before)).toEqual([950, 1000]);
     expect(f.smooths.slice(before)).toEqual([false, true]);
   });
 
@@ -1367,7 +1367,7 @@ describe("TimelineViewportCoordinator", () => {
     expect(f.writes).toHaveLength(before);
     f.core.touch(false);
     f.setNow(1000); f.step(1000);
-    expect(f.writes.slice(before)).toEqual([950, 1050]);
+    expect(f.writes.slice(before)).toEqual([950, 1000]);
     expect(f.smooths.slice(before)).toEqual([false, true]);
   });
 
@@ -1407,7 +1407,8 @@ describe("TimelineViewportCoordinator", () => {
     f.core.userRead();
     const before = f.writes.length;
     f.core.latest();
-    expect(f.writes.slice(before)).toEqual([1050]);
+    // 平滑写入按可滚动范围夹取；减少动态效果时的即时写入仍交给浏览器夹取。
+    expect(f.writes.slice(before)).toEqual([animate ? 1000 : 1050]);
   });
 });
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ActionIcon, Popover, Textarea } from "@mantine/core";
 import { Info } from "lucide-react";
-import { pwaFadeTransition, usePwaMotionDuration } from "./use-pwa-motion";
+import { usePwaMenuTransition } from "./use-pwa-motion";
 import { useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 
@@ -41,7 +41,7 @@ function scheduleFocusReturn(
 export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
   const floatingMiddlewares = useFloatingSafeMiddlewares();
   const { t } = useI18n();
-  const menuDuration = usePwaMotionDuration("--pwa-duration-fade");
+  const menuTransition = usePwaMenuTransition();
   const [opened, setOpened] = useState(false);
   const openedRef = useRef(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -107,7 +107,7 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
       position="bottom-end"
       width="var(--pwa-command-menu-width)"
       offset={8}
-      transitionProps={{ transition: pwaFadeTransition, duration: menuDuration }}
+      transitionProps={menuTransition}
       onExitTransitionEnd={() => {
         if (!openedRef.current && !hasValidPageFocus()) triggerRef.current?.focus({ preventScroll: true });
       }}
@@ -119,7 +119,7 @@ export function SessionActionsMenu({ info }: SessionActionsMenuProps) {
       <Popover.Target>
         <ActionIcon ref={triggerRef} className="pwa-session-actions-trigger" type="button" aria-label={t.actions.sessionInfo} title={t.actions.sessionInfo} onClick={() => setMenuOpened(!openedRef.current)} onKeyDown={handleTriggerKeyDown}><Info size={20} /></ActionIcon>
       </Popover.Target>
-      <Popover.Dropdown ref={setDropdownRef} inert={!opened} className="pwa-command-menu-dropdown pwa-session-actions-dropdown" aria-label={t.actions.sessionInfo} aria-describedby={`${nameId} ${metadataId}`} aria-modal={false}>
+      <Popover.Dropdown ref={setDropdownRef} inert={!opened} className="pwa-command-menu-dropdown pwa-session-actions-dropdown pwa-menu-motion" aria-label={t.actions.sessionInfo} aria-describedby={`${nameId} ${metadataId}`} aria-modal={false}>
         <div className="pwa-session-info" role="group" aria-label={t.actions.sessionInfo}>
           <strong id={nameId} className="pwa-session-info-name">{info.name}</strong>
           {info.cwd ? <Textarea autosize readOnly variant="unstyled" value={info.cwd} aria-label={t.actions.workingDirectory} classNames={{ input: "pwa-session-info-cwd" }} /> : null}

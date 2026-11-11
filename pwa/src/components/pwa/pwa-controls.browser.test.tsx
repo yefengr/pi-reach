@@ -200,7 +200,8 @@ test("Composer owns its radius and light elevation without changing the shared r
   const notice = screen.getByText("Attachment limit fixture").element();
   // 提示行位于输入框卡片内、文本框之上（DESIGN「Composer」）。
   expect(card.contains(notice)).toBe(true);
-  expect(notice.getBoundingClientRect().bottom).toBeLessThanOrEqual(card.querySelector<HTMLElement>(".pwa-composer-input")!.getBoundingClientRect().top);
+  // 提示行以高度过渡进入，结束后再比较位置。
+  await expect.poll(() => notice.getBoundingClientRect().bottom <= card.querySelector<HTMLElement>(".pwa-composer-input")!.getBoundingClientRect().top).toBe(true);
   await screen.getByRole("button", { name: "Dark fixture" }).click();
   await expect.poll(() => getComputedStyle(card).boxShadow).toBe("none");
   expect(getComputedStyle(card).borderRadius).toBe("32px");
@@ -319,17 +320,20 @@ test.each([false, true])("action menu uses actual anchor, semantic timing and st
   const menu = document.querySelector<HTMLElement>(".pwa-menu-motion")!;
   await expect.poll(() => getComputedStyle(menu).opacity).toBe("1");
   expect(menu.dataset.position).toBe("top-start");
-  expect(getComputedStyle(menu).getPropertyValue("--pwa-menu-shift-y").trim()).toBe("4px");
-  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(reduce ? 0.12 : 0.16);
+  // 上方左对齐：从触发按钮所在的左下角展开。
+  const [originX, originY] = getComputedStyle(menu).transformOrigin.split(" ").map(parseFloat);
+  expect(Math.round(originX)).toBe(0);
+  expect(Math.round(originY)).toBe(Math.round(menu.offsetHeight));
+  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(reduce ? 0.12 : 0.24);
   const enter = await entering;
   expect(enter.minOpacity).toBeLessThan(1);
-  expect(enter.minScale).toBe(1);
-  if (reduce) expect(enter.maxShift).toBe(0);
-  else expect(enter.maxShift).toBeGreaterThan(0);
+  expect(enter.maxShift).toBe(0);
+  if (reduce) expect(enter.minScale).toBe(1);
+  else expect(enter.minScale).toBeLessThan(1);
   flushSync(() => setOpened(false));
   expect(menu.hasAttribute("inert")).toBe(true);
   await expect.poll(() => menu.style.opacity).toBe("0");
-  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(0.12);
+  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(reduce ? 0.12 : 0.16);
   expect(getComputedStyle(menu).transitionTimingFunction).toBe(reduce ? "cubic-bezier(0.2, 0, 0, 1)" : "cubic-bezier(0.3, 0, 1, 1)");
   await expect.poll(() => document.querySelector(".pwa-menu-motion")).toBeNull();
   await screen.unmount();

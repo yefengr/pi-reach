@@ -332,7 +332,7 @@ test("a running Thinking without preview text hides its empty row instead of lea
   expect(getComputedStyle(entry).display).toBe("none");
 });
 
-test("a finished Thinking-only group keeps its last title and settles with the slower automatic collapse", async () => {
+test("a finished Thinking-only group keeps its last title and settles with the automatic collapse timing", async () => {
   const view = await harness({ entries: [thinking()] });
   expect(view.head().textContent).toContain("Reviewing Pi Reach");
   view.update({ entries: [thinking("**Reviewing Pi Reach**\nDetails.", false)], ended: true });
@@ -341,7 +341,7 @@ test("a finished Thinking-only group keeps its last title and settles with the s
   expect(view.head().textContent).not.toBe(en.timeline.thinkingTrace);
   const details = view.root().querySelector<HTMLElement>(".pwa-process-details")!;
   expect(details.dataset.exit).toBe("settle");
-  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.4s");
+  expect(getComputedStyle(details).transitionDuration.split(", ")).toContain("0.28s");
   await expect.poll(() => view.root().querySelector(".pwa-process-details")).toBeNull();
 });
 

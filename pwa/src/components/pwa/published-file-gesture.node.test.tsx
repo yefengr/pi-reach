@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { doubleTapImage, IMAGE_DOUBLE_TAP_ZOOM, IMAGE_PULL_MIN_SCALE, IMAGE_RESET, imageGesture, pullScale, zoomImage, zoomImageAt } from "./published-image-gesture";
+import { doubleTapImage, IMAGE_DOUBLE_TAP_ZOOM, IMAGE_PULL_MIN_SCALE, IMAGE_RESET, IMAGE_UNDERZOOM_LIMIT, imageGesture, pullScale, zoomImage, zoomImageAt } from "./published-image-gesture";
 import { fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
 
 test("zoom, pinch and pan are bounded and reset at fit", () => {
@@ -11,6 +11,19 @@ test("zoom, pinch and pan are bounded and reset at fit", () => {
   expect(imageGesture(IMAGE_RESET, [{ x: 0, y: 0 }], [{ x: 20, y: 20 }])).toEqual(IMAGE_RESET);
   expect(imageGesture(pinch, [], [])).toEqual(pinch);
   expect(imageGesture(pinch, [{ x: 0, y: 0 }], [])).toEqual(pinch);
+});
+
+test("pinching below fit follows with resistance and never reaches the underzoom limit", () => {
+  const pinch = (from: number, to: number) => imageGesture(IMAGE_RESET, [{ x: 0, y: 0 }, { x: from, y: 0 }], [{ x: 0, y: 0 }, { x: to, y: 0 }]);
+  const half = pinch(100, 50);
+  // 手指比例 0.5，越界部分按橡皮筋递减：缩小但远不到 0.5，且始终高于下限。
+  expect(half.scale).toBeLessThan(1);
+  expect(half.scale).toBeGreaterThan(0.75);
+  expect(pinch(100, 10).scale).toBeLessThan(half.scale);
+  expect(pinch(100, 1).scale).toBeGreaterThan(1 - IMAGE_UNDERZOOM_LIMIT);
+  // 跟随两指中点；从放大状态捏回原始大小以下同样带阻尼。
+  expect(half.x).toBe(-25);
+  expect(imageGesture({ scale: 2, x: 40, y: 0 }, [{ x: 0, y: 0 }, { x: 100, y: 0 }], [{ x: 0, y: 0 }, { x: 25, y: 0 }]).scale).toBe(half.scale);
 });
 
 test("zooming at a point keeps that screen point fixed", () => {

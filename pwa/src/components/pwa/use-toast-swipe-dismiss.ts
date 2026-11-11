@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { notifications } from "@mantine/notifications";
-import { beginSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, projectedCommit, trackedDistance, type SwipePoint, type SwipeState } from "./swipe-gesture";
+import { beginSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, overscrollDistance, projectedCommit, rubberBand, type SwipePoint, type SwipeState } from "./swipe-gesture";
 import { pwaContentEasing, pwaMotionShiftDisabled, pwaReleaseEasing } from "./use-pwa-motion";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { OPERATION_NOTIFICATION_ID, type OperationNotificationController } from "@/lib/pwa/operation-notifications";
@@ -9,6 +9,8 @@ const TOAST_SELECTOR = ".pwa-operation-notifications .pwa-operation-notification
 
 const coordinates = (event: PointerEvent): SwipePoint => ({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp });
 const lifted = (distance: number) => `0 ${-distance}px`;
+/** 朝收走方向原样跟随；向下越过原位时按卡片高度做橡皮筋阻尼。 */
+const displayed = (distance: number, element: HTMLElement) => distance >= 0 ? distance : -rubberBand(-distance, element.offsetHeight);
 
 /**
  * 触屏上滑收走 Toast：卡片跟随手指上移，松手后按投影停点判定（与抽屉同一规则，行程为卡片离开屏幕顶边的距离）；
@@ -21,6 +23,8 @@ export function useToastSwipeDismiss(controller: OperationNotificationController
     let toast: HTMLElement | null = null;
     let follow = false;
     let paused = false;
+    // 卡片当前显示的上移量；向下越过原位时为负，按卡片高度做橡皮筋阻尼。
+    let shown = 0;
     // 已上滑收走、正随退出淡化的卡片；同一元素被下一条提示复用时须先复位。
     let dismissed: HTMLElement | null = null;
 
@@ -36,15 +40,19 @@ export function useToastSwipeDismiss(controller: OperationNotificationController
       state = IDLE_SWIPE;
       toast = null;
       follow = false;
+      shown = 0;
       window.removeEventListener("pointerdown", secondPointer, true);
     };
     const settleBack = (element: HTMLElement, distance: number) => {
       element.style.translate = "";
-      if (distance > 0) element.animate([{ translate: lifted(distance) }, { translate: lifted(0) }], { duration: readPwaMotionDuration("--pwa-duration-toast-out"), easing: pwaContentEasing(element) });
+      if (distance === 0) return;
+      const duration = readPwaMotionDuration(distance < 0 ? "--pwa-duration-overscroll" : "--pwa-duration-toast-out");
+      element.animate([{ translate: lifted(distance) }, { translate: lifted(0) }], { duration, easing: pwaContentEasing(element) });
     };
     const cancel = (point?: SwipePoint) => {
       const element = toast;
-      const distance = point ? trackedDistance(state, point) : 0;
+      if (point && element && follow) shown = displayed(overscrollDistance(state, point), element);
+      const distance = shown;
       const wasFollowing = follow;
       reset();
       if (element && wasFollowing) settleBack(element, distance);
@@ -73,7 +81,10 @@ export function useToastSwipeDismiss(controller: OperationNotificationController
         controller.pauseAutoClose("drag");
         paused = true;
       }
-      if (follow) toast.style.translate = lifted(trackedDistance(state, point));
+      if (follow) {
+        shown = displayed(overscrollDistance(state, point), toast);
+        toast.style.translate = lifted(shown);
+      }
     };
     const up = (event: PointerEvent) => {
       if (state.phase === "idle" || event.pointerId !== state.pointerId || !toast) return;
@@ -81,12 +92,13 @@ export function useToastSwipeDismiss(controller: OperationNotificationController
       const wasFollowing = follow;
       const tracking = state.phase === "tracking";
       const result = finishSwipe(state, coordinates(event));
+      const from = wasFollowing ? displayed(overscrollDistance(state, coordinates(event)), element) : 0;
       reset();
       if (!tracking || !element.isConnected) { resume(); return; }
       // 行程：卡片下沿到屏幕顶边的距离，走完即完全离开屏幕。
       const extent = element.getBoundingClientRect().bottom + (wasFollowing ? result.distance : 0);
       if (!projectedCommit(result.distance, result.velocity, extent)) {
-        if (wasFollowing) settleBack(element, result.distance);
+        if (wasFollowing) settleBack(element, from);
         resume();
         return;
       }

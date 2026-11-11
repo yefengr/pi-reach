@@ -46,6 +46,22 @@ test("the toast follows an upward drag and returns when released at rest short o
   expect(shown(controller)).toBe(1);
 });
 
+test("dragging past the rest position toward the screen follows with resistance and springs back", async () => {
+  const { controller, rest, x, y } = await mount();
+  pointerAt(card()!, "pointerdown", x, y, 0);
+  pointerAt(card()!, "pointermove", x, y - 14, 50);
+  // 锁定方向后反向下拉 60px：卡片带阻尼跟随，下移量小于手指位移。
+  pointerAt(card()!, "pointermove", x, y + 46, 100);
+  const pulled = cardTop() - rest;
+  expect(pulled).toBeGreaterThan(0);
+  expect(pulled).toBeLessThan(60);
+  pointerAt(card()!, "pointerup", x, y + 46, 400);
+  expect(card()!.getAnimations().length).toBeGreaterThan(0);
+  await expect.poll(() => card()!.getAnimations().length).toBe(0);
+  expect(cardTop()).toBe(rest);
+  expect(shown(controller)).toBe(1);
+});
+
 test("releasing at rest past half way dismisses through the close path and the next toast starts in place", async () => {
   const dismissals: string[] = [];
   const { controller, rest, x, y, extent } = await mount((controller) => controller.showUpdate("Update ready", { label: "Refresh", onClick: () => {} }, () => dismissals.push("update")));

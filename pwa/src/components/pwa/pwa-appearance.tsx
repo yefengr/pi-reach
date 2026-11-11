@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useMantineColorScheme, type MantineColorScheme } from "@mantine/core";
 import { DARK_SCHEME_QUERY, DARK_THEME_COLOR, LIGHT_THEME_COLOR } from "@/lib/ui/appearance";
 
@@ -45,8 +46,14 @@ export function PwaAppearanceProvider({ children }: { children: ReactNode }) {
   }, [appearance]);
 
   const setAppearance = useCallback((nextAppearance: PwaAppearance) => {
-    setManualAppearance(nextAppearance);
-    setColorScheme(nextAppearance === "system" ? "auto" : nextAppearance);
+    const apply = () => {
+      setManualAppearance(nextAppearance);
+      setColorScheme(nextAppearance === "system" ? "auto" : nextAppearance);
+    };
+    // 手动切换外观时整屏交叉淡化（时长 appearance）：快照新旧两帧，期间页面不响应交互，只用于这类低频整屏切换。
+    // 浏览器不支持或页面不可见时直接切换；回调内同步提交，让新快照取到切换后的样式。
+    if (typeof document.startViewTransition !== "function" || document.visibilityState !== "visible") { apply(); return; }
+    document.startViewTransition(() => flushSync(apply));
   }, [setColorScheme]);
 
   const value = useMemo(() => ({ appearance, setAppearance }), [appearance, setAppearance]);

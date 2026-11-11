@@ -177,6 +177,24 @@ test.each([false, true])("reverses from the current position without settling an
   } finally { await harness.screen.unmount(); }
 });
 
+test.each([false, true])("a running transition carries its velocity into the reversal instead of restarting from rest (initialOpen=%s)", async (initialOpen) => {
+  const harness = await renderTransition(initialOpen);
+  try {
+    harness.controls().switchView(!initialOpen);
+    harness.root.getAnimations({ subtree: true }).forEach((animation) => { animation.currentTime = 80; });
+    harness.controls().switchView(initialOpen);
+    const settings = settingsOf(harness.root);
+    const reversed = harness.root.getAnimations({ subtree: true }).find((animation) => animation.effect instanceof KeyframeEffect && animation.effect.target === settings)!;
+    const easing = String(reversed.effect?.getTiming().easing);
+    expect(easing).toMatch(/^linear\(/);
+    // 浏览器可能把 linear() 序列化为带百分比的停靠点，只取每段的输出值。
+    const samples = easing.replace(/^linear\(|\)$/g, "").split(",").map((stop) => Number.parseFloat(stop));
+    // 设置层仍朝原方向运动：先背离新终点一小段、减速后折返，不在折返处从零速度起步。
+    expect(samples[1]).toBeLessThan(0);
+    expect(samples.at(-1)).toBe(1);
+  } finally { await harness.screen.unmount(); }
+});
+
 test("ignores an old finished callback already queued when a new transition starts", async () => {
   const harness = await renderTransition(false);
   try {

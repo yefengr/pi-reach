@@ -588,7 +588,8 @@ export class TimelineViewportCoordinator<C, A> {
     const layout = this.layout;
     if (!layout) return;
     this.receipt = { target: geometry ? Math.min(top, geometry.bottom) : top, last: layout.top(), smooth };
-    layout.scroll(top, smooth);
+    // 平滑写入由布局逐帧推进，终点按已测量的可滚动范围夹取，布局不再另读几何。
+    layout.scroll(smooth ? this.receipt.target : top, smooth);
     const actual = layout.top();
     if (this.layout !== layout || (!this.following || this.paused)) return;
     this.lastTop = actual;

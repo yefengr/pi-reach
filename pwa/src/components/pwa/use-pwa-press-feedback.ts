@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { outsideTapSwallowed } from "./use-outside-tap-guard";
 
 const BUTTON_TARGET = ".pwa-button, .pwa-icon-button";
@@ -23,7 +24,8 @@ type Held = { element: HTMLElement; pointerId: number; row: boolean; x: number; 
 
 /**
  * 触控浏览器不保证按住期间保留 :active；仅补绘制状态，不捕获指针或阻止原生点击／滚动。
- * 按钮按下即标记；行类按 iOS 列表的做法延迟标记，移动即撤销。
+ * 按钮按下即标记；行类按 iOS 列表的做法延迟标记，移动即撤销。行的底色按下时直接出现，
+ * 撤销后在 press-out 期间标记 data-pwa-press-release，让底色从容淡出（样式见 pwa-controls.css）。
  */
 export function usePwaPressFeedback() {
   const scopeRef = useRef<HTMLDivElement>(null);
@@ -34,19 +36,34 @@ export function usePwaPressFeedback() {
     let delay: number | null = null;
     // 轻点松手后仍在显示按下态的行；到时或下一次按下时撤销。
     let tapped: { element: HTMLElement; timer: number } | null = null;
+    const releasing = new Map<HTMLElement, number>();
+    const settleRelease = (element: HTMLElement) => {
+      window.clearTimeout(releasing.get(element));
+      releasing.delete(element);
+      delete element.dataset.pwaPressRelease;
+    };
+    // 只有已经显示出底色的行才需要淡出；延迟内被撤销（滚动起手）的行从未显示。
+    const unpressRow = (element: HTMLElement) => {
+      if (element.dataset.pwaPressed === undefined) return;
+      delete element.dataset.pwaPressed;
+      settleRelease(element);
+      element.dataset.pwaPressRelease = "true";
+      releasing.set(element, window.setTimeout(() => settleRelease(element), readPwaMotionDuration("--pwa-duration-press-out")));
+    };
     const observer = new MutationObserver(() => {
       if (held && unavailable(held.element)) clear();
     });
     const clearTapped = () => {
       if (!tapped) return;
       window.clearTimeout(tapped.timer);
-      delete tapped.element.dataset.pwaPressed;
+      unpressRow(tapped.element);
       tapped = null;
     };
     const clear = () => {
       if (delay !== null) window.clearTimeout(delay);
       delay = null;
-      if (held) delete held.element.dataset.pwaPressed;
+      if (held?.row) unpressRow(held.element);
+      else if (held) delete held.element.dataset.pwaPressed;
       held = null;
       observer.disconnect();
     };
@@ -58,6 +75,7 @@ export function usePwaPressFeedback() {
       const element = event.target.closest<HTMLElement>(PRESS_TARGET);
       if (!element || !scope.contains(element) || unavailable(element) || (import.meta.env.DEV && element.closest(".pwa-ui-review"))) return;
       const row = !element.matches(BUTTON_TARGET);
+      settleRelease(element);
       held = { element, pointerId: event.pointerId, row, x: event.clientX, y: event.clientY };
       if (row) delay = window.setTimeout(() => { delay = null; if (held?.element === element) element.dataset.pwaPressed = "true"; }, PRESS_ROW_DELAY_MS);
       else element.dataset.pwaPressed = "true";
@@ -75,6 +93,7 @@ export function usePwaPressFeedback() {
       const quickTap = row && delay !== null && event.type === "pointerup" && !unavailable(element);
       clear();
       if (!quickTap) return;
+      settleRelease(element);
       element.dataset.pwaPressed = "true";
       tapped = { element, timer: window.setTimeout(clearTapped, PRESS_ROW_TAP_MS) };
     };
@@ -90,6 +109,7 @@ export function usePwaPressFeedback() {
     return () => {
       clear();
       clearTapped();
+      [...releasing.keys()].forEach(settleRelease);
       scope.removeEventListener("pointerdown", start);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", finish);

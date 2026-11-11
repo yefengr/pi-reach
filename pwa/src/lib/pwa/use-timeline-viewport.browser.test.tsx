@@ -349,7 +349,7 @@ test("resumes following and clears unread output when returning to the bottom or
 });
 
 test("scrolls smoothly to Latest before resetting output following", async () => {
-  const { screen, scrollTo, viewport } = await renderViewport();
+  const { screen, list, scrollTo, viewport } = await renderViewport();
   try {
     viewport().handleScroll(false);
     viewport().receiveRealtimeOutput("group-1");
@@ -357,7 +357,9 @@ test("scrolls smoothly to Latest before resetting output following", async () =>
 
     viewport().showLatest();
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "smooth" });
+    // 「最新」由时间线布局逐帧推进到可滚动的底部，不交给原生平滑滚动。
+    await vi.waitFor(() => expect(scrollTo).toHaveBeenLastCalledWith({ top: Math.min(1000, 1000 - list.clientHeight), behavior: "auto" }));
+    expect(scrollTo).not.toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
     await vi.waitFor(() => expect(viewport().followingOutput).toBe(true));
     expect(viewport().unreadOutput).toBe(0);
   } finally {
@@ -611,17 +613,18 @@ test("Latest smooth scrolling owns the viewport until completion, then follows n
   try {
     Object.defineProperties(list, { clientHeight: { configurable: true, value: 300 }, scrollTop: { configurable: true, writable: true, value: 100 } });
     flushSync(() => viewport().showLatest());
-    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "smooth" });
+    // 逐帧滚动在下一帧起步；途中的新输出不让跟随抢写底部。
+    expect(scrollTo).not.toHaveBeenCalled();
     Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1200 });
     viewport().receiveRealtimeOutput("during-smooth");
-    frames.shift()!(0);
-    expect(scrollTo).toHaveBeenCalledTimes(1);
+    frames.splice(0).forEach((callback) => callback(0));
+    expect(scrollTo).not.toHaveBeenCalledWith({ top: 1200, behavior: "auto" });
     list.scrollTop = 400;
     flushSync(() => viewport().handleScroll(false));
     expect(viewport().followingOutput).toBe(true);
     list.scrollTop = 700;
     flushSync(() => viewport().handleScroll(false));
-    frames.shift()!(0);
+    frames.splice(0).forEach((callback) => callback(0));
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1200, behavior: "auto" });
     expect(viewport().followingOutput).toBe(true);
   } finally { await screen.unmount(); }
@@ -640,7 +643,7 @@ test("Latest still follows new output when content shrinks during its smooth scr
     flushSync(() => viewport().handleScroll(true));
     Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1200 });
     viewport().receiveRealtimeOutput("after-shrink");
-    frames.shift()!(0);
+    frames.splice(0).forEach((callback) => callback(0));
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1200, behavior: "auto" });
     expect(viewport().followingOutput).toBe(true);
   } finally { await screen.unmount(); }
@@ -665,12 +668,13 @@ test("scrolling upward cancels a pending follow frame and a Latest animation", a
     list.scrollTop = 300;
     flushSync(() => viewport().handleScroll(false));
     expect(viewport().followingOutput).toBe(false);
+    // 向上回看停住「最新」：即时写回当前位置，已排队的逐帧滚动不再写入。
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: "auto" });
-    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
     viewport().receiveRealtimeOutput("after-interruption");
     await vi.waitFor(() => expect(viewport().unreadOutput).toBe(1));
     frames.forEach((callback) => callback(200));
-    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
   } finally { await screen.unmount(); }
 });
 
@@ -976,7 +980,8 @@ test("reads list geometry once per synchronous follow, geometry event and Latest
     heightReads = 0;
     clientReads = 0;
     flushSync(() => viewport().showLatest());
-    expect(scrollTo.mock.calls.at(-1)?.[0]).toMatchObject({ top: 2000 });
+    // 「最新」起步只读一次几何；逐帧滚动在之后的帧推进，不交给原生平滑滚动。
+    expect(scrollTo).not.toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
     expect(heightReads).toBe(1);
     expect(clientReads).toBe(1);
   } finally {

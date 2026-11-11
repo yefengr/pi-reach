@@ -312,43 +312,75 @@
   --pwa-ease-content: linear(0, 0.017, 0.06, 0.12, 0.189, 0.261, 0.334, 0.405, 0.472, 0.535, 0.592, 0.644, 0.691, 0.733, 0.771, 0.803, 0.832, 0.858, 0.88, 0.899, 0.915, 0.93, 0.942, 0.953, 0.962, 0.97, 0.976, 0.982, 0.987, 0.991, 0.994, 0.997, 1);
   /* 自动收起：弹簧起步平缓，不会出现标准曲线前段过陡造成的一帧塌陷，与内容曲线统一。 */
   --pwa-ease-settle: var(--pwa-ease-content);
-  --pwa-duration-sidebar: 360ms;
+  /* 时长档位：毫秒值只在这里定义，组件时长 token 只引用档位；减少动态效果时统一改写档位（见文末）。
+     新增动效先挑最接近的档位，真机调速只改一处。 */
+  --pwa-tier-press: 90ms;
+  --pwa-tier-quick: 120ms;
+  --pwa-tier-short: 160ms;
+  --pwa-tier-leave: 200ms;
+  --pwa-tier-respond: 240ms;
+  --pwa-tier-return: 280ms;
+  --pwa-tier-fade-in: 320ms;
+  --pwa-tier-panel: 360ms;
+  --pwa-tier-appear: 400ms;
+  --pwa-duration-sidebar: var(--pwa-tier-panel);
   /* 设置页与 Drawer 的进入／离开（含松手收尾与遮罩），内容曲线；离开更快。 */
-  --pwa-duration-page: 360ms;
-  --pwa-duration-page-out: 280ms;
-  --pwa-duration-drawer: 360ms;
-  --pwa-duration-drawer-out: 280ms;
+  --pwa-duration-page: var(--pwa-tier-panel);
+  --pwa-duration-page-out: var(--pwa-tier-return);
+  --pwa-duration-drawer: var(--pwa-tier-panel);
+  --pwa-duration-drawer-out: var(--pwa-tier-return);
   /* 桌面等没有导航退出的入口切换会话前的淡出；移动导航中的选择随 drawer-out 淡出。 */
-  --pwa-duration-switch-out: 200ms;
-  --pwa-duration-modal-in: 400ms;
-  --pwa-duration-modal-out: 200ms;
+  --pwa-duration-switch-out: var(--pwa-tier-leave);
+  --pwa-duration-modal-in: var(--pwa-tier-appear);
+  --pwa-duration-modal-out: var(--pwa-tier-leave);
   /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
-  --pwa-duration-status-slot: 160ms;
-  --pwa-duration-collapse-in: 400ms;
-  --pwa-duration-collapse-out: 280ms;
-  /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
-  --pwa-duration-collapse-settle: 400ms;
+  --pwa-duration-status-slot: var(--pwa-tier-short);
+  --pwa-duration-collapse-in: var(--pwa-tier-appear);
+  --pwa-duration-collapse-out: var(--pwa-tier-return);
+  /* 过程组自动收起（正文接续或本轮结束）：与手动收起同长，正文不为它多等。 */
+  --pwa-duration-collapse-settle: var(--pwa-tier-return);
   /* 主屏 PWA 输入区随软键盘停靠：脚本约在 iOS 整页上推（约 250ms）开始后 50ms 检测到键盘并立即停靠，停靠与剩余的上推同时结束，
      并入上推、不单独出现。抬起仍按 drawer-out，与键盘收起同时开始。 */
-  --pwa-duration-keyboard-dock: 200ms;
-  --pwa-duration-image-in: 400ms;
-  --pwa-duration-image-out: 280ms;
-  --pwa-duration-toast: 400ms;
+  --pwa-duration-keyboard-dock: var(--pwa-tier-leave);
+  --pwa-duration-image-in: var(--pwa-tier-appear);
+  --pwa-duration-image-out: var(--pwa-tier-return);
+  /* 图片阅读器内的双击与按钮缩放。 */
+  --pwa-duration-image-zoom: var(--pwa-tier-fade-in);
+  /* 越界后松手弹回：图片捏合缩小到原始大小以下、Toast 与底部面板朝关闭的反方向拖动。 */
+  --pwa-duration-overscroll: var(--pwa-tier-return);
+  --pwa-duration-toast: var(--pwa-tier-appear);
   /* 只用于 Toast 离开；toast 同时是浮动入口与局部提示的出现时长，不随之改变。 */
-  --pwa-duration-toast-out: 200ms;
-  --pwa-duration-fade: 120ms;
-  --pwa-duration-message-in: 400ms;
-  --pwa-duration-press-in: 90ms;
-  --pwa-duration-press-out: 120ms;
-  --pwa-duration-menu-in: 160ms;
-  --pwa-duration-menu-out: 120ms;
-  --pwa-duration-feedback: 120ms;
-  /* 减少动态效果时所有非循环过渡统一取此值；与 fade 同值但独立，调整通用淡化不连带改变减少动态效果。 */
+  --pwa-duration-toast-out: var(--pwa-tier-leave);
+  --pwa-duration-fade: var(--pwa-tier-quick);
+  --pwa-duration-message-in: var(--pwa-tier-appear);
+  /* 「最新」的逐帧滚动，与发送跟随同长。 */
+  --pwa-duration-scroll-latest: var(--pwa-tier-appear);
+  /* 短列表增删时其余项补位（排队抽屉、附件行、在线 Pi）。 */
+  --pwa-duration-reorder: var(--pwa-tier-return);
+  --pwa-duration-press-in: var(--pwa-tier-press);
+  /* 松开恢复：按钮缩放回弹与行按下底色淡出。 */
+  --pwa-duration-press-out: var(--pwa-tier-respond);
+  --pwa-duration-menu-in: var(--pwa-tier-respond);
+  --pwa-duration-menu-out: var(--pwa-tier-short);
+  /* 菜单内切换子视图：面板高度过渡与新视图淡入。 */
+  --pwa-duration-menu-resize: var(--pwa-tier-return);
+  --pwa-duration-menu-view: var(--pwa-tier-leave);
+  /* 原位图标替换：复制对勾、发送与停止互换、发送按钮可用态。 */
+  --pwa-duration-feedback: var(--pwa-tier-short);
+  /* Switch：滑块位置与底色。 */
+  --pwa-duration-toggle: var(--pwa-tier-return);
+  --pwa-duration-toggle-track: var(--pwa-tier-leave);
+  /* 浅色与深色切换的整屏交叉淡化。 */
+  --pwa-duration-appearance: var(--pwa-tier-fade-in);
+  /* 减少动态效果时所有档位统一改写为此值；独立于档位，不能引用档位（否则改写后自我引用）。 */
   --pwa-duration-reduced: 120ms;
   /* 只作用于内部绘制层；外层44px命中区与焦点轮廓不缩放。 */
   --pwa-press-icon-scale: 0.97;
   --pwa-press-button-scale: 0.98;
-  --pwa-menu-offset: 4px;
+  /* 菜单与 Popover 从触发按钮展开的起始缩放，乘以 --pwa-motion-shift 后减少动态效果时为 1。 */
+  --pwa-menu-scale: 0.9;
+  /* 图标替换时新图标的起始缩放。 */
+  --pwa-swap-scale: 0.8;
   /* 居中 Modal、Toast 与浮动入口进出时的位移距离，乘以 --pwa-motion-shift。 */
   --pwa-overlay-shift: 12px;
   /* 新发送气泡从下方进入、折叠内容收起时上移的距离，乘以 --pwa-motion-shift。 */
@@ -359,7 +391,7 @@
   --pwa-navigation-row-padding: 6px;
   --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容与流式新文字的淡入。 */
-  --pwa-duration-content: 320ms;
+  --pwa-duration-content: var(--pwa-tier-fade-in);
   /* 无限循环：旋转一圈、骨架呼吸一个周期，配 linear；减少动态效果时循环直接暂停，不替换时长。 */
   --pwa-duration-spin: 1.3s;
   --pwa-duration-breathe: 2s;
@@ -466,31 +498,15 @@
     --pwa-motion-shift: 0;
     /* 只剩短淡化：脚本动画与 CSS 过渡一样退回标准曲线（CSS 过渡另由下方 !important 规则统一）。 */
     --pwa-ease-content: var(--pwa-ease-standard);
-    --pwa-duration-sidebar: var(--pwa-duration-reduced);
-    --pwa-duration-page: var(--pwa-duration-reduced);
-    --pwa-duration-page-out: var(--pwa-duration-reduced);
-    --pwa-duration-drawer: var(--pwa-duration-reduced);
-    --pwa-duration-drawer-out: var(--pwa-duration-reduced);
-    --pwa-duration-keyboard-dock: var(--pwa-duration-reduced);
-    --pwa-duration-switch-out: var(--pwa-duration-reduced);
-    --pwa-duration-modal-in: var(--pwa-duration-reduced);
-    --pwa-duration-modal-out: var(--pwa-duration-reduced);
-    --pwa-duration-status-slot: var(--pwa-duration-reduced);
-    --pwa-duration-collapse-in: var(--pwa-duration-reduced);
-    --pwa-duration-collapse-out: var(--pwa-duration-reduced);
-    --pwa-duration-collapse-settle: var(--pwa-duration-reduced);
-    --pwa-duration-image-in: var(--pwa-duration-reduced);
-    --pwa-duration-image-out: var(--pwa-duration-reduced);
-    --pwa-duration-toast: var(--pwa-duration-reduced);
-    --pwa-duration-toast-out: var(--pwa-duration-reduced);
-    --pwa-duration-menu-in: var(--pwa-duration-reduced);
-    --pwa-duration-menu-out: var(--pwa-duration-reduced);
-    --pwa-duration-content: var(--pwa-duration-reduced);
-    --pwa-duration-message-in: var(--pwa-duration-reduced);
-    --pwa-duration-fade: var(--pwa-duration-reduced);
-    --pwa-duration-press-in: var(--pwa-duration-reduced);
-    --pwa-duration-press-out: var(--pwa-duration-reduced);
-    --pwa-duration-feedback: var(--pwa-duration-reduced);
+    --pwa-tier-press: var(--pwa-duration-reduced);
+    --pwa-tier-quick: var(--pwa-duration-reduced);
+    --pwa-tier-short: var(--pwa-duration-reduced);
+    --pwa-tier-leave: var(--pwa-duration-reduced);
+    --pwa-tier-respond: var(--pwa-duration-reduced);
+    --pwa-tier-return: var(--pwa-duration-reduced);
+    --pwa-tier-fade-in: var(--pwa-duration-reduced);
+    --pwa-tier-panel: var(--pwa-duration-reduced);
+    --pwa-tier-appear: var(--pwa-duration-reduced);
   }
 
   *,

@@ -7,6 +7,14 @@ export const SWIPE_VELOCITY_WINDOW_MS = 100;
 /** 跟手模式的松手判定：按 iOS 常规减速率（每毫秒保留 0.998）推算惯性停点，停点过表面行程的一半才提交。 */
 export const SWIPE_PROJECTION_DECELERATION = 0.998;
 export const SWIPE_PROJECTION_COMMIT_RATIO = 0.5;
+/** 越界阻尼系数（iOS 滚动视图的橡皮筋公式）：越界位移 x 显示为 (1 - 1 / (x × 系数 / d + 1)) × d，逼近但不超过 d。 */
+export const RUBBER_BAND_COEFFICIENT = 0.55;
+
+/** 越界位移的阻尼显示值；dimension 为渐近上限（通常取表面自身尺寸）。 */
+export function rubberBand(offset: number, dimension: number): number {
+  if (!(offset > 0) || !(dimension > 0)) return 0;
+  return (1 - 1 / (offset * RUBBER_BAND_COEFFICIENT / dimension + 1)) * dimension;
+}
 
 /** down 用于底部面板下拉关闭，up 用于顶部 Toast 上滑关闭；主轴为纵向，其余规则与左右一致。 */
 export type SwipeDirection = "left" | "right" | "down" | "up";
@@ -46,8 +54,13 @@ function signedDistance(state: ActiveSwipe, point: SwipePoint) {
 
 /** 面板跟手位移：从锁定方向的位置起算，反向不为负。 */
 export function trackedDistance(state: SwipeState, point: SwipePoint): number {
+  return Math.max(0, overscrollDistance(state, point));
+}
+
+/** 同 trackedDistance，但朝关闭的反方向越过起点时为负；供带越界阻尼的表面使用。 */
+export function overscrollDistance(state: SwipeState, point: SwipePoint): number {
   if (state.phase !== "tracking") return 0;
-  return Math.max(0, signedDistance(state, point) - state.lockOffset);
+  return signedDistance(state, point) - state.lockOffset;
 }
 
 export function moveSwipe(state: SwipeState, point: SwipePoint): SwipeState {

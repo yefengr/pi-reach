@@ -19,6 +19,9 @@ import "./published-files.css";
 import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 const swipePoint = (event: PointerEvent<HTMLDivElement>) => ({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp });
+const imageTransform = (value: ImageTransform) => `translate(${value.x}px, ${value.y}px) scale(${value.scale})`;
+// 手动缩放仍用 transform；反向补偿圆角，避免屏幕半径随图片放大。
+const imageRadiusFor = (scale: number) => `calc(var(--pwa-radius-md) / ${scale})`;
 
 function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened, instant, allowEnter, enterDuration, exitDuration, onDismiss }: {
   url: string; name: string; onRetry: () => void; canRetry: boolean; source?: HTMLButtonElement;
@@ -36,6 +39,27 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
   usePublishedImageMotion({ image, source, root: surface, url, opened, instant, zoomed: transform.scale !== 1 || transform.x !== 0 || transform.y !== 0, allowEnter, enterDuration, exitDuration });
   const transformRef = useRef(transform);
   const updateTransform = (value: ImageTransform) => { transformRef.current = value; setTransform(value); };
+  const zoomDuration = usePwaMotionDuration("--pwa-duration-image-zoom");
+  const overscrollDuration = usePwaMotionDuration("--pwa-duration-overscroll");
+  const zoomAnimationRef = useRef<Animation | null>(null);
+  // 双击、按钮与越界弹回的缩放过渡中开始新的缩放或拖动：以此刻的绘制位置为新起点，不跳到上一次的终点。
+  // 单纯的轻点不打断过渡。
+  const freezeZoom = () => {
+    const running = zoomAnimationRef.current;
+    zoomAnimationRef.current = null;
+    if (!running || running.playState !== "running" || !image) return;
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(image).transform);
+    running.cancel();
+    updateTransform({ scale: matrix.a, x: matrix.e, y: matrix.f });
+  };
+  const glideTo = (next: ImageTransform, duration: number) => {
+    freezeZoom();
+    const from = transformRef.current;
+    updateTransform(next);
+    if (!image || typeof image.animate !== "function" || pwaMotionShiftDisabled(image)) return;
+    const frame = (value: ImageTransform) => ({ transform: imageTransform(value), borderRadius: imageRadiusFor(value.scale) });
+    zoomAnimationRef.current = image.animate([frame(from), frame(next)], { duration, easing: pwaContentEasing(image) });
+  };
   const gesture = useRef<{ transform: ImageTransform; points: ImagePoint[] }>({ transform, points: [] });
   const rebase = () => { gesture.current = { transform: transformRef.current, points: [...pointers.current.values()] }; };
   const pullRef = useRef<{ state: SwipeState; follow: boolean; distance: number }>({ state: IDLE_SWIPE, follow: false, distance: 0 });
@@ -52,6 +76,7 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
     if (event.pointerType === "mouse" && event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size > 1) freezeZoom();
     rebase();
     const single = pointers.current.size === 1;
     tapRef.current.down = single ? { x: event.clientX, y: event.clientY, time: event.timeStamp, id: event.pointerId } : null;
@@ -76,10 +101,18 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
         return;
       }
     }
+    if (zoomAnimationRef.current?.playState === "running") {
+      // 过渡中开始拖动：先停在当前绘制位置，从这一帧起跟手。
+      freezeZoom();
+      rebase();
+      return;
+    }
     updateTransform(imageGesture(gesture.current.transform, gesture.current.points, [...pointers.current.values()]));
   };
   const end = (event: PointerEvent<HTMLDivElement>) => {
     const tracked = pointers.current.delete(event.pointerId);
+    // 捏合缩到原始大小以下：少于两指即弹回。
+    if (tracked && pointers.current.size < 2 && transformRef.current.scale < 1) glideTo({ ...IMAGE_RESET }, overscrollDuration);
     rebase();
     const released = tracked && event.type === "pointerup";
     const active = pullRef.current;
@@ -104,19 +137,18 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
     if (!last || tap.time - last.time > IMAGE_DOUBLE_TAP_MS || Math.hypot(tap.x - last.x, tap.y - last.y) > IMAGE_DOUBLE_TAP_RADIUS_PX) { tapRef.current.last = tap; return; }
     tapRef.current.last = null;
     const box = image?.getBoundingClientRect();
-    if (box) updateTransform(doubleTapImage(transformRef.current, tap, { x: box.left + box.width / 2, y: box.top + box.height / 2 }));
+    if (box) glideTo(doubleTapImage(transformRef.current, tap, { x: box.left + box.width / 2, y: box.top + box.height / 2 }), zoomDuration);
   };
-  // 手动缩放仍用 transform；反向补偿圆角，避免屏幕半径随图片放大。
-  const imageRadius = `calc(var(--pwa-radius-md) / ${transform.scale})`;
+  const imageRadius = imageRadiusFor(transform.scale);
   const pulled = pull > 0 ? { translate: `0 ${pull}px`, scale: pullScale(pull, stageHeight()) } : null;
   return <>
     <div className="pwa-file-image-stage" data-swipe-ignore data-image-pull={pulled ? "" : undefined} onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
-      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ borderRadius: imageRadius, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, ...pulled }} />}
+      {failed ? <div role="alert"><p className="pwa-published-error">{t.files.decodeError}</p><Button variant="transparent" disabled={!canRetry} onClick={onRetry}>{t.common.retry}</Button></div> : <img ref={setImage} src={url} alt={name} draggable={false} onError={() => setFailed(true)} style={{ borderRadius: imageRadius, transform: imageTransform(transform), ...pulled }} />}
     </div>
     <div className="pwa-file-zoom">
-      <ActionIcon variant="subtle" aria-label={t.files.zoomOut} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale / 1.5))}><Minus size={20} /></ActionIcon>
-      <Button variant="transparent" leftSection={<RotateCcw size={16} />} onClick={() => updateTransform({ ...IMAGE_RESET })} aria-label={t.files.resetZoom}>{Math.round(transform.scale * 100)}%</Button>
-      <ActionIcon variant="subtle" aria-label={t.files.zoomIn} onClick={() => updateTransform(zoomImage(transformRef.current, transformRef.current.scale * 1.5))}><Plus size={20} /></ActionIcon>
+      <ActionIcon variant="subtle" aria-label={t.files.zoomOut} onClick={() => glideTo(zoomImage(transformRef.current, transformRef.current.scale / 1.5), zoomDuration)}><Minus size={20} /></ActionIcon>
+      <Button variant="transparent" leftSection={<RotateCcw size={16} />} onClick={() => glideTo({ ...IMAGE_RESET }, zoomDuration)} aria-label={t.files.resetZoom}>{Math.round(transform.scale * 100)}%</Button>
+      <ActionIcon variant="subtle" aria-label={t.files.zoomIn} onClick={() => glideTo(zoomImage(transformRef.current, transformRef.current.scale * 1.5), zoomDuration)}><Plus size={20} /></ActionIcon>
     </div>
   </>;
 }

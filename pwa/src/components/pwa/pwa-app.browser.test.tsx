@@ -2783,20 +2783,21 @@ test("shows Latest after scrolling away and preserves position while unread real
   expect(scrollTo).not.toHaveBeenCalled();
 
   scrollTo.mockImplementation((options: ScrollToOptions) => {
-    list.scrollTop = options.behavior === "smooth" ? 500 : list.scrollHeight - list.clientHeight;
+    list.scrollTop = Math.min(options.top ?? 0, list.scrollHeight - list.clientHeight);
     list.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
+  const start = list.scrollTop;
+  const end = list.scrollHeight - list.clientHeight;
   await screen.getByRole("button", { name: "1 new output" }).click();
-  expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "smooth" });
   await expect.element(screen.getByRole("button", { name: "Latest" })).not.toBeInTheDocument();
+  // 「最新」由时间线逐帧推进，不交给原生平滑滚动。
+  expect(scrollTo).not.toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
 
+  // 途中到达的新输出不改变这次滚动的终点，抵达后再跟随新增的高度。
   Object.defineProperty(list, "scrollHeight", { configurable: true, value: 1100 });
   channel.emit(partialFrame("partial-2", "group-2", "during smooth scroll"));
   await expect.element(screen.getByText("during smooth scroll")).toBeVisible();
-  expect(scrollTo).toHaveBeenCalledTimes(1);
-  // 模拟 Latest 抵达原目标，随后跟随期间新增的高度。
-  list.scrollTop = 600;
-  list.dispatchEvent(new Event("scroll", { bubbles: true }));
+  expect(scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).top ?? 0).every((top) => top >= start && top <= end)).toBe(true);
   await expect.poll(() => scrollTo).toHaveBeenCalledWith({ top: 1100, behavior: "auto" });
   await expect.element(screen.getByRole("button", { name: /new output/ })).not.toBeInTheDocument();
   await screen.unmount();

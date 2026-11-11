@@ -1,3 +1,5 @@
+import { rubberBand } from "./swipe-gesture";
+
 export type ImageTransform = { scale: number; x: number; y: number };
 export type ImagePoint = { x: number; y: number };
 export const IMAGE_RESET: ImageTransform = { scale: 1, x: 0, y: 0 };
@@ -13,6 +15,8 @@ export const IMAGE_TAP_SLOP_PX = 10;
 export const IMAGE_PULL_DISMISS_PX = 120;
 /** 下拉过程中图片随位移缩小的下限，对应下拉一个舞台高度。 */
 export const IMAGE_PULL_MIN_SCALE = 0.7;
+/** 捏合缩小到原始大小以下时带阻尼继续跟手，越界部分逼近该比例（倍率不低于 1 减去它），松手弹回原始大小。 */
+export const IMAGE_UNDERZOOM_LIMIT = 0.5;
 export function zoomImage(value: ImageTransform, scale: number): ImageTransform {
   const bounded = Math.max(1, Math.min(IMAGE_MAX_ZOOM, scale));
   return bounded === 1 ? { ...IMAGE_RESET } : { ...value, scale: bounded };
@@ -23,9 +27,13 @@ export function imageGesture(start: ImageTransform, before: readonly ImagePoint[
   const distance = (points: readonly ImagePoint[]) => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
   const initialDistance = distance(before);
   if (initialDistance === 0) return start;
-  const result = zoomImage(start, start.scale * distance(after) / initialDistance);
+  const raw = start.scale * distance(after) / initialDistance;
+  const shift = { x: (after[0].x + after[1].x - before[0].x - before[1].x) / 2, y: (after[0].y + after[1].y - before[0].y - before[1].y) / 2 };
+  // 原始大小以下：图片绕原位中心继续缩小并跟随两指中点，由调用方在松手时弹回。
+  if (raw < 1) return { scale: 1 - rubberBand(1 - raw, IMAGE_UNDERZOOM_LIMIT), ...shift };
+  const result = zoomImage(start, raw);
   if (result.scale === 1) return result;
-  return { ...result, x: start.x + (after[0].x + after[1].x - before[0].x - before[1].x) / 2, y: start.y + (after[0].y + after[1].y - before[0].y - before[1].y) / 2 };
+  return { ...result, x: start.x + shift.x, y: start.y + shift.y };
 }
 
 /** 以屏幕上的 point 为不动点缩放；origin 为图片当前绘制的中心（缩放绕中心进行，已含平移）。 */

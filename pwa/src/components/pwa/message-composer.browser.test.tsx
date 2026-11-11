@@ -784,6 +784,8 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the Composer
     const menu = screen.getByRole("menu", { name: "Model and thinking" });
     await expect.poll(() => menu.element().getBoundingClientRect().top >= 0).toBe(true);
     const dropdown = menu.element() as HTMLElement;
+    // 切换子视图的高度过渡结束后再量几何与滚动。
+    await expect.poll(() => dropdown.getAnimations().length).toBe(0);
     const box = dropdown.getBoundingClientRect();
     expect(box.left).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(width);

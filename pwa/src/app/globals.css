@@ -15,6 +15,9 @@
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
+/* 浅色与深色手动切换的整屏交叉淡化（View Transitions，见 pwa-appearance）；只用于这类低频、无需交互的整屏切换。 */
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: var(--pwa-duration-appearance); animation-timing-function: var(--pwa-ease-standard); }
 
 body {
   margin: 0;
@@ -332,6 +335,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-variant="filled"][data-disabled]::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"]:disabled::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"][data-disabled]::before { background: var(--pwa-accent); }
+/* 图标替换：可用态的透明度变化随之过渡；发送与停止互换后，新按钮的图标从 --pwa-swap-scale 缩放淡入（首次挂载不播放）。 */
+.pwa-ui-scope .pwa-icon-button:is(.pwa-composer-send, .pwa-composer-stop) { transition: opacity var(--pwa-duration-feedback) var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-icon-button:is(.pwa-composer-send, .pwa-composer-stop)[data-pwa-swap] .mantine-ActionIcon-icon { animation: pwa-icon-swap-in var(--pwa-duration-feedback) var(--pwa-ease-content) backwards; }
+@keyframes pwa-icon-swap-in {
+  from { opacity: 0; transform: scale(calc(1 - (1 - var(--pwa-swap-scale)) * var(--pwa-motion-shift))); }
+}
 .pwa-composer-menu,
 .pwa-composer-command { position: relative; flex: 0 0 auto; }
 .pwa-root .pwa-composer-menu-panel,

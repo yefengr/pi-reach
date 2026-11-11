@@ -43,11 +43,18 @@ function declarations(selector: string): Record<string, string> {
   return Object.fromEntries([...THEME.slice(open + 1, close).matchAll(/(--pwa-[a-z-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()]));
 }
 
-/** 常规动效下的毫秒时长：取每个 token 的首次定义，减少动态效果的改写在其后。 */
+/** 常规动效下的毫秒时长：取每个 token 与档位的首次定义（减少动态效果的改写在其后），组件 token 经档位解析为毫秒。 */
 function themeDurations(): Record<string, number> {
-  const durations: Record<string, number> = {};
-  for (const match of THEME.matchAll(/(--pwa-duration-[a-z-]+):\s*(\d+)ms;/g)) durations[match[1]] ??= Number(match[2]);
-  return durations;
+  const raw: Record<string, string> = {};
+  for (const match of THEME.matchAll(/(--pwa-(?:duration|tier)-[a-z-]+):\s*([^;]+);/g)) raw[match[1]] ??= match[2].trim();
+  const resolve = (value: string): string => {
+    const tier = /^var\((--pwa-tier-[a-z-]+)\)$/.exec(value)?.[1];
+    return tier ? resolve(raw[tier] ?? "") : value;
+  };
+  return Object.fromEntries(Object.entries(raw).flatMap(([name, value]) => {
+    const resolved = /^(\d+)ms$/.exec(resolve(value));
+    return name.startsWith("--pwa-duration-") && resolved ? [[name, Number(resolved[1])]] : [];
+  }));
 }
 
 /** 本文件从 lucide-react 导入的图标本地名（处理 `as` 别名）。 */
@@ -83,6 +90,19 @@ function iconAttributes(text: string, attribute: string): { value: string; index
 describe("script token guard", () => {
   test("motion fallbacks match every millisecond duration token in the theme", () => {
     expect(PWA_MOTION_FALLBACK_MS).toEqual(themeDurations());
+  });
+
+  test("component durations reference a tier and tiers stay inside the theme", () => {
+    // 毫秒值只写在档位上（减少动态效果的 reduced 例外）；组件与脚本只引用组件 token，不直接取档位。
+    const literal = [...THEME.matchAll(/(--pwa-duration-[a-z-]+):\s*([\d.]+m?s);/g)].map((match) => match[1]);
+    expect(literal).toEqual(["--pwa-duration-reduced", "--pwa-duration-spin", "--pwa-duration-breathe"]);
+    const offenders = sourceFiles(SOURCE_ROOT, [".css", ".ts", ".tsx"]).sort().flatMap((path) => {
+      const file = relative(SOURCE_ROOT, path);
+      if (file === "app/pwa-theme.css" || file === "lib/ui/motion-duration.ts") return [];
+      const text = readFileSync(path, "utf8");
+      return [...text.matchAll(/--pwa-tier-[a-z-]+/g)].map((match) => `${file}:${lineOf(text, match.index)} ${match[0]}`);
+    });
+    expect(offenders).toEqual([]);
   });
 
   test("the content enter fade starts at the theme opacity token", () => {

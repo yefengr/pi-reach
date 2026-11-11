@@ -167,14 +167,14 @@ test("slow motion scales only duration tokens and restores them", async () => {
   const read = (token: string) => getComputedStyle(document.documentElement).getPropertyValue(token).trim();
   expect(read("--pwa-duration-fade")).toBe("120ms");
   expect(read("--pwa-duration-modal-in")).toBe("400ms");
-  expect(read("--pwa-duration-menu-in")).toBe("160ms");
+  expect(read("--pwa-duration-menu-in")).toBe("240ms");
   expect(read("--pwa-duration-press-in")).toBe("90ms");
   await screen.getByRole("button", { name: "0.25× 慢放", exact: true }).click();
   await expect.poll(() => read("--pwa-duration-fade")).toBe("480ms");
   expect(read("--pwa-duration-modal-in")).toBe("1600ms");
-  expect(read("--pwa-duration-menu-in")).toBe("640ms");
+  expect(read("--pwa-duration-menu-in")).toBe("960ms");
   expect(read("--pwa-duration-press-in")).toBe("360ms");
-  expect(read("--pwa-duration-feedback")).toBe("480ms");
+  expect(read("--pwa-duration-feedback")).toBe("640ms");
   // 旧完成态时钟只在历史DEV作用域保留，不由正式主题继承，也不受慢放影响。
   expect(getComputedStyle(root()).getPropertyValue("--pwa-duration-fetch-settle").trim()).toBe("600ms");
   expect(read("--pwa-duration-fetch-settle")).toBe("");
@@ -183,11 +183,11 @@ test("slow motion scales only duration tokens and restores them", async () => {
   expect(read("--pwa-duration-menu-in")).toBe("120ms");
   expect(getComputedStyle(root()).getPropertyValue("--pwa-duration-fetch-settle").trim()).toBe("600ms");
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
-  await expect.poll(() => read("--pwa-duration-menu-in")).toBe("640ms");
+  await expect.poll(() => read("--pwa-duration-menu-in")).toBe("960ms");
   await screen.getByRole("button", { name: "1×", exact: true }).click();
   await expect.poll(() => read("--pwa-duration-fade")).toBe("120ms");
   expect(read("--pwa-duration-modal-in")).toBe("400ms");
-  expect(read("--pwa-duration-menu-in")).toBe("160ms");
+  expect(read("--pwa-duration-menu-in")).toBe("240ms");
   expect(getMessages().common.back.length).toBeGreaterThan(0);
 });
 
