@@ -98,3 +98,48 @@ test("a hold released while taken over returns its space smoothly once handed ba
     remove();
   }
 });
+
+test("a hold whose group head sits above the screen lifts the position with the collapse clock and keeps only the rest as space", () => {
+  const { list, content, remove } = mountHoldList(1000);
+  const from = list.scrollHeight - list.clientHeight;
+  // 收回 500，其中 400 用于把组头带回可见区；带回用实际收起时长 80，保持时钟另含兜底余量。
+  const hold = new CollapseHoldTransition(list, from, () => from - 500, 100, 500, { distance: 400, duration: 80 });
+  try {
+    const tops: number[] = [];
+    for (const [now, height] of [[0, 1000], [20, 900], [40, 750], [60, 600], [80, 500], [120, 500]] as const) {
+      content.style.height = `${height}px`;
+      const step = hold.advance(now);
+      tops.push(step.top);
+      // 任一帧都可达：不会被浏览器钳制成跳动。
+      expect(list.scrollHeight - list.clientHeight).toBeGreaterThanOrEqual(Math.ceil(step.top));
+    }
+    expect(tops[0]).toBe(from);
+    for (let index = 1; index < tops.length; index += 1) expect(tops[index]!).toBeLessThanOrEqual(tops[index - 1]!);
+    expect(tops[2]).toBeLessThan(from);
+    expect(tops[2]).toBeGreaterThan(from - 400);
+    expect(tops.at(-1)).toBe(from - 400);
+    // 收起结束后只保留其余的 100 给后续正文。
+    expect(hold.heldSpace()).toBe(100);
+  } finally {
+    hold.finish();
+    remove();
+  }
+});
+
+test("a user taking over during the lift stops it where the user is", () => {
+  const { list, content, remove } = mountHoldList(1000);
+  const from = list.scrollHeight - list.clientHeight;
+  const hold = new CollapseHoldTransition(list, from, () => from - 500, 100, 500, { distance: 400, duration: 80 });
+  try {
+    hold.advance(0);
+    content.style.height = "800px";
+    const lifted = hold.advance(30).top;
+    expect(hold.track(lifted - 10, 40)).toBe(false);
+    content.style.height = "500px";
+    // 交回后不再继续带回，位置停在用户留下的地方。
+    expect(hold.advance(120).top).toBe(lifted - 10);
+  } finally {
+    hold.finish();
+    remove();
+  }
+});

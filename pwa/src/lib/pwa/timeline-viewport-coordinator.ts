@@ -21,6 +21,8 @@ export type ViewportMotion = { advance(now: number): ViewportMotionStep; finish(
  */
 export type ViewportHoldMotion = ViewportMotion & { release(): void; extend(reserve: number, duration: number, live: boolean): void; track(top: number, now?: number): boolean };
 export type ViewportCapture<C> = Readonly<{ generation: number; binding: object; value: C }>;
+/** 收起开始时组头在可见区上方的距离与实际收起时长；距离为 0 表示组头可见，维持原位不动。 */
+export type ViewportLift = Readonly<{ distance: number; duration: number }>;
 /** 用户输入让内容朝哪个方向移动：down 朝最新内容；滚动条拖动等无法判断时为 unknown。 */
 export type ViewportInputDirection = "up" | "down" | "unknown";
 export type ViewportPosition<A> = { following: true } | { following: false; anchor: A };
@@ -32,8 +34,8 @@ export interface ViewportLayout<C, A> {
   captureReply?(): ReplyProbe | null;
   send(capture: C): ViewportMotion;
   activity(from: number, target: (geometry: ViewportGeometry) => number): ViewportMotion;
-  /** 过程组收起期间保持 from 不动并保留 reserve；release 后平滑移到 target。 */
-  hold(from: number, target: (geometry: ViewportGeometry) => number, duration: number, reserve: number): ViewportHoldMotion;
+  /** 过程组收起期间保持 from 不动并保留 reserve；release 后平滑移到 target。lift 时随收起把位置上移，带回组头。 */
+  hold(from: number, target: (geometry: ViewportGeometry) => number, duration: number, reserve: number, lift?: ViewportLift): ViewportHoldMotion;
   captureAnchor(fallback?: boolean): A | null;
   restoreAnchor(anchor: A, migrate?: boolean): boolean;
 }
@@ -455,7 +457,7 @@ export class TimelineViewportCoordinator<C, A> {
    * 没有后续输出时等收起结束再平滑收回。已有其他过程拥有滚动时，只阻止跟随为同一提交的新增内容先向下追。
    * 回看、暂停、发送过渡、Latest 与无动画时忽略；duration 为收起时长加兜底。
    */
-  collapse(removed: number, duration: number, live = false): void {
+  collapse(removed: number, duration: number, live = false, lift?: ViewportLift): void {
     const layout = this.layout;
     if (!layout || removed <= EPSILON) return;
     // 用户接管后尚未交回的保持：只保留空间、不写滚动，按住或回看中也叠加，避免新的收起让位置被钳制。
@@ -482,7 +484,10 @@ export class TimelineViewportCoordinator<C, A> {
     // 同一提交里的其他收缩（如活动区撤下）可能已让浏览器钳制位置；以提交前的位置为准，并在绘制前写回。
     const from = Math.max(geometry.top, this.lastTop);
     // 收回空间时只回到收起后的位置，不为同一提交新增的内容向下追。
-    const hold = layout.hold(from, (value) => Math.min(from, this.followTarget(value)), duration, reserve);
+    // 组头已在可见区上方时随收起带回，最多带回收回的高度，其余仍作为空白留给后续输出。
+    const distance = lift ? Math.min(Math.max(0, lift.distance), reserve) : 0;
+    const hold = layout.hold(from, (value) => Math.min(from, this.followTarget(value)), duration, reserve,
+      distance > EPSILON ? { distance, duration: lift!.duration } : undefined);
     if (!live) hold.release();
     this.motion = hold;
     this.holdMotion = hold;

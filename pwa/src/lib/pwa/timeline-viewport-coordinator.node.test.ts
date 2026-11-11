@@ -22,7 +22,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
   let finishShift = 0;
   /** 收起保持期间保留的可达位置：模拟临时补偿让该位置在自然范围之外仍可滚到。 */
   let reach = 0;
-  const holds: { from: number; reserve: number; extends: number; released: boolean }[] = [];
+  const holds: { from: number; reserve: number; extends: number; released: boolean; lift?: { distance: number; duration: number } }[] = [];
   const restored: number[] = [];
   const activityOrigins: number[] = [];
   const writes: number[] = [];
@@ -72,8 +72,8 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     captureSend: () => top, send: () => motion(), activity: (from, target) => {
       activityOrigins.push(from); return motion(() => target(layout.measure()));
     },
-    hold: (from, target, duration, reserve) => {
-      const record = { from, reserve, extends: 0, released: false };
+    hold: (from, target, duration, reserve, lift) => {
+      const record = { from, reserve, extends: 0, released: false, ...(lift ? { lift } : {}) };
       holds.push(record);
       return holdMotion(from, () => target(layout.measure()), duration, record);
     },
@@ -1420,6 +1420,22 @@ describe("process group collapse hold", () => {
     f.core.collapse(50, 190, live);
     return f;
   }
+
+  test("a group head above the screen is lifted back with the collapse, never further than the space it returns", () => {
+    const f = fixture();
+    f.core.notify("commit");
+    f.core.collapse(50, 190, true, { distance: 30, duration: 140 });
+    expect(f.holds[0]).toMatchObject({ from: 100, reserve: 50, lift: { distance: 30, duration: 140 } });
+    const capped = fixture();
+    capped.core.notify("commit");
+    capped.core.collapse(50, 190, true, { distance: 80, duration: 140 });
+    expect(capped.holds[0]!.lift).toEqual({ distance: 50, duration: 140 });
+    // 组头仍在屏幕内（距离为 0）时维持原规则，不带回。
+    const visible = fixture();
+    visible.core.notify("commit");
+    visible.core.collapse(50, 190, true, { distance: 0, duration: 140 });
+    expect(visible.holds[0]!.lift).toBeUndefined();
+  });
 
   test("keeps the head in place through the collapse and resumes following once later output fills the space", () => {
     const f = collapsing(true);

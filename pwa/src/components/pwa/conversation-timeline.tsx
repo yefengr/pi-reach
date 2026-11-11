@@ -240,15 +240,28 @@ export function ConversationTimeline({ sourceKey, items, live, completions, runn
     if (!list) return;
     let removed = 0;
     let duration = 0;
+    // 最靠下的收起组决定画面：它的组头已在可见区上方（组比一屏高）时，收起期间要把它带回。
+    let lowest: { top: number; duration: number } | null = null;
     for (const [key, expanded] of next) {
       if (expanded || previous.get(key) !== true) continue;
       const root = [...list.querySelectorAll<HTMLElement>(":scope > [data-timeline-key]")].find(node => node.dataset.timelineKey === key);
       removed += root?.querySelector<HTMLElement>(":scope > .pwa-process-details")?.getBoundingClientRect().height ?? 0;
       // 保持期覆盖同一提交里最长的退出：自动收起比手动收起慢。
-      duration = Math.max(duration, isSettleCollapse(states.get(key)!) ? settleDuration : collapseDuration);
+      const exit = isSettleCollapse(states.get(key)!) ? settleDuration : collapseDuration;
+      duration = Math.max(duration, exit);
+      const top = root?.getBoundingClientRect().top;
+      if (top !== undefined && (lowest === null || top > lowest.top)) lowest = { top, duration: exit };
     }
+    if (removed <= 0) return;
+    // 只有组头被遮住（在列表顶边或浮动提示占位之上）才带回；落在顶部留白里仍算可见，维持原位不动。
+    // 带回后与列表开头的内容同一位置：顶部内边距含留白与浮动提示占位。
+    const style = getComputedStyle(list);
+    const padding = Number.parseFloat(style.paddingTop) || 0;
+    const listTop = list.getBoundingClientRect().top;
+    const covered = listTop + padding - (Number.parseFloat(style.getPropertyValue("--pwa-timeline-pad-top")) || 0);
+    const lift = lowest === null || lowest.top >= covered ? undefined : { distance: listTop + padding - lowest.top, duration: lowest.duration };
     // live：本轮仍在运行（活动区在），收起后让出的空白留给随后的输出填入。
-    if (removed > 0) list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: duration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS, live: slotPresent } }));
+    list.dispatchEvent(new CustomEvent(TIMELINE_GEOMETRY_EVENT, { detail: { reason: "collapse", removed, duration: duration + COLLAPSE_EXIT_FALLBACK_MARGIN_MS, live: slotPresent, lift } }));
   });
   // 只有活动区的出现与收起改变高度；其中 Working 的显隐只改透明度，不通知视口。
   const previousSlot = useRef(slotPresent);

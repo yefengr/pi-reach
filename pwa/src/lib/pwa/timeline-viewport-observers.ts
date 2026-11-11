@@ -1,5 +1,5 @@
 import { chatFooterOf, syncChatFooterSpace } from "./chat-footer-space";
-import type { ViewportInputDirection } from "./timeline-viewport-coordinator";
+import type { ViewportInputDirection, ViewportLift } from "./timeline-viewport-coordinator";
 
 export const TIMELINE_GEOMETRY_EVENT = "pwa:timeline-geometry";
 const EXCLUSIONS = ".pwa-earlier, .pwa-bottom-sentinel, .pwa-chat-empty-slot";
@@ -15,8 +15,11 @@ function keyDirection(event: KeyboardEvent): ViewportInputDirection | null {
 }
 type Events = {
   geometry(activity: boolean, added?: number): void;
-  /** 过程组开始收起：removed 为预计收回的高度，duration 为收起时长加兜底，live 为本轮仍在运行；只是预期，不是位置终点。 */
-  collapse(removed: number, duration: number, live: boolean): void;
+  /**
+   * 过程组开始收起：removed 为预计收回的高度，duration 为收起时长加兜底，live 为本轮仍在运行；只是预期，不是位置终点。
+   * lift 为组头在可见区上方的距离与实际收起时长。
+   */
+  collapse(removed: number, duration: number, live: boolean, lift?: ViewportLift): void;
   resize(): void;
   /** 明确的滚动输入及其方向；down 表示内容朝最新方向移动。 */
   interrupt(direction: ViewportInputDirection): void;
@@ -45,7 +48,11 @@ export class TimelineViewportObservers {
     const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
     const geometry = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail : null;
-      if (detail?.reason === "collapse") { events.collapse(finite(detail.removed), finite(detail.duration), detail.live === true); return; }
+      if (detail?.reason === "collapse") {
+        const lift = detail.lift && typeof detail.lift === "object" ? { distance: finite(detail.lift.distance), duration: finite(detail.lift.duration) } : undefined;
+        events.collapse(finite(detail.removed), finite(detail.duration), detail.live === true, lift);
+        return;
+      }
       const added = typeof detail?.added === "number" && Number.isFinite(detail.added) ? Math.max(0, detail.added) : 0;
       events.geometry(detail?.reason === "activity", added);
     };
