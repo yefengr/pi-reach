@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { ActivityFollowTransition, activityFollowSpace } from "./timeline-follow-motion";
+import { ActivityFollowTransition, activityFollowSpace, CollapseHoldTransition } from "./timeline-follow-motion";
 
 const NATURAL_PADDING = 88;
 
@@ -37,5 +37,64 @@ test.each([1000, 1000.25, 1000.5, 1000.8])("keeps the measured natural bottom ex
     }
   } finally {
     list.remove();
+  }
+});
+
+/** 与 globals.css 同一规则：保持期间的临时空白由列表末尾伪元素承担。 */
+function mountHoldList(contentHeight: number) {
+  const style = document.createElement("style");
+  style.textContent = ".hold-test[data-timeline-hold]::after { content: \"\"; display: block; height: var(--pwa-timeline-hold, 0px); }";
+  document.head.append(style);
+  const list = mountList(contentHeight);
+  list.classList.add("hold-test");
+  const content = list.firstElementChild as HTMLElement;
+  return { list, content, remove: () => { list.remove(); style.remove(); } };
+}
+
+test("a taken-over hold keeps its whole reserve until the collapse clock ends, then shrinks with the position", () => {
+  const { list, content, remove } = mountHoldList(1000);
+  const from = list.scrollHeight - list.clientHeight;
+  const hold = new CollapseHoldTransition(list, from, () => from, 100, 200);
+  try {
+    // 收起尚未开始收缩时，按所需只需 0；收起期间仍须保留全部 200，否则随后的收缩会逐帧钳制位置。
+    expect(hold.track(from - 50, 0)).toBe(false);
+    expect(hold.heldSpace()).toBe(200);
+    content.style.height = "800px";
+    expect(hold.track(from - 50, 50)).toBe(false);
+    expect(hold.heldSpace()).toBe(200);
+    // 收起结束后只保留让当前位置可达的部分。
+    expect(hold.track(from - 50, 150)).toBe(false);
+    expect(hold.heldSpace()).toBe(150);
+    expect(list.scrollHeight - list.clientHeight).toBeGreaterThanOrEqual(from - 50);
+    expect(hold.track(from - 200, 160)).toBe(true);
+    expect(hold.heldSpace()).toBe(0);
+    expect(list.hasAttribute("data-timeline-hold")).toBe(false);
+  } finally {
+    hold.finish();
+    remove();
+  }
+});
+
+test("a hold released while taken over returns its space smoothly once handed back", () => {
+  const { list, content, remove } = mountHoldList(1000);
+  const from = list.scrollHeight - list.clientHeight;
+  const target = from - 200;
+  const hold = new CollapseHoldTransition(list, from, () => target, 100, 200);
+  try {
+    hold.track(from, 0);
+    content.style.height = "800px";
+    hold.release();
+    expect(hold.track(from, 150)).toBe(false);
+    // 交回后收回时钟才起步：第一帧原位，之后逐帧移动，不一步跳到目标。
+    expect(hold.advance(200)).toEqual({ top: from, finished: false });
+    const middle = hold.advance(250);
+    expect(middle.finished).toBe(false);
+    expect(middle.top).toBeLessThan(from);
+    expect(middle.top).toBeGreaterThan(target);
+    const last = hold.advance(400);
+    expect(last).toEqual({ top: target, finished: true });
+  } finally {
+    hold.finish();
+    remove();
   }
 });

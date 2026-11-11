@@ -110,9 +110,19 @@ describe("TimelineHistoryPager", () => {
     expect(pager.sync({ requestId: "zero", targetChannelId: "channel-1", leafId: session.getLeafId() ?? null, before: 0 })[0]).toMatchObject({
       type: "protocol_error", code: "invalid_cursor",
     });
-    expect(pager.sync({ requestId: "large-limit", targetChannelId: "channel-1", leafId: session.getLeafId() ?? null, before: 4, limit: 81 })[0]).toMatchObject({
+    expect(pager.sync({ requestId: "large-limit", targetChannelId: "channel-1", leafId: session.getLeafId() ?? null, before: 4, limit: 161 })[0]).toMatchObject({
       type: "protocol_error", code: "invalid_cursor",
     });
+  });
+
+  test("serves up to 160 formal events when the request asks for them", () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const recovered = events(163, session);
+    const pager = new TimelineHistoryPager(session, () => recovered);
+
+    const page = pager.sync({ requestId: "sync-160", targetChannelId: "channel-1", leafId: session.getLeafId() ?? null, before: null, limit: 160 });
+    expect(frameEvents(page).map((event) => event.event_seq)).toEqual(Array.from({ length: 160 }, (_, index) => index + 4));
+    expect(finalChunk(page)).toMatchObject({ eos: false, next_before: 4 });
   });
 
   test("fails closed for non-dense, duplicate, and out-of-scope recovery", () => {

@@ -1,13 +1,13 @@
 import type { ClientFrame, ServerFrame } from "../pi-reach/protocol-v2/frames";
-import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
+import { LEGACY_SESSION_SYNC_LIMIT, MAX_SESSION_SYNC_LIMIT, type TimelineEvent } from "../pi-reach/protocol-v2/schema";
 import { HistoryWindowAssembler, type HistoryWindowResult } from "./timeline-transfer";
 import type { TimelineScope as RuntimeTimelineScope } from "./timeline-runtime";
 import { TIMELINE_RECENT_LIMIT } from "./timeline-reconnect";
 import type { TimelineScope as StoreTimelineScope } from "./timeline-store";
 import type { TimelineEarlierSource } from "./timeline-local-pager";
 
-/** 向前加载一页的记录数；只读历史的分页沿用同一页大小。 */
-export const TIMELINE_PAGE_SIZE = 80;
+/** 向前加载一页的记录数；只读历史的分页沿用同一页大小。在线会话按单次请求上限拆分。 */
+export const TIMELINE_PAGE_SIZE = 160;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_DURATION_MS = 180_000;
 const CANCELLED = Symbol("timeline-history-loader-cancelled");
@@ -61,8 +61,12 @@ export type TimelineHistoryLoaderOptions = {
 };
 
 class TimelineHistoryLoaderError extends Error {
-  constructor(message: string) {
+  /** Extension 以 protocol_error 拒绝时的错误码。 */
+  readonly code: string | null;
+
+  constructor(message: string, code: string | null = null) {
     super(message);
+    this.code = code;
     this.name = "TimelineHistoryLoaderError";
   }
 }
@@ -127,6 +131,8 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
   private readonly requestId: () => string;
   private readonly currentLeafId: () => string | null;
   private boundary: number;
+  /** 单次 session_sync 的条数；旧 Extension 拒绝后降为旧上限，本加载器内不再回升。 */
+  private requestLimit = MAX_SESSION_SYNC_LIMIT;
   private active: PageOperation | null = null;
   // 正在进行的单条核对；期间请求的分页排到其后执行，不复用核对结果。
   private verification: Promise<unknown> | null = null;
@@ -237,7 +243,7 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
         frame.in_reply_to !== request.id
         || ("target_channel_id" in frame && frame.target_channel_id !== this.scope.channelId)
       ) return false;
-      this.rejectRequest(request, new TimelineHistoryLoaderError(frame.message));
+      this.rejectRequest(request, new TimelineHistoryLoaderError(frame.message, frame.code));
       return true;
     }
     if (frame.type !== "session_history_chunk" || frame.in_reply_to !== request.id) return false;
@@ -313,12 +319,30 @@ export class TimelineHistoryLoader implements TimelineEarlierSource {
     for (const gap of gaps) {
       let end = gap.end;
       while (end >= gap.start) {
-        const result = await this.requestRange(page, { start: gap.start, end });
+        const range = { start: Math.max(gap.start, end - this.requestLimit + 1), end };
+        let result: HistoryWindowResult | Cancelled;
+        try {
+          result = await this.requestRange(page, range);
+        } catch (error) {
+          if (!this.isCurrent(page)) return false;
+          if (this.downgradeRequestLimit(error, range)) continue;
+          throw error;
+        }
         if (result === CANCELLED) return false;
-        const firstSequence = this.acceptResponse(page, { start: gap.start, end }, result);
-        end = firstSequence - 1;
+        end = this.acceptResponse(page, range, result) - 1;
       }
     }
+    return true;
+  }
+
+  /**
+   * PWA 先于 Extension 发布：旧 Extension 的 strict schema 以 protocol_upgrade_required 拒绝超过旧上限的请求。
+   * 只在请求确实超过旧上限时降级一次并重发同一段；其他错误或降级后的再次拒绝照常失败。
+   */
+  private downgradeRequestLimit(error: unknown, range: SequenceRange): boolean {
+    if (!(error instanceof TimelineHistoryLoaderError) || error.code !== "protocol_upgrade_required"
+      || range.end - range.start + 1 <= LEGACY_SESSION_SYNC_LIMIT) return false;
+    this.requestLimit = LEGACY_SESSION_SYNC_LIMIT;
     return true;
   }
 

@@ -183,9 +183,18 @@ export class CollapseHoldTransition {
     if (this.phase === "hold") this.startRelease();
   }
 
-  /** 发送等其他过程接管滚动后：以实际位置为准只缩减空间，空间用完返回 true。 */
-  track(top: number): boolean {
+  /**
+   * 发送或用户接管滚动后：以实际位置为准只缩减空间，空间用完返回 true。
+   * 传入 now 时按收起时钟区分阶段：收起的 CSS 过渡尚未结束时仍保留全部待收回高度，
+   * 否则随后的收缩会让浏览器逐帧钳制位置；收起结束后才开始缩减，已 release 的转入收回阶段（交回后才推进）。
+   */
+  track(top: number, now?: number): boolean {
     this.top = top;
+    if (now !== undefined && this.phase === "collapse") {
+      if (!this.clock.sample(now).finished) { this.keepReachable(this.reserve); return false; }
+      this.phase = "hold";
+      if (this.released) this.startRelease();
+    }
     return this.keepReachable() <= 0;
   }
 

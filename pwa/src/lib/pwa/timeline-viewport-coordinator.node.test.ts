@@ -62,7 +62,12 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     };
   };
   const layout: ViewportLayout<number, number> = {
-    measure: () => { measures += 1; return { top, bottom, height: bottom + 50, animate, tailSpace, compensation: 0, tailReply: reply }; }, top: () => top,
+    // 与真实布局一致：收起保持暂留的空白计入物理滚动底部，同时作为补偿量单独报告。
+    measure: () => {
+      measures += 1;
+      const physical = Math.max(bottom, reach);
+      return { top, bottom: physical, height: physical + 50, animate, tailSpace, compensation: physical - bottom, tailReply: reply };
+    }, top: () => top,
     scroll(value, smooth) { writes.push(value); smooths.push(smooth); top = Math.min(Math.max(bottom, reach), value); reenter?.(); },
     captureSend: () => top, send: () => motion(), activity: (from, target) => {
       activityOrigins.push(from); return motion(() => target(layout.measure()));
@@ -74,7 +79,7 @@ function fixture(trace?: (entry: ViewportTrace) => void, tracing = () => true) {
     },
     captureAnchor: () => top - anchorShift, restoreAnchor: (anchor) => {
       if (!anchorAvailable) return false;
-      restored.push(anchor); top = Math.min(bottom, anchor + anchorShift); reenter?.(); return true;
+      restored.push(anchor); top = Math.min(Math.max(bottom, reach), anchor + anchorShift); reenter?.(); return true;
     },
   };
   Object.assign(layout, { captureReply: () => reply ? { sample: () => replyConnected ? { height: replyHeight, streaming: replyStreaming } : null } : null });
@@ -123,6 +128,68 @@ describe("manual scroll ownership", () => {
     f.core.engage(); f.setTop(160); f.core.scroll(false);
     expect(f.layout.top()).toBe(160);
     expect(f.writes).toHaveLength(before);
+    // 向下未到底不是回看：跟随保留，输入静止后从用户位置接上。
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("a downward drag that has not caught up with growth keeps following and resumes after idle", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.core.touch(true);
+    f.setBottom(300); f.core.notify("commit");
+    expect(f.layout.top()).toBe(100);
+    f.setTop(150); f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+    f.core.touch(false);
+    f.setNow(1000); f.step(1000);
+    expect(f.layout.top()).toBe(300);
+  });
+
+  test("growth during the momentum after a return to the bottom does not end following again", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.core.engage(); f.setTop(40); f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+    f.core.engage(); f.setTop(100); f.core.scroll(true);
+    expect(f.core.state.following).toBe(true);
+    // 惯性收尾期间新输出到达：位置仍在向下，只是还没追上新的底部。
+    f.setBottom(130); f.core.notify("commit");
+    f.setTop(104); f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("a rubber band settling back from past the bottom is not read as an upward review", () => {
+    const f = fixture();
+    f.core.notify("commit"); f.core.scroll(true);
+    f.core.touch(true);
+    f.setTop(130); f.core.scroll(true);
+    f.setBottom(150); f.core.notify("commit");
+    f.setTop(120); f.core.scroll(false);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("a downward interrupt stops a glide without ending following or rewinding the position", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.setBottom(130); f.core.notify("commit"); f.step(16); f.step(32);
+    const stale = [...f.frames.values()];
+    f.core.engage(); f.core.interrupt("down");
+    expect(f.core.state.following).toBe(true);
+    const at = f.layout.top();
+    const writes = f.writes.length;
+    stale.forEach(run => run(1000));
+    expect(f.writes).toHaveLength(writes);
+    f.setTop(at + 10); f.core.scroll(false);
+    f.setNow(1000); f.step(1000);
+    expect(f.layout.top()).toBeGreaterThanOrEqual(at + 10);
+    expect(f.core.state.following).toBe(true);
+  });
+
+  test("an upward interrupt during a glide ends following", () => {
+    const f = fixture();
+    f.stream(); f.core.notify("commit");
+    f.setBottom(130); f.core.notify("commit"); f.step(16); f.step(32);
+    f.core.engage(); f.core.interrupt("up");
     expect(f.core.state.following).toBe(false);
   });
 
@@ -500,14 +567,14 @@ describe("TimelineViewportCoordinator", () => {
     f.core.engage();
     f.setBottom(140); f.core.notify("commit"); f.step(48); f.step(64);
     expect(f.layout.top()).toBe(stopped);
-    // 暂停期内的用户滚动（惯性或拖动）顺延暂停。
-    f.setNow(150); f.setTop(stopped + 2); f.core.scroll(true);
+    // 暂停期内向上的用户滚动（惯性或拖动）是回看，并顺延暂停；向下未到底见下方的接续用例。
+    f.setNow(150); f.setTop(stopped - 2); f.core.scroll(false);
     expect(f.core.state.following).toBe(false);
     f.setNow(300); f.core.notify("commit"); f.step(316);
-    expect(f.layout.top()).toBe(stopped + 2);
+    expect(f.layout.top()).toBe(stopped - 2);
     // 静止只释放暂停，不恢复已被用户接管的阅读意图。
     glideFrames(f, 360);
-    expect(f.layout.top()).toBe(stopped + 2);
+    expect(f.layout.top()).toBe(stopped - 2);
     f.core.engage(); f.setTop(140); f.core.scroll(true);
     expect(f.core.state.following).toBe(true);
   });
@@ -1235,6 +1302,26 @@ describe("TimelineViewportCoordinator", () => {
     expect(ordinary.layout.top()).toBe(0);
   });
 
+  test("an ordinary commit during the input pause still leaves a reader in place", () => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(50);
+    f.core.userRead();
+    f.core.engage();
+    f.shiftAnchor(400); f.setBottom(1400);
+    f.core.notify("commit");
+    expect(f.layout.top()).toBe(50);
+  });
+
+  test("a reading position moved without observed input is kept by the next commit", () => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(50);
+    f.core.userRead();
+    f.setNow(1000);
+    f.setTop(300); f.core.scroll(false);
+    f.setBottom(1100); f.core.notify("commit");
+    expect(f.layout.top()).toBe(300);
+  });
+
   test("Latest resets the prepend guard and follows", () => {
     const f = prependedReader();
     f.core.latest();
@@ -1253,6 +1340,61 @@ describe("TimelineViewportCoordinator", () => {
     // 假布局视口高 50：先瞬时到 950，再平滑到内容高度 1050；中途同步回执不能退出跟随。
     expect(f.writes.slice(-2)).toEqual([950, 1050]);
     expect(f.core.state).toMatchObject({ following: true, mode: "follow" });
+  });
+
+  test("a tap that stops Latest midway finishes the trip with Latest's motion after idle", () => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(0);
+    f.core.userRead();
+    f.core.latest();
+    // 浏览器的平滑滚动走到一半时被轻点停住。
+    f.setTop(500);
+    f.core.touch(true); f.core.touch(false);
+    expect(f.core.state.following).toBe(true);
+    const before = f.writes.length;
+    f.setNow(1000); f.step(1000);
+    expect(f.writes.slice(before)).toEqual([950, 1050]);
+    expect(f.smooths.slice(before)).toEqual([false, true]);
+  });
+
+  test("Latest pressed while a finger holds the list starts its motion once input is idle", () => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(0);
+    f.core.userRead();
+    f.core.touch(true);
+    const before = f.writes.length;
+    f.core.latest();
+    expect(f.writes).toHaveLength(before);
+    f.core.touch(false);
+    f.setNow(1000); f.step(1000);
+    expect(f.writes.slice(before)).toEqual([950, 1050]);
+    expect(f.smooths.slice(before)).toEqual([false, true]);
+  });
+
+  test("dragging up after stopping Latest cancels the rest of the trip", () => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(0);
+    f.core.userRead();
+    f.core.latest();
+    f.setTop(500);
+    f.core.engage(); f.core.touch(true); f.core.interrupt("up"); f.core.touch(false);
+    expect(f.core.state.following).toBe(false);
+    const before = f.writes.length;
+    f.setNow(1000); f.step(1000);
+    expect(f.writes).toHaveLength(before);
+  });
+
+  test("Latest pressed while held without motion lands in one write after idle", () => {
+    const f = fixture();
+    f.setBottom(1000); f.setTop(0);
+    f.reduce();
+    f.core.userRead();
+    f.core.touch(true);
+    const before = f.writes.length;
+    f.core.latest();
+    f.core.touch(false);
+    f.setNow(1000); f.step(1000);
+    expect(f.writes.slice(before)).toEqual([1050]);
   });
 
   test.each([
@@ -1359,11 +1501,14 @@ describe("process group collapse hold", () => {
     expect(f.layout.top()).toBe(150);
   });
 
-  test("a hold kept across a reading pause ends with the next exit", () => {
+  test("a hold kept across a reading pause passes to the reader and ends once content fills it", () => {
     const f = collapsing(true);
     f.setBottom(50); f.step(16);
     f.core.details(true);
     f.core.userRead();
+    expect(f.finishes).toBe(0);
+    expect(f.layout.top()).toBe(100);
+    f.setBottom(120); f.core.notify("commit");
     expect(f.finishes).toBe(1);
   });
 
@@ -1383,12 +1528,72 @@ describe("process group collapse hold", () => {
     expect(f.finishes).toBeGreaterThanOrEqual(2);
   });
 
-  test("an upward user input ends the hold and keeps reading", () => {
+  test("an upward user input keeps reading and hands the space to the reader instead of dropping it", () => {
     const f = collapsing(true);
     f.step(16);
-    f.core.interrupt();
-    expect(f.finishes).toBe(1);
+    f.core.interrupt("up");
+    expect(f.finishes).toBe(0);
+    expect(f.layout.top()).toBe(100);
     expect(f.core.state.following).toBe(false);
+  });
+
+  test("pressing during the hold leaves the head in place and a tap resumes the hold after idle", () => {
+    const f = collapsing(true);
+    f.setBottom(50); f.step(16);
+    f.core.touch(true);
+    expect(f.layout.top()).toBe(100);
+    expect(f.finishes).toBe(0);
+    f.core.touch(false);
+    f.setNow(1000); f.step(1000);
+    expect(f.core.state).toMatchObject({ following: true, mode: "activity" });
+    expect(f.layout.top()).toBe(100);
+    // 后续输出填满让出的空间后交回普通跟随。
+    f.setBottom(120); f.core.notify("commit");
+    for (let frame = 1; frame <= 60 && f.frames.size > 0; frame += 1) f.step(1000 + frame * 16);
+    expect(f.finishes).toBe(1);
+    expect(f.layout.top()).toBe(120);
+  });
+
+  test("scrolling up during the hold shrinks the space with the reader's position until it runs out", () => {
+    const f = collapsing(true);
+    f.setBottom(50); f.step(16);
+    f.core.touch(true);
+    f.setTop(70); f.core.scroll(false);
+    expect(f.core.state.following).toBe(false);
+    expect(f.finishes).toBe(0);
+    expect(f.layout.top()).toBe(70);
+    f.setTop(40); f.core.scroll(false);
+    expect(f.finishes).toBe(1);
+    expect(f.layout.top()).toBe(40);
+  });
+
+  test("content filling the space while reading ends the hold without writing the position", () => {
+    const f = collapsing(true);
+    f.setBottom(50); f.step(16);
+    f.core.touch(true);
+    f.setTop(70); f.core.scroll(false);
+    f.core.touch(false);
+    const writes = f.writes.length;
+    f.setNow(1000); f.setBottom(80); f.core.notify("commit");
+    expect(f.finishes).toBe(1);
+    expect(f.writes).toHaveLength(writes);
+    expect(f.layout.top()).toBe(70);
+  });
+
+  test("the activity slot leaving releases a hold the user has taken over", () => {
+    const f = collapsing(true);
+    f.core.touch(true);
+    f.core.notify("activity", true, 0);
+    expect(f.holds[0]!.released).toBe(true);
+  });
+
+  test.each(["reset", "latest", "bind"] as const)("%s ends a hold the user has taken over", (exit) => {
+    const f = collapsing(true);
+    f.core.touch(true);
+    if (exit === "reset") f.core.reset();
+    else if (exit === "latest") f.core.latest();
+    else f.core.bind(null);
+    expect(f.finishes).toBe(1);
   });
 
   test("reset ends the hold and no-animation collapses are ignored", () => {

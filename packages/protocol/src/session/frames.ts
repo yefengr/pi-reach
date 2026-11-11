@@ -10,6 +10,8 @@ import {
   MAX_ARRAY_ITEMS,
   MAX_FRAGMENT_BYTES,
   MAX_TOOL_DETAILS_BYTES,
+  LEGACY_SESSION_SYNC_LIMIT,
+  MAX_SESSION_SYNC_LIMIT,
   TOOL_DETAILS_CAPABILITY,
   positiveIntSchema,
   toolRefSchema,
@@ -81,7 +83,7 @@ export const userMessageFrameSchema = strictObject({ ...protocol, type: z.litera
 });
 export const userMessageStatusRequestFrameSchema = strictObject({ ...protocol, type: z.literal("user_message_status_request"), id: idSchema, ...channelRequest, client_request_id: idSchema });
 export const userMessageObservedFrameSchema = strictObject({ ...protocol, type: z.literal("user_message_observed"), id: idSchema, ...channelRequest, client_request_id: idSchema, message_id: idSchema, status: z.literal("committed") });
-export const sessionSyncFrameSchema = strictObject({ ...protocol, type: z.literal("session_sync"), id: idSchema, ...channelRequest, before: eventSequenceSchema.nullable(), limit: z.number().int().min(1).finite().max(80).default(80) });
+export const sessionSyncFrameSchema = strictObject({ ...protocol, type: z.literal("session_sync"), id: idSchema, ...channelRequest, before: eventSequenceSchema.nullable(), limit: z.number().int().min(1).finite().max(MAX_SESSION_SYNC_LIMIT).default(LEGACY_SESSION_SYNC_LIMIT) });
 export const pingFrameSchema = strictObject({ ...protocol, type: z.literal("ping"), id: idSchema, ...channelRequest });
 export const cancelFrameSchema = strictObject({ ...protocol, type: z.literal("cancel"), id: idSchema, ...channelRequest, group_id: idSchema });
 export const sessionNewFrameSchema = strictObject({ ...protocol, type: z.literal("session_new"), id: idSchema, ...channelRequest });
