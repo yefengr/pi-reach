@@ -17,6 +17,14 @@
   transform: scale(var(--pwa-press-button-scale));
   transition-duration: var(--pwa-duration-press-in);
 }
+/* 行类按下态（触屏）：usePwaPressFeedback 延迟标记 data-pwa-pressed，滚动起手不闪；底色统一为 neutral-active，
+   盖过 hover 与 selected。有真实悬停的设备仍用各自的 :active 规则。 */
+.pwa-ui-scope .pwa-root :is(.pwa-nav-session, .pwa-history-row, .pwa-settings-choice, .pwa-settings-row-button, .pwa-command-row, .pwa-command-back, .pwa-timeline-toggle, .pwa-thinking-tail-action, .pwa-thinking-process-row-action, .pwa-queued-messages-toggle, .pwa-attachment-open)[data-pwa-pressed]:not(:disabled):not([data-disabled]),
+.pwa-ui-scope .pwa-root .pwa-peer-card:has(> .pwa-computer-select[data-pwa-pressed]) { background: var(--pwa-neutral-active); }
+/* 底色画在伪元素上的入口：菜单项、模型标签与移动标题区的导航入口。 */
+.pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item][data-pwa-pressed]:not(:disabled):not([data-disabled])::before,
+.pwa-ui-scope .pwa-root .pwa-composer-model[data-pwa-pressed]:not(:disabled)::before,
+.pwa-ui-scope .pwa-root .pwa-session-trigger[data-pwa-pressed] .pwa-session-trigger-icon::before { background: var(--pwa-neutral-active); }
 .pwa-ui-scope .pwa-root .pwa-icon-button:is(:disabled, [data-disabled])::before,
 .pwa-ui-scope .pwa-icon-button:is(:disabled, [data-disabled]) .mantine-ActionIcon-icon,
 .pwa-ui-scope .pwa-button:is(:disabled, [data-disabled]) .mantine-Button-inner {

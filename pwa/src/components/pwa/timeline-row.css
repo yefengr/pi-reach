@@ -30,9 +30,9 @@
   cursor: pointer;
   transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
-/* 悬停底色只给有真实悬停的设备；触屏点击后不残留，按下时用 :active 给即时反馈。 */
+/* 悬停与 :active 底色只给有真实悬停的设备；触屏点击后不残留，按下态由 data-pwa-pressed 延迟给出（见 pwa-controls.css）。 */
 @media (hover: hover) { .pwa-timeline-toggle:hover { background: var(--pwa-hover); } }
-.pwa-timeline-toggle:active { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-timeline-toggle:active { background: var(--pwa-hover); } }
 .pwa-timeline-toggle:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 /* 收起时向右的箭头字形在 16 图标框内右侧留约 5，抵消后与阅读列右缘、气泡右缘对齐（展开转为向下时仍不越出 1px 以上）。 */
 .pwa-timeline-chevron { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); margin-inline-end: -5px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-content); }

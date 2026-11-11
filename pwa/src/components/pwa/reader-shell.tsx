@@ -36,7 +36,7 @@ export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTrans
   const requestClose = () => { if (!readerHasOverlay(surface)) onClose(); };
   const motion = useDrawerMoving(opened);
   const { instant, skipExit, resetSkipExit } = useReaderHistory({ opened, stateKey: historyKey, marker: true, onClose: requestClose, ignorePop: () => readerHasOverlay(surface) });
-  const { drag, canSwipe } = useDrawerSwipeClose({ surface, opened, direction: 1, requestClose, skipExit, resetSkipExit });
+  const { drag, canSwipe } = useDrawerSwipeClose({ surface, opened, direction: "right", requestClose, skipExit, resetSkipExit });
   useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: requestClose, canSwipe, drag });
   const enter = () => { motion.onEnterTransitionEnd(); onEnterTransitionEnd?.(); };
   const controls = <>{actions}

@@ -10,6 +10,7 @@ import { APPEARANCE_STORAGE_KEY } from "@/lib/ui/appearance";
 import { MessageComposer } from "./message-composer";
 import { usePwaAppearance } from "./pwa-appearance";
 import { usePwaMenuTransition } from "./use-pwa-motion";
+import { PRESS_ROW_DELAY_MS, PRESS_ROW_SLOP_PX } from "./use-pwa-press-feedback";
 import { ComputerRow } from "./workspace-device-control";
 
 const setMotion = (reduce: boolean) => cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: reduce ? "reduce" : "no-preference" }] });
@@ -126,6 +127,49 @@ test.each(["touch", "pen"] as const)("%s press state clears on cancel, leave, a 
   expect(replacement.hasAttribute("data-pwa-pressed")).toBe(true);
   await screen.unmount();
   expect(replacement.hasAttribute("data-pwa-pressed")).toBe(false);
+});
+
+test("rows show the pressed fill after a delay, drop it once the finger slides, and flash it for a quick tap", async () => {
+  const screen = await renderPwa(<div style={{ width: 280 }}>
+    <button type="button" className="pwa-settings-row-button" style={{ width: "100%", minHeight: 44 }}>Row fixture</button>
+  </div>);
+  const row = screen.getByRole("button", { name: "Row fixture" }).element() as HTMLButtonElement;
+  const bounds = row.getBoundingClientRect();
+  const dispatch = (type: string, dx = 0, dy = 0) => row.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, pointerType: "touch", isPrimary: true, button: 0, clientX: bounds.left + 20 + dx, clientY: bounds.top + 20 + dy }));
+  const pressed = () => row.hasAttribute("data-pwa-pressed");
+  const resting = getComputedStyle(row).backgroundColor;
+
+  // 按住：延迟结束后才出现，松手即撤销。
+  dispatch("pointerdown");
+  expect(pressed()).toBe(false);
+  await expect.poll(pressed).toBe(true);
+  await expect.poll(() => getComputedStyle(row).backgroundColor).not.toBe(resting);
+  dispatch("pointerup");
+  expect(pressed()).toBe(false);
+
+  // 滑动起手：延迟期间移动超过容差，之后不再出现。
+  dispatch("pointerdown");
+  dispatch("pointermove", 0, PRESS_ROW_SLOP_PX + 2);
+  await new Promise((resolve) => setTimeout(resolve, PRESS_ROW_DELAY_MS + 80));
+  expect(pressed()).toBe(false);
+  dispatch("pointerup", 0, PRESS_ROW_SLOP_PX + 2);
+  expect(pressed()).toBe(false);
+
+  // 浏览器接管成滚动（pointercancel）：不补显。
+  dispatch("pointerdown");
+  dispatch("pointercancel");
+  expect(pressed()).toBe(false);
+
+  // 轻点：延迟未到就松手，补显后自行撤销。
+  dispatch("pointerdown");
+  dispatch("pointerup");
+  expect(pressed()).toBe(true);
+  await expect.poll(pressed).toBe(false);
+
+  // 鼠标不走这条路径。
+  row.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 2, pointerType: "mouse", isPrimary: true, button: 0, clientX: bounds.left + 20, clientY: bounds.top + 20 }));
+  await new Promise((resolve) => setTimeout(resolve, PRESS_ROW_DELAY_MS + 80));
+  expect(pressed()).toBe(false);
 });
 
 function ComposerFixture() {

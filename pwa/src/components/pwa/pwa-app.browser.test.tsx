@@ -6,6 +6,8 @@ import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { renderPwa } from "@/test/browser/render";
+import { readStoredDrafts } from "@/lib/pwa/draft-storage";
+import { SESSION_POSITION_STORAGE_KEY } from "@/lib/pwa/session-position-store";
 import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
 import { encodeBase64 } from "@/lib/pi-reach/encoding";
@@ -5605,4 +5607,67 @@ test("the desktop sidebar fades out the old session before switching to another 
     expect(fadeOuts()).toHaveLength(0);
     expect(listText()).not.toContain("Record 3");
   } finally { await screen.unmount(); }
+});
+
+/** 模拟页面被系统回收后重新载入：卸载应用、丢弃旧连接，再从头渲染。 */
+async function reloadApp(screen: { unmount: () => void | Promise<void> }) {
+  window.dispatchEvent(new Event("pagehide"));
+  await screen.unmount();
+  relayHarness.instances.length = 0;
+  channelHarness.channels.length = 0;
+}
+
+test("restores an unsent draft after the app reloads and drops the stored copy once it is sent", async () => {
+  const first = await renderReadyTimeline();
+  await first.screen.getByRole("textbox", { name: /Message your agent/i }).fill("Half written before the reload");
+  // 转入后台即落盘，不等输入防抖。
+  await reloadApp(first.screen);
+  expect(Object.values(readStoredDrafts())).toEqual(["Half written before the reload"]);
+
+  const second = await renderReadyTimeline();
+  try {
+    const restored = second.screen.getByRole("textbox", { name: /Message your agent/i });
+    await expect.element(restored).toHaveValue("Half written before the reload");
+    await second.screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.element(restored).toHaveValue("");
+    window.dispatchEvent(new Event("pagehide"));
+    expect(readStoredDrafts()).toEqual({});
+  } finally { await second.screen.unmount(); }
+});
+
+test("returns to the reading position of the live session after the app reloads", async () => {
+  // 记录从第 1 条起全部在本地且一页显示完，回看时没有更早的记录可自动加载，位置只由恢复逻辑决定。
+  await seedTimeline(numberedEvents(30));
+  const open = async () => {
+    const screen = await renderOnlineApp(renderWorkspaceApp);
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1", 30));
+    await expect.poll(listText).toContain("Record 30");
+    return { screen, list: document.querySelector<HTMLDivElement>(".pwa-message-list")! };
+  };
+  const first = await open();
+  // 首次打开停在底部；用户向上回看后，位置按屏幕顶部那一行保存。
+  await expect.poll(() => first.list.scrollHeight - first.list.clientHeight).toBeGreaterThan(500);
+  await expect.poll(() => Math.round(first.list.scrollHeight - first.list.scrollTop - first.list.clientHeight)).toBeLessThanOrEqual(1);
+  first.list.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  first.list.scrollTop = 300;
+  await expect.poll(() => first.list.scrollTop).toBe(300);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  const topRow = () => {
+    const list = document.querySelector<HTMLDivElement>(".pwa-message-list")!;
+    const top = list.getBoundingClientRect().top;
+    return [...list.querySelectorAll<HTMLElement>("[data-viewport-row]")].find((row) => row.getBoundingClientRect().bottom > top + 1)?.textContent;
+  };
+  const reading = topRow();
+  expect(reading).toMatch(/Record \d+$/);
+  await reloadApp(first.screen);
+  expect(window.sessionStorage.getItem(SESSION_POSITION_STORAGE_KEY)).toContain("live:owner-device-key");
+
+  const second = await open();
+  try {
+    await expect.poll(topRow).toBe(reading);
+    await expect.poll(() => Math.abs(second.list.scrollTop - 300)).toBeLessThanOrEqual(1);
+    // 仍在回看：没有被拉回底部。
+    expect(second.list.scrollHeight - second.list.scrollTop - second.list.clientHeight).toBeGreaterThan(200);
+  } finally { await second.screen.unmount(); }
 });

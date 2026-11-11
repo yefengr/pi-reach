@@ -351,6 +351,11 @@
   .pwa-root .pwa-navigation-drawer,
   .pwa-root .pwa-navigation-drawer .pwa-navigation-scroll { touch-action: pan-y; }
 
+  /* 底部面板下拉关闭：纵向拖动交给手势；正文溢出时（data-swipe-vertical）改回浏览器滚动，只有头部可下拉。 */
+  .pwa-root .pwa-device-drawer,
+  .pwa-root .pwa-device-drawer-body { touch-action: pan-x; }
+  .pwa-root .pwa-device-drawer-body[data-swipe-vertical] { touch-action: pan-y; }
+
   .pwa-root .pwa-peer-presence {
     gap: 4px;
     font-size: var(--pwa-text-meta);

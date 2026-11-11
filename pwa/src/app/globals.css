@@ -307,7 +307,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: var(--pwa-hit-target); display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-md); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
 .pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled)::before { background: var(--pwa-hover); } }
-.pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); }
+@media (hover: hover) { .pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); } }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); } }
 .pwa-ui-scope .pwa-composer-model:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -6px; }
 .pwa-ui-scope .pwa-composer-model:disabled { cursor: not-allowed; }
@@ -403,7 +403,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 单选行：行首图标、主副文字，选中项行尾为 accent 对勾；原生 radio 只在视觉上隐藏，读屏、方向键与表单语义不变，键盘聚焦时整行显示焦点轮廓。 */
 .pwa-root .pwa-settings-choice { display: block; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-choice:hover { background: var(--pwa-hover); } }
-.pwa-root .pwa-settings-choice:active { background: var(--pwa-neutral-active); }
+@media (hover: hover) { .pwa-root .pwa-settings-choice:active { background: var(--pwa-neutral-active); } }
 .pwa-root .pwa-settings-choice:has(.mantine-Radio-radio:focus-visible) { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
 .pwa-root .pwa-settings-choice .mantine-Radio-body { display: flex; align-items: center; gap: 10px; }
 .pwa-root .pwa-settings-choice .mantine-Radio-inner { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; }
@@ -422,7 +422,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 跳转行：整行是按钮，右侧为 secondary 箭头。 */
 .pwa-root .pwa-settings-row-button { text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-row-button:hover { background: var(--pwa-hover); } }
-.pwa-root .pwa-settings-row-button:active { background: var(--pwa-neutral-active); }
+@media (hover: hover) { .pwa-root .pwa-settings-row-button:active { background: var(--pwa-neutral-active); } }
 .pwa-root .pwa-settings-row-button:focus-visible { outline-offset: -2px; }
 .pwa-root .pwa-settings-row-label { min-width: 0; flex: 1; }
 .pwa-root .pwa-settings-row-chevron { flex: 0 0 auto; color: var(--pwa-secondary); }
@@ -594,6 +594,8 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-operation-notifications .pwa-operation-notification[style],
   .mantine-Modal-overlay.pwa-scrim[style] { transition-timing-function: var(--pwa-ease-standard) !important; }
 }
+/* 触屏上滑收走：纵向拖动交给手势，不触发页面平移。 */
+.pwa-operation-notifications .pwa-operation-notification { touch-action: none; }
 .pwa-operation-notifications .pwa-toast-icon { width: var(--pwa-icon-inline); min-width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); margin-right: 8px; border-radius: 0; background: transparent; }
 .pwa-operation-notifications .pwa-toast-success .pwa-toast-icon { color: var(--pwa-complete); }
 .pwa-operation-notifications .pwa-toast-info .pwa-toast-icon { color: var(--pwa-ink); }

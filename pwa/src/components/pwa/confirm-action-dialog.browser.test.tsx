@@ -227,6 +227,24 @@ test("applies the PWA mobile layout without clipping action content", async () =
   await expect.element(screen.getByRole("button", { name: "Clear local data" })).toBeVisible();
 });
 
+test("stacks the confirmation above Cancel on mobile and keeps Cancel first on desktop", async () => {
+  await page.viewport(390, 844);
+  const mobile = await openConfirmation({ kind: "clear-local-data" });
+  const order = () => [...document.querySelectorAll<HTMLButtonElement>(".pwa-confirm-actions button")];
+  // 纵向排列时取消在最下方；DOM 顺序与视觉一致，Tab 与读屏先到确认。
+  await expect.poll(() => order().map((button) => button.textContent)).toEqual(["Clear local data", "Cancel"]);
+  const [confirm, cancel] = order();
+  expect(Math.round(confirm.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(cancel.getBoundingClientRect().top));
+  expect(confirm.classList.contains("pwa-danger-confirm")).toBe(true);
+  await mobile.screen.unmount();
+
+  await page.viewport(1280, 900);
+  await openConfirmation({ kind: "clear-local-data" });
+  await expect.poll(() => order().map((button) => button.textContent)).toEqual(["Cancel", "Clear local data"]);
+  const [desktopCancel, desktopConfirm] = order();
+  expect(Math.round(desktopCancel.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(desktopConfirm.getBoundingClientRect().left));
+});
+
 function locatorFor(selector: string) {
   const element = document.querySelector<HTMLElement>(selector);
   expect(element).not.toBeNull();

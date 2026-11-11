@@ -31,6 +31,8 @@
 .pwa-root .pwa-file-markdown pre code { padding: 0; color: inherit; background: transparent; font: inherit; white-space: pre; overflow-wrap: normal; }
 .pwa-root .pwa-file-plain { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
 .pwa-root .pwa-file-image-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: hidden; background: var(--pwa-panel); touch-action: none; }
+/* 下拉关闭期间图片可越出舞台，不被舞台边界裁切。 */
+.pwa-root .pwa-file-image-stage[data-image-pull] { overflow: visible; }
 .pwa-root .pwa-file-image-stage img { max-width: 100%; max-height: 100%; border-radius: var(--pwa-radius-md); object-fit: contain; user-select: none; pointer-events: none; }
 /* clone仅拥有图片几何，阅读器背景原位淡化；退出和资源释放仍由Drawer负责。 */
 .pwa-root .pwa-published-image-transition { position: fixed; z-index: var(--pwa-z-image-transition); display: block; max-width: none; max-height: none; margin: 0; border-radius: var(--pwa-radius-md); object-fit: fill; pointer-events: none; user-select: none; visibility: visible; }

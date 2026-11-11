@@ -22,8 +22,8 @@ description: 在 Pi Reach PWA 中实现或审查 Mantine Modal、Drawer、Menu�
 5. 验证最上层独占本次 Escape、遮罩及关闭动作。Modal 叠在 Drawer 或阅读器上时，底层同步门禁不得因 React 闭包滞后而一起关闭；连续逐层 Escape 则按实际事件转发与既有契约消费，不能靠短计时器或退出中的 DOM 长期阻挡下一次按键。页面级快捷键在叠层打开时暂停，不得越过叠层操作被覆盖的工作区。
 6. 异步确认沿用同步 pending ref 防快速双击，并在既有结束路径解锁。pending 期间确认、取消、关闭、Escape、遮罩及相关布局重置均服从门禁；失败留在正确上下文，不提前执行业务动作。退出后交接动作先取走并清空 pending，确保正常退出与卸载清理至多执行一次。
 7. 阅读器（工具、文件、摘要、Thinking）共用 `ReaderShell` 与 `useReaderSelection`：打开与退出期间互斥，owner token 隔离旧过渡回调，阅读锁持有到真实退出；每次打开只占一条 history，Back 只关闭阅读器。改动其中一种时核对其余阅读器与已发布图片的放大过渡层。
-8. 跟手与页面转场验证预览、提交、回弹、外部关闭与晚挂载的交接：预览不抢焦点、不启用滚动锁；解除 `inert` 后明确消费待处理焦点请求一次。关闭被拒绝须撤销手势专用即时退出标记；取消原因不能替代实际打开状态。WAAPI 末帧保留到 React 静止态提交后再清理，旧回调不得影响快速重开。Drawer 与设置页的进出时长与弹簧以 DESIGN「动效」为准，等待退出用可观察信号，不按旧时长写死。
-9. 涉及 Notifications 时读当前版本类型和源码，核对自动关闭、拖拽、滚动关闭、store、固定 ID 与队列行为。队列及优先级按 DESIGN 和现有控制器验证，不把 `limit=1` 当作禁用队列；空通知不占布局，关闭或 Portal 目标变化后焦点与实例生命周期有效。
+8. 跟手与页面转场验证预览、提交、回弹、外部关闭与晚挂载的交接：预览不抢焦点、不启用滚动锁；解除 `inert` 后明确消费待处理焦点请求一次。关闭被拒绝须撤销手势专用即时退出标记；取消原因不能替代实际打开状态。WAAPI 末帧保留到 React 静止态提交后再清理，旧回调不得影响快速重开。Drawer 与设置页的进出时长与弹簧以 DESIGN「动效」为准，等待退出用可观察信号，不按旧时长写死。跟手手势按投影停点提交（停点过行程一半）：测试用停稳后松手或指定事件时间戳固定松手速度，不让提交与否随机器快慢变化；底部电脑面板的下拉关闭与左右 Drawer 共用同一控制器，下方的导航 Drawer 不算阻断叠层。
+9. 涉及 Notifications 时读当前版本类型和源码，核对自动关闭、拖拽、滚动关闭、store、固定 ID 与队列行为。Mantine 自带的横向拖动与滚动关闭保持关闭；触屏上滑收走由 `use-toast-swipe-dismiss` 实现，提交走关闭按钮的同一入口，固定 ID 的下一条提示复用同一元素时不得带着上一条的位移。队列及优先级按 DESIGN 和现有控制器验证，不把 `limit=1` 当作禁用队列；空通知不占布局，关闭或 Portal 目标变化后焦点与实例生命周期有效。
 10. 自动化覆盖动作路由、副作用顺序、失败保持、并发锁、背景门禁与真正关闭态。测试走真实父组件路径，不让 fixture 提前关闭底层而伪造通过。非视觉行为优先 Browser Mode；视觉、点击命中和生产样式再用隔离浏览器补证，不执行真实清库、删除配对或创建会话等破坏性确认。
 
 ## Pitfalls
@@ -51,17 +51,17 @@ description: 在 Pi Reach PWA 中实现或审查 Mantine Modal、Drawer、Menu�
 | 设置页确认与帮助 | 当前设置是 `/app/settings` 页面，不是 Drawer；确认与快捷键帮助位于正确根内，Escape 只关闭最上层并返回有效设置控件，不触发底层返回；带着帮助返回工作区时，入口焦点在设置层卸载后仍有效 |
 | 删除配对确认 | 取消保留底层导航并回到电脑管理入口；成功删除使来源消失时落到已定义的后备入口；遮罩与层级符合 DESIGN |
 | 电脑面板与导航 | 桌面为 Portal Popover、移动为底部 Drawer，操作菜单位于面板之上；入口完成提示按 DESIGN 排除当前电脑，显隐不改变名称宽度，开关面板不确认提醒，切换电脑后即时重算；选择电脑不抢焦点，外部点击关闭不夺走其他控件焦点；正常动效与 Reduced Motion 下连续发送 Escape，不等待退出动画也能按契约逐层关闭，不重复路由或泄漏按键 |
-| Modal、菜单与信息 Popover | 打开焦点、Tab、Escape 回焦、外部关闭不抢焦点；输入区命令、附件与模型菜单在设置层滑入时被覆盖；会话信息保持非模态 dialog 语义；异步更新与快重开不继承旧焦点或动作 |
+| Modal、菜单与信息 Popover | 打开焦点、Tab、Escape 回焦、外部关闭不抢焦点；输入区命令、附件与模型菜单在设置层滑入时被覆盖；会话信息保持非模态 dialog 语义；异步更新与快重开不继承旧焦点或动作；触屏上点浮层之外只关闭它，不触发下方控件、不移动焦点，点自己的触发器照常收起，鼠标外部点击仍作用于被点控件；移动端确认弹窗确认在上、取消在最下，DOM 顺序与视觉一致 |
 | 阅读器 | 真实打开态、系统返回、按钮／Escape／遮罩关闭、history 撤回、阅读锁与 pin 释放、来源移除后的后备焦点均按既有生命周期完成；上层 Modal 先独占 Escape，下一次 Escape 才关闭阅读器；视口变化不重建正文 DOM；四类阅读器互斥，图片放大过渡层高于阅读器 |
-| 跟手与设置返回 | 预览不抢焦点或锁滚动，提交正确启用，回弹无残留；外部关闭从当前位置交接，拒绝后正常关闭仍有退出动画；晚挂载及已挂载导航均只消费一次焦点请求 |
+| 跟手与设置返回 | 预览不抢焦点或锁滚动，提交正确启用，回弹无残留；停稳松手不过半回弹、过半提交，短促轻扫提交；外部关闭从当前位置交接，拒绝后正常关闭仍有退出动画；晚挂载及已挂载导航均只消费一次焦点请求；底部电脑面板下拉关闭在正文溢出时只由头部触发，图片阅读器未缩放时下拉关闭、已缩放时单指为平移 |
 | 桌面快捷键 | 输入控件、可编辑内容、菜单、弹窗、阅读器打开或页面转场时，页面级快捷键暂停；设置页只响应帮助；帮助关闭后回到有效来源或无来源时的后备焦点 |
 | 桌面侧栏收展与调宽 | 收起仅重置所属 Portal 控件，不卸载会话或导航滚动区；Popover／Menu 打开时收起再展开，旧浮层不重现且焦点有效；调宽拖动被 Escape、失焦、收起或进入设置取消时不保存半次宽度，命中区不抢收展入口与滚动条 |
 | 已安装桌面窗口 | 阅读器、Modal 及其遮罩覆盖整页（含品牌行与会话标题区）；原生标题栏外观与控件只用真实安装窗口核验 |
 | 窄屏与短横屏 | Dialog 在视口内，按钮布局与点击域有效；真实正文可滚到最后一项；动态提示不遮挡输入和时间线 |
-| Toast 与提示共存 | 固定 ID、展示条数、队列及优先级符合现有控制器；连接 banner、局部错误、SW 提示同时出现时测正文或 Range 边界与点击命中，结合截图验可用面积 |
+| Toast 与提示共存 | 固定 ID、展示条数、队列及优先级符合现有控制器；连接 banner、局部错误、SW 提示同时出现时测正文或 Range 边界与点击命中，结合截图验可用面积；触屏上滑收走后关闭回调照常触发，下一条提示在原位出现 |
 
 - 命令真源是根与 PWA 的 `package.json`、`vitest.config.ts` 和 `playwright.config.ts`。执行受影响 Node／Browser Mode 测试与 PWA lint；改动层级、叠层组件或其 CSS 时运行 `pwa-layer-guard` 等静态守卫；涉及类型或生产产物时再运行 typecheck／build，关键跨模块流程增加对应 Playwright。最终运行 `git diff --check`，不据纯技能或文字变更宣称业务测试通过。
 - 叠层组件清单（直接引入 Mantine Modal、Drawer、Menu、Popover 或 Notifications 的产品组件，由 `scripts/overlay-skill-guard.test.mjs` 与源码双向核对；增删叠层组件时同步本行与上方矩阵）：`composer-command-menu`、`message-composer`、`session-actions-menu`、`workspace-device-control`、`session-sheet`、`reader-shell`、`published-file-reader`、`confirm-action-dialog`、`pairing-dialog`、`rename-pairing-dialog`、`keyboard-shortcuts-dialog`、`pwa-operation-notifications`。
-- 现有目标测试可从 `pwa/src/components/pwa/` 定位：设置与帮助看 `settings-page`、`pwa-workspace-layout`；确认与配对看 `confirm-action-dialog`、`pairing-dialog`、`rename-pairing-dialog`；电脑面板、导航与标题区看 `workspace-device-control`、`session-sheet`、`session-actions-menu`、`workspace-title-bar`；阅读器看 `reader-drawer`、`summary-reader`、`thinking-reader`、`published-file`、`published-image-motion`；侧栏看 `sidebar-width`；通知看 `pwa-operation-notifications`、`pwa-notice-layout`；时间线看 `message-list`；手势看 swipe／drag 浏览器测试。先确认文件存在，不固定测试数量。
+- 现有目标测试可从 `pwa/src/components/pwa/` 定位：设置与帮助看 `settings-page`、`pwa-workspace-layout`；确认与配对看 `confirm-action-dialog`、`pairing-dialog`、`rename-pairing-dialog`；电脑面板、导航与标题区看 `workspace-device-control`、`session-sheet`、`session-actions-menu`、`workspace-title-bar`；阅读器看 `reader-drawer`、`summary-reader`、`thinking-reader`、`published-file`、`published-image-motion`；侧栏看 `sidebar-width`；通知看 `pwa-operation-notifications`、`pwa-notice-layout`、`toast-swipe-dismiss`；时间线看 `message-list`；手势看 swipe／drag 浏览器测试与 `device-sheet-drag`；触屏外部点按看 `outside-tap-guard`。先确认文件存在，不固定测试数量。
 - 缺少真实 DOM runner 或真机证据时报告未覆盖风险；结构门禁和截图只作补充，不能当作 transition、history、焦点或设备验收已通过。
 - 触及授权外流程、共享契约冲突、真实数据或环境阻塞时停止并报告，不扩大写入、提交或部署范围。

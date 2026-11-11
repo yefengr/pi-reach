@@ -78,7 +78,7 @@
   transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
 @media (hover: hover) { .pwa-root .pwa-process-group .pwa-thinking-tail-action:hover { background: var(--pwa-hover); } }
-.pwa-root .pwa-process-group .pwa-thinking-tail-action:active { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-root .pwa-process-group .pwa-thinking-tail-action:active { background: var(--pwa-hover); } }
 .pwa-root .pwa-process-group .pwa-thinking-tail-action:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 
 /* 工具明细：状态图标移到左侧图标列，状态文字留给读屏，现有 aria-label 不变。 */
@@ -111,7 +111,7 @@
 }
 .pwa-root .pwa-process-group .pwa-thinking-process-row-action { cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-process-group .pwa-thinking-process-row-action:hover { background: var(--pwa-hover); } }
-.pwa-root .pwa-process-group .pwa-thinking-process-row-action:active { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-root .pwa-process-group .pwa-thinking-process-row-action:active { background: var(--pwa-hover); } }
 .pwa-root .pwa-process-group .pwa-thinking-process-row-action:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-root .pwa-process-group .pwa-thinking-process-row-static { cursor: default; }
 

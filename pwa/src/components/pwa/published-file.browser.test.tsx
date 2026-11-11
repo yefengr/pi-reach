@@ -9,7 +9,8 @@ import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { renderPwa } from "@/test/browser/render";
 import { resetTextSizeStateForTest, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import { PublishedFile } from "./published-file";
-import { IMAGE_MAX_ZOOM } from "./published-image-gesture";
+import { IMAGE_MAX_ZOOM, IMAGE_PULL_DISMISS_PX } from "./published-image-gesture";
+import { pointerAt } from "@/test/browser/swipe";
 import { MessageList } from "./message-list";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "./published-files-context";
 
@@ -757,6 +758,100 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
   await expect.poll(() => h.unpin.mock.calls.length).toBe(2);
   expect(h.open).not.toHaveBeenCalled();
+  await h.screen.unmount();
+});
+
+async function openImageReader() {
+  const h = await harness({ file: image, items: [event(published(image))], initial: { phase: "ready", receivedBytes: 100, preview: imagePreview, url: blobUrl(imageBlob) } });
+  await h.screen.getByRole("button", { name: "View image" }).click();
+  await expect.element(h.screen.getByRole("button", { name: "Zoom in" })).toBeVisible();
+  const stage = document.querySelector<HTMLDivElement>(".pwa-file-image-stage")!;
+  // 合成事件没有 UA 活跃指针，单独屏蔽 capture；真实指针捕获由浏览器负责。
+  stage.setPointerCapture = () => {};
+  const picture = stage.querySelector("img")!;
+  await expect.poll(() => picture.complete && picture.naturalWidth > 0).toBe(true);
+  await expect.poll(() => document.querySelector(".pwa-published-image-transition")).toBeNull();
+  const box = stage.getBoundingClientRect();
+  return { h, stage, picture, x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) };
+}
+
+test("a double tap zooms the image around the tapped point and the next double tap resets it", async () => {
+  const { h, stage, picture, x, y } = await openImageReader();
+  const tap = (px: number, py: number, time: number) => flushSync(() => { pointerAt(stage, "pointerdown", px, py, time); pointerAt(stage, "pointerup", px, py, time + 40); });
+  const centre = () => { const box = picture.getBoundingClientRect(); return { x: box.left + box.width / 2, y: box.top + box.height / 2 }; };
+  const rest = centre();
+  // 单击与间隔过长的两次点按都不缩放。
+  tap(x, y, 0);
+  tap(x, y, 1000);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(picture.style.transform).toBe("translate(0px, 0px) scale(1)");
+  // 落点偏离图片中心 20px：放大 2 倍后该点保持不动，图片中心反向移开 20px。
+  tap(rest.x + 20, rest.y, 2000);
+  tap(rest.x + 20, rest.y, 2150);
+  await expect.poll(() => picture.style.transform).toBe("translate(-20px, 0px) scale(2)");
+  expect(Math.round(centre().x)).toBe(Math.round(rest.x - 20));
+  await expect.element(h.screen.getByRole("button", { name: "Reset zoom" })).toHaveTextContent("200%");
+  tap(x, y, 3000);
+  tap(x, y, 3150);
+  await expect.poll(() => picture.style.transform).toBe("translate(0px, 0px) scale(1)");
+  // 两次落点相距过远不算双击。
+  tap(x - 60, y, 4000);
+  tap(x + 60, y, 4150);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(picture.style.transform).toBe("translate(0px, 0px) scale(1)");
+  await h.screen.unmount();
+});
+
+test("pulling the unzoomed image down follows the finger, springs back when short and closes past the dismiss distance", async () => {
+  await page.viewport(390, 844);
+  const { h, stage, picture, x, y } = await openImageReader();
+  const drag = (dy: number) => flushSync(() => {
+    pointerAt(stage, "pointerdown", x, y, 0);
+    pointerAt(stage, "pointermove", x, y + 14, 50);
+    pointerAt(stage, "pointermove", x, y + 14 + dy, 200);
+  });
+  drag(50);
+  // 位移 = 手指位移 − 方向锁定那一帧的位移；图片随下拉略微缩小，缩放平移状态不变。
+  await expect.poll(() => picture.style.translate).toBe("0px 50px");
+  expect(Number(picture.style.scale)).toBeLessThan(1);
+  expect(Number(picture.style.scale)).toBeGreaterThan(0.9);
+  expect(picture.style.transform).toBe("translate(0px, 0px) scale(1)");
+  expect(stage.hasAttribute("data-image-pull")).toBe(true);
+  // 停稳后松手，停点不足关闭距离：回到原位，阅读器仍打开。
+  flushSync(() => pointerAt(stage, "pointerup", x, y + 64, 600));
+  await expect.poll(() => picture.style.translate).toBe("");
+  expect(stage.hasAttribute("data-image-pull")).toBe(false);
+  await expect.poll(() => picture.getAnimations().length).toBe(0);
+  expect(document.querySelector(".pwa-file-reader")).not.toBeNull();
+
+  drag(IMAGE_PULL_DISMISS_PX + 20);
+  flushSync(() => pointerAt(stage, "pointerup", x, y + 14 + IMAGE_PULL_DISMISS_PX + 20, 600));
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+  await h.screen.unmount();
+});
+
+test("a zoomed image pans under one finger instead of pulling down, and an upward drag at fit does nothing", async () => {
+  await page.viewport(390, 844);
+  const { h, stage, picture, x, y } = await openImageReader();
+  flushSync(() => {
+    pointerAt(stage, "pointerdown", x, y, 0);
+    pointerAt(stage, "pointermove", x, y - 14, 50);
+    pointerAt(stage, "pointermove", x, y - 160, 200);
+    pointerAt(stage, "pointerup", x, y - 160, 230);
+  });
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(picture.style.translate).toBe("");
+  expect(document.querySelector(".pwa-file-reader")).not.toBeNull();
+  await h.screen.getByRole("button", { name: "Zoom in" }).click();
+  flushSync(() => {
+    pointerAt(stage, "pointerdown", x, y, 1000);
+    pointerAt(stage, "pointermove", x, y + 14, 1050);
+    pointerAt(stage, "pointermove", x, y + 200, 1200);
+  });
+  await expect.poll(() => picture.style.transform).toBe("translate(0px, 200px) scale(1.5)");
+  expect(picture.style.translate).toBe("");
+  flushSync(() => pointerAt(stage, "pointerup", x, y + 200, 1230));
+  expect(document.querySelector(".pwa-file-reader")).not.toBeNull();
   await h.screen.unmount();
 });
 

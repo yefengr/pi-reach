@@ -18,6 +18,7 @@ import { useDelayedVisibility } from "./use-delayed-visibility";
 import { EmptyHintExitContext } from "./empty-hint-exit";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
+import { observeKeyboardDismissOnLookBack } from "@/lib/pwa/dismiss-keyboard-on-look-back";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
 import { SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 
@@ -157,6 +158,10 @@ export function MessageList({ items, sourceKey, hasEarlier, loadingEarlier = fal
   useLayoutEffect(() => {
     listRef.current?.dispatchEvent(new Event(TIMELINE_GEOMETRY_EVENT));
   }, [liveCompacting, noticeKey, listRef]);
+  useEffect(() => {
+    const list = listRef.current;
+    return list ? observeKeyboardDismissOnLookBack(list) : undefined;
+  }, [listRef]);
   useTimelineEnterFade(listRef, visibleItems.length === 0, loading);
   const completions = useMemo(() => runCompletions(
     items.flatMap((item) => item.kind === "event" ? [item.event] : []),

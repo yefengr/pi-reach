@@ -17,7 +17,7 @@
 .pwa-ui-scope .pwa-attachment-open { border-radius: var(--pwa-radius-xs); color: inherit; text-align: start; cursor: pointer; }
 .pwa-ui-scope .pwa-attachment-open:disabled { cursor: default; }
 @media (hover: hover) { .pwa-ui-scope .pwa-attachment-open:not(:disabled):hover { background: var(--pwa-hover); } }
-.pwa-ui-scope .pwa-attachment-open:not(:disabled):active { background: var(--pwa-hover); }
+@media (hover: hover) { .pwa-ui-scope .pwa-attachment-open:not(:disabled):active { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-attachment-open:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
 .pwa-attachment-actions { display: flex; flex: 0 0 auto; align-items: center; }
 .pwa-attachment-actions button { flex: 0 0 var(--pwa-hit-target); width: var(--pwa-hit-target); height: var(--pwa-hit-target); }

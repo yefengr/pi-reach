@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { enableTouch, resetTouch, touch, type TouchPoint } from "@/test/browser/swipe";
+import { enableTouch, resetTouch, touch, touchReleaseAtRest, type TouchPoint } from "@/test/browser/swipe";
 import { useSettingsRoute } from "@/lib/pwa/settings-route";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
@@ -83,7 +83,10 @@ async function dragTo(origin: TouchPoint, dx: number) {
     await moveTouch(origin, LOCK_STEP + (dx - LOCK_STEP) * step / 4);
   }
 }
-const release = () => touch("touchEnd", []);
+/** 停稳后松手，结果只取决于停点是否过行程一半（见 touchReleaseAtRest）。 */
+const release = touchReleaseAtRest;
+/** 松手前把手指带过行程一半（260px），停稳后松手即提交。 */
+const commitRelease = async (origin: TouchPoint) => { await moveTouch(origin, 260); await release(); };
 async function returned() {
   await expect.poll(settingsOpen).toBe(false);
   await expect.poll(() => settings()).toBeNull();
@@ -127,7 +130,7 @@ test("D4 settings follow the finger over the stationary workspace while the scri
   expect(getComputedStyle(workspace()).visibility).toBe("visible");
   expect(settingsOpen()).toBe(true);
   expect(window.history.state.piReachSettings).toBeDefined();
-  await release();
+  await commitRelease(origin);
   await returned();
   await expect.element(mounted!.getByRole("button", { name: "Open navigation" })).toHaveFocus();
 }, 15000);
@@ -137,7 +140,7 @@ test("D4 return plays from the dragged position without flashing back", async ()
   await dragTo(origin, 140);
   const positions: number[] = [];
   const sample = setInterval(() => { const node = settings(); if (node) positions.push(Math.round(node.getBoundingClientRect().left)); }, 8);
-  await release();
+  await commitRelease(origin);
   await returned();
   clearInterval(sample);
   expect(Math.min(...positions)).toBeGreaterThan(100);
@@ -195,7 +198,7 @@ test("D4 restores the settings page when the route never changes after the commi
   const origin = await openFromWorkspace();
   vi.spyOn(window.history, "back").mockImplementation(() => {});
   await dragTo(origin, 140);
-  await release();
+  await commitRelease(origin);
   await expect.poll(() => layerAnimations().length === 0 && !inTransition(), { timeout: 4000 }).toBe(true);
   expect(settingsLeft()).toBe(0);
   expect(settingsOpen()).toBe(true);
@@ -205,7 +208,7 @@ test("D4 restores the settings page when the route never changes after the commi
 test("D4 a second press while committed does not start another drag", async () => {
   const origin = await openFromWorkspace();
   await dragTo(origin, 140);
-  await release();
+  await commitRelease(origin);
   await touch("touchStart", [origin]);
   await moveTouch(origin, LOCK_STEP);
   await moveTouch(origin, 120);
@@ -235,7 +238,7 @@ test("D4 from navigation previews the expanded navigation, keeps focus until com
   expect(document.activeElement).toBe(focusBefore);
   expect(settings()!.contains(document.activeElement)).toBe(true);
   expect(document.body.style.overflow).not.toBe("hidden");
-  await release();
+  await commitRelease(origin);
   await returned();
   await expect.poll(() => document.activeElement?.matches(".pwa-nav-settings")).toBe(true);
   expect(sheet()!.contains(document.activeElement)).toBe(true);

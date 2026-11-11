@@ -297,7 +297,7 @@
 /* 选择 Pi：卡片底的可点行（不描边），悬停 hover、按下 neutral-active，右侧箭头提示可进入。 */
 .pwa-root .pwa-choose-pi-list { width: min(var(--pwa-reading-width), 100%); display: grid; gap: 8px; margin-top: 16px; text-align: left; }
 .pwa-root .pwa-choose-pi-list .pwa-nav-session { min-height: 56px; margin: 0; padding: 8px 12px; }
-.pwa-root .pwa-choose-pi-list .pwa-nav-session:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
+@media (hover: hover) { .pwa-root .pwa-choose-pi-list .pwa-nav-session:active:not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); } }
 .pwa-root .pwa-choose-pi-list .pwa-nav-link-section { color: var(--pwa-secondary); }
 
 /* 本地历史的只读说明条替换输入区。 */

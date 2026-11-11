@@ -207,7 +207,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     document.addEventListener("keydown", escapeFromOutside);
     return () => document.removeEventListener("keydown", escapeFromOutside);
   }, [contentElement, gesture, opened, preview, requestClose]);
-  const { drag, canSwipe: dragCanSwipe } = useDrawerSwipeClose({ surface: contentElement, opened, direction: -1, requestClose, skipExit, resetSkipExit });
+  const { drag, canSwipe: dragCanSwipe } = useDrawerSwipeClose({ surface: contentElement, opened, direction: "left", requestClose, skipExit, resetSkipExit });
   useSwipe(contentElement, {
     direction: "left",
     enabled: opened,

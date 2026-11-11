@@ -123,6 +123,9 @@ export function useWorkspaceDrag({ settingsRoute, transitioning, rootRef, settin
     move(distance) {
       if (phaseRef.current === "dragging") dragRef.current?.setDistance(distance);
     },
+    extent() {
+      return rootRef.current?.clientWidth ?? 0;
+    },
     end({ committed, velocity }) {
       const drag = dragRef.current;
       if (!drag || phaseRef.current !== "dragging") return;
