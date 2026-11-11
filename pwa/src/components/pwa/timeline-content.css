@@ -59,14 +59,15 @@
 .pwa-compaction-notice { box-sizing: border-box; display: flex; align-items: center; min-height: var(--pwa-hit-target); margin: 6px 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-compaction-notice.is-error { color: var(--pwa-error); }
 
-/* Markdown：标题只分两级且不大于会话标题；链接常显下划线；代码块与工具输出同底。 */
+/* Markdown：标题分三级，一、二级大于正文并收紧行高，其余与正文同号加粗；链接常显下划线；代码块与工具输出同底。 */
 .pwa-markdown { min-width: 0; overflow-wrap: anywhere; }
 .pwa-markdown > :first-child { margin-top: 0; }
 .pwa-markdown > :last-child { margin-bottom: 0; }
 .pwa-markdown p { margin: 8px 0; }
 .pwa-markdown strong, .pwa-markdown b { font-weight: var(--pwa-weight-strong); }
 .pwa-markdown h1, .pwa-markdown h2, .pwa-markdown h3, .pwa-markdown h4, .pwa-markdown h5, .pwa-markdown h6 { margin: 16px 0 8px; font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
-.pwa-markdown h1, .pwa-markdown h2 { font-size: var(--pwa-text-title); }
+.pwa-markdown h1 { font-size: var(--pwa-text-heading); line-height: var(--pwa-leading-title); }
+.pwa-markdown h2 { font-size: var(--pwa-text-subheading); line-height: var(--pwa-leading-title); }
 .pwa-markdown h3, .pwa-markdown h4, .pwa-markdown h5, .pwa-markdown h6 { font-size: var(--pwa-text-body); }
 .pwa-markdown ul, .pwa-markdown ol { margin: 8px 0; padding-left: 20px; }
 .pwa-markdown ul { list-style: disc; }

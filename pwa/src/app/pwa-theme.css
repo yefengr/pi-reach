@@ -227,8 +227,13 @@
   --pwa-text-code: 14px;
   --pwa-text-title: 18px;
   --pwa-text-page: 24px;
+  /* Markdown 一、二级标题，与正文保持至少 2px 级差。 */
+  --pwa-text-heading: 20px;
+  --pwa-text-subheading: 18px;
   --pwa-leading-body: 1.65;
   --pwa-leading-ui: 1.4;
+  /* 页面标题与 Markdown 一、二级标题：字号越大行高倍数越小。 */
+  --pwa-leading-title: 1.25;
   --pwa-leading-code: 1.55;
   --pwa-weight-regular: 400;
   --pwa-weight-strong: 600;
@@ -368,6 +373,8 @@
   --pwa-text-code: 16px;
   --pwa-text-title: 20px;
   --pwa-text-page: 28px;
+  --pwa-text-heading: 22px;
+  --pwa-text-subheading: 20px;
 }
 
 :root[data-pwa-text-size="xlarge"] {
@@ -377,6 +384,40 @@
   --pwa-text-code: 18px;
   --pwa-text-title: 22px;
   --pwa-text-page: 32px;
+  --pwa-text-heading: 24px;
+  --pwa-text-subheading: 22px;
+}
+
+/*
+ * 触控设备的字号基准：手机与平板的阅读字号大于桌面，参照 iOS 正文 17。
+ * 按主输入方式区分而不按宽度，桌面窄窗口不变；代码块标准档保持 14，避免窄屏上每行可见字符过少。
+ */
+@media (pointer: coarse) {
+  :root {
+    --pwa-text-meta: 14px;
+    --pwa-text-list: 16px;
+    --pwa-text-body: 17px;
+    --pwa-text-page: 28px;
+    --pwa-text-heading: 22px;
+    --pwa-text-subheading: 20px;
+  }
+
+  :root[data-pwa-text-size="large"] {
+    --pwa-text-meta: 15px;
+    --pwa-text-list: 18px;
+    --pwa-text-body: 19px;
+    --pwa-text-page: 30px;
+    --pwa-text-heading: 24px;
+    --pwa-text-subheading: 22px;
+  }
+
+  :root[data-pwa-text-size="xlarge"] {
+    --pwa-text-meta: 16px;
+    --pwa-text-list: 20px;
+    --pwa-text-body: 21px;
+    --pwa-text-heading: 26px;
+    --pwa-text-subheading: 24px;
+  }
 }
 
 /* 发丝线档位：0.5px 只在此处定义，正式 CSS 的边框宽度引用 --pwa-hairline。 */

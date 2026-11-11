@@ -167,6 +167,8 @@ export const zh: Messages = {
     darkHint: "更柔和的夜间工作区",
     textSize: "字体大小",
     textSizeHint: "调整界面与消息文字的大小，只保存在此浏览器中。",
+    textSizeSystem: "跟随系统",
+    textSizeSystemHint: "与设备的文字大小一致",
     textSizeStandard: "标准",
     textSizeStandardHint: "默认字号",
     textSizeLarge: "大",

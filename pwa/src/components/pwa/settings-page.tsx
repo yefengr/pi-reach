@@ -1,10 +1,10 @@
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
-import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
+import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
-import type { PwaTextSize } from "@/lib/ui/text-size";
+import type { PwaTextSizePreference } from "@/lib/ui/text-size";
 import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "@/components/pwa/pwa-install";
@@ -17,8 +17,10 @@ export type SettingsPagePreferences = {
   setLanguage: (value: LanguagePreference) => void;
   enterSends: boolean;
   setEnterSends: (value: boolean) => void;
-  textSize: PwaTextSize;
-  setTextSize: (value: PwaTextSize) => void;
+  textSize: PwaTextSizePreference;
+  setTextSize: (value: PwaTextSizePreference) => void;
+  /** 浏览器能读到系统文字大小时才提供「跟随系统」；否则该偏好按标准档显示。 */
+  textSizeFollowsSystem?: boolean;
 };
 
 type SettingsPageProps = {
@@ -53,8 +55,8 @@ export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
 function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   const { preference } = useI18n();
   const [enterSends, setEnterSends] = useEnterSends();
-  const { textSize, setTextSize } = usePwaTextSize();
-  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize }} />;
+  const { preference: textSize, followsSystem, setTextSize } = usePwaTextSize();
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize, textSizeFollowsSystem: followsSystem }} />;
 }
 
 function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
@@ -63,7 +65,8 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
   const { t } = useI18n();
-  const { enterSends, setEnterSends, textSize, setTextSize } = preferences;
+  const { enterSends, setEnterSends, setTextSize, textSizeFollowsSystem = false } = preferences;
+  const textSize = preferences.textSize === "system" && !textSizeFollowsSystem ? "standard" : preferences.textSize;
   const s = t.settings;
   const versionText = (version: string | null, status: ConnectionViewState) => {
     if (status === "online") return version ?? s.versionUnavailable;
@@ -108,8 +111,9 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-text-size-heading">
         <h2 id="pwa-text-size-heading" className="pwa-settings-section-title">{s.textSize}</h2>
-        <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSize)}>
+        <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSizePreference)}>
           <div className="pwa-settings-group">
+            {textSizeFollowsSystem ? <SettingsChoice value="system" icon={<Smartphone size={20} />} title={s.textSizeSystem} hint={s.textSizeSystemHint} /> : null}
             <SettingsChoice value="standard" icon={<Type size={20} />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
             <SettingsChoice value="large" icon={<ALargeSmall size={20} />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
             <SettingsChoice value="xlarge" icon={<CaseSensitive size={20} />} title={s.textSizeXLarge} hint={s.textSizeXLargeHint} />

@@ -46,7 +46,7 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
     fontFamily: "var(--pwa-font-ui)",
     fontWeight: "var(--pwa-weight-strong)",
     sizes: {
-      h1: { fontSize: "var(--pwa-text-page)", lineHeight: "var(--pwa-leading-ui)" },
+      h1: { fontSize: "var(--pwa-text-page)", lineHeight: "var(--pwa-leading-title)" },
       h2: { fontSize: "var(--pwa-text-title)", lineHeight: "var(--pwa-leading-ui)" },
       h3: { fontSize: "var(--pwa-text-body)", lineHeight: "var(--pwa-leading-ui)" },
       h4: { fontSize: "var(--pwa-text-body)", lineHeight: "var(--pwa-leading-ui)" },

@@ -164,6 +164,8 @@ export const en = {
     darkHint: "A softer evening workspace",
     textSize: "Text size",
     textSizeHint: "Adjust interface and message text. Saved in this browser only.",
+    textSizeSystem: "System",
+    textSizeSystemHint: "Match your device text size",
     textSizeStandard: "Standard",
     textSizeStandardHint: "Default size",
     textSizeLarge: "Large",

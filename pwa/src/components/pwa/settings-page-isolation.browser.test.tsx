@@ -4,13 +4,13 @@ import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { getMessages, type LanguagePreference } from "@/lib/i18n";
 import { ENTER_SENDS_STORAGE_KEY } from "@/lib/pwa/keyboard-shortcuts";
-import { resetTextSizeStateForTest, TEXT_SIZE_STORAGE_KEY, type PwaTextSize } from "@/lib/ui/text-size";
+import { resetTextSizeStateForTest, TEXT_SIZE_STORAGE_KEY, type PwaTextSizePreference } from "@/lib/ui/text-size";
 import { SettingsPage } from "./settings-page";
 
 function Harness({ onSave = async () => {} }: { onSave?: (value: string) => Promise<void> }) {
   const [language, setLanguage] = useState<LanguagePreference>("system");
   const [enterSends, setEnterSends] = useState(true);
-  const [textSize, setTextSize] = useState<PwaTextSize>("standard");
+  const [textSize, setTextSize] = useState<PwaTextSizePreference>("standard");
   return <SettingsPage preferences={{ language, setLanguage, enterSends, setEnterSends, textSize, setTextSize }} relayUrl="https://relay.invalid" defaultRelayUrl="https://relay.invalid" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={onSave} onBack={() => {}} backLabel="Back" onClearData={() => {}} onResetLayout={() => {}} onShowShortcuts={() => {}} />;
 }
 

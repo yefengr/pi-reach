@@ -1330,7 +1330,7 @@ test.each([390, 767, 768, 1280].flatMap(width => ["light", "dark"].map(scheme =>
   try {
     document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
     await expect.element(screen.getByRole("heading", { name: "阅读标题 Reading title" })).toBeVisible();
-    for (const [selector, size, lineHeight] of [[".pwa-markdown h2", "18px", "25.2px"], [".pwa-markdown p", "16px", "26.4px"], [".pwa-markdown p code", "14px", "21.7px"], [".pwa-code-block pre", "14px", "21.7px"], [".pwa-code-language", "13px", "18.2px"], [".pwa-turn-meta", "13px", "18.2px"]]) {
+    for (const [selector, size, lineHeight] of [[".pwa-markdown h2", "18px", "22.5px"], [".pwa-markdown p", "16px", "26.4px"], [".pwa-markdown p code", "14px", "21.7px"], [".pwa-code-block pre", "14px", "21.7px"], [".pwa-code-language", "13px", "18.2px"], [".pwa-turn-meta", "13px", "18.2px"]]) {
       const element = document.querySelector(selector)!;
       expect(element, selector).not.toBeNull();
       expect(getComputedStyle(element).fontSize, selector).toBe(size);

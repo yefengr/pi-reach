@@ -372,7 +372,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) var(--pwa-gutter) calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
 .pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }
 .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { margin-left: -8px; padding-inline: 8px; }
-.pwa-root .pwa-settings-title { margin: 0; font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-settings-title { margin: 0; font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-title); }
 .pwa-root .pwa-settings-title:focus { outline: none; }
 .pwa-root .pwa-settings-title:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 2px; border-radius: var(--pwa-radius-xs); }
 .pwa-root .pwa-settings-section { min-width: 0; }
@@ -513,7 +513,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-startup-icon,
 .pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid var(--pwa-running-line); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
 .pwa-startup-icon { width: 48px; height: 48px; margin-bottom: 16px; }
-.pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-title); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: var(--pwa-text-meta) !important; }
 .pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
@@ -620,7 +620,7 @@ body:has(.pwa-root) { overflow: hidden; }
   @media (hover: hover) { .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; } }
   .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back .mantine-Button-section { margin: 0; }
   .pwa-root .pwa-settings-back-label { display: none; }
-  .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); }
+  .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); line-height: var(--pwa-leading-ui); }
   .pwa-startup-card { padding: 24px 16px; }
   .pwa-runtime-notice { margin-top: 6px; padding: 10px 6px 10px 12px; }
   .pwa-runtime-notice .pwa-runtime-notice-body,

@@ -4,7 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { SettingsPage } from "./settings-page";
 import { setLanguagePreference } from "@/lib/i18n";
-import { resetTextSizeStateForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
+import { resetTextSizeStateForTest, setSystemBodyProbeForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 
 const relayUrl = "https://relay.example.test";
 const defaultRelayUrl = "https://relay.default.test";
@@ -44,6 +44,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   window.localStorage.removeItem("pi-reach-enter-sends");
   window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
+  setSystemBodyProbeForTest(null);
   resetTextSizeStateForTest();
   await page.viewport(1280, 900);
 });
@@ -313,6 +314,25 @@ test("applies and remembers a text size tier immediately", async () => {
   expect(document.documentElement.dataset.pwaTextSize).toBe("xlarge");
   expect(window.localStorage.getItem(TEXT_SIZE_STORAGE_KEY)).toBe("xlarge");
   expect(getComputedStyle(document.documentElement).getPropertyValue("--pwa-text-body").trim()).toBe("20px");
+  await screen.unmount();
+});
+
+test("offers following the system text size only where the browser can read it", async () => {
+  let screen = await renderPwa(<SettingsHarness />);
+  // 读不到系统字号的浏览器不显示该选项，默认偏好按标准档显示。
+  expect(document.querySelector('[aria-labelledby="pwa-text-size-heading"] input[value="system"]')).toBeNull();
+  await expect.element(screen.getByRole("radio", { name: /^Standard/ })).toBeChecked();
+  await screen.unmount();
+
+  setSystemBodyProbeForTest(() => 21);
+  screen = await renderPwa(<SettingsHarness />);
+  const system = document.querySelector<HTMLInputElement>('[aria-labelledby="pwa-text-size-heading"] input[value="system"]')!;
+  expect(system.checked).toBe(true);
+  expect(document.documentElement.dataset.pwaTextSize).toBe("xlarge");
+
+  await screen.getByRole("radio", { name: /^Large/ }).click();
+  expect(document.documentElement.dataset.pwaTextSize).toBe("large");
+  expect(system.checked).toBe(false);
   await screen.unmount();
 });
 
