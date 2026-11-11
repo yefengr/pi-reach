@@ -1523,3 +1523,32 @@ test("streaming reply fades in only newly shown text and keeps each fade's start
     expect([...row().querySelectorAll(".pwa-markdown > p")].map(node => node.textContent)).toEqual(["First paragraph. More text", "Second"]);
   } finally { await screen.unmount(); }
 });
+
+test("completion times stay one per turn without stale rows while earlier turns split by compaction are prepended", async () => {
+  const at = (n: number, step: number) => n * 10 + step;
+  const event = (fields: Record<string, unknown>): TimelineViewItem => eventItem({ session_id: "session-1", leaf_id: "history-1", ...fields } as TimelineEvent);
+  /** 一轮：提问、回复、中途压缩（不带轮次）、续跑回复、出错结束。 */
+  const turn = (n: number): TimelineViewItem[] => [
+    event({ event_id: `u${n}`, event_seq: at(n, 1), timestamp: at(n, 1), group_id: `g${n}`, kind: "user", message_id: `u${n}`, blocks: [{ type: "text", text: `Question ${n}` }], origin: "pwa", sender_ref: "me", delivery: "normal", status: "committed" }),
+    event({ event_id: `a${n}`, event_seq: at(n, 2), timestamp: at(n, 2), group_id: `g${n}`, kind: "assistant", status: "complete", blocks: [{ type: "text", text: `Answer ${n}` }] }),
+    event({ event_id: `c${n}`, event_seq: at(n, 3), timestamp: at(n, 3), kind: "compaction", payload: "Summary", truncated: false }),
+    event({ event_id: `b${n}`, event_seq: at(n, 4), timestamp: at(n, 4), group_id: `g${n}`, kind: "assistant", status: "complete", blocks: [{ type: "text", text: `Retry ${n}` }] }),
+    event({ event_id: `e${n}`, event_seq: at(n, 5), timestamp: at(n, 5), group_id: `g${n}`, kind: "run_end", status: "error" }),
+  ];
+  const turns = (from: number) => Array.from({ length: 7 - from }, (_, index) => turn(from + index)).flat();
+  const duplicateKeys = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { screen, update } = await liveList(turns(5));
+  try {
+    const metas = () => [...document.querySelectorAll(".pwa-turn-meta")].map(meta => meta.getAttribute("data-viewport-completion"));
+    expect(metas()).toEqual(["g5", "g6"]);
+    // 每次前插都是一次列表更新；重复 key 会让 React 留下旧节点，时间点越积越多。
+    for (let from = 4; from >= 1; from -= 1) {
+      await update(turns(from));
+      expect(metas()).toEqual(Array.from({ length: 7 - from }, (_, index) => `g${from + index}`));
+    }
+    expect(duplicateKeys.mock.calls.filter(call => String(call[0]).includes("same key"))).toHaveLength(0);
+  } finally {
+    duplicateKeys.mockRestore();
+    await screen.unmount();
+  }
+});

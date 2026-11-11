@@ -294,6 +294,17 @@ describe("turn presentation", () => {
   const runEnd = (id: string, group: string, timestamp: number, status: "complete" | "interrupted" | "error" = "complete"): TimelineEvent => ({ ...scope, event_id: id, group_id: group, timestamp, kind: "run_end", status });
   const events = (...values: TimelineEvent[]) => values.map((event) => ({ kind: "event" as const, event }));
 
+  test("a turn split by a mid-run compaction shows its completion time once, after its last content", () => {
+    // 上下文超长时同一轮中途压缩再续跑；压缩摘要不带轮次，不能把这一轮切成两段各显示一次。
+    const compaction: TimelineEvent = { ...scope, event_id: "c1", timestamp: 3, kind: "compaction", payload: "Summary", truncated: false };
+    const html = renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), compaction, answer("b1", "g1", 4), runEnd("r1", "g1", 5, "error"),
+      user("u2", "g2", 6), answer("a2", "g2", 7), runEnd("r2", "g2", 8)), { hasEarlier: false });
+    expect(html.match(/class="pwa-turn-meta"/g)).toHaveLength(2);
+    const first = html.indexOf('data-viewport-completion="g1"');
+    expect(first).toBeGreaterThan(html.indexOf("Answer b1"));
+    expect(first).toBeLessThan(html.indexOf("Question u2"));
+  });
+
   test("shows the completion time once at the end of a finished turn without visible sender labels", () => {
     const finished = Date.UTC(2026, 0, 1, 9, 30);
     const html = renderList(events(user("u1", "g1", finished - 5000), answer("a1", "g1", finished - 1000), runEnd("r1", "g1", finished)), { hasEarlier: false });

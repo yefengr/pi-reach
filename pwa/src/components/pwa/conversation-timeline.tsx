@@ -127,37 +127,41 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
       rows.push(<CompactionNoticeRow key={`compaction:${notice.id}`} notice={notice} />);
     }
   };
-  let segmentGroup: string | undefined;
-  let hasOutput = false;
-  let interrupted = false;
-  const closeSegment = () => {
-    const completion = segmentGroup === undefined ? undefined : completions?.get(segmentGroup);
-    if (segmentGroup !== undefined && completion && hasOutput) rows.push(<TurnMeta key={`turn:${segmentGroup}`} completion={completion} interrupted={interrupted} groupId={segmentGroup} entering={meta.entering(segmentGroup)} afterSettle={meta.afterSettle(segmentGroup)} />);
-  };
-  for (const entry of entries) {
-    const groupId = entryGroupId(entry);
-    if (groupId !== segmentGroup) {
-      closeSegment();
-      segmentGroup = groupId;
-      hasOutput = false;
-      interrupted = false;
-    }
-    // 先结束上一轮（补上完成时间），再插入发生在两轮之间的本地提示。
+  const turns = turnEnds(entries);
+  entries.forEach((entry, index) => {
+    // 上一轮的完成时间已在其最后一条之后输出，再插入发生在两轮之间的本地提示。
     flushNotices(entry.seq ?? Infinity);
-    if (isPiOutputEntry(entry)) hasOutput = true;
-    if (entry.kind === "text" && entry.interrupted) interrupted = true;
     if (gapKeys.has(entry.key)) rows.push(<GapNotice key={`gap:${entry.key}`} />);
     // 过程组成员相邻且以缺口、本地提示与轮次断开，组在首个成员处整体输出。
     const group = groupOf.get(entry.key);
-    if (group !== undefined) {
-      if (group.entries[0]!.key === entry.key) rows.push(renderGroup(group));
-      continue;
-    }
-    rows.push(render(entry));
-  }
-  closeSegment();
+    if (group === undefined) rows.push(render(entry));
+    else if (group.entries[0]!.key === entry.key) rows.push(renderGroup(group));
+    const groupId = entryGroupId(entry);
+    const turn = groupId === undefined ? undefined : turns.get(groupId);
+    const completion = groupId === undefined ? undefined : completions?.get(groupId);
+    if (groupId === undefined || turn?.last !== index || !turn.output || !completion) return;
+    rows.push(<TurnMeta key={`turn:${groupId}`} completion={completion} interrupted={turn.interrupted} groupId={groupId} entering={meta.entering(groupId)} afterSettle={meta.afterSettle(groupId)} />);
+  });
   flushNotices(Infinity);
   return rows;
+}
+
+/**
+ * 每轮最后一条的位置、是否有 Pi 输出与是否中断。完成时间只在这里输出一次：
+ * 压缩摘要等不带轮次的记录会把同一轮隔开，按连续段输出会重复，重复的 key 还会让 React 在更新中残留旧节点。
+ */
+function turnEnds(entries: readonly PresentationEntry[]): Map<string, { last: number; output: boolean; interrupted: boolean }> {
+  const turns = new Map<string, { last: number; output: boolean; interrupted: boolean }>();
+  entries.forEach((entry, index) => {
+    const groupId = entryGroupId(entry);
+    if (groupId === undefined) return;
+    const turn = turns.get(groupId) ?? { last: index, output: false, interrupted: false };
+    turn.last = index;
+    if (isPiOutputEntry(entry)) turn.output = true;
+    if (entry.kind === "text" && entry.interrupted) turn.interrupted = true;
+    turns.set(groupId, turn);
+  });
+  return turns;
 }
 
 const sameGroups = (left: readonly ProcessGroupModel[], right: readonly ProcessGroupModel[]) =>
