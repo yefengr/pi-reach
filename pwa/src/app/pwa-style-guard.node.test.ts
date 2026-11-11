@@ -22,7 +22,7 @@ const SPACING_TOKENS = new Map([
   ["--pwa-space-2xl", 48],
   ["--pwa-space-pair", 2],
   ["--pwa-space-status", 6],
-  ["--pwa-space-menu-pad", 10],
+  ["--pwa-space-menu-pad", 12],
   ["--pwa-space-composer", 10],
 ]);
 /** 通用圆角四档；Composer、Toast 与胶囊是专用圆角，只允许各自登记的选择器使用。 */
@@ -77,7 +77,7 @@ type Declaration = { file: string; selector: string; property: string; value: st
 type Exception = { file: string; selector: string; property: string; values: number[]; reason: string };
 
 const OPTICAL = "1px 光学校正或读屏隐藏（.pwa-sr-only 同款）";
-const ALIGN = "负外边距让文字或图标与内容左缘对齐，或抵消点击区／gutter 超出视觉的部分";
+const ALIGN = "负外边距让可见文字或图标与内容边缘对齐，或抵消点击区／gutter 超出视觉的部分";
 
 /** 已登记的非档位、非细档间距；数值不在 values 中或登记失效都会失败。新增时同步 DESIGN。 */
 const EXCEPTIONS: Exception[] = [
@@ -99,6 +99,9 @@ const EXCEPTIONS: Exception[] = [
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown code", property: "padding", values: [1], reason: OPTICAL },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-code-copy", property: "margin-block", values: [-4], reason: ALIGN },
   { file: "components/pwa/tool-reader.css", selector: ".pwa-ui-scope .pwa-button.pwa-tool-details-button", property: "margin-left", values: [-8], reason: ALIGN },
+  { file: "components/pwa/timeline-row.css", selector: ".pwa-timeline-chevron", property: "margin-inline-end", values: [-5], reason: ALIGN },
+  { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-button.pwa-delivery-action", property: "margin-inline-end", values: [-8], reason: ALIGN },
+  { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-delivery-action", property: "margin-inline-end", values: [-14], reason: ALIGN },
 ];
 
 type HoverRule = { file: string; selector: string };

@@ -10,7 +10,9 @@
 /* 悬浮侧栏偏好宽度由 hook 注入；主区平铺全高，安全区只由实际贴边层承担。 */
 .pwa-root {
   --pwa-sidebar-width: 280px;
-  --pwa-sidebar-span: calc(var(--pwa-sidebar-width) + 12px + var(--pwa-safe-left));
+  /* 桌面悬浮侧栏与窗口上、左、下边缘的距离；桌面首行与输入区底部留白随之取同值，四周等距。 */
+  --pwa-float-inset: 12px;
+  --pwa-sidebar-span: calc(var(--pwa-sidebar-width) + var(--pwa-float-inset) + var(--pwa-safe-left));
   --pwa-sidebar-motion: var(--pwa-duration-sidebar);
   --pwa-main-safe-top: var(--pwa-safe-top);
   --pwa-main-safe-left: 0px;
@@ -19,11 +21,14 @@
   --pwa-main-inset-start: calc(var(--pwa-gutter) + var(--pwa-main-safe-left));
   --pwa-main-inset-end: calc(var(--pwa-gutter) + var(--pwa-main-safe-right));
   /* 主区底部留白：侧栏、分隔条、输入区与只读说明条共用，侧栏底边与 Composer 卡片底边对齐。 */
-  --pwa-main-bottom-gap: max(var(--pwa-composer-bottom, 16px), var(--pwa-main-safe-bottom, var(--pwa-safe-bottom)));
+  --pwa-composer-bottom: var(--pwa-float-inset);
+  --pwa-main-bottom-gap: max(var(--pwa-composer-bottom), var(--pwa-main-safe-bottom, var(--pwa-safe-bottom)));
   /* 工作区页面以 bg 承载；悬浮侧栏不再给整条状态区铺 panel，移动导航与设置层另行覆盖。 */
   --pwa-status-backdrop: var(--pwa-bg);
 }
 .pwa-root[data-sidebar-collapsed] { --pwa-main-safe-left: var(--pwa-safe-left); --pwa-status-backdrop: var(--pwa-bg); }
+/* 移动布局没有悬浮侧栏，输入区底部默认 16；下方主屏 PWA 与触屏标签页的规则在其后覆盖，顺序不能调换。 */
+@media (max-width: 767.98px) { .pwa-root { --pwa-composer-bottom: 16px; } }
 
 /* 工作区与设置页两层视图：设置页为当前视图时工作区隐藏但保持挂载，保留会话、草稿与阅读位置。
    转场与右侧 Drawer 同一模型：工作区不动，设置层带模态阴影滑入，遮罩只在转场中由脚本淡入淡出。 */
@@ -91,9 +96,9 @@
 .pwa-root .pwa-desktop-navigation {
   width: var(--pwa-sidebar-width);
   min-height: 0;
-  margin-top: var(--pwa-safe-top);
+  margin-top: calc(var(--pwa-float-inset) + var(--pwa-safe-top));
   margin-bottom: var(--pwa-main-bottom-gap);
-  margin-left: calc(12px + var(--pwa-safe-left));
+  margin-left: calc(var(--pwa-float-inset) + var(--pwa-safe-left));
   overflow: hidden;
   border: var(--pwa-hairline) solid var(--pwa-edge);
   border-radius: var(--pwa-radius-xl);
@@ -106,7 +111,7 @@
 .pwa-root .pwa-desktop-navigation .pwa-sidebar { width: 100%; height: 100%; padding-top: 0; padding-left: 8px; }
 .pwa-root .pwa-desktop-navigation .pwa-sidebar-brand { padding-right: calc(var(--pwa-hit-target) + 8px); font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-regular); white-space: nowrap; }
 /* 命中区完全在侧栏右侧，避开品牌行按钮和列表滚动条；视觉分隔只由侧栏自身边框承担。 */
-.pwa-root .pwa-sidebar-resizer { position: absolute; z-index: var(--pwa-z-sidebar-toggle); top: calc(var(--pwa-safe-top) + var(--pwa-topbar-height)); bottom: var(--pwa-main-bottom-gap); left: var(--pwa-sidebar-span); width: 8px; cursor: col-resize; touch-action: none; }
+.pwa-root .pwa-sidebar-resizer { position: absolute; z-index: var(--pwa-z-sidebar-toggle); top: calc(var(--pwa-safe-top) + var(--pwa-float-inset) + var(--pwa-topbar-height)); bottom: var(--pwa-main-bottom-gap); left: var(--pwa-sidebar-span); width: 8px; cursor: col-resize; touch-action: none; }
 .pwa-root .pwa-sidebar-resizer::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: -1px; width: 2px; border-radius: var(--pwa-radius-xs); background: transparent; pointer-events: none; }
 /* 悬停与拖动都不画竖线；其余路径只在键盘聚焦时给轮廓提示。 */
 .pwa-root .pwa-sidebar-resizer:focus-visible { outline: none; }
@@ -121,7 +126,7 @@
 .pwa-ui-scope .pwa-root .pwa-icon-button.pwa-sidebar-toggle {
   position: absolute;
   z-index: var(--pwa-z-sidebar-toggle);
-  top: calc((var(--pwa-topbar-height) - var(--pwa-hit-target)) / 2 + var(--pwa-safe-top));
+  top: calc((var(--pwa-topbar-height) - var(--pwa-hit-target)) / 2 + var(--pwa-float-inset) + var(--pwa-safe-top));
   left: calc(var(--pwa-sidebar-span) - 52px);
   transition: left var(--pwa-sidebar-motion) var(--pwa-ease-content), top var(--pwa-sidebar-motion) var(--pwa-ease-content), color var(--pwa-duration-fade) var(--pwa-ease-standard);
 }
@@ -215,9 +220,10 @@
 /* 会话列：外层消费主区左右安全区，内层为消息列表与输入区提供独立滚动上下文。 */
 .pwa-root .pwa-workspace-body { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding-inline: var(--pwa-main-safe-left) var(--pwa-main-safe-right); }
 .pwa-root .pwa-workspace-column { --pwa-main-safe-left: 0px; --pwa-main-safe-right: 0px; --pwa-main-inset-start: var(--pwa-gutter); --pwa-main-inset-end: var(--pwa-gutter); position: relative; flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-/* 桌面标题区始终贴顶并避让安全区：首行对齐共享 48px 顶栏带，最小高 64px；字号变大时自然撑高。 */
+/* 桌面标题区贴顶，上方留出与侧栏相同的 float-inset 再避让安全区，首行与侧栏品牌行共用 48px 顶栏带；收起侧栏时不变，收展不引起纵向跳动。
+   不含上方留白的最小高 64px；字号变大时自然撑高。 */
 /* 左内边距与侧栏列宽同时长、同曲线过渡：收展时标题只朝一个方向移动，不先反向跳到收起入口的避让位置。 */
-.pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: var(--pwa-main-safe-top); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); transition: padding-left var(--pwa-sidebar-motion) var(--pwa-ease-content); }
+.pwa-root .pwa-title-bar { min-height: calc(64px + var(--pwa-float-inset) + var(--pwa-main-safe-top)); align-items: flex-start; padding-top: calc(var(--pwa-float-inset) + var(--pwa-main-safe-top)); padding-right: calc(8px + var(--pwa-main-safe-right)); padding-bottom: 6px; padding-left: var(--pwa-main-inset-start); transition: padding-left var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root[data-sidebar-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }
 /* 首行文字的中心落在 48px 顶栏带中央；行距按 2px，第二行是普通项目文本。 */
 .pwa-root .pwa-title-bar-heading { min-width: 0; flex: 1 1 auto; display: grid; align-content: start; gap: var(--pwa-space-pair); padding-top: calc((var(--pwa-topbar-height) - var(--pwa-text-title) * var(--pwa-leading-ui)) / 2); }
@@ -243,7 +249,7 @@
 .pwa-chat-footer[data-own-send] .pwa-composer-hint-slot[data-presence="leaving"] { display: none; }
 /* 提示行随包裹层收拢时裁切，不溢出到正文上；裁切范围上下各外扩 10，留给文字操作 44 的点击区与悬停底色。 */
 .pwa-root .pwa-composer-hint-slot > .pwa-composer-hint-line { overflow: clip; overflow-clip-margin: 10px; }
-.pwa-root .pwa-composer-card .pwa-composer-hint-line { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0; padding: 2px 0 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
+.pwa-root .pwa-composer-card .pwa-composer-hint-line { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0; padding: 2px 12px 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); text-align: left; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > svg { flex: 0 0 auto; }
 /* 提示行的文字操作（如「立即重试」）：中性色、600，靠右；点击区 44，越出提示行的部分由负外边距抵消，不撑高提示行；悬停底色上下各内缩 10。 */

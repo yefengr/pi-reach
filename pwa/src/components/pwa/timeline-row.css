@@ -21,7 +21,7 @@
   gap: 8px;
   width: 100%;
   min-height: var(--pwa-hit-target);
-  padding: 4px 6px 4px 0;
+  padding: 4px 0;
   border: 0;
   border-radius: var(--pwa-radius-md);
   color: inherit;
@@ -34,7 +34,8 @@
 @media (hover: hover) { .pwa-timeline-toggle:hover { background: var(--pwa-hover); } }
 .pwa-timeline-toggle:active { background: var(--pwa-hover); }
 .pwa-timeline-toggle:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
-.pwa-timeline-chevron { width: 16px; height: 16px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-content); }
+/* 收起时向右的箭头字形在 16 图标框内右侧留约 5，抵消后与阅读列右缘、气泡右缘对齐（展开转为向下时仍不越出 1px 以上）。 */
+.pwa-timeline-chevron { width: 16px; height: 16px; margin-inline-end: -5px; color: var(--pwa-secondary); transition: transform var(--pwa-duration-collapse-out) var(--pwa-ease-content); }
 .pwa-timeline-toggle[aria-expanded="true"] > .pwa-timeline-chevron { transform: rotate(90deg); transition-duration: var(--pwa-duration-collapse-in); }
 
 /* 展开：进入 180ms、退出 140ms；内容略微位移并淡入淡出。减少动态效果时只保留透明度。 */

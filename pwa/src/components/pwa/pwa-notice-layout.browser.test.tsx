@@ -66,9 +66,9 @@ test.each(viewports.flatMap((viewport) => [3, 10].map((lines) => ({ ...viewport,
   const slot = document.querySelector<HTMLElement>(".pwa-navigation-notice-slot")!;
   expect(runtimeNotice.parentElement).toBe(slot);
   expect(document.querySelector(".pwa-runtime-notice-fallback")!.getBoundingClientRect().height).toBe(0);
-  // 正式标题区：桌面两行最小 64，移动端单行 48；矮密度只由外壳实际高度决定。
+  // 正式标题区：桌面上方 12 加两行最小 64，移动端单行 48；矮密度只由外壳实际高度决定。
   const titleBar = document.querySelector<HTMLElement>(".pwa-title-bar")!;
-  expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(width >= 768 ? 64 : 48);
+  expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(width >= 768 ? 76 : 48);
   // 导航底部的提示不占消息区高度，矮窗口也不压缩；局部错误浮在标题区下方，不推动列表。
   const runtimeStyle = getComputedStyle(runtimeNotice);
   expect([runtimeStyle.marginTop, runtimeStyle.paddingTop, runtimeStyle.paddingBottom]).toEqual(["8px", "10px", "10px"]);

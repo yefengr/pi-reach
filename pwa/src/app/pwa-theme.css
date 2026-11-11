@@ -277,8 +277,9 @@
   /* 领域细档：2／6／10，只用于 DESIGN「间距」细档表列出的语义，不作为通用档位；新语义先补表再使用。 */
   --pwa-space-pair: 2px;
   --pwa-space-status: 6px;
-  --pwa-space-menu-pad: 10px;
   --pwa-space-composer: 10px;
+  /* 菜单行左右内边距取通用档位 12：加上浮层面板内边距 4，菜单文字距面板边缘 16，与移动页面 gutter 同值。 */
+  --pwa-space-menu-pad: 12px;
 
   /* 浮起两层：贴边接触层（shadow-contact-color）勾出下缘，大范围淡投影提供高度；Composer 同理（深色 Composer 不用阴影）。 */
   --pwa-shadow-float: 0 1px 2px var(--pwa-shadow-contact-color), 0 4px 16px var(--pwa-shadow-color);

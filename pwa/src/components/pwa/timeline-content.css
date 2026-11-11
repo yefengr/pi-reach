@@ -38,7 +38,9 @@
 .pwa-delivery-status { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0 4px; margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 /* 明确失败沿用状态色语义；文字本身已说明原因，不靠颜色单独传递状态。 */
 .pwa-delivery-status[data-delivery="failed"] { color: var(--pwa-error); }
-.pwa-ui-scope .pwa-button.pwa-delivery-action { min-height: var(--pwa-hit-target); padding-inline: 8px; font-size: var(--pwa-text-meta); }
+/* 操作的可见文字与图标贴齐气泡右缘（阅读列右缘），点击区向外越出：文字按钮抵消左右内边距 8，图标按钮抵消 44 点击区与 16 图标之差的一半。 */
+.pwa-ui-scope .pwa-button.pwa-delivery-action { min-height: var(--pwa-hit-target); margin-inline-end: -8px; padding-inline: 8px; font-size: var(--pwa-text-meta); }
+.pwa-ui-scope .pwa-icon-button.pwa-delivery-action { margin-inline-end: -14px; }
 
 /* 一轮结束后的完成时间，与运行期间的即时兜底提示。 */
 .pwa-turn-meta { margin: 4px 0 12px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }

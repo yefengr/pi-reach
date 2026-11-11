@@ -1119,7 +1119,8 @@ test.each([1280, 390])("completed process groups summarize calls with a right ch
       const summary = summaryLabel.getBoundingClientRect();
       expect(getComputedStyle(summaryLabel).fontSize).toBe("16px");
       expect(Math.round(arrow.left)).toBeGreaterThanOrEqual(Math.round(summary.right));
-      expect(Math.round(arrow.right)).toBeLessThanOrEqual(Math.round(group.getBoundingClientRect().right));
+      // 箭头图标框越出组头右缘 5，箭头字形贴齐阅读列右缘（DESIGN「间距」）。
+      expect(Math.round(arrow.right - group.getBoundingClientRect().right)).toBe(5);
       expect(group.querySelector("[role='status']")).toBeNull();
       expect(document.querySelectorAll(".pwa-process-group .pwa-tool-status-complete")).toHaveLength(calls.length);
       const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
@@ -1224,7 +1225,10 @@ test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width,
       expect(Math.round(slot().getBoundingClientRect().width)).toBe(16);
       expect(Math.round(slot().getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(copy.getBoundingClientRect().left));
       expect(Math.round(copy.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(chevron.getBoundingClientRect().left));
-      expect(Math.round(chevron.getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(group.getBoundingClientRect().right));
+      // 箭头图标框按设计越出 5，字形贴齐右缘；列表本身不出现横向溢出。状态变化时箭头可能仍在旋转，包围盒会暂时变宽，
+      // 改用不受旋转影响的中心判断：16 框越出 5 后中心在组右缘内 3。
+      const arrow = chevron.getBoundingClientRect();
+      expect(Math.abs(arrow.left + arrow.width / 2 - (group.getBoundingClientRect().right - 3))).toBeLessThanOrEqual(1);
       const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
     };

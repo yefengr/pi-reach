@@ -1212,7 +1212,13 @@ test("only abnormal delivery states render an in-flow status row without coverin
       const row = status.closest(".pwa-user-row")!;
       const followingRow = row.nextElementSibling!;
       expect(Math.round(row.getBoundingClientRect().bottom)).toBeLessThanOrEqual(top(followingRow));
-      expect(status.querySelector("button")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      const action = status.querySelector<HTMLElement>("button")!;
+      expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      // 可见的图标或文字贴齐气泡右缘，44 点击区向外越出（DESIGN「间距」）。
+      const glyph = action.querySelector<Element>("svg, .mantine-Button-label")!;
+      const bubbleRight = Math.round(row.querySelector(".pwa-user-bubble-frame")!.getBoundingClientRect().right);
+      expect(Math.abs(Math.round(glyph.getBoundingClientRect().right) - bubbleRight)).toBeLessThanOrEqual(1);
+      expect(Math.round(action.getBoundingClientRect().right)).toBeGreaterThan(bubbleRight);
     }
   } finally { await h.screen.unmount(); }
 });

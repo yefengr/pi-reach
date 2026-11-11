@@ -374,14 +374,47 @@ test("language rows lead with distinct marks that take the icon slot", async () 
   }
 });
 
-test("rows in a group are divided by hairlines inset 16 on both sides", async () => {
+test("row hairlines start at the row text and stay inset 16 from the group's right edge", async () => {
   await renderPwa(<SettingsHarness />);
   const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
   const choiceRows = [...document.querySelectorAll<HTMLElement>('[aria-labelledby="pwa-appearance-heading"] .pwa-settings-row')];
   const versionRows = [...document.querySelectorAll<HTMLElement>(".pwa-settings-versions > .pwa-settings-row")];
-  for (const rows of [choiceRows, versionRows]) {
+  // 带行首图标的单选行从文字起（16＋20＋10），没有图标的行从内边距 16 起。
+  for (const [rows, left] of [[choiceRows, 46], [versionRows, 16]] as const) {
     expect(getComputedStyle(rows[0]!, "::before").content).toBe("none");
     const divider = getComputedStyle(rows[1]!, "::before");
-    expect([divider.left, divider.right, divider.borderTopWidth]).toEqual(["16px", "16px", hairline]);
+    expect([divider.left, divider.right, divider.borderTopWidth]).toEqual([`${left}px`, "16px", hairline]);
+  }
+  const text = choiceRows[1]!.querySelector(".pwa-settings-choice-text")!;
+  expect(Math.round(text.getBoundingClientRect().left - choiceRows[1]!.getBoundingClientRect().left)).toBe(46);
+});
+
+test.each([1280, 390])("section titles, row text and footnotes share one left edge at %ipx", async (width) => {
+  await page.viewport(width, 844);
+  await renderPwa(<SettingsHarness />);
+  for (const section of document.querySelectorAll<HTMLElement>(".pwa-settings-section")) {
+    const group = section.querySelector<HTMLElement>(".pwa-settings-group")!;
+    const title = section.querySelector<HTMLElement>(".pwa-settings-section-title")!;
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    expect(Math.round(range.getBoundingClientRect().left - group.getBoundingClientRect().left), title.textContent!).toBe(16);
+    const footnote = section.querySelector<HTMLElement>(".pwa-settings-footnote");
+    if (footnote) expect(Math.round(footnote.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(footnote).paddingLeft) - group.getBoundingClientRect().left)).toBe(16);
+  }
+  // 「关于」右侧复制图标的右缘与版本号右缘对齐。
+  const copyIcon = document.querySelector(".pwa-settings-about-heading svg")!;
+  const version = document.querySelector('[data-version="pwa"]')!;
+  expect(Math.round(copyIcon.getBoundingClientRect().right)).toBe(Math.round(version.getBoundingClientRect().right));
+});
+
+test.each([[390, true], [1280, false]])("group buttons stretch to the group width only on mobile (%ipx)", async (width, stretched) => {
+  await page.viewport(width, 844);
+  await renderPwa(<SettingsHarness />);
+  const group = document.querySelector<HTMLElement>(".pwa-settings-group-actions")!;
+  const inner = group.getBoundingClientRect().width - 32;
+  for (const button of group.querySelectorAll<HTMLElement>(".pwa-button")) {
+    const buttonWidth = Math.round(button.getBoundingClientRect().width);
+    if (stretched) expect(buttonWidth).toBe(Math.round(inner));
+    else expect(buttonWidth).toBeLessThan(Math.round(inner));
   }
 });

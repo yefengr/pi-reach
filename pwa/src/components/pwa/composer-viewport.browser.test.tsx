@@ -195,9 +195,9 @@ test("keeps the mobile Composer clear of the home indicator in a standalone app 
     document.documentElement.style.setProperty("--pwa-safe-bottom", "34px");
     expect(bottom()).toBe("34px");
     document.documentElement.style.removeProperty("--pwa-safe-bottom");
-    // 桌面布局不变。
+    // 桌面布局取悬浮侧栏的四周留白 12，不受移动主屏下限影响。
     await page.viewport(1280, 844);
-    await expect.poll(bottom).toBe("16px");
+    await expect.poll(bottom).toBe("12px");
   } finally {
     standalone.remove();
     document.documentElement.style.removeProperty("--pwa-safe-bottom");
@@ -464,10 +464,10 @@ test("keeps a fixed small gap in a touch browser tab and docks only in the stand
     expect(footerSpace()).toBe(restingSpace);
     expect(Math.round(view.list.scrollTop)).toBe(Math.round(followingTop));
     expect(bottomGap(view.list)).toBeLessThanOrEqual(1);
-    // 桌面布局不受影响。
+    // 桌面布局不受影响，仍为悬浮侧栏的四周留白 12。
     await page.viewport(1280, 844);
     view.input.focus({ preventScroll: true });
-    await expect.poll(bottom).toBe("16px");
+    await expect.poll(bottom).toBe("12px");
     view.input.blur();
   } finally {
     standalone.remove();

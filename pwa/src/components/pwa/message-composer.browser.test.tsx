@@ -435,7 +435,10 @@ test.each([[1280, 900], [390, 844]])("keeps a single Composer surface, frameless
     expect(cardStyle.borderRadius).toBe("32px");
     expect(inputStyle.borderTopWidth).toBe("0px");
     expect(inputStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
-    expect(inputStyle.paddingLeft).toBe("0px");
+    // 文字在卡片内边距 12 之外再内缩 12，距卡片内缘 24，远离 32 的大圆角。
+    expect([inputStyle.paddingLeft, inputStyle.paddingRight]).toEqual(["12px", "12px"]);
+    const textLeft = input.getBoundingClientRect().left + Number.parseFloat(inputStyle.paddingLeft);
+    expect(Math.round(textLeft - card.getBoundingClientRect().left - Number.parseFloat(cardStyle.borderLeftWidth))).toBe(24);
     for (const tool of [image, commands]) {
       expect(tool.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
       expect(tool.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
@@ -1332,6 +1335,10 @@ test("the in-card hint sits 13px below the card edge and 14px above the text", a
     // 提示离卡片上沿略近于离正文，读作卡片的状态行而不是正文的一部分；发丝线按整像素取整。
     expect(Math.round(text.top - card.top)).toBe(13);
     expect(Math.round(textTop - text.bottom)).toBe(14);
+    // 提示行与正文同一左缘。
+    const line = document.querySelector<HTMLElement>(".pwa-composer-hint-line")!;
+    const hintLeft = line.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(line).paddingLeft);
+    expect(Math.round(hintLeft)).toBe(Math.round(input.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(input).paddingLeft)));
   } finally { await screen.unmount(); }
 });
 

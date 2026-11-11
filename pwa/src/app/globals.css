@@ -280,10 +280,11 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; } }
 .pwa-composer-textarea { display: block; width: 100%; min-width: 0; }
+/* 文字在卡片左右内边距 12 之外再内缩 12：远离 32 的大圆角，并与下方附件、命令图标的可见字形大致同一左缘。 */
 .pwa-ui-scope .pwa-composer .pwa-composer-input,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:hover,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:focus,
-.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: var(--pwa-space-composer) 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: var(--pwa-space-composer) 12px; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-ui-scope .pwa-composer .pwa-composer-input:disabled { background: transparent; }
 .pwa-composer .pwa-composer-input::placeholder { color: var(--pwa-secondary); }
 .pwa-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -375,7 +376,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-title:focus { outline: none; }
 .pwa-root .pwa-settings-title:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 2px; border-radius: var(--pwa-radius-xs); }
 .pwa-root .pwa-settings-section { min-width: 0; }
-.pwa-root .pwa-settings-section-title { margin: 0 0 8px; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+/* 分区标题与分组内的行文字、分组下方的说明同一左缘（分组内边距 16）。 */
+.pwa-root .pwa-settings-section-title { margin: 0 0 8px; padding-inline: 16px; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-root .pwa-settings-section-description { margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 /* 分组下方的补充说明：与分组相距 6（附属说明），左右与行内文字同缩进 16。 */
 .pwa-root .pwa-settings-footnote { margin-top: 6px; padding-inline: 16px; overflow-wrap: anywhere; }
@@ -383,6 +385,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-group { margin: 0; overflow: hidden; border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); }
 .pwa-root .pwa-settings-row { position: relative; box-sizing: border-box; width: 100%; min-height: var(--pwa-hit-target); margin: 0; padding: 8px 16px; display: flex; align-items: center; gap: 10px; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-root .pwa-settings-row + .pwa-settings-row::before { content: ""; position: absolute; top: 0; right: 16px; left: 16px; border-top: var(--pwa-hairline) solid var(--pwa-separator); pointer-events: none; }
+/* 带行首图标的单选行，分隔线从文字起（内边距 16＋图标 20＋间隔 10），图标读作一列；右端仍内缩 16。 */
+.pwa-root .pwa-settings-choice + .pwa-settings-choice::before { left: 46px; }
 /* 单选行：行首图标、主副文字，选中项行尾为 accent 对勾；原生 radio 只在视觉上隐藏，读屏、方向键与表单语义不变，键盘聚焦时整行显示焦点轮廓。 */
 .pwa-root .pwa-settings-choice { display: block; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-choice:hover { background: var(--pwa-hover); } }
@@ -424,7 +428,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-form { padding: 16px; display: grid; justify-items: start; gap: var(--pwa-space-md); }
 .pwa-root .pwa-settings-form .pwa-field { width: 100%; }
 .pwa-root .pwa-settings-actions { margin-top: 16px; display: grid; justify-items: start; gap: 8px; }
-.pwa-root .pwa-settings-about-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+/* 滚动诊断的状态与操作放进内边距 16 的分组；Stack 间隔 8 加 8，状态文字到操作仍为 16。 */
+.pwa-root .pwa-settings-diagnostics { padding: 16px; }
+.pwa-root .pwa-settings-diagnostics .pwa-settings-section-description { margin: 0; }
+.pwa-root .pwa-settings-diagnostics .pwa-settings-actions { margin-top: 8px; }
+/* 右侧复制按钮的 16 图标在 44 点击区内各留 14，再让 2，使图标右缘与行内版本号右缘同在内缩 16 处。 */
+.pwa-root .pwa-settings-about-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; padding-inline-end: 2px; }
 .pwa-root .pwa-settings-about-heading .pwa-settings-section-title { margin: 0; }
 .pwa-root .pwa-settings-versions > .pwa-settings-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
 .pwa-root .pwa-settings-versions dt { margin: 0; }
@@ -599,6 +608,8 @@ body:has(.pwa-root) { overflow: hidden; }
 @keyframes pwa-rotate { to { transform: rotate(360deg); } }
 
 @media (max-width: 767.98px) {
+  /* 移动设置页分组内的按钮纵向全宽，与移动确认弹窗一致，避免宽度随文字长短参差。 */
+  .pwa-root .pwa-settings-group .pwa-button { justify-self: stretch; }
   /* 移动端与桌面保持同一块输入表面的内边距。 */
   /* 移动设置页：返回箭头与标题组成固定顶栏，尺寸同 .pwa-topbar；左右各让出内容区 16px 铺满屏宽，由顶栏遮挡状态栏。 */
   .pwa-root .pwa-settings-inner { padding: 0 var(--pwa-gutter) calc(48px + var(--pwa-safe-bottom, 0px)); }

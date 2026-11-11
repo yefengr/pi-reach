@@ -284,9 +284,9 @@ test("desktop management panel routes rename, remove, and pair after it closes",
 
   await trigger.click();
   await screen.getByRole("button", { name: "Computer actions for Travel Mac" }).click();
-  // 菜单项与其他菜单同规格：最小高 44、左右内边距 10。
+  // 菜单项与其他菜单同规格：最小高 44、左右内边距 12，加面板内边距 4 后文字距面板边缘 16。
   const renameItem = screen.getByRole("menuitem", { name: "Rename Travel Mac" }).element();
-  expect(getComputedStyle(renameItem).paddingLeft).toBe("10px");
+  expect(getComputedStyle(renameItem).paddingLeft).toBe("12px");
   expect(Math.round(renameItem.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await screen.getByRole("menuitem", { name: "Rename Travel Mac" }).click();
   await expect.poll(() => events).toEqual(["rename:device:next"]);

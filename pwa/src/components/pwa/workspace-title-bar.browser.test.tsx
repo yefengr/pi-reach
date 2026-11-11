@@ -6,6 +6,10 @@ import { WorkspaceTitleBar } from "./workspace-title-bar";
 
 const LONG_TITLE = `Release check ${"with a very long conversation title ".repeat(10)}`;
 const LONG_PROJECT = `pi-reach-${"long-project-directory-name-".repeat(10)}`;
+/** 桌面标题区上方与悬浮侧栏同样留 12（--pwa-float-inset），其下为 64 最小高与 48 首行带。 */
+const FLOAT_INSET = 12;
+const DESKTOP_TITLE_HEIGHT = 64 + FLOAT_INSET;
+const FIRST_ROW_CENTER = FLOAT_INSET + 24;
 
 function renderBar(props: Partial<Parameters<typeof WorkspaceTitleBar>[0]> = {}) {
   return renderPwa(<WorkspaceTitleBar title="Release check" showTitle prefix="pi-reach-desk" navigationExpanded={false} onOpenNavigation={() => {}} onRefresh={() => {}} {...props} />);
@@ -67,14 +71,14 @@ test("shows only the session name in h1 and the project as a second line without
   expect(Math.round(projectBox.left)).toBe(Math.round(nameBox.left));
   expect(Math.round(projectBox.top - nameBox.bottom)).toBe(2);
 
-  // 标准档桌面标题区为 64，首行中心与右侧操作都落在共享 48 顶栏带的中央。
+  // 标准档桌面标题区为上方 12 加 64，首行中心与右侧操作都落在共享 48 顶栏带的中央。
   const barBox = titleBar().getBoundingClientRect();
   const actions = document.querySelector<HTMLElement>(".pwa-title-bar-actions")!;
   const actionsBox = actions.getBoundingClientRect();
-  expect(Math.round(barBox.height)).toBe(64);
-  expect(Math.abs(centerY(nameBox) - Math.round(barBox.top + 24))).toBeLessThanOrEqual(1);
-  expect(Math.abs(centerY(actionsBox) - Math.round(barBox.top + 24))).toBeLessThanOrEqual(1);
-  expect(Math.round(actionsBox.top)).toBe(Math.round(barBox.top));
+  expect(Math.round(barBox.height)).toBe(DESKTOP_TITLE_HEIGHT);
+  expect(Math.abs(centerY(nameBox) - Math.round(barBox.top + FIRST_ROW_CENTER))).toBeLessThanOrEqual(1);
+  expect(Math.abs(centerY(actionsBox) - Math.round(barBox.top + FIRST_ROW_CENTER))).toBeLessThanOrEqual(1);
+  expect(Math.round(actionsBox.top)).toBe(Math.round(barBox.top + FLOAT_INSET));
   expect(Math.round(nameBox.right)).toBeLessThanOrEqual(Math.round(actionsBox.left));
 
   // 刷新仍是 44px 命中区。
@@ -90,7 +94,7 @@ test("ellipsizes both lines at the 768px desktop edge without pushing the action
   const project = document.querySelector<HTMLElement>(".pwa-title-bar-project")!;
   const actions = document.querySelector<HTMLElement>(".pwa-title-bar-actions")!;
 
-  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(64);
+  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(DESKTOP_TITLE_HEIGHT);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(768);
   // 两行各自单行省略，标题区收缩但右侧操作不被挤压。
   for (const line of [name, project]) {
@@ -103,17 +107,17 @@ test("ellipsizes both lines at the 768px desktop edge without pushing the action
   expect(Math.round(actions.getBoundingClientRect().right)).toBeLessThanOrEqual(768 - 8);
 });
 
-test("keeps the default 64px title area without a project and without a session", async () => {
+test("keeps the default desktop title area height without a project and without a session", async () => {
   await page.viewport(1280, 844);
   const withProject = await renderBar();
   await expect.element(withProject.getByRole("heading", { level: 1 })).toBeVisible();
-  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(64);
+  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(DESKTOP_TITLE_HEIGHT);
   await withProject.unmount();
 
   const withoutProject = await renderBar({ prefix: null });
   await expect.element(withoutProject.getByRole("heading", { level: 1 })).toBeVisible();
   expect(document.querySelector(".pwa-title-bar-project")).toBeNull();
-  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(64);
+  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(DESKTOP_TITLE_HEIGHT);
   await withoutProject.unmount();
 
   const withoutSession = await renderBar({ showTitle: false });
@@ -121,7 +125,7 @@ test("keeps the default 64px title area without a project and without a session"
   expect(document.querySelector(".pwa-session-trigger")).not.toBeNull();
   expect(document.querySelector("h1")).toBeNull();
   expect(document.querySelector(".pwa-title-bar-project")).toBeNull();
-  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(64);
+  expect(Math.round(titleBar().getBoundingClientRect().height)).toBe(DESKTOP_TITLE_HEIGHT);
   await withoutSession.unmount();
 });
 
@@ -140,14 +144,14 @@ test("lets enlarged text grow the title area without clipping and keeps the firs
   const actionsBox = document.querySelector<HTMLElement>(".pwa-title-bar-actions")!.getBoundingClientRect();
   const lineHeight = Number.parseFloat(getComputedStyle(name).lineHeight);
   // 大字号时标题区自然增高，两行仍完整可见，不被 64 最小高裁切。
-  expect(Math.round(barBox.height)).toBeGreaterThanOrEqual(64);
-  expect(Math.round(barBox.height)).toBeLessThan(72);
+  expect(Math.round(barBox.height)).toBeGreaterThanOrEqual(DESKTOP_TITLE_HEIGHT);
+  expect(Math.round(barBox.height)).toBeLessThan(DESKTOP_TITLE_HEIGHT + 8);
   expect(Math.round(nameBox.height)).toBeGreaterThanOrEqual(Math.round(lineHeight));
   expect(Math.round(projectBox.bottom)).toBeLessThanOrEqual(Math.round(barBox.bottom - 6));
   expect(Math.round(projectBox.top - nameBox.bottom)).toBe(2);
   // 首行中心与右侧操作仍按 48 顶栏带对齐。
-  expect(Math.abs(centerY(nameBox) - Math.round(barBox.top + 24))).toBeLessThanOrEqual(1);
-  expect(Math.abs(centerY(actionsBox) - Math.round(barBox.top + 24))).toBeLessThanOrEqual(1);
+  expect(Math.abs(centerY(nameBox) - Math.round(barBox.top + FIRST_ROW_CENTER))).toBeLessThanOrEqual(1);
+  expect(Math.abs(centerY(actionsBox) - Math.round(barBox.top + FIRST_ROW_CENTER))).toBeLessThanOrEqual(1);
 });
 
 test("keeps the mobile title bar at 48 plus safe top with a single navigation entry", async () => {

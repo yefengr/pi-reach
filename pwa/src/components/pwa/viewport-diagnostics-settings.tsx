@@ -38,8 +38,7 @@ export function ViewportDiagnosticsSettings({ online }: { online: boolean }) {
   };
   return <section className="pwa-settings-section" aria-labelledby="pwa-viewport-diagnostics-heading">
     <h2 id="pwa-viewport-diagnostics-heading" className="pwa-settings-section-title">{s.title}</h2>
-    <p className="pwa-settings-section-description">{s.hint}</p>
-    <Stack gap="xs">
+    <Stack gap="xs" className="pwa-settings-group pwa-settings-diagnostics">
       <p className="pwa-settings-section-description" role="status">{s[state.phase]}</p>
       {!online ? <p className="pwa-settings-section-description">{s.offline}</p> : null}
       <div className="pwa-settings-actions">
@@ -56,5 +55,6 @@ export function ViewportDiagnosticsSettings({ online }: { online: boolean }) {
         <Textarea label={s.json} description={s.jsonHint} value={json} readOnly rows={8} spellCheck={false} />
       </> : null}
     </Stack>
+    <p className="pwa-settings-section-description pwa-settings-footnote">{s.hint}</p>
   </section>;
 }

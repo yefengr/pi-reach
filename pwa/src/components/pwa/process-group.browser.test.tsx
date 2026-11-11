@@ -87,6 +87,8 @@ async function finish(element: Element) {
 }
 const rect = (node: Element) => node.getBoundingClientRect();
 const round = (value: number) => Math.round(value);
+/** 折叠箭头的 16 图标框越出组头右缘 5，使向右的字形贴齐阅读列右缘（DESIGN「间距」）。 */
+const CHEVRON_OUTSET = 5;
 
 test("running groups mount immediately with one viewport identity, real rows and no entry motion", async () => {
   const view = await harness();
@@ -219,7 +221,8 @@ test.each(sizes)("short connectors, fixed left status slots and single-line rows
   const detail = view.root().querySelector<HTMLElement>(".pwa-tool-action-copy > span")!;
   expect(getComputedStyle(detail).textOverflow).toBe("ellipsis");
   expect(getComputedStyle(detail).whiteSpace).toBe("nowrap");
-  expect(view.root().scrollWidth).toBeLessThanOrEqual(view.root().clientWidth);
+  // 只有折叠箭头的图标框按设计越出 5（字形贴齐右缘），长文字不得撑出组宽。
+  expect(view.root().scrollWidth).toBeLessThanOrEqual(view.root().clientWidth + CHEVRON_OUTSET);
   expect(round(rect(view.root()).right)).toBeLessThanOrEqual(width);
   const color = getComputedStyle(heading).color;
   document.documentElement.setAttribute("data-mantine-color-scheme", theme === "light" ? "dark" : "light");
@@ -229,6 +232,15 @@ test.each(sizes)("short connectors, fixed left status slots and single-line rows
     await cdp().send("Input.dispatchMouseEvent", { type: "mouseMoved", x: width - 1, y: 899 });
     await page.screenshot({ element: view.root(), path: `../../../../.pi/tmp/thinking-tool-p3-${theme}.png` });
   }
+});
+
+test("the head keeps a full-width hit row while its chevron glyph reaches the reading column's right edge", async () => {
+  const view = await harness({ entries: [tool("read", "complete", "README.md"), tool("bash", "complete", "pnpm test")] });
+  const chevron = view.head().querySelector<SVGElement>(".pwa-timeline-chevron")!;
+  expect(round(rect(view.head()).width)).toBe(round(rect(view.root()).width));
+  expect(getComputedStyle(view.head()).paddingRight).toBe("0px");
+  // 向右箭头的字形在 16 图标框右侧留约 5，图标框越出 5 后字形贴齐组头右缘（DESIGN「间距」）。
+  expect(round(rect(chevron).right - rect(view.head()).right)).toBe(CHEVRON_OUTSET);
 });
 
 test("a running Thinking title moves into the expanded head; its row keeps only the readable tail until it ends", async () => {
@@ -373,5 +385,5 @@ test("large text and reduced motion retain icon alignment without geometric titl
   expect(round(rect(slot).width)).toBe(16);
   expect(title().getAnimations({ subtree: true })).toHaveLength(0);
   expect(getComputedStyle(title()).transitionProperty).not.toMatch(/width|transform/);
-  expect(view.root().scrollWidth).toBeLessThanOrEqual(view.root().clientWidth);
+  expect(view.root().scrollWidth).toBeLessThanOrEqual(view.root().clientWidth + CHEVRON_OUTSET);
 });
