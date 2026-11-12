@@ -18,6 +18,7 @@ import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 import { applyStandaloneRules } from "@/test/browser/standalone";
 import { minimumControlHeight } from "@/test/browser/button-height";
+import { finishCssTransitions } from "@/test/browser/motion";
 
 const device: PwaDeviceRecord = {
   id: "device:office",
@@ -690,6 +691,8 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(drawer.boxShadow).not.toBe("none");
       } else {
         await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
+        // 弹层从触发角缩放展开，测量前等进入过渡结束，否则尺寸按缩放后的 0.9 倍读出。
+        await finishCssTransitions();
       }
     };
     const select = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name} (?:Online|Offline|Partial|Checking)`) });
