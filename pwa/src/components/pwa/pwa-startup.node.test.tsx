@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StartupErrorView } from "./pwa-startup";
+import { StartupErrorView, StartupLoading } from "./pwa-startup";
 import { PwaUiProvider } from "./pwa-ui-provider";
 
 test("renders the startup error with a Mantine reload action", () => {
@@ -21,4 +21,16 @@ test("renders the startup error with a Mantine reload action", () => {
   expect(reloadButton).toMatch(/data-variant="filled"/);
   expect(reloadButton).toMatch(/type="button"/);
   expect(reloadButton).toMatch(/data-position="left"/);
+});
+
+test("startup loading keeps only the background until it is due, then shows the mark and status", () => {
+  const render = (visible: boolean) => renderToStaticMarkup(<PwaUiProvider><StartupLoading visible={visible} /></PwaUiProvider>);
+  // 启动图之后先接一片同色底，快速打开时不闪出标识与文字。
+  const pending = render(false);
+  expect(pending).toContain('class="pwa-loading"');
+  expect(pending).not.toContain("pwa-loading-mark");
+  expect(pending).not.toContain("Opening local workspace");
+  const due = render(true);
+  expect(due).toContain("pwa-loading-mark");
+  expect(due).toContain("Opening local workspace…");
 });

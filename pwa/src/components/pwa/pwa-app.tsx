@@ -1279,8 +1279,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const compactCurrentSession = useCallback(() => { sendCommandAction({ action: "session_compact" }); }, [sendCommandAction]);
   const setComposerModel = useCallback((model: WireModel) => { sendCommandAction({ action: "model_set", provider: model.provider, modelId: model.id }); }, [sendCommandAction]);
   const setComposerThinking = useCallback((level: ThinkingLevel) => { sendCommandAction({ action: "thinking_set", level }); }, [sendCommandAction]);
+  const startupLoadingVisible = useDelayedVisibility(startupState === "loading");
   const canAttach = !newSessionPending && connection === "online" && attachments.snapshot.capability.status === "supported" && !attachments.snapshot.active;
-  if (startupState === "loading") return <StartupLoading />;
+  // 本地工作区通常很快打开：300ms 内完成不显示加载屏，只留与启动图同色的底，避免启动后闪一下；出现后至少保留 500ms。
+  if (startupState === "loading" || (startupState === "ready" && startupLoadingVisible)) return <StartupLoading visible={startupLoadingVisible} />;
   if (startupState === "error") return <StartupErrorView error={startupError} onRetry={() => window.location.reload()} />;
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
   const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, historyListStatus, onRetryHistory: () => { void refreshHistory(); }, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, deviceActivity, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
