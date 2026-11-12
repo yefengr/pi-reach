@@ -4370,6 +4370,23 @@ test("keeps an exited Pi in place when a new runtime appears for the same endpoi
   }
 });
 
+test("leaves the mobile title empty while waiting for online Pi, then names the computer when none is online", async () => {
+  const screen = await renderWorkspaceApp();
+  try {
+    const title = () => document.querySelector<HTMLElement>(".pwa-session-trigger-title")?.textContent;
+    await vi.waitFor(() => expect(relayHarness.instances[0]?.state).toBe("open"));
+    // 等待快照期间不先显示电脑名，避免随后换成会话名时跳一下。
+    await expect.element(screen.getByText("Checking for running Pi…", { exact: true })).toBeInTheDocument();
+    expect(title()).toBe("");
+    expect(document.querySelector(".pwa-session-trigger")!.hasAttribute("title")).toBe(false);
+    relayHarness.instances[0]!.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [] });
+    await expect.element(screen.getByRole("heading", { name: "No Pi online" })).toBeVisible();
+    await expect.poll(title).toBe("test-host");
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("shows the Relay status instead of a connection failure while no Pi is online", async () => {
   const screen = await renderWorkspaceApp();
   try {

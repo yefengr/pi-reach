@@ -1287,6 +1287,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
   const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, historyListStatus, onRetryHistory: () => { void refreshHistory(); }, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, deviceActivity, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
+  const awaitingSession = activeDevice !== null && (placeholderKind === "checking" || placeholderKind === "opening");
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;
   const titleBar: PwaWorkspaceTitleBar = {
     ...(selectedHistory
@@ -1294,7 +1295,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       : activeDevice && displayEndpoint
         ? { title: displayPi(displayEndpoint), prefix: cwdName(displayEndpoint.cwd), showTitle: true, moreMenu: <SessionActionsMenu info={{ name: displayPi(displayEndpoint), cwd: displayEndpoint.cwd ?? null, computer: computerName, status: exitedDisplay ? t.workspace.exited : displayEndpoint.working ? t.actions.running : t.actions.idle }} /> }
         // 没有配对或未选中电脑时，移动顶栏显示品牌名（不翻译），不把「导航」当标题。
-        : { title: activeDevice ? computerName : "Pi Reach", showTitle: false }),
+        // 等待在线 Pi 与打开会话期间标题留空：会话名与输入区随后一起出现，不先闪过电脑名。
+        : { title: activeDevice ? (awaitingSession ? "" : computerName) : "Pi Reach", showTitle: false }),
     navigationNotice: completedEndpointIds.size > 0,
   };
   const connectionHintView = connectionHint(connectionIssue, connectionStage, displayConnection === "connecting" || displayConnection === "retrying", {
