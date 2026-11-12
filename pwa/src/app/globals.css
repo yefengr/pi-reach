@@ -180,7 +180,7 @@ body:has(.pwa-root) { overflow: hidden; }
 @media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-active); }
 .pwa-ui-scope .pwa-icon-button:disabled,
-.pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: not-allowed; }
+.pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: default; }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:disabled::before,
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"][data-disabled]::before { background: var(--pwa-disabled-bg); }
 .pwa-ui-scope .pwa-icon-button:disabled::before,
@@ -282,7 +282,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: transparent; color: var(--pwa-error); background: var(--pwa-error-wash); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash-hover); } }
 .pwa-ui-scope .pwa-button:disabled,
-.pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: not-allowed; }
+.pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: default; }
 .pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
 .pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
 .pwa-message-action { display: inline-flex; }
@@ -293,6 +293,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-image-input { display: none; }
 .pwa-composer-card { position: relative; z-index: 1; min-width: 0; padding: var(--pwa-space-composer) 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
+/* 拖着文件经过可添加附件的输入区时，外框与聚焦同样改为强调色，表示松手即加入附件。 */
+.pwa-composer[data-file-drag] .pwa-composer-card { border-color: var(--pwa-accent); }
 .pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; } }
@@ -315,7 +317,7 @@ body:has(.pwa-root) { overflow: hidden; }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); } }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); } }
 .pwa-ui-scope .pwa-composer-model:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -6px; }
-.pwa-ui-scope .pwa-composer-model:disabled { cursor: not-allowed; }
+.pwa-ui-scope .pwa-composer-model:disabled { cursor: default; }
 .pwa-ui-scope .pwa-composer-model > svg { flex: 0 0 auto; }
 .pwa-composer-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pwa-composer-model-thinking { flex: 0 0 auto; }
@@ -366,7 +368,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 禁用项不靠透明度：文字与图标改为 secondary，保持可读。 */
 .pwa-command-row:disabled,
 .pwa-command-row:disabled .pwa-command-copy code,
-.pwa-command-row:disabled .pwa-command-copy > span { color: var(--pwa-secondary); cursor: not-allowed; }
+.pwa-command-row:disabled .pwa-command-copy > span { color: var(--pwa-secondary); cursor: default; }
 .pwa-command-copy { display: grid; min-width: 0; flex: 1; gap: var(--pwa-space-pair); }
 .pwa-command-copy code,
 .pwa-command-copy > span { overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
@@ -546,7 +548,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-spin { color: var(--pwa-running); animation: pwa-rotate var(--pwa-duration-spin) linear infinite; }
 .pwa-loading { color: var(--pwa-secondary); font-size: var(--pwa-text-body); }
 .pwa-loading p { margin: 16px 0 0; }
-.pwa-loading p span { color: var(--pwa-secondary); }
 .pwa-loading-mark { display: block; margin: 0 auto; color: var(--pwa-ink); }
 
 

@@ -38,16 +38,13 @@ test("keeps every tile on one scrolling row without folding, so each remove stay
   }
 });
 
-test("shows the file name in a tooltip on hover and keyboard focus", async () => {
+test("gives the file name and status as a native hint without a custom tooltip", async () => {
   const screen = await renderPwa(<Card><ComposerAttachmentTiles items={[file, { ...file, id: "paused", fileName: "paused.bin", status: "paused", receivedBytes: 1024 }]} onRemove={() => {}} /></Card>);
   try {
+    expect(screen.getByRole("group", { name: "notes.txt" }).element().getAttribute("title")).toBe("notes.txt");
+    expect(screen.getByRole("group", { name: /paused\.bin/ }).element().getAttribute("title")).toBe("paused.bin · Paused");
     await userEvent.hover(screen.getByRole("group", { name: "notes.txt" }));
-    await expect.element(page.getByRole("tooltip")).toHaveTextContent("notes.txt");
-    await userEvent.unhover(screen.getByRole("group", { name: "notes.txt" }));
-    await expect.element(page.getByRole("tooltip")).not.toBeInTheDocument();
-    // 聚焦进入方块内的角标同样弹出，状态短词一并给出。
-    screen.getByRole("button", { name: "Cancel paused.bin" }).element().focus();
-    await expect.element(page.getByRole("tooltip")).toHaveTextContent("paused.bin · Paused");
+    expect(document.querySelector("[role='tooltip']")).toBeNull();
   } finally {
     await screen.unmount();
   }

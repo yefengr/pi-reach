@@ -389,7 +389,7 @@ test("fails closed before connecting when deployment metadata is absent or inval
 test("keeps the Owner Relay alive while endpoint discovery is still checking", async () => {
   const screen = await renderPwa(<PwaApp />);
 
-  await expect.element(screen.getByText("Checking for running Pi...", { exact: true })).toBeVisible();
+  await expect.element(screen.getByText("Checking for running Pi…", { exact: true })).toBeVisible();
   await expect.element(screen.getByText("Loading…", { exact: true })).toBeInTheDocument();
   expect(relayHarness.instances).toHaveLength(1);
   expect(relayHarness.instances[0]?.closeCalls).toBe(0);

@@ -30,7 +30,6 @@ const containerSelectors = [
   ".pwa-navigation-scroll",
   ".pwa-markdown-table",
   ".pwa-code-block pre",
-  ".pwa-tool-diff-output",
   ".pwa-file-reader-scroll",
   ".pwa-queued-message-list",
   ".pwa-command-menu-dropdown",

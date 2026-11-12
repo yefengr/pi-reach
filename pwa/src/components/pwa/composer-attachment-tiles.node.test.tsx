@@ -9,15 +9,15 @@ function markup(items: ComposerAttachmentItem[], interactive = true) {
   return renderToStaticMarkup(<PwaUiProvider><ComposerAttachmentTiles items={items} onRemove={interactive ? () => {} : undefined} onRetry={interactive ? () => {} : undefined} /></PwaUiProvider>);
 }
 
-test("renders nothing without attachments and names each tile without a native title", () => {
+test("renders nothing without attachments and names each tile with a native hint", () => {
   expect(markup([])).not.toContain("pwa-attachment-tiles");
   const html = markup([file]);
   expect(html).toContain('aria-label="notes.txt"');
   expect(html).toContain(">TXT<");
   expect(html).toContain("1 KiB");
   expect(html).toContain('aria-label="Remove notes.txt"');
-  // 文件名只经 aria-label 与 Tooltip 提供，原生 title 会与 Tooltip 重复。
-  expect(html).not.toContain("title=");
+  // 方块上不显示文件名，悬停时由原生提示给出。
+  expect(html).toContain('title="notes.txt"');
 });
 
 test("a finished upload looks like a draft and carries no check mark", () => {

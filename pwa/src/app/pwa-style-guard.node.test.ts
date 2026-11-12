@@ -116,7 +116,6 @@ const EXCEPTIONS: Exception[] = [
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown ul, .pwa-markdown ol", property: "padding-left", values: [20], reason: "Markdown 列表缩进" },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown code", property: "padding", values: [1], reason: OPTICAL },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-code-copy", property: "margin-block", values: [-4], reason: ALIGN },
-  { file: "components/pwa/tool-reader.css", selector: ".pwa-ui-scope .pwa-button.pwa-tool-details-button", property: "margin-left", values: [-8], reason: ALIGN },
   { file: "components/pwa/timeline-row.css", selector: ".pwa-timeline-chevron", property: "margin-inline-end", values: [-5], reason: ALIGN },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-button.pwa-delivery-action", property: "margin-inline-end", values: [-8], reason: ALIGN },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-delivery-action", property: "margin-inline-end", values: [-14], reason: ALIGN },
@@ -378,6 +377,12 @@ describe("CSS static guard", () => {
     expect(found.map(key).filter((rule) => !allowed.has(rule))).toEqual([]);
     const present = new Set(found.map(key));
     expect(HOVER_OVERRIDES.map(key).filter((rule) => !present.has(rule))).toEqual([]);
+  });
+
+  test("disabled controls keep the default cursor instead of not-allowed", () => {
+    // 禁用已由 disabled-bg 与 secondary 表达；与系统控件一致，禁用时不换成禁止光标。
+    const offenders = all.filter((entry) => !entry.file.startsWith("dev/") && entry.property === "cursor" && entry.value.includes("not-allowed")).map(keyOf);
+    expect(offenders).toEqual([]);
   });
 
   test("border and outline widths stay hairline", () => {

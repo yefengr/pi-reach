@@ -204,6 +204,8 @@ test("mobile title bar and navigation head share the top bar below a translucent
     expect(Math.round(head.height)).toBe(48 + safeTop);
     const brand = document.querySelector(".pwa-session-sheet-head .pwa-brand-mark")!.getBoundingClientRect();
     expect(Math.round(brand.left)).toBe(16);
+    // 品牌标识与桌面侧栏同为 20。
+    expect(Math.round(brand.width)).toBe(20);
     expect(Math.abs(center(brand) - (safeTop + 24))).toBeLessThanOrEqual(1);
     const close = document.querySelector(".pwa-session-sheet-head .pwa-icon-button")!.getBoundingClientRect();
     expect(Math.abs(center(close) - (safeTop + 24))).toBeLessThanOrEqual(1);

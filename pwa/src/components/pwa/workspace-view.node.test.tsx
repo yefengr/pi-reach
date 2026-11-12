@@ -179,7 +179,7 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(currentHistory).not.toMatch(/items?</);
   expect(nextHistory).toContain("<time");
   expect(historyHtml).not.toContain("Current saved session");
-  expect(waitingHtml).toContain("Checking for running Pi...");
+  expect(waitingHtml).toContain("Checking for running Pi…");
   expect(waitingHtml).toContain("pwa-nav-skeleton");
   expect(waitingHtml).not.toContain(">Current Pi<");
   expect(waitingHtml).toContain("**Pinned history**");

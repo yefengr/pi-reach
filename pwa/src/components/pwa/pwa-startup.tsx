@@ -24,7 +24,7 @@ export function describeStartupFailure(failure: unknown): StartupError {
 
 export function StartupLoading() {
   const { t } = useI18n();
-  return <div className="pwa-loading"><div><BrandMark className="pwa-loading-mark" size={48} /><p>{t.startup.opening}<span>...</span></p></div></div>;
+  return <div className="pwa-loading"><div><BrandMark className="pwa-loading-mark" size={48} /><p>{t.startup.opening}</p></div></div>;
 }
 
 export function StartupErrorView({ error, onRetry }: { error: StartupError | null; onRetry: () => void }) {

@@ -14,6 +14,7 @@ import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { DESKTOP_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 import { dismissKeyboardAfterSend } from "@/lib/pwa/dismiss-keyboard-after-send";
+import { useFileDropTarget } from "./use-file-drop";
 
 type ComposerAttachmentMenuProps = {
   disabled: boolean;
@@ -312,6 +313,8 @@ const MessageComposerContent = memo(function MessageComposerContent({
     if (document.activeElement === textareaRef.current) event.preventDefault();
   };
 
+  const fileDrop = useFileDropTarget({ disabled: addDisabled, onFiles: onAddFiles });
+
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.files);
     if (!files.length || addDisabled) return;
@@ -429,7 +432,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
   };
 
   return (
-    <form className="pwa-composer" onSubmit={handleSubmit}>
+    <form className="pwa-composer" onSubmit={handleSubmit} data-file-drag={fileDrop.active || undefined} {...fileDrop.handlers}>
       <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/*" capture="environment" disabled={addDisabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file && !addDisabled) onAddFiles([file]); event.currentTarget.value = ""; }} />
       <ComposerQueuedMessages />
       <div className="pwa-composer-card">

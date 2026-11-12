@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { serwist } from "@serwist/vite";
 import { defineConfig } from "vite";
 import { pwaRoutingPlugin } from "./scripts/pwa-routing.mjs";
+import { startupImageLinks } from "./scripts/startup-images.mjs";
 import { APPEARANCE_STORAGE_KEY, DARK_SCHEME_QUERY, DARK_THEME_COLOR, LIGHT_THEME_COLOR } from "./src/lib/ui/appearance.ts";
 
 // 复用 Mantine 已恢复的外观；存储不可用时与 CSS 一样退回系统偏好。
@@ -31,7 +32,10 @@ export default defineConfig(({ command }) => ({
           defaultColorScheme: "auto",
           localStorageKey: APPEARANCE_STORAGE_KEY,
         }));
-        return html.replace("<!-- color-scheme -->", `${colorSchemeScript}<script>${themeColorScript}</script>`);
+        // iOS 启动图按设备尺寸、方向与深浅外观逐条声明，链接由同一份设备清单生成。
+        return html
+          .replace("<!-- color-scheme -->", `${colorSchemeScript}<script>${themeColorScript}</script>`)
+          .replace("<!-- startup-images -->", startupImageLinks());
       },
     },
     serwist({
@@ -40,7 +44,8 @@ export default defineConfig(({ command }) => ({
       swDest: "sw.js",
       globDirectory: "dist",
       globPatterns: ["**/*.{html,js,css,woff,woff2,png,svg,webmanifest}"],
-      globIgnores: ["sw.js", "**/*.map"],
+      // 启动图只在 iOS 添加到主屏幕时下载一次，不进入每个客户端的预缓存。
+      globIgnores: ["sw.js", "**/*.map", "startup/**"],
       injectionPoint: "self.__SW_MANIFEST",
       rollupFormat: "iife",
       scope: "/app",

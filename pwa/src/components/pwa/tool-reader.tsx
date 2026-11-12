@@ -68,7 +68,7 @@ export function ToolReader({ value: sourceValue, sourceKey, status: statusOverri
   // 正文首块原样列出全部参数（不截断），其后只放真实结果，不再从参数复制内容。
   // 对象参数只用结构化结果，不再额外拼一份未使用的全文，避免大参数在流式渲染中重复序列化。
   const callText = value && !callArguments ? toolReaderCall(value) : undefined;
-  const blocks = value ? toolContentBlocks(value, { input: false }) : [];
+  const blocks = value ? toolContentBlocks(value) : [];
   const error = value ? toolError(value) : undefined;
   const bodyBlocks = blocks.filter((block) => !(block.kind === "text" && block.style === "error"));
   const title = value?.tool ?? t.tools.noToolSelected;
@@ -90,7 +90,7 @@ export function ToolReader({ value: sourceValue, sourceKey, status: statusOverri
               : callText ? <pre className="pwa-tool-reader-command">{callText}</pre> : null}
             {error ? <div className="pwa-reader-error" role="alert"><CircleAlert size={16} aria-hidden="true" /><pre>{error}</pre></div> : null}
             {bodyBlocks.map((block, index) => block.kind === "image"
-              ? <ToolImage key={`image:${index}`} block={block} index={index} preview={false} />
+              ? <ToolImage key={`image:${index}`} block={block} index={index} />
               : <OutputText key={`text:${index}`} block={block} />)}
             {toolWasTruncated(value) ? <p className="pwa-tool-notice">{t.tools.outputTruncated}</p> : null}
           </>}

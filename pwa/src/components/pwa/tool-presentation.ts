@@ -267,10 +267,6 @@ export function searchMatches(value: ToolValue): readonly SearchMatch[] | undefi
 
 export const TOOL_HEADER_MAX_CHARACTERS = 240;
 export const TOOL_HEADER_MAX_LINES = 4;
-export const TOOL_INLINE_MAX_LINES = 12;
-export const TOOL_INLINE_MAX_CHARACTERS = 2_400;
-export const TOOL_INLINE_MAX_BLOCKS = 8;
-export const TOOL_INLINE_IMAGE_MAX_HEIGHT = 240;
 export const TOOL_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"]);
 
 type ContentStyle = "plain" | "code" | "terminal" | "diff" | "error" | "notice" | "json";
@@ -281,31 +277,6 @@ export type ToolContentBlock =
 /** 标题独立限长并保持 Unicode 完整；正文预算与 Reader 全文不受影响。 */
 export function toolInlineText(text: string): string {
   return previewText(text, TOOL_HEADER_MAX_CHARACTERS, TOOL_HEADER_MAX_LINES);
-}
-
-/** 命令类工具的完整调用；作为展开输出块的第一行回显，参数仍只走专用视图。 */
-export function toolCommandLead(value: ToolValue): string | undefined {
-  const action = toolAction(value);
-  return action.kind === "command" ? `$ ${action.detail}` : undefined;
-}
-
-/** 完整调用上下文以原始换行显示；大正文在同一内容流内单独呈现。 */
-export function toolCallText(value: ToolValue): string {
-  const action = toolAction(value);
-  const heading = toolCommandLead(value) ?? toolHeaderSummary(value);
-  const args = toolInput(value);
-  if (action.kind === "generic") return `${value.tool}${heading ? ` ${heading}` : ""}`;
-  if (!isRecord(args)) return heading;
-  const consumed = new Set<string>(action.kind === "command" ? COMMAND_KEYS : action.kind === "search" ? QUERY_KEYS : PATH_KEYS);
-  if (action.kind === "write") consumed.add("content");
-  const requested = action.kind === "edit" ? requestedToolDiff(value) : undefined;
-  if (requested !== undefined) {
-    for (const key of ["edits", "oldText", "newText"]) consumed.add(key);
-  }
-  const extra = Object.entries(args).filter(([key]) => !consumed.has(key)).map(([key, item]) => `${key}: ${typeof item === "string" ? item : safeJsonText(item, INPUT_IMAGE_PLACEHOLDER)}`);
-  // 已返回 diff 时，正文优先展示真实修改；完整调用仍保留原始请求供对照。
-  if (requested !== undefined && reliableToolDiff(value)) extra.push(`${getMessages().tools.requestedChanges}\n${requested}`);
-  return [heading, ...extra].join("\n");
 }
 
 /** 阅读器首块的参数结构：名称与值分开，界面只强调名称；参数不是对象时不拆分，按纯文本显示。 */
@@ -329,31 +300,9 @@ export function toolReaderCall(value: ToolValue): string | undefined {
   return entries.map(({ name, value: text }) => `${name}: ${text}`).join("\n");
 }
 
-function parametersBlock(value: ToolValue): ToolContentBlock | undefined {
-  if (toolInput(value) === undefined) return undefined;
-  const args = toolInput(value);
-  return { kind: "text", text: typeof args === "string" ? args : safeJsonText(args, INPUT_IMAGE_PLACEHOLDER), style: "json", label: getMessages().tools.parameters };
-}
-
-function requestedToolDiff(value: ToolValue): string | undefined {
-  const args = toolInput(value);
-  if (!isRecord(args)) return undefined;
-  const edits = Array.isArray(args.edits) ? args.edits : [args];
-  if (edits.length === 0 || !edits.every((edit) => isRecord(edit) && typeof edit.oldText === "string" && typeof edit.newText === "string")) return undefined;
-  return edits.map((edit) => {
-    const replacement = edit as { oldText: string; newText: string };
-    return [replacement.oldText === "" ? "" : replacement.oldText.split("\n").map((line) => `-${line}`).join("\n"), replacement.newText === "" ? "" : replacement.newText.split("\n").map((line) => `+${line}`).join("\n")].filter(Boolean).join("\n");
-  }).join("\n\n");
-}
-
-/** 真实结果优先保留；请求 diff 不代表执行成功，也不覆盖失败和中断输出。 */
-/**
- * 默认包含从输入派生的块：通用工具的「参数」、write 的内容与 edit 的请求修改。
- * 详情阅读器已在首块原样列出全部参数，传 input: false 只保留真实结果，避免同一内容出现两次。
- */
-export function toolContentBlocks(value: ToolValue, { input: withInput = true }: { input?: boolean } = {}): ToolContentBlock[] {
+/** 只保留工具真实返回的结果；参数由详情阅读器首块原样列出，不从输入派生内容，请求的修改也不当作已执行的 diff。 */
+export function toolContentBlocks(value: ToolValue): ToolContentBlock[] {
   if (isToolSummary(value)) return [{ kind: "text", text: getMessages().tools.detailsNotLoaded, style: "notice" }];
-  const args = toolInput(value);
   const action = toolAction(value);
   const output = toolResult(value);
   const error = toolError(value);
@@ -363,11 +312,7 @@ export function toolContentBlocks(value: ToolValue, { input: withInput = true }:
   if (error && !errorInResult) blocks.push({ kind: "text", text: error, style: "error", label: getMessages().tools.toolError });
   if (toolStatus(value) === "interrupted") blocks.push({ kind: "text", text: getMessages().tools.interruptedNotice, style: "notice" });
   const diff = action.kind === "edit" ? reliableToolDiff(value) : undefined;
-  const requested = withInput && action.kind === "edit" && !diff ? requestedToolDiff(value) : undefined;
   const matches = action.kind === "search" ? searchMatches(value) : undefined;
-  if (withInput && action.kind === "write" && !error && toolStatus(value) !== "interrupted" && isRecord(args) && typeof args.content === "string") {
-    blocks.push({ kind: "text", text: args.content, style: "code", path: action.detail });
-  }
   if (matches !== undefined) {
     blocks.push({ kind: "text", text: matches.length ? matches.map((match) => `${match.path}${match.line === undefined ? "" : `:${match.line}`}\n${match.text}`).join("\n") : getMessages().tools.noMatches, style: "plain", label: getMessages().tools.searchResults });
   } else {
@@ -390,12 +335,6 @@ export function toolContentBlocks(value: ToolValue, { input: withInput = true }:
     }
   }
   if (diff) blocks.push({ kind: "text", text: diff, style: "diff", label: getMessages().tools.returnedDiff });
-  if (requested !== undefined) blocks.push({ kind: "text", text: requested, style: "diff", label: getMessages().tools.requestedChanges });
-  if (withInput && action.kind === "write" && (error || toolStatus(value) === "interrupted") && isRecord(args) && typeof args.content === "string") {
-    blocks.push({ kind: "text", text: args.content, style: "code", path: action.detail });
-  }
-  const parameters = withInput && action.kind === "generic" ? parametersBlock(value) : undefined;
-  if (parameters) blocks.unshift(parameters);
   if (!blocks.length) blocks.push({ kind: "text", text: output === undefined ? getMessages().tools.noOutputYet : getMessages().tools.noTextOutput, style: "notice" });
   return blocks;
 }
@@ -414,45 +353,4 @@ function remainingToolResult(value: unknown, diff: string | undefined): unknown 
     else delete remaining.details;
   }
   return Object.keys(remaining).length ? remaining : undefined;
-}
-
-/** 内联预算跨块累计，避免许多小块绕过上限；展开预览首行回显命令调用。 */
-export function toolContentView(value: ToolValue, preview = false): { blocks: ToolContentBlock[]; clipped: boolean } {
-  const source = toolContentBlocks(value);
-  if (!preview) return { blocks: source, clipped: false };
-  const blocks: ToolContentBlock[] = [];
-  let characters = TOOL_INLINE_MAX_CHARACTERS;
-  let lines = TOOL_INLINE_MAX_LINES;
-  let clipped = false;
-  // 命令回显沿用标题限长，长命令不能占满预览行数、把真实结果挤出首屏。
-  const command = toolCommandLead(value);
-  if (command !== undefined) {
-    const text = toolInlineText(command);
-    blocks.push({ kind: "text", text, style: "terminal" });
-    characters -= text.length;
-    lines -= text.split("\n").length;
-    if (text !== command) clipped = true;
-  }
-  for (const block of source) {
-    if (blocks.length >= TOOL_INLINE_MAX_BLOCKS || (block.kind === "text" && (characters <= 0 || lines <= 0))) { clipped = true; break; }
-    if (block.kind === "image") { blocks.push(block); continue; }
-    const text = safeSlice(block.text.split("\n", lines).join("\n"), characters);
-    blocks.push({ ...block, text });
-    characters -= text.length;
-    lines -= text.split("\n").length;
-    if (text !== block.text) clipped = true;
-  }
-  return { blocks, clipped };
-}
-
-/** 完整输出中文本块的总行数，用于「查看全部（共 N 行）」。 */
-export function toolLineCount(value: ToolValue): number {
-  return toolContentBlocks(value).reduce((total, block) => total + (block.kind === "text" && block.text ? block.text.split("\n").length : 0), 0);
-}
-
-/** 静态预算已省略正文或完整调用时需要详情；真实布局溢出由 ToolPreview 处理。 */
-export function toolHasOverflow(value: ToolValue): boolean {
-  const view = toolContentView(value, true);
-  const call = toolCallText(value);
-  return view.clipped || toolInlineText(call) !== call || view.blocks.some((block) => block.kind === "image" && !block.omitted && Boolean(block.data) && TOOL_IMAGE_MIMES.has(block.mime));
 }
