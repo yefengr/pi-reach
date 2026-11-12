@@ -142,7 +142,6 @@ test("candidate attachment cards lift onto the operation surface without changin
       count: cards.length,
       heights: cards.map((card) => Math.round(card.getBoundingClientRect().height)),
       radius: style.borderRadius,
-      background: style.backgroundColor,
       shadow: style.boxShadow,
       targets: actions.map((button) => [Math.round(button.getBoundingClientRect().width), Math.round(button.getBoundingClientRect().height)]),
     };
@@ -159,7 +158,7 @@ test("candidate attachment cards lift onto the operation surface without changin
   expect(candidate.radius).toBe("10px");
   expect(baseline.shadow).toBe("none");
   expect(candidate.shadow).not.toBe("none");
-  expect(candidate.background).not.toBe(baseline.background);
+  // 正式附件卡片已改用页面底色，浅色下与候选的 surface 同为白色；候选靠轻抬升与圆角 10 区分，不再比较底色。
 });
 
 test("slow motion scales only duration tokens and restores them", async () => {
