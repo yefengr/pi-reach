@@ -833,6 +833,26 @@ test("pinching below the original size follows with resistance and springs back 
   await h.screen.unmount();
 });
 
+test("pinching above the zoom limit follows with resistance and springs back to the limit on release", async () => {
+  const { h, stage, picture, x, y } = await openImageReader();
+  flushSync(() => {
+    pointerAt(stage, "pointerdown", x - 10, y, 0, { pointerId: 1, isPrimary: true });
+    pointerAt(stage, "pointerdown", x + 10, y, 0, { pointerId: 2, isPrimary: false });
+  });
+  // 两指距离拉开到 16 倍，是上限的两倍：超出上限的部分带阻尼，不按手指比例放大。
+  flushSync(() => { pointerAt(stage, "pointermove", x - 160, y, 50, { pointerId: 1, isPrimary: true }); pointerAt(stage, "pointermove", x + 160, y, 50, { pointerId: 2, isPrimary: false }); });
+  await expect.poll(() => new DOMMatrix(getComputedStyle(picture).transform).a).toBeGreaterThan(IMAGE_MAX_ZOOM);
+  expect(new DOMMatrix(getComputedStyle(picture).transform).a).toBeLessThan(IMAGE_MAX_ZOOM * 1.5);
+  flushSync(() => pointerAt(stage, "pointerup", x - 160, y, 100, { pointerId: 1, isPrimary: true }));
+  await expect.poll(() => picture.style.transform).toBe(`translate(0px, 0px) scale(${IMAGE_MAX_ZOOM})`);
+  expect(picture.getAnimations().length).toBeGreaterThan(0);
+  await expect.poll(() => picture.getAnimations().length).toBe(0);
+  expect(new DOMMatrix(getComputedStyle(picture).transform).a).toBe(IMAGE_MAX_ZOOM);
+  flushSync(() => pointerAt(stage, "pointerup", x + 160, y, 120, { pointerId: 2, isPrimary: false }));
+  expect(document.querySelector(".pwa-file-reader")).not.toBeNull();
+  await h.screen.unmount();
+});
+
 test("pulling the unzoomed image down follows the finger, springs back when short and closes past the dismiss distance", async () => {
   await page.viewport(390, 844);
   const { h, stage, picture, x, y } = await openImageReader();

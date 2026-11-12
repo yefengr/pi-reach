@@ -9,7 +9,7 @@ import { FileTextContent } from "./file-text-content";
 import { useSwipe } from "./use-swipe";
 import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { usePublishedFilesView } from "./published-files-context";
-import { doubleTapImage, IMAGE_DOUBLE_TAP_MS, IMAGE_DOUBLE_TAP_RADIUS_PX, IMAGE_PULL_DISMISS_PX, IMAGE_RESET, IMAGE_TAP_SLOP_PX, imageGesture, pullScale, zoomImage, type ImagePoint, type ImageTransform } from "./published-image-gesture";
+import { doubleTapImage, IMAGE_DOUBLE_TAP_MS, IMAGE_DOUBLE_TAP_RADIUS_PX, IMAGE_MAX_ZOOM, IMAGE_PULL_DISMISS_PX, IMAGE_RESET, IMAGE_TAP_SLOP_PX, imageGesture, pullScale, zoomImage, type ImagePoint, type ImageTransform } from "./published-image-gesture";
 import { beginSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, projectedStop, trackedDistance, type SwipeState } from "./swipe-gesture";
 import { PWA_DRAWER_EASE, pwaContentEasing, pwaDrawerTransitions, pwaFadeTransition, pwaMotionShiftDisabled, usePwaMotionDuration, useDrawerMoving } from "./use-pwa-motion";
 import { publishedImageBounds, usePublishedImageMotion } from "./published-image-motion";
@@ -111,8 +111,10 @@ function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened,
   };
   const end = (event: PointerEvent<HTMLDivElement>) => {
     const tracked = pointers.current.delete(event.pointerId);
-    // 捏合缩到原始大小以下：少于两指即弹回。
-    if (tracked && pointers.current.size < 2 && transformRef.current.scale < 1) glideTo({ ...IMAGE_RESET }, overscrollDuration);
+    // 捏合缩到原始大小以下或放大到上限以上：少于两指即弹回边界。
+    const pinched = transformRef.current;
+    if (tracked && pointers.current.size < 2 && pinched.scale < 1) glideTo({ ...IMAGE_RESET }, overscrollDuration);
+    else if (tracked && pointers.current.size < 2 && pinched.scale > IMAGE_MAX_ZOOM) glideTo({ ...pinched, scale: IMAGE_MAX_ZOOM }, overscrollDuration);
     rebase();
     const released = tracked && event.type === "pointerup";
     const active = pullRef.current;

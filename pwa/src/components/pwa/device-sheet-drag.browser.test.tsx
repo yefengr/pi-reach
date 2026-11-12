@@ -70,6 +70,19 @@ test("sheet follows the finger downwards and springs back when released short of
   expect(events).toEqual([]);
 }, 15000);
 
+test("dragging back up past the rest position stops there, keeping the sheet on the bottom edge", async () => {
+  const { rest, head } = await open(2);
+  await dragDown(head, 62);
+  // 反向越过起点：面板贴着屏幕底边，上移会在下方露出空隙，所以停在原位。
+  await moveTouch(head, -120);
+  expect(sheetTop()).toBe(rest);
+  expect(Math.round(sheet()!.getBoundingClientRect().bottom)).toBe(window.innerHeight);
+  await touchReleaseAtRest();
+  await expect.poll(() => sheet()!.getAnimations().length).toBe(0);
+  expect(sheetTop()).toBe(rest);
+  expect(events).toEqual([]);
+}, 15000);
+
 test("sheet closes once the release point is past half its height, without replaying the exit", async () => {
   const { rest, head } = await open(2);
   const height = sheet()!.offsetHeight;

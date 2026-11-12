@@ -107,7 +107,7 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
   const presence = usePresence(current.length ? current : null, Object.is, { exit: "--pwa-duration-drawer-out" });
   const leavingRows = useLeavingItems(current);
   // 撤回或投递一条时其余行与抽屉上沿平滑补位；抽屉贴着卡片向上长，上沿随之过渡。
-  useFlipLayout(sectionRef, { edge: true });
+  const flip = useFlipLayout(sectionRef, { edge: true });
   const items = presence.rendered ?? [];
   const present = items.length > 0;
   // 抽屉在场之后才让新行单独淡入；与抽屉同时出现的行随抽屉滑出，不叠加第二层淡入。
@@ -126,6 +126,7 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
   const rowProps = { numbered, isOnline, onInsert, onCancel, onDismissNotice };
 
   return <div className="pwa-composer-grow pwa-queued-messages-slot" {...presenceProps(presence)}><section ref={sectionRef} className="pwa-queued-messages" aria-label={q.title} {...presenceProps(presence)}>
+    {flip}
     {numbered ? <h2 className="pwa-queued-messages-header" {...{ [FLIP_KEY_ATTRIBUTE]: "header" }}>
       <UnstyledButton className="pwa-queued-messages-toggle" type="button" aria-expanded={!folded} aria-controls={bodyId} onClick={() => setCollapsed((current) => !current)}>
         <span className="pwa-queued-messages-title">{q.title}</span>

@@ -507,6 +507,32 @@ test("shows the Stop action with the same accent circle as Send", async () => {
   await screen.unmount();
 });
 
+test("Send and Stop cross-fade in one icon slot on every swap, not only the first", async () => {
+  const screen = await renderPwa(<ComposerHarness initialWorking />);
+  const textarea = screen.getByRole("textbox");
+  const slot = document.querySelector<HTMLElement>(".pwa-composer-action-icons")!;
+  const send = slot.querySelector<HTMLElement>(".pwa-composer-action-send")!;
+  const stop = slot.querySelector<HTMLElement>(".pwa-composer-action-stop")!;
+  // 首次挂载不播放：停止图标直接可见，发送图标隐去并缩到 --pwa-swap-scale。
+  expect(getComputedStyle(stop).opacity).toBe("1");
+  expect(getComputedStyle(send).opacity).toBe("0");
+  expect(new DOMMatrix(getComputedStyle(send).transform).a).toBe(0.8);
+  expect(slot.getAnimations({ subtree: true })).toHaveLength(0);
+  for (const draft of ["a", "", "b", ""]) {
+    if (draft) await textarea.fill(draft);
+    else await userEvent.clear(textarea);
+    const [shown, hidden] = draft ? [send, stop] : [stop, send];
+    await expect.element(screen.getByRole("button", { name: draft ? "Send message" : "Stop current task" })).toBeVisible();
+    // 两个图标留在同一个槽里，每次互换都有过渡在播放，而不是只有第一次。
+    expect(document.querySelector(".pwa-composer-action-icons")).toBe(slot);
+    expect(slot.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
+    await expect.poll(() => getComputedStyle(shown).opacity).toBe("1");
+    await expect.poll(() => getComputedStyle(hidden).opacity).toBe("0");
+    expect(getComputedStyle(shown).transform).toBe("none");
+  }
+  await screen.unmount();
+});
+
 function getImageInputs(): [HTMLInputElement, HTMLInputElement] {
   const inputs = [...document.querySelectorAll<HTMLInputElement>("input.pwa-image-input")];
   expect(inputs).toHaveLength(2);

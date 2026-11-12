@@ -98,12 +98,13 @@ export function ComposerAttachmentTiles({ items, onRemove, onRetry, disabled = f
   const { t } = useI18n();
   const slotRef = useRef<HTMLDivElement>(null);
   const tilesRef = useRef<HTMLElement>(null);
-  useFlipLayout(tilesRef);
+  const flip = useFlipLayout(tilesRef);
   const row = usePresence(items.length ? items : null, Object.is, { exit: "--pwa-duration-collapse-out", skipExit: () => hideDuringOwnSend(slotRef.current) });
   const leaving = useLeavingItems(items);
   const shown = row.rendered ?? [];
   if (!shown.length) return null;
   return <div ref={slotRef} className="pwa-composer-grow pwa-attachment-tiles-slot" {...presenceProps(row)}><section ref={tilesRef} className="pwa-attachment-tiles" aria-label={t.attachments.title} {...presenceProps(row)}>
+    {flip}
     {withLeavingItems(shown, row.leaving ? [] : leaving).map(({ item, leaving: isLeaving }) =>
       <AttachmentTile key={item.id} item={item} onRemove={onRemove} onRetry={onRetry} disabled={disabled} leaving={isLeaving} />)}
   </section></div>;

@@ -122,6 +122,17 @@ function ComposerQueuedMessages() {
 }
 
 /** 队列可随时间线更新，但不让它的新插槽引用反复渲染输入框和菜单。 */
+/**
+ * 发送与停止共用同一个图标槽：两个图标叠放、常驻，互换时交叉淡化并缩放（DESIGN「图标替换」，样式见 globals.css）。
+ * 常驻才能让离开的图标淡出、每次互换都播放；首次挂载没有状态变化，不播放。
+ */
+function SendStopIcons({ showStop, stopping }: { showStop: boolean; stopping: boolean }) {
+  return <span className="pwa-composer-action-icons" data-stop={showStop || undefined} aria-hidden="true">
+    <span className="pwa-composer-action-send"><ArrowUp size={20} /></span>
+    <span className="pwa-composer-action-stop">{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</span>
+  </span>;
+}
+
 export function MessageComposer({ enterSends, queuedMessages, ...props }: MessageComposerProps & { enterSends?: boolean }) {
   return <QueuedMessagesContext.Provider value={queuedMessages}>
     {enterSends === undefined
@@ -278,9 +289,6 @@ const MessageComposerContent = memo(function MessageComposerContent({
   const modelPending = modelExitPending || commandPendingAction === "model_set" || commandPendingAction === "thinking_set";
   // 运行中有草稿时显示发送，消息进入 Extension 队列；草稿为空才把按钮让给停止。
   const showStop = isOnline && isWorking && !hasMessage;
-  // 发送与停止第一次互换后才标记图标替换，首次挂载不播放。
-  const [stopSwap, setStopSwap] = useState({ showStop, swapped: false });
-  if (stopSwap.showStop !== showStop) setStopSwap({ showStop, swapped: true });
   const addDisabled = !canAttach || sendingAttachments || newSessionPending;
   // 操作状态是当前最具体、最短命的一行，压过附件与连接提示；它结束后约束提示自动恢复。
   // 断线的短暂抖动不提示：连接提示由应用层在断线 3 秒后才给出，期间发送按钮仍按 isOnline 不可用。
@@ -509,7 +517,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
                 />
               </Menu.Dropdown>
             </Menu>
-            {showStop ? <ActionIcon className="pwa-composer-stop" data-pwa-swap={stopSwap.swapped || undefined} variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" data-pwa-swap={stopSwap.swapped || undefined} variant="filled" type="submit" onMouseDown={keepComposerFocus} disabled={!sendReady || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
+            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}><SendStopIcons showStop stopping={stopping} /></ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" onMouseDown={keepComposerFocus} disabled={!sendReady || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><SendStopIcons showStop={false} stopping={false} /></ActionIcon>}
           </div>
         </div>
       </div>

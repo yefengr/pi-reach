@@ -1,8 +1,8 @@
 .pwa-copy-icons { display: grid; place-items: center; flex: none; width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); }
 /* 图标替换：交叉淡化，隐去的一侧同时缩小，新图标从 --pwa-swap-scale 放大到原尺寸。 */
 .pwa-copy-icons > svg { grid-area: 1 / 1; transition: opacity var(--pwa-duration-feedback) var(--pwa-ease-standard), transform var(--pwa-duration-feedback) var(--pwa-ease-content); }
-.pwa-copy-icons .pwa-copy-icon-check { opacity: 0; transform: scale(var(--pwa-swap-scale)); }
-.pwa-copy-icons[data-copied] .pwa-copy-icon-copy { opacity: 0; transform: scale(var(--pwa-swap-scale)); }
+.pwa-copy-icons .pwa-copy-icon-check { opacity: 0; transform: scale(calc(1 - (1 - var(--pwa-swap-scale)) * var(--pwa-motion-shift))); }
+.pwa-copy-icons[data-copied] .pwa-copy-icon-copy { opacity: 0; transform: scale(calc(1 - (1 - var(--pwa-swap-scale)) * var(--pwa-motion-shift))); }
 .pwa-copy-icons[data-copied] .pwa-copy-icon-check { opacity: 1; transform: none; }
 
 /* 错误脱离工具栏布局，保留原文选择与相邻关闭按钮的命中区。 */

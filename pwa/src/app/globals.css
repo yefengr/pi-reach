@@ -335,12 +335,13 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-variant="filled"][data-disabled]::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"]:disabled::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"][data-disabled]::before { background: var(--pwa-accent); }
-/* 图标替换：可用态的透明度变化随之过渡；发送与停止互换后，新按钮的图标从 --pwa-swap-scale 缩放淡入（首次挂载不播放）。 */
+/* 图标替换：可用态的透明度变化随之过渡；发送与停止的图标叠放在同一槽内，互换时交叉淡化，
+   隐去的一侧缩到 --pwa-swap-scale，新图标从它放大到原尺寸。两个图标常驻，每次互换都播放，首次挂载不播放。 */
 .pwa-ui-scope .pwa-icon-button:is(.pwa-composer-send, .pwa-composer-stop) { transition: opacity var(--pwa-duration-feedback) var(--pwa-ease-standard); }
-.pwa-ui-scope .pwa-icon-button:is(.pwa-composer-send, .pwa-composer-stop)[data-pwa-swap] .mantine-ActionIcon-icon { animation: pwa-icon-swap-in var(--pwa-duration-feedback) var(--pwa-ease-content) backwards; }
-@keyframes pwa-icon-swap-in {
-  from { opacity: 0; transform: scale(calc(1 - (1 - var(--pwa-swap-scale)) * var(--pwa-motion-shift))); }
-}
+.pwa-composer-action-icons { display: grid; place-items: center; }
+.pwa-composer-action-icons > span { grid-area: 1 / 1; display: grid; place-items: center; transition: opacity var(--pwa-duration-feedback) var(--pwa-ease-standard), transform var(--pwa-duration-feedback) var(--pwa-ease-content); }
+.pwa-composer-action-icons:not([data-stop]) > .pwa-composer-action-stop,
+.pwa-composer-action-icons[data-stop] > .pwa-composer-action-send { opacity: 0; transform: scale(calc(1 - (1 - var(--pwa-swap-scale)) * var(--pwa-motion-shift))); }
 .pwa-composer-menu,
 .pwa-composer-command { position: relative; flex: 0 0 auto; }
 .pwa-root .pwa-composer-menu-panel,

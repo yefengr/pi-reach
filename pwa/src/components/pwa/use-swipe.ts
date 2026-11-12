@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, overscrollDistance, projectedCommit, trackedDistance, type SwipeDirection, type SwipePoint, type SwipeState } from "./swipe-gesture";
+import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, projectedCommit, trackedDistance, type SwipeDirection, type SwipePoint, type SwipeState } from "./swipe-gesture";
 import { swipeBlocked, swipeEdgeExcluded, swipeStartExcluded } from "./swipe-guards";
 import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
@@ -14,10 +14,8 @@ export type SwipeCancelReason = "interrupted" | "blocked" | "disabled";
 export type SwipeDragHandlers = {
   /** 指针捕获成功后调用；返回 false 拒绝，本次退回触发式。 */
   start(): boolean | void;
-  /** trackedDistance，已 ≥ 0；overscroll 为 true 时反向越过起点为负。 */
+  /** trackedDistance，已 ≥ 0。 */
   move(distance: number): void;
-  /** 反向越界时是否继续报告负位移（由控制器做阻尼）；贴边的全屏表面不启用，越界会露出空隙。 */
-  overscroll?: boolean;
   /** 表面的全程位移（像素）；松手时按投影停点是否过半判定提交，取不到时返回 0（不提交）。 */
   extent(): number;
   /** 松手：committed 按投影停点判定，反向甩回已计入。控制器负责收尾动画和随后的关闭／返回调用。 */
@@ -95,8 +93,7 @@ export function useSwipe(element: HTMLElement | null, options: SwipeOptions): vo
         const { drag, direction } = optionsRef.current;
         dragging = drag !== undefined && !swipeEdgeExcluded(direction, state.start.x) && drag.start() !== false;
       }
-      const drag = optionsRef.current.drag;
-      if (dragging) drag?.move(drag.overscroll ? overscrollDistance(state, point) : trackedDistance(state, point));
+      if (dragging) optionsRef.current.drag?.move(trackedDistance(state, point));
     };
     const up = (event: PointerEvent) => {
       if (state.phase === "idle" || event.pointerId !== state.pointerId) return;

@@ -76,6 +76,32 @@ test("draws a 36px ring with the percentage for uploads and lets a failed tile r
   }
 });
 
+test("tiles slide from where they are drawn at the moment of removal, even after the row moved without re-rendering", async () => {
+  const two = [{ ...file, id: "a", fileName: "a.txt" }, { ...file, id: "b", fileName: "b.txt" }];
+  const tree = (items: ComposerAttachmentItem[]) => <PwaUiProvider><div className="pwa-root"><div data-testid="spacer" /><Card><ComposerAttachmentTiles items={items} onRemove={() => {}} /></Card></div></PwaUiProvider>;
+  const screen = await renderPwa(<><div data-testid="spacer" /><Card><ComposerAttachmentTiles items={two} onRemove={() => {}} /></Card></>);
+  try {
+    const second = screen.getByRole("group", { name: "b.txt" }).element() as HTMLElement;
+    await expect.poll(() => getComputedStyle(second).opacity).toBe("1");
+    await expect.poll(() => document.getAnimations().length).toBe(0);
+    // 周围布局把整行下推（如展开动画、输入框长高），附件行自身没有重新渲染。
+    screen.getByTestId("spacer").element().style.height = "120px";
+    const top = Math.round(second.getBoundingClientRect().top);
+    const left = Math.round(second.getBoundingClientRect().left);
+
+    await screen.rerender(tree(two.slice(1)));
+    // 起点是移除那一刻的绘制位置：只有横向补位，不从下推前的旧位置跳过来。
+    expect(Math.round(second.getBoundingClientRect().top)).toBe(top);
+    expect(Math.round(second.getBoundingClientRect().left)).toBe(left);
+    expect(second.getAnimations().length).toBeGreaterThan(0);
+    await expect.poll(() => second.getAnimations().length).toBe(0);
+    expect(Math.round(second.getBoundingClientRect().top)).toBe(top);
+    expect(Math.round(second.getBoundingClientRect().left)).toBeLessThan(left);
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("a new tile fades in; a removed tile fades out in place while the others slide into its space", async () => {
   const two = [{ ...file, id: "a", fileName: "a.txt" }, { ...file, id: "b", fileName: "b.txt" }];
   const tree = (items: ComposerAttachmentItem[]) => <PwaUiProvider><div className="pwa-root"><Card><ComposerAttachmentTiles items={items} onRemove={() => {}} /></Card></div></PwaUiProvider>;

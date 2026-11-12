@@ -9,12 +9,11 @@ let scrim: HTMLElement;
 let drag: SwipeDrag | undefined;
 
 const frame = (progress: number): Keyframe => ({ transform: `translateX(${progress * 200}px)` });
-const create = (toEndDuration = 120, backDuration = toEndDuration, overscroll?: number) => {
+const create = (toEndDuration = 120, backDuration = toEndDuration) => {
   drag = createSwipeDrag({
     targets: [{ element: panel, frame }, { element: scrim, frame: (progress) => ({ opacity: 1 - progress }) }],
     extent: () => 200,
     duration: (toEnd) => toEnd ? toEndDuration : backDuration,
-    overscroll,
   });
   return drag;
 };
@@ -79,27 +78,6 @@ test("spring progress matches the normalized content spring and ends exactly at 
   expect(pwaSpringProgress(0.6)).toBeGreaterThan(0.88);
   expect(pwaSpringProgress(0.6)).toBeLessThan(0.93);
   expect(pwaSpringProgress(0.1)).toBeLessThan(pwaSpringProgress(0.2));
-});
-
-test("overscroll follows a reverse drag with resistance and springs back with its own duration", () => {
-  const swipe = create(350, 450, 280);
-  // 起点在暂停动画的中间：未拖动时面板不动。
-  expect(new DOMMatrix(getComputedStyle(panel).transform).m41).toBe(0);
-  swipe.setDistance(-100);
-  const pulled = new DOMMatrix(getComputedStyle(panel).transform).m41;
-  expect(pulled).toBeLessThan(0);
-  expect(pulled).toBeGreaterThan(-100);
-  swipe.setDistance(50);
-  expect(Math.round(new DOMMatrix(getComputedStyle(panel).transform).m41)).toBe(50);
-  swipe.setDistance(-100);
-  void swipe.settle(false);
-  expect(panel.getAnimations()[0].effect?.getTiming().duration).toBe(280);
-});
-
-test("without overscroll a reverse drag stays at the start", () => {
-  const swipe = create();
-  swipe.setDistance(-100);
-  expect(new DOMMatrix(getComputedStyle(panel).transform).m41).toBe(0);
 });
 
 test("settle keeps the token duration for its direction instead of shortening it by distance or velocity", () => {

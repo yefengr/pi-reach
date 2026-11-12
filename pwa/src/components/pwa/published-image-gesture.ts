@@ -17,6 +17,8 @@ export const IMAGE_PULL_DISMISS_PX = 120;
 export const IMAGE_PULL_MIN_SCALE = 0.7;
 /** 捏合缩小到原始大小以下时带阻尼继续跟手，越界部分逼近该比例（倍率不低于 1 减去它），松手弹回原始大小。 */
 export const IMAGE_UNDERZOOM_LIMIT = 0.5;
+/** 捏合放大到上限以上时同样带阻尼，超出上限的比例逼近该值（倍率不超过上限的 1 加它倍），松手弹回上限。 */
+export const IMAGE_OVERZOOM_LIMIT = 0.5;
 export function zoomImage(value: ImageTransform, scale: number): ImageTransform {
   const bounded = Math.max(1, Math.min(IMAGE_MAX_ZOOM, scale));
   return bounded === 1 ? { ...IMAGE_RESET } : { ...value, scale: bounded };
@@ -31,6 +33,8 @@ export function imageGesture(start: ImageTransform, before: readonly ImagePoint[
   const shift = { x: (after[0].x + after[1].x - before[0].x - before[1].x) / 2, y: (after[0].y + after[1].y - before[0].y - before[1].y) / 2 };
   // 原始大小以下：图片绕原位中心继续缩小并跟随两指中点，由调用方在松手时弹回。
   if (raw < 1) return { scale: 1 - rubberBand(1 - raw, IMAGE_UNDERZOOM_LIMIT), ...shift };
+  // 上限以上：超出的比例带阻尼，平移照常跟随两指中点，由调用方在松手时弹回上限。
+  if (raw > IMAGE_MAX_ZOOM) return { scale: IMAGE_MAX_ZOOM * (1 + rubberBand(raw / IMAGE_MAX_ZOOM - 1, IMAGE_OVERZOOM_LIMIT)), x: start.x + shift.x, y: start.y + shift.y };
   const result = zoomImage(start, raw);
   if (result.scale === 1) return result;
   return { ...result, x: start.x + shift.x, y: start.y + shift.y };

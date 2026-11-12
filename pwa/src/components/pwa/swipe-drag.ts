@@ -1,5 +1,4 @@
 import { pwaReleaseEasing } from "./use-pwa-motion";
-import { rubberBand } from "./swipe-gesture";
 
 /** 存续期间标记在目标元素上，样式表据此关闭 CSS 过渡，使 WAAPI 动画不被 Mantine 的过渡盖过。 */
 export const SWIPE_DRAG_ACTIVE_ATTRIBUTE = "data-swipe-drag-active";
@@ -19,8 +18,6 @@ type SwipeDragOptions = {
   extent: () => number;
   /** 收尾时长 token（毫秒）：toEnd 为走到 keyframes 终点，否则回到起点；由调用方按进入或离开取值。 */
   duration: (toEnd: boolean) => number;
-  /** 设置后反向越过起点带阻尼跟随（橡皮筋公式，以全程为渐近上限），从越界处回到起点用该时长（毫秒）。 */
-  overscroll?: number;
 };
 
 export type SwipeDrag = {
@@ -37,11 +34,9 @@ export type SwipeDrag = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-export function createSwipeDrag({ targets, extent, duration, overscroll }: SwipeDragOptions): SwipeDrag {
+export function createSwipeDrag({ targets, extent, duration }: SwipeDragOptions): SwipeDrag {
   targets.forEach(({ element }) => element.setAttribute(SWIPE_DRAG_ACTIVE_ATTRIBUTE, ""));
-  // 有越界时暂停动画覆盖 -1…1 的进度，起点在中间。
-  const lowest = overscroll === undefined ? 0 : -1;
-  let animations = targets.map(({ element, frame }) => element.animate([frame(lowest), frame(1)], { duration: DRAG_SPAN_MS, easing: "linear", fill: "both" }));
+  let animations = targets.map(({ element, frame }) => element.animate([frame(0), frame(1)], { duration: DRAG_SPAN_MS, easing: "linear", fill: "both" }));
   animations.forEach((animation) => animation.pause());
   let progress = 0;
   let token = 0;
@@ -52,7 +47,7 @@ export function createSwipeDrag({ targets, extent, duration, overscroll }: Swipe
 
   const setProgress = (value: number) => {
     progress = value;
-    animations.forEach((animation) => { animation.currentTime = (value - lowest) / (1 - lowest) * DRAG_SPAN_MS; });
+    animations.forEach((animation) => { animation.currentTime = value * DRAG_SPAN_MS; });
   };
   const readProgress = () => {
     if (!settling || !animations[0]) return progress;
@@ -60,13 +55,11 @@ export function createSwipeDrag({ targets, extent, duration, overscroll }: Swipe
     const eased = animations[0].effect?.getComputedTiming().progress;
     return typeof eased === "number" ? progress + (settleTarget - progress) * eased : progress;
   };
-  if (lowest !== 0) setProgress(0);
   return {
     setDistance(px) {
       if (disposed || settling) return;
       const width = extent();
-      if (!(width > 0)) { setProgress(0); return; }
-      setProgress(px < 0 && overscroll !== undefined ? -rubberBand(-px, width) / width : clamp(px / width, 0, 1));
+      setProgress(width > 0 ? clamp(px / width, 0, 1) : 0);
     },
     settle(toEnd, velocity = 0) {
       if (disposed) return Promise.resolve(false);
@@ -78,7 +71,7 @@ export function createSwipeDrag({ targets, extent, duration, overscroll }: Swipe
       settleTarget = to;
       settling = true;
       // 参照 iOS：时长固定为 token，不随剩余距离缩短；松手速度作为弹簧初速度接续。
-      const time = !toEnd && from < 0 && overscroll !== undefined ? overscroll : duration(toEnd);
+      const time = duration(toEnd);
       const remaining = Math.abs(to - from) * extent();
       const easing = pwaReleaseEasing(targets[0].element, remaining > 0 ? velocity / remaining : 0, time);
       animations.forEach((animation) => animation.cancel());

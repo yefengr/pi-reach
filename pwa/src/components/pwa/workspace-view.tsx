@@ -142,10 +142,11 @@ export function WorkspaceRunningPiSection({ activeDevice, endpoints, activeEndpo
   const { t } = useI18n();
   const sectionRef = useRef<HTMLElement>(null);
   // Pi 上线或离线时其余行平滑补位。
-  useFlipLayout(sectionRef);
+  const flip = useFlipLayout(sectionRef);
   if (!activeDevice) return null;
   const activePis = endpoints.filter((endpoint) => endpoint.deviceId === activeDevice.deviceId && endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right)));
   return <section ref={sectionRef} className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={!snapshotReady || undefined}>
+    {flip}
     <div className={sectionHeadingClassName(variant)} id={headingId}><Bot size={16} /><span>{t.navigation.onlinePi}</span>{snapshotReady ? <small className="pwa-tabular">{activePis.length}</small> : null}</div>
     {!snapshotReady ? <><span className="pwa-sr-only">{t.navigation.checkingPi}</span><SkeletonRows /></> : activePis.length === 0 ? <p className="pwa-nav-empty">{t.navigation.noPiOnline}</p> : activePis.map((endpoint) => <OnlinePiRow
       key={endpoint.id}

@@ -346,7 +346,7 @@
   --pwa-duration-image-out: var(--pwa-tier-return);
   /* 图片阅读器内的双击与按钮缩放。 */
   --pwa-duration-image-zoom: var(--pwa-tier-fade-in);
-  /* 越界后松手弹回：图片捏合缩小到原始大小以下、Toast 与底部面板朝关闭的反方向拖动。 */
+  /* 越界后松手弹回：图片捏合缩小到原始大小以下或放大到上限以上、Toast 朝关闭的反方向拖动。 */
   --pwa-duration-overscroll: var(--pwa-tier-return);
   --pwa-duration-toast: var(--pwa-tier-appear);
   /* 只用于 Toast 离开；toast 同时是浮动入口与局部提示的出现时长，不随之改变。 */
