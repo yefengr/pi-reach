@@ -78,7 +78,7 @@ test("computer row keeps current selection separate from actual presence", () =>
   const computerSelect = navLinkMarkup(html, "Office Mac");
   const computerActions = html.match(/<button[^>]*aria-label="Computer actions for Office Mac"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
 
-  expect(html).toContain("OFFLINE");
+  expect(html).toContain("Offline");
   expect(html).toContain("Current");
   expect(html).not.toContain("OPEN");
   expect(computerSelect).toMatch(/^<button\b/);

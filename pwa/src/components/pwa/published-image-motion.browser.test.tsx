@@ -44,8 +44,8 @@ function expectScreenRadius(image: HTMLImageElement) {
   for (const corner of [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius]) {
     const [x, y = x] = corner.split(" ").map(parseFloat);
     // 夹具每一边均大于直径，浏览器不会触发过大圆角的自动收缩。
-    expect(Math.round(x * scaleX)).toBe(8);
-    expect(Math.round(y * scaleY)).toBe(8);
+    expect(Math.round(x * scaleX)).toBe(12);
+    expect(Math.round(y * scaleY)).toBe(12);
   }
 }
 
@@ -61,7 +61,7 @@ function sample(image: HTMLImageElement, start: ImageBounds, end: ImageBounds) {
   }
 }
 
-test.each(["in", "out"] as const)("image %s keeps all four screen-space radii at 8px throughout its geometry change", async direction => {
+test.each(["in", "out"] as const)("image %s keeps all four screen-space radii at 12px throughout its geometry change", async direction => {
   const fixture = await imageFixture();
   const motion = animatePublishedImage({ ...fixture, direction, duration: DURATION });
   try {

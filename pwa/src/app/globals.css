@@ -259,14 +259,16 @@ body:has(.pwa-root) { overflow: hidden; }
  * 默认圆角 12，成列的可点行用 pwa-card-row 的 8。卡片底取 --pwa-card，分组列表页把它改为 surface。
  * 选择器优先级与导航行基础规则相同且位置在后，覆盖其透明底；悬停、按下与选中规则优先级更高，仍然生效。
  */
-:is(.pwa-root, .pwa-startup-error) .pwa-card { border: 0; border-radius: var(--pwa-radius-lg); background: var(--pwa-card); box-shadow: none; }
+:is(.pwa-root, .pwa-startup-error) .pwa-card { border: 0; border-radius: var(--pwa-radius-xl); background: var(--pwa-card); box-shadow: none; }
 :is(.pwa-root, .pwa-startup-error) .pwa-card-row { border-radius: var(--pwa-radius-md); }
 
 /* 图标尺寸由 token 决定：行内图标随字号档位放大，图标按钮内的图标在触控设备上加大；线宽换算回 24 画布，实际线宽不变。 */
 .lucide[width="16"] { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); stroke-width: var(--pwa-icon-inline-stroke); }
+/* 按钮文字为 600 字重，同行图标的线宽随之加重。 */
+.pwa-button .lucide[width="16"] { stroke-width: var(--pwa-icon-inline-stroke-strong); }
 .pwa-icon-button .lucide[width="20"], .pwa-settings-back .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
 
-.pwa-ui-scope .pwa-button { min-height: var(--pwa-button-height); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-md); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-button { min-height: var(--pwa-button-height); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-button-radius); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
@@ -308,7 +310,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-actions { flex: 1 1 auto; justify-content: flex-end; }
 /* 模型标签：发送按钮左侧的文字按钮，显示当前模型与思考级别；视觉高 32、点击区 44，手机只显示模型名。 */
 .pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: var(--pwa-hit-target); display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-md); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
-.pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-chip-radius); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled)::before { background: var(--pwa-hover); } }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); } }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); } }
@@ -382,7 +384,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-choice[data-selected]:hover:not(:disabled),
 .pwa-command-choice[data-selected]:focus-visible:not(:disabled) { color: var(--pwa-ink); background: var(--pwa-selected); }
 .pwa-command-choice[data-selected] .pwa-command-copy > span { color: var(--pwa-ink); }
-.pwa-command-menu-heading { padding: 8px var(--pwa-space-menu-pad) 6px; font-weight: var(--pwa-weight-strong); text-transform: uppercase; }
+.pwa-command-menu-heading { padding: 8px var(--pwa-space-menu-pad) 6px; font-weight: var(--pwa-weight-strong); }
 .pwa-command-back { color: var(--pwa-secondary); }
 .pwa-command-empty { margin: 0; padding: 12px var(--pwa-space-menu-pad); line-height: var(--pwa-leading-ui); }
 
@@ -481,7 +483,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-textarea .mantine-InputWrapper-description { margin-top: 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 
 .pwa-rename-dialog,
-.pwa-confirm-dialog { min-width: 0; padding: 24px; border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
+.pwa-confirm-dialog { min-width: 0; padding: 24px; border-radius: var(--pwa-radius-2xl); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
 .pwa-rename-head,
 .pwa-confirm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .pwa-rename-head h2,
@@ -507,7 +509,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 遮罩始终只有一层：Modal 叠在带遮罩的 Drawer 上时，下层遮罩隐去，不叠加加深。 */
 .pwa-root:has(.mantine-Modal-overlay) .mantine-Drawer-overlay { opacity: 0 !important; }
 /* 配对弹窗（表单类，480）：与重命名弹窗同一表面；扫码取景、配对码输入与其他方式的文字按钮自上而下排列。 */
-.pwa-pairing-dialog { min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
+.pwa-pairing-dialog { min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border-radius: var(--pwa-radius-2xl); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
 .pwa-pairing-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px -10px 0 0; padding: 0; background: transparent; }
 .pwa-pairing-title { font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-pairing-body { min-width: 0; padding: 0; }
@@ -534,7 +536,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-loading { min-height: var(--pwa-app-height); display: grid; place-items: center; padding: calc(24px + var(--pwa-safe-top)) 24px calc(24px + var(--pwa-safe-bottom)); color: var(--pwa-ink); background: var(--pwa-bg); text-align: center; }
 .pwa-startup-card { width: min(520px, 100%); padding: 32px; }
 .pwa-startup-icon,
-.pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid var(--pwa-running-line); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
+.pwa-chat-empty-icon { display: grid; place-items: center; border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
 .pwa-startup-icon { width: 48px; height: 48px; margin-bottom: 16px; }
 .pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-title); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
@@ -614,7 +616,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-operation-notifications .pwa-toast-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* 操作按钮点击区 44，视觉底色仍为 36 高：底色画在上下各内缩 4 的伪元素上，焦点轮廓同样内缩。 */
 .pwa-operation-notifications .pwa-toast-action { position: relative; isolation: isolate; flex: 0 0 auto; white-space: nowrap; min-height: var(--pwa-hit-target); padding: 0 8px; border: 0; border-radius: var(--pwa-radius-md); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
-.pwa-operation-notifications .pwa-toast-action::before { content: ""; position: absolute; z-index: -1; inset: 4px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-operation-notifications .pwa-toast-action::before { content: ""; position: absolute; z-index: -1; inset: 4px 0; border-radius: var(--pwa-chip-radius); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-operation-notifications .pwa-toast-action:focus-visible { outline-offset: -4px; }
 @media (hover: hover) { .pwa-operation-notifications .pwa-toast-action:hover::before { background: var(--pwa-hover); } }
 .pwa-operation-notifications .pwa-operation-notification-close { flex: 0 0 var(--pwa-hit-target); width: var(--pwa-hit-target); min-width: var(--pwa-hit-target); height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); color: var(--pwa-secondary); }

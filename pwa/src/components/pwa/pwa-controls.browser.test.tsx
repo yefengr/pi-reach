@@ -219,8 +219,12 @@ test.each([1280, 390])("shared radii stay 4/8/12 with a concentric 32px Composer
     <MenuFixture />
     <ComposerFixture />
   </>);
+  // 常规按钮的圆角随指针类型切换：纯细指针为 8，存在粗指针时为胶囊（单行高 44 的一半）；与按钮高度同一判定。
+  const rootStyle = getComputedStyle(document.documentElement);
+  const buttonRadius = rootStyle.getPropertyValue("--pwa-button-radius").trim();
+  expect(buttonRadius).toBe(rootStyle.getPropertyValue("--pwa-button-height").trim() === "36px" ? "8px" : "22px");
   const radii = [
-    [screen.getByTestId("radius-button").element(), "8px"],
+    [screen.getByTestId("radius-button").element(), buttonRadius],
     [screen.getByRole("textbox", { name: "Radius input fixture" }).element(), "8px"],
     [screen.getByTestId("radius-badge").element(), "4px"],
     // 状态标签为胶囊（DESIGN「圆角」）。

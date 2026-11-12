@@ -7,7 +7,7 @@ import { describe, expect, test } from "vitest";
 import { CONTENT_ENTER_OPACITY } from "@/components/pwa/use-timeline-enter-fade";
 import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 import { piReachTheme } from "@/lib/ui/pi-reach-theme";
-import { ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
+import { ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG, SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 const SOURCE_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -139,12 +139,16 @@ describe("script token guard", () => {
   });
 
   test("Lucide icons use the documented sizes and named stroke widths", () => {
-    expect([ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE]).toEqual([1.5, 12]);
+    expect([ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG, SMALL_SPINNER_SIZE]).toEqual([1.5, 2, 12]);
     // 样式改写图标尺寸时同步改写线宽：每组 --pwa-icon-* 的线宽须等于 实际线宽 × 24 ÷ 尺寸，与脚本注入的实际线宽一致。
     const sizes = [...THEME.matchAll(/--pwa-icon-(inline|control):\s*(\d+)px;\s*--pwa-icon-\1-stroke:\s*([\d.]+);/g)];
     expect(sizes.map((match) => `${match[1]} ${match[2]}`)).toEqual(["inline 16", "control 20", "inline 18", "inline 20", "control 22"]);
     for (const [, , size, stroke] of sizes) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH * 24 / Number(size), 3);
-    expect(THEME.match(/--pwa-icon-[a-z-]+:/g)).toHaveLength(sizes.length * 2);
+    // 按钮内的行内图标另有加重线宽，随行内图标尺寸的每一档给出。
+    const strong = [...THEME.matchAll(/--pwa-icon-inline:\s*(\d+)px;\s*--pwa-icon-inline-stroke:\s*[\d.]+;\s*--pwa-icon-inline-stroke-strong:\s*([\d.]+);/g)];
+    expect(strong.map((match) => match[1])).toEqual(["16", "18", "20"]);
+    for (const [, size, stroke] of strong) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH_STRONG * 24 / Number(size), 3);
+    expect(THEME.match(/--pwa-icon-[a-z-]+:/g)).toHaveLength(sizes.length * 2 + strong.length);
     const offenders = sourceFiles(SOURCE_ROOT, [".tsx"]).sort().flatMap((path) => {
       const text = readFileSync(path, "utf8");
       const file = relative(SOURCE_ROOT, path);

@@ -283,11 +283,11 @@ test("startup notices keep icons on the 16/20/24 scale and the mobile gutter", a
   expect([Math.round(icon.width), Math.round(icon.height)]).toEqual([48, 48]);
   const card = document.querySelector<HTMLElement>(".pwa-startup-card")!;
   expect(getComputedStyle(card).paddingLeft).toBe("16px");
-  // 嵌入式卡片：bg 上的 card 底、圆角 12、不描边（DESIGN「卡片」）。
+  // 嵌入式卡片：bg 上的 card 底、圆角 16、不描边（DESIGN「卡片」）。
   const fill = document.createElement("span");
   fill.style.backgroundColor = "var(--pwa-card)";
   card.append(fill);
-  expect([getComputedStyle(card).borderTopWidth, getComputedStyle(card).borderRadius, getComputedStyle(card).backgroundColor]).toEqual(["0px", "12px", getComputedStyle(fill).backgroundColor]);
+  expect([getComputedStyle(card).borderTopWidth, getComputedStyle(card).borderRadius, getComputedStyle(card).backgroundColor]).toEqual(["0px", "16px", getComputedStyle(fill).backgroundColor]);
   fill.remove();
   // 大号标题引出的独立说明与主区空状态同为 8。
   const title = document.querySelector(".pwa-startup-card h1")!.getBoundingClientRect();

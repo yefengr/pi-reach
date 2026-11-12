@@ -5,6 +5,8 @@
 /* 只配对一台电脑时收成无框的一行，悬停浅底；多台时保持卡片样式。 */
 .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact { min-height: var(--pwa-hit-target); padding: 0 8px 0 12px; border-color: transparent; background: transparent; }
 @media (hover: hover) { .pwa-root .pwa-button.pwa-device-trigger.pwa-device-trigger-compact:hover:not(:disabled) { background: var(--pwa-hover); } }
+/* 导航底部入口与电脑面板内的配对入口属于导航行与面板行，触控下不改为胶囊：与导航行同形，并与面板圆角同心（8 + 内边距 4）。 */
+.pwa-root .pwa-button.pwa-device-trigger, .pwa-root .pwa-button.pwa-nav-pair, .pwa-root .pwa-button.pwa-device-panel-pair { border-radius: var(--pwa-radius-md); }
 
 .pwa-root .pwa-device-trigger .mantine-Button-inner,
 .pwa-root .pwa-device-trigger .mantine-Button-label {
@@ -155,9 +157,9 @@
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border: 1px solid var(--pwa-line);
   border-radius: var(--pwa-radius-md);
   color: var(--pwa-secondary);
+  background: var(--pwa-tonal);
 }
 
 .pwa-root .pwa-peer-icon.online {
@@ -221,6 +223,8 @@
   background: var(--pwa-tonal);
   font-size: var(--pwa-text-meta);
   font-weight: var(--pwa-weight-strong);
+  /* 不沿用 Mantine Badge 的全大写：标签按文案原样显示。 */
+  text-transform: none;
 }
 
 .pwa-root .pwa-presence-label.online {

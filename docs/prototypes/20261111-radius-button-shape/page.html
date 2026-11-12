@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>圆角与按钮形状对比 · Pi Reach 原型</title>
+<link rel="stylesheet" href="./shared.css">
+</head>
+<body data-device="touch" data-shape="b">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-slash" viewBox="0 0 24 24"><path d="M17 5L7 19"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 1 1 0 10h-2M8 12h8"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+  </defs>
+</svg>
+
+<header class="review-bar" aria-label="对比选项">
+  <h1>圆角与按钮形状对比</h1>
+  <div class="seg"><span>外观</span>
+    <div class="seg-group" role="group" aria-label="外观">
+      <button type="button" data-set="theme" data-value="light" aria-pressed="true">浅色</button>
+      <button type="button" data-set="theme" data-value="dark" aria-pressed="false">深色</button>
+    </div>
+  </div>
+  <div class="seg"><span>设备</span>
+    <div class="seg-group" role="group" aria-label="设备">
+      <button type="button" data-set="device" data-value="touch" aria-pressed="true">手机 · 触控</button>
+      <button type="button" data-set="device" data-value="desktop" aria-pressed="false">桌面 · 鼠标</button>
+    </div>
+  </div>
+  <div class="seg"><span>调整后的按钮形状</span>
+    <div class="seg-group" role="group" aria-label="调整后的按钮形状">
+      <button type="button" data-set="shape" data-value="a" aria-pressed="false">两端都圆角 8</button>
+      <button type="button" data-set="shape" data-value="b" aria-pressed="true">仅触控端胶囊</button>
+      <button type="button" data-set="shape" data-value="c" aria-pressed="false">两端都胶囊</button>
+    </div>
+  </div>
+</header>
+
+<main class="review-main">
+  <section class="scene" data-tpl="tpl-chat" aria-label="会话">
+    <h2>会话</h2>
+    <p>气泡 16 → 20（与内部卡片同心）；附件卡片去掉描边改用页面底色；代码块与图片 8 → 12；模型标签随按钮形状。</p>
+    <div class="pair">
+      <div class="col"><h3>现状</h3><div class="frame" data-v="now"></div></div>
+      <div class="col"><h3>调整后</h3><div class="frame" data-v="next"></div></div>
+    </div>
+  </section>
+
+  <section class="scene" data-tpl="tpl-settings" aria-label="设置页">
+    <h2>设置页</h2>
+    <p>分组 12 → 16；按钮内图标线宽 1.5 → 2；手机上的返回图标由箭头改为尖角；按钮形状按上方选项。</p>
+    <div class="pair">
+      <div class="col"><h3>现状</h3><div class="frame" data-v="now"></div></div>
+      <div class="col"><h3>调整后</h3><div class="frame" data-v="next"></div></div>
+    </div>
+  </section>
+
+  <section class="scene" data-tpl="tpl-modal" aria-label="配对弹窗">
+    <h2>配对弹窗</h2>
+    <p>弹窗 12 → 24；输入框保持圆角 8 与轮廓；按钮形状按上方选项。</p>
+    <div class="pair">
+      <div class="col"><h3>现状</h3><div class="frame" data-v="now"></div></div>
+      <div class="col"><h3>调整后</h3><div class="frame" data-v="next"></div></div>
+    </div>
+  </section>
+
+  <section class="scene" data-tpl="tpl-float" aria-label="电脑面板与 Toast">
+    <h2>电脑面板与 Toast</h2>
+    <p>图标块由描边改为色调底；状态标签不再全大写（英文界面）；Toast 的文字操作随按钮形状。</p>
+    <div class="pair">
+      <div class="col"><h3>现状</h3><div class="frame" data-v="now"></div></div>
+      <div class="col"><h3>调整后</h3><div class="frame" data-v="next"></div></div>
+    </div>
+  </section>
+</main>
+
+<template id="tpl-chat">
+  <div class="chat">
+    <div class="msg user">
+      <p>请按这两份材料调整。</p>
+      <div class="attach-row">
+        <div class="attach">
+          <span class="thumb"><svg class="i sm" aria-hidden="true"><use href="#i-file"/></svg></span>
+          <span class="meta"><b>界面截图.png</b><small>47.1 KiB</small></span>
+          <button type="button" class="ibtn" aria-label="下载 界面截图.png"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg></button>
+        </div>
+        <div class="attach">
+          <span class="thumb"><svg class="i sm" aria-hidden="true"><use href="#i-file"/></svg></span>
+          <span class="meta"><b>调整说明.md</b><small>2 KiB</small></span>
+          <button type="button" class="ibtn" aria-label="下载 调整说明.md"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="msg pi">
+      <p>已按材料调整，面板改为内存模式：</p>
+      <div class="code">
+        <div class="code-head"><span>typescript</span><button type="button" class="ibtn" aria-label="复制代码"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg></button></div>
+        <pre>const panel = { mode: "memory" };
+console.log(panel);</pre>
+      </div>
+      <div class="shot" role="img" aria-label="布局示意图：左侧对话，右侧详情"><span>对话</span><span>详情</span></div>
+    </div>
+    <div class="composer">
+      <p class="placeholder">给 Pi 发消息…</p>
+      <div class="composer-row">
+        <button type="button" class="ibtn" aria-label="添加附件"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button>
+        <button type="button" class="ibtn" aria-label="命令"><svg class="i" aria-hidden="true"><use href="#i-slash"/></svg></button>
+        <span class="spacer"></span>
+        <button type="button" class="chip" aria-label="模型：model-standard"><span>model-standard<svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></button>
+        <button type="button" class="send" aria-label="发送"><span><svg class="i" aria-hidden="true"><use href="#i-arrow-up"/></svg></span></button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-settings">
+  <div class="settings">
+    <div class="settings-head">
+      <button type="button" class="btn text back-text"><svg class="i" aria-hidden="true"><use href="#i-arrow-left"/></svg>返回工作区</button>
+      <button type="button" class="ibtn back-icon" aria-label="返回工作区">
+        <svg class="i glyph-now" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        <svg class="i glyph-next" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+      </button>
+      <h4>设置</h4>
+    </div>
+
+    <div class="group-title">外观</div>
+    <div class="group">
+      <div class="row"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg><span class="text"><b>跟随系统</b><small>与设备保持一致</small></span></div>
+      <div class="row"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg><span class="text"><b>浅色</b><small>明亮的工作区</small></span><svg class="i check" aria-hidden="true"><use href="#i-check"/></svg></div>
+      <div class="row"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg><span class="text"><b>深色</b><small>更柔和的夜间工作区</small></span></div>
+    </div>
+    <p class="group-note">选择 Pi Reach 在此浏览器中的外观。</p>
+
+    <div class="group-title">键盘</div>
+    <div class="group">
+      <div class="row plain"><span class="text"><b>Enter 发送消息</b><small>关闭后 Enter 换行</small></span><span class="switch" role="img" aria-label="已开启"></span></div>
+      <div class="row plain"><span class="text"><b>键盘快捷键</b></span><svg class="i" aria-hidden="true"><use href="#i-chevron-right"/></svg></div>
+    </div>
+
+    <div class="group-title">连接</div>
+    <div class="group pad">
+      <div class="field"><label>Relay 地址</label><div class="input">https://relay.example.com</div></div>
+      <button type="button" class="btn primary">保存设置</button>
+    </div>
+    <p class="group-note">使用 https:// 连接安全的 Relay。</p>
+
+    <div class="group-title">浏览器数据</div>
+    <div class="group pad">
+      <button type="button" class="btn tonal"><svg class="i" aria-hidden="true"><use href="#i-rotate"/></svg>重置布局</button>
+      <button type="button" class="btn danger"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg>清除本地数据</button>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-modal">
+  <div class="stage">
+    <div class="modal" role="dialog" aria-label="配对电脑">
+      <div class="modal-head"><h4>配对电脑</h4><button type="button" class="ibtn" aria-label="关闭"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <p>在电脑上的 Pi 中运行 /pi-reach pair，然后输入配对码。</p>
+      <div class="field"><label>配对码</label><div class="input mono">K7MP4Q2D</div><small>8 位字符，不区分大小写。</small></div>
+      <div class="modal-actions">
+        <button type="button" class="btn tonal">取消</button>
+        <button type="button" class="btn primary">配对</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-float">
+  <div class="float-stage">
+    <div class="popover" role="group" aria-label="电脑面板">
+      <div class="peer current">
+        <span class="peer-icon"><svg class="i" aria-hidden="true"><use href="#i-server"/></svg></span>
+        <span class="text"><b>Work laptop</b><span class="tags"><span class="tag">Online</span><span class="tag">Current</span></span><small>2 Pis running</small></span>
+      </div>
+      <div class="peer">
+        <span class="peer-icon"><svg class="i" aria-hidden="true"><use href="#i-server"/></svg></span>
+        <span class="text"><b>Home desktop</b><span class="tags"><span class="tag">Offline</span></span><small>0 Pis running</small></span>
+      </div>
+      <button type="button" class="btn tonal block"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Pair a computer</button>
+    </div>
+    <div class="toast" role="status">
+      <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+      <span class="msg-text">发送失败</span>
+      <button type="button" class="toast-act"><span>重试</span></button>
+      <button type="button" class="ibtn" aria-label="关闭提示"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+</template>
+
+<script>
+// 仅用于评审：把同一份场景复制到「现状」与「调整后」两个画框，并切换对比选项。
+document.querySelectorAll(".scene[data-tpl]").forEach(scene => {
+  const tpl = document.getElementById(scene.dataset.tpl);
+  scene.querySelectorAll(".frame").forEach(frame => frame.append(tpl.content.cloneNode(true)));
+});
+document.querySelectorAll("[data-set]").forEach(button => {
+  button.addEventListener("click", () => {
+    const { set, value } = button.dataset;
+    (set === "theme" ? document.documentElement : document.body).dataset[set] = value;
+    document.querySelectorAll(`[data-set="${set}"]`).forEach(peer => peer.setAttribute("aria-pressed", String(peer === button)));
+  });
+});
+</script>
+</body>
+</html>

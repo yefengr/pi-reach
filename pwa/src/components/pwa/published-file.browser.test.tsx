@@ -690,7 +690,7 @@ function screenImageRadii(image: HTMLImageElement) {
   });
 }
 
-test.each([1280, 390])("image zoom preserves 8px screen-space corners through the zoom limit and reset at width %s", async width => {
+test.each([1280, 390])("image zoom preserves 12px screen-space corners through the zoom limit and reset at width %s", async width => {
   await page.viewport(width, 844);
   const canvas = document.createElement("canvas");
   canvas.width = 320;
@@ -706,24 +706,24 @@ test.each([1280, 390])("image zoom preserves 8px screen-space corners through th
     await expect.poll(() => picture.complete && picture.naturalWidth === 320).toBe(true);
     // 有尺寸的图片排除过大圆角自动收缩；不能用 1px 夹具证明实际圆角。
     expect(parseFloat(getComputedStyle(picture).height)).toBeGreaterThan(16);
-    expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
+    expect(screenImageRadii(picture)).toEqual(Array(8).fill(12));
     const stepsToLimit = Math.ceil(Math.log(IMAGE_MAX_ZOOM) / Math.log(1.5));
     // 缩放按钮以 image-zoom 过渡；屏幕圆角在过渡结束后核对。
     const settled = () => expect.poll(() => picture.getAnimations().length).toBe(0);
     for (let step = 0; step < stepsToLimit; step += 1) {
       await h.screen.getByRole("button", { name: "Zoom in" }).click();
       await settled();
-      expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
+      expect(screenImageRadii(picture)).toEqual(Array(8).fill(12));
     }
     expect(new DOMMatrix(getComputedStyle(picture).transform).a).toBe(IMAGE_MAX_ZOOM);
     await h.screen.getByRole("button", { name: "Zoom out" }).click();
     await settled();
-    expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
+    expect(screenImageRadii(picture)).toEqual(Array(8).fill(12));
     await h.screen.getByRole("button", { name: "Reset zoom" }).click();
     await settled();
     expect(new DOMMatrix(getComputedStyle(picture).transform).a).toBe(1);
-    expect(getComputedStyle(picture).borderRadius).toBe("8px");
-    expect(screenImageRadii(picture)).toEqual(Array(8).fill(8));
+    expect(getComputedStyle(picture).borderRadius).toBe("12px");
+    expect(screenImageRadii(picture)).toEqual(Array(8).fill(12));
     await h.screen.getByRole("button", { name: "Close file reader" }).click();
     await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
     await expect.poll(() => window.history.state?.piReachFileReader === true).toBe(false);
@@ -737,8 +737,8 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   visibility(true);
   expect(h.pin).toHaveBeenCalledTimes(1);
   const embedded = document.querySelector<HTMLElement>(".pwa-published-image")!;
-  expect(getComputedStyle(embedded).borderRadius).toBe("8px");
-  expect(getComputedStyle(embedded.querySelector("img")!).borderRadius).toBe("8px");
+  expect(getComputedStyle(embedded).borderRadius).toBe("12px");
+  expect(getComputedStyle(embedded.querySelector("img")!).borderRadius).toBe("12px");
   await h.screen.getByRole("button", { name: "View image" }).click();
   await expect.element(h.screen.getByRole("button", { name: "Zoom in" })).toBeVisible();
   expect(h.pin).toHaveBeenCalledTimes(2);
@@ -747,7 +747,7 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   await h.screen.getByRole("button", { name: "Zoom in" }).click();
   const stage = document.querySelector<HTMLDivElement>(".pwa-file-image-stage")!;
   await expect.poll(() => stage.querySelector("img")!.getAnimations().length).toBe(0);
-  expect(screenImageRadii(stage.querySelector("img")!)).toEqual(Array(8).fill(8));
+  expect(screenImageRadii(stage.querySelector("img")!)).toEqual(Array(8).fill(12));
   const pointer = (type: string, id: number, x: number, y: number) => stage.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, pointerType: "touch", clientX: x, clientY: y }));
   // 合成事件没有 UA 活跃指针，单独屏蔽 capture；真实指针捕获由浏览器负责。
   stage.setPointerCapture = () => {};
@@ -756,7 +756,7 @@ test("ready image embeds once, visibility pins inline, zoom/pointer pan/pinch an
   flushSync(() => pointer("pointerdown", 2, 40, 30));
   flushSync(() => pointer("pointermove", 2, 50, 30));
   await expect.poll(() => stage.querySelector("img")?.style.transform).toContain("scale(3)");
-  expect(screenImageRadii(stage.querySelector("img")!)).toEqual(Array(8).fill(8));
+  expect(screenImageRadii(stage.querySelector("img")!)).toEqual(Array(8).fill(12));
   flushSync(() => { pointer("pointerup", 1, 30, 30); pointer("pointercancel", 2, 50, 30); });
   await h.screen.getByRole("button", { name: "Reset zoom" }).click();
   await expect.poll(() => stage.querySelector("img")?.style.transform).toBe("translate(0px, 0px) scale(1)");
@@ -962,9 +962,9 @@ test("image source handoff owns one geometric layer and keeps pins until Drawer 
   await expect.poll(imageClone).not.toBeNull();
   const clone = imageClone()!;
   expect(document.querySelectorAll(".pwa-published-image-transition")).toHaveLength(1);
-  expect(getComputedStyle(clone).borderRadius).toBe("8px");
-  expect(getComputedStyle(h.source.querySelector("img")!).borderRadius).toBe("8px");
-  expect(getComputedStyle(document.querySelector(".pwa-file-image-stage img")!).borderRadius).toBe("8px");
+  expect(getComputedStyle(clone).borderRadius).toBe("12px");
+  expect(getComputedStyle(h.source.querySelector("img")!).borderRadius).toBe("12px");
+  expect(getComputedStyle(document.querySelector(".pwa-file-image-stage img")!).borderRadius).toBe("12px");
   const frames = (clone.getAnimations()[0].effect as KeyframeEffect).getKeyframes();
   expect(frames[0].width).not.toBe(frames[1].width);
   expect(getComputedStyle(document.querySelector(".pwa-file-reader")!).transform).toBe("none");

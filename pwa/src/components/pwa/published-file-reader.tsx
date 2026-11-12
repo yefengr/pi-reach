@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { ActionIcon, Button, Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { ArrowLeft, Download, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { ChevronLeft, Download, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { fileKey, isAttachmentFile, type FileSourceDescriptor } from "@/lib/pwa/file-source";
 import { useI18n } from "@/lib/i18n";
 import { FILE_TEXT_PREVIEW_BYTES, fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
@@ -21,7 +21,7 @@ import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 const swipePoint = (event: PointerEvent<HTMLDivElement>) => ({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp });
 const imageTransform = (value: ImageTransform) => `translate(${value.x}px, ${value.y}px) scale(${value.scale})`;
 // 手动缩放仍用 transform；反向补偿圆角，避免屏幕半径随图片放大。
-const imageRadiusFor = (scale: number) => `calc(var(--pwa-radius-md) / ${scale})`;
+const imageRadiusFor = (scale: number) => `calc(var(--pwa-radius-lg) / ${scale})`;
 
 function PublishedImage({ url, name, onRetry, canRetry, source, surface, opened, instant, allowEnter, enterDuration, exitDuration, onDismiss }: {
   url: string; name: string; onRetry: () => void; canRetry: boolean; source?: HTMLButtonElement;
@@ -264,7 +264,7 @@ function PublishedModalFileReader({ file, opened, onClose, onExitTransitionEnd, 
     <Drawer.Content ref={setSurface} classNames={{ content: "pwa-file-reader" }} data-pwa-moving={motion.moving || undefined} data-image-reader={imageReader || undefined} data-publication-id={isAttachmentFile(file) ? undefined : file.publication_id} data-attachment-id={isAttachmentFile(file) ? file.attachment_id : undefined}>
       <Drawer.Header className="pwa-topbar pwa-file-reader-header">
         {/* 移动全屏与设置页同为左侧返回；桌面右侧 Drawer 保留右上角关闭。 */}
-        {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back" aria-label={t.files.closeReader} icon={<ArrowLeft size={20} />} /> : null}
+        {mobile ? <Drawer.CloseButton className="pwa-icon-button pwa-topbar-back" aria-label={t.files.closeReader} icon={<ChevronLeft size={20} />} /> : null}
         <Drawer.Title tabIndex={-1} data-autofocus title={name}>{name}</Drawer.Title>
         {state?.phase === "ready" && state.url ? <ActionIcon component="a" className="pwa-icon-button" href={state.url} download={fileSaveName(name)} aria-label={t.files.save} title={t.files.save}><Download size={20} aria-hidden="true" /></ActionIcon> : null}
         {mobile ? null : <Drawer.CloseButton className="pwa-icon-button" aria-label={t.files.closeReader} icon={<X size={20} />} />}

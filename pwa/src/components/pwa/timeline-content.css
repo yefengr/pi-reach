@@ -4,21 +4,21 @@
 .pwa-message { min-width: 0; margin: 12px 0; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); overflow-wrap: anywhere; }
 .pwa-message > p, .pwa-user-blocks p { margin: 0; white-space: pre-wrap; }
 .pwa-user-blocks { display: grid; gap: 8px; }
-.pwa-message.user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: var(--pwa-radius-xl); background: var(--pwa-message); }
+.pwa-message.user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: var(--pwa-radius-bubble); background: var(--pwa-message); }
 .pwa-message.assistant { padding: 0; }
 .pwa-message-status { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 0 0 4px; font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
-.pwa-message.provider_error { padding: 12px; border-radius: var(--pwa-radius-md); background: var(--pwa-error-wash); }
+.pwa-message.provider_error { padding: 12px; border-radius: var(--pwa-radius-lg); background: var(--pwa-error-wash); }
 .pwa-message.provider_error .pwa-message-status { color: var(--pwa-error); }
 .pwa-message.compaction, .pwa-message.branch_summary, .pwa-message.custom { padding: 0 0 0 12px; border-left: 2px solid var(--pwa-line); color: var(--pwa-soft-ink); font-size: var(--pwa-text-body); }
 .pwa-message.compaction .pwa-message-status, .pwa-message.branch_summary .pwa-message-status, .pwa-message.custom .pwa-message-status { color: var(--pwa-secondary); }
-.pwa-message-image { display: block; max-width: min(360px, 100%); height: auto; border-radius: var(--pwa-radius-md); }
+.pwa-message-image { display: block; max-width: min(360px, 100%); height: auto; border-radius: var(--pwa-radius-lg); }
 .pwa-stream-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .pwa-assistant-blocks { display: grid; gap: 12px; }
 
 /* 待发送消息与正式记录同样式；仅异常投递状态在气泡下方占一行 12px 文字。 */
 .pwa-user-row { position: relative; min-width: 0; margin: 12px 0; }
 /* 入场位移只在气泡自身的静态框内绘制，不侵入下方状态行或改变滚动几何。 */
-.pwa-user-bubble-frame { display: flow-root; width: fit-content; max-width: 80%; margin-left: auto; overflow: clip; border-radius: var(--pwa-radius-xl); }
+.pwa-user-bubble-frame { display: flow-root; width: fit-content; max-width: 80%; margin-left: auto; overflow: clip; border-radius: var(--pwa-radius-bubble); }
 .pwa-user-bubble-frame > .pwa-message.user { width: auto; max-width: none; margin: 0; }
 /* 在线会话追加的新行（正文、过程组与组内成员）只淡入，不位移、不做高度动画；位移由跟随滚动承担。 */
 .pwa-row-enter { animation: pwa-row-enter var(--pwa-duration-message-in) var(--pwa-ease-content); }
@@ -78,7 +78,7 @@
 .pwa-markdown blockquote { margin: 8px 0; padding-left: 12px; border-left: 2px solid var(--pwa-control-line); color: var(--pwa-soft-ink); }
 .pwa-markdown code { padding: 1px 4px; border-radius: var(--pwa-radius-xs); color: var(--pwa-soft-ink); background: var(--pwa-panel); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
 .pwa-markdown hr { margin: 16px 0; border: 0; border-top: var(--pwa-hairline) solid var(--pwa-separator); }
-.pwa-markdown img { max-width: 100%; height: auto; border-radius: var(--pwa-radius-md); }
+.pwa-markdown img { max-width: 100%; height: auto; border-radius: var(--pwa-radius-lg); }
 .pwa-markdown-table { max-width: 100%; margin: 8px 0; overflow-x: auto; }
 /* 分离边框模型：WebKit 在 collapse 模式下画不出 0.5px 发丝线，iOS 上格线会整行消失；border-spacing 0 保持原外观。 */
 .pwa-markdown table { border-collapse: separate; border-spacing: 0; font-size: var(--pwa-text-body); }
@@ -88,7 +88,7 @@
 .pwa-markdown-cell { --pwa-markdown-cell-min: 8em; min-width: var(--pwa-markdown-cell-min); overflow-wrap: break-word; }
 
 /* 成段代码：浅色主题在 panel 上、深色在 code-bg 上；块内横向滚动，右上角复制。 */
-.pwa-code-block { margin: 8px 0; border-radius: var(--pwa-radius-md); color: var(--pwa-code-text); background: var(--pwa-code-surface); }
+.pwa-code-block { margin: 8px 0; border-radius: var(--pwa-radius-lg); color: var(--pwa-code-text); background: var(--pwa-code-surface); }
 /* 标题栏高 36px；复制按钮保留 44px 点击区，上下各以 4px 透明扩展区越出标题栏。 */
 .pwa-code-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding-left: 12px; }
 .pwa-code-language { min-width: 0; overflow: hidden; color: var(--pwa-code-dim); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-mono); white-space: nowrap; text-overflow: ellipsis; }

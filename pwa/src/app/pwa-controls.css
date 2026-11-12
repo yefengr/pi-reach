@@ -99,6 +99,8 @@
     --pwa-navigation-row-padding: 4px;
     --pwa-menu-visual-inset: 2px;
     --pwa-button-height: 36px;
+    --pwa-button-radius: var(--pwa-radius-md);
+    --pwa-chip-radius: var(--pwa-radius-md);
   }
 }
 /* 大窗口不代表只有鼠标：有任一粗指针就保持可触控密度。 */
@@ -108,6 +110,8 @@
     --pwa-navigation-row-padding: 6px;
     --pwa-menu-visual-inset: 0px;
     --pwa-button-height: var(--pwa-hit-target);
+    --pwa-button-radius: var(--pwa-radius-toast);
+    --pwa-chip-radius: var(--pwa-radius-pill);
   }
 }
 

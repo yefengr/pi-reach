@@ -690,7 +690,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
       }
     };
-    const select = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name} (?:ONLINE|OFFLINE|PARTIAL|CHECKING)`) });
+    const select = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name} (?:Online|Offline|Partial|Checking)`) });
     const expectSelection = async (id: string) => {
       await expect.poll(() => events).toEqual(mobile ? ["close-request", `device:${id}`] : [`device:${id}`]);
       if (mobile) await expect.poll(() => document.querySelector('.pwa-session-sheet')).toBeNull();
@@ -717,7 +717,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(button.parentElement).toBe(menu.parentElement);
         expect(row.classList.contains("active")).toBe(index === 0);
         expect(button.querySelector(".pwa-current-label")?.textContent ?? "").toBe(index === 0 ? "Current" : "");
-        expect(button.querySelector(".pwa-presence-label")?.textContent).toBe(["ONLINE", "OFFLINE", "PARTIAL", "CHECKING"][index]);
+        expect(button.querySelector(".pwa-presence-label")?.textContent).toBe(["Online", "Offline", "Partial", "Checking"][index]);
         const presenceBox = button.querySelector<HTMLElement>(".pwa-peer-presence")!.getBoundingClientRect();
         for (const text of button.querySelectorAll<HTMLElement>(".pwa-presence-label, .pwa-current-label, .pwa-peer-summary")) {
           expect(text.scrollWidth, text.textContent ?? "").toBeLessThanOrEqual(text.clientWidth);

@@ -200,7 +200,6 @@
   --pwa-code-accent: #98B8E6;
 
   /* 带状态色的装饰边框：在 :root 上按当前主题的状态色与 line 计算，只辅助识别。 */
-  --pwa-running-line: color-mix(in srgb, var(--pwa-running) 40%, var(--pwa-line));
   --pwa-error-line: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line));
   /* 色调危险入口的悬停底：错误轻底再混入 4% 错误色，浅色错误色文字约 4.6:1，再加深即低于 4.5:1。 */
   --pwa-error-wash-hover: color-mix(in srgb, var(--pwa-error) 4%, var(--pwa-error-wash));
@@ -246,9 +245,11 @@
    * 图标：行内图标（TSX 中 size 16）随字号档位放大，图标按钮内的图标（size 20）在触控设备上加大。
    * *-stroke 是换算回 24 画布的线宽（1.5 × 24 ÷ 尺寸），使实际线宽保持 lib/ui/icon-metrics.ts 的 1.5px；
    * 写成算好的数值而不用 calc()，由守卫校验与尺寸对应。
+   * *-stroke-strong 用于按钮内与 600 字重文字并排的行内图标，实际线宽 2px（lib/ui/icon-metrics.ts）。
    */
   --pwa-icon-inline: 16px;
   --pwa-icon-inline-stroke: 2.25;
+  --pwa-icon-inline-stroke-strong: 3;
   --pwa-icon-control: 20px;
   --pwa-icon-control-stroke: 1.8;
 
@@ -270,8 +271,12 @@
   --pwa-radius-xs: 4px;
   --pwa-radius-md: 8px;
   --pwa-radius-lg: 12px;
-  /* 用户消息气泡、底部弹出面板上沿与桌面悬浮侧栏。 */
+  /* 页面级嵌入容器（设置页分组、启动失败卡片）、底部弹出面板上沿与桌面悬浮侧栏。 */
   --pwa-radius-xl: 16px;
+  /* 居中 Modal：最大的浮层表面，圆角大于菜单与卡片。 */
+  --pwa-radius-2xl: 24px;
+  /* 用户消息气泡：与内部圆角 8 的附件卡片同心（8 + 内边距 12）。 */
+  --pwa-radius-bubble: 20px;
   /* Toast：单行高 44 的一半，与其 36 圆形关闭按钮同心（18 + 视觉内缩 4）；多行时仍是大圆角而非椭圆两端。 */
   --pwa-radius-toast: 22px;
   /* 胶囊：只用于单行的状态标签与浮动入口。 */
@@ -405,6 +410,10 @@
   --pwa-hit-target: 44px;
   /* 常规按钮与文字按钮的高度：默认按触控取 44，纯细指针时为 36（见 pwa-controls.css）。 */
   --pwa-button-height: 44px;
+  /* 常规按钮与文字按钮的圆角：默认按触控取胶囊（单行高 44 的一半；文字换行时仍是大圆角，不成椭圆两端），纯细指针时为 8（见 pwa-controls.css）。 */
+  --pwa-button-radius: var(--pwa-radius-toast);
+  /* 行内文字操作的视觉底（Toast 操作、输入区提示操作、模型标签）：均为单行，触控取胶囊，纯细指针时为 8。 */
+  --pwa-chip-radius: var(--pwa-radius-pill);
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
   /* 横屏刘海与圆角的左右安全区；只由实际贴住该屏幕边缘的布局层使用，同一边不重复叠加（见 DESIGN「安全区」）。 */
   --pwa-safe-left: env(safe-area-inset-left, 0px);
@@ -425,6 +434,7 @@
   --pwa-text-subheading: 20px;
   --pwa-icon-inline: 18px;
   --pwa-icon-inline-stroke: 2;
+  --pwa-icon-inline-stroke-strong: 2.667;
 }
 
 :root[data-pwa-text-size="xlarge"] {
@@ -438,6 +448,7 @@
   --pwa-text-subheading: 22px;
   --pwa-icon-inline: 20px;
   --pwa-icon-inline-stroke: 1.8;
+  --pwa-icon-inline-stroke-strong: 2.4;
 }
 
 /*

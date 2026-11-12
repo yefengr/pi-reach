@@ -114,7 +114,7 @@ export const en = {
     removePairing: "Remove pairing",
     checking: "Checking",
     piRunning: (count: number) => (count === 1 ? "1 Pi running" : `${count} Pis running`),
-    status: { checking: "CHECKING", online: "ONLINE", offline: "OFFLINE", partial: "PARTIAL" },
+    status: { checking: "Checking", online: "Online", offline: "Offline", partial: "Partial" },
     noneYet: "No computer paired yet.",
     chooseComputer: "Choose a computer",
     noComputerPaired: "No computer paired",

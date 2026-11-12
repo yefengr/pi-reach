@@ -255,7 +255,7 @@
 /* 提示行的文字操作（如「立即重试」）：中性色、600，靠右；点击区 44，越出提示行的部分由负外边距抵消，不撑高提示行；悬停底色上下各内缩 10。 */
 .pwa-root .pwa-composer-card .pwa-composer-hint-line > span { flex: 1 1 auto; }
 .pwa-root .pwa-composer-hint-action { position: relative; z-index: 1; isolation: isolate; flex: 0 0 auto; min-height: var(--pwa-hit-target); margin-block: -10px; padding: 0 8px; border-radius: var(--pwa-radius-md); color: var(--pwa-ink); font: inherit; font-weight: var(--pwa-weight-strong); white-space: nowrap; }
-.pwa-root .pwa-composer-hint-action::before { content: ""; position: absolute; z-index: -1; inset: 10px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-root .pwa-composer-hint-action::before { content: ""; position: absolute; z-index: -1; inset: 10px 0; border-radius: var(--pwa-chip-radius); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-root .pwa-composer-hint-action:focus-visible { outline-offset: -10px; }
 .pwa-root .pwa-composer-hint-action:disabled { color: var(--pwa-secondary); cursor: default; }
 @media (hover: hover) { .pwa-root .pwa-composer-hint-action:not(:disabled):hover::before { background: var(--pwa-hover); } }
@@ -305,7 +305,7 @@
 /* 骨架屏：hover 色块按真实布局排列，约 2 秒轻微明暗呼吸，减少动态效果时静止。 */
 .pwa-root .pwa-skeleton-rows { display: grid; gap: 12px; }
 .pwa-skeleton { display: block; height: 14px; border-radius: var(--pwa-radius-xs); background: var(--pwa-hover); animation: pwa-breathe var(--pwa-duration-breathe) linear infinite; }
-.pwa-root .pwa-skeleton-user { justify-self: end; width: 45%; height: 40px; border-radius: var(--pwa-radius-xl); }
+.pwa-root .pwa-skeleton-user { justify-self: end; width: 45%; height: 40px; border-radius: var(--pwa-radius-bubble); }
 .pwa-root .pwa-skeleton-short { width: 60%; }
 .pwa-root .pwa-nav-skeleton { display: grid; gap: 10px; padding: 8px; }
 .pwa-root .pwa-nav-skeleton .pwa-skeleton:last-child { width: 70%; }

@@ -104,12 +104,12 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   const group = appearance.querySelector<HTMLElement>(".pwa-settings-group")!;
   expect(Math.round(group.getBoundingClientRect().top - appearance.querySelector("h2")!.getBoundingClientRect().bottom)).toBe(8);
   expect(Math.round(appearance.querySelector(".pwa-settings-footnote")!.getBoundingClientRect().top - group.getBoundingClientRect().bottom)).toBe(6);
-  expect(getComputedStyle(group).borderRadius).toBe("12px");
+  expect(getComputedStyle(group).borderRadius).toBe("16px");
   // 分组是公共的嵌入式卡片：不描边，底色为 grouped-bg 上的 surface（DESIGN「卡片」）。
   for (const card of document.querySelectorAll<HTMLElement>(".pwa-settings-group")) {
     const style = getComputedStyle(card);
     expect(card.classList.contains("pwa-card")).toBe(true);
-    expect([style.borderTopWidth, style.boxShadow, style.borderRadius]).toEqual(["0px", "none", "12px"]);
+    expect([style.borderTopWidth, style.boxShadow, style.borderRadius]).toEqual(["0px", "none", "16px"]);
     const probe = document.createElement("span");
     probe.style.backgroundColor = "var(--pwa-surface)";
     card.append(probe);

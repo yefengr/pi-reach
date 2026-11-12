@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
-import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
+import { ALargeSmall, CaseSensitive, Check, ChevronLeft, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
@@ -92,7 +92,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
     <div className="pwa-status-bar-shield" aria-hidden="true" />
     <div className="pwa-settings-inner">
       <header className="pwa-settings-header">
-        <Button className="pwa-settings-back" variant="transparent" type="button" onClick={onBack} aria-label={backLabel} title={backLabel} leftSection={<ArrowLeft size={20} aria-hidden="true" />}>
+        <Button className="pwa-settings-back" variant="transparent" type="button" onClick={onBack} aria-label={backLabel} title={backLabel} leftSection={<ChevronLeft size={20} aria-hidden="true" />}>
           <span className="pwa-settings-back-label">{backLabel}</span>
         </Button>
         <h1 id="pwa-settings-title" className="pwa-settings-title" ref={titleRef} tabIndex={-1}>{s.title}</h1>

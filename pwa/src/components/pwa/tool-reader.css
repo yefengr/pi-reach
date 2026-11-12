@@ -22,7 +22,7 @@
 .pwa-root .pwa-tool-details .pwa-collapse-inner { padding-bottom: 4px; }
 
 /* 会话内预览：与代码块同底（浅色 panel、深色 code-bg），最多 12 行，超出部分底部渐隐。 */
-.pwa-root .pwa-tool-preview { position: relative; max-height: calc(12 * var(--pwa-text-code) * var(--pwa-leading-code) + 24px); min-width: 0; overflow: clip; border-radius: var(--pwa-radius-md); background: var(--pwa-code-surface); }
+.pwa-root .pwa-tool-preview { position: relative; max-height: calc(12 * var(--pwa-text-code) * var(--pwa-leading-code) + 24px); min-width: 0; overflow: clip; border-radius: var(--pwa-radius-lg); background: var(--pwa-code-surface); }
 .pwa-root .pwa-tool-preview[data-overflow]::after { content: ""; position: absolute; inset: auto 0 0; height: 40px; background: linear-gradient(to bottom, transparent, var(--pwa-code-surface)); pointer-events: none; }
 .pwa-root .pwa-tool-preview-content { min-width: 0; padding: 12px; }
 .pwa-root .pwa-tool-read-actions { margin-top: 4px; }
@@ -64,7 +64,7 @@
 /* 主机真实截断需要关注，用运行色；预览只是界面缩短、展开可见全部，用中性色。 */
 .pwa-root .pwa-tool-notice { margin: 4px 0 0; color: var(--pwa-running); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-root .pwa-tool-notice-preview { color: var(--pwa-secondary); }
-.pwa-root .pwa-tool-output-image { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; object-position: left top; border-radius: var(--pwa-radius-md); background: var(--pwa-panel); }
+.pwa-root .pwa-tool-output-image { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; object-position: left top; border-radius: var(--pwa-radius-lg); background: var(--pwa-panel); }
 .pwa-root .pwa-image-omitted { margin: 0; color: var(--pwa-secondary); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); overflow-wrap: anywhere; }
 
 /* 工具详情阅读器：桌面右侧 720px Drawer，移动端全屏；输出不带行号、长行自动换行。
@@ -88,7 +88,7 @@
 .pwa-root .pwa-thinking-reader-scroll { font: var(--pwa-text-body)/var(--pwa-leading-body) var(--pwa-font-ui); overflow-wrap: anywhere; }
 .pwa-root .pwa-thinking-reader-scroll .pwa-code-block pre,
 .pwa-root .pwa-thinking-reader-scroll .pwa-markdown-table { touch-action: auto; }
-.pwa-root .pwa-reader-error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--pwa-radius-md); color: var(--pwa-error); background: var(--pwa-error-wash); }
+.pwa-root .pwa-reader-error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-error); background: var(--pwa-error-wash); }
 .pwa-root .pwa-reader-error > svg { flex: 0 0 auto; margin-top: 2px; }
 .pwa-root .pwa-reader-error pre { min-width: 0; margin: 0; color: var(--pwa-ink); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .pwa-root .pwa-reader-block-label { margin: 0 0 4px; color: var(--pwa-code-dim); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }

@@ -103,6 +103,8 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme tokens", (_
       expect(ratio(theme, "hover", surface), `hover on ${surface}`).toBeGreaterThanOrEqual(1.1);
     }
     expect(ratio(theme, "neutral-active", "hover")).toBeGreaterThanOrEqual(1.08);
+    // 用户气泡内的附件卡片不描边，只靠页面底色与气泡底色的差成形。
+    expect(ratio(theme, "bg", "message"), "attachment card on the user bubble").toBeGreaterThanOrEqual(1.1);
     expect(ratio(theme, "selected", "panel")).toBeGreaterThanOrEqual(1.14);
     expect(theme["--pwa-selected"]).not.toBe(theme["--pwa-hover"]);
     expect(theme["--pwa-disabled-bg"]).not.toBe(theme["--pwa-hover"]);
@@ -226,8 +228,8 @@ test("the tonal danger hover mixes a little error into its wash and keeps error 
   }
 });
 
-test("status edges mix each status color with line at one shared ratio", () => {
-  expect(shared["--pwa-running-line"]).toBe("color-mix(in srgb, var(--pwa-running) 40%, var(--pwa-line))");
+test("the status edge mixes the error color with line", () => {
+  expect(shared["--pwa-running-line"]).toBeUndefined();
   expect(shared["--pwa-error-line"]).toBe("color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line))");
 });
 
