@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, NativeSelect } from "@mantine/core";
 import { SettingsPage } from "@/components/pwa/settings-page";
 import { PairingDialog } from "@/components/pwa/pairing-dialog";
@@ -10,7 +10,7 @@ import { createOperationNotificationController, type OperationNotificationContro
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingErrorCode } from "@/lib/pwa/use-device-pairing";
 import type { LanguagePreference } from "@/lib/i18n";
-import type { PwaTextSizePreference } from "@/lib/ui/text-size";
+import { previewTextSize, type PwaTextSizePreference } from "@/lib/ui/text-size";
 import { GALLERY_DEVICES } from "./ui-state-shell-fixtures";
 
 export type GallerySurface = "settings" | "pairing" | "confirm" | "rename" | "shortcuts" | null;
@@ -61,7 +61,7 @@ function GallerySurfaceControls({ inactive, open, outcome, setOutcome, controlle
       <Button variant="default" onClick={() => controller.show("preference-save")}>错误 Toast</Button>
       <Button variant="default" onClick={() => controller.showUpdate("发现新版本（仅本页演示）。", { label: "刷新（仅演示）", onClick: () => refresh(true) }, () => refresh(false))}>更新 Toast</Button>
     </div>
-    <p className="pwa-ui-states-note">设置仅演示页面和操作结果，不演示 /app/settings 路由转场。语言仅预览选中状态，不切换全局翻译；字号仅预览选中状态，不改变全局字号；发送键偏好仅用于本页设置与帮助。配对只展示本地连接中与错误，不发送配对码。</p>
+    <p className="pwa-ui-states-note">设置仅演示页面和操作结果，不演示 /app/settings 路由转场。语言仅预览选中状态，不切换全局翻译；字号作用于本页，不保存为正式偏好；发送键偏好仅用于本页设置与帮助。配对只展示本地连接中与错误，不发送配对码。</p>
   </section>;
 }
 
@@ -78,6 +78,8 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
   const [language, setLanguage] = useState<LanguagePreference>("system");
   const [enterSends, setEnterSends] = useState(true);
   const [textSize, setTextSize] = useState<PwaTextSizePreference>("standard");
+  // 实际字号与设置里的选中项共用这份内存偏好；不写入正式偏好存储。
+  useLayoutEffect(() => { previewTextSize(textSize); }, [textSize]);
   const [previousSurface, setPreviousSurface] = useState(surface);
   const [settingsVisible, setSettingsVisible] = useState(surface === "settings");
   const [confirmAction, setConfirmAction] = useState<ConfirmActionDialogAction>({ kind: "new-session" });

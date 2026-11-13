@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { getMessages } from "@/lib/i18n";
+import { getTextSizeState, resetTextSizeStateForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import { UiStateGalleryPage } from "./ui-states";
 import { GALLERY_CODE, type GalleryState } from "./ui-state-fixtures";
 
@@ -256,4 +258,24 @@ test("main region renders the real empty, startup and notice components for ever
   await expect.element(page.getByRole("button", { name: "Install app" })).toBeVisible();
   await page.getByRole("button", { name: "Use in browser for now" }).click();
   await expect.poll(() => document.querySelector(".pwa-workspace-state .pwa-command-block")).not.toBeNull();
+});
+
+test("the actual gallery text size ignores the stored preference and follows only the memory selection", async () => {
+  const stored = localStorage.getItem(TEXT_SIZE_STORAGE_KEY);
+  localStorage.setItem(TEXT_SIZE_STORAGE_KEY, "xlarge");
+  resetTextSizeStateForTest();
+  try {
+    await render(<UiStateGalleryPage />);
+    // Composer 读取全局字号状态，得到的也是展厅的内存档位，而非存储里的「特大」。
+    await expect.poll(() => document.documentElement.dataset.pwaTextSize).toBe("standard");
+    expect(getTextSizeState().preference).toBe("standard");
+    await page.getByLabelText("展示区域", { exact: true }).selectOptions("surfaces");
+    await page.getByRole("button", { name: "预览设置页", exact: true }).click();
+    await page.getByRole("radio", { name: new RegExp(`^${getMessages().settings.textSizeLarge}`) }).click();
+    await expect.poll(() => document.documentElement.dataset.pwaTextSize).toBe("large");
+    expect(localStorage.getItem(TEXT_SIZE_STORAGE_KEY)).toBe("xlarge");
+  } finally {
+    if (stored === null) localStorage.removeItem(TEXT_SIZE_STORAGE_KEY); else localStorage.setItem(TEXT_SIZE_STORAGE_KEY, stored);
+    resetTextSizeStateForTest();
+  }
 });

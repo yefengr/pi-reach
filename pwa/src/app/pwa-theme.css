@@ -421,7 +421,7 @@
   --pwa-app-height: 100dvh;
 }
 
-/* 字号档位：只放大字号，间距、图标、点击区与断点不随档位缩放。 */
+/* 字号档位：放大字号与行内图标，间距、其他图标、点击区与断点不随档位缩放。 */
 :root[data-pwa-text-size="large"] {
   --pwa-text-meta: 14px;
   --pwa-text-list: 16px;

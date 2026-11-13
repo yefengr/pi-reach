@@ -119,6 +119,11 @@ export function setTextSize(preference: PwaTextSizePreference): void {
   publish(next);
 }
 
+/** 只改当前页面的档位、不写存储：开发展厅用它让实际字号与内存中的选择保持同一份。 */
+export function previewTextSize(preference: PwaTextSizePreference): void {
+  publish(isPwaTextSizePreference(preference) ? preference : DEFAULT_TEXT_SIZE_PREFERENCE);
+}
+
 export function subscribeTextSize(listener: () => void): () => void {
   listeners.add(listener);
   return () => {

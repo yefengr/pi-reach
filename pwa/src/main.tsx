@@ -9,7 +9,7 @@ import { PwaInstallProvider } from "@/components/pwa/pwa-install";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { installHairlineDetection } from "@/lib/ui/hairline";
-import { applyStoredTextSize, installSystemTextSizeTracking, shouldRestoreTextSize } from "@/lib/ui/text-size";
+import { applyStoredTextSize, DEFAULT_TEXT_SIZE, installSystemTextSizeTracking, previewTextSize, shouldRestoreTextSize } from "@/lib/ui/text-size";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing PWA root element");
@@ -20,6 +20,9 @@ const reviewPath = import.meta.env.DEV ? window.location.pathname : "";
 if (shouldRestoreTextSize(reviewPath)) {
   applyStoredTextSize();
   installSystemTextSizeTracking();
+} else {
+  // 先占住字号状态，后续组件读取时不会再从存储加载正式偏好。
+  previewTextSize(DEFAULT_TEXT_SIZE);
 }
 // 同理在渲染前确定发丝线档位，避免分隔线先粗后细。
 installHairlineDetection();
