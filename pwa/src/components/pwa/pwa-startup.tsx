@@ -22,12 +22,13 @@ export function describeStartupFailure(failure: unknown): StartupError {
   return { title: t.openFailedTitle, message: message || t.genericBody, action: t.reloadAction };
 }
 
-export function StartupLoading() {
+/** visible 为 false 时只铺底色：启动图之后接一片同色底，而不是一闪而过的标识与文字。 */
+export function StartupLoading({ visible = true }: { visible?: boolean }) {
   const { t } = useI18n();
-  return <div className="pwa-loading"><div><BrandMark className="pwa-loading-mark" size={48} /><p>{t.startup.opening}<span>...</span></p></div></div>;
+  return <div className="pwa-loading">{visible ? <div><BrandMark className="pwa-loading-mark" size={48} /><p>{t.startup.opening}</p></div> : null}</div>;
 }
 
 export function StartupErrorView({ error, onRetry }: { error: StartupError | null; onRetry: () => void }) {
   const { t } = useI18n();
-  return <main className="pwa-startup-error"><div className="pwa-startup-card"><span className="pwa-startup-icon"><WifiOff size={24} /></span><span className="pwa-kicker">{t.startup.kicker}</span><h1>{error?.title || t.startup.unavailableTitle}</h1><p>{error?.message || t.startup.unavailableBody}</p>{error?.action ? <p className="pwa-startup-action-note">{error.action}</p> : null}<div className="pwa-startup-actions"><Button type="button" onClick={onRetry} leftSection={<RefreshCw size={16} />}>{t.startup.reload}</Button></div></div></main>;
+  return <main className="pwa-startup-error"><div className="pwa-card pwa-startup-card"><span className="pwa-startup-icon"><WifiOff size={24} /></span><span className="pwa-kicker">{t.startup.kicker}</span><h1>{error?.title || t.startup.unavailableTitle}</h1><p>{error?.message || t.startup.unavailableBody}</p>{error?.action ? <p className="pwa-startup-action-note">{error.action}</p> : null}<div className="pwa-startup-actions"><Button type="button" onClick={onRetry} leftSection={<RefreshCw size={16} />}>{t.startup.reload}</Button></div></div></main>;
 }

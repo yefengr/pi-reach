@@ -165,9 +165,12 @@ test.each(["standard", "large", "xlarge"] as const)("Working spinner centers its
   const icon = slot.querySelector<HTMLElement>(".pwa-working-icon")!;
   const spinner = icon.querySelector<SVGSVGElement>(".pwa-spin")!;
   const label = slot.querySelector<HTMLElement>(".pwa-working-label")!;
-  // 旋转只作用在槽内的 svg；位置按固定 16px 外槽与活动区整行判定，不用旋转后的 svg 包围盒。
-  expect([rounded(icon.getBoundingClientRect().width), rounded(icon.getBoundingClientRect().height)]).toEqual([16, 16]);
-  expect([getComputedStyle(spinner).width, getComputedStyle(spinner).height]).toEqual(["16px", "16px"]);
+  // 旋转只作用在槽内的 svg；位置按外槽与活动区整行判定，不用旋转后的 svg 包围盒。外槽与行内图标同宽，随字号档位放大。
+  const inline = { standard: 16, large: 18, xlarge: 20 }[size];
+  expect([rounded(icon.getBoundingClientRect().width), rounded(icon.getBoundingClientRect().height)]).toEqual([inline, inline]);
+  expect([getComputedStyle(spinner).width, getComputedStyle(spinner).height]).toEqual([`${inline}px`, `${inline}px`]);
+  // 实际线宽固定 1.5px：换算回 24 画布的线宽随尺寸变化。
+  expect(Number.parseFloat(getComputedStyle(spinner).strokeWidth)).toBeCloseTo(1.5 * 24 / inline, 3);
   expect(center(icon.getBoundingClientRect())).toBe(center(slot.getBoundingClientRect()));
   expect(center(label.getBoundingClientRect())).toBe(center(slot.getBoundingClientRect()));
   expect(rounded(label.getBoundingClientRect().left - icon.getBoundingClientRect().right)).toBe(6);

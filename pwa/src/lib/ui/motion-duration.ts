@@ -1,5 +1,5 @@
 /**
- * 毫秒时长 token 的回退值，与 pwa-theme.css 常规动效下的取值一致（pwa-script-token-guard 校验）。
+ * 毫秒时长 token 的回退值，与 pwa-theme.css 常规动效下经档位解析后的取值一致（pwa-script-token-guard 校验）。
  * 只在读不到计算样式（无 DOM、样式未加载）时使用；调用点不另写数值。循环动画的秒级 token 不经脚本读取。
  */
 export const PWA_MOTION_FALLBACK_MS = {
@@ -14,33 +14,42 @@ export const PWA_MOTION_FALLBACK_MS = {
   "--pwa-duration-status-slot": 160,
   "--pwa-duration-collapse-in": 400,
   "--pwa-duration-collapse-out": 280,
-  "--pwa-duration-collapse-settle": 400,
+  "--pwa-duration-collapse-settle": 280,
   "--pwa-duration-keyboard-dock": 200,
   "--pwa-duration-image-in": 400,
   "--pwa-duration-image-out": 280,
+  "--pwa-duration-image-zoom": 320,
+  "--pwa-duration-overscroll": 280,
   "--pwa-duration-toast": 400,
   "--pwa-duration-toast-out": 200,
   "--pwa-duration-fade": 120,
   "--pwa-duration-message-in": 400,
+  "--pwa-duration-scroll-latest": 400,
+  "--pwa-duration-reorder": 280,
   "--pwa-duration-press-in": 90,
-  "--pwa-duration-press-out": 120,
-  "--pwa-duration-menu-in": 160,
-  "--pwa-duration-menu-out": 120,
-  "--pwa-duration-feedback": 120,
-  "--pwa-duration-content": 320,
+  "--pwa-duration-press-out": 240,
+  "--pwa-duration-menu-in": 240,
+  "--pwa-duration-menu-out": 160,
+  "--pwa-duration-menu-resize": 280,
+  "--pwa-duration-menu-view": 200,
+  "--pwa-duration-feedback": 160,
+  "--pwa-duration-toggle": 280,
+  "--pwa-duration-toggle-track": 200,
+  "--pwa-duration-appearance": 320,
   "--pwa-duration-reduced": 120,
+  "--pwa-duration-content": 320,
 } as const;
 
 export type PwaMotionDurationToken = keyof typeof PWA_MOTION_FALLBACK_MS;
 
 /**
- * 时长 token 的原始计算值。getPropertyValue 对自定义属性返回原始 var(...)，须沿 token 引用解析；
+ * 时长 token 的原始计算值。getPropertyValue 对自定义属性可能返回原始 var(...)，须沿 token 与档位引用解析；
  * 减少动态效果时由全局媒体查询改写的 token 同样生效。
  */
 export function resolvePwaMotionDuration(style: CSSStyleDeclaration, variable: PwaMotionDurationToken): string {
   let value = style.getPropertyValue(variable).trim();
   for (let depth = 0; depth < 4; depth += 1) {
-    const reference = /^var\((--pwa-duration-[\w-]+)\)$/.exec(value);
+    const reference = /^var\((--pwa-(?:duration|tier)-[\w-]+)\)$/.exec(value);
     if (!reference) break;
     value = style.getPropertyValue(reference[1]).trim();
   }

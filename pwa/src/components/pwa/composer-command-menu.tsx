@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronRight, Cpu, FilePlus2, Gauge, LoaderCircle, Mi
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
+import { pwaContentEasing, pwaMotionShiftDisabled, usePwaMotionDuration } from "./use-pwa-motion";
 import "./operation-feedback.css";
 
 export type ModelListStatus = "idle" | "loading" | "success" | "error";
@@ -83,11 +84,30 @@ function isCurrentModel(model: WireModel, currentModel: WireModel | null): boole
 function useCommandViewFocus(view: ComposerModelSettingsView) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const focusTargetRef = useRef<ComposerModelSettingsView | null>(null);
+  // 切换前的面板高度：视图在同一次提交中替换，提交后才能量到新高度。
+  const fromHeightRef = useRef<number | null>(null);
+  const resizeDuration = usePwaMotionDuration("--pwa-duration-menu-resize");
+  const viewDuration = usePwaMotionDuration("--pwa-duration-menu-view");
   const changeView = (target: ComposerModelSettingsView, callback: () => void) => {
     // 只补救视图切换中即将卸载的菜单项焦点；指针打开时不抢触发器焦点。
     focusTargetRef.current = panelRef.current?.contains(document.activeElement) ? target : null;
+    fromHeightRef.current = panelRef.current?.closest<HTMLElement>("[data-menu-dropdown]")?.offsetHeight ?? null;
     callback();
   };
+  useLayoutEffect(() => {
+    const from = fromHeightRef.current;
+    fromHeightRef.current = null;
+    const panel = panelRef.current;
+    const dropdown = panel?.closest<HTMLElement>("[data-menu-dropdown]");
+    if (!panel || !dropdown || from === null || typeof dropdown.animate !== "function") return;
+    // 面板高度过渡、新视图淡入；减少动态效果时高度一次到位，只保留淡入。
+    const to = dropdown.offsetHeight;
+    const easing = pwaContentEasing(dropdown);
+    if (from !== to && !pwaMotionShiftDisabled(dropdown)) {
+      dropdown.animate([{ height: `${from}px`, overflow: "hidden" }, { height: `${to}px`, overflow: "hidden" }], { duration: resizeDuration, easing });
+    }
+    panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: viewDuration, easing });
+  }, [view, resizeDuration, viewDuration]);
   useLayoutEffect(() => {
     const target = focusTargetRef.current;
     focusTargetRef.current = null;

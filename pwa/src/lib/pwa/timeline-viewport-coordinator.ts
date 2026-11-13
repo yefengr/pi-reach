@@ -452,6 +452,11 @@ export class TimelineViewportCoordinator<C, A> {
     this.pendingAnchor = position && !position.following ? position.anchor : null;
   }
 
+  /** 仍有等待恢复的阅读位置（目标行尚未出现，或下一帧才写入）。 */
+  get restoring(): boolean {
+    return this.pendingAnchor !== null;
+  }
+
   /**
    * 过程组开始收起：跟随中组头原位不动，收回的高度暂留为底部空白，由随后的输出（live）填入；
    * 没有后续输出时等收起结束再平滑收回。已有其他过程拥有滚动时，只阻止跟随为同一提交的新增内容先向下追。
@@ -583,7 +588,8 @@ export class TimelineViewportCoordinator<C, A> {
     const layout = this.layout;
     if (!layout) return;
     this.receipt = { target: geometry ? Math.min(top, geometry.bottom) : top, last: layout.top(), smooth };
-    layout.scroll(top, smooth);
+    // 平滑写入由布局逐帧推进，终点按已测量的可滚动范围夹取，布局不再另读几何。
+    layout.scroll(smooth ? this.receipt.target : top, smooth);
     const actual = layout.top();
     if (this.layout !== layout || (!this.following || this.paused)) return;
     this.lastTop = actual;

@@ -78,7 +78,7 @@ test("computer row keeps current selection separate from actual presence", () =>
   const computerSelect = navLinkMarkup(html, "Office Mac");
   const computerActions = html.match(/<button[^>]*aria-label="Computer actions for Office Mac"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
 
-  expect(html).toContain("OFFLINE");
+  expect(html).toContain("Offline");
   expect(html).toContain("Current");
   expect(html).not.toContain("OPEN");
   expect(computerSelect).toMatch(/^<button\b/);
@@ -179,7 +179,7 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(currentHistory).not.toMatch(/items?</);
   expect(nextHistory).toContain("<time");
   expect(historyHtml).not.toContain("Current saved session");
-  expect(waitingHtml).toContain("Checking for running Pi...");
+  expect(waitingHtml).toContain("Checking for running Pi…");
   expect(waitingHtml).toContain("pwa-nav-skeleton");
   expect(waitingHtml).not.toContain(">Current Pi<");
   expect(waitingHtml).toContain("**Pinned history**");
@@ -195,7 +195,7 @@ test("12px connection spinners override the global stroke to match 16px icons", 
 
   for (const html of statuses) {
     expect(spinner(html)).toContain('width="12"');
-    expect(spinner(html)).toContain('stroke-width="2.4"');
+    expect(spinner(html)).toContain('stroke-width="3"');
   }
 });
 

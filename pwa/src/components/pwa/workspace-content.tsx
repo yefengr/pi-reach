@@ -5,7 +5,7 @@ import { ChevronRight, CloudOff, Computer, Download, History, Link2, LoaderCircl
 import { BrandMark } from "@/components/pwa/brand-mark";
 import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "@/components/pwa/pwa-install";
 import type { ConnectionHintStage, ConnectionIssueKind } from "@/lib/pwa/connection-hint";
-import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
+import { SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { OnlinePiRow } from "@/components/pwa/workspace-view";
 import { MessageList } from "@/components/pwa/message-list";
 import { ReadOnlyComposer } from "@/components/pwa/message-composer";
@@ -194,7 +194,7 @@ export function ConnectionIssueWorkspace({ kind, stage, busy, onRetry, retryDisa
     icon={<CloudOff size={24} />}
     title={t.connection.relayUnreachableTitle}
     action={retry ? <Button variant="default" type="button" disabled={retryDisabled} onClick={onRetry}>{t.connection.retryNow}</Button> : undefined}
-  ><span className="pwa-workspace-state-busy" role="status">{busy || !retry ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" /> : null}{body}</span></WorkspaceEmptyState>;
+  ><span className="pwa-workspace-state-busy" role="status">{busy || !retry ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} aria-hidden="true" /> : null}{body}</span></WorkspaceEmptyState>;
 }
 
 export function ChooseComputerWorkspace() {
@@ -209,7 +209,7 @@ export function ChoosePiWorkspace({ endpoints, completedEndpointIds, onSelect }:
   return <div className="pwa-workspace-state pwa-choose-pi">
     <h2>{t.workspace.choosePiTitle(endpoints.length)}</h2>
     <div className="pwa-choose-pi-list">
-      {ordered.map((endpoint) => <OnlinePiRow key={endpoint.id} endpoint={endpoint} current={false} completed={completedEndpointIds?.has(endpoint.endpointId) ?? false} onSelect={() => onSelect(endpoint.endpointId)} trailing={<ChevronRight size={16} aria-hidden="true" />} />)}
+      {ordered.map((endpoint) => <OnlinePiRow key={endpoint.id} endpoint={endpoint} current={false} completed={completedEndpointIds?.has(endpoint.endpointId) ?? false} onSelect={() => onSelect(endpoint.endpointId)} trailing={<ChevronRight size={16} aria-hidden="true" />} className="pwa-card pwa-card-row" />)}
     </div>
   </div>;
 }

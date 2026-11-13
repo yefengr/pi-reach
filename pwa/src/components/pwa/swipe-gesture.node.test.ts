@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, trackedDistance, type SwipeDirection, type SwipeState } from "./swipe-gesture";
+import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, overscrollDistance, projectedCommit, rubberBand, trackedDistance, type SwipeDirection, type SwipeState } from "./swipe-gesture";
 
 const point = (x: number, time: number, y = 0, pointerId = 1) => ({ x, y, time, pointerId });
 const start = (direction: SwipeDirection = "right") => beginSwipe(IDLE_SWIPE, point(0, 0), direction, "touch", true);
@@ -77,16 +77,54 @@ test("tracked distance is clamped at zero when reversing and ignores non-trackin
   expect(trackedDistance(moveSwipe(start(), point(0, 10, 20)), point(80, 20))).toBe(0);
 });
 
+test("overscroll distance keeps the reverse sign that tracked distance clamps", () => {
+  let state = start();
+  state = moveSwipe(state, point(14, 10));
+  expect(overscrollDistance(state, point(-30, 20))).toBe(-44);
+  expect(overscrollDistance(state, point(64, 20))).toBe(50);
+  expect(overscrollDistance(IDLE_SWIPE, point(-30, 20))).toBe(0);
+});
+
+test("rubber band follows the iOS formula, approaches but never reaches the dimension", () => {
+  expect(rubberBand(0, 100)).toBe(0);
+  expect(rubberBand(-10, 100)).toBe(0);
+  expect(rubberBand(10, 0)).toBe(0);
+  expect(rubberBand(100, 100)).toBeCloseTo((1 - 1 / 1.55) * 100, 6);
+  expect(rubberBand(20, 100)).toBeLessThan(20);
+  expect(rubberBand(1e6, 100)).toBeLessThan(100);
+  expect(rubberBand(200, 100)).toBeGreaterThan(rubberBand(100, 100));
+});
+
 test("finish reports the tracked release distance", () => {
   expect(release([[14, 10], [90, 200]]).distance).toBe(76);
   expect(release([[14, 10], [4, 200]]).distance).toBe(0);
 });
 
-test("reversed is set only when the release velocity flicks back past the threshold", () => {
-  // 已越过提交阈值后迅速甩回：触发式判定不变，跟手模式靠 reversed 回弹。
-  const back = release([[90, 20], [60, 160], [20, 200]]);
-  expect(back.reversed).toBe(true);
-  expect(release([[90, 20], [88, 60], [86, 140]]).reversed).toBe(false);
-  expect(release([[90, 20], [100, 60]]).reversed).toBe(false);
-  expect(release([[90, 20], [90, 140]]).reversed).toBe(false);
+test("down locks on the vertical axis and measures distance and velocity along it", () => {
+  const down = () => beginSwipe(IDLE_SWIPE, point(0, 0), "down", "touch", true);
+  expect(moveSwipe(down(), point(1, 10, 20)).phase).toBe("tracking");
+  expect(moveSwipe(down(), point(20, 10, 1)).phase).toBe("rejected");
+  expect(moveSwipe(down(), point(0, 10, -20)).phase).toBe("rejected");
+  const locked = moveSwipe(down(), point(0, 10, 14));
+  expect(trackedDistance(locked, point(0, 30, 64))).toBe(50);
+  const result = finishSwipe(moveSwipe(down(), point(0, 20, 15)), point(0, 80, 32));
+  expect(result.velocity).toBe(0.4);
+  expect(result.committed).toBe(true);
+});
+
+test("projected commit needs the inertial stop to pass half the extent", () => {
+  // 静止松手：只看位置是否过半。
+  expect(projectedCommit(160, 0, 320)).toBe(true);
+  expect(projectedCommit(159, 0, 320)).toBe(false);
+  // 0.3px/ms 的松手速度按 0.998 减速率滑行约 150px。
+  expect(projectedCommit(20, 0.3, 320)).toBe(true);
+  expect(projectedCommit(5, 0.3, 320)).toBe(false);
+  // 已过半后反向甩回，停点被拉回起点一侧。
+  expect(projectedCommit(300, -0.4, 320)).toBe(false);
+  expect(projectedCommit(300, -0.1, 320)).toBe(true);
+});
+
+test("projected commit never commits without travel or a measurable extent", () => {
+  expect(projectedCommit(0, 5, 320)).toBe(false);
+  expect(projectedCommit(200, 1, 0)).toBe(false);
 });

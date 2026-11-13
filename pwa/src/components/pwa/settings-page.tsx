@@ -1,10 +1,10 @@
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
-import { ALargeSmall, ArrowLeft, CaseSensitive, Check, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Sun, Trash2, Type } from "lucide-react";
+import { ALargeSmall, CaseSensitive, Check, ChevronLeft, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
-import type { PwaTextSize } from "@/lib/ui/text-size";
+import type { PwaTextSizePreference } from "@/lib/ui/text-size";
 import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "@/components/pwa/pwa-install";
@@ -17,8 +17,10 @@ export type SettingsPagePreferences = {
   setLanguage: (value: LanguagePreference) => void;
   enterSends: boolean;
   setEnterSends: (value: boolean) => void;
-  textSize: PwaTextSize;
-  setTextSize: (value: PwaTextSize) => void;
+  textSize: PwaTextSizePreference;
+  setTextSize: (value: PwaTextSizePreference) => void;
+  /** 浏览器能读到系统文字大小时才提供「跟随系统」；否则该偏好按标准档显示。 */
+  textSizeFollowsSystem?: boolean;
 };
 
 type SettingsPageProps = {
@@ -53,8 +55,8 @@ export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
 function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   const { preference } = useI18n();
   const [enterSends, setEnterSends] = useEnterSends();
-  const { textSize, setTextSize } = usePwaTextSize();
-  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize }} />;
+  const { preference: textSize, followsSystem, setTextSize } = usePwaTextSize();
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize, textSizeFollowsSystem: followsSystem }} />;
 }
 
 function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
@@ -63,7 +65,8 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
   const { t } = useI18n();
-  const { enterSends, setEnterSends, textSize, setTextSize } = preferences;
+  const { enterSends, setEnterSends, setTextSize, textSizeFollowsSystem = false } = preferences;
+  const textSize = preferences.textSize === "system" && !textSizeFollowsSystem ? "standard" : preferences.textSize;
   const s = t.settings;
   const versionText = (version: string | null, status: ConnectionViewState) => {
     if (status === "online") return version ?? s.versionUnavailable;
@@ -89,7 +92,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
     <div className="pwa-status-bar-shield" aria-hidden="true" />
     <div className="pwa-settings-inner">
       <header className="pwa-settings-header">
-        <Button className="pwa-settings-back" variant="transparent" type="button" onClick={onBack} aria-label={backLabel} title={backLabel} leftSection={<ArrowLeft size={20} aria-hidden="true" />}>
+        <Button className="pwa-settings-back" variant="transparent" type="button" onClick={onBack} aria-label={backLabel} title={backLabel} leftSection={<ChevronLeft size={20} aria-hidden="true" />}>
           <span className="pwa-settings-back-label">{backLabel}</span>
         </Button>
         <h1 id="pwa-settings-title" className="pwa-settings-title" ref={titleRef} tabIndex={-1}>{s.title}</h1>
@@ -98,7 +101,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-appearance-heading">
         <h2 id="pwa-appearance-heading" className="pwa-settings-section-title">{s.appearance}</h2>
         <Radio.Group aria-label={s.appearance} name="pwa-appearance" value={appearance} onChange={(next) => setAppearance(next as PwaAppearance)}>
-          <div className="pwa-settings-group">
+          <div className="pwa-card pwa-settings-group">
             <SettingsChoice value="system" icon={<Monitor size={20} />} title={s.system} hint={s.systemHint} />
             <SettingsChoice value="light" icon={<Sun size={20} />} title={s.light} hint={s.lightHint} />
             <SettingsChoice value="dark" icon={<Moon size={20} />} title={s.dark} hint={s.darkHint} />
@@ -108,8 +111,9 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-text-size-heading">
         <h2 id="pwa-text-size-heading" className="pwa-settings-section-title">{s.textSize}</h2>
-        <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSize)}>
-          <div className="pwa-settings-group">
+        <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSizePreference)}>
+          <div className="pwa-card pwa-settings-group">
+            {textSizeFollowsSystem ? <SettingsChoice value="system" icon={<Smartphone size={20} />} title={s.textSizeSystem} hint={s.textSizeSystemHint} /> : null}
             <SettingsChoice value="standard" icon={<Type size={20} />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
             <SettingsChoice value="large" icon={<ALargeSmall size={20} />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
             <SettingsChoice value="xlarge" icon={<CaseSensitive size={20} />} title={s.textSizeXLarge} hint={s.textSizeXLargeHint} />
@@ -120,7 +124,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
         <Radio.Group aria-label={s.language} name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
-          <div className="pwa-settings-group">
+          <div className="pwa-card pwa-settings-group">
             <SettingsChoice value="system" icon={<Globe size={20} />} title={s.followBrowser} hint={s.followBrowserHint} />
             <SettingsChoice value="zh" icon={<LanguageGlyph lang="zh-CN">中</LanguageGlyph>} title={s.chinese} hint={s.chineseHint} lang="zh-CN" />
             <SettingsChoice value="en" icon={<LanguageGlyph lang="en">En</LanguageGlyph>} title={s.english} hint={s.englishHint} lang="en" />
@@ -130,7 +134,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-keyboard-heading">
         <h2 id="pwa-keyboard-heading" className="pwa-settings-section-title">{s.keyboard}</h2>
-        <div className="pwa-settings-group">
+        <div className="pwa-card pwa-settings-group">
           <Switch className="pwa-settings-row pwa-keyboard-setting" size="md" labelPosition="left" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
           <UnstyledButton className="pwa-settings-row pwa-settings-row-button" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>
             <span className="pwa-settings-row-label">{t.shortcuts.title}</span>
@@ -141,7 +145,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-connection-heading">
         <h2 id="pwa-connection-heading" className="pwa-settings-section-title">{s.connection}</h2>
-        <form className="pwa-settings-group pwa-settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <form className="pwa-card pwa-settings-group pwa-settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <TextInput className="pwa-input pwa-field" label={s.relayUrl} value={value} onChange={(event) => setValue(event.target.value)} placeholder={defaultRelayUrl} spellCheck={false} autoCapitalize="none" autoCorrect="off" inputMode="url" />
           <Button type="submit" loading={saving}>{s.save}</Button>
         </form>
@@ -149,7 +153,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-browser-data-heading">
         <h2 id="pwa-browser-data-heading" className="pwa-settings-section-title">{s.browserData}</h2>
-        <div className="pwa-settings-group pwa-settings-group-actions">
+        <div className="pwa-card pwa-settings-group pwa-settings-group-actions">
           <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
           <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
@@ -162,7 +166,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
           <h2 id="pwa-about-heading" className="pwa-settings-section-title">{s.about}</h2>
           <CopyButton text={versionInfo} label={s.copyVersionInfo} />
         </div>
-        <dl className="pwa-settings-group pwa-settings-versions">
+        <dl className="pwa-card pwa-settings-group pwa-settings-versions">
           <div className="pwa-settings-row"><dt>PWA</dt><dd data-version="pwa">{pwaVersion}</dd></div>
           <div className="pwa-settings-row"><dt>Relay</dt><dd data-version="relay">{relayVersionText}</dd></div>
           <div className="pwa-settings-row"><dt>{s.extension}</dt><dd data-version="extension">{extensionVersionText}</dd></div>
@@ -189,7 +193,7 @@ function InstallSettingsContent({ offer, onInstall }: { offer: InstallOffer; onI
   const { title, lead } = useInstallCopy(offer);
   return <section className="pwa-settings-section" aria-labelledby="pwa-install-heading">
     <h2 id="pwa-install-heading" className="pwa-settings-section-title">{n.settingsSection}</h2>
-    <div className="pwa-settings-group pwa-settings-install">
+    <div className="pwa-card pwa-settings-group pwa-settings-install">
       <span className="pwa-settings-choice-text"><strong>{title}</strong><small>{lead}</small></span>
       {offer === "prompt"
         ? <Button variant="default" type="button" leftSection={<Download size={16} />} onClick={() => void onInstall()}>{n.install}</Button>

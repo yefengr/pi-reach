@@ -3,6 +3,7 @@ import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { getMessages, setLanguagePreference } from "@/lib/i18n";
 import { UiReviewStageAPage } from "./ui-review-stage-a";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const root = () => document.querySelector<HTMLElement>(".pwa-stage-a")!;
 const cell = (testId: string) => root().querySelector<HTMLElement>(`[data-testid="${testId}"]`)!.closest<HTMLElement>(".pwa-review-compare-cell")!;
@@ -73,9 +74,9 @@ test("candidate press shrinks the drawing layer while the hit area stays put", a
   expect(pressRules("baseline").some((rule) => rule.transform === "none")).toBe(true);
   // 两列控件几何一致：按压只作用于绘制层，不改变点击区。
   const geometry = ["baseline", "candidate"].map((variant) => [...cell(`stage-a-press-${variant}`).querySelectorAll<HTMLElement>("button")]
-    .map((button) => { const box = button.getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height)]; }));
+    .map((button) => { const box = button.getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height), minimumControlHeight(button)]; }));
   expect(geometry[1]).toEqual(geometry[0]);
-  expect(geometry[0].every(([width, height]) => width >= 44 && height >= 44)).toBe(true);
+  expect(geometry[0].every(([width, height, minimum]) => width >= 44 && height >= minimum)).toBe(true);
 });
 
 test("historical press specimens keep baseline layers still and avoid doubling candidate scale", async () => {
@@ -141,7 +142,6 @@ test("candidate attachment cards lift onto the operation surface without changin
       count: cards.length,
       heights: cards.map((card) => Math.round(card.getBoundingClientRect().height)),
       radius: style.borderRadius,
-      background: style.backgroundColor,
       shadow: style.boxShadow,
       targets: actions.map((button) => [Math.round(button.getBoundingClientRect().width), Math.round(button.getBoundingClientRect().height)]),
     };
@@ -158,7 +158,7 @@ test("candidate attachment cards lift onto the operation surface without changin
   expect(candidate.radius).toBe("10px");
   expect(baseline.shadow).toBe("none");
   expect(candidate.shadow).not.toBe("none");
-  expect(candidate.background).not.toBe(baseline.background);
+  // 正式附件卡片已改用页面底色，浅色下与候选的 surface 同为白色；候选靠轻抬升与圆角 10 区分，不再比较底色。
 });
 
 test("slow motion scales only duration tokens and restores them", async () => {
@@ -166,14 +166,14 @@ test("slow motion scales only duration tokens and restores them", async () => {
   const read = (token: string) => getComputedStyle(document.documentElement).getPropertyValue(token).trim();
   expect(read("--pwa-duration-fade")).toBe("120ms");
   expect(read("--pwa-duration-modal-in")).toBe("400ms");
-  expect(read("--pwa-duration-menu-in")).toBe("160ms");
+  expect(read("--pwa-duration-menu-in")).toBe("240ms");
   expect(read("--pwa-duration-press-in")).toBe("90ms");
   await screen.getByRole("button", { name: "0.25× 慢放", exact: true }).click();
   await expect.poll(() => read("--pwa-duration-fade")).toBe("480ms");
   expect(read("--pwa-duration-modal-in")).toBe("1600ms");
-  expect(read("--pwa-duration-menu-in")).toBe("640ms");
+  expect(read("--pwa-duration-menu-in")).toBe("960ms");
   expect(read("--pwa-duration-press-in")).toBe("360ms");
-  expect(read("--pwa-duration-feedback")).toBe("480ms");
+  expect(read("--pwa-duration-feedback")).toBe("640ms");
   // 旧完成态时钟只在历史DEV作用域保留，不由正式主题继承，也不受慢放影响。
   expect(getComputedStyle(root()).getPropertyValue("--pwa-duration-fetch-settle").trim()).toBe("600ms");
   expect(read("--pwa-duration-fetch-settle")).toBe("");
@@ -182,11 +182,11 @@ test("slow motion scales only duration tokens and restores them", async () => {
   expect(read("--pwa-duration-menu-in")).toBe("120ms");
   expect(getComputedStyle(root()).getPropertyValue("--pwa-duration-fetch-settle").trim()).toBe("600ms");
   await cdp().send("Emulation.setEmulatedMedia", { features: [] });
-  await expect.poll(() => read("--pwa-duration-menu-in")).toBe("640ms");
+  await expect.poll(() => read("--pwa-duration-menu-in")).toBe("960ms");
   await screen.getByRole("button", { name: "1×", exact: true }).click();
   await expect.poll(() => read("--pwa-duration-fade")).toBe("120ms");
   expect(read("--pwa-duration-modal-in")).toBe("400ms");
-  expect(read("--pwa-duration-menu-in")).toBe("160ms");
+  expect(read("--pwa-duration-menu-in")).toBe("240ms");
   expect(getMessages().common.back.length).toBeGreaterThan(0);
 });
 

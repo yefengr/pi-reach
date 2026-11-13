@@ -22,23 +22,41 @@ const SPACING_TOKENS = new Map([
   ["--pwa-space-2xl", 48],
   ["--pwa-space-pair", 2],
   ["--pwa-space-status", 6],
-  ["--pwa-space-menu-pad", 10],
+  ["--pwa-space-menu-pad", 12],
   ["--pwa-space-composer", 10],
 ]);
-/** 通用圆角四档；Composer、Toast 与胶囊是专用圆角，只允许各自登记的选择器使用。 */
+/** 通用圆角五档；气泡、Composer、Toast 与胶囊是专用圆角，只允许各自登记的选择器使用。 */
 const RADIUS_TOKENS = new Map([
   ["--pwa-radius-xs", "4px"],
   ["--pwa-radius-md", "8px"],
   ["--pwa-radius-lg", "12px"],
   ["--pwa-radius-xl", "16px"],
+  ["--pwa-radius-2xl", "24px"],
+  ["--pwa-radius-bubble", "20px"],
   ["--pwa-radius-composer", "32px"],
   ["--pwa-radius-toast", "22px"],
   ["--pwa-radius-pill", "999px"],
 ]);
-const RADIUS_VALUE = /^(?:0|50%|inherit|var\(--pwa-radius-(?:xs|md|lg|xl)\))$/;
+const RADIUS_VALUE = /^(?:0|50%|inherit|var\(--pwa-radius-(?:xs|md|lg|xl|2xl)\))$/;
+/** 随指针类型切换的圆角：触控为胶囊，纯细指针为 8；只在主题与 pwa-controls.css 定义。 */
+const INPUT_RADII = new Map([
+  ["--pwa-button-radius", ["var(--pwa-radius-toast)", "var(--pwa-radius-md)"]],
+  ["--pwa-chip-radius", ["var(--pwa-radius-pill)", "var(--pwa-radius-md)"]],
+]);
 /** 专用圆角 token → 允许使用的「文件 | 选择器」。 */
 const DEDICATED_RADII = new Map([
   ["var(--pwa-radius-composer)", ["app/globals.css | .pwa-composer-card"]],
+  ["var(--pwa-radius-bubble)", [
+    "components/pwa/timeline-content.css | .pwa-message.user",
+    "components/pwa/timeline-content.css | .pwa-user-bubble-frame",
+    "app/workspace-shell.css | .pwa-root .pwa-skeleton-user",
+  ]],
+  ["var(--pwa-button-radius)", ["app/globals.css | .pwa-ui-scope .pwa-button"]],
+  ["var(--pwa-chip-radius)", [
+    "app/globals.css | .pwa-ui-scope .pwa-composer-model::before",
+    "app/globals.css | .pwa-operation-notifications .pwa-toast-action::before",
+    "app/workspace-shell.css | .pwa-root .pwa-composer-hint-action::before",
+  ]],
   ["var(--pwa-radius-toast)", ["app/globals.css | .pwa-operation-notifications .pwa-operation-notification", "app/globals.css | .pwa-status-error"]],
   ["var(--pwa-radius-pill)", [
     "app/globals.css | .pwa-ui-scope .pwa-button.pwa-latest-button",
@@ -52,7 +70,7 @@ const SPACING_PROPERTY = /^(?:(?:scroll-)?(?:margin|padding)(?:-(?:top|right|bot
 const SPACING_CUSTOM_PROPERTY = /^--pwa-(?!space-)[a-z0-9-]*(?:pad|gap|margin|inset)[a-z0-9-]*$/;
 const BORDER_WIDTH_PROPERTY = /^(?:border|outline)(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-width)?$/;
 const HEX_COLOR = /#[0-9a-f]{3,8}\b/i;
-/** 派生色只在主题文件定义成 token（如 --pwa-running-line）。 */
+/** 派生色只在主题文件定义成 token（如 --pwa-error-line）。 */
 const COLOR_MIX = /color-mix\(/i;
 /** 函数写法的颜色（rgb、hsl 等）同 hex 一样只在主题文件出现。 */
 const FUNCTIONAL_COLOR = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i;
@@ -77,7 +95,7 @@ type Declaration = { file: string; selector: string; property: string; value: st
 type Exception = { file: string; selector: string; property: string; values: number[]; reason: string };
 
 const OPTICAL = "1px 光学校正或读屏隐藏（.pwa-sr-only 同款）";
-const ALIGN = "负外边距让文字或图标与内容左缘对齐，或抵消点击区／gutter 超出视觉的部分";
+const ALIGN = "负外边距让可见文字或图标与内容边缘对齐，或抵消点击区／gutter 超出视觉的部分";
 
 /** 已登记的非档位、非细档间距；数值不在 values 中或登记失效都会失败。新增时同步 DESIGN。 */
 const EXCEPTIONS: Exception[] = [
@@ -98,7 +116,9 @@ const EXCEPTIONS: Exception[] = [
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown ul, .pwa-markdown ol", property: "padding-left", values: [20], reason: "Markdown 列表缩进" },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-markdown code", property: "padding", values: [1], reason: OPTICAL },
   { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-code-copy", property: "margin-block", values: [-4], reason: ALIGN },
-  { file: "components/pwa/tool-reader.css", selector: ".pwa-ui-scope .pwa-button.pwa-tool-details-button", property: "margin-left", values: [-8], reason: ALIGN },
+  { file: "components/pwa/timeline-row.css", selector: ".pwa-timeline-chevron", property: "margin-inline-end", values: [-5], reason: ALIGN },
+  { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-button.pwa-delivery-action", property: "margin-inline-end", values: [-8], reason: ALIGN },
+  { file: "components/pwa/timeline-content.css", selector: ".pwa-ui-scope .pwa-icon-button.pwa-delivery-action", property: "margin-inline-end", values: [-14], reason: ALIGN },
 ];
 
 type HoverRule = { file: string; selector: string };
@@ -292,7 +312,7 @@ describe("CSS static guard", () => {
     expect(new Set(definitions.map((entry) => entry.property)).size).toBe(SPACING_TOKENS.size);
   });
 
-  test("radius tokens are defined once with the shared sizes and the dedicated Composer, Toast and pill sizes", () => {
+  test("radius tokens are defined once with the shared sizes and the dedicated bubble, Composer, Toast and pill sizes", () => {
     const definitions = all.filter((entry) => entry.property.startsWith("--pwa-radius-"));
     const offenders = definitions.filter((entry) => entry.file !== THEME_FILE
       || RADIUS_TOKENS.get(entry.property) !== entry.value).map(keyOf);
@@ -304,7 +324,7 @@ describe("CSS static guard", () => {
 
   test("production radii use shared tokens, edge or circle geometry, with dedicated radii isolated", () => {
     const offenders = all.filter((entry) => !entry.file.startsWith("dev/")
-      && entry.property.includes("radius") && !entry.property.startsWith("--pwa-radius-")).filter((entry) => {
+      && entry.property.includes("radius") && !entry.property.startsWith("--pwa-radius-") && !INPUT_RADII.has(entry.property)).filter((entry) => {
       const value = entry.value.replace(/\s*!important$/, "");
       const dedicated = DEDICATED_RADII.get(value);
       if (dedicated) return entry.property !== "border-radius" || !dedicated.includes(`${entry.file} | ${entry.selector}`);
@@ -319,17 +339,29 @@ describe("CSS static guard", () => {
     }
   });
 
+  test("button and inline action radii switch with the pointer type only in the theme and control density rules", () => {
+    const definitions = all.filter((entry) => INPUT_RADII.has(entry.property));
+    const offenders = definitions.filter((entry) => ![THEME_FILE, "app/pwa-controls.css"].includes(entry.file)
+      || !INPUT_RADII.get(entry.property)!.includes(entry.value)).map(keyOf);
+    expect(offenders).toEqual([]);
+    for (const [token, values] of INPUT_RADII) {
+      // 主题默认按触控取胶囊；pwa-controls.css 在纯细指针时改为 8，存在粗指针时改回。
+      expect(definitions.filter((entry) => entry.property === token).map((entry) => `${entry.file} ${entry.value}`), token)
+        .toEqual([`app/pwa-controls.css ${values[1]}`, `app/pwa-controls.css ${values[0]}`, `${THEME_FILE} ${values[0]}`]);
+    }
+  });
+
   test("image radii follow display roles rather than their content source", () => {
     const roles = [
       ["components/pwa/attachment-cards.css", ".pwa-attachment-thumb", "xs"],
       ["app/queued-messages.css", ".pwa-queued-message-images img", "xs"],
-      ["components/pwa/timeline-content.css", ".pwa-message-image", "md"],
-      ["components/pwa/timeline-content.css", ".pwa-markdown img", "md"],
-      ["components/pwa/tool-reader.css", ".pwa-root .pwa-tool-output-image", "md"],
-      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image", "md"],
-      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image img", "md"],
-      ["components/pwa/published-files.css", ".pwa-root .pwa-file-image-stage img", "md"],
-      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image-transition", "md"],
+      ["components/pwa/timeline-content.css", ".pwa-message-image", "lg"],
+      ["components/pwa/timeline-content.css", ".pwa-markdown img", "lg"],
+      ["components/pwa/tool-reader.css", ".pwa-root .pwa-tool-output-image", "lg"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image", "lg"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image img", "lg"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-file-image-stage img", "lg"],
+      ["components/pwa/published-files.css", ".pwa-root .pwa-published-image-transition", "lg"],
     ] as const;
     for (const [file, selector, size] of roles) {
       const matches = all.filter((entry) => entry.file === file && entry.selector === selector && entry.property === "border-radius");
@@ -345,6 +377,12 @@ describe("CSS static guard", () => {
     expect(found.map(key).filter((rule) => !allowed.has(rule))).toEqual([]);
     const present = new Set(found.map(key));
     expect(HOVER_OVERRIDES.map(key).filter((rule) => !present.has(rule))).toEqual([]);
+  });
+
+  test("disabled controls keep the default cursor instead of not-allowed", () => {
+    // 禁用已由 disabled-bg 与 secondary 表达；与系统控件一致，禁用时不换成禁止光标。
+    const offenders = all.filter((entry) => !entry.file.startsWith("dev/") && entry.property === "cursor" && entry.value.includes("not-allowed")).map(keyOf);
+    expect(offenders).toEqual([]);
   });
 
   test("border and outline widths stay hairline", () => {
@@ -383,6 +421,21 @@ describe("CSS static guard", () => {
       && /^border(?:-(?:top|right|bottom|left))?$/.test(entry.property) && entry.value.includes("var(--pwa-hairline)")
       && !/var\(--(?:pwa-separator|pwa-edge|alert-bd)\)/.test(entry.value))
       .map((entry) => `${keyOf(entry)}: ${entry.value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test("embedded cards take their fill and shape from the shared card rule", () => {
+    // 卡片底只由公共规则引用，页面只改写 token；各卡片的布局类不再自己写底色、描边或圆角。
+    const production = all.filter((entry) => !entry.file.startsWith("dev/") && entry.file !== THEME_FILE);
+    expect(production.filter((entry) => entry.value.includes("var(--pwa-card)")).map(keyOf)).toEqual([
+      "app/globals.css | :is(.pwa-root, .pwa-startup-error) .pwa-card | background",
+    ]);
+    expect(production.filter((entry) => entry.property === "--pwa-card").map((entry) => `${keyOf(entry)}: ${entry.value}`)).toEqual([
+      "app/globals.css | .pwa-root .pwa-settings-page | --pwa-card: var(--pwa-surface)",
+    ]);
+    const layoutOnly = [".pwa-root .pwa-settings-group", ".pwa-startup-card", ".pwa-root .pwa-choose-pi-list .pwa-nav-session"];
+    const offenders = production.filter((entry) => layoutOnly.includes(entry.selector) && /^(?:background(?:-color)?|border(?:-radius)?|box-shadow)$/.test(entry.property)).map(keyOf);
+    expect(layoutOnly.every((selector) => production.some((entry) => entry.selector === selector))).toBe(true);
     expect(offenders).toEqual([]);
   });
 });

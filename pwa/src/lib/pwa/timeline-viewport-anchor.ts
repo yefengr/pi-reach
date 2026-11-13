@@ -3,7 +3,7 @@ const READABLE_BLOCK_SELECTOR = "p, li, pre, blockquote, h1, h2, h3, h4, h5, h6,
 const CONTENT_ROW_SELECTOR = "[data-viewport-row]";
 const EXCLUDED_SELECTOR = "[hidden], [aria-hidden='true']";
 
-type RowLocator = {
+export type RowLocator = {
   attribute: "data-viewport-row";
   key: string;
   blockIndex: number | null;
@@ -98,6 +98,15 @@ export function captureTimelineViewportAnchor(
     scrollTop: list.scrollTop,
     preserveScrollTopFallback,
   };
+}
+
+/**
+ * 只凭行标识与偏移构造锚点（页面重载后读回的阅读位置）：原 DOM 节点已不存在，
+ * 用未挂载的占位节点代替，恢复时走行标识定位；该行尚未加载时恢复失败，由调用方保留到它出现。
+ */
+export function anchorFromLocator(list: HTMLDivElement, locator: RowLocator, rowOffsetTop: number, offsetTop: number): TimelineViewportAnchor {
+  const detached = list.ownerDocument.createElement("div");
+  return { list, element: detached, offsetTop, rowElement: detached, rowOffsetTop, rowLocator: locator, scrollTop: list.scrollTop, preserveScrollTopFallback: false };
 }
 
 export function restoreTimelineViewportAnchor(list: HTMLDivElement, anchor: TimelineViewportAnchor): boolean {

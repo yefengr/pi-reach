@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { enableTouch, resetTouch, touch, touchDrag, touchOrigin, touchTap, type TouchPoint } from "@/test/browser/swipe";
+import { enableTouch, resetTouch, touch, touchReleaseAtRest, touchDrag, touchOrigin, touchTap, type TouchPoint } from "@/test/browser/swipe";
 import { useSettingsRoute } from "@/lib/pwa/settings-route";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
@@ -91,7 +91,10 @@ async function dragRight(dx: number) {
     await moveTouch(origin, LOCK_STEP + (dx - LOCK_STEP) * step / 4);
   }
 }
-const release = () => touch("touchEnd", []);
+/** 停稳后松手，结果只取决于停点是否过行程一半（见 touchReleaseAtRest）。 */
+const release = touchReleaseAtRest;
+/** 松手前把手指带过行程一半（220px），停稳后松手即提交。 */
+const commitRelease = async () => { await moveTouch(origin, 220); await release(); };
 const escape = () => userEvent.keyboard("{Escape}");
 /** 记录测试期间滚动锁是否曾经启用，用来证明被中止的打开收尾没有短暂启用过它。 */
 function watchScrollLock() {
@@ -171,7 +174,7 @@ test.each(reopenCases)("D5 reopens through three real touch cycles (initial: $in
       expect(sheetLeft()).toBe(-sheetWidth() + 128);
       expect(document.activeElement).toBe(trigger());
       expect(scrollLocked()).toBe(false);
-      await release();
+      await commitRelease();
     }
     await committedNavigation();
     await closeNavigation(close);
@@ -222,7 +225,7 @@ test("D5 fast reopen survives a stale exit callback without releasing the new ge
     expect(preview.hasAttribute("data-swipe-drag")).toBe(true);
     expect(sheetLeft()).toBe(-sheetWidth() + 128);
   }
-  await release();
+  await commitRelease();
   await committedNavigation();
   await closeNavigation("button");
 }, 30000);
@@ -236,7 +239,7 @@ test("D5 navigation opens under the finger from off-screen with a preview that d
   expect(sheet()!.hasAttribute("data-swipe-drag")).toBe(true);
   expect(document.activeElement).toBe(outside);
   expect(scrollLocked()).toBe(false);
-  await release();
+  await commitRelease();
   await expect.poll(() => sheet()!.hasAttribute("data-swipe-drag")).toBe(false);
   await expect.poll(() => sheet()!.getAnimations().length).toBe(0);
   expect(sheetLeft()).toBe(0);
@@ -247,7 +250,7 @@ test("D5 commit moves focus into the navigation, locks scrolling, and a normal c
   await mount();
   outsideButton();
   await dragRight(140);
-  await release();
+  await commitRelease();
   await expect.poll(() => sheet()?.contains(document.activeElement) ?? false).toBe(true);
   await expect.poll(scrollLocked).toBe(true);
   expect(scrim()!.getAnimations()).toHaveLength(0);
@@ -272,7 +275,7 @@ test.each(["other element", "body"] as const)("D5 springs back below the thresho
   expect(document.querySelector("[data-swipe-drag]")).toBeNull();
   // 跳过回焦标记已消费：之后一次正常的拖动打开再关闭仍回到触发按钮。
   await dragRight(140);
-  await release();
+  await commitRelease();
   await expect.poll(() => sheet()?.contains(document.activeElement) ?? false).toBe(true);
   document.querySelector<HTMLElement>(".pwa-navigation-close")!.click();
   await expect.poll(() => sheet()).toBeNull();
@@ -337,7 +340,7 @@ test("D5 an external close while the opening settles never enables the focus tra
     animation.pause();
     return animation;
   });
-  await release();
+  await commitRelease();
   expect(opening).toHaveBeenCalledOnce();
   opening.mockRestore();
   expect(surface.hasAttribute("data-swipe-drag")).toBe(true);
@@ -352,7 +355,7 @@ test("D5 an external close while the opening settles never enables the focus tra
   expect(document.activeElement).toBe(outside);
   // 手势状态已完全复位：可以再次拖动打开。
   await dragRight(140);
-  await release();
+  await commitRelease();
   await expect.poll(() => sheet()?.contains(document.activeElement) ?? false).toBe(true);
 }, 30000);
 

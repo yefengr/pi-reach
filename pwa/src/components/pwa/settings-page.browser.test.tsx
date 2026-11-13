@@ -4,7 +4,8 @@ import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { SettingsPage } from "./settings-page";
 import { setLanguagePreference } from "@/lib/i18n";
-import { resetTextSizeStateForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
+import { resetTextSizeStateForTest, setSystemBodyProbeForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const relayUrl = "https://relay.example.test";
 const defaultRelayUrl = "https://relay.default.test";
@@ -44,6 +45,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   window.localStorage.removeItem("pi-reach-enter-sends");
   window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
+  setSystemBodyProbeForTest(null);
   resetTextSizeStateForTest();
   await page.viewport(1280, 900);
 });
@@ -102,7 +104,18 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   const group = appearance.querySelector<HTMLElement>(".pwa-settings-group")!;
   expect(Math.round(group.getBoundingClientRect().top - appearance.querySelector("h2")!.getBoundingClientRect().bottom)).toBe(8);
   expect(Math.round(appearance.querySelector(".pwa-settings-footnote")!.getBoundingClientRect().top - group.getBoundingClientRect().bottom)).toBe(6);
-  expect(getComputedStyle(group).borderRadius).toBe("12px");
+  expect(getComputedStyle(group).borderRadius).toBe("16px");
+  // 分组是公共的嵌入式卡片：不描边，底色为 grouped-bg 上的 surface（DESIGN「卡片」）。
+  for (const card of document.querySelectorAll<HTMLElement>(".pwa-settings-group")) {
+    const style = getComputedStyle(card);
+    expect(card.classList.contains("pwa-card")).toBe(true);
+    expect([style.borderTopWidth, style.boxShadow, style.borderRadius]).toEqual(["0px", "none", "16px"]);
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "var(--pwa-surface)";
+    card.append(probe);
+    expect(style.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+    probe.remove();
+  }
   for (const row of document.querySelectorAll<HTMLElement>(".pwa-settings-row")) expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   const back = screen.getByRole("button", { name: "Back to workspace" }).element();
   const title = screen.getByRole("heading", { level: 1, name: "Settings" }).element();
@@ -122,7 +135,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
     const action = screen.getByRole("button", { name });
     action.element().scrollIntoView({ block: "nearest" });
     await expect.element(action).toBeVisible();
-    expect(action.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(action.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumControlHeight(action.element()));
   }
   const about = document.querySelector<HTMLElement>('[aria-labelledby="pwa-about-heading"]')!;
   about.scrollIntoView({ block: "end" });
@@ -316,6 +329,25 @@ test("applies and remembers a text size tier immediately", async () => {
   await screen.unmount();
 });
 
+test("offers following the system text size only where the browser can read it", async () => {
+  let screen = await renderPwa(<SettingsHarness />);
+  // 读不到系统字号的浏览器不显示该选项，默认偏好按标准档显示。
+  expect(document.querySelector('[aria-labelledby="pwa-text-size-heading"] input[value="system"]')).toBeNull();
+  await expect.element(screen.getByRole("radio", { name: /^Standard/ })).toBeChecked();
+  await screen.unmount();
+
+  setSystemBodyProbeForTest(() => 21);
+  screen = await renderPwa(<SettingsHarness />);
+  const system = document.querySelector<HTMLInputElement>('[aria-labelledby="pwa-text-size-heading"] input[value="system"]')!;
+  expect(system.checked).toBe(true);
+  expect(document.documentElement.dataset.pwaTextSize).toBe("xlarge");
+
+  await screen.getByRole("radio", { name: /^Large/ }).click();
+  expect(document.documentElement.dataset.pwaTextSize).toBe("large");
+  expect(system.checked).toBe(false);
+  await screen.unmount();
+});
+
 test("invalid stored text size falls back to standard", async () => {
   window.localStorage.setItem(TEXT_SIZE_STORAGE_KEY, "small");
   resetTextSizeStateForTest();
@@ -374,14 +406,47 @@ test("language rows lead with distinct marks that take the icon slot", async () 
   }
 });
 
-test("rows in a group are divided by hairlines inset 16 on both sides", async () => {
+test("row hairlines start at the row text and stay inset 16 from the group's right edge", async () => {
   await renderPwa(<SettingsHarness />);
   const hairline = getComputedStyle(document.documentElement).getPropertyValue("--pwa-hairline").trim();
   const choiceRows = [...document.querySelectorAll<HTMLElement>('[aria-labelledby="pwa-appearance-heading"] .pwa-settings-row')];
   const versionRows = [...document.querySelectorAll<HTMLElement>(".pwa-settings-versions > .pwa-settings-row")];
-  for (const rows of [choiceRows, versionRows]) {
+  // 带行首图标的单选行从文字起（16＋20＋10），没有图标的行从内边距 16 起。
+  for (const [rows, left] of [[choiceRows, 46], [versionRows, 16]] as const) {
     expect(getComputedStyle(rows[0]!, "::before").content).toBe("none");
     const divider = getComputedStyle(rows[1]!, "::before");
-    expect([divider.left, divider.right, divider.borderTopWidth]).toEqual(["16px", "16px", hairline]);
+    expect([divider.left, divider.right, divider.borderTopWidth]).toEqual([`${left}px`, "16px", hairline]);
+  }
+  const text = choiceRows[1]!.querySelector(".pwa-settings-choice-text")!;
+  expect(Math.round(text.getBoundingClientRect().left - choiceRows[1]!.getBoundingClientRect().left)).toBe(46);
+});
+
+test.each([1280, 390])("section titles, row text and footnotes share one left edge at %ipx", async (width) => {
+  await page.viewport(width, 844);
+  await renderPwa(<SettingsHarness />);
+  for (const section of document.querySelectorAll<HTMLElement>(".pwa-settings-section")) {
+    const group = section.querySelector<HTMLElement>(".pwa-settings-group")!;
+    const title = section.querySelector<HTMLElement>(".pwa-settings-section-title")!;
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    expect(Math.round(range.getBoundingClientRect().left - group.getBoundingClientRect().left), title.textContent!).toBe(16);
+    const footnote = section.querySelector<HTMLElement>(".pwa-settings-footnote");
+    if (footnote) expect(Math.round(footnote.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(footnote).paddingLeft) - group.getBoundingClientRect().left)).toBe(16);
+  }
+  // 「关于」右侧复制图标的右缘与版本号右缘对齐。
+  const copyIcon = document.querySelector(".pwa-settings-about-heading svg")!;
+  const version = document.querySelector('[data-version="pwa"]')!;
+  expect(Math.round(copyIcon.getBoundingClientRect().right)).toBe(Math.round(version.getBoundingClientRect().right));
+});
+
+test.each([[390, true], [1280, false]])("group buttons stretch to the group width only on mobile (%ipx)", async (width, stretched) => {
+  await page.viewport(width, 844);
+  await renderPwa(<SettingsHarness />);
+  const group = document.querySelector<HTMLElement>(".pwa-settings-group-actions")!;
+  const inner = group.getBoundingClientRect().width - 32;
+  for (const button of group.querySelectorAll<HTMLElement>(".pwa-button")) {
+    const buttonWidth = Math.round(button.getBoundingClientRect().width);
+    if (stretched) expect(buttonWidth).toBe(Math.round(inner));
+    else expect(buttonWidth).toBeLessThan(Math.round(inner));
   }
 });

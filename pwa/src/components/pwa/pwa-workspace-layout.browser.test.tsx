@@ -17,6 +17,8 @@ import { UnpairedWorkspace } from "./workspace-content";
 import type { PwaDeviceRecord, PwaEndpointRecord } from "@/lib/pwa/db";
 import type { TimelineSessionSummary } from "@/lib/pwa/timeline-store";
 import { applyStandaloneRules } from "@/test/browser/standalone";
+import { minimumControlHeight } from "@/test/browser/button-height";
+import { finishCssTransitions } from "@/test/browser/motion";
 
 const device: PwaDeviceRecord = {
   id: "device:office",
@@ -141,6 +143,8 @@ test.each([[1280, 844], [844, 390]])("keeps the sidebar toggle clear of brand an
 
 test("keeps desktop brand, toggle and title bar below a translucent status bar", async () => {
   const safeTop = 24;
+  // 悬浮侧栏与窗口四周等距 12（--pwa-float-inset），标题区上方同样留 12，首行与品牌行共用中线。
+  const inset = 12;
   await page.viewport(1024, 768);
   document.documentElement.style.setProperty("--pwa-safe-top", `${safeTop}px`);
   try {
@@ -150,27 +154,29 @@ test("keeps desktop brand, toggle and title bar below a translucent status bar",
     const center = (element: Element) => { const rect = element.getBoundingClientRect(); return rect.top + rect.height / 2; };
     const brand = document.querySelector(".pwa-desktop-navigation .pwa-sidebar-brand")!;
     const titleBar = document.querySelector(".pwa-title-bar")!;
-    // 主区平铺贴顶；侧栏外框消费安全区，品牌从外框内侧发丝线之后开始。
+    // 主区平铺贴顶；侧栏外框在安全区下方再留 12，品牌从外框内侧发丝线之后开始。
     const frame = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!;
-    expect(Math.round(frame.getBoundingClientRect().top)).toBe(safeTop);
+    const frameBox = frame.getBoundingClientRect();
+    expect(Math.round(frameBox.top)).toBe(safeTop + inset);
+    expect([Math.round(frameBox.left), Math.round(window.innerHeight - frameBox.bottom)]).toEqual([inset, inset]);
     const border = Number.parseFloat(getComputedStyle(frame).borderTopWidth);
-    expect(Math.round(brand.getBoundingClientRect().top)).toBe(Math.round(safeTop + border));
-    expect(Math.round(toggle.element().getBoundingClientRect().top)).toBeGreaterThanOrEqual(safeTop);
+    expect(Math.round(brand.getBoundingClientRect().top)).toBe(Math.round(safeTop + inset + border));
+    expect(Math.round(toggle.element().getBoundingClientRect().top)).toBeGreaterThanOrEqual(safeTop + inset);
     expect(Math.round(document.querySelector(".pwa-main")!.getBoundingClientRect().top)).toBe(0);
     expect(Math.round(titleBar.getBoundingClientRect().top)).toBe(0);
-    expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(64 + safeTop);
+    expect(Math.round(titleBar.getBoundingClientRect().height)).toBe(64 + inset + safeTop);
     const visible = [...titleBar.children].filter(child => child.getBoundingClientRect().height > 0);
     expect(visible.length).toBeGreaterThan(0);
-    for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
+    for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop + inset);
     expect(Math.abs(center(toggle.element()) - center(brand))).toBeLessThanOrEqual(1);
     await toggle.click();
     const expand = screen.getByRole("button", { name: "Expand sidebar" });
     await expect.element(expand).toBeVisible();
-    expect(Math.abs(center(expand.element()) - (safeTop + 24))).toBeLessThanOrEqual(1);
-    // 收起后主区贴到顶边，标题区按顶栏规格把状态栏高度计入自身，两行最小高仍为 64。
+    expect(Math.abs(center(expand.element()) - (safeTop + inset + 24))).toBeLessThanOrEqual(1);
+    // 收起后主区仍贴顶，标题区高度与首行位置不变，收展不引起纵向跳动。
     await expect.poll(() => Math.round(document.querySelector(".pwa-main")!.getBoundingClientRect().top)).toBe(0);
-    await expect.poll(() => Math.round(titleBar.getBoundingClientRect().height)).toBe(64 + safeTop);
-    for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop);
+    await expect.poll(() => Math.round(titleBar.getBoundingClientRect().height)).toBe(64 + inset + safeTop);
+    for (const child of visible) expect(Math.round(child.getBoundingClientRect().top), child.className).toBeGreaterThanOrEqual(safeTop + inset);
   } finally {
     document.documentElement.style.removeProperty("--pwa-safe-top");
   }
@@ -199,6 +205,8 @@ test("mobile title bar and navigation head share the top bar below a translucent
     expect(Math.round(head.height)).toBe(48 + safeTop);
     const brand = document.querySelector(".pwa-session-sheet-head .pwa-brand-mark")!.getBoundingClientRect();
     expect(Math.round(brand.left)).toBe(16);
+    // 品牌标识与桌面侧栏同为 20。
+    expect(Math.round(brand.width)).toBe(20);
     expect(Math.abs(center(brand) - (safeTop + 24))).toBeLessThanOrEqual(1);
     const close = document.querySelector(".pwa-session-sheet-head .pwa-icon-button")!.getBoundingClientRect();
     expect(Math.abs(center(close) - (safeTop + 24))).toBeLessThanOrEqual(1);
@@ -279,9 +287,9 @@ test("keeps the toggle in the header band and on top throughout both sidebar tra
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       frames += 1;
       const box = toggle.getBoundingClientRect();
-      // 品牌行与顶栏入口仍在首行 48 带内，标题区改为两行后入口也不下移，过渡中只水平移动。
+      // 品牌行与顶栏入口仍在上方 12 留白之下的首行 48 带内，标题区改为两行后入口也不下移，过渡中只水平移动。
       expect(Math.round(box.top)).toBe(Math.round(start.top));
-      expect(box.bottom).toBeLessThanOrEqual(48);
+      expect(box.bottom).toBeLessThanOrEqual(12 + 48);
       expect(toggle.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))).toBe(true);
       for (const element of [...brandCopy, ...rows]) {
         if (getComputedStyle(element).visibility === "hidden") continue;
@@ -603,7 +611,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
       expect(headingRect.top).toBeLessThan(mainRect.top + mainRect.height * 0.6);
       expect(icon.getBoundingClientRect().width).toBe(24);
       expect(empty.querySelector(".pwa-zero-mark")).toBeNull();
-      expect(buttonRect.height).toBeGreaterThanOrEqual(44);
+      expect(buttonRect.height).toBeGreaterThanOrEqual(minimumControlHeight(pair.element()));
       expect(pair.element().getAttribute("data-variant")).toBe("filled");
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await page.screenshot({ path: `../../../.vitest/screenshots/empty-main-${width}x${height}-${scheme}.png` });
@@ -625,7 +633,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
       expect(container.element().querySelector(".pwa-nav-section")).toBeNull();
       const navigationPair = container.getByRole("button", { name: "Pair a computer", exact: true });
       const navigationPairRect = navigationPair.element().getBoundingClientRect();
-      expect(navigationPairRect.height).toBeGreaterThanOrEqual(44);
+      expect(navigationPairRect.height).toBeGreaterThanOrEqual(minimumControlHeight(navigationPair.element()));
       expect(container.element().scrollWidth).toBeLessThanOrEqual(container.element().clientWidth);
       await page.screenshot({ path: `../../../.vitest/screenshots/empty-navigation-${width}x${height}-${scheme}.png` });
       navigationPair.element().focus();
@@ -683,9 +691,11 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(drawer.boxShadow).not.toBe("none");
       } else {
         await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
+        // 弹层从触发角缩放展开，测量前等进入过渡结束，否则尺寸按缩放后的 0.9 倍读出。
+        await finishCssTransitions();
       }
     };
-    const select = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name} (?:ONLINE|OFFLINE|PARTIAL|CHECKING)`) });
+    const select = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name} (?:Online|Offline|Partial|Checking)`) });
     const expectSelection = async (id: string) => {
       await expect.poll(() => events).toEqual(mobile ? ["close-request", `device:${id}`] : [`device:${id}`]);
       if (mobile) await expect.poll(() => document.querySelector('.pwa-session-sheet')).toBeNull();
@@ -712,7 +722,7 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         expect(button.parentElement).toBe(menu.parentElement);
         expect(row.classList.contains("active")).toBe(index === 0);
         expect(button.querySelector(".pwa-current-label")?.textContent ?? "").toBe(index === 0 ? "Current" : "");
-        expect(button.querySelector(".pwa-presence-label")?.textContent).toBe(["ONLINE", "OFFLINE", "PARTIAL", "CHECKING"][index]);
+        expect(button.querySelector(".pwa-presence-label")?.textContent).toBe(["Online", "Offline", "Partial", "Checking"][index]);
         const presenceBox = button.querySelector<HTMLElement>(".pwa-peer-presence")!.getBoundingClientRect();
         for (const text of button.querySelectorAll<HTMLElement>(".pwa-presence-label, .pwa-current-label, .pwa-peer-summary")) {
           expect(text.scrollWidth, text.textContent ?? "").toBeLessThanOrEqual(text.clientWidth);

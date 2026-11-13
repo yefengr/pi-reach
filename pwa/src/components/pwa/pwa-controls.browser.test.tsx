@@ -10,6 +10,7 @@ import { APPEARANCE_STORAGE_KEY } from "@/lib/ui/appearance";
 import { MessageComposer } from "./message-composer";
 import { usePwaAppearance } from "./pwa-appearance";
 import { usePwaMenuTransition } from "./use-pwa-motion";
+import { PRESS_ROW_DELAY_MS, PRESS_ROW_SLOP_PX } from "./use-pwa-press-feedback";
 import { ComputerRow } from "./workspace-device-control";
 
 const setMotion = (reduce: boolean) => cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: reduce ? "reduce" : "no-preference" }] });
@@ -128,6 +129,49 @@ test.each(["touch", "pen"] as const)("%s press state clears on cancel, leave, a 
   expect(replacement.hasAttribute("data-pwa-pressed")).toBe(false);
 });
 
+test("rows show the pressed fill after a delay, drop it once the finger slides, and flash it for a quick tap", async () => {
+  const screen = await renderPwa(<div style={{ width: 280 }}>
+    <button type="button" className="pwa-settings-row-button" style={{ width: "100%", minHeight: 44 }}>Row fixture</button>
+  </div>);
+  const row = screen.getByRole("button", { name: "Row fixture" }).element() as HTMLButtonElement;
+  const bounds = row.getBoundingClientRect();
+  const dispatch = (type: string, dx = 0, dy = 0) => row.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, pointerType: "touch", isPrimary: true, button: 0, clientX: bounds.left + 20 + dx, clientY: bounds.top + 20 + dy }));
+  const pressed = () => row.hasAttribute("data-pwa-pressed");
+  const resting = getComputedStyle(row).backgroundColor;
+
+  // 按住：延迟结束后才出现，松手即撤销。
+  dispatch("pointerdown");
+  expect(pressed()).toBe(false);
+  await expect.poll(pressed).toBe(true);
+  await expect.poll(() => getComputedStyle(row).backgroundColor).not.toBe(resting);
+  dispatch("pointerup");
+  expect(pressed()).toBe(false);
+
+  // 滑动起手：延迟期间移动超过容差，之后不再出现。
+  dispatch("pointerdown");
+  dispatch("pointermove", 0, PRESS_ROW_SLOP_PX + 2);
+  await new Promise((resolve) => setTimeout(resolve, PRESS_ROW_DELAY_MS + 80));
+  expect(pressed()).toBe(false);
+  dispatch("pointerup", 0, PRESS_ROW_SLOP_PX + 2);
+  expect(pressed()).toBe(false);
+
+  // 浏览器接管成滚动（pointercancel）：不补显。
+  dispatch("pointerdown");
+  dispatch("pointercancel");
+  expect(pressed()).toBe(false);
+
+  // 轻点：延迟未到就松手，补显后自行撤销。
+  dispatch("pointerdown");
+  dispatch("pointerup");
+  expect(pressed()).toBe(true);
+  await expect.poll(pressed).toBe(false);
+
+  // 鼠标不走这条路径。
+  row.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 2, pointerType: "mouse", isPrimary: true, button: 0, clientX: bounds.left + 20, clientY: bounds.top + 20 }));
+  await new Promise((resolve) => setTimeout(resolve, PRESS_ROW_DELAY_MS + 80));
+  expect(pressed()).toBe(false);
+});
+
 function ComposerFixture() {
   const [draft, setDraft] = useState("Draft survives its container resizing");
   const [width, setWidth] = useState(320);
@@ -156,7 +200,8 @@ test("Composer owns its radius and light elevation without changing the shared r
   const notice = screen.getByText("Attachment limit fixture").element();
   // 提示行位于输入框卡片内、文本框之上（DESIGN「Composer」）。
   expect(card.contains(notice)).toBe(true);
-  expect(notice.getBoundingClientRect().bottom).toBeLessThanOrEqual(card.querySelector<HTMLElement>(".pwa-composer-input")!.getBoundingClientRect().top);
+  // 提示行以高度过渡进入，结束后再比较位置。
+  await expect.poll(() => notice.getBoundingClientRect().bottom <= card.querySelector<HTMLElement>(".pwa-composer-input")!.getBoundingClientRect().top).toBe(true);
   await screen.getByRole("button", { name: "Dark fixture" }).click();
   await expect.poll(() => getComputedStyle(card).boxShadow).toBe("none");
   expect(getComputedStyle(card).borderRadius).toBe("32px");
@@ -174,8 +219,12 @@ test.each([1280, 390])("shared radii stay 4/8/12 with a concentric 32px Composer
     <MenuFixture />
     <ComposerFixture />
   </>);
+  // 常规按钮的圆角随指针类型切换：纯细指针为 8，存在粗指针时为胶囊（单行高 44 的一半）；与按钮高度同一判定。
+  const rootStyle = getComputedStyle(document.documentElement);
+  const buttonRadius = rootStyle.getPropertyValue("--pwa-button-radius").trim();
+  expect(buttonRadius).toBe(rootStyle.getPropertyValue("--pwa-button-height").trim() === "36px" ? "8px" : "22px");
   const radii = [
-    [screen.getByTestId("radius-button").element(), "8px"],
+    [screen.getByTestId("radius-button").element(), buttonRadius],
     [screen.getByRole("textbox", { name: "Radius input fixture" }).element(), "8px"],
     [screen.getByTestId("radius-badge").element(), "4px"],
     // 状态标签为胶囊（DESIGN「圆角」）。
@@ -275,17 +324,20 @@ test.each([false, true])("action menu uses actual anchor, semantic timing and st
   const menu = document.querySelector<HTMLElement>(".pwa-menu-motion")!;
   await expect.poll(() => getComputedStyle(menu).opacity).toBe("1");
   expect(menu.dataset.position).toBe("top-start");
-  expect(getComputedStyle(menu).getPropertyValue("--pwa-menu-shift-y").trim()).toBe("4px");
-  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(reduce ? 0.12 : 0.16);
+  // 上方左对齐：从触发按钮所在的左下角展开。
+  const [originX, originY] = getComputedStyle(menu).transformOrigin.split(" ").map(parseFloat);
+  expect(Math.round(originX)).toBe(0);
+  expect(Math.round(originY)).toBe(Math.round(menu.offsetHeight));
+  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(reduce ? 0.12 : 0.24);
   const enter = await entering;
   expect(enter.minOpacity).toBeLessThan(1);
-  expect(enter.minScale).toBe(1);
-  if (reduce) expect(enter.maxShift).toBe(0);
-  else expect(enter.maxShift).toBeGreaterThan(0);
+  expect(enter.maxShift).toBe(0);
+  if (reduce) expect(enter.minScale).toBe(1);
+  else expect(enter.minScale).toBeLessThan(1);
   flushSync(() => setOpened(false));
   expect(menu.hasAttribute("inert")).toBe(true);
   await expect.poll(() => menu.style.opacity).toBe("0");
-  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(0.12);
+  expect(parseFloat(getComputedStyle(menu).transitionDuration)).toBe(reduce ? 0.12 : 0.16);
   expect(getComputedStyle(menu).transitionTimingFunction).toBe(reduce ? "cubic-bezier(0.2, 0, 0, 1)" : "cubic-bezier(0.3, 0, 1, 1)");
   await expect.poll(() => document.querySelector(".pwa-menu-motion")).toBeNull();
   await screen.unmount();

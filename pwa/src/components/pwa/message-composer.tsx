@@ -14,6 +14,7 @@ import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import { hasKeyboardOverlay, ignoreShortcutEvent, isPrimaryModifier, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
 import { DESKTOP_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 import { dismissKeyboardAfterSend } from "@/lib/pwa/dismiss-keyboard-after-send";
+import { useFileDropTarget } from "./use-file-drop";
 
 type ComposerAttachmentMenuProps = {
   disabled: boolean;
@@ -122,6 +123,17 @@ function ComposerQueuedMessages() {
 }
 
 /** 队列可随时间线更新，但不让它的新插槽引用反复渲染输入框和菜单。 */
+/**
+ * 发送与停止共用同一个图标槽：两个图标叠放、常驻，互换时交叉淡化并缩放（DESIGN「图标替换」，样式见 globals.css）。
+ * 常驻才能让离开的图标淡出、每次互换都播放；首次挂载没有状态变化，不播放。
+ */
+function SendStopIcons({ showStop, stopping }: { showStop: boolean; stopping: boolean }) {
+  return <span className="pwa-composer-action-icons" data-stop={showStop || undefined} aria-hidden="true">
+    <span className="pwa-composer-action-send"><ArrowUp size={20} /></span>
+    <span className="pwa-composer-action-stop">{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</span>
+  </span>;
+}
+
 export function MessageComposer({ enterSends, queuedMessages, ...props }: MessageComposerProps & { enterSends?: boolean }) {
   return <QueuedMessagesContext.Provider value={queuedMessages}>
     {enterSends === undefined
@@ -301,6 +313,8 @@ const MessageComposerContent = memo(function MessageComposerContent({
     if (document.activeElement === textareaRef.current) event.preventDefault();
   };
 
+  const fileDrop = useFileDropTarget({ disabled: addDisabled, onFiles: onAddFiles });
+
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.files);
     if (!files.length || addDisabled) return;
@@ -418,7 +432,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
   };
 
   return (
-    <form className="pwa-composer" onSubmit={handleSubmit}>
+    <form className="pwa-composer" onSubmit={handleSubmit} data-file-drag={fileDrop.active || undefined} {...fileDrop.handlers}>
       <input ref={cameraInputRef} className="pwa-image-input" type="file" accept="image/*" capture="environment" disabled={addDisabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file && !addDisabled) onAddFiles([file]); event.currentTarget.value = ""; }} />
       <ComposerQueuedMessages />
       <div className="pwa-composer-card">
@@ -506,7 +520,7 @@ const MessageComposerContent = memo(function MessageComposerContent({
                 />
               </Menu.Dropdown>
             </Menu>
-            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}>{stopping ? <LoaderCircle className="pwa-spin" size={20} /> : <Square size={16} fill="currentColor" />}</ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" onMouseDown={keepComposerFocus} disabled={!sendReady || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><ArrowUp size={20} /></ActionIcon>}
+            {showStop ? <ActionIcon className="pwa-composer-stop" variant="filled" type="button" onClick={onStop} disabled={stopping || newSessionPending} aria-label={stopping ? t.composer.stoppingTask : t.composer.stopTask} title={stopping ? t.composer.stoppingTask : t.composer.stopTask}><SendStopIcons showStop stopping={stopping} /></ActionIcon> : <ActionIcon className="pwa-composer-send" variant="filled" type="submit" onMouseDown={keepComposerFocus} disabled={!sendReady || !isOnline || sendingAttachments || newSessionPending || !hasMessage || (attachments.length > 0 && !canAttach)} aria-label={t.composer.send} title={t.composer.send}><SendStopIcons showStop={false} stopping={false} /></ActionIcon>}
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ActionIcon, Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { ArrowLeft, X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { useSwipe } from "./use-swipe";
 import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, useDrawerMoving, usePwaMotionDuration } from "./use-pwa-motion";
@@ -36,7 +36,7 @@ export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTrans
   const requestClose = () => { if (!readerHasOverlay(surface)) onClose(); };
   const motion = useDrawerMoving(opened);
   const { instant, skipExit, resetSkipExit } = useReaderHistory({ opened, stateKey: historyKey, marker: true, onClose: requestClose, ignorePop: () => readerHasOverlay(surface) });
-  const { drag, canSwipe } = useDrawerSwipeClose({ surface, opened, direction: 1, requestClose, skipExit, resetSkipExit });
+  const { drag, canSwipe } = useDrawerSwipeClose({ surface, opened, direction: "right", requestClose, skipExit, resetSkipExit });
   useSwipe(surface, { direction: "right", enabled: opened && mobile, onSwipe: requestClose, canSwipe, drag });
   const enter = () => { motion.onEnterTransitionEnd(); onEnterTransitionEnd?.(); };
   const controls = <>{actions}
@@ -49,7 +49,7 @@ export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTrans
       <Drawer.Overlay className="pwa-scrim" />
       <Drawer.Content ref={setSurface} classNames={{ content: `pwa-tool-reader ${className}`.trim() }} data-pwa-moving={motion.moving || undefined} aria-describedby={describedBy}>
         <header className={`pwa-topbar pwa-tool-reader-header${className === "pwa-file-reader" ? " pwa-file-reader-header" : ""}`}>
-          {mobile ? <ActionIcon className="pwa-icon-button pwa-topbar-back pwa-tool-reader-close" aria-label={closeLabel} title={closeLabel} onClick={requestClose}><ArrowLeft size={20} /></ActionIcon> : null}
+          {mobile ? <ActionIcon className="pwa-icon-button pwa-topbar-back pwa-tool-reader-close" aria-label={closeLabel} title={closeLabel} onClick={requestClose}><ChevronLeft size={20} /></ActionIcon> : null}
           <Drawer.Title className="pwa-tool-reader-title" tabIndex={-1} data-autofocus title={title}>{title}</Drawer.Title>
           {className === "pwa-file-reader" ? controls : <div className="pwa-tool-reader-actions">{controls}</div>}
         </header>

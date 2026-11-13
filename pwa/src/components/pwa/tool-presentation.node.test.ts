@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { JsonValue, TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import { reliableToolDiff, safeJsonText, TOOL_HEADER_MAX_LINES, toolAction, toolCommandLead, toolContentBlocks, toolContentView, toolHeaderSummary, toolReaderCall } from "./tool-presentation";
+import { reliableToolDiff, safeJsonText, toolAction, toolContentBlocks, toolHeaderSummary, toolReaderCall } from "./tool-presentation";
 
 const base = { event_id: "e", session_id: "s", leaf_id: "g", group_id: "group", timestamp: 1, kind: "tool" as const, tool_call_id: "call", truncated: false, status: "complete" as const };
 function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool"; status: "complete"; args: JsonValue }> {
@@ -41,16 +41,10 @@ test("keeps structured output readable without exposing image bytes", () => {
   expect(text).not.toContain("AAAA-real-image-data");
 });
 
-test("keeps one command title form and echoes the full call only into expanded content", () => {
+test("keeps one command title form and never echoes the call into the reader body", () => {
   const value = event("bash", { command: "pwd\nls -al" }, "result");
   expect(toolHeaderSummary(value)).toBe("pwd ls -al");
-  expect(toolCommandLead(value)).toBe("$ pwd\nls -al");
-  expect(toolCommandLead(event("read", { path: "src/file.ts" }, "text"))).toBeUndefined();
-
-  const preview = toolContentView(value, true);
-  expect(preview.blocks[0]).toEqual({ kind: "text", text: "$ pwd\nls -al", style: "terminal" });
-  expect(toolContentView(value, false).blocks[0]).not.toEqual(preview.blocks[0]);
-  // 阅读器正文只保留真实结果，命令回显留在展开预览首行。
+  // 阅读器正文只保留真实结果，完整调用由首块的参数列表承担。
   expect(toolContentBlocks(value).some((block) => block.kind === "text" && block.text.startsWith("$ "))).toBe(false);
 });
 
@@ -74,25 +68,7 @@ test("the reader call lists every argument as is: text raw, other values as JSON
 
 test("the reader keeps only real results, without blocks copied from the input", () => {
   const texts = (blocks: ReturnType<typeof toolContentBlocks>) => blocks.flatMap((block) => block.kind === "text" ? [block.text] : []);
-  const generic = event("deploy", { target: "prod" }, "ok");
-  expect(texts(toolContentBlocks(generic)).some((text) => text.includes('"target"'))).toBe(true);
-  expect(texts(toolContentBlocks(generic, { input: false })).some((text) => text.includes('"target"'))).toBe(false);
-
-  // 会话内展开仍显示写入内容与请求修改；阅读器只保留工具真实返回的结果。
-  const write = event("write", { path: "a.txt", content: "FILE BODY" }, "Wrote a.txt");
-  expect(texts(toolContentBlocks(write))).toContain("FILE BODY");
-  expect(texts(toolContentBlocks(write, { input: false }))).toEqual(["Wrote a.txt"]);
-  const edit = event("edit", { path: "a.txt", oldText: "old", newText: "new" }, "Edited a.txt");
-  expect(texts(toolContentBlocks(edit)).some((text) => text.includes("+new"))).toBe(true);
-  expect(texts(toolContentBlocks(edit, { input: false }))).toEqual(["Edited a.txt"]);
-});
-test("bounds the preview command echo so the real result keeps its budget", () => {
-  const command = Array.from({ length: 30 }, (_, index) => `step ${index + 1}`).join("\n");
-  const value = event("bash", { command }, "REAL_RESULT");
-  const preview = toolContentView(value, true);
-  const lead = preview.blocks[0];
-  expect(lead.kind === "text" && lead.text.endsWith("…")).toBe(true);
-  expect(lead.kind === "text" && lead.text.split("\n").length).toBeLessThanOrEqual(TOOL_HEADER_MAX_LINES + 1);
-  expect(preview.clipped).toBe(true);
-  expect(preview.blocks.some((block) => block.kind === "text" && block.text === "REAL_RESULT")).toBe(true);
+  expect(texts(toolContentBlocks(event("deploy", { target: "prod" }, "ok")))).toEqual(["ok"]);
+  expect(texts(toolContentBlocks(event("write", { path: "a.txt", content: "FILE BODY" }, "Wrote a.txt")))).toEqual(["Wrote a.txt"]);
+  expect(texts(toolContentBlocks(event("edit", { path: "a.txt", oldText: "old", newText: "new" }, "Edited a.txt")))).toEqual(["Edited a.txt"]);
 });

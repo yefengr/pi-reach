@@ -4,6 +4,7 @@ import { PwaOperationNotifications, PwaToastProvider } from "@/components/pwa/pw
 import { createOperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { useViewportDensity } from "@/lib/pwa/use-viewport-density";
 import { useSoftKeyboard } from "@/lib/pwa/use-soft-keyboard";
+import { usePreventFileNavigation } from "@/components/pwa/use-file-drop";
 import "@/app/workspace-viewport.css";
 
 type PwaRuntimeNoticeContextValue = {
@@ -38,6 +39,7 @@ export function PwaAppShell({ children, runtimeNotice }: { children: ReactNode; 
   const shellRef = useRef<HTMLDivElement>(null);
   useViewportDensity(shellRef);
   useSoftKeyboard();
+  usePreventFileNavigation();
   const fallbackId = useId();
   const [fallbackTarget, setFallbackTarget] = useState<HTMLDivElement | null>(null);
   const [toastFallbackTarget, setToastFallbackTarget] = useState<HTMLDivElement | null>(null);

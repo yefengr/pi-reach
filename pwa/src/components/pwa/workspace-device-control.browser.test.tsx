@@ -6,6 +6,7 @@ import { WorkspaceDeviceControl, type WorkspaceDeviceControlVariant } from "./wo
 import { renderPwa } from "@/test/browser/render";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { DeviceActivity } from "@/lib/pwa/pwa-view-model";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const currentDevice: PwaDeviceRecord = {
   id: "device:current",
@@ -98,13 +99,13 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   const panel = document.querySelector<HTMLElement>(".pwa-device-popover")!;
   expect(panel).not.toBeNull();
   expect(panel.closest(".pwa-root")).not.toBeNull();
-  // 与菜单共用同一组进入过渡：方向由实际 data-position 推导，顶部面板从下方 4px 归位。
+  // 与菜单共用同一组进入过渡：原点由实际 data-position 推导，顶部面板从下沿（触发按钮一侧）展开。
   expect(panel.getAttribute("data-position")).toMatch(/^top/);
-  expect(getComputedStyle(panel).getPropertyValue("--pwa-menu-shift-y").trim()).toBe("4px");
-  expect(parseFloat(getComputedStyle(panel).transitionDuration)).toBe(0.16);
+  expect(Math.round(parseFloat(getComputedStyle(panel).transformOrigin.split(" ")[1]))).toBe(Math.round(panel.offsetHeight));
+  expect(parseFloat(getComputedStyle(panel).transitionDuration)).toBe(0.24);
   await expect.poll(() => Math.round(panel.getBoundingClientRect().bottom)).toBeLessThanOrEqual(Math.round(triggerNode.getBoundingClientRect().top));
   expect(Number(getComputedStyle(panel).zIndex)).toBe(220);
-  const current = screen.getByRole("button", { name: /Current computer with an intentionally very long local name ONLINE/ });
+  const current = screen.getByRole("button", { name: /Current computer with an intentionally very long local name Online/ });
   const label = current.element().querySelector<HTMLElement>(".pwa-peer-label")!;
   expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
   expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
@@ -113,7 +114,7 @@ test("desktop chooser uses a portal Popover, truncates long names, and finishes 
   for (const summary of panel.querySelectorAll<HTMLElement>(".pwa-peer-summary")) {
     expect(summary.scrollWidth, summary.textContent ?? "").toBeLessThanOrEqual(summary.clientWidth);
   }
-  await screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).click();
+  await screen.getByRole("button", { name: /Travel Mac Offline/ }).click();
   await expect.poll(() => events).toEqual(["select:device:next"]);
   await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
   await new Promise((resolve) => setTimeout(resolve, 30));
@@ -244,13 +245,13 @@ test.each(["desktop", "sheet"] as const)("%s computer trigger only reports other
     // 切换电脑后按新的当前 id 重算，目标电脑仍保留自己的行内提醒。
     flushSync(() => setDeviceActivity?.({ [nextDevice.id]: "completed" }));
     await trigger.click();
-    await screen.getByRole("button", { name: /^Travel Mac OFFLINE/ }).click();
+    await screen.getByRole("button", { name: /^Travel Mac Offline/ }).click();
     await expect.poll(() => events).toEqual(["select:device:next"]);
     await expect.poll(() => triggerNode.getAttribute("aria-label")).toBe("Choose computer, current Travel Mac");
     expect(dot()).toBeNull();
     expect(triggerNode.getAttribute("aria-describedby")).toBeNull();
     await trigger.click();
-    const selectedRow = screen.getByRole("button", { name: /^Travel Mac OFFLINE/ });
+    const selectedRow = screen.getByRole("button", { name: /^Travel Mac Offline/ });
     await expect.element(selectedRow).toBeVisible();
     expect(selectedRow.element().querySelector(".pwa-notice-dot")).not.toBeNull();
     if (variant === "desktop") await userEvent.tab();
@@ -271,7 +272,7 @@ test("unpaired desktop footer pairs directly without opening a chooser", async (
   const screen = await renderPwa(<WorkspaceDeviceControl devices={[]} activeDeviceId={null} pairingPresence={{}} variant="desktop" onPair={() => events.push("pair")} onSelectDevice={() => {}} onRename={() => {}} onRemove={() => {}} />);
   const pair = screen.getByRole("button", { name: "Pair a computer" });
   await expect.element(pair).toBeVisible();
-  expect(Math.round(pair.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  expect(Math.round(pair.element().getBoundingClientRect().height)).toBeGreaterThanOrEqual(minimumControlHeight(pair.element()));
   await pair.click();
   expect(events).toEqual(["pair"]);
   expect(document.querySelector(".pwa-device-popover")).toBeNull();
@@ -284,10 +285,11 @@ test("desktop management panel routes rename, remove, and pair after it closes",
 
   await trigger.click();
   await screen.getByRole("button", { name: "Computer actions for Travel Mac" }).click();
-  // 菜单项与其他菜单同规格：最小高 44、左右内边距 10。
+  // 菜单项与其他菜单同规格：最小高 44、左右内边距 12，加面板内边距 4 后文字距面板边缘 16。
   const renameItem = screen.getByRole("menuitem", { name: "Rename Travel Mac" }).element();
-  expect(getComputedStyle(renameItem).paddingLeft).toBe("10px");
-  expect(Math.round(renameItem.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  expect(getComputedStyle(renameItem).paddingLeft).toBe("12px");
+  // 菜单从触发按钮缩放展开，进入结束后再量命中区。
+  await expect.poll(() => Math.round(renameItem.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await screen.getByRole("menuitem", { name: "Rename Travel Mac" }).click();
   await expect.poll(() => events).toEqual(["rename:device:next"]);
   await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
@@ -326,7 +328,7 @@ test("reduced motion fades the computer Drawer without movement and returns focu
     expect(events).toEqual([]);
 
     await trigger.click();
-    await screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).click();
+    await screen.getByRole("button", { name: /Travel Mac Offline/ }).click();
     await expect.poll(() => events).toEqual(["select:device:next"]);
     await expect.element(screen.getByTestId("device-action-target")).toHaveFocus();
   } finally {
@@ -354,14 +356,14 @@ test("mobile chooser is a compact z220 bottom Drawer with reachable actions and 
   expect(Math.round(rect.bottom)).toBeLessThanOrEqual(window.innerHeight);
   expect(rect.height).toBeLessThan(320);
   for (const action of [
-    screen.getByRole("button", { name: /Travel Mac OFFLINE/ }),
+    screen.getByRole("button", { name: /Travel Mac Offline/ }),
     screen.getByRole("button", { name: "Computer actions for Travel Mac" }),
     screen.getByRole("button", { name: "Pair a computer" }),
     screen.getByRole("button", { name: "Close computer chooser" }),
   ]) {
     const box = action.element().getBoundingClientRect();
     expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(minimumControlHeight(action.element()));
   }
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   await page.screenshot({ path: "../../../.vitest/screenshots/workspace-device-control-320x568.png" });
@@ -407,7 +409,7 @@ test("desktop trigger toggles, closes on outside click or Escape, and preserves 
   // Escape 从面板内真实可聚焦项关闭并回到入口。
   await trigger.click();
   await expect.poll(() => panel()).not.toBeNull();
-  (screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).element() as HTMLButtonElement).focus();
+  (screen.getByRole("button", { name: /Travel Mac Offline/ }).element() as HTMLButtonElement).focus();
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => panel()).toBeNull();
   await expect.element(trigger).toHaveFocus();
@@ -477,7 +479,7 @@ test("reopening during the popover exit transition keeps the panel open", async 
   // 所有入场转场结束；旧退场若在结束阶段关闭面板，这里会看到 aria-expanded=false。
   await expect.poll(() => findPanel()!.getAnimations().length, { interval: 10, timeout: 2_000 }).toBe(0);
   expect(triggerNode.getAttribute("aria-expanded")).toBe("true");
-  const row = screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).element();
+  const row = screen.getByRole("button", { name: /Travel Mac Offline/ }).element();
   const rowBox = row.getBoundingClientRect();
   const hit = document.elementFromPoint(Math.round(rowBox.left + rowBox.width / 2), Math.round(rowBox.top + rowBox.height / 2));
   expect(hit === row || row.contains(hit)).toBe(true);
@@ -494,7 +496,7 @@ test("queued action keeps the panel closed when the trigger is pressed again", a
   const trigger = screen.getByRole("button", { name: /Choose computer, current Current computer/ });
   await trigger.click();
   await expect.poll(() => document.querySelector(".pwa-device-popover")).not.toBeNull();
-  const row = screen.getByRole("button", { name: /Travel Mac OFFLINE/ }).element() as HTMLButtonElement;
+  const row = screen.getByRole("button", { name: /Travel Mac Offline/ }).element() as HTMLButtonElement;
   flushSync(() => row.click());
   // 退出动画尚未结束、动作已排队：不能再打开面板，否则动作会被搁置。
   flushSync(() => (trigger.element() as HTMLButtonElement).click());

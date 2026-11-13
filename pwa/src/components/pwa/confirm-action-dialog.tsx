@@ -1,4 +1,6 @@
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 import { localizeFeedback } from "@/lib/pwa/feedback-messages";
 import { useI18n, type Messages } from "@/lib/i18n";
 import { PWA_CONFIRM_DIALOG_SIZE } from "@/lib/ui/pi-reach-theme";
@@ -70,8 +72,13 @@ export function ConfirmActionDialog({ action, pending, error, onConfirm, onClose
   const copy = dialogCopy(visibleAction, t.confirm, t.attachments, t.files);
   // 危险确认是确认弹窗的最后一步，使用实心错误色；其余确认为主操作。
   const confirmButtonProps = copy.destructive ? { variant: "filled" as const, className: "pwa-danger-confirm" } : {};
+  // 移动端按钮纵向排列：确认在上、取消在最下（靠近拇指的位置放安全选项）；DOM 顺序随之调整，使 Tab 与读屏顺序和视觉一致。
+  const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
   const titleId = "pwa-confirm-action-title";
   const descriptionId = "pwa-confirm-action-description";
+
+  const cancelButton = <Button key="cancel" variant="default" type="button" onClick={onClose} disabled={pending}>{visibleAction.kind === "leave-attachments" ? visibleAction.files ? t.files.leaveCancel : t.attachments.leaveCancel : t.common.cancel}</Button>;
+  const confirmButton = <Button key="confirm" {...confirmButtonProps} type="button" onClick={onConfirm} disabled={pending}>{pending ? copy.pendingLabel : copy.confirmLabel}</Button>;
 
   return <Modal
     opened={action !== null}
@@ -97,8 +104,8 @@ export function ConfirmActionDialog({ action, pending, error, onConfirm, onClose
       <Text component="p" id={descriptionId} className="pwa-confirm-description">{copy.description}{fetchingFiles && visibleAction.kind !== "leave-attachments" ? ` ${t.files.cancelFetching}` : ""}</Text>
       {error ? <Text component="p" className="pwa-confirm-error" role="alert">{localizeFeedback(error, locale)}</Text> : null}
       <Group className="pwa-confirm-actions" justify="flex-end" gap="xs">
-        <Button variant="default" type="button" onClick={onClose} disabled={pending}>{visibleAction.kind === "leave-attachments" ? visibleAction.files ? t.files.leaveCancel : t.attachments.leaveCancel : t.common.cancel}</Button>
-        <Button {...confirmButtonProps} type="button" onClick={onConfirm} disabled={pending}>{pending ? copy.pendingLabel : copy.confirmLabel}</Button>
+        {mobile ? confirmButton : cancelButton}
+        {mobile ? cancelButton : confirmButton}
       </Group>
     </Stack>
   </Modal>;

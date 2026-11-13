@@ -7,6 +7,7 @@ import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { MOBILE_LAYOUT_QUERY, TOUCH_INPUT_QUERY } from "@/lib/ui/viewport-queries";
 import { PwaUiProvider } from "./pwa-ui-provider";
+import { PwaAppShell } from "./pwa-app-shell";
 import type { ThinkingLevel, WireModel } from "@/lib/pi-reach/types";
 import { MessageComposer } from "./message-composer";
 import type { ComposerAttachmentItem } from "./attachment-cards";
@@ -435,7 +436,10 @@ test.each([[1280, 900], [390, 844]])("keeps a single Composer surface, frameless
     expect(cardStyle.borderRadius).toBe("32px");
     expect(inputStyle.borderTopWidth).toBe("0px");
     expect(inputStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
-    expect(inputStyle.paddingLeft).toBe("0px");
+    // 文字在卡片内边距 12 之外再内缩 12，距卡片内缘 24，远离 32 的大圆角。
+    expect([inputStyle.paddingLeft, inputStyle.paddingRight]).toEqual(["12px", "12px"]);
+    const textLeft = input.getBoundingClientRect().left + Number.parseFloat(inputStyle.paddingLeft);
+    expect(Math.round(textLeft - card.getBoundingClientRect().left - Number.parseFloat(cardStyle.borderLeftWidth))).toBe(24);
     for (const tool of [image, commands]) {
       expect(tool.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
       expect(tool.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
@@ -501,6 +505,32 @@ test("shows the Stop action with the same accent circle as Send", async () => {
   expect(rect.width).toBeGreaterThanOrEqual(44);
   expect(rect.height).toBeGreaterThanOrEqual(44);
   expect(stop.textContent).toBe("");
+  await screen.unmount();
+});
+
+test("Send and Stop cross-fade in one icon slot on every swap, not only the first", async () => {
+  const screen = await renderPwa(<ComposerHarness initialWorking />);
+  const textarea = screen.getByRole("textbox");
+  const slot = document.querySelector<HTMLElement>(".pwa-composer-action-icons")!;
+  const send = slot.querySelector<HTMLElement>(".pwa-composer-action-send")!;
+  const stop = slot.querySelector<HTMLElement>(".pwa-composer-action-stop")!;
+  // 首次挂载不播放：停止图标直接可见，发送图标隐去并缩到 --pwa-swap-scale。
+  expect(getComputedStyle(stop).opacity).toBe("1");
+  expect(getComputedStyle(send).opacity).toBe("0");
+  expect(new DOMMatrix(getComputedStyle(send).transform).a).toBe(0.8);
+  expect(slot.getAnimations({ subtree: true })).toHaveLength(0);
+  for (const draft of ["a", "", "b", ""]) {
+    if (draft) await textarea.fill(draft);
+    else await userEvent.clear(textarea);
+    const [shown, hidden] = draft ? [send, stop] : [stop, send];
+    await expect.element(screen.getByRole("button", { name: draft ? "Send message" : "Stop current task" })).toBeVisible();
+    // 两个图标留在同一个槽里，每次互换都有过渡在播放，而不是只有第一次。
+    expect(document.querySelector(".pwa-composer-action-icons")).toBe(slot);
+    expect(slot.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
+    await expect.poll(() => getComputedStyle(shown).opacity).toBe("1");
+    await expect.poll(() => getComputedStyle(hidden).opacity).toBe("0");
+    expect(getComputedStyle(shown).transform).toBe("none");
+  }
   await screen.unmount();
 });
 
@@ -781,6 +811,8 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the Composer
     const menu = screen.getByRole("menu", { name: "Model and thinking" });
     await expect.poll(() => menu.element().getBoundingClientRect().top >= 0).toBe(true);
     const dropdown = menu.element() as HTMLElement;
+    // 切换子视图的高度过渡结束后再量几何与滚动。
+    await expect.poll(() => dropdown.getAnimations().length).toBe(0);
     const box = dropdown.getBoundingClientRect();
     expect(box.left).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(width);
@@ -804,6 +836,71 @@ test.each([[1280, 900], [390, 844], [390, 500], [756, 413]])("keeps the Composer
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
+  }
+});
+
+test("accepts dragged files on the composer, leaves text drags native and blocks file drops elsewhere", async () => {
+  const attachments: File[][] = [];
+  const screen = await renderPwa(<PwaAppShell runtimeNotice={null}><ComposerHarness onAddFiles={files => attachments.push(files)} /></PwaAppShell>);
+  const form = document.querySelector<HTMLFormElement>(".pwa-composer")!;
+  const card = form.querySelector<HTMLElement>(".pwa-composer-card")!;
+  const textarea = screen.getByRole("textbox").element() as HTMLTextAreaElement;
+  const file = new File(["image"], "dropped.png", { type: "image/png" });
+  const withFiles = () => { const data = new DataTransfer(); data.items.add(file); return data; };
+  const drag = (target: Element, type: string, dataTransfer: DataTransfer) => {
+    const event = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const accent = () => { const probe = document.createElement("span"); probe.style.color = "var(--pwa-accent)"; form.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color; };
+  try {
+    const files = withFiles();
+    drag(textarea, "dragenter", files);
+    const over = drag(textarea, "dragover", files);
+    expect(over.defaultPrevented).toBe(true);
+    await expect.poll(() => form.hasAttribute("data-file-drag")).toBe(true);
+    await expect.poll(() => getComputedStyle(card).borderTopColor).toBe(accent());
+    expect(drag(textarea, "drop", files).defaultPrevented).toBe(true);
+    expect(attachments).toEqual([[file]]);
+    expect(attachments[0][0]).toBe(file);
+    await expect.poll(() => form.hasAttribute("data-file-drag")).toBe(false);
+
+    // 子元素之间移动时 dragenter／dragleave 成对出现，指针仍在输入区内就不撤销提示；离开最外层才撤销。
+    const moving = withFiles();
+    drag(form, "dragenter", moving);
+    drag(textarea, "dragenter", moving);
+    drag(form, "dragleave", moving);
+    // 等两帧让状态提交，确认中间的 dragleave 没有撤销提示。
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(form.hasAttribute("data-file-drag")).toBe(true);
+    drag(textarea, "dragleave", moving);
+    await expect.poll(() => form.hasAttribute("data-file-drag")).toBe(false);
+
+    // 拖动文字不接管，仍由浏览器插入输入框。
+    const text = new DataTransfer();
+    text.setData("text/plain", "dragged words");
+    drag(textarea, "dragenter", text);
+    expect(drag(textarea, "dragover", text).defaultPrevented).toBe(false);
+    await expect.poll(() => form.hasAttribute("data-file-drag")).toBe(false);
+
+    // 输入区之外的文件拖放被拦截，浏览器不会离开应用打开文件。
+    const outside = screen.getByRole("button", { name: "Outside composer" }).element();
+    const elsewhere = withFiles();
+    expect(drag(outside, "dragover", elsewhere).defaultPrevented).toBe(true);
+    expect(drag(outside, "drop", elsewhere).defaultPrevented).toBe(true);
+    expect(attachments).toHaveLength(1);
+
+    // 不能添加附件时（如断线）不提示、不加入，拖放同样被拦截。
+    screen.getByTestId("composer-go-offline").element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect.poll(() => (screen.getByRole("button", { name: "Add attachments" }).element() as HTMLButtonElement).disabled).toBe(true);
+    const offline = withFiles();
+    drag(textarea, "dragenter", offline);
+    expect(drag(textarea, "dragover", offline).defaultPrevented).toBe(true);
+    await expect.poll(() => form.hasAttribute("data-file-drag")).toBe(false);
+    expect(drag(textarea, "drop", offline).defaultPrevented).toBe(true);
+    expect(attachments).toHaveLength(1);
+  } finally {
+    await screen.unmount();
   }
 });
 
@@ -1332,6 +1429,10 @@ test("the in-card hint sits 13px below the card edge and 14px above the text", a
     // 提示离卡片上沿略近于离正文，读作卡片的状态行而不是正文的一部分；发丝线按整像素取整。
     expect(Math.round(text.top - card.top)).toBe(13);
     expect(Math.round(textTop - text.bottom)).toBe(14);
+    // 提示行与正文同一左缘。
+    const line = document.querySelector<HTMLElement>(".pwa-composer-hint-line")!;
+    const hintLeft = line.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(line).paddingLeft);
+    expect(Math.round(hintLeft)).toBe(Math.round(input.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(input).paddingLeft)));
   } finally { await screen.unmount(); }
 });
 

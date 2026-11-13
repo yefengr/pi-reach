@@ -10,16 +10,13 @@ import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
 import { MarkdownContent } from "./timeline-content";
-import { ToolPreview } from "./tool-preview";
 import { SessionActionsMenu } from "./session-actions-menu";
-import type { ToolValue } from "./tool-presentation";
 import type { WorkspaceNavigationProps } from "./workspace-view";
 import "./tool-reader.css";
 
 const wide = "unbroken_long_line_".repeat(60);
 const columns = Array.from({ length: 18 }, (_, index) => `Column ${index}`);
 const markdown = `Body **child text** for swipe.\n\n\`\`\`text\n${wide}\n\`\`\`\n\n| ${columns.join(" | ")} |\n| ${columns.map(() => "---").join(" | ")} |\n| ${columns.map(() => "Cell value").join(" | ")} |`;
-const diff: ToolValue = { event_id: "event", session_id: "session", leaf_id: "leaf", group_id: "group", timestamp: 0, kind: "tool", tool_call_id: "call", tool: "edit", args: { path: "notes.txt" }, status: "complete", truncated: false, result: { diff: `-${wide}\n+${wide}` } };
 let showMenu: (value: boolean) => void;
 let enterSettings: () => void;
 const navigation: WorkspaceNavigationProps = {
@@ -42,7 +39,6 @@ function Harness({ clicks, empty = false }: { clicks: () => void; empty?: boolea
   >
     {empty ? <div className="pwa-workspace-state"><p data-testid="empty-copy">No messages</p></div> : <div className="pwa-message-list" data-testid="messages">
       <MarkdownContent text={markdown} />
-      <ToolPreview value={diff} />
       <button type="button" data-testid="tap-button" onClick={clicks}>Ordinary action</button>
       {Array.from({ length: 35 }, (_, index) => <MarkdownContent key={index} text={`Paragraph ${index} with reading content to make the message list scroll.`} />)}
     </div>}
@@ -107,9 +103,9 @@ test("G1 excludes inputs, composer descendants, contenteditable, opt-out and sel
   expect(navigationOpen()).toBe(false);
 });
 
-test("G1 excludes real overflowing Markdown code, table and tool diff without changing their touch action", async () => {
+test("G1 excludes real overflowing Markdown code and table without changing their touch action", async () => {
   await setup();
-  for (const selector of [".pwa-code-block pre", ".pwa-markdown-table", ".pwa-tool-diff-output"]) {
+  for (const selector of [".pwa-code-block pre", ".pwa-markdown-table"]) {
     const scroll = document.querySelector<HTMLElement>(selector)!;
     expect(scroll.scrollWidth, selector).toBeGreaterThan(scroll.clientWidth);
     expect(getComputedStyle(scroll).touchAction, selector).toBe("auto");

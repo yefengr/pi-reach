@@ -131,6 +131,9 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
     move(distance) {
       if (phaseRef.current === "dragging" && !voidRef.current) dragRef.current?.setDistance(distance);
     },
+    extent() {
+      return rootRef.current?.querySelector<HTMLElement>(SHEET_SELECTOR)?.offsetWidth ?? 0;
+    },
     end({ committed, velocity }) {
       const drag = dragRef.current;
       if (!drag || phaseRef.current !== "dragging") return;

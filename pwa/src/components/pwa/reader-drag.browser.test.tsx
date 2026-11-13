@@ -5,7 +5,7 @@ import { cdp, page } from "vitest/browser";
 import { Modal } from "@mantine/core";
 import type { PublishedFileDescriptor } from "@pi-reach/protocol/session";
 import { renderPwa } from "@/test/browser/render";
-import { enableTouch, resetTouch, touch, type TouchPoint } from "@/test/browser/swipe";
+import { enableTouch, resetTouch, touch, touchReleaseAtRest, type TouchPoint } from "@/test/browser/swipe";
 import { PublishedFileReader } from "./published-file-reader";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "./published-files-context";
 import { ToolReader } from "./tool-reader";
@@ -74,7 +74,10 @@ async function dragTo(origin: TouchPoint, dx: number) {
     await moveTouch(origin, LOCK_STEP + (dx - LOCK_STEP) * step / 4);
   }
 }
-const release = () => touch("touchEnd", []);
+/** 停稳后松手，结果只取决于停点是否过行程一半（见 touchReleaseAtRest）。 */
+const release = touchReleaseAtRest;
+/** 松手前把手指带过行程一半（260px），停稳后松手即提交。 */
+const commitRelease = async (origin: TouchPoint) => { await moveTouch(origin, 260); await release(); };
 async function closed(kind: Kind) {
   await expect.poll(() => document.querySelector(SURFACE[kind])).toBeNull();
   await expect.poll(() => history(kind)).toBeUndefined();
@@ -109,7 +112,7 @@ test.each(["tool", "file"] as const)("%s reader follows the finger from the lock
   expect(Number(getComputedStyle(scrim).opacity)).toBeCloseTo(1 - 100 / window.innerWidth, 1);
   expect(close).not.toHaveBeenCalled();
   expect(history(kind)).toBeTruthy();
-  await release();
+  await commitRelease(origin);
   await closed(kind);
 }, 15000);
 
@@ -148,7 +151,7 @@ test.each(["tool", "file"] as const)("%s reader closes after the settle with one
   await dragTo(origin, 140);
   const positions: number[] = [];
   const sample = setInterval(() => { const node = document.querySelector<HTMLElement>(SURFACE[kind]); if (node) positions.push(Math.round(node.getBoundingClientRect().left)); }, 8);
-  await release();
+  await commitRelease(origin);
   await closed(kind);
   clearInterval(sample);
   // 收尾只会单调靠近右侧终点，不得出现回到起点的一帧。
@@ -239,7 +242,7 @@ test("tool reader ignores a second press while settling and does not start a new
 test("file reader rolls back when a confirmation appears before the close request and keeps the normal exit afterwards", async () => {
   const { origin } = await open("file");
   await dragTo(origin, 140);
-  await release();
+  await commitRelease(origin);
   modal(true);
   await expect.element(mounted!.getByRole("heading", { name: "Top confirmation" })).toBeVisible();
   // 请求被 hasOtherModal 门禁拒绝：不改 history、不触发 onClose，面板回到起点。

@@ -1,3 +1,5 @@
+import type { SwipeDirection } from "./swipe-gesture";
+
 /** 只排除需要横向拖动选字或光标的控件；单选与复选同按钮一样只响应点按（设置页单选的 radio 透明铺满整行），不阻断滑动。 */
 const EXCLUDED_START = 'input:not([type="radio"]):not([type="checkbox"]), textarea, select, [contenteditable], .pwa-composer, [data-swipe-ignore]';
 /** Safari 标签页左缘属于浏览器后退手势；起点落在此宽度内时不跟手，退回触发式。 */
@@ -5,13 +7,17 @@ export const SWIPE_EDGE_EXCLUSION_PX = 24;
 const STANDALONE_QUERY = "(display-mode: standalone)";
 const BLOCKING_OVERLAY = '[role="dialog"], [role="menu"], [role="listbox"]';
 
-export function swipeStartExcluded(surface: HTMLElement, target: EventTarget | null): boolean {
+/** 起点祖先中沿手势主轴真正可滚动的区域不识别：左右滑动看横向滚动，下拉看纵向滚动。 */
+export function swipeStartExcluded(surface: HTMLElement, target: EventTarget | null, direction: SwipeDirection = "right"): boolean {
   if (window.getSelection()?.toString()) return true;
   if (!(target instanceof Element) || !surface.contains(target)) return true;
   if (target.closest(EXCLUDED_START)) return true;
+  const vertical = direction === "down" || direction === "up";
   for (let element: Element | null = target; element; element = element.parentElement) {
-    const overflow = getComputedStyle(element).overflowX;
-    if ((overflow === "auto" || overflow === "scroll") && element.scrollWidth > element.clientWidth) return true;
+    const style = getComputedStyle(element);
+    const overflow = vertical ? style.overflowY : style.overflowX;
+    const scrollable = vertical ? element.scrollHeight > element.clientHeight : element.scrollWidth > element.clientWidth;
+    if ((overflow === "auto" || overflow === "scroll") && scrollable) return true;
     if (element === surface) break;
   }
   return false;
@@ -20,11 +26,12 @@ export function swipeStartExcluded(surface: HTMLElement, target: EventTarget | n
 /** 拖动控制器给自己预挂载的叠层打的标记；它不是需要阻断手势的外部叠层。 */
 export const SWIPE_DRAG_ATTRIBUTE = "data-swipe-drag";
 
-export function swipeBlocked(surface: HTMLElement): boolean {
+export function swipeBlocked(surface: HTMLElement, underlay?: string): boolean {
   const root = surface.closest(".pwa-root");
   if (!root) return false;
   return [...root.querySelectorAll<HTMLElement>(BLOCKING_OVERLAY)].some((overlay) =>
     !overlay.contains(surface)
+    && !(underlay && overlay.closest(underlay))
     && !overlay.hasAttribute(SWIPE_DRAG_ATTRIBUTE)
     && overlay.isConnected
     && !overlay.closest('[inert], [aria-hidden="true"]')
@@ -33,7 +40,7 @@ export function swipeBlocked(surface: HTMLElement): boolean {
 }
 
 /** standalone 没有系统边缘返回（待真机核对），不排除；浏览器标签页内向右拖动不得起自左缘。 */
-export function swipeEdgeExcluded(direction: "left" | "right", startX: number): boolean {
+export function swipeEdgeExcluded(direction: SwipeDirection, startX: number): boolean {
   if (direction !== "right" || startX >= SWIPE_EDGE_EXCLUSION_PX) return false;
   return !window.matchMedia(STANDALONE_QUERY).matches;
 }

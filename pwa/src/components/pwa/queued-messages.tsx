@@ -3,7 +3,8 @@ import { ActionIcon, UnstyledButton } from "@mantine/core";
 import { useI18n, type Messages } from "@/lib/i18n";
 import { presenceProps, usePresence } from "./use-presence";
 import { detachInPlace, useLeavingItems, withLeavingItems } from "./use-leaving-items";
-import { SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
+import { FLIP_KEY_ATTRIBUTE, useFlipLayout } from "./use-flip-layout";
+import { SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { ArrowUp, ChevronDown, CircleAlert, Clock, LoaderCircle, Paperclip, Pencil, X } from "lucide-react";
 import type { AttachmentDescriptor } from "@pi-reach/protocol/session";
 
@@ -40,7 +41,7 @@ function queuedMessageDescription(item: QueuedMessageView, index: number, t: Mes
 
 function QueuedMessageStatus({ item }: { item: QueuedMessageView }) {
   const icon = item.waiting ? <Clock size={16} aria-hidden="true" />
-    : item.pending ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} strokeWidth={SMALL_SPINNER_STROKE} aria-hidden="true" />
+    : item.pending ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} aria-hidden="true" />
       : item.attention ? <CircleAlert size={16} aria-hidden="true" />
         : null;
   return <span className="pwa-queued-message-status" data-pending={item.pending ? "" : undefined} title={item.waiting ? item.status : undefined}>
@@ -65,7 +66,7 @@ function QueuedMessageRow({ item, index, numbered, isOnline, onInsert, onCancel,
   const description = queuedMessageDescription(item, index, q);
   const manageable = item.canManage && item.busy !== true && !item.dismissible;
   const attachmentCount = item.attachments?.length ?? 0;
-  return <article ref={rowRef} className="pwa-queued-message" title={item.text || undefined} data-attention={item.attention ? "" : undefined}
+  return <article ref={rowRef} className="pwa-queued-message" {...{ [FLIP_KEY_ATTRIBUTE]: item.id }} title={item.text || undefined} data-attention={item.attention ? "" : undefined}
     {...(leaving ? { "data-presence": "leaving", inert: true, "aria-hidden": true } : {})}>
     {numbered ? <span className="pwa-queued-message-index" aria-hidden="true">{index + 1}</span> : null}
     {item.images?.length ? <div className="pwa-queued-message-images">
@@ -105,6 +106,8 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
   // 清空后保留最后一批条目，随包裹层收拢沉回卡片背后（drawer-out）再移除；离开期间 inert，不可操作也不被播报。
   const presence = usePresence(current.length ? current : null, Object.is, { exit: "--pwa-duration-drawer-out" });
   const leavingRows = useLeavingItems(current);
+  // 撤回或投递一条时其余行与抽屉上沿平滑补位；抽屉贴着卡片向上长，上沿随之过渡。
+  const flip = useFlipLayout(sectionRef, { edge: true });
   const items = presence.rendered ?? [];
   const present = items.length > 0;
   // 抽屉在场之后才让新行单独淡入；与抽屉同时出现的行随抽屉滑出，不叠加第二层淡入。
@@ -123,7 +126,8 @@ export function QueuedMessages({ items: current, isOnline, onInsert, onCancel, o
   const rowProps = { numbered, isOnline, onInsert, onCancel, onDismissNotice };
 
   return <div className="pwa-composer-grow pwa-queued-messages-slot" {...presenceProps(presence)}><section ref={sectionRef} className="pwa-queued-messages" aria-label={q.title} {...presenceProps(presence)}>
-    {numbered ? <h2 className="pwa-queued-messages-header">
+    {flip}
+    {numbered ? <h2 className="pwa-queued-messages-header" {...{ [FLIP_KEY_ATTRIBUTE]: "header" }}>
       <UnstyledButton className="pwa-queued-messages-toggle" type="button" aria-expanded={!folded} aria-controls={bodyId} onClick={() => setCollapsed((current) => !current)}>
         <span className="pwa-queued-messages-title">{q.title}</span>
         {folded && attention ? <CircleAlert className="pwa-queued-messages-attention" size={16} aria-hidden="true" /> : null}

@@ -40,7 +40,9 @@ import { useDevicePairing, type DevicePairingResult } from "@/lib/pwa/use-device
 import { ACTIVE_DEVICE_SETTING, activeEndpointSettingKey, useActiveEndpointSelection } from "@/lib/pwa/use-active-endpoint-selection";
 import { PendingCapacityError, type QueuedCancellation, type TimelineScope } from "@/lib/pwa/timeline-runtime";
 import { attachmentRetryDecision, submitMessage, type AttachmentLease } from "@/lib/pwa/message-submission";
-import type { TimelineSessionPosition } from "@/lib/pwa/use-timeline-viewport";
+import { SessionPositionStore } from "@/lib/pwa/session-position-store";
+import { clearStoredDrafts, draftBelongsToDevice, readStoredDrafts } from "@/lib/pwa/draft-storage";
+import { useDraftPersistence } from "@/lib/pwa/use-draft-persistence";
 import { useTimeline } from "@/lib/pwa/use-timeline";
 import { useHistorySessionList } from "@/lib/pwa/use-history-session-list";
 import { useHistorySessionDetails } from "@/lib/pwa/use-history-session-details";
@@ -109,7 +111,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const [connectionFeedback, setConnectionFeedback] = useState<ConnectionIssueKind | null>(null);
   const [sessionRestartToken, setSessionRestartToken] = useState(0);
   const [defaultRelayUrl, setDefaultRelayUrl] = useState("");
-  const [relayUrl, setRelayUrl] = useState(""); const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
+  const [relayUrl, setRelayUrl] = useState(""); const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>(readStoredDrafts);
+  useDraftPersistence(drafts);
   const setDraftFor = useCallback((key: string, value: string) => setDrafts((current) => current[key] === value ? current : { ...current, [key]: value }), []);
   const [draftSessions, setDraftSessions] = useState<Readonly<Record<string, string>>>({});
   // 当前查看的 Pi 退出后保留会话原位显示，并暂停自动选择，直到用户选择其他 Pi 或离开。
@@ -509,24 +512,42 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     }, []),
   });
   const { rememberSessionDetails, invalidateSessionDetails } = useHistorySessionDetails({ endpoint: activeEndpoint, runtimeRef: timelineRuntimeRef, channelRef, helloRequestRef, onSaved: refreshHistory, onError: reportHistoryFailure, replacingSession: pendingAction?.action === "session_new" });
-  // 同一次访问中切回看过的会话时恢复离开时的阅读位置；只保存在页面内存中。首次打开停在底部最新内容。
+  // 切回看过的会话时恢复离开时的阅读位置；另写入 sessionStorage，页面被系统回收重载后仍能回到原处。首次打开停在底部最新内容。
   // 两种会话都按「跟随最新」或「屏幕顶部那一行」保存；历史另记已展开的条数，切回时先展开到同一范围再按行定位。
-  const sessionPositionsRef = useRef(new Map<string, TimelineSessionPosition | { history: true; position: TimelineSessionPosition; shown: number }>());
+  const [sessionPositions] = useState(() => new SessionPositionStore());
   const currentViewKeyRef = useRef<string | null>(null);
   const rememberSessionPosition = useCallback(() => {
     const key = currentViewKeyRef.current;
     if (!key) return;
     const position = captureSessionPosition();
     if (!position) return;
-    if (!key.startsWith("history:")) { sessionPositionsRef.current.set(key, position); return; }
+    if (!key.startsWith("history:")) { sessionPositions.set(key, position); return; }
     const shown = historyShownCount();
-    if (shown !== null) sessionPositionsRef.current.set(key, { history: true, position, shown });
-  }, [captureSessionPosition, historyShownCount]);
+    if (shown !== null) sessionPositions.set(key, { history: true, position, shown });
+  }, [captureSessionPosition, historyShownCount, sessionPositions]);
+  // 转入后台或卸载前记下当前会话的位置：主屏 PWA 在后台随时可能被系统回收，之后不再有机会保存。
+  useEffect(() => {
+    const hidden = () => { if (document.hidden) rememberSessionPosition(); };
+    window.addEventListener("pagehide", rememberSessionPosition);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      window.removeEventListener("pagehide", rememberSessionPosition);
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, [rememberSessionPosition]);
+  // 重载后自动进入的在线会话不经过 openLiveEndpoint：首次显示时按上次保存的位置恢复一次。
+  const startupPositionRef = useRef(true);
+  useLayoutEffect(() => {
+    if (!startupPositionRef.current || !currentViewKey) return;
+    startupPositionRef.current = false;
+    const saved = currentViewKey.startsWith("live:") ? sessionPositions.get(currentViewKey) : undefined;
+    if (saved && !("history" in saved)) restoreSessionPosition(saved);
+  }, [currentViewKey, restoreSessionPosition, sessionPositions]);
   const openHistory = useCallback((history: TimelineSessionSummary) => {
     operationNotifications.clearSession();
     resetActions(); setCompactionActivity(null);
     rememberSessionPosition();
-    const saved = sessionPositionsRef.current.get(`history:${history.id}`);
+    const saved = sessionPositions.get(`history:${history.id}`);
     const restore = saved && "history" in saved ? saved : null;
     const token = ++historyLoadTokenRef.current;
     setExitedEndpoint(null);
@@ -538,7 +559,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       if (status === "error" && token === historyLoadTokenRef.current) setHistoryError("Could not read the saved conversation.");
     });
     restoreSessionPosition(restore?.position ?? null);
-  }, [clearSessionConnection, openTimelineHistory, operationNotifications, rememberSessionPosition, resetActions, restoreSessionPosition]);
+  }, [clearSessionConnection, openTimelineHistory, operationNotifications, rememberSessionPosition, resetActions, restoreSessionPosition, sessionPositions]);
   const openLiveEndpoint = useCallback((endpointId: string) => {
     if (selectedHistory !== null || activeEndpointId !== endpointId) { setExtensionVersion(null); resetActions(); setModels([]); setCurrentModel(null); setReportedThinking(null); setModelsStatus("idle"); setCompactionActivity(null); }
     operationNotifications.clearSession();
@@ -560,10 +581,10 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       if (onlineRef.current) setConnection("connecting");
     }
     resetOutputFollowing();
-    const saved = activeDevice ? sessionPositionsRef.current.get(`live:${activeDevice.deviceId}\u0000${endpointId}`) : undefined;
+    const saved = activeDevice ? sessionPositions.get(`live:${activeDevice.deviceId}\u0000${endpointId}`) : undefined;
     restoreSessionPosition(saved && !("history" in saved) ? saved : null);
     selectEndpoint(endpointId);
-  }, [activeDevice, activeEndpointId, endpoints, historySessions, liveEndpointSnapshot?.endpointId, onlineRef, operationNotifications, rememberSessionPosition, resetActions, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory, switchLiveTimeline]);
+  }, [activeDevice, activeEndpointId, endpoints, historySessions, liveEndpointSnapshot?.endpointId, onlineRef, operationNotifications, rememberSessionPosition, resetActions, resetOutputFollowing, restoreSessionPosition, selectEndpoint, selectedHistory, sessionPositions, switchLiveTimeline]);
   const sendModelsRequest = useCallback((scope: TimelineScope, channel: PeerChannel): boolean => {
     const readback = configurationReadbackRef.current;
     if (readback && (readback.channelId !== scope.channelId || readback.sessionId !== scope.sessionId)) configurationReadbackRef.current = null;
@@ -1089,6 +1110,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     await invalidatePersistence();
     await invalidateSessionDetails();
     await removePwaDeviceData(device.deviceId, device.id, activeEndpointSettingKey(device.id));
+    setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !draftBelongsToDevice(key, device.deviceId))));
     const remaining = await listPwaDevices(); setDevices(remaining);
     if (isActiveDevice(device.id)) selectDevice(remaining[0]?.id ?? null);
   }, [clearSessionConnection, invalidatePersistence, invalidateSessionDetails, isActiveDevice, selectDevice]);
@@ -1096,7 +1118,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     await invalidatePersistence();
     await invalidateSessionDetails();
     await clearPwaData();
-  }, [invalidatePersistence, invalidateSessionDetails]);
+    clearStoredDrafts();
+    sessionPositions.clear();
+  }, [invalidatePersistence, invalidateSessionDetails, sessionPositions]);
   const saveDeviceNickname = useCallback(async (device: PwaDeviceRecord, nickname: string) => { await getPwaDatabase().devices.put({ ...device, nickname }); setDevices(await listPwaDevices()); }, []);
   const saveRelayUrl = useCallback(async (value: string) => {
     const normalized = value.trim().replace(/\/$/, "") || defaultRelayUrl;
@@ -1255,12 +1279,15 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const compactCurrentSession = useCallback(() => { sendCommandAction({ action: "session_compact" }); }, [sendCommandAction]);
   const setComposerModel = useCallback((model: WireModel) => { sendCommandAction({ action: "model_set", provider: model.provider, modelId: model.id }); }, [sendCommandAction]);
   const setComposerThinking = useCallback((level: ThinkingLevel) => { sendCommandAction({ action: "thinking_set", level }); }, [sendCommandAction]);
+  const startupLoadingVisible = useDelayedVisibility(startupState === "loading");
   const canAttach = !newSessionPending && connection === "online" && attachments.snapshot.capability.status === "supported" && !attachments.snapshot.active;
-  if (startupState === "loading") return <StartupLoading />;
+  // 本地工作区通常很快打开：300ms 内完成不显示加载屏，只留与启动图同色的底，避免启动后闪一下；出现后至少保留 500ms。
+  if (startupState === "loading" || (startupState === "ready" && startupLoadingVisible)) return <StartupLoading visible={startupLoadingVisible} />;
   if (startupState === "error") return <StartupErrorView error={startupError} onRetry={() => window.location.reload()} />;
   const openLatestHistory = historySessions[0] ? () => selectHistory(historySessions[0]!) : undefined;
   const navigation: WorkspaceNavigationProps = { devices, endpoints, history: navigationHistory, historyListStatus, onRetryHistory: () => { void refreshHistory(); }, activeDeviceId, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null, snapshotReady, pairingPresence, deviceActivity, completedEndpointIds, onPair: openPairing, onSettings: () => openSettings({ kind: "workspace" }), onSelectDevice: (deviceId) => { if (deviceId !== activeDeviceId) switchOut.run(() => navigate(() => selectDevice(deviceId))); else switchOut.settle(); }, onSelectEndpoint: selectLiveEndpoint, onSelectHistory: selectHistory, onSwitchIntent: (target) => { if (switchesTo(target)) switchOut.begin(); }, onRename: (device) => { setRenameFocusOrigin(focusedElement()); setRenameDevice(device); }, onRemove: (device) => requestConfirmation({ kind: "remove-pairing", label: displayDevice(device), device }) };
   const computerName = activeDevice ? displayDevice(activeDevice) : t.navigation.fallbackLabel;
+  const awaitingSession = activeDevice !== null && (placeholderKind === "checking" || placeholderKind === "opening");
   const historyEndpoint = selectedHistory ? endpoints.find((endpoint) => endpoint.deviceId === selectedHistory.deviceId && endpoint.endpointId === selectedHistory.endpointId) ?? null : null;
   const titleBar: PwaWorkspaceTitleBar = {
     ...(selectedHistory
@@ -1268,7 +1295,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       : activeDevice && displayEndpoint
         ? { title: displayPi(displayEndpoint), prefix: cwdName(displayEndpoint.cwd), showTitle: true, moreMenu: <SessionActionsMenu info={{ name: displayPi(displayEndpoint), cwd: displayEndpoint.cwd ?? null, computer: computerName, status: exitedDisplay ? t.workspace.exited : displayEndpoint.working ? t.actions.running : t.actions.idle }} /> }
         // 没有配对或未选中电脑时，移动顶栏显示品牌名（不翻译），不把「导航」当标题。
-        : { title: activeDevice ? computerName : "Pi Reach", showTitle: false }),
+        // 等待在线 Pi 与打开会话期间标题留空：会话名与输入区随后一起出现，不先闪过电脑名。
+        : { title: activeDevice ? (awaitingSession ? "" : computerName) : "Pi Reach", showTitle: false }),
     navigationNotice: completedEndpointIds.size > 0,
   };
   const connectionHintView = connectionHint(connectionIssue, connectionStage, displayConnection === "connecting" || displayConnection === "retrying", {

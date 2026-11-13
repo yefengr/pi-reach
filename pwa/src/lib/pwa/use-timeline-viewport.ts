@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import type { TimelineViewItem } from "./timeline-runtime";
 import type { OwnSendLayoutCapture } from "./own-send-transition";
 import type { TimelineViewportAnchor } from "./timeline-viewport-anchor";
+import { fromStoredPosition, isStoredPosition, type SavedSessionPosition, type StoredViewportPosition } from "./session-position-store";
 import { TimelineViewportCoordinator, type ViewportCapture, type ViewportPosition } from "./timeline-viewport-coordinator";
 import { TimelineViewportLayout } from "./timeline-viewport-layout";
 import { TimelineViewportObservers } from "./timeline-viewport-observers";
@@ -31,7 +32,7 @@ export type TimelineViewport = {
   setReadingDetails: (reading: boolean) => void;
   prepareHistoryPrepend: () => void;
   captureSessionPosition: () => TimelineSessionPosition | null;
-  restoreSessionPosition: (position: TimelineSessionPosition | null) => void;
+  restoreSessionPosition: (position: SavedSessionPosition | null) => void;
   /** 等触摸、惯性与回弹结束后执行会改动滚动几何的工作；返回取消函数。 */
   whenScrollIdle: (run: () => void) => () => void;
 };
@@ -63,6 +64,9 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
       () => layoutRef.current !== null && viewportDiagnosticSamplingEnabled());
   }, [core]);
 
+  const pendingStoredRef = useRef<StoredViewportPosition | null>(null);
+  /** 最近一次交给视口、来自存储的非跟随位置；见 reset。 */
+  const storedRef = useRef<StoredViewportPosition | null>(null);
   const bind = useCallback(() => {
     const list = enabledRef.current ? messageListRef.current : null;
     if (layoutRef.current?.list === list) return;
@@ -77,6 +81,10 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
     layoutRef.current = layout;
     core.bind(layout);
     if (!list || !layout) return;
+    if (pendingStoredRef.current) {
+      core.restorePosition(fromStoredPosition(list, pendingStoredRef.current));
+      pendingStoredRef.current = null;
+    }
     const valid = () => enabledRef.current && messageListRef.current === list && layoutRef.current === layout;
     observersRef.current = new TimelineViewportObservers(list, {
       geometry: (activity, added) => { if (valid()) core.notify(activity ? "activity" : "geometry", true, activity ? added : 0); },
@@ -141,11 +149,31 @@ export function useTimelineViewport(items?: readonly TimelineViewItem[], enabled
   const captureOwnSend = useCallback(() => { bind(); return core.captureOwnSend(); }, [bind, core]);
   const followingNow = useCallback(() => core.state.following && !core.state.paused, [core]);
   const followOwnSend = useCallback((capture: OwnSendCapture | null) => { bind(); core.followOwnSend(capture); }, [bind, core]);
-  const reset = useCallback(() => { bind(); core.reset(); latestEntry.hide(); }, [bind, core, latestEntry]);
+  const reset = useCallback(() => {
+    bind();
+    // 重载后读回的位置在首批记录加载前就已交给视口；首次加载提交时的重置不应丢掉它。
+    // 只在它仍未恢复时保留：已恢复或被用户滚动放弃后，之后的重置照常回到跟随最新。
+    const list = layoutRef.current?.list;
+    const keep = storedRef.current && core.restoring && list ? storedRef.current : null;
+    core.reset();
+    if (keep && list) core.restorePosition(fromStoredPosition(list, keep));
+    else if (!pendingStoredRef.current) storedRef.current = null;
+    latestEntry.hide();
+  }, [bind, core, latestEntry]);
   const setReadingDetails = useCallback((reading: boolean) => { bind(); core.details(reading); }, [bind, core]);
   const prepareHistoryPrepend = useCallback(() => { bind(); core.historyPrepend(); }, [bind, core]);
   const captureSessionPosition = useCallback(() => { bind(); return core.capturePosition(); }, [bind, core]);
-  const restoreSessionPosition = useCallback((position: TimelineSessionPosition | null) => { bind(); core.restorePosition(position); }, [bind, core]);
+  const restoreSessionPosition = useCallback((position: SavedSessionPosition | null) => {
+    bind();
+    pendingStoredRef.current = null;
+    storedRef.current = null;
+    if (!position || !isStoredPosition(position)) { core.restorePosition(position); return; }
+    storedRef.current = position.following ? null : position;
+    // 重载后读回的位置要接到列表元素上；列表尚未挂载时留到绑定后再恢复。
+    const list = layoutRef.current?.list;
+    if (list) core.restorePosition(fromStoredPosition(list, position));
+    else { core.restorePosition(null); pendingStoredRef.current = position; }
+  }, [bind, core]);
   const whenScrollIdle = useCallback((run: () => void) => idleGate.defer(run), [idleGate]);
 
   const latestEntryVisible = ui.unreadOutput > 0 || (!ui.followingOutput && latestDistant);

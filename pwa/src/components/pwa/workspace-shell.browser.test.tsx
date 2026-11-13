@@ -86,7 +86,8 @@ test("ordinary safe areas protect the floating frame and settings covers both br
   const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
   const settings = screen.getByRole("button", { name: "Open settings" });
   const frame = nav.getBoundingClientRect();
-  expect([frame.left, frame.top, window.innerHeight - frame.bottom].map(Math.round)).toEqual([36, 16, 20]);
+  // 四周等距 12 各加对应安全区；底部取 max(12, 安全区)，安全区更大时不叠加。
+  expect([frame.left, frame.top, window.innerHeight - frame.bottom].map(Math.round)).toEqual([36, 28, 20]);
   for (const [size, pixels] of [["standard", 14], ["large", 16], ["xlarge", 18]] as const) {
     document.documentElement.dataset.pwaTextSize = size;
     await expect.poll(() => getComputedStyle(brand).fontSize).toBe(`${pixels}px`);
@@ -177,8 +178,8 @@ test("closes desktop computer portals and returns nested menu focus to the sideb
   await expect.poll(() => document.querySelector<HTMLElement>(".pwa-device-popover")?.getClientRects().length ?? 0).toBeGreaterThan(0);
   // 面板宽度按侧栏内容宽计算，不再等于底部入口宽度。
   const sidebarFrame = document.querySelector<HTMLElement>(".pwa-desktop-navigation")!.getBoundingClientRect();
-  const popover = document.querySelector<HTMLElement>(".pwa-device-popover")!.getBoundingClientRect();
-  expect(Math.round(popover.width)).toBe(Math.round(sidebarFrame.width - 16));
+  // 面板从触发按钮缩放展开，进入结束后再量宽度。
+  await expect.poll(() => Math.round(document.querySelector<HTMLElement>(".pwa-device-popover")!.getBoundingClientRect().width)).toBe(Math.round(sidebarFrame.width - 16));
   await screen.getByRole("button", { name: "Computer actions for MacBook Pro" }).click();
   const rename = screen.getByRole("menuitem", { name: "Rename MacBook Pro" });
   await expect.element(rename).toBeVisible();
@@ -285,7 +286,8 @@ test("aligns the sidebar bottom with the real composer card across safe areas an
     if (safeBottom > 0) document.documentElement.style.setProperty("--pwa-safe-bottom", `${safeBottom}px`);
     const screen = await mount({ composer: true });
     try {
-      const expected = Math.max(16, safeBottom);
+      // 与悬浮侧栏四周留白同为 12，安全区更大时取安全区。
+      const expected = Math.max(12, safeBottom);
       await expect.poll(() => readGap(".pwa-desktop-navigation")).toBe(expected);
       await expect.poll(() => readGap(".pwa-composer-card")).toBe(expected);
       expect(readGap(".pwa-desktop-navigation")).toBe(readGap(".pwa-composer-card"));

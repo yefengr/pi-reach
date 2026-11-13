@@ -477,15 +477,13 @@ test("Working after Latest completes starts at the actual bottom, not the old re
   try {
     await h.read();
     const clock = layoutClock();
-    const nativeScroll = h.list.scrollTo.bind(h.list);
-    vi.spyOn(h.list, "scrollTo").mockImplementation((options?: ScrollToOptions | number) => {
-      if (typeof options !== "object") return;
-      if (options.behavior === "smooth") h.list.scrollTop = Math.min(options.top ?? 0, h.list.scrollHeight - h.list.clientHeight);
-      else nativeScroll(options);
-    });
-    // 精确交付 smooth 完成事件，避免额外原生 scroll 偶然刷新起点而掩盖缺陷。
-    flushSync(() => { h.viewport().showLatest(); h.viewport().handleScroll(true); });
-    clock.step(0);
+    // 「最新」由时间线逐帧推进：走完 scroll-latest 时长抵达底部后，再精确交付这次滚动的完成事件，
+    // 避免额外原生 scroll 偶然刷新起点而掩盖缺陷。
+    const latest = readPwaMotionDuration("--pwa-duration-scroll-latest");
+    flushSync(() => h.viewport().showLatest());
+    clock.step(0); clock.step(latest);
+    flushSync(() => h.viewport().handleScroll(true));
+    clock.step(latest);
     const before = h.list.scrollTop;
     expect(gap(h.list)).toBeLessThanOrEqual(1);
     h.work(false);
@@ -531,15 +529,14 @@ test.each(["details", "hidden", "reduce", "latest", "send", "reset"])("borrowed 
       await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
     } else if (action === "send") h.send();
     else if (action === "reset") { h.viewport().reset(); h.update([history]); }
-    else {
-      const scroll = h.list.scrollTo.bind(h.list);
-      vi.spyOn(h.list, "scrollTo").mockImplementation((options?: ScrollToOptions | number) => {
-        if (typeof options === "object") scroll({ ...options, behavior: "auto" });
-      });
-      flushSync(() => h.viewport().showLatest());
-      flushSync(() => h.list.dispatchEvent(new Event("scroll", { bubbles: true })));
-    }
+    else flushSync(() => h.viewport().showLatest());
     clock.step(160); clock.step(200); clock.step(400);
+    if (action === "latest") {
+      // 「最新」逐帧推进，走完 scroll-latest 时长抵达底部后交付滚动事件，由协调器接续跟随。
+      clock.step(400 + readPwaMotionDuration("--pwa-duration-scroll-latest"));
+      flushSync(() => h.list.dispatchEvent(new Event("scroll", { bubbles: true })));
+      clock.step(800 + readPwaMotionDuration("--pwa-duration-scroll-latest"));
+    }
     if (["details", "hidden", "reduce"].includes(action)) {
       expect(h.list.scrollTop).toBe(before);
       expect(gap(h.list)).toBe(borrowed);
@@ -1212,7 +1209,13 @@ test("only abnormal delivery states render an in-flow status row without coverin
       const row = status.closest(".pwa-user-row")!;
       const followingRow = row.nextElementSibling!;
       expect(Math.round(row.getBoundingClientRect().bottom)).toBeLessThanOrEqual(top(followingRow));
-      expect(status.querySelector("button")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      const action = status.querySelector<HTMLElement>("button")!;
+      expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      // 可见的图标或文字贴齐气泡右缘，44 点击区向外越出（DESIGN「间距」）。
+      const glyph = action.querySelector<Element>("svg, .mantine-Button-label")!;
+      const bubbleRight = Math.round(row.querySelector(".pwa-user-bubble-frame")!.getBoundingClientRect().right);
+      expect(Math.abs(Math.round(glyph.getBoundingClientRect().right) - bubbleRight)).toBeLessThanOrEqual(1);
+      expect(Math.round(action.getBoundingClientRect().right)).toBeGreaterThan(bubbleRight);
     }
   } finally { await h.screen.unmount(); }
 });

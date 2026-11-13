@@ -207,7 +207,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     document.addEventListener("keydown", escapeFromOutside);
     return () => document.removeEventListener("keydown", escapeFromOutside);
   }, [contentElement, gesture, opened, preview, requestClose]);
-  const { drag, canSwipe: dragCanSwipe } = useDrawerSwipeClose({ surface: contentElement, opened, direction: -1, requestClose, skipExit, resetSkipExit });
+  const { drag, canSwipe: dragCanSwipe } = useDrawerSwipeClose({ surface: contentElement, opened, direction: "left", requestClose, skipExit, resetSkipExit });
   useSwipe(contentElement, {
     direction: "left",
     enabled: opened,
@@ -285,7 +285,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     <Drawer.Content ref={setContentRef} role="dialog" aria-modal="true" data-swipe-drag={dragPreview ? "" : undefined} onFocusCapture={(event) => {
       if (event.target instanceof HTMLElement) onFocusedElement(event.target);
     }}>
-      <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={24} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} /></Drawer.Header>
+      <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={20} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} /></Drawer.Header>
       <Drawer.Body>
         <div className="pwa-navigation-content">
           <div className="pwa-navigation-scroll" ref={scrollRef}>

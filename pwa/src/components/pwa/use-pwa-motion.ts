@@ -19,13 +19,15 @@ export const pwaFadeTransition = {
   transitionProperty: "opacity",
 } as MantineTransition;
 
-/** 菜单由实际 data-position 提供来源方向；不改变只读 Popover、Modal 或 Drawer 的过渡。 */
+/**
+ * 菜单与 Popover 以触发按钮为原点缩放展开（原点由实际 data-position 推导，见 pwa-controls.css），离开时缩回按钮。
+ * 缩放只在进出的一瞬间发生，静止时命中区为完整尺寸；减少动态效果时 --pwa-motion-shift 为 0，只剩淡化。
+ */
 export const pwaMenuTransition = {
-  in: { opacity: 1, transform: "translate(0, 0)", transitionTimingFunction: "var(--pwa-ease-enter)" },
+  in: { opacity: 1, transform: "scale(1)", transitionTimingFunction: "var(--pwa-ease-content)" },
   out: {
     opacity: 0,
-    // 整层缩放会同时缩小44px命中区；菜单只沿真实锚点方向轻移与淡化。
-    transform: "translate(calc(var(--pwa-menu-shift-x, 0px) * var(--pwa-motion-shift, 1)), calc(var(--pwa-menu-shift-y, calc(-1 * var(--pwa-menu-offset))) * var(--pwa-motion-shift, 1)))",
+    transform: "scale(calc(1 - (1 - var(--pwa-menu-scale)) * var(--pwa-motion-shift, 1)))",
     pointerEvents: "none",
     transitionTimingFunction: "var(--pwa-ease-exit)",
   },

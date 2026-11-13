@@ -227,6 +227,8 @@ test("G5 image single pan and two-finger pinch do not close", async () => {
   const h = await fileHarness({ image: true });
   await h.screen.getByRole("button", { name: "Zoom in" }).click();
   const stage = element(".pwa-file-image-stage");
+  // 缩放按钮以 image-zoom 过渡，结束后再开始拖动。
+  await expect.poll(() => stage.querySelector("img")!.getAnimations().length).toBe(0);
   expect(stage.hasAttribute("data-swipe-ignore")).toBe(true);
   expect(getComputedStyle(stage).touchAction).toBe("none");
   // 只为这项合成图片事件模拟舞台 capture；CDP 用例不替换捕获。
@@ -283,6 +285,7 @@ test("G5 CDP native image capture handles pan and pinch without closing", async 
   const h = await fileHarness({ image: true, synthetic: false });
   await h.screen.getByRole("button", { name: "Zoom in" }).click();
   const stage = element(".pwa-file-image-stage");
+  await expect.poll(() => stage.querySelector("img")!.getAnimations().length).toBe(0);
   await touchDrag(touchOrigin(stage, 80, 120), 100, 20);
   expect(stage.querySelector("img")?.style.transform).not.toBe("translate(0px, 0px) scale(1.5)");
   const first = touchOrigin(stage, 100, 200);

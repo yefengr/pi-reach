@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { ActionIcon, Badge, Button, Drawer, Menu, NavLink, Popover } from "@mantine/core";
 import { usePwaMotionDuration, PWA_DRAWER_EASE, pwaDrawerTransitions, useMenuExitAction, usePwaMenuTransition } from "@/components/pwa/use-pwa-motion";
 import { ChevronDown, Computer, Ellipsis, Link2, Pencil, Trash2 } from "lucide-react";
@@ -7,6 +7,13 @@ import type { DeviceActivity, PairingPresence } from "@/lib/pwa/pwa-view-model";
 import { RunningIndicator } from "@/components/pwa/running-indicator";
 import { getMessages, useI18n } from "@/lib/i18n";
 import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
+import { useDrawerSwipeClose } from "@/components/pwa/use-drawer-swipe-close";
+import { useSwipe } from "@/components/pwa/use-swipe";
+
+/** 底部面板可从移动导航打开：下方的导航 Drawer 不算阻断下拉关闭的叠层。 */
+const SHEET_UNDERLAY = ".pwa-navigation-drawer";
+/** 面板正文纵向溢出时标在滚动容器上：此时正文交给浏览器滚动，只有头部可下拉关闭。 */
+const SHEET_SCROLLABLE_ATTRIBUTE = "data-swipe-vertical";
 
 export type WorkspaceDeviceControlVariant = "desktop" | "sheet";
 
@@ -109,9 +116,9 @@ export function ComputerRow({ device, active, presence, activity = null, onSelec
   </div>;
 }
 
-function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, deviceActivity = {}, onPair, onSelectDevice, onRename, onRemove, onMenuChange }: Omit<WorkspaceDeviceControlProps, "variant" | "purpose" | "onOverlayChange">) {
+function DevicePanel({ devices, activeDeviceId, pairingPresence = {}, deviceActivity = {}, onPair, onSelectDevice, onRename, onRemove, onMenuChange, panelRef }: Omit<WorkspaceDeviceControlProps, "variant" | "purpose" | "onOverlayChange"> & { panelRef?: Ref<HTMLDivElement> }) {
   const { t } = useI18n();
-  return <div className="pwa-device-panel">
+  return <div ref={panelRef} className="pwa-device-panel">
     <div className="pwa-device-panel-list">
       {devices.length === 0 ? <p className="pwa-device-panel-empty">{t.devices.noneYet}</p> : devices.map((device) => <ComputerRow
         key={device.id}
@@ -140,6 +147,15 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
   const menuOwnsDismissRef = useRef(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const pendingActionRef = useRef<(() => void) | null>(null);
+  // 下拉关闭收尾到终点后面板已移出屏幕，随后的关闭不再播放退出动画。
+  const [sheetSurface, setSheetSurface] = useState<HTMLElement | null>(null);
+  const [exitInstant, setExitInstant] = useState(false);
+  const [seenOpened, setSeenOpened] = useState(false);
+  if (seenOpened !== opened) {
+    setSeenOpened(opened);
+    if (opened) setExitInstant(false);
+  }
+  const setPanelRef = useCallback((panel: HTMLDivElement | null) => setSheetSurface(panel?.closest<HTMLElement>(".pwa-device-drawer") ?? null), []);
   const completionDescriptionId = useId();
   const hasOtherComputerCompletion = devices.some((device) => device.id !== activeDeviceId && deviceActivity[device.id] === "completed");
   const activeDevice = devices.find((device) => device.id === activeDeviceId) ?? null;
@@ -155,6 +171,20 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     if (!menuOwnsDismissRef.current) setPanelOpened(false);
   };
   // 底部入口与展开面板共用同一个开关状态：重复点击或快速连点可反向，不另建状态机。
+  const skipExit = useCallback(() => setExitInstant(true), []);
+  const resetSkipExit = useCallback(() => setExitInstant(false), []);
+  const sheetSwipe = useDrawerSwipeClose({ surface: sheetSurface, opened, direction: "down", requestClose: dismissPanel, skipExit, resetSkipExit });
+  useSwipe(sheetSurface, { direction: "down", enabled: opened && variant === "sheet", onSwipe: dismissPanel, canSwipe: sheetSwipe.canSwipe, drag: sheetSwipe.drag, underlay: SHEET_UNDERLAY });
+  useLayoutEffect(() => {
+    const body = sheetSurface?.querySelector<HTMLElement>(".pwa-device-drawer-body");
+    if (!body) return;
+    const measure = () => body.toggleAttribute(SHEET_SCROLLABLE_ATTRIBUTE, body.scrollHeight > body.clientHeight);
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    if (body.firstElementChild) observer.observe(body.firstElementChild);
+    measure();
+    return () => observer.disconnect();
+  }, [sheetSurface]);
   const togglePanel = () => {
     if (openedRef.current) dismissPanel();
     // 面板正在退出且已排队业务动作时不再重开，避免动作挂在被取消的退场里。
@@ -190,6 +220,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
     onSelectDevice={(deviceId) => runAfterClose(() => onSelectDevice(deviceId))}
     onRename={(device) => runAfterClose(() => onRename(device))}
     onRemove={(device) => runAfterClose(() => onRemove(device))}
+    panelRef={variant === "sheet" ? setPanelRef : undefined}
   />;
   if (purpose === "choose" && devices.length === 0) return <Button className="pwa-nav-pair" variant="transparent" type="button" onClick={onPair} leftSection={<Link2 size={16} />}>{t.navigation.pairComputer}</Button>;
 
@@ -226,6 +257,8 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
       zIndex="var(--pwa-z-device-panel)"
       padding={0}
       title={title}
+      // 下拉关闭按该类名找到遮罩，随面板位移同步淡化。
+      overlayProps={{ className: "pwa-scrim" }}
       closeButtonProps={{ "aria-label": t.devices.closeChooser, title: t.devices.closeChooser }}
       classNames={{ content: "pwa-device-drawer", header: "pwa-device-drawer-head", body: "pwa-device-drawer-body", close: "pwa-icon-button" }}
       styles={{ inner: { justifyContent: "flex-end" }, content: { maxHeight: "min(72dvh, 560px)" } }}
@@ -236,7 +269,7 @@ export function WorkspaceDeviceControl({ devices, activeDeviceId, pairingPresenc
         event.stopPropagation();
         dismissPanel();
       }}
-      transitionProps={{ transition: pwaDrawerTransitions.bottom, duration: chooserDuration, exitDuration: chooserExitDuration, timingFunction: PWA_DRAWER_EASE }}
+      transitionProps={{ transition: pwaDrawerTransitions.bottom, duration: chooserDuration, exitDuration: exitInstant ? 0 : chooserExitDuration, timingFunction: PWA_DRAWER_EASE }}
     >{panel}</Drawer>
   </>;
 

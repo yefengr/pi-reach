@@ -9,7 +9,7 @@ export const TOAST_AUTO_CLOSE_MS = 4_000;
 
 export type ToastKind = "success" | "info";
 export type ToastOptions = { kind?: ToastKind; sessionScoped?: boolean; action?: { label: string; onClick: () => void; disabled?: boolean }; onDismiss?: () => void };
-type PauseReason = "hover" | "focus";
+type PauseReason = "hover" | "focus" | "drag";
 
 export type OperationAction = "session_new" | "session_compact" | "model_set" | "thinking_set";
 export type OperationFeedback =

@@ -10,7 +10,7 @@ import { createOperationNotificationController, type OperationNotificationContro
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingErrorCode } from "@/lib/pwa/use-device-pairing";
 import type { LanguagePreference } from "@/lib/i18n";
-import type { PwaTextSize } from "@/lib/ui/text-size";
+import type { PwaTextSizePreference } from "@/lib/ui/text-size";
 import { GALLERY_DEVICES } from "./ui-state-shell-fixtures";
 
 export type GallerySurface = "settings" | "pairing" | "confirm" | "rename" | "shortcuts" | null;
@@ -74,7 +74,7 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
   const [controller] = useState(createOperationNotificationController);
   const [language, setLanguage] = useState<LanguagePreference>("system");
   const [enterSends, setEnterSends] = useState(true);
-  const [textSize, setTextSize] = useState<PwaTextSize>("standard");
+  const [textSize, setTextSize] = useState<PwaTextSizePreference>("standard");
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [previousSurface, setPreviousSurface] = useState(surface);
   const [settingsVisible, setSettingsVisible] = useState(surface === "settings");

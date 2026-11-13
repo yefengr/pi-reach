@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, trackedDistance, type SwipeDirection, type SwipePoint, type SwipeState } from "./swipe-gesture";
+import { beginSwipe, cancelSwipe, finishSwipe, IDLE_SWIPE, moveSwipe, projectedCommit, trackedDistance, type SwipeDirection, type SwipePoint, type SwipeState } from "./swipe-gesture";
 import { swipeBlocked, swipeEdgeExcluded, swipeStartExcluded } from "./swipe-guards";
 import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
@@ -16,7 +16,9 @@ export type SwipeDragHandlers = {
   start(): boolean | void;
   /** trackedDistance，已 ≥ 0。 */
   move(distance: number): void;
-  /** 松手：committed 已排除反向甩回。控制器负责收尾动画和随后的关闭／返回调用。 */
+  /** 表面的全程位移（像素）；松手时按投影停点是否过半判定提交，取不到时返回 0（不提交）。 */
+  extent(): number;
+  /** 松手：committed 按投影停点判定，反向甩回已计入。控制器负责收尾动画和随后的关闭／返回调用。 */
   end(result: { committed: boolean; velocity: number; distance: number }): void;
   cancel(reason: SwipeCancelReason): void;
 };
@@ -29,6 +31,8 @@ export type SwipeOptions = {
   canSwipe?: () => boolean;
   /** 跟手拖动；缺省时保持触发式。 */
   drag?: SwipeDragHandlers;
+  /** 已知位于本表面下方的叠层选择器（如从移动导航打开的底部面板之下的导航 Drawer）；它们不阻断手势。 */
+  underlay?: string;
 };
 
 const coordinates = (event: PointerEvent): SwipePoint => ({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp });
@@ -48,7 +52,7 @@ export function useSwipe(element: HTMLElement | null, options: SwipeOptions): vo
     const unavailable = (): SwipeCancelReason | null => {
       if (!media.matches) return "interrupted";
       if (!optionsRef.current.enabled) return "disabled";
-      if (!(optionsRef.current.canSwipe?.() ?? true) || swipeBlocked(element)) return "blocked";
+      if (!(optionsRef.current.canSwipe?.() ?? true) || swipeBlocked(element, optionsRef.current.underlay)) return "blocked";
       return null;
     };
     const reset = () => {
@@ -72,7 +76,7 @@ export function useSwipe(element: HTMLElement | null, options: SwipeOptions): vo
       if (state.phase !== "idle" && event.pointerType === "touch" && event.pointerId !== state.pointerId) cancel("interrupted");
     };
     const down = (event: PointerEvent) => {
-      if (state.phase !== "idle" || unavailable() || swipeStartExcluded(element, event.target)) return;
+      if (state.phase !== "idle" || unavailable() || swipeStartExcluded(element, event.target, optionsRef.current.direction)) return;
       state = beginSwipe(state, coordinates(event), optionsRef.current.direction, event.pointerType, event.isPrimary);
       if (state.phase !== "idle") window.addEventListener("pointerdown", secondPointer, { capture: true, passive: true });
     };
@@ -98,7 +102,8 @@ export function useSwipe(element: HTMLElement | null, options: SwipeOptions): vo
       if (dragging) {
         if (reason) { cancel(reason); return; }
         reset();
-        optionsRef.current.drag?.end({ committed: result.committed && !result.reversed, velocity: Math.max(0, result.velocity), distance: result.distance });
+        const drag = optionsRef.current.drag;
+        drag?.end({ committed: projectedCommit(result.distance, result.velocity, drag.extent()), velocity: Math.max(0, result.velocity), distance: result.distance });
         return;
       }
       const committed = result.committed && !reason;

@@ -9,6 +9,7 @@ import { decodeQrImage } from "@/lib/pwa/qr-decoder";
 import { PairingDialog } from "./pairing-dialog";
 import { QrCamera } from "./qr-scanner";
 import type { PairingErrorCode } from "@/lib/pwa/use-device-pairing";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 vi.mock("@/lib/pwa/qr-decoder", () => ({ decodeQrImage: vi.fn(() => null) }));
 
@@ -314,7 +315,8 @@ test("mobile controls remain reachable and close/reopen ignores old permission",
   expect(Math.round(rect.left)).toBeGreaterThanOrEqual(16);
   expect(Math.round(rect.right)).toBeLessThanOrEqual(window.innerWidth - 16);
   for (const name of ["Close pairing", "Enter pairing code"]) {
-    expect(screen.getByRole("button", { name }).element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    const control = screen.getByRole("button", { name }).element();
+    expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumControlHeight(control));
   }
   await screen.getByRole("button", { name: "Close pairing" }).click();
   await expect.poll(() => document.querySelector(".pwa-scanner")).toBeNull();

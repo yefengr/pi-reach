@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { enableTouch, resetTouch, touch, type TouchPoint } from "@/test/browser/swipe";
+import { enableTouch, resetTouch, touch, touchReleaseAtRest, type TouchPoint } from "@/test/browser/swipe";
 import { useSettingsRoute } from "@/lib/pwa/settings-route";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
@@ -68,7 +68,10 @@ async function dragLeft(origin: TouchPoint, dx: number) {
     await moveTouch(origin, -(LOCK_STEP + (dx - LOCK_STEP) * step / 4));
   }
 }
-const release = () => touch("touchEnd", []);
+/** 停稳后松手，结果只取决于停点是否过行程一半（见 touchReleaseAtRest）。 */
+const release = touchReleaseAtRest;
+/** 松手前把手指带过行程一半（220px），停稳后松手即提交。 */
+const commitRelease = async (origin: TouchPoint) => { await moveTouch(origin, -220); await release(); };
 async function closed() {
   await expect.poll(navigationOpen).toBe(false);
   await expect.poll(() => sheet()).toBeNull();
@@ -97,7 +100,7 @@ test("D3 navigation follows the finger leftwards and dims the scrim", async () =
   const scrim = document.querySelector<HTMLElement>(".pwa-scrim")!;
   expect(Number(getComputedStyle(scrim).opacity)).toBeCloseTo(1 - 100 / sheet()!.offsetWidth, 1);
   expect(navigationOpen()).toBe(true);
-  await release();
+  await commitRelease(origin);
   await closed();
   expect(document.activeElement).toBe(trigger());
 }, 15000);
@@ -128,7 +131,7 @@ test("D3 navigation closes from the dragged position without flashing back", asy
   await dragLeft(origin, 140);
   const positions: number[] = [];
   const sample = setInterval(() => { if (sheet()) positions.push(Math.round(sheet()!.getBoundingClientRect().left)); }, 8);
-  await release();
+  await commitRelease(origin);
   await closed();
   clearInterval(sample);
   expect(Math.max(...positions)).toBeLessThan(-100);
@@ -138,7 +141,7 @@ test("D3 navigation closes from the dragged position without flashing back", asy
 test("D3 a confirmation raised before the close request rolls the navigation back and keeps the normal exit", async () => {
   const origin = await openNavigation();
   await dragLeft(origin, 140);
-  await release();
+  await commitRelease(origin);
   showConfirmation();
   await expect.poll(() => document.querySelector(".pwa-confirm-dialog")?.getClientRects().length ?? 0).toBeGreaterThan(0);
   await expect.poll(() => sheet()!.getAnimations().length).toBe(0);

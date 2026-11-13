@@ -84,10 +84,10 @@ test("an automatic settle exit slows height, opacity and shift together on the c
   close();
   expect(node.dataset.exit).toBe("settle");
   const style = getComputedStyle(node);
-  expect(style.transitionDuration).toBe("0.4s");
+  expect(style.transitionDuration).toBe("0.28s");
   expect(style.transitionTimingFunction).toMatch(/^linear\(/);
   const inner = getComputedStyle(node.querySelector(".pwa-collapse-inner")!);
-  expect(inner.transitionDuration).toBe("0.4s");
+  expect(inner.transitionDuration).toBe("0.28s");
   expect(inner.transitionTimingFunction).toMatch(/^linear\(/);
   await expect.poll(() => document.querySelector(".pwa-collapse")).toBeNull();
 });

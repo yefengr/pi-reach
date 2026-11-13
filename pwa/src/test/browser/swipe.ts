@@ -5,6 +5,13 @@ export function pointer(target: Element | Window, type: string, x = 0, y = 0, in
   target.dispatchEvent(new PointerEvent(type, { bubbles: true, composed: true, pointerId: 1, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, ...init }));
 }
 
+/** 合成事件的时间戳由浏览器生成、几乎同时到达；需要确定松手速度的用例用它指定毫秒时间。 */
+export function pointerAt(target: Element | Window, type: string, x: number, y: number, time: number, init: PointerEventInit = {}) {
+  const event = new PointerEvent(type, { bubbles: true, composed: true, pointerId: 1, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, ...init });
+  Object.defineProperty(event, "timeStamp", { value: time });
+  target.dispatchEvent(event);
+}
+
 export function syntheticSwipe(target: Element, dx = 100, dy = 0, init: PointerEventInit = {}) {
   pointer(target, "pointerdown", 0, 0, init);
   pointer(target, "pointermove", dx / 2, dy / 2, init);
@@ -63,6 +70,17 @@ export async function touchDrag(origin: TouchPoint, dx: number, dy: number) {
     await new Promise((resolve) => setTimeout(resolve, 25));
     await touch("touchMove", [{ ...origin, x: origin.x + dx * step / 8, y: origin.y + dy * step / 8 }]);
   }
+  await touch("touchEnd", []);
+}
+
+/** 松手速度按最后 100ms 采样；多等一段，确保采样窗口内没有位移。 */
+const TOUCH_REST_MS = 180;
+
+/** 停稳后松手：松手速度为 0，跟手手势提交与否只看停点是否过行程一半，不随机器快慢变化。 */
+export async function touchReleaseAtRest() {
+  const until = performance.now() + TOUCH_REST_MS;
+  // 以渲染帧计时：用例冻结 setTimeout 时仍能推进。
+  while (performance.now() < until) await new Promise((resolve) => requestAnimationFrame(resolve));
   await touch("touchEnd", []);
 }
 

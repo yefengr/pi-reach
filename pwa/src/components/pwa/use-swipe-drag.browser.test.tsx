@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { pointer, syntheticCapture } from "@/test/browser/swipe";
+import { pointer, pointerAt, syntheticCapture } from "@/test/browser/swipe";
 import { useSwipe, type SwipeDragHandlers } from "./use-swipe";
 
 let setEnabled: (value: boolean) => void;
@@ -11,9 +11,12 @@ let showOverlay: (value: boolean) => void;
 let calls: string[];
 let startResult: boolean | void;
 let canSwipe: boolean;
+/** 表面行程；投影停点过一半（100px）才提交。 */
+const EXTENT = 200;
 const drag: SwipeDragHandlers = {
   start: vi.fn(() => { calls.push("start"); return startResult; }),
   move: vi.fn((distance: number) => { calls.push(`move:${distance}`); }),
+  extent: vi.fn(() => EXTENT),
   end: vi.fn((result) => { calls.push(`end:${result.committed}`); }),
   cancel: vi.fn((reason) => { calls.push(`cancel:${reason}`); }),
 };
@@ -27,7 +30,7 @@ function Harness() {
     setEnabled = (value) => flushSync(() => setEnabledState(value));
     showOverlay = (value) => flushSync(() => setOverlay(value));
   }, []);
-  useSwipe(element, { direction: "right", enabled, onSwipe, canSwipe: () => canSwipe, drag });
+  useSwipe(element, { direction: "right", enabled, onSwipe, canSwipe: () => canSwipe, drag, underlay: ".pwa-test-underlay" });
   return <div className="pwa-root">
     <div ref={setElement} data-testid="surface"><span data-testid="child">Body</span></div>
     {overlay ? <div role="dialog" style={{ width: 20, height: 20 }}>Blocker</div> : null}
@@ -73,22 +76,41 @@ test("start runs after capture, move reports tracked distance from the lock fram
   expect(capture.held.size).toBe(0);
 });
 
-test("a release below the threshold ends uncommitted and never calls onSwipe", async () => {
+test("a stationary release short of half the extent ends uncommitted and never calls onSwipe", async () => {
   const { child, surface } = await setup();
-  down(child);
-  moveTo(child, 30);
-  pointer(surface, "pointerup", 130, 0);
+  // 慢拖 76px 后停住松手：停点仍在一半（100px）以内，按旧的 72px 固定阈值会提交。
+  pointerAt(child, "pointerdown", 100, 0, 0);
+  pointerAt(child, "pointermove", 114, 0, 100);
+  pointerAt(child, "pointermove", 190, 0, 600);
+  pointerAt(surface, "pointerup", 190, 0, 900);
   expect(calls.at(-1)).toBe("end:false");
   expect(onSwipe).not.toHaveBeenCalled();
 });
 
-test("a fast flick back after crossing the threshold ends uncommitted", async () => {
+test("a stationary release past half the extent commits", async () => {
   const { child, surface } = await setup();
-  // 合成事件的时间戳由浏览器生成，几乎同时到达：回退段的速度必为强负值，具体数值边界由纯函数单测覆盖。
-  down(child);
-  moveTo(child, 90);
-  moveTo(child, 60);
-  pointer(surface, "pointerup", 120, 0);
+  pointerAt(child, "pointerdown", 100, 0, 0);
+  pointerAt(child, "pointermove", 114, 0, 100);
+  pointerAt(child, "pointermove", 220, 0, 600);
+  pointerAt(surface, "pointerup", 220, 0, 900);
+  expect(calls.at(-1)).toBe("end:true");
+});
+
+test("a short quick flick commits by its projected stop", async () => {
+  const { child, surface } = await setup();
+  // 位移只有 26px，松手速度 0.5px/ms：惯性停点约 26 + 250px，越过一半。
+  pointerAt(child, "pointerdown", 100, 0, 0);
+  pointerAt(child, "pointermove", 114, 0, 20);
+  pointerAt(surface, "pointerup", 140, 0, 72);
+  expect(calls.at(-1)).toBe("end:true");
+});
+
+test("a fast flick back after crossing half the extent ends uncommitted", async () => {
+  const { child, surface } = await setup();
+  pointerAt(child, "pointerdown", 100, 0, 0);
+  pointerAt(child, "pointermove", 114, 0, 20);
+  pointerAt(child, "pointermove", 250, 0, 300);
+  pointerAt(surface, "pointerup", 210, 0, 330);
   expect(calls.at(-1)).toBe("end:false");
   expect(onSwipe).not.toHaveBeenCalled();
 });
@@ -161,6 +183,17 @@ test("a blocking overlay marked as the drag's own preview does not block", async
   document.querySelector('[role="dialog"]')!.setAttribute("data-swipe-drag", "");
   moveTo(child, 90);
   pointer(surface, "pointerup", 190, 0);
+  expect(calls.at(-1)).toBe("end:true");
+});
+
+test("an overlay known to lie beneath the surface does not block", async () => {
+  const { child, surface } = await setup();
+  showOverlay(true);
+  document.querySelector('[role="dialog"]')!.classList.add("pwa-test-underlay");
+  down(child);
+  moveTo(child, 40);
+  moveTo(child, 190);
+  pointer(surface, "pointerup", 290, 0);
   expect(calls.at(-1)).toBe("end:true");
 });
 

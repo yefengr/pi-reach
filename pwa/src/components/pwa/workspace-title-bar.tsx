@@ -37,7 +37,7 @@ export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, 
       aria-label={t.navigation.open}
       aria-haspopup="dialog"
       aria-expanded={navigationExpanded}
-      title={title}
+      title={title || undefined}
     >
       <span className="pwa-session-trigger-icon" aria-hidden="true"><Menu size={20} />{navigationNotice ? <span className="pwa-notice-dot" /> : null}</span>
       <span className="pwa-session-trigger-copy"><span className="pwa-session-trigger-title">{title}</span></span>

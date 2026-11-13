@@ -15,6 +15,9 @@
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
+/* 浅色与深色手动切换的整屏交叉淡化（View Transitions，见 pwa-appearance）；只用于这类低频、无需交互的整屏切换。 */
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: var(--pwa-duration-appearance); animation-timing-function: var(--pwa-ease-standard); }
 
 body {
   margin: 0;
@@ -177,7 +180,7 @@ body:has(.pwa-root) { overflow: hidden; }
 @media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-active); }
 .pwa-ui-scope .pwa-icon-button:disabled,
-.pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: not-allowed; }
+.pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: default; }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:disabled::before,
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"][data-disabled]::before { background: var(--pwa-disabled-bg); }
 .pwa-ui-scope .pwa-icon-button:disabled::before,
@@ -251,7 +254,21 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-message-actions { position: absolute; left: 0; right: 0; bottom: 100%; min-height: var(--pwa-hit-target); display: flex; justify-content: center; align-items: center; gap: 8px; padding: 0 var(--pwa-main-inset-end) 12px var(--pwa-main-inset-start); pointer-events: none; }
 
 /* 按钮层级：主操作实心强调色；次级为无边框色调底；文字按钮无底无框；危险入口为错误色轻底与文字。 */
-.pwa-ui-scope .pwa-button { min-height: var(--pwa-hit-target); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-radius-md); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+/*
+ * 嵌入式卡片（DESIGN「卡片」）：只靠与所在页面底色的差成形，不描边、无阴影；内边距与尺寸由各自的布局类负责。
+ * 默认圆角 12，成列的可点行用 pwa-card-row 的 8。卡片底取 --pwa-card，分组列表页把它改为 surface。
+ * 选择器优先级与导航行基础规则相同且位置在后，覆盖其透明底；悬停、按下与选中规则优先级更高，仍然生效。
+ */
+:is(.pwa-root, .pwa-startup-error) .pwa-card { border: 0; border-radius: var(--pwa-radius-xl); background: var(--pwa-card); box-shadow: none; }
+:is(.pwa-root, .pwa-startup-error) .pwa-card-row { border-radius: var(--pwa-radius-md); }
+
+/* 图标尺寸由 token 决定：行内图标随字号档位放大，图标按钮内的图标在触控设备上加大；线宽换算回 24 画布，实际线宽不变。 */
+.lucide[width="16"] { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); stroke-width: var(--pwa-icon-inline-stroke); }
+/* 按钮文字为 600 字重，同行图标的线宽随之加重。 */
+.pwa-button .lucide[width="16"] { stroke-width: var(--pwa-icon-inline-stroke-strong); }
+.pwa-icon-button .lucide[width="20"], .pwa-settings-back .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
+
+.pwa-ui-scope .pwa-button { min-height: var(--pwa-button-height); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-button-radius); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
@@ -265,7 +282,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-button[data-variant="outline"] { border-color: transparent; color: var(--pwa-error); background: var(--pwa-error-wash); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="outline"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-error-wash-hover); } }
 .pwa-ui-scope .pwa-button:disabled,
-.pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: not-allowed; }
+.pwa-ui-scope .pwa-button[data-disabled] { border-color: transparent; color: var(--pwa-secondary); background: var(--pwa-disabled-bg); cursor: default; }
 .pwa-ui-scope .pwa-button[data-variant="transparent"]:disabled,
 .pwa-ui-scope .pwa-button[data-variant="transparent"][data-disabled] { background: transparent; }
 .pwa-message-action { display: inline-flex; }
@@ -276,14 +293,17 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-image-input { display: none; }
 .pwa-composer-card { position: relative; z-index: 1; min-width: 0; padding: var(--pwa-space-composer) 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-composer); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-composer); transition: border-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-composer-card:focus-within { border-color: var(--pwa-accent); }
+/* 拖着文件经过可添加附件的输入区时，外框与聚焦同样改为强调色，表示松手即加入附件。 */
+.pwa-composer[data-file-drag] .pwa-composer-card { border-color: var(--pwa-accent); }
 .pwa-composer-remove { position: absolute; top: 4px; right: 4px; }
 .pwa-ui-scope .pwa-composer-icon { border-color: transparent; border-radius: 50%; background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-icon:hover:not(:disabled):not([data-disabled])::before { border-color: transparent; } }
 .pwa-composer-textarea { display: block; width: 100%; min-width: 0; }
+/* 文字在卡片左右内边距 12 之外再内缩 12：远离 32 的大圆角，并与下方附件、命令图标的可见字形大致同一左缘。 */
 .pwa-ui-scope .pwa-composer .pwa-composer-input,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:hover,
 .pwa-ui-scope .pwa-composer .pwa-composer-input:focus,
-.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: var(--pwa-space-composer) 0; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
+.pwa-ui-scope .pwa-composer .pwa-composer-input:focus-within { display: block; width: 100%; min-width: 0; height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); max-height: calc(6lh + 20px); resize: none; overflow-y: hidden; padding: var(--pwa-space-composer) 12px; border: 0; border-radius: 0; outline: none; box-shadow: none; color: var(--pwa-ink); background: transparent; font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 .pwa-ui-scope .pwa-composer .pwa-composer-input:disabled { background: transparent; }
 .pwa-composer .pwa-composer-input::placeholder { color: var(--pwa-secondary); }
 .pwa-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -292,12 +312,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-composer-actions { flex: 1 1 auto; justify-content: flex-end; }
 /* 模型标签：发送按钮左侧的文字按钮，显示当前模型与思考级别；视觉高 32、点击区 44，手机只显示模型名。 */
 .pwa-ui-scope .pwa-composer-model { position: relative; isolation: isolate; min-width: 0; max-width: 240px; min-height: var(--pwa-hit-target); display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--pwa-radius-md); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; cursor: pointer; }
-.pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-composer-model::before { content: ""; position: absolute; z-index: -1; inset: 6px 0; border-radius: var(--pwa-chip-radius); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled)::before { background: var(--pwa-hover); } }
-.pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); }
+@media (hover: hover) { .pwa-ui-scope .pwa-composer-model:active:not(:disabled)::before { background: var(--pwa-neutral-active); } }
 @media (hover: hover) { .pwa-ui-scope .pwa-composer-model:hover:not(:disabled) { color: var(--pwa-ink); } }
 .pwa-ui-scope .pwa-composer-model:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: -6px; }
-.pwa-ui-scope .pwa-composer-model:disabled { cursor: not-allowed; }
+.pwa-ui-scope .pwa-composer-model:disabled { cursor: default; }
 .pwa-ui-scope .pwa-composer-model > svg { flex: 0 0 auto; }
 .pwa-composer-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pwa-composer-model-thinking { flex: 0 0 auto; }
@@ -319,6 +339,13 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-icon-button.pwa-composer-send[data-variant="filled"][data-disabled]::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"]:disabled::before,
 .pwa-ui-scope .pwa-icon-button.pwa-composer-stop[data-variant="filled"][data-disabled]::before { background: var(--pwa-accent); }
+/* 图标替换：可用态的透明度变化随之过渡；发送与停止的图标叠放在同一槽内，互换时交叉淡化，
+   隐去的一侧缩到 --pwa-swap-scale，新图标从它放大到原尺寸。两个图标常驻，每次互换都播放，首次挂载不播放。 */
+.pwa-ui-scope .pwa-icon-button:is(.pwa-composer-send, .pwa-composer-stop) { transition: opacity var(--pwa-duration-feedback) var(--pwa-ease-standard); }
+.pwa-composer-action-icons { display: grid; place-items: center; }
+.pwa-composer-action-icons > span { grid-area: 1 / 1; display: grid; place-items: center; transition: opacity var(--pwa-duration-feedback) var(--pwa-ease-standard), transform var(--pwa-duration-feedback) var(--pwa-ease-content); }
+.pwa-composer-action-icons:not([data-stop]) > .pwa-composer-action-stop,
+.pwa-composer-action-icons[data-stop] > .pwa-composer-action-send { opacity: 0; transform: scale(calc(1 - (1 - var(--pwa-swap-scale)) * var(--pwa-motion-shift))); }
 .pwa-composer-menu,
 .pwa-composer-command { position: relative; flex: 0 0 auto; }
 .pwa-root .pwa-composer-menu-panel,
@@ -341,7 +368,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 禁用项不靠透明度：文字与图标改为 secondary，保持可读。 */
 .pwa-command-row:disabled,
 .pwa-command-row:disabled .pwa-command-copy code,
-.pwa-command-row:disabled .pwa-command-copy > span { color: var(--pwa-secondary); cursor: not-allowed; }
+.pwa-command-row:disabled .pwa-command-copy > span { color: var(--pwa-secondary); cursor: default; }
 .pwa-command-copy { display: grid; min-width: 0; flex: 1; gap: var(--pwa-space-pair); }
 .pwa-command-copy code,
 .pwa-command-copy > span { overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
@@ -359,34 +386,38 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-command-choice[data-selected]:hover:not(:disabled),
 .pwa-command-choice[data-selected]:focus-visible:not(:disabled) { color: var(--pwa-ink); background: var(--pwa-selected); }
 .pwa-command-choice[data-selected] .pwa-command-copy > span { color: var(--pwa-ink); }
-.pwa-command-menu-heading { padding: 8px var(--pwa-space-menu-pad) 6px; font-weight: var(--pwa-weight-strong); text-transform: uppercase; }
+.pwa-command-menu-heading { padding: 8px var(--pwa-space-menu-pad) 6px; font-weight: var(--pwa-weight-strong); }
 .pwa-command-back { color: var(--pwa-secondary); }
 .pwa-command-empty { margin: 0; padding: 12px var(--pwa-space-menu-pad); line-height: var(--pwa-leading-ui); }
 
 /* 独立设置页：分组列表底色 grouped-bg，内容最大宽 640，分区间距 32，页面本身为主滚动区。 */
 /* 设置层左右都贴屏幕边缘，由页面自身内缩左右安全区；内部 640 容器及其内边距不再叠加。 */
-.pwa-root .pwa-settings-page { min-height: 100%; padding-inline: var(--pwa-safe-left) var(--pwa-safe-right); color: var(--pwa-ink); background: var(--pwa-grouped-bg); }
+/* grouped-bg 上的卡片底为 surface：浅色页面底是 panel、深色是 bg，与 bg 上的卡片互为镜像。 */
+.pwa-root .pwa-settings-page { --pwa-card: var(--pwa-surface); min-height: 100%; padding-inline: var(--pwa-safe-left) var(--pwa-safe-right); color: var(--pwa-ink); background: var(--pwa-grouped-bg); }
 /* 桌面设置页没有固定顶栏，顶部吸附一条与页面同底色的遮挡条，系统报告状态栏安全区时内容不滚入状态栏；负外边距使其不占布局高度。 */
 .pwa-root .pwa-status-bar-shield { position: sticky; z-index: 1; top: 0; height: var(--pwa-safe-top); margin-bottom: calc(-1 * var(--pwa-safe-top)); background: var(--pwa-grouped-bg); }
 .pwa-root .pwa-settings-inner { width: min(640px, 100%); margin: 0 auto; padding: calc(32px + var(--pwa-safe-top)) var(--pwa-gutter) calc(48px + var(--pwa-safe-bottom, 0px)); display: grid; gap: 32px; }
 .pwa-root .pwa-settings-header { display: grid; justify-items: start; gap: 8px; }
 .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back { margin-left: -8px; padding-inline: 8px; }
-.pwa-root .pwa-settings-title { margin: 0; font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-settings-title { margin: 0; font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-title); }
 .pwa-root .pwa-settings-title:focus { outline: none; }
 .pwa-root .pwa-settings-title:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 2px; border-radius: var(--pwa-radius-xs); }
 .pwa-root .pwa-settings-section { min-width: 0; }
-.pwa-root .pwa-settings-section-title { margin: 0 0 8px; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+/* 分区标题与分组内的行文字、分组下方的说明同一左缘（分组内边距 16）。 */
+.pwa-root .pwa-settings-section-title { margin: 0 0 8px; padding-inline: 16px; color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-root .pwa-settings-section-description { margin: 4px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 /* 分组下方的补充说明：与分组相距 6（附属说明），左右与行内文字同缩进 16。 */
 .pwa-root .pwa-settings-footnote { margin-top: 6px; padding-inline: 16px; overflow-wrap: anywhere; }
 /* 分组：surface 底、圆角 12，无边框与阴影；行间发丝线左右各缩进 16，不碰分组边缘。 */
-.pwa-root .pwa-settings-group { margin: 0; overflow: hidden; border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); }
+.pwa-root .pwa-settings-group { margin: 0; overflow: hidden; }
 .pwa-root .pwa-settings-row { position: relative; box-sizing: border-box; width: 100%; min-height: var(--pwa-hit-target); margin: 0; padding: 8px 16px; display: flex; align-items: center; gap: 10px; color: var(--pwa-ink); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
 .pwa-root .pwa-settings-row + .pwa-settings-row::before { content: ""; position: absolute; top: 0; right: 16px; left: 16px; border-top: var(--pwa-hairline) solid var(--pwa-separator); pointer-events: none; }
+/* 带行首图标的单选行，分隔线从文字起（内边距 16＋图标 20＋间隔 10），图标读作一列；右端仍内缩 16。 */
+.pwa-root .pwa-settings-choice + .pwa-settings-choice::before { left: 46px; }
 /* 单选行：行首图标、主副文字，选中项行尾为 accent 对勾；原生 radio 只在视觉上隐藏，读屏、方向键与表单语义不变，键盘聚焦时整行显示焦点轮廓。 */
 .pwa-root .pwa-settings-choice { display: block; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-choice:hover { background: var(--pwa-hover); } }
-.pwa-root .pwa-settings-choice:active { background: var(--pwa-neutral-active); }
+@media (hover: hover) { .pwa-root .pwa-settings-choice:active { background: var(--pwa-neutral-active); } }
 .pwa-root .pwa-settings-choice:has(.mantine-Radio-radio:focus-visible) { outline: 2px solid var(--pwa-accent); outline-offset: -2px; }
 .pwa-root .pwa-settings-choice .mantine-Radio-body { display: flex; align-items: center; gap: 10px; }
 .pwa-root .pwa-settings-choice .mantine-Radio-inner { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; }
@@ -405,7 +436,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 跳转行：整行是按钮，右侧为 secondary 箭头。 */
 .pwa-root .pwa-settings-row-button { text-align: left; cursor: pointer; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 @media (hover: hover) { .pwa-root .pwa-settings-row-button:hover { background: var(--pwa-hover); } }
-.pwa-root .pwa-settings-row-button:active { background: var(--pwa-neutral-active); }
+@media (hover: hover) { .pwa-root .pwa-settings-row-button:active { background: var(--pwa-neutral-active); } }
 .pwa-root .pwa-settings-row-button:focus-visible { outline-offset: -2px; }
 .pwa-root .pwa-settings-row-label { min-width: 0; flex: 1; }
 .pwa-root .pwa-settings-row-chevron { flex: 0 0 auto; color: var(--pwa-secondary); }
@@ -424,7 +455,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-form { padding: 16px; display: grid; justify-items: start; gap: var(--pwa-space-md); }
 .pwa-root .pwa-settings-form .pwa-field { width: 100%; }
 .pwa-root .pwa-settings-actions { margin-top: 16px; display: grid; justify-items: start; gap: 8px; }
-.pwa-root .pwa-settings-about-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+/* 滚动诊断的状态与操作放进内边距 16 的分组；Stack 间隔 8 加 8，状态文字到操作仍为 16。 */
+.pwa-root .pwa-settings-diagnostics { padding: 16px; }
+.pwa-root .pwa-settings-diagnostics .pwa-settings-section-description { margin: 0; }
+.pwa-root .pwa-settings-diagnostics .pwa-settings-actions { margin-top: 8px; }
+/* 右侧复制按钮的 16 图标在 44 点击区内各留 14，再让 2，使图标右缘与行内版本号右缘同在内缩 16 处。 */
+.pwa-root .pwa-settings-about-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; padding-inline-end: 2px; }
 .pwa-root .pwa-settings-about-heading .pwa-settings-section-title { margin: 0; }
 .pwa-root .pwa-settings-versions > .pwa-settings-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
 .pwa-root .pwa-settings-versions dt { margin: 0; }
@@ -449,7 +485,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-textarea .mantine-InputWrapper-description { margin-top: 4px; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 
 .pwa-rename-dialog,
-.pwa-confirm-dialog { min-width: 0; padding: 24px; border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
+.pwa-confirm-dialog { min-width: 0; padding: 24px; border-radius: var(--pwa-radius-2xl); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
 .pwa-rename-head,
 .pwa-confirm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .pwa-rename-head h2,
@@ -475,7 +511,7 @@ body:has(.pwa-root) { overflow: hidden; }
 /* 遮罩始终只有一层：Modal 叠在带遮罩的 Drawer 上时，下层遮罩隐去，不叠加加深。 */
 .pwa-root:has(.mantine-Modal-overlay) .mantine-Drawer-overlay { opacity: 0 !important; }
 /* 配对弹窗（表单类，480）：与重命名弹窗同一表面；扫码取景、配对码输入与其他方式的文字按钮自上而下排列。 */
-.pwa-pairing-dialog { min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border-radius: var(--pwa-radius-lg); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
+.pwa-pairing-dialog { min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border-radius: var(--pwa-radius-2xl); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
 .pwa-pairing-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px -10px 0 0; padding: 0; background: transparent; }
 .pwa-pairing-title { font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-pairing-body { min-width: 0; padding: 0; }
@@ -500,11 +536,11 @@ body:has(.pwa-root) { overflow: hidden; }
 
 .pwa-startup-error,
 .pwa-loading { min-height: var(--pwa-app-height); display: grid; place-items: center; padding: calc(24px + var(--pwa-safe-top)) 24px calc(24px + var(--pwa-safe-bottom)); color: var(--pwa-ink); background: var(--pwa-bg); text-align: center; }
-.pwa-startup-card { width: min(520px, 100%); padding: 32px; border: 1px solid var(--pwa-line); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); }
+.pwa-startup-card { width: min(520px, 100%); padding: 32px; }
 .pwa-startup-icon,
-.pwa-chat-empty-icon { display: grid; place-items: center; border: 1px solid var(--pwa-running-line); border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
+.pwa-chat-empty-icon { display: grid; place-items: center; border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
 .pwa-startup-icon { width: 48px; height: 48px; margin-bottom: 16px; }
-.pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+.pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-title); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: var(--pwa-text-meta) !important; }
 .pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
@@ -512,7 +548,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-spin { color: var(--pwa-running); animation: pwa-rotate var(--pwa-duration-spin) linear infinite; }
 .pwa-loading { color: var(--pwa-secondary); font-size: var(--pwa-text-body); }
 .pwa-loading p { margin: 16px 0 0; }
-.pwa-loading p span { color: var(--pwa-secondary); }
 .pwa-loading-mark { display: block; margin: 0 auto; color: var(--pwa-ink); }
 
 
@@ -572,7 +607,9 @@ body:has(.pwa-root) { overflow: hidden; }
   .pwa-operation-notifications .pwa-operation-notification[style],
   .mantine-Modal-overlay.pwa-scrim[style] { transition-timing-function: var(--pwa-ease-standard) !important; }
 }
-.pwa-operation-notifications .pwa-toast-icon { width: 16px; min-width: 16px; height: 16px; margin-right: 8px; border-radius: 0; background: transparent; }
+/* 触屏上滑收走：纵向拖动交给手势，不触发页面平移。 */
+.pwa-operation-notifications .pwa-operation-notification { touch-action: none; }
+.pwa-operation-notifications .pwa-toast-icon { width: var(--pwa-icon-inline); min-width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); margin-right: 8px; border-radius: 0; background: transparent; }
 .pwa-operation-notifications .pwa-toast-success .pwa-toast-icon { color: var(--pwa-complete); }
 .pwa-operation-notifications .pwa-toast-info .pwa-toast-icon { color: var(--pwa-ink); }
 .pwa-operation-notifications .pwa-toast-error .pwa-toast-icon { color: var(--pwa-error); }
@@ -580,7 +617,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-operation-notifications .pwa-toast-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* 操作按钮点击区 44，视觉底色仍为 36 高：底色画在上下各内缩 4 的伪元素上，焦点轮廓同样内缩。 */
 .pwa-operation-notifications .pwa-toast-action { position: relative; isolation: isolate; flex: 0 0 auto; white-space: nowrap; min-height: var(--pwa-hit-target); padding: 0 8px; border: 0; border-radius: var(--pwa-radius-md); color: var(--pwa-accent); background: transparent; font: inherit; font-weight: var(--pwa-weight-strong); cursor: pointer; }
-.pwa-operation-notifications .pwa-toast-action::before { content: ""; position: absolute; z-index: -1; inset: 4px 0; border-radius: var(--pwa-radius-md); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
+.pwa-operation-notifications .pwa-toast-action::before { content: ""; position: absolute; z-index: -1; inset: 4px 0; border-radius: var(--pwa-chip-radius); background: transparent; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-operation-notifications .pwa-toast-action:focus-visible { outline-offset: -4px; }
 @media (hover: hover) { .pwa-operation-notifications .pwa-toast-action:hover::before { background: var(--pwa-hover); } }
 .pwa-operation-notifications .pwa-operation-notification-close { flex: 0 0 var(--pwa-hit-target); width: var(--pwa-hit-target); min-width: var(--pwa-hit-target); height: var(--pwa-hit-target); min-height: var(--pwa-hit-target); color: var(--pwa-secondary); }
@@ -599,6 +636,8 @@ body:has(.pwa-root) { overflow: hidden; }
 @keyframes pwa-rotate { to { transform: rotate(360deg); } }
 
 @media (max-width: 767.98px) {
+  /* 移动设置页分组内的按钮纵向全宽，与移动确认弹窗一致，避免宽度随文字长短参差。 */
+  .pwa-root .pwa-settings-group .pwa-button { justify-self: stretch; }
   /* 移动端与桌面保持同一块输入表面的内边距。 */
   /* 移动设置页：返回箭头与标题组成固定顶栏，尺寸同 .pwa-topbar；左右各让出内容区 16px 铺满屏宽，由顶栏遮挡状态栏。 */
   .pwa-root .pwa-settings-inner { padding: 0 var(--pwa-gutter) calc(48px + var(--pwa-safe-bottom, 0px)); }
@@ -609,7 +648,7 @@ body:has(.pwa-root) { overflow: hidden; }
   @media (hover: hover) { .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; } }
   .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back .mantine-Button-section { margin: 0; }
   .pwa-root .pwa-settings-back-label { display: none; }
-  .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); }
+  .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); line-height: var(--pwa-leading-ui); }
   .pwa-startup-card { padding: 24px 16px; }
   .pwa-runtime-notice { margin-top: 6px; padding: 10px 6px 10px 12px; }
   .pwa-runtime-notice .pwa-runtime-notice-body,

@@ -1,9 +1,12 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createSwipeDrag, type SwipeDrag } from "./swipe-drag";
+import type { SwipeDirection } from "./swipe-gesture";
 import type { SwipeDragHandlers } from "./use-swipe";
 import { pwaMotionShiftDisabled, usePwaMotionDuration } from "./use-pwa-motion";
 
 type Phase = "idle" | "dragging" | "settling";
+
+const surfaceExtent = (element: HTMLElement, direction: SwipeDirection) => direction === "down" ? element.offsetHeight : element.offsetWidth;
 
 /** 跟手拖动到收尾结束期间标在 Drawer 表面上，供样式显示移动中的圆角等外观。 */
 export const DRAWER_DRAGGING_ATTRIBUTE = "data-pwa-dragging";
@@ -12,8 +15,8 @@ type DrawerSwipeCloseOptions = {
   /** Drawer.Content；Drawer 关闭卸载后为 null。 */
   surface: HTMLElement | null;
   opened: boolean;
-  /** 关闭方向：右侧抽屉向右（1），左侧抽屉向左（-1）。 */
-  direction: 1 | -1;
+  /** 关闭方向：右侧抽屉向右、左侧抽屉向左、底部面板向下。 */
+  direction: SwipeDirection;
   /** 现有关闭入口（同步门禁，可能不关闭）；结果以提交后的 opened 为准，不看返回值。 */
   requestClose: () => void;
   /** 使本次关闭的退出时长为 0；收尾到终点时 WAAPI 已把面板移出屏幕。 */
@@ -105,13 +108,13 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
       const { surface: element, opened: isOpen, duration: enter, exitDuration: exit } = latest.current;
       if (!element || !isOpen || dragRef.current || phaseRef.current !== "idle" || pwaMotionShiftDisabled(element)) return false;
       const overlay = element.closest(".mantine-Drawer-root")?.querySelector<HTMLElement>(".pwa-scrim");
-      const width = () => element.offsetWidth;
+      const extent = () => surfaceExtent(element, direction);
       dragRef.current = createSwipeDrag({
         targets: [
-          { element, frame: (progress) => ({ transform: `translateX(${direction * progress * width()}px)` }) },
+          { element, frame: (progress) => ({ transform: direction === "down" ? `translateY(${progress * extent()}px)` : `translateX(${(direction === "right" ? 1 : -1) * progress * extent()}px)` }) },
           ...(overlay ? [{ element: overlay, frame: (progress: number) => ({ opacity: 1 - progress }) }] : []),
         ],
-        extent: width,
+        extent,
         // 终点是关闭：走完用离开时长，回弹回到打开用进入时长。
         duration: (toEnd) => toEnd ? exit : enter,
       });
@@ -122,6 +125,10 @@ export function useDrawerSwipeClose({ surface, opened, direction, requestClose, 
     },
     move(distance) {
       if (phaseRef.current === "dragging") dragRef.current?.setDistance(distance);
+    },
+    extent() {
+      const element = latest.current.surface;
+      return element ? surfaceExtent(element, direction) : 0;
     },
     end({ committed, velocity }) {
       const drag = dragRef.current;

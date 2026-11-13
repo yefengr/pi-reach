@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { pwaReleaseEasing } from "@/lib/ui/motion";
+import { pwaRedirectEasing, pwaReleaseEasing, pwaSpringProgress } from "@/lib/ui/motion";
 import { createSwipeDrag, type SwipeDrag } from "./swipe-drag";
 
 const EASE = "cubic-bezier(0.1, 0.2, 0.3, 1)";
@@ -49,6 +49,35 @@ test("release easing carries the finger velocity without overshoot and matches t
   // 松手越快，前段走得越远。
   expect(fast[1]).toBeGreaterThan(slow[1]);
   expect(capped[1]).toBeGreaterThanOrEqual(fast[1]);
+});
+
+test("redirect easing keeps a reverse velocity: it first moves away, then turns without a stop, within the allowed room", () => {
+  expect(pwaRedirectEasing(panel, 0, 280, 1)).toBe(EASE);
+  const room = 0.05;
+  const curve = samples(pwaRedirectEasing(panel, -0.01, 280, room));
+  expect(curve).toHaveLength(33);
+  expect(curve[0]).toBe(0);
+  expect(curve.at(-1)).toBe(1);
+  // 先背离终点（进度为负），越过起点的幅度不超过 room，之后单调走向终点。
+  expect(curve[1]).toBeLessThan(0);
+  expect(Math.min(...curve)).toBeGreaterThanOrEqual(-room - 0.001);
+  const turn = curve.indexOf(Math.min(...curve));
+  curve.slice(turn).forEach((value, index, rest) => { if (index > 0) expect(value).toBeGreaterThanOrEqual(rest[index - 1]); });
+  // 没有余地时背离速度被压到零，曲线不越过起点。
+  expect(Math.min(...samples(pwaRedirectEasing(panel, -0.01, 280, 0)))).toBeGreaterThanOrEqual(0);
+  // 朝向终点的速度与松手曲线一致。
+  expect(pwaRedirectEasing(panel, 0.004, 280, room)).toBe(pwaReleaseEasing(panel, 0.004, 280));
+});
+
+test("spring progress matches the normalized content spring and ends exactly at one", () => {
+  expect(pwaSpringProgress(0)).toBe(0);
+  expect(pwaSpringProgress(-1)).toBe(0);
+  expect(pwaSpringProgress(1)).toBe(1);
+  expect(pwaSpringProgress(2)).toBe(1);
+  // 与内容曲线同族：约六成时长完成九成。
+  expect(pwaSpringProgress(0.6)).toBeGreaterThan(0.88);
+  expect(pwaSpringProgress(0.6)).toBeLessThan(0.93);
+  expect(pwaSpringProgress(0.1)).toBeLessThan(pwaSpringProgress(0.2));
 });
 
 test("settle keeps the token duration for its direction instead of shortening it by distance or velocity", () => {

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect } from "react";
 import { Notifications } from "@mantine/notifications";
 import { usePwaMotionDuration } from "./use-pwa-motion";
+import { useToastSwipeDismiss } from "./use-toast-swipe-dismiss";
 import { observeWrappedText } from "@/lib/ui/wrapped-text";
 import type { OperationNotificationController } from "@/lib/pwa/operation-notifications";
 
@@ -24,7 +25,7 @@ function withinToast(target: EventTarget | null): boolean {
 
 /**
  * Toast：顶部居中、位于会话标题区下方的最顶层浮层，不拦截其他操作，不抢焦点，以 aria-live 播报。
- * 悬停或聚焦时暂停自动关闭计时。
+ * 悬停或聚焦时暂停自动关闭计时；触屏可上滑收走（useToastSwipeDismiss），不使用 Mantine 自带的横向拖动与滚动关闭。
  */
 export function PwaOperationNotifications({ controller, target }: PwaOperationNotificationsProps) {
   const transitionDuration = usePwaMotionDuration("--pwa-duration-toast");
@@ -49,6 +50,8 @@ export function PwaOperationNotifications({ controller, target }: PwaOperationNo
       document.removeEventListener("focusout", onFocusOut);
     };
   }, [controller]);
+
+  useToastSwipeDismiss(controller);
 
   // 正文换行时圆角改为 16（ADR-20261105）。Toast 由 Mantine 渲染、取不到 ref：每次通知变化后的下一帧找到正文并观察尺寸。
   useEffect(() => {

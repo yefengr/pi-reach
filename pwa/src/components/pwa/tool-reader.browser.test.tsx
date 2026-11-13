@@ -3,9 +3,8 @@ import { flushSync } from "react-dom";
 import { afterEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
-import { ToolPreview } from "./tool-preview";
 import { ToolReader } from "./tool-reader";
-import { TOOL_INLINE_IMAGE_MAX_HEIGHT, toolHasOverflow, type ToolValue } from "./tool-presentation";
+import type { ToolValue } from "./tool-presentation";
 import { AttachmentCards } from "./attachment-cards";
 import { QueuedMessages } from "./queued-messages";
 
@@ -20,7 +19,7 @@ function value(result: string): ToolValue {
 
 afterEach(async () => { await page.viewport(1280, 900); });
 
-test.each([1280, 390])("content images stay 8px and small thumbnails stay 4px at width %s", async width => {
+test.each([1280, 390])("reader images stay 12px and small thumbnails stay 4px at width %s", async width => {
   await page.viewport(width, 844);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 32;
@@ -29,7 +28,6 @@ test.each([1280, 390])("content images stay 8px and small thumbnails stay 4px at
   function Harness() {
     const [opened, setOpened] = useState(false);
     return <>
-      <ToolPreview value={current} />
       <AttachmentCards items={[{ id: "thumbnail", fileName: "thumbnail.jpg", byteLength: atob(data).length, status: "draft", preview: { mime_type: "image/jpeg", data, byte_length: atob(data).length, width: 32, height: 32 } }]} />
       <QueuedMessages items={[{ id: "queued", text: "Queued image fixture", images: [{ mime: "image/jpeg", data }], status: "Queued", canManage: false }]} isOnline={false} onInsert={() => {}} onCancel={() => {}} />
       <button type="button" onClick={() => setOpened(true)}>Open image fixture</button>
@@ -39,14 +37,11 @@ test.each([1280, 390])("content images stay 8px and small thumbnails stay 4px at
   const screen = await renderPwa(<Harness />);
   const previousScheme = document.documentElement.getAttribute("data-mantine-color-scheme");
   try {
-    const content = document.querySelector<HTMLImageElement>(".pwa-tool-preview img")!;
     const thumbnail = document.querySelector<HTMLImageElement>("img.pwa-attachment-thumb")!;
     const queued = document.querySelector<HTMLImageElement>(".pwa-queued-message-images img")!;
-    await expect.poll(() => [content, thumbnail, queued].every(image => image.complete && image.naturalWidth > 0)).toBe(true);
+    await expect.poll(() => [thumbnail, queued].every(image => image.complete && image.naturalWidth > 0)).toBe(true);
     for (const scheme of ["light", "dark"]) {
       document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
-      expect(getComputedStyle(content).borderRadius).toBe("8px");
-      expect(getComputedStyle(content).maxHeight).toBe(`${TOOL_INLINE_IMAGE_MAX_HEIGHT}px`);
       expect(getComputedStyle(thumbnail).borderRadius).toBe("4px");
       expect(getComputedStyle(queued).borderRadius).toBe("4px");
       expect(Math.round(thumbnail.getBoundingClientRect().width)).toBe(32);
@@ -55,7 +50,7 @@ test.each([1280, 390])("content images stay 8px and small thumbnails stay 4px at
       await expect.element(screen.getByRole("dialog")).toBeVisible();
       const readerImage = document.querySelector<HTMLImageElement>(".pwa-tool-reader img")!;
       await expect.poll(() => readerImage.complete && readerImage.naturalWidth > 0).toBe(true);
-      expect(getComputedStyle(readerImage).borderRadius).toBe("8px");
+      expect(getComputedStyle(readerImage).borderRadius).toBe("12px");
       expect(getComputedStyle(readerImage).maxHeight).toBe("none");
       await userEvent.keyboard("{Escape}");
       await expect.poll(() => document.querySelector(".pwa-tool-reader")).toBeNull();
@@ -66,86 +61,6 @@ test.each([1280, 390])("content images stay 8px and small thumbnails stay 4px at
     else document.documentElement.setAttribute("data-mantine-color-scheme", previousScheme);
     await screen.unmount();
   }
-});
-
-test("View all follows logical and measured overflow through streaming changes", async () => {
-  await page.viewport(390, 844);
-  const short = "Complete output.";
-  const long = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n");
-  expect(toolHasOverflow(value(long))).toBe(true);
-  let setOutput!: (output: string) => void;
-  function Harness() {
-    const [output, setValue] = useState(short);
-    setOutput = setValue;
-    return <main style={{ width: "100vw" }}><ToolPreview value={value(output)} onRead={() => {}} /></main>;
-  }
-
-  const screen = await renderPwa(<Harness />);
-  await expect.poll(() => document.querySelector(".pwa-tool-details-button")).toBeNull();
-  expect(document.querySelector(".pwa-tool-preview")!.hasAttribute("data-overflow")).toBe(false);
-
-  flushSync(() => setOutput(long));
-  await expect.poll(() => document.querySelector(".pwa-tool-details-button")).not.toBeNull();
-  const preview = document.querySelector<HTMLElement>(".pwa-tool-preview")!;
-  const button = screen.getByRole("button", { name: "View all (20 lines)" }).element();
-  expect(preview.hasAttribute("data-overflow")).toBe(true);
-  expect(preview.getBoundingClientRect().height).toBeLessThan(document.querySelector(".pwa-tool-preview-content")!.getBoundingClientRect().height);
-  expect(getComputedStyle(preview).overflowY).toBe("clip");
-  preview.scrollTop = 100;
-  expect(preview.scrollTop).toBe(0);
-  for (const descendant of preview.querySelectorAll<HTMLElement>("*")) {
-    expect(getComputedStyle(descendant).overflowY).not.toMatch(/auto|scroll/);
-  }
-  expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
-
-  flushSync(() => setOutput(short));
-  await expect.poll(() => document.querySelector(".pwa-tool-details-button")).toBeNull();
-  expect(document.body.textContent).not.toContain("Raw data");
-});
-
-test("all output blocks share one height limit while host truncation stays visible", async () => {
-  const current: ToolValue = {
-    ...base, truncated: true,
-    result: Array.from({ length: 6 }, (_, index) => ({ type: "text", text: `Block ${index}\nSecond line` })),
-  };
-  expect(toolHasOverflow(current)).toBe(false);
-  const screen = await renderPwa(<ToolPreview value={current} onRead={() => {}} />);
-  await expect.element(screen.getByRole("button", { name: /^View all/ })).toBeVisible();
-  const preview = document.querySelector<HTMLElement>(".pwa-tool-preview")!;
-  expect(preview.querySelectorAll("pre")).toHaveLength(6);
-  expect(document.querySelector(".pwa-tool-preview-content")!.getBoundingClientRect().height).toBeGreaterThan(preview.getBoundingClientRect().height);
-  const notice = screen.getByText("Output was truncated by the host.");
-  await expect.element(notice).toBeVisible();
-  expect(preview.contains(notice.element())).toBe(false);
-  expect(notice.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(preview.getBoundingClientRect().bottom);
-});
-
-test("command preview echoes the call as its first line inside the bounded preview", async () => {
-  const command = "pnpm --filter pwa test:unit";
-  const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n") }] };
-  const screen = await renderPwa(<ToolPreview value={current} onRead={() => {}} />);
-  const blocks = document.querySelectorAll<HTMLElement>(".pwa-tool-preview .pwa-tool-output-blocks > *");
-  expect(blocks[0]?.textContent).toBe(`$ ${command}`);
-  expect(document.querySelector(".pwa-tool-preview")!.hasAttribute("data-overflow")).toBe(true);
-  await expect.element(screen.getByRole("button", { name: "View all (20 lines)" })).toBeVisible();
-});
-
-test.each([
-  { name: "desktop", width: 1280, height: 900, readerWidth: 720 },
-  { name: "mobile", width: 390, height: 844, readerWidth: 390 },
-])("the $name reader docks to the right edge at full height", async ({ width, height, readerWidth }) => {
-  await page.viewport(width, height);
-  const screen = await renderPwa(<ToolReader value={value("done")} opened onClose={() => {}} />);
-  await expect.element(screen.getByRole("dialog")).toBeVisible();
-  const content = document.querySelector<HTMLElement>(".mantine-Drawer-content")!;
-  await expect.poll(() => Math.round(content.getBoundingClientRect().width)).toBe(readerWidth);
-  const rect = content.getBoundingClientRect();
-  expect(Math.round(rect.right)).toBe(width);
-  expect(Math.round(rect.top)).toBe(0);
-  expect(Math.round(rect.height)).toBe(height);
-  const inner = document.querySelector<HTMLElement>(".mantine-Drawer-inner")!;
-  expect(inner.classList.contains("pwa-tool-reader")).toBe(false);
-  expect(getComputedStyle(inner).flexDirection).toBe("row");
 });
 
 test("the reader shows the call as the first body block on the main background", async () => {

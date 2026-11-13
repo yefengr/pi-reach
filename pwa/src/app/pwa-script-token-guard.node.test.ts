@@ -7,7 +7,7 @@ import { describe, expect, test } from "vitest";
 import { CONTENT_ENTER_OPACITY } from "@/components/pwa/use-timeline-enter-fade";
 import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 import { piReachTheme } from "@/lib/ui/pi-reach-theme";
-import { ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE } from "@/lib/ui/icon-metrics";
+import { ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG, SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 const SOURCE_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -21,7 +21,8 @@ const MOTION_TOKEN_READ = /getPropertyValue\(\s*["'`]--pwa-(?:duration|ease)-/g;
 const DESKTOP_MIN_WIDTH = 768;
 /** 16 按钮内与状态行、20 图标按钮与导航、24 大尺寸；12 只经具名常量出现。 */
 const ICON_SIZES = new Set(["16", "20", "24", "SMALL_SPINNER_SIZE"]);
-const ICON_STROKES = new Set(["ICON_STROKE_WIDTH", "SMALL_SPINNER_STROKE"]);
+// 线宽只由 LucideProvider 注入的全局值决定，单个图标不另写。
+const ICON_STROKES = new Set(["ICON_STROKE_WIDTH"]);
 
 function sourceFiles(directory: string, extensions: string[]): string[] {
   return readdirSync(directory).flatMap((name) => {
@@ -42,11 +43,18 @@ function declarations(selector: string): Record<string, string> {
   return Object.fromEntries([...THEME.slice(open + 1, close).matchAll(/(--pwa-[a-z-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()]));
 }
 
-/** 常规动效下的毫秒时长：取每个 token 的首次定义，减少动态效果的改写在其后。 */
+/** 常规动效下的毫秒时长：取每个 token 与档位的首次定义（减少动态效果的改写在其后），组件 token 经档位解析为毫秒。 */
 function themeDurations(): Record<string, number> {
-  const durations: Record<string, number> = {};
-  for (const match of THEME.matchAll(/(--pwa-duration-[a-z-]+):\s*(\d+)ms;/g)) durations[match[1]] ??= Number(match[2]);
-  return durations;
+  const raw: Record<string, string> = {};
+  for (const match of THEME.matchAll(/(--pwa-(?:duration|tier)-[a-z-]+):\s*([^;]+);/g)) raw[match[1]] ??= match[2].trim();
+  const resolve = (value: string): string => {
+    const tier = /^var\((--pwa-tier-[a-z-]+)\)$/.exec(value)?.[1];
+    return tier ? resolve(raw[tier] ?? "") : value;
+  };
+  return Object.fromEntries(Object.entries(raw).flatMap(([name, value]) => {
+    const resolved = /^(\d+)ms$/.exec(resolve(value));
+    return name.startsWith("--pwa-duration-") && resolved ? [[name, Number(resolved[1])]] : [];
+  }));
 }
 
 /** 本文件从 lucide-react 导入的图标本地名（处理 `as` 别名）。 */
@@ -84,6 +92,19 @@ describe("script token guard", () => {
     expect(PWA_MOTION_FALLBACK_MS).toEqual(themeDurations());
   });
 
+  test("component durations reference a tier and tiers stay inside the theme", () => {
+    // 毫秒值只写在档位上（减少动态效果的 reduced 例外）；组件与脚本只引用组件 token，不直接取档位。
+    const literal = [...THEME.matchAll(/(--pwa-duration-[a-z-]+):\s*([\d.]+m?s);/g)].map((match) => match[1]);
+    expect(literal).toEqual(["--pwa-duration-reduced", "--pwa-duration-spin", "--pwa-duration-breathe"]);
+    const offenders = sourceFiles(SOURCE_ROOT, [".css", ".ts", ".tsx"]).sort().flatMap((path) => {
+      const file = relative(SOURCE_ROOT, path);
+      if (file === "app/pwa-theme.css" || file === "lib/ui/motion-duration.ts") return [];
+      const text = readFileSync(path, "utf8");
+      return [...text.matchAll(/--pwa-tier-[a-z-]+/g)].map((match) => `${file}:${lineOf(text, match.index)} ${match[0]}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+
   test("the content enter fade starts at the theme opacity token", () => {
     expect(CONTENT_ENTER_OPACITY).toBe(Number(declarations("\n:root {")["--pwa-opacity-enter"]));
   });
@@ -118,7 +139,16 @@ describe("script token guard", () => {
   });
 
   test("Lucide icons use the documented sizes and named stroke widths", () => {
-    expect([ICON_STROKE_WIDTH, SMALL_SPINNER_SIZE, SMALL_SPINNER_STROKE]).toEqual([1.8, 12, 2.4]);
+    expect([ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG, SMALL_SPINNER_SIZE]).toEqual([1.5, 2, 12]);
+    // 样式改写图标尺寸时同步改写线宽：每组 --pwa-icon-* 的线宽须等于 实际线宽 × 24 ÷ 尺寸，与脚本注入的实际线宽一致。
+    const sizes = [...THEME.matchAll(/--pwa-icon-(inline|control):\s*(\d+)px;\s*--pwa-icon-\1-stroke:\s*([\d.]+);/g)];
+    expect(sizes.map((match) => `${match[1]} ${match[2]}`)).toEqual(["inline 16", "control 20", "inline 18", "inline 20", "control 22"]);
+    for (const [, , size, stroke] of sizes) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH * 24 / Number(size), 3);
+    // 按钮内的行内图标另有加重线宽，随行内图标尺寸的每一档给出。
+    const strong = [...THEME.matchAll(/--pwa-icon-inline:\s*(\d+)px;\s*--pwa-icon-inline-stroke:\s*[\d.]+;\s*--pwa-icon-inline-stroke-strong:\s*([\d.]+);/g)];
+    expect(strong.map((match) => match[1])).toEqual(["16", "18", "20"]);
+    for (const [, size, stroke] of strong) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH_STRONG * 24 / Number(size), 3);
+    expect(THEME.match(/--pwa-icon-[a-z-]+:/g)).toHaveLength(sizes.length * 2 + strong.length);
     const offenders = sourceFiles(SOURCE_ROOT, [".tsx"]).sort().flatMap((path) => {
       const text = readFileSync(path, "utf8");
       const file = relative(SOURCE_ROOT, path);

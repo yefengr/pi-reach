@@ -12,6 +12,8 @@
   --pwa-panel: #F7F7F7;
   /* 设置页分组列表的页面底：浅色用 panel 衬出 surface 分组；深色 panel 与 surface 过近，改用 bg。 */
   --pwa-grouped-bg: var(--pwa-panel);
+  /* 嵌在 bg 上的卡片底，只由 .pwa-card 引用：只靠底色差成形，不描边；分组列表页（grouped-bg）上改为 surface。 */
+  --pwa-card: var(--pwa-panel);
   --pwa-message: #F2F2F2;
   --pwa-hover: #EBEBEB;
   --pwa-selected: #E5E5E5;
@@ -76,6 +78,7 @@
   --pwa-surface: #2D2D2D;
   --pwa-panel: #282828;
   --pwa-grouped-bg: var(--pwa-bg);
+  --pwa-card: var(--pwa-surface);
   --pwa-message: #353535;
   --pwa-hover: #353535;
   --pwa-selected: #3A3A3A;
@@ -137,6 +140,7 @@
     --pwa-surface: #2D2D2D;
     --pwa-panel: #282828;
     --pwa-grouped-bg: var(--pwa-bg);
+    --pwa-card: var(--pwa-surface);
     --pwa-message: #353535;
     --pwa-hover: #353535;
     --pwa-selected: #3A3A3A;
@@ -196,7 +200,6 @@
   --pwa-code-accent: #98B8E6;
 
   /* 带状态色的装饰边框：在 :root 上按当前主题的状态色与 line 计算，只辅助识别。 */
-  --pwa-running-line: color-mix(in srgb, var(--pwa-running) 40%, var(--pwa-line));
   --pwa-error-line: color-mix(in srgb, var(--pwa-error) 40%, var(--pwa-line));
   /* 色调危险入口的悬停底：错误轻底再混入 4% 错误色，浅色错误色文字约 4.6:1，再加深即低于 4.5:1。 */
   --pwa-error-wash-hover: color-mix(in srgb, var(--pwa-error) 4%, var(--pwa-error-wash));
@@ -227,11 +230,28 @@
   --pwa-text-code: 14px;
   --pwa-text-title: 18px;
   --pwa-text-page: 24px;
+  /* Markdown 一、二级标题，与正文保持至少 2px 级差。 */
+  --pwa-text-heading: 20px;
+  --pwa-text-subheading: 18px;
   --pwa-leading-body: 1.65;
   --pwa-leading-ui: 1.4;
+  /* 页面标题与 Markdown 一、二级标题：字号越大行高倍数越小。 */
+  --pwa-leading-title: 1.25;
   --pwa-leading-code: 1.55;
   --pwa-weight-regular: 400;
   --pwa-weight-strong: 600;
+
+  /*
+   * 图标：行内图标（TSX 中 size 16）随字号档位放大，图标按钮内的图标（size 20）在触控设备上加大。
+   * *-stroke 是换算回 24 画布的线宽（1.5 × 24 ÷ 尺寸），使实际线宽保持 lib/ui/icon-metrics.ts 的 1.5px；
+   * 写成算好的数值而不用 calc()，由守卫校验与尺寸对应。
+   * *-stroke-strong 用于按钮内与 600 字重文字并排的行内图标，实际线宽 2px（lib/ui/icon-metrics.ts）。
+   */
+  --pwa-icon-inline: 16px;
+  --pwa-icon-inline-stroke: 2.25;
+  --pwa-icon-inline-stroke-strong: 3;
+  --pwa-icon-control: 20px;
+  --pwa-icon-control-stroke: 1.8;
 
   /* 叠层自下而上（DESIGN「叠层」）：全部叠层 Portal 到 .pwa-root，与工作区固定元素共用同一层叠上下文。 */
   --pwa-z-composer: 3;
@@ -251,8 +271,12 @@
   --pwa-radius-xs: 4px;
   --pwa-radius-md: 8px;
   --pwa-radius-lg: 12px;
-  /* 用户消息气泡、底部弹出面板上沿与桌面悬浮侧栏。 */
+  /* 页面级嵌入容器（设置页分组、启动失败卡片）、底部弹出面板上沿与桌面悬浮侧栏。 */
   --pwa-radius-xl: 16px;
+  /* 居中 Modal：最大的浮层表面，圆角大于菜单与卡片。 */
+  --pwa-radius-2xl: 24px;
+  /* 用户消息气泡：与内部圆角 8 的附件卡片同心（8 + 内边距 12）。 */
+  --pwa-radius-bubble: 20px;
   /* Toast：单行高 44 的一半，与其 36 圆形关闭按钮同心（18 + 视觉内缩 4）；多行时仍是大圆角而非椭圆两端。 */
   --pwa-radius-toast: 22px;
   /* 胶囊：只用于单行的状态标签与浮动入口。 */
@@ -277,8 +301,9 @@
   /* 领域细档：2／6／10，只用于 DESIGN「间距」细档表列出的语义，不作为通用档位；新语义先补表再使用。 */
   --pwa-space-pair: 2px;
   --pwa-space-status: 6px;
-  --pwa-space-menu-pad: 10px;
   --pwa-space-composer: 10px;
+  /* 菜单行左右内边距取通用档位 12：加上浮层面板内边距 4，菜单文字距面板边缘 16，与移动页面 gutter 同值。 */
+  --pwa-space-menu-pad: 12px;
 
   /* 浮起两层：贴边接触层（shadow-contact-color）勾出下缘，大范围淡投影提供高度；Composer 同理（深色 Composer 不用阴影）。 */
   --pwa-shadow-float: 0 1px 2px var(--pwa-shadow-contact-color), 0 4px 16px var(--pwa-shadow-color);
@@ -292,43 +317,75 @@
   --pwa-ease-content: linear(0, 0.017, 0.06, 0.12, 0.189, 0.261, 0.334, 0.405, 0.472, 0.535, 0.592, 0.644, 0.691, 0.733, 0.771, 0.803, 0.832, 0.858, 0.88, 0.899, 0.915, 0.93, 0.942, 0.953, 0.962, 0.97, 0.976, 0.982, 0.987, 0.991, 0.994, 0.997, 1);
   /* 自动收起：弹簧起步平缓，不会出现标准曲线前段过陡造成的一帧塌陷，与内容曲线统一。 */
   --pwa-ease-settle: var(--pwa-ease-content);
-  --pwa-duration-sidebar: 360ms;
+  /* 时长档位：毫秒值只在这里定义，组件时长 token 只引用档位；减少动态效果时统一改写档位（见文末）。
+     新增动效先挑最接近的档位，真机调速只改一处。 */
+  --pwa-tier-press: 90ms;
+  --pwa-tier-quick: 120ms;
+  --pwa-tier-short: 160ms;
+  --pwa-tier-leave: 200ms;
+  --pwa-tier-respond: 240ms;
+  --pwa-tier-return: 280ms;
+  --pwa-tier-fade-in: 320ms;
+  --pwa-tier-panel: 360ms;
+  --pwa-tier-appear: 400ms;
+  --pwa-duration-sidebar: var(--pwa-tier-panel);
   /* 设置页与 Drawer 的进入／离开（含松手收尾与遮罩），内容曲线；离开更快。 */
-  --pwa-duration-page: 360ms;
-  --pwa-duration-page-out: 280ms;
-  --pwa-duration-drawer: 360ms;
-  --pwa-duration-drawer-out: 280ms;
+  --pwa-duration-page: var(--pwa-tier-panel);
+  --pwa-duration-page-out: var(--pwa-tier-return);
+  --pwa-duration-drawer: var(--pwa-tier-panel);
+  --pwa-duration-drawer-out: var(--pwa-tier-return);
   /* 桌面等没有导航退出的入口切换会话前的淡出；移动导航中的选择随 drawer-out 淡出。 */
-  --pwa-duration-switch-out: 200ms;
-  --pwa-duration-modal-in: 400ms;
-  --pwa-duration-modal-out: 200ms;
+  --pwa-duration-switch-out: var(--pwa-tier-leave);
+  --pwa-duration-modal-in: var(--pwa-tier-appear);
+  --pwa-duration-modal-out: var(--pwa-tier-leave);
   /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
-  --pwa-duration-status-slot: 160ms;
-  --pwa-duration-collapse-in: 400ms;
-  --pwa-duration-collapse-out: 280ms;
-  /* 过程组自动收起（正文接续或本轮结束）：淡出与高度收拢同步放缓；手动收起仍用 collapse-out。 */
-  --pwa-duration-collapse-settle: 400ms;
+  --pwa-duration-status-slot: var(--pwa-tier-short);
+  --pwa-duration-collapse-in: var(--pwa-tier-appear);
+  --pwa-duration-collapse-out: var(--pwa-tier-return);
+  /* 过程组自动收起（正文接续或本轮结束）：与手动收起同长，正文不为它多等。 */
+  --pwa-duration-collapse-settle: var(--pwa-tier-return);
   /* 主屏 PWA 输入区随软键盘停靠：脚本约在 iOS 整页上推（约 250ms）开始后 50ms 检测到键盘并立即停靠，停靠与剩余的上推同时结束，
      并入上推、不单独出现。抬起仍按 drawer-out，与键盘收起同时开始。 */
-  --pwa-duration-keyboard-dock: 200ms;
-  --pwa-duration-image-in: 400ms;
-  --pwa-duration-image-out: 280ms;
-  --pwa-duration-toast: 400ms;
+  --pwa-duration-keyboard-dock: var(--pwa-tier-leave);
+  --pwa-duration-image-in: var(--pwa-tier-appear);
+  --pwa-duration-image-out: var(--pwa-tier-return);
+  /* 图片阅读器内的双击与按钮缩放。 */
+  --pwa-duration-image-zoom: var(--pwa-tier-fade-in);
+  /* 越界后松手弹回：图片捏合缩小到原始大小以下或放大到上限以上、Toast 朝关闭的反方向拖动。 */
+  --pwa-duration-overscroll: var(--pwa-tier-return);
+  --pwa-duration-toast: var(--pwa-tier-appear);
   /* 只用于 Toast 离开；toast 同时是浮动入口与局部提示的出现时长，不随之改变。 */
-  --pwa-duration-toast-out: 200ms;
-  --pwa-duration-fade: 120ms;
-  --pwa-duration-message-in: 400ms;
-  --pwa-duration-press-in: 90ms;
-  --pwa-duration-press-out: 120ms;
-  --pwa-duration-menu-in: 160ms;
-  --pwa-duration-menu-out: 120ms;
-  --pwa-duration-feedback: 120ms;
-  /* 减少动态效果时所有非循环过渡统一取此值；与 fade 同值但独立，调整通用淡化不连带改变减少动态效果。 */
+  --pwa-duration-toast-out: var(--pwa-tier-leave);
+  --pwa-duration-fade: var(--pwa-tier-quick);
+  --pwa-duration-message-in: var(--pwa-tier-appear);
+  /* 「最新」的逐帧滚动，与发送跟随同长。 */
+  --pwa-duration-scroll-latest: var(--pwa-tier-appear);
+  /* 短列表增删时其余项补位（排队抽屉、附件行、在线 Pi）。 */
+  --pwa-duration-reorder: var(--pwa-tier-return);
+  --pwa-duration-press-in: var(--pwa-tier-press);
+  /* 松开恢复：按钮缩放回弹与行按下底色淡出。 */
+  --pwa-duration-press-out: var(--pwa-tier-respond);
+  --pwa-duration-menu-in: var(--pwa-tier-respond);
+  --pwa-duration-menu-out: var(--pwa-tier-short);
+  /* 菜单内切换子视图：面板高度过渡与新视图淡入。 */
+  --pwa-duration-menu-resize: var(--pwa-tier-return);
+  --pwa-duration-menu-view: var(--pwa-tier-leave);
+  /* 原位图标替换：复制对勾、发送与停止互换、发送按钮可用态。 */
+  --pwa-duration-feedback: var(--pwa-tier-short);
+  /* Switch：滑块位置与底色。 */
+  --pwa-duration-toggle: var(--pwa-tier-return);
+  --pwa-duration-toggle-track: var(--pwa-tier-leave);
+  /* 浅色与深色切换的整屏交叉淡化。 */
+  --pwa-duration-appearance: var(--pwa-tier-fade-in);
+  /* 减少动态效果时所有档位统一改写为此值；独立于档位，不能引用档位（否则改写后自我引用）。 */
   --pwa-duration-reduced: 120ms;
   /* 只作用于内部绘制层；外层44px命中区与焦点轮廓不缩放。 */
   --pwa-press-icon-scale: 0.97;
   --pwa-press-button-scale: 0.98;
-  --pwa-menu-offset: 4px;
+  /* 菜单与 Popover 从触发按钮展开的起始缩放，乘以 --pwa-motion-shift 后减少动态效果时为 1。 */
+  --pwa-menu-scale: 0.9;
+  /* 图标替换时新图标的起始缩放。 */
+  --pwa-swap-scale: 0.8;
   /* 居中 Modal、Toast 与浮动入口进出时的位移距离，乘以 --pwa-motion-shift。 */
   --pwa-overlay-shift: 12px;
   /* 新发送气泡从下方进入、折叠内容收起时上移的距离，乘以 --pwa-motion-shift。 */
@@ -339,7 +396,7 @@
   --pwa-navigation-row-padding: 6px;
   --pwa-menu-visual-inset: 0px;
   /* 切换会话后新内容与流式新文字的淡入。 */
-  --pwa-duration-content: 320ms;
+  --pwa-duration-content: var(--pwa-tier-fade-in);
   /* 无限循环：旋转一圈、骨架呼吸一个周期，配 linear；减少动态效果时循环直接暂停，不替换时长。 */
   --pwa-duration-spin: 1.3s;
   --pwa-duration-breathe: 2s;
@@ -351,6 +408,12 @@
   --pwa-topbar-height: 48px;
   /* 最小点击区（DESIGN「按钮尺寸」）；同高的行、输入框与操作槽共用，不随字号档位缩放。 */
   --pwa-hit-target: 44px;
+  /* 常规按钮与文字按钮的高度：默认按触控取 44，纯细指针时为 36（见 pwa-controls.css）。 */
+  --pwa-button-height: 44px;
+  /* 常规按钮与文字按钮的圆角：默认按触控取胶囊（单行高 44 的一半；文字换行时仍是大圆角，不成椭圆两端），纯细指针时为 8（见 pwa-controls.css）。 */
+  --pwa-button-radius: var(--pwa-radius-toast);
+  /* 行内文字操作的视觉底（Toast 操作、输入区提示操作、模型标签）：均为单行，触控取胶囊，纯细指针时为 8。 */
+  --pwa-chip-radius: var(--pwa-radius-pill);
   --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
   /* 横屏刘海与圆角的左右安全区；只由实际贴住该屏幕边缘的布局层使用，同一边不重复叠加（见 DESIGN「安全区」）。 */
   --pwa-safe-left: env(safe-area-inset-left, 0px);
@@ -367,6 +430,11 @@
   --pwa-text-code: 16px;
   --pwa-text-title: 20px;
   --pwa-text-page: 28px;
+  --pwa-text-heading: 22px;
+  --pwa-text-subheading: 20px;
+  --pwa-icon-inline: 18px;
+  --pwa-icon-inline-stroke: 2;
+  --pwa-icon-inline-stroke-strong: 2.667;
 }
 
 :root[data-pwa-text-size="xlarge"] {
@@ -376,6 +444,45 @@
   --pwa-text-code: 18px;
   --pwa-text-title: 22px;
   --pwa-text-page: 32px;
+  --pwa-text-heading: 24px;
+  --pwa-text-subheading: 22px;
+  --pwa-icon-inline: 20px;
+  --pwa-icon-inline-stroke: 1.8;
+  --pwa-icon-inline-stroke-strong: 2.4;
+}
+
+/*
+ * 触控设备的字号基准：手机与平板的阅读字号大于桌面，参照 iOS 正文 17。
+ * 按主输入方式区分而不按宽度，桌面窄窗口不变；代码块标准档保持 14，避免窄屏上每行可见字符过少。
+ */
+@media (pointer: coarse) {
+  :root {
+    --pwa-text-meta: 14px;
+    --pwa-text-list: 16px;
+    --pwa-text-body: 17px;
+    --pwa-text-page: 28px;
+    --pwa-text-heading: 22px;
+    --pwa-text-subheading: 20px;
+    --pwa-icon-control: 22px;
+    --pwa-icon-control-stroke: 1.636;
+  }
+
+  :root[data-pwa-text-size="large"] {
+    --pwa-text-meta: 15px;
+    --pwa-text-list: 18px;
+    --pwa-text-body: 19px;
+    --pwa-text-page: 30px;
+    --pwa-text-heading: 24px;
+    --pwa-text-subheading: 22px;
+  }
+
+  :root[data-pwa-text-size="xlarge"] {
+    --pwa-text-meta: 16px;
+    --pwa-text-list: 20px;
+    --pwa-text-body: 21px;
+    --pwa-text-heading: 26px;
+    --pwa-text-subheading: 24px;
+  }
 }
 
 /* 发丝线档位：0.5px 只在此处定义，正式 CSS 的边框宽度引用 --pwa-hairline。 */
@@ -402,31 +509,15 @@
     --pwa-motion-shift: 0;
     /* 只剩短淡化：脚本动画与 CSS 过渡一样退回标准曲线（CSS 过渡另由下方 !important 规则统一）。 */
     --pwa-ease-content: var(--pwa-ease-standard);
-    --pwa-duration-sidebar: var(--pwa-duration-reduced);
-    --pwa-duration-page: var(--pwa-duration-reduced);
-    --pwa-duration-page-out: var(--pwa-duration-reduced);
-    --pwa-duration-drawer: var(--pwa-duration-reduced);
-    --pwa-duration-drawer-out: var(--pwa-duration-reduced);
-    --pwa-duration-keyboard-dock: var(--pwa-duration-reduced);
-    --pwa-duration-switch-out: var(--pwa-duration-reduced);
-    --pwa-duration-modal-in: var(--pwa-duration-reduced);
-    --pwa-duration-modal-out: var(--pwa-duration-reduced);
-    --pwa-duration-status-slot: var(--pwa-duration-reduced);
-    --pwa-duration-collapse-in: var(--pwa-duration-reduced);
-    --pwa-duration-collapse-out: var(--pwa-duration-reduced);
-    --pwa-duration-collapse-settle: var(--pwa-duration-reduced);
-    --pwa-duration-image-in: var(--pwa-duration-reduced);
-    --pwa-duration-image-out: var(--pwa-duration-reduced);
-    --pwa-duration-toast: var(--pwa-duration-reduced);
-    --pwa-duration-toast-out: var(--pwa-duration-reduced);
-    --pwa-duration-menu-in: var(--pwa-duration-reduced);
-    --pwa-duration-menu-out: var(--pwa-duration-reduced);
-    --pwa-duration-content: var(--pwa-duration-reduced);
-    --pwa-duration-message-in: var(--pwa-duration-reduced);
-    --pwa-duration-fade: var(--pwa-duration-reduced);
-    --pwa-duration-press-in: var(--pwa-duration-reduced);
-    --pwa-duration-press-out: var(--pwa-duration-reduced);
-    --pwa-duration-feedback: var(--pwa-duration-reduced);
+    --pwa-tier-press: var(--pwa-duration-reduced);
+    --pwa-tier-quick: var(--pwa-duration-reduced);
+    --pwa-tier-short: var(--pwa-duration-reduced);
+    --pwa-tier-leave: var(--pwa-duration-reduced);
+    --pwa-tier-respond: var(--pwa-duration-reduced);
+    --pwa-tier-return: var(--pwa-duration-reduced);
+    --pwa-tier-fade-in: var(--pwa-duration-reduced);
+    --pwa-tier-panel: var(--pwa-duration-reduced);
+    --pwa-tier-appear: var(--pwa-duration-reduced);
   }
 
   *,

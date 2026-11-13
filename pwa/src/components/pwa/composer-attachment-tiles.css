@@ -28,4 +28,3 @@
 .pwa-ui-scope .pwa-attachment-tile-remove:disabled { background: transparent; }
 .pwa-attachment-tile-badge { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--pwa-ink); box-shadow: 0 0 0 2px var(--pwa-surface); }
 .pwa-ui-scope .pwa-attachment-tile-remove:disabled .pwa-attachment-tile-badge { opacity: var(--pwa-opacity-disabled); }
-.pwa-attachment-tile-tip { padding: 4px 8px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-md); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); pointer-events: none; }

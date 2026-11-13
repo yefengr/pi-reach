@@ -5,6 +5,7 @@ import { renderPwa } from "@/test/browser/render";
 import { PwaInstallContext, PwaInstallProvider, usePwaInstall, type InstallOffer, type PwaInstallState } from "./pwa-install";
 import { SettingsPage } from "./settings-page";
 import { UnpairedWorkspace } from "./workspace-content";
+import { minimumControlHeight } from "@/test/browser/button-height";
 
 const navigatorPrototype = Object.getPrototypeOf(navigator);
 const originalServiceWorkerDescriptor = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
@@ -185,8 +186,8 @@ test("fits the install step and its actions inside a 390px phone width", async (
   const state = document.querySelector<HTMLElement>(".pwa-onboarding")!;
   expect(state.scrollWidth).toBeLessThanOrEqual(state.clientWidth);
   for (const name of ["Install app", "Use in browser for now"]) {
-    const box = screen.getByRole("button", { name }).element().getBoundingClientRect();
-    expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
+    const action = screen.getByRole("button", { name }).element();
+    expect(Math.round(action.getBoundingClientRect().height)).toBeGreaterThanOrEqual(minimumControlHeight(action));
   }
 });
 
