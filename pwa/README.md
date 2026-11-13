@@ -4,9 +4,12 @@ React browser PWA for remotely controlling Pi coding agents, built with Vite.
 
 ## Routes
 
-- `/app` — browser workspace and the only product route.
+- `/app` — browser workspace.
+- `/app/settings` — settings page. All product routes live under `/app`; any
+  `/app/*` subpath serves the app entry and the client resolves it.
 - `/` — HTTP 307 redirect to `/app`, also used by the Docker healthcheck.
-- Missing pages and assets return 404; there is no general SPA fallback.
+- Missing pages and assets outside `/app/` return 404; there is no general SPA
+  fallback.
 
 The PWA uses IndexedDB for browser-local identity, pairings, session history,
 and offline-readable messages. Live connections use the existing Relay and
@@ -15,7 +18,9 @@ Pi Extension protocol.
 Session attachments keep the original `File` in page memory until sending.
 The PWA uploads originals over the existing Relay route and then submits their
 IDs; only descriptions and bounded previews enter persisted history. Reloads
-do not preserve unsent files, and the PWA has no original-file download action.
+do not preserve unsent files. In a live session, sent attachments can be
+fetched back from the computer to preview or save the original; read-only
+history, pending and queued messages cannot.
 Limits, leases and host storage are documented in
 [ARCHITECTURE](../docs/ARCHITECTURE.md#会话附件) and the
 [session protocol](../docs/reference/protocol/protocol-v2.md#会话附件).
