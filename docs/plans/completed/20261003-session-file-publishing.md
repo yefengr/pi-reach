@@ -2,7 +2,7 @@
 
 本文保留会话文件发布、查看与下载的原始设计，并补充实施结束记录。截至 `416fe96`，`publish_file`、文件读取协议及正式 PWA 界面已实现，相关自动化、隔离真实链路与代码评审修复已完成，代码已提交并推送到 PR #31。此次归档结束的是本地实现任务，不表示 PR 已合并、产品已部署，或真机验收已通过；未覆盖项见[遗留风险与发布边界](#103-遗留风险与发布边界)。项目级事项状态只由 [ROADMAP](../../ROADMAP.md) 维护。
 
-第 1–8 节是基于 `c192257` 的实施前设计快照，保留当时的建议名称、复用点和验收要求，不代表功能仍待实现，也不是现行接口的真源。第 9 节记录方案阶段的[独立效果稿](../../prototypes/20261003-session-file-publishing/page.html)及其验证范围；原型状态仍为「评审中」，本次归档不修改原型或把模拟按钮当作真实传输。实际实施结果与验证证据见[实施结束记录](#10-实施结束记录)。当前架构、协议和设计分别以 [ARCHITECTURE](../../ARCHITECTURE.md#会话文件发布与获取)、[会话协议](../../reference/protocol/protocol-v2.md#会话文件发布与获取)及[设计规范](../../DESIGN.md#组件规则)为准。
+第 1–8 节是基于 `c192257` 的实施前设计快照，保留当时的建议名称、复用点和验收要求，不代表功能仍待实现，也不是现行接口的真源。第 9 节保留方案阶段效果稿的场景与验证范围；旧稿和专用截图已于 2026-11-13 移除，历史定位见该节。原归档未将原型评审或模拟按钮当作真实传输验收。实际实施结果与验证证据见[实施结束记录](#10-实施结束记录)。当前架构、协议和设计分别以 [ARCHITECTURE](../../ARCHITECTURE.md#会话文件发布与获取)、[会话协议](../../reference/protocol/protocol-v2.md#会话文件发布与获取)及[设计规范](../../DESIGN.md#组件规则)为准。
 
 ## 1. 目标与边界
 
@@ -234,22 +234,11 @@ Client 请求共同携带 `protocol_version: 2`、`id`、`channel_id`、`session
 
 ## 9. 效果稿与评审（方案阶段记录）
 
-[打开效果稿](../../prototypes/20261003-session-file-publishing/page.html)。原生 HTML/CSS 与少量场景切换脚本仅用于视觉评审，不接真实文件或 Relay，不实现发布与下载。
+2026-11-13 已移除旧效果稿及其专用截图和资源；[删除前目录](https://github.com/yefengr/pi-reach/tree/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261003-session-file-publishing)仅供追溯当时的源码与截图，不是当前可运行入口。当前组件在开发环境 `/app/ui-states` 查看。以下保留方案阶段的场景与检查结论：原生 HTML/CSS 与少量场景切换脚本仅用于视觉评审，不接真实文件或 Relay，不实现发布与下载。
 
 已制作会话主视图（图片＋文件行）、单张大图、Markdown 阅读、获取中、失败/缺失/超限、切换确认、大图待获取和离线历史。桌面与移动均沿用当前设计的阅读列、导航、字号和触控目标；主视图补深色。新增文件呈现属于本功能的拟议增量，不修改现有上传附件“无原件下载/无大图”的规则。CLI 仅使用本文的原生文本示意。
 
 入口顶部的评审工具条可切换静态场景与浅深外观；它不属于产品界面。也可用 `?scene=chat|image|markdown|loading|errors|confirm|large|offline&theme=light|dark` 选择单一值直接打开画面。
-
-| 画面 | 桌面 | 手机 |
-| --- | --- | --- |
-| 会话主视图 | [浅色](../../prototypes/20261003-session-file-publishing/screenshots/desktop-chat-light.png) · [深色](../../prototypes/20261003-session-file-publishing/screenshots/desktop-chat-dark.png) | [浅色](../../prototypes/20261003-session-file-publishing/screenshots/mobile-chat-light.png) · [深色](../../prototypes/20261003-session-file-publishing/screenshots/mobile-chat-dark.png) |
-| 单张大图 | [查看](../../prototypes/20261003-session-file-publishing/screenshots/desktop-image-light.png) | [查看](../../prototypes/20261003-session-file-publishing/screenshots/mobile-image-light.png) |
-| Markdown 阅读 | [查看](../../prototypes/20261003-session-file-publishing/screenshots/desktop-markdown-light.png) | [查看](../../prototypes/20261003-session-file-publishing/screenshots/mobile-markdown-light.png) |
-| 获取中 | [查看](../../prototypes/20261003-session-file-publishing/screenshots/desktop-loading-light.png) | [查看](../../prototypes/20261003-session-file-publishing/screenshots/mobile-loading-light.png) |
-| 失败、缺失与超限 | [查看](../../prototypes/20261003-session-file-publishing/screenshots/desktop-errors-light.png) | [查看](../../prototypes/20261003-session-file-publishing/screenshots/mobile-errors-light.png) |
-| 切换确认 | [查看](../../prototypes/20261003-session-file-publishing/screenshots/desktop-confirm-light.png) | [查看](../../prototypes/20261003-session-file-publishing/screenshots/mobile-confirm-light.png) |
-| 大图待获取 | [查看](../../prototypes/20261003-session-file-publishing/screenshots/desktop-large-light.png) | [查看](../../prototypes/20261003-session-file-publishing/screenshots/mobile-large-light.png) |
-| 离线历史 | [查看](../../prototypes/20261003-session-file-publishing/screenshots/desktop-offline-light.png) | [查看](../../prototypes/20261003-session-file-publishing/screenshots/mobile-offline-light.png) |
 
 原型内固定名称、大小、进度和文档内容都是模拟材料；`assets/sample-image.html` 是示例图源，PNG 由本地浏览器截图生成，不是真实发布的文件。缩放、下载、消息发送等产品按钮只表达视觉意图；只实现评审栏的场景/主题切换，阻止模拟输入区提交。完整手势、Portal 生命周期、真实下载与手机能力留给正式实现验证。
 
@@ -260,7 +249,7 @@ Client 请求共同携带 `protocol_version: 2`、`id`、`channel_id`、`session
 - 可滚动阅读区、具备完整 title 的文件名省略及 1px 读屏标签为刻意布局，不作为可见文本溢出；未通过缩小字体或隐藏正文规避检查。
 - 当前效果稿只覆盖中文静态画面。双语、真实触摸缩放/软键盘/安全区、下载保存、连接与协议、图片解码资源峰值、真实 iOS/Android、辅助技术及叠层焦点生命周期均未作功能验收。
 
-原型状态仍为「评审中」，本次方案归档不变更原型评审状态。以上截图和文档审查仅证明方案阶段的覆盖，正式实现的结束范围如下。
+原方案归档时，原型仍为「评审中」；2026-11-13 的原型清理不追加评审或验收通过结论。以上截图和文档审查仅证明方案阶段的覆盖，正式实现的结束范围如下。
 
 ## 10. 实施结束记录
 
@@ -279,7 +268,7 @@ Client 请求共同携带 `protocol_version: 2`、`id`、`channel_id`、`session
 
 发布工具的对外正式参数、实时 partial 和恢复投影均已脱敏，不仅是 custom 文件描述；本机原生参数与其他工具行为保持。图片结构检查证明有界预览资格，不认证压缩像素或 CRC 完整性，也不承诺浏览器解码器的全部安全性质。源文件仍是可变引用，不提供文件系统原子快照。
 
-`530c585` 单独纳入原始方案和效果稿；本次只更新方案的实施记录并归档，效果稿文件、截图与评审状态保持原样。
+`530c585` 单独纳入原始方案和效果稿；原归档只更新方案的实施记录，未修改当时的效果稿、截图与评审状态。后续原型清理见第 9 节，不改变该次归档的验证范围。
 
 ### 10.2 实施验证
 

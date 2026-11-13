@@ -5,13 +5,15 @@
 - 覆盖：[ADR-20261101](20261101-hairline-concentric-radii.md) 补充决策中「行内按钮保持 8，不做胶囊」「所有按钮胶囊不采纳」、用户消息气泡圆角 16、设置页分组圆角 12，以及正文决策中「只靠描边成形的标签与图标块保持 1px」；[ADR-20261111 图标、按钮与卡片](20261111-icons-buttons-cards.md)中用户气泡内附件卡片保留 1px `line` 的例外、「按钮改为胶囊形」的未采纳结论，以及按钮内图标与其他图标同为 1.5px 线宽；DESIGN 中 Modal 圆角 12、块级内容圆角 8、启动失败卡片圆角 12、返回入口使用箭头图标
 - 后续调整（2026-11-12）：决策 3 中的「电脑图标块改为 `tonal` 底」不再沿用。电脑面板的电脑行改为与设置页单选行相同的裸图标（20，在线与离线只靠图标颜色区分），不加底色块；原 31×31 的尺寸是描边时期遗留、不在尺寸档位内，DESIGN 中「20 的选项图标、图标与文字 10」的描述保持不变。
 
+> 原型清理（2026-11-13）：旧评审原型已从当前目录移除，下方链接固定到删除前提交的历史源码。原决策与后续取代关系保持不变，当前规则仍以 DESIGN 和后续 ADR 为准。
+
 ## 背景
 
 此前几轮「参照 iOS」的调整依据的是对 iOS 的印象和二手报道，决策记录、方案与 DESIGN 中没有引用过 Apple 官方文档。本次按 [参照 iOS 的原则](20261101-ios-reference-structure-not-material.md)，逐项对照官方 Human Interface Guidelines、Liquid Glass 采用指南与相关 WWDC 讲座，复核边框、圆角、间距、布局、字体、图标、按钮、卡片与页面、交互和动效。官方原文的摘录见 [iOS 官方设计规范摘录](../reference/ios-design-guidelines.md)。
 
 复核结论是现有规则大部分与官方一致：字号基准与标题档位、44 点击区、每个视图一个主操作、嵌入式卡片靠底色而浮层才有外框、悬浮侧栏、滚动边缘、跟手与弹簧动效都有官方依据。偏离集中在下面几处。
 
-官方文档不提供圆角、间距与分隔线的具体数值，只说明方向（分组与面板圆角增大、嵌套同心、触控用胶囊）。本记录中的数值是 Pi Reach 的取值，经对比原型 [`docs/prototypes/20261111-radius-button-shape/`](../prototypes/20261111-radius-button-shape/page.html) 评审确定。
+官方文档不提供圆角、间距与分隔线的具体数值，只说明方向（分组与面板圆角增大、嵌套同心、触控用胶囊）。本记录中的数值是 Pi Reach 的取值，经对比原型 [`docs/prototypes/20261111-radius-button-shape/`](https://github.com/yefengr/pi-reach/blob/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261111-radius-button-shape/page.html) 评审确定。
 
 ## 决策
 

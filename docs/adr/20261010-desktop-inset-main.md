@@ -5,6 +5,8 @@
 
 > 后续调整：[ADR-20261102](20261102-desktop-flat-window-controls.md) 取代本文的桌面主区内嵌卡片、8px 外边距与标题错位规则；抽屉与页面的圆角已由 ADR-20261028 覆盖。下文保留当时的决策与原因。
 
+> 原型清理（2026-11-13）：旧评审原型已从当前目录移除，下方链接固定到删除前提交的历史源码。原决策与后续取代关系保持不变，当前规则仍以 DESIGN 和后续 ADR 为准。
+
 ## 背景
 
 桌面布局原为侧栏与主区都贴满窗口：侧栏 `panel`（浅色 `#F7F7F7`）与主区 `bg`（浅色 `#FFFFFF`）直接相接，不加分割线。浅色主题下两者只差一级亮度，分区边界偏弱，整体显得平。
@@ -14,7 +16,7 @@
 - 页面内元素（侧栏、消息、输入区）不用阴影，阴影只用于 Popover、Menu、Toast、Modal 等浮层；侧栏带阴影后会被误读为可关闭的叠层。
 - 侧栏是贴边整块表面（圆角为 0），并负责把 `panel` 底色延伸进状态栏与左安全区；悬浮后这些区域会露出另一种底色。
 
-对比稿见 [`docs/prototypes/20261010-desktop-inset-main/`](../prototypes/20261010-desktop-inset-main/page.html)。
+对比稿见 [`docs/prototypes/20261010-desktop-inset-main/`](https://github.com/yefengr/pi-reach/blob/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261010-desktop-inset-main/page.html)。
 
 ## 决策
 
