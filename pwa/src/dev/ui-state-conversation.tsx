@@ -41,7 +41,7 @@ export function useGalleryConversation(state: GalleryState) {
   return {
     items, online, loading: loading || skeletonVisible, skeletonVisible, modelsStatus,
     epoch: local.epoch, sourceChanged: state === "flow" && local.step === 6,
-    running: online && (state === "thinking" || state === "tools" || (state === "flow" && local.step < 4)),
+    running: online && (state === "thinking" || state === "tools" || state === "tool-details" || (state === "flow" && local.step < 4)),
     step: local.step, pending: local.pending, uploads: local.uploads, delivered: local.delivered,
     recover: () => setLocal(value => ({ ...value, recovered: true })),
     completeLoading: () => setLocal(value => ({ ...value, loaded: true })),

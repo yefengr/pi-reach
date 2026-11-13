@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { getMessages } from "@/lib/i18n";
 import { UiStateGalleryPage } from "./ui-states";
 
 const input = () => document.querySelector<HTMLTextAreaElement>("form.pwa-composer textarea")!;
@@ -113,6 +114,19 @@ test("settings and its nested help isolate all background surface controls until
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-settings-back")!);
   await expect.poll(() => controls.hasAttribute("inert")).toBe(false);
   await expect.poll(() => document.activeElement).toBe(origin);
+});
+
+test("a computer renamed in the gallery appears in the navigation like the formal workspace", async () => {
+  await render(<UiStateGalleryPage />);
+  await page.getByLabelText("展示区域", { exact: true }).selectOptions("surfaces");
+  await page.getByRole("button", { name: "重命名电脑", exact: true }).click();
+  await page.getByRole("textbox", { name: getMessages().rename.label }).fill("改名后的电脑");
+  await page.getByRole("button", { name: getMessages().rename.save, exact: true }).click();
+  await expect.poll(() => document.querySelector(".pwa-rename-dialog"), { timeout: 3_000 }).toBeNull();
+  await navigation();
+  const desktop = () => document.querySelector(".pwa-desktop-navigation")?.textContent ?? "";
+  await expect.poll(desktop).toContain("改名后的电脑");
+  expect(desktop()).not.toContain("工作电脑");
 });
 
 test("all navigation states and opening isolated settings and pairing leave storage, connections and camera untouched", async () => {

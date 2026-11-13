@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { NativeSelect } from "@mantine/core";
-import { DesktopSidebar, type ConnectionViewState, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
+import { DesktopSidebar, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { SessionSheet } from "@/components/pwa/session-sheet";
 import { SidebarToggle } from "@/components/pwa/sidebar-toggle";
 import { WorkspaceTitleBar } from "@/components/pwa/workspace-title-bar";
@@ -17,15 +17,16 @@ type NavigationScene = "paired" | "unpaired" | "choose-computer" | "loading" | "
 type UiStateNavigationProps = {
   enabled: boolean;
   settingsOpen: boolean;
+  /** 重命名弹窗保存的演示名称；与正式版一样，保存后导航立即显示新名称。 */
+  nicknames: Readonly<Record<string, string>>;
   children: ReactNode;
   onSceneChange: (state: GalleryState) => void;
   onOpenSurface: (surface: GallerySurface, device?: PwaDeviceRecord) => void;
 };
 
 /** 复用无存储的正式导航；固定主区子树，切换展示区域不会卸载 Composer。 */
-export function UiStateNavigation({ enabled, settingsOpen, children, onSceneChange, onOpenSurface }: UiStateNavigationProps) {
+export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, onSceneChange, onOpenSurface }: UiStateNavigationProps) {
   const [scene, setScene] = useState<NavigationScene>("paired");
-  const [connection, setConnection] = useState<ConnectionViewState>("online");
   const [collapsed, setCollapsed] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeDeviceId, setActiveDeviceId] = useState(GALLERY_DEVICES[0].id);
@@ -35,7 +36,8 @@ export function UiStateNavigation({ enabled, settingsOpen, children, onSceneChan
   const [removeDevice, setRemoveDevice] = useState<PwaDeviceRecord | null>(null);
   const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [origin, setOrigin] = useState<HTMLButtonElement | null>(null);
-  const devices = scene === "unpaired" ? [] : GALLERY_DEVICES.filter(device => !removedIds.has(device.id));
+  const devices = scene === "unpaired" ? [] : GALLERY_DEVICES.filter(device => !removedIds.has(device.id))
+    .map(device => nicknames[device.id] === undefined ? device : { ...device, nickname: nicknames[device.id] });
   const selectedDevice = scene === "choose-computer" ? null : devices.find(device => device.id === activeDeviceId) ?? null;
   const endpoint = GALLERY_ENDPOINTS.find(item => item.endpointId === activeEndpointId && item.deviceId === selectedDevice?.deviceId);
   const title = selectedHistoryId ? GALLERY_HISTORY[0].name! : endpoint?.name ?? selectedDevice?.nickname ?? "Pi Reach";
@@ -60,10 +62,6 @@ export function UiStateNavigation({ enabled, settingsOpen, children, onSceneChan
       <NativeSelect label="导航状态" value={scene} onChange={event => setScene(event.currentTarget.value as NavigationScene)} data={[
         { value: "paired", label: "已配对 · 在线与历史" }, { value: "unpaired", label: "未配对" }, { value: "choose-computer", label: "尚未选择电脑" },
         { value: "loading", label: "快照与历史加载中" }, { value: "error", label: "历史加载失败" },
-      ]} />
-      <NativeSelect label="导航连接状态" value={connection} onChange={event => setConnection(event.currentTarget.value as ConnectionViewState)} data={[
-        { value: "online", label: "已连接" }, { value: "connecting", label: "连接中" }, { value: "retrying", label: "重连中" },
-        { value: "offline", label: "离线" }, { value: "no_network", label: "无网络" },
       ]} />
       <span>导航、会话选择和刷新只改变本页；路由与跟手手势请在测试环境验收。</span>
     </div> : null}

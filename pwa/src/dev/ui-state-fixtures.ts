@@ -1,16 +1,17 @@
-import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, PUBLISHED_FILE_TYPE, type AttachmentMetadata, type JsonValue, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, PUBLISHED_FILE_TYPE, type AttachmentMetadata, type JsonValue, type PublishedFileDescriptor, type ToolDetailsContent, type ToolRef, type ToolSummary } from "@pi-reach/protocol/session";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { ComposerAttachmentItem } from "@/components/pwa/attachment-cards";
 import type { PublishedFileViewState } from "@/components/pwa/published-files-context";
 import type { WireModel } from "@/lib/pi-reach/types";
 
-export type GalleryState = "thinking" | "tools" | "tool-types" | "failure" | "long" | "files"
+export type GalleryState = "thinking" | "tools" | "tool-types" | "tool-details" | "failure" | "long" | "files"
   | "empty" | "offline" | "reconnecting" | "loading" | "models-loading" | "models-error"
   | "uploading" | "pending" | "history" | "summaries" | "delivery" | "flow";
 export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[] = [
   { id: "thinking", label: "运行中 · 思考", note: "展开查看思考正文；运行状态仅由本页控件改变。" },
   { id: "tools", label: "运行中 · 工具", note: "运行中的过程组默认展开，点击工具行查看真实详情。" },
   { id: "tool-types", label: "已完成 · 工具类型", note: "展开过程组查看读取、运行、搜索、修改、写入五类图标与修改的增删行数；只有修改的组，组头显示该类图标。" },
+  { id: "tool-details", label: "工具详情 · 按需加载", note: "工具行只带摘要，打开后才请求详情；打开前选好返回方式，查看加载中、运行预览、完整详情、失败重试与离线不可用。" },
   { id: "failure", label: "失败与重试", note: "附件可原位重试；工具重试会替换本页演示结果。" },
   { id: "long", label: "长文字", note: "检查中英文、长路径、Markdown 与代码的阅读和复制。" },
   { id: "files", label: "文件", note: "文本与图片已就绪；获取进度由明确控件演示，不传输文件。" },
@@ -59,6 +60,32 @@ function toolTypeItems(): TimelineViewItem[] {
     { kind: "event", event: { ...base, event_id: "types-run-end", kind: "run_end", status: "complete", timestamp: 1000 } },
   ];
 }
+type GalleryDetailTool = { id: string; tool: string; running: boolean; summary: ToolSummary; args: { [key: string]: JsonValue }; output: string };
+/** 摘要工具行：时间线只带摘要，参数与输出由详情演示在打开后返回。 */
+export const GALLERY_DETAIL_TOOLS: GalleryDetailTool[] = [
+  { id: "details-read", tool: "read", running: false, summary: { action: "read", path: "pwa/src/components/pwa/tool-reader.tsx" }, args: { path: "pwa/src/components/pwa/tool-reader.tsx" },
+    output: "仅本页演示：按需返回的完整读取结果。\n" + "export function ToolReader() { /* 演示内容 */ }\n".repeat(24) },
+  { id: "details-check", tool: "bash", running: false, summary: { action: "execute", command: "pnpm typecheck" }, args: { command: "pnpm typecheck" },
+    output: "仅本页演示：命令没有实际执行。\n类型检查通过。" },
+  { id: "details-test", tool: "bash", running: true, summary: { action: "execute", command: "pnpm test" }, args: { command: "pnpm test" },
+    output: "仅本页演示：运行中的输出预览。\n正式结果保存后，阅读器原位换成完整详情。" },
+];
+const detailToolRef = (id: string): ToolRef => ({ call_entry_id: `${id}-entry`, tool_call_id: id });
+function detailToolItems(): TimelineViewItem[] {
+  return [
+    text("details-intro", "工具行只带摘要；点开工具行后，阅读器才请求详情。"),
+    ...GALLERY_DETAIL_TOOLS.map(({ id, tool, running, summary }): TimelineViewItem => running
+      ? { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: `tool:${id}`, kind: "tool", tool_call_id: id, tool, representation: "summary", summary, tool_ref: detailToolRef(id), status: "running" } }
+      : { kind: "event", event: { ...base, event_id: id, kind: "tool", tool_call_id: id, tool, representation: "summary", summary, tool_ref: detailToolRef(id), status: "complete" } }),
+  ];
+}
+/** 运行中的工具返回受限预览；已完成的工具返回可缓存的完整详情。 */
+export function galleryToolDetails(ref: ToolRef): ToolDetailsContent | null {
+  const entry = GALLERY_DETAIL_TOOLS.find(item => item.id === ref.tool_call_id);
+  if (!entry) return null;
+  return { tool_ref: ref, tool: entry.tool, source: entry.running ? "preview" : "session", status: entry.running ? "running" : "complete",
+    args: entry.args, result: { content: [{ type: "text", text: entry.output }] }, limited: entry.running };
+}
 function tool(status: "complete" | "error"): TimelineViewItem {
   return { kind: "event", event: { ...base, event_id: "read-result", kind: "tool", tool_call_id: "read-result", tool: "read", args: { path: "pwa/src/components/pwa/reader-shell.tsx" }, ...(status === "error" ? { status: "error" as const, error: "演示读取失败" } : { status: "complete" as const }), truncated: false, result: { content: [{ type: "text", text: status === "error" ? "演示读取失败：文件暂不可用。" : "仅本页演示：重试完成。\n" + "Independent reading content. 保持阅读与对话独立。\n".repeat(60) }] } } };
 }
@@ -79,6 +106,7 @@ export function galleryItems(state: GalleryState, retried: boolean): TimelineVie
   if (state === "thinking") return [text("intro", "正在整理阅读布局。"), { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "thinking", kind: "thinking", status: "delta", delta: "**检查阅读与输入的关系**\n\n在本页展开思考，检查标题、正文和运行提示。没有连接远程会话。" } }];
   if (state === "tools") return [text("intro", "正在检查工作面板；点击工具行查看原始输出。"), { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "tool:check", kind: "tool", tool_call_id: "check", tool: "bash", args: { command: "pnpm typecheck" }, status: "running", blocks: [{ type: "text", text: "演示输出：正在检查类型。\n此命令没有实际执行。" }] } }];
   if (state === "tool-types") return toolTypeItems();
+  if (state === "tool-details") return detailToolItems();
   if (state === "failure") return [tool(retried ? "complete" : "error"), text("failure-note", retried ? "演示工具重试已完成。" : "工具失败保留原始输出，附件失败保留独立重试入口。")];
   if (state === "long") return [text("long", `## 阅读与换行\n\n中英文正文保持原有排版。Long English text should wrap inside the reading column without widening the page.\n\n\`pwa/src/components/pwa/very-long-directory-name/another-long-directory-name/reader-drawer-and-state.tsx\`\n\n> 阅读位置和输入草稿应在宽度切换时保持。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n| 状态 | 说明 |\n| --- | --- |\n| 内存 | 不连接远程服务 |\n| 草稿 | 仅保留在本页 |\n\n${"长段落用于检查自然换行。Keep the reading column comfortable. ".repeat(14)}`)];
   if (state !== "files") return conversationItems(state);

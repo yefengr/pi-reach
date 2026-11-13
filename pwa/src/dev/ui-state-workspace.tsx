@@ -13,8 +13,10 @@ import type { ThinkingLevel } from "@/lib/pi-reach/types";
 import { createGalleryAssets, GALLERY_MODELS, galleryAttachment, galleryItems, type GalleryState } from "./ui-state-fixtures";
 import { fileKey, isAttachmentFile } from "@/lib/pwa/file-source";
 import { GalleryConversationControls, GalleryHistory, useGalleryConversation } from "./ui-state-conversation";
+import { ToolDetailsProvider } from "@/components/pwa/tool-details-context";
+import { GalleryToolDetailsControls, useGalleryToolDetails } from "./ui-state-tool-details";
 
-function GalleryTimeline({ state, conversation }: { state: GalleryState; conversation: ReturnType<typeof useGalleryConversation> }) {
+function GalleryTimeline({ state, sourceKey, conversation }: { state: GalleryState; sourceKey: string; conversation: ReturnType<typeof useGalleryConversation> }) {
   const [retried, setRetried] = useState(false);
   const failureItems = useMemo(() => state === "failure" ? galleryItems(state, retried) : null, [state, retried]);
   // 排队消息与正式应用一样只在排队抽屉中显示。
@@ -22,7 +24,7 @@ function GalleryTimeline({ state, conversation }: { state: GalleryState; convers
   const viewport = useTimelineViewport(items);
   return <>
     {state === "failure" ? <div className="pwa-ui-states-actions"><Button variant="default" disabled={retried} onClick={() => setRetried(true)}>演示工具重试</Button></div> : null}
-    <MessageList sourceKey={JSON.stringify(["gallery", state, conversation.epoch, conversation.sourceChanged])} items={items} hasEarlier={false} running={conversation.running} isLive={conversation.online}
+    <MessageList sourceKey={sourceKey} items={items} hasEarlier={false} running={conversation.running} isLive={conversation.online}
       loading={conversation.loading} skeletonVisible={conversation.skeletonVisible}
       emptyContext={state === "empty" ? "pi-reach · 内存演示模型 · medium" : null}
       onRetryFailed={conversation.retryFailed} onCheckStatus={conversation.checkStatus} onCancelQueued={conversation.cancelQueued}
@@ -47,6 +49,9 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
   const queued = conversation.items.filter(isQueuedMessage).filter(item => !(noticeDismissed && item.insertionStatus === "unconfirmed"));
   const { epoch, sourceChanged } = conversation;
   const scopeToken = useMemo(() => ({ state, epoch, sourceChanged }), [state, epoch, sourceChanged]);
+  // 详情只交给同一来源的阅读器，与正式工作区一致。
+  const sourceKey = JSON.stringify(["gallery", state, epoch, sourceChanged]);
+  const toolDetails = useGalleryToolDetails(sourceKey);
   const updateStates = (next: Map<string, PublishedFileViewState>) => {
     currentStates.current = next;
     setStates(next);
@@ -83,8 +88,9 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
     pin() {}, unpin() {},
   };
   const uploading = state === "uploading" && conversation.uploads.some(item => item.status !== "complete");
-  return <PublishedFilesProvider value={files}>
+  return <PublishedFilesProvider value={files}><ToolDetailsProvider value={toolDetails.view}>
     <GalleryConversationControls state={state} conversation={conversation} onResult={setResult} />
+    {state === "tool-details" ? <GalleryToolDetailsControls details={toolDetails} /> : null}
     {state === "files" ? <div className="pwa-ui-states-actions"><Button variant="default" disabled={states.get("reading")?.phase === "ready"} onClick={() => {
       if (!assets.current) return;
       const next = new Map(currentStates.current);
@@ -92,7 +98,7 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
       updateStates(next);
     }}>演示获取完成</Button><span>获取中固定为 50%，只在点击后改变。</span></div> : null}
     <div className="pwa-workspace-body"><div className="pwa-workspace-column">
-      {state === "history" ? <GalleryHistory items={conversation.items} /> : <GalleryTimeline key={`${state}:${epoch}`} state={state} conversation={conversation} />}
+      {state === "history" ? <GalleryHistory items={conversation.items} /> : <GalleryTimeline key={`${state}:${epoch}`} state={state} sourceKey={sourceKey} conversation={conversation} />}
       <div className="pwa-chat-footer" ref={initializeAssets} hidden={state === "history"} inert={state === "history"} style={state === "history" ? { display: "none" } : undefined}>
         <MessageComposer enterSends={true} queuedMessages={queued.length ? <QueuedMessages items={queued.map(item => queuedMessageView(item, t.queued))} isOnline={conversation.online}
           onInsert={() => setResult("已演示插入排队消息；未发送到 Pi。")} onCancel={conversation.cancelQueued} onDismissNotice={() => setNoticeDismissed(true)} /> : undefined}
@@ -111,5 +117,5 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
           onCompactSession={() => setResult("已演示压缩；未执行远程操作。")} />
       </div>
     </div></div>
-  </PublishedFilesProvider>;
+  </ToolDetailsProvider></PublishedFilesProvider>;
 }

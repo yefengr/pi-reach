@@ -65,17 +65,19 @@ function GallerySurfaceControls({ inactive, open, outcome, setOutcome, controlle
   </section>;
 }
 
-export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true, device = GALLERY_DEVICES[0] }: {
+export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true, device = GALLERY_DEVICES[0], nicknames, onNicknameChange }: {
   surface: GallerySurface;
   onSurfaceChange: (next: GallerySurface) => void;
   showControls?: boolean;
   device?: PwaDeviceRecord;
+  /** 演示名称由展厅外层持有，导航与重命名弹窗读取同一份。 */
+  nicknames: Readonly<Record<string, string>>;
+  onNicknameChange: (deviceId: string, nickname: string) => void;
 }) {
   const [controller] = useState(createOperationNotificationController);
   const [language, setLanguage] = useState<LanguagePreference>("system");
   const [enterSends, setEnterSends] = useState(true);
   const [textSize, setTextSize] = useState<PwaTextSizePreference>("standard");
-  const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [previousSurface, setPreviousSurface] = useState(surface);
   const [settingsVisible, setSettingsVisible] = useState(surface === "settings");
   const [confirmAction, setConfirmAction] = useState<ConfirmActionDialogAction>({ kind: "new-session" });
@@ -136,7 +138,7 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
   };
   const rename = async (nickname: string) => {
     if (await wait()) {
-      setNicknames(current => ({ ...current, [device.id]: nickname }));
+      onNicknameChange(device.id, nickname);
       controller.notify("电脑名称已保存（仅演示，未写入配对记录）。");
     }
   };

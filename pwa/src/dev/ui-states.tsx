@@ -25,6 +25,7 @@ function GalleryContent({ slow, onSlowChange, reducedMotion }: { slow: boolean; 
   const [region, setRegion] = useState("conversation");
   const [surface, setSurface] = useState<GallerySurface>(null);
   const [surfaceDevice, setSurfaceDevice] = useState(GALLERY_DEVICES[0]);
+  const [nicknames, setNicknames] = useState<Readonly<Record<string, string>>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsOrigin = useRef<HTMLElement | null>(null);
   const changeSurface = (next: GallerySurface) => {
@@ -67,9 +68,10 @@ function GalleryContent({ slow, onSlowChange, reducedMotion }: { slow: boolean; 
         <p>这里只展示当前正式组件，不保留历史版本或候选方案；组件改动后同步更新演示数据。原生路由、真实连接、摄像头、安装与设备手势仍在测试环境验收。</p>
       </details>
     </header>
-    <UiStateSurfaces surface={surface} onSurfaceChange={changeSurface} showControls={region === "surfaces"} device={surfaceDevice} />
+    <UiStateSurfaces surface={surface} onSurfaceChange={changeSurface} showControls={region === "surfaces"} device={surfaceDevice}
+      nicknames={nicknames} onNicknameChange={(deviceId, nickname) => setNicknames(current => ({ ...current, [deviceId]: nickname }))} />
     <section className="pwa-ui-states-workspace" data-narrow={narrow || undefined} aria-label="真实组件演示工作区" inert={settingsOpen} aria-hidden={settingsOpen || undefined}>
-      <UiStateNavigation enabled={region === "navigation"} settingsOpen={settingsOpen} onSceneChange={setState} onOpenSurface={(next, device) => { setSurfaceDevice(device ?? GALLERY_DEVICES[0]); changeSurface(next); }}>
+      <UiStateNavigation enabled={region === "navigation"} settingsOpen={settingsOpen} nicknames={nicknames} onSceneChange={setState} onOpenSurface={(next, device) => { setSurfaceDevice(device ?? GALLERY_DEVICES[0]); changeSurface(next); }}>
         {region === "main" ? <UiStateMain /> : <UiStateWorkspace state={state} />}
       </UiStateNavigation>
     </section>

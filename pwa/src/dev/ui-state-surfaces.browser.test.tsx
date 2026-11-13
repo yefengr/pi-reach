@@ -11,7 +11,9 @@ import "./ui-states.css";
 
 function Harness({ onChange = () => {} }: { onChange?: (next: GallerySurface) => void }) {
   const [surface, setSurface] = useState<GallerySurface>(null);
-  return <UiStateSurfaces surface={surface} onSurfaceChange={next => { onChange(next); setSurface(next); }} />;
+  const [nicknames, setNicknames] = useState<Readonly<Record<string, string>>>({});
+  return <UiStateSurfaces surface={surface} onSurfaceChange={next => { onChange(next); setSurface(next); }}
+    nicknames={nicknames} onNicknameChange={(deviceId, nickname) => setNicknames(current => ({ ...current, [deviceId]: nickname }))} />;
 }
 
 afterEach(() => vi.restoreAllMocks());
