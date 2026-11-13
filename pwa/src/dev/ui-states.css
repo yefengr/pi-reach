@@ -66,12 +66,3 @@
   .pwa-root.pwa-ui-states .pwa-ui-states-frame .pwa-desktop-navigation,
   .pwa-ui-states-sidebar-control { display: none; }
 }
-/* 动效对比·旧规范：气泡、浮动入口、Modal 与 Toast 的进入原为陡峭的进入曲线，折叠与跟随沿用标准曲线（与现行内容曲线同值）。 */
-html[data-review-motion="previous"] :is(.pwa-user-message-in, .pwa-presence, .mantine-Modal-root, .pwa-operation-notifications) {
-  --pwa-ease-content: cubic-bezier(0, 0, 0, 1);
-}
-.pwa-ui-states-motion-params { width: 100%; border-collapse: collapse; font-size: var(--pwa-text-meta); line-height: 1.5; }
-.pwa-ui-states-motion-params th, .pwa-ui-states-motion-params td { padding: var(--pwa-space-2xs) var(--pwa-space-xs); border-bottom: 1px solid var(--pwa-line); text-align: left; vertical-align: top; }
-.pwa-ui-states-motion-params th { color: var(--pwa-secondary); font-weight: 500; }
-.pwa-ui-states-motion-params [data-active] { color: var(--pwa-ink); font-weight: 600; }
-.pwa-ui-states-motion-scroll { overflow-x: auto; }

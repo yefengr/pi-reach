@@ -72,7 +72,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | `opacity-enter` | 32% | 同左 | 会话内容接管骨架时的淡入起点；脚本副本 `CONTENT_ENTER_OPACITY` 由 `pwa-script-token-guard` 校验同值 |
 | `composer-fade-gradient` | `bg` 依次 0 → 16% → 48% → 80% → 100%（段点 25%／50%／75%） | 同左 | 消息列表在输入区上方的渐隐，先慢后快；只在 `pwa-theme.css` 定义 |
 
-新增透明度时先在刻度中取档并登记到上表；没有合适的档位时，先说明理由并扩充刻度，不写刻度外的值。开发评审页（`pwa/src/dev/`）与历史原型保留当时的对照取值，不受此约束。
+新增透明度时先在刻度中取档并登记到上表；没有合适的档位时，先说明理由并扩充刻度，不写刻度外的值。开发展厅（`pwa/src/dev/`）自身的控件与布局样式和历史原型不受此约束；展厅里展示的是正式组件，仍按本文取值。
 
 ### 基础层
 
@@ -193,7 +193,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 
 - CSS 间距字面量必须落在通用档位或领域细档内；其余值（如消息区底部 88、主区空态上限 260、收起侧栏避让 56、附件元数据 3）在 [`pwa-style-guard`](../pwa/src/app/pwa-style-guard.node.test.ts) 按文件、选择器与属性登记取值和理由。
 - 守卫扫描间距属性、名称含 `pad`／`gap`／`margin`／`inset` 的自定义属性、十六进制色值与边框宽度，并拒绝不再需要的登记：登记值必须至少有一个超出通用档位与领域细档。
-- 圆角守卫固定通用 token 为 4／8／12／16／24px，专用 token 为用户气泡 20px、Composer 32px、Toast 22px、胶囊 999px；正式 CSS 的圆角只允许引用这些 token、使用贴边 `0`、圆形 `50%` 或 `inherit`，专用 token 只允许守卫中登记的选择器使用（用户气泡、Composer 输入卡片、Toast 与局部错误卡片、状态标签与「最新」入口）；随指针类型切换的 `--pwa-button-radius` 与 `--pwa-chip-radius` 只能在主题与 `pwa-controls.css` 定义，并只用于登记的按钮与行内操作。历史开发评审样式不受该圆角用法限制。
+- 圆角守卫固定通用 token 为 4／8／12／16／24px，专用 token 为用户气泡 20px、Composer 32px、Toast 22px、胶囊 999px；正式 CSS 的圆角只允许引用这些 token、使用贴边 `0`、圆形 `50%` 或 `inherit`，专用 token 只允许守卫中登记的选择器使用（用户气泡、Composer 输入卡片、Toast 与局部错误卡片、状态标签与「最新」入口）；随指针类型切换的 `--pwa-button-radius` 与 `--pwa-chip-radius` 只能在主题与 `pwa-controls.css` 定义，并只用于登记的按钮与行内操作。开发展厅（`pwa/src/dev/`）自身的控件样式不受该圆角用法限制。
 - 守卫另检查正式 CSS 的字号与字重（含 `font` 简写）只引用 `--pwa-text-*`、`--pwa-weight-*` 或 `inherit`，见「基础层」的字重规则。
 - 正式 CSS 不写 `44px`：点击区及与之同高的行、输入框引用 `--pwa-hit-target`（见[「按钮尺寸」](#按钮尺寸)）。
 - 正式 CSS 的 `translate` 函数与属性不写非零 px 字面量：位移引用位移 token 或百分比（见[「动效」](#动效)）。
@@ -278,7 +278,7 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | --- | --- | --- |
 | `press` | 90ms | `press-in` |
 | `quick` | 120ms | `fade` |
-| `short` | 160ms | `menu-out`、`feedback`、`status-slot` |
+| `short` | 160ms | `menu-out`、`feedback` |
 | `leave` | 200ms | `modal-out`、`toast-out`、`switch-out`、`keyboard-dock`、`menu-view`、`toggle-track` |
 | `respond` | 240ms | `menu-in`、`press-out` |
 | `return` | 280ms | `page-out`、`drawer-out`、`collapse-out`、`collapse-settle`、`image-out`、`overscroll`、`reorder`、`menu-resize`、`toggle` |
@@ -299,7 +299,6 @@ PWA 使用浅色、深色和系统跟随三种外观。页面、表面、选中�
 | `collapse-in` / `collapse-out` | 过程组与工具手动折叠展开、折叠箭头旋转；排队抽屉整段列表的展开与折叠 |
 | `keyboard-dock` | 主屏 PWA 输入区随软键盘停靠：脚本约在 iOS 整页上推（约 250ms）开始后 50ms 检测到键盘并立即停靠，停靠与剩余的上推同时结束，并入上推、不单独出现（见「左右安全区」的移动主区）；减少动态效果时一次到位 |
 | `collapse-settle` | 过程组自动收起（正文接续或本轮结束）：与手动收起同长，高度、透明度与位移同用 `--pwa-ease-settle`，内容边淡出边被裁切，组头文案在收拢后再切换 |
-| `status-slot` | 仅历史评审页（`/app/ui-review`）沿用；生产时间线的状态槽固定 16px，不伸缩、不位移 |
 | `message-in` | 新发送气泡与在线新行进入、提交后输入区回缩与贴底 |
 | `scroll-latest` | 「最新」的逐帧滚动 |
 | `reorder` | 排队抽屉、附件行与在线 Pi 增删时其余项补位，排队抽屉上沿过渡 |

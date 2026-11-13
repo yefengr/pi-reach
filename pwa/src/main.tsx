@@ -14,7 +14,7 @@ import { applyStoredTextSize, installSystemTextSizeTracking, shouldRestoreTextSi
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing PWA root element");
 
-// 开发评审不挂载连接、数据库或 Service Worker；生产构建会移除整个动态入口。
+// 开发展厅不挂载连接、数据库或 Service Worker；生产构建会移除整个动态入口。
 const reviewPath = import.meta.env.DEV ? window.location.pathname : "";
 // 渲染前恢复字号，避免首屏先按标准档排版再跳变；展厅保持受控字号。
 if (shouldRestoreTextSize(reviewPath)) {
@@ -26,15 +26,7 @@ installHairlineDetection();
 
 const appRoot = createRoot(root);
 
-if (reviewPath === "/app/ui-review") {
-  void import("./dev/ui-review").then(({ UiReviewPage }) => {
-    appRoot.render(<StrictMode><UiReviewPage /></StrictMode>);
-  });
-} else if (reviewPath === "/app/ui-review-stage-a") {
-  void import("./dev/ui-review-stage-a").then(({ UiReviewStageAPage }) => {
-    appRoot.render(<StrictMode><UiReviewStageAPage /></StrictMode>);
-  });
-} else if (reviewPath === "/app/ui-states") {
+if (reviewPath === "/app/ui-states") {
   void import("./dev/ui-states").then(({ UiStateGalleryPage }) => {
     appRoot.render(<StrictMode><UiStateGalleryPage /></StrictMode>);
   });

@@ -339,7 +339,6 @@
   --pwa-duration-modal-in: var(--pwa-tier-appear);
   --pwa-duration-modal-out: var(--pwa-tier-leave);
   /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
-  --pwa-duration-status-slot: var(--pwa-tier-short);
   --pwa-duration-collapse-in: var(--pwa-tier-appear);
   --pwa-duration-collapse-out: var(--pwa-tier-return);
   /* 过程组自动收起（正文接续或本轮结束）：与手动收起同长，正文不为它多等。 */

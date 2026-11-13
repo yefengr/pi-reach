@@ -11,8 +11,8 @@ export const DEFAULT_TEXT_SIZE_PREFERENCE: PwaTextSizePreference = "system";
 
 const TEXT_SIZES: readonly PwaTextSize[] = ["standard", "large", "xlarge"];
 
-/** 这些开发展厅使用受控字号，不继承正式应用的持久化偏好。 */
-const REVIEW_ONLY_PATHS = new Set(["/app/ui-review", "/app/ui-review-stage-a", "/app/ui-states"]);
+/** 开发展厅使用受控字号，不继承正式应用的持久化偏好。 */
+const REVIEW_ONLY_PATHS = new Set(["/app/ui-states"]);
 
 /**
  * WebKit 的系统正文字体关键字：字号随 iOS「文字大小」设置变化（默认 17px）。

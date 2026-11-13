@@ -170,16 +170,19 @@ test("compaction, branch summary and provider error open the real SummaryReader 
 test("real pending delivery check and retry update only their messages", async () => {
   await render(<UiStateGalleryPage />);
   await choose("delivery");
-  expect(document.querySelectorAll(".pwa-pending")).toHaveLength(4);
+  // 对话区只有发送中、未确认与失败三条；排队消息与正式应用一样在输入框上方的排队抽屉中。
+  expect(document.querySelectorAll(".pwa-message-list .pwa-pending")).toHaveLength(3);
+  await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-queued-message").length).toBe(2);
+  expect(document.querySelector(".pwa-message-list")?.textContent).not.toContain("这条排队消息");
   const unknown = [...document.querySelectorAll<HTMLElement>(".pwa-pending")].find(element => element.textContent?.includes("Not confirmed"))!;
   await userEvent.click(unknown.querySelector<HTMLButtonElement>("button")!);
   expect(unknown.querySelector("button")).toBeNull();
   const failed = [...document.querySelectorAll<HTMLElement>(".pwa-pending")].find(element => element.textContent?.includes("Not sent; check the connection and retry"))!;
   await userEvent.click(failed.querySelector<HTMLButtonElement>("button")!);
   expect(failed.querySelector("button")).toBeNull();
-  const queued = [...document.querySelectorAll<HTMLElement>(".pwa-pending")].find(element => element.textContent?.includes("这条排队消息"))!;
-  await userEvent.click(queued.querySelector<HTMLButtonElement>("button")!);
-  expect(document.querySelectorAll(".pwa-pending")).toHaveLength(3);
+  const queued = [...document.querySelectorAll<HTMLElement>(".pwa-composer .pwa-queued-message")].find(element => element.textContent?.includes("这条排队消息"))!;
+  await userEvent.click(queued.querySelector<HTMLButtonElement>(".pwa-queued-message-cancel")!);
+  await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-queued-message").length).toBe(1);
   await page.getByRole("button", { name: "演示投递完成", exact: true }).click();
   expect(document.querySelectorAll(".pwa-pending")).toHaveLength(0);
 });
@@ -247,4 +250,19 @@ test("flow file selection survives ordinary controls and closes on the explicit 
   await screen.unmount();
   expect(create).toHaveBeenCalledTimes(2);
   expect(revoke.mock.calls.map(call => call[0]).sort()).toEqual(create.mock.results.map(result => result.value).sort());
+});
+
+test("tool-types fixture shows every current tool type icon and the edit diff counts", async () => {
+  await render(<UiStateGalleryPage />);
+  await choose("tool-types");
+  const heads = () => [...document.querySelectorAll<HTMLButtonElement>("button.pwa-process-head")];
+  await expect.poll(() => heads().length).toBe(2);
+  // 已结束的组首次加载即收起：混合类型的组头为步骤列表图标，只有修改的组头为修改图标。
+  expect(heads()[0].querySelector(".pwa-process-status-slot svg")).toHaveClass("lucide-list-tree");
+  expect(heads()[1].querySelector(".pwa-process-status-slot svg")).toHaveClass("lucide-file-diff");
+  await userEvent.click(heads()[0]);
+  const icons = () => [...document.querySelectorAll(".pwa-process-group")][0].querySelectorAll(".pwa-tool-card svg[class*='lucide-']");
+  await expect.poll(() => [...icons()].map(icon => [...icon.classList].find(name => name.startsWith("lucide-") && name !== "lucide-icon"))).toEqual(
+    expect.arrayContaining(["lucide-eye", "lucide-terminal", "lucide-search", "lucide-file-diff", "lucide-pencil"]));
+  expect(document.querySelector(".pwa-tool-diff")?.textContent).toBe("+2−1");
 });
