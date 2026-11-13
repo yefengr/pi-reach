@@ -263,10 +263,18 @@ test("completed rows show neutral type icons, failures stay red and a finished g
   expect(failed!.querySelector(".pwa-tool-status .lucide-circle-alert")).not.toBeNull();
   expect(getComputedStyle(failed!.querySelector(".pwa-tool-action-copy strong")!).color).toBe(tokenColor("--pwa-error"));
   expect(getComputedStyle(view.head().querySelector(".pwa-process-status-slot")!).color).toBe(tokenColor("--pwa-error"));
+  // 整组成功不打勾：同类工具显示该类图标，类型混合时为步骤列表，均为中性色。
   view.update({ entries: [tool("done", "complete"), tool("again", "complete")] });
-  const slot = view.head().querySelector<HTMLElement>(".pwa-process-status-slot")!;
-  expect(slot.querySelector(".lucide-check")).not.toBeNull();
-  expect(getComputedStyle(slot).color).toBe(tokenColor("--pwa-secondary"));
+  const slot = () => view.head().querySelector<HTMLElement>(".pwa-process-status-slot")!;
+  expect(slot().querySelector(".lucide-terminal")).not.toBeNull();
+  expect(slot().querySelector(".lucide-check")).toBeNull();
+  expect(getComputedStyle(slot()).color).toBe(tokenColor("--pwa-secondary"));
+  const read: ToolEntry = { kind: "tool", key: "read", value: {
+    ...scope, kind: "tool", event_id: "read", timestamp: 1, tool_call_id: "read", tool: "read", args: { path: "a.ts" }, truncated: false, status: "complete", result: "ok",
+  } };
+  view.update({ entries: [read, tool("done", "complete")] });
+  expect(slot().querySelector(".lucide-list-tree")).not.toBeNull();
+  expect(getComputedStyle(slot()).color).toBe(tokenColor("--pwa-secondary"));
 });
 
 test("narrow rows keep the verb and file name whole and shorten the directory first", async () => {

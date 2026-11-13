@@ -8,7 +8,7 @@ function event(tool: string, args: JsonValue, result: JsonValue): Extract<Timeli
 }
 
 test("uses specialized views only when tool name and required input are clear", () => {
-  expect(toolAction(event("read", { path: "src/file.ts" }, "text"))).toMatchObject({ kind: "read", icon: "file", label: "Read", detail: "src/file.ts" });
+  expect(toolAction(event("read", { path: "src/file.ts" }, "text"))).toMatchObject({ kind: "read", icon: "read", label: "Read", detail: "src/file.ts" });
   expect(toolAction(event("bread", { path: "src/file.ts" }, "text")).kind).toBe("generic");
   expect(toolAction(event("bash", {}, "text")).kind).toBe("generic");
 });

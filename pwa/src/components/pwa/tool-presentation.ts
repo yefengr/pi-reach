@@ -7,7 +7,7 @@ import type { ToolDetailsContent } from "@pi-reach/protocol/session";
 export type ToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }> | (Omit<ToolDetailsContent, "status"> & { kind: "tool"; tool_call_id: string; session_id: string; group_id: string; leaf_id: string | null; status: "running" | "complete" | "error" | "interrupted"; truncated: boolean });
 export type ToolStatus = "running" | "complete" | "error" | "interrupted" | "unknown";
 export type ToolKind = "read" | "command" | "search" | "edit" | "write" | "generic";
-export type ToolIconKind = "file" | "terminal" | "search" | "edit" | "write" | "tool";
+export type ToolIconKind = "read" | "terminal" | "search" | "edit" | "write" | "tool";
 
 type RecordValue = Record<string, unknown>;
 
@@ -96,7 +96,7 @@ export function toolAction(value: ToolValue): ToolAction {
   const t = getMessages().tools;
 
   if (hasName(tool, ["read"], ["read", "file"]) && path) {
-    return { kind: "read", icon: "file", label: t.actionRead, detail: path };
+    return { kind: "read", icon: "read", label: t.actionRead, detail: path };
   }
   if (hasName(tool, ["bash"], ["shell"], ["exec"], ["execute"], ["run", "command"]) && command) {
     return { kind: "command", icon: "terminal", label: t.actionCommand, detail: command };

@@ -1,4 +1,5 @@
-import { CircleAlert, CircleHelp, CircleStop, FilePlus, FileText, LoaderCircle, Pencil, Search, Terminal, Wrench, type LucideIcon } from "lucide-react";
+import type { Ref } from "react";
+import { CircleAlert, CircleHelp, CircleStop, Eye, FilePlus, LoaderCircle, Pencil, Search, Terminal, Wrench, type LucideIcon } from "lucide-react";
 
 import { isToolPreparing, toolAction, toolCallCopy, toolDiffStats, toolIdentity, toolStatus, type ToolIconKind, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
@@ -14,8 +15,14 @@ type ToolCardProps = {
   indicatorKeys?: readonly string[];
 };
 
-// 只有读取与写入用文件外形；修改用铅笔、命令用不带框的提示符，16px 下靠外形而非细节区分。
-const TOOL_TYPE_ICONS = { file: FileText, terminal: Terminal, search: Search, edit: Pencil, write: FilePlus, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
+// 只有修改用文件外形；读取用眼睛、写入用铅笔、命令用不带框的提示符，16px 下靠外形而非细节区分。
+const TOOL_TYPE_ICONS = { read: Eye, terminal: Terminal, search: Search, edit: FilePlus, write: Pencil, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
+
+/** 工具类型图标：工具行成功时与整组同类工具成功时的组头共用。 */
+export function ToolTypeIcon({ icon, iconRef }: { icon: ToolIconKind; iconRef?: Ref<SVGSVGElement> }) {
+  const TypeIcon = TOOL_TYPE_ICONS[icon];
+  return <TypeIcon ref={iconRef} size={16} aria-hidden="true" />;
+}
 
 /** 图标表示做了什么：成功时显示工具类型，运行、失败、中断与未知才换成状态图标。 */
 function ToolStatusIcon({ status, icon, toolKeys }: { status: ToolStatus; icon: ToolIconKind; toolKeys: readonly string[] }) {
@@ -24,8 +31,7 @@ function ToolStatusIcon({ status, icon, toolKeys }: { status: ToolStatus; icon: 
   if (status === "error") return <CircleAlert size={16} aria-hidden="true" />;
   if (status === "interrupted") return <CircleStop size={16} aria-hidden="true" />;
   if (status === "unknown") return <CircleHelp size={16} aria-hidden="true" />;
-  const TypeIcon = TOOL_TYPE_ICONS[icon];
-  return <TypeIcon size={16} aria-hidden="true" />;
+  return <ToolTypeIcon icon={icon} />;
 }
 
 /**
