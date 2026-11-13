@@ -15,4 +15,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const GALLERY_HISTORY_AT = Date.now() - DAY_MS;
 export const GALLERY_HISTORY: TimelineSessionSummary[] = [
   { id: "gallery-history", deviceId: "gallery-computer", endpointId: "gallery-live", sessionId: "gallery-saved", leafId: "saved-leaf", startedAt: GALLERY_HISTORY_AT, updatedAt: GALLERY_HISTORY_AT, eventCount: 6, preview: "只读历史示例", name: "已保存的界面检查", model: "演示模型", thinking: "medium" },
+  // 离线电脑没有在线 Pi，本地历史仍可打开。
+  { id: "gallery-offline-history", deviceId: "gallery-offline", endpointId: "gallery-offline-pi", sessionId: "gallery-offline-saved", leafId: "offline-leaf", startedAt: GALLERY_HISTORY_AT, updatedAt: GALLERY_HISTORY_AT, eventCount: 4, preview: "离线电脑上的历史", name: "离线电脑的已保存会话", model: "演示模型", thinking: "medium" },
 ];

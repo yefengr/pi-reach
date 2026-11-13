@@ -71,20 +71,23 @@ export const GALLERY_DETAIL_TOOLS: GalleryDetailTool[] = [
     output: "仅本页演示：运行中的输出预览。\n正式结果保存后，阅读器原位换成完整详情。" },
 ];
 const detailToolRef = (id: string): ToolRef => ({ call_entry_id: `${id}-entry`, tool_call_id: id });
-function detailToolItems(): TimelineViewItem[] {
+/** `completed` 中的运行工具已收到正式结果，以完成的摘要事件原位接管运行行。 */
+export function detailToolItems(completed: ReadonlySet<string> = new Set()): TimelineViewItem[] {
   return [
     text("details-intro", "工具行只带摘要；点开工具行后，阅读器才请求详情。"),
-    ...GALLERY_DETAIL_TOOLS.map(({ id, tool, running, summary }): TimelineViewItem => running
+    ...GALLERY_DETAIL_TOOLS.map(({ id, tool, running, summary }): TimelineViewItem => running && !completed.has(id)
       ? { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: `tool:${id}`, kind: "tool", tool_call_id: id, tool, representation: "summary", summary, tool_ref: detailToolRef(id), status: "running" } }
       : { kind: "event", event: { ...base, event_id: id, kind: "tool", tool_call_id: id, tool, representation: "summary", summary, tool_ref: detailToolRef(id), status: "complete" } }),
   ];
 }
-/** 运行中的工具返回受限预览；已完成的工具返回可缓存的完整详情。 */
-export function galleryToolDetails(ref: ToolRef): ToolDetailsContent | null {
+/** 运行中的工具返回受限预览，`final` 时返回其正式结果；已完成的工具返回可缓存的完整详情。 */
+export function galleryToolDetails(ref: ToolRef, final = false): ToolDetailsContent | null {
   const entry = GALLERY_DETAIL_TOOLS.find(item => item.id === ref.tool_call_id);
   if (!entry) return null;
-  return { tool_ref: ref, tool: entry.tool, source: entry.running ? "preview" : "session", status: entry.running ? "running" : "complete",
-    args: entry.args, result: { content: [{ type: "text", text: entry.output }] }, limited: entry.running };
+  const preview = entry.running && !final;
+  const output = entry.running && final ? `${entry.output}\n正式结果：测试通过。` : entry.output;
+  return { tool_ref: ref, tool: entry.tool, source: preview ? "preview" : "session", status: preview ? "running" : "complete",
+    args: entry.args, result: { content: [{ type: "text", text: output }] }, limited: preview };
 }
 function tool(status: "complete" | "error"): TimelineViewItem {
   return { kind: "event", event: { ...base, event_id: "read-result", kind: "tool", tool_call_id: "read-result", tool: "read", args: { path: "pwa/src/components/pwa/reader-shell.tsx" }, ...(status === "error" ? { status: "error" as const, error: "演示读取失败" } : { status: "complete" as const }), truncated: false, result: { content: [{ type: "text", text: status === "error" ? "演示读取失败：文件暂不可用。" : "仅本页演示：重试完成。\n" + "Independent reading content. 保持阅读与对话独立。\n".repeat(60) }] } } };

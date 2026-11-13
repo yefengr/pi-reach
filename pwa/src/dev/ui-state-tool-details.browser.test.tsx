@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { getMessages } from "@/lib/i18n";
 import { UiStateGalleryPage } from "./ui-states";
-import type { GalleryDetailsReply } from "./ui-state-tool-details";
+import { DETAILS_COMPLETE_MS, type GalleryDetailsReply } from "./ui-state-tool-details";
 
 const reader = () => document.querySelector<HTMLElement>(".pwa-tool-reader-scroll");
 const notice = () => reader()?.querySelector(".pwa-tool-notice")?.textContent ?? null;
@@ -67,4 +67,22 @@ test("summary tool rows load details on demand through the production controller
   await expect.poll(notice).toBe(t.detailsOffline);
   await closeReader();
   expect(database).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled(); expect(socket).not.toHaveBeenCalled();
+});
+
+test("a running tool's preview is replaced in place by its formal result while the reader stays open", async () => {
+  const t = getMessages().tools;
+  await render(<UiStateGalleryPage />);
+  await page.getByLabelText("演示状态", { exact: true }).selectOptions("tool-details");
+  await reply("complete");
+  await openTool(2);
+  await expect.poll(output).toContain("运行中的输出预览");
+  expect(notice()).toBe(t.detailsPreview);
+  const body = reader();
+  await expect.poll(output, { timeout: DETAILS_COMPLETE_MS * 3 }).toContain("正式结果：测试通过");
+  expect(reader()).toBe(body);
+  expect(notice()).toBeNull();
+  // 时间线同一行原位转为完成，本轮不再运行。
+  await expect.poll(() => document.querySelectorAll(".pwa-tool-card[data-tool-status='complete']").length).toBe(3);
+  await closeReader();
+  expect(document.querySelector(".pwa-composer-stop")).toBeNull();
 });

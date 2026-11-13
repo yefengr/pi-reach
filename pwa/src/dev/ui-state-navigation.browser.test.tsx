@@ -25,7 +25,7 @@ test("navigation, sidebar, saved history and settings retain the original Compos
   await userEvent.click(desktop.querySelector<HTMLButtonElement>(".pwa-history-row")!);
   await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe("history");
   expect(input()).toBe(composer);
-  await userEvent.click(desktop.querySelector<HTMLButtonElement>(".pwa-nav-session")!);
+  await userEvent.click([...desktop.querySelectorAll<HTMLButtonElement>(".pwa-nav-session")].find(button => button.textContent?.includes("阅读与对话布局"))!);
   await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe("tools");
   const settings = desktop.querySelector<HTMLButtonElement>(".pwa-nav-settings")!;
   settings.focus();
@@ -114,6 +114,34 @@ test("settings and its nested help isolate all background surface controls until
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-settings-back")!);
   await expect.poll(() => controls.hasAttribute("inert")).toBe(false);
   await expect.poll(() => document.activeElement).toBe(origin);
+});
+
+test("selecting a finished Pi shows a finished turn instead of a running one", async () => {
+  await render(<UiStateGalleryPage />);
+  await navigation();
+  const sessions = [...document.querySelectorAll<HTMLButtonElement>(".pwa-desktop-navigation .pwa-nav-session")];
+  await userEvent.click(sessions.find(button => button.textContent?.includes("另一段已完成的会话"))!);
+  await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe("tool-types");
+  expect(document.querySelector(".pwa-composer-stop")).toBeNull();
+  await userEvent.click(sessions.find(button => button.textContent?.includes("阅读与对话布局"))!);
+  await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe("tools");
+});
+
+test("switching computers filters history and opens local history without an online Pi", async () => {
+  await render(<UiStateGalleryPage />);
+  await navigation();
+  const desktop = document.querySelector(".pwa-desktop-navigation")!;
+  const historyNames = () => [...desktop.querySelectorAll(".pwa-history-row")].map(row => row.textContent ?? "");
+  await expect.poll(historyNames).toEqual([expect.stringContaining("已保存的界面检查")]);
+  await userEvent.click(desktop.querySelector<HTMLButtonElement>(".pwa-device-trigger")!);
+  await expect.poll(() => document.querySelector(".pwa-device-popover")).not.toBeNull();
+  const offline = [...document.querySelectorAll<HTMLElement>(".pwa-device-popover .pwa-computer-select")].find(row => row.textContent?.includes("离线电脑"))!;
+  await userEvent.click(offline);
+  await expect.poll(historyNames).toEqual([expect.stringContaining("离线电脑的已保存会话")]);
+  await userEvent.click(desktop.querySelector<HTMLButtonElement>(".pwa-history-row")!);
+  await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe("history");
+  expect(document.querySelector<HTMLElement>(".pwa-ui-states-frame-content")!.hidden).toBe(false);
+  expect(document.querySelector(".pwa-ui-states-frame")?.textContent).toContain("离线电脑的已保存会话");
 });
 
 test("a computer renamed in the gallery appears in the navigation like the formal workspace", async () => {

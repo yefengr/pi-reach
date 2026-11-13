@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { UiStateGalleryPage } from "./ui-states";
 import type { GalleryState } from "./ui-state-fixtures";
+import { FLOW_AUTO_STEP_MS } from "./ui-state-conversation";
 
 const input = () => document.querySelector<HTMLTextAreaElement>(".pwa-composer textarea")!;
 const send = () => document.querySelector<HTMLButtonElement>(".pwa-composer-send")!;
@@ -232,6 +233,28 @@ test("flow preserves thinking, tool expansion, reader and draft through formal l
   expect(document.querySelector("[data-flow-step]")?.getAttribute("data-flow-step")).toBe("0");
   expect(input()).toBe(composer);
   expect(composer.value).toBe("连续推进不丢失");
+});
+
+test("auto-advance lets the tool reader stay open through output growth, the formal result handoff and the source change", async () => {
+  await render(<UiStateGalleryPage />);
+  await choose("flow");
+  await page.getByRole("button", { name: "自动推进", exact: true }).click();
+  const step = () => document.querySelector("[data-flow-step]")?.getAttribute("data-flow-step");
+  const timeout = FLOW_AUTO_STEP_MS * 3;
+  await expect.poll(step, { timeout }).toBe("2");
+  await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!);
+  await expect.poll(reader).not.toBeNull();
+  const body = reader();
+  // 模态阅读器打开期间流程继续推进：输出增长与正式结果都在同一阅读器内原位更新。
+  await expect.poll(() => reader()?.textContent ?? "", { timeout }).toContain("追加输出");
+  expect(reader()).toBe(body);
+  await expect.poll(() => reader()?.textContent ?? "", { timeout }).toContain("正式结果：检查完成");
+  expect(reader()).toBe(body);
+  // 来源切换后旧详情自动关闭。
+  await expect.poll(step, { timeout: timeout * 2 }).toBe("6");
+  await expect.poll(reader).toBeNull();
+  await expect.poll(historyOpen).toBe(false);
+  await expect.element(page.getByRole("button", { name: "自动推进", exact: true })).toBeDisabled();
 });
 
 test("flow file selection survives ordinary controls and closes on the explicit source change", async () => {

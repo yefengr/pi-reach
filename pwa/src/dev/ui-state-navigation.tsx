@@ -40,11 +40,14 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
     .map(device => nicknames[device.id] === undefined ? device : { ...device, nickname: nicknames[device.id] });
   const selectedDevice = scene === "choose-computer" ? null : devices.find(device => device.id === activeDeviceId) ?? null;
   const endpoint = GALLERY_ENDPOINTS.find(item => item.endpointId === activeEndpointId && item.deviceId === selectedDevice?.deviceId);
-  const title = selectedHistoryId ? GALLERY_HISTORY[0].name! : endpoint?.name ?? selectedDevice?.nickname ?? "Pi Reach";
-  const emptyWorkspace = enabled && (!selectedDevice || !endpoint);
+  // 与正式应用一致：历史按当前电脑筛选，打开本地历史不依赖在线 Pi。
+  const history = scene === "loading" || scene === "error" ? [] : GALLERY_HISTORY.filter(item => item.deviceId === selectedDevice?.deviceId);
+  const selectedHistory = history.find(item => item.id === selectedHistoryId) ?? null;
+  const title = selectedHistory?.name ?? endpoint?.name ?? selectedDevice?.nickname ?? "Pi Reach";
+  const emptyWorkspace = enabled && !selectedHistory && (!selectedDevice || !endpoint);
   const navigation: WorkspaceNavigationProps = {
-    devices, endpoints: GALLERY_ENDPOINTS, history: scene === "loading" || scene === "error" ? [] : GALLERY_HISTORY,
-    activeDeviceId: selectedDevice?.id ?? null, activeEndpointId, selectedHistoryId,
+    devices, endpoints: GALLERY_ENDPOINTS, history,
+    activeDeviceId: selectedDevice?.id ?? null, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null,
     snapshotReady: scene !== "loading", historyListStatus: scene === "loading" ? "loading" : scene === "error" ? "error" : "success",
     onRetryHistory: () => setScene("paired"), completedEndpointIds: new Set([GALLERY_ENDPOINTS[1].endpointId]),
     pairingPresence: {
@@ -53,7 +56,11 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
     },
     onPair: () => onOpenSurface("pairing"), onSettings: () => { setSheetOpen(false); onOpenSurface("settings"); },
     onSelectDevice: id => { setScene("paired"); setActiveDeviceId(id); setSelectedHistoryId(null); setNotice("已选择演示电脑，未建立连接。"); },
-    onSelectEndpoint: id => { setActiveEndpointId(id); setSelectedHistoryId(null); onSceneChange("tools"); },
+    // 主区按所选 Pi 的状态切换：运行中的 Pi 演示运行工具，已完成的演示已结束的一轮。
+    onSelectEndpoint: id => {
+      setActiveEndpointId(id); setSelectedHistoryId(null);
+      onSceneChange(GALLERY_ENDPOINTS.find(item => item.endpointId === id)?.working ? "tools" : "tool-types");
+    },
     onSelectHistory: history => { setSelectedHistoryId(history.id); onSceneChange("history"); },
     onRename: device => onOpenSurface("rename", device), onRemove: setRemoveDevice,
   };
