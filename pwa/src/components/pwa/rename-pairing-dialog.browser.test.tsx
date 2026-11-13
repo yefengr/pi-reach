@@ -68,24 +68,26 @@ test("keeps 16px mobile side margins and separates the description from the form
   const title = document.getElementById("pwa-rename-title")!.getBoundingClientRect();
   const description = document.querySelector(".pwa-rename-description")!.getBoundingClientRect();
   const label = document.querySelector(".pwa-rename-field label")!.getBoundingClientRect();
-  expect(Math.round(description.top - title.bottom)).toBe(16);
+  // 三种居中弹窗共用同一标题行（与配对弹窗一致），标题到说明 16–20。
+  expect(Math.round(description.top - title.bottom)).toBeGreaterThanOrEqual(16);
+  expect(Math.round(description.top - title.bottom)).toBeLessThanOrEqual(20);
   expect(Math.round(label.top - description.bottom)).toBe(16);
 });
 
 test("renders an accessible in-root dialog and focuses the preselected suggested name", async () => {
   const { screen, dialog } = await openRename();
-  const input = screen.getByRole("textbox", { name: "Pairing name" });
+  const input = screen.getByRole("textbox", { name: "Computer name" });
   const dialogElement = dialog.element();
 
   await expect.element(dialog).toHaveAttribute("aria-modal", "true");
   expect(dialogElement.closest(".pwa-root")).not.toBeNull();
   const labelledBy = dialogElement.getAttribute("aria-labelledby");
   expect(labelledBy).toBeTruthy();
-  expect(document.getElementById(labelledBy!)?.textContent).toContain("Rename pairing");
+  expect(document.getElementById(labelledBy!)?.textContent).toContain("Rename computer");
   const describedBy = dialogElement.getAttribute("aria-describedby");
   expect(describedBy).toBeTruthy();
   expect(document.getElementById(describedBy!)?.textContent).toContain("This only changes the label in this browser.");
-  await expect.element(screen.getByRole("heading", { name: "Rename pairing", exact: true })).toBeVisible();
+  await expect.element(screen.getByRole("heading", { name: "Rename computer", exact: true })).toBeVisible();
   await expect.element(input).toHaveValue("office");
   await expect.element(input).toHaveFocus();
   const inputElement = input.element() as HTMLInputElement;
@@ -98,7 +100,7 @@ test.each([390, 767, 768, 1440].flatMap(width => ["light", "dark"].map(scheme =>
   const { screen, dialog } = await openRename();
   try {
     document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
-    const input = screen.getByRole("textbox", { name: "Pairing name" }).element();
+    const input = screen.getByRole("textbox", { name: "Computer name" }).element();
     const description = document.querySelector<HTMLElement>(".pwa-rename-description")!;
     const actions = document.querySelector<HTMLElement>(".pwa-rename-actions")!;
     await expect.poll(() => getComputedStyle(dialog.element()).opacity).toBe("1");
@@ -128,7 +130,7 @@ test("submits a trimmed name with Enter, closes, and returns focus", async () =>
   const { screen, trigger, dialog } = await openRename(async (nickname) => {
     savedNames.push(nickname);
   });
-  const input = screen.getByRole("textbox", { name: "Pairing name" });
+  const input = screen.getByRole("textbox", { name: "Computer name" });
 
   await input.fill("  Desk Pi  ");
   await userEvent.keyboard("{Enter}");
@@ -166,7 +168,7 @@ test("locks close paths and duplicate submissions while saving", async () => {
 
   screen.getByTestId("double-submit-rename").element().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   expect(attempts).toBe(1);
-  await expect.element(screen.getByRole("textbox", { name: "Pairing name" })).toBeDisabled();
+  await expect.element(screen.getByRole("textbox", { name: "Computer name" })).toBeDisabled();
   await expect.element(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   await expect.element(screen.getByRole("button", { name: "Close rename dialog" })).toBeDisabled();
   await expect.element(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
@@ -223,7 +225,7 @@ test("returns Endpoint Drawer rename flows to the persistent endpoint switcher",
     await screen.getByRole("menuitem", { name: "Rename office" }).click();
     await expect.element(chooser).not.toBeInTheDocument();
     await expect.element(drawer).not.toBeInTheDocument();
-    const dialog = screen.getByRole("dialog", { name: "Rename pairing" });
+    const dialog = screen.getByRole("dialog", { name: "Rename computer" });
     await expect.element(dialog).toBeVisible();
     return dialog;
   };
@@ -257,7 +259,7 @@ test("keeps the dialog open after a save error and permits a retry", async () =>
   });
 
   await screen.getByRole("button", { name: "Save" }).click();
-  await expect.element(screen.getByRole("alert")).toHaveTextContent("Could not save this pairing name. Try again.");
+  await expect.element(screen.getByRole("alert")).toHaveTextContent("Could not save this computer name. Try again.");
   await expect.element(dialog).toBeVisible();
   await expect.element(screen.getByRole("button", { name: "Save" })).toBeEnabled();
 

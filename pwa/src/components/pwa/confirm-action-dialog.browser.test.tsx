@@ -187,7 +187,10 @@ test.each(confirmLayoutCases)("lays out the $action.kind confirmation at $width 
   const actions = document.querySelector<HTMLElement>(".pwa-confirm-actions")!.getBoundingClientRect();
   expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
   expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(close.left);
-  expect(Math.round(description.top - title.getBoundingClientRect().bottom)).toBe(16);
+  // 三种居中弹窗共用同一标题行（与配对弹窗一致），标题到说明 16–20。
+  const titleGap = Math.round(description.top - title.getBoundingClientRect().bottom);
+  expect(titleGap).toBeGreaterThanOrEqual(16);
+  expect(titleGap).toBeLessThanOrEqual(20);
   const errorBox = document.querySelector<HTMLElement>(".pwa-confirm-error")?.getBoundingClientRect();
   if (error) {
     expect(errorBox).toBeDefined();

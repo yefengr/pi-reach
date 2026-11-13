@@ -1075,3 +1075,23 @@ test.each(["removed", "clipped", "animation failure"])("image source handoff fal
     await h.screen.unmount();
   }
 });
+
+test("image and text file rows share the column edges while only the image preview is capped", async () => {
+  const h = await harness({ items: [event(published(image)), event(published({ ...descriptor, publication_id: "text" }))] });
+  visibility(false);
+  await expect.poll(() => document.querySelectorAll(".pwa-published-actions svg").length).toBeGreaterThan(1);
+  const [imageCard, textCard] = [...document.querySelectorAll<HTMLElement>(".pwa-published-file")];
+  const right = (element: Element) => Math.round(element.getBoundingClientRect().right);
+  const left = (element: Element) => Math.round(element.getBoundingClientRect().left);
+  // 图片卡片与文本卡片同宽，限宽只作用在预览上。
+  expect(right(imageCard)).toBe(right(textCard));
+  const preview = imageCard.querySelector(".pwa-published-image, .pwa-published-placeholder");
+  if (preview) expect(Math.round(preview.getBoundingClientRect().width)).toBeLessThanOrEqual(560);
+  for (const card of [imageCard, textCard]) {
+    const glyphs = [...card.querySelectorAll(".pwa-published-actions svg")];
+    // 行尾操作图标的字形贴齐阅读列右缘，行首类型图标贴齐左缘；点击区向外越出。
+    expect(Math.abs(right(glyphs.at(-1)!) - right(card))).toBeLessThanOrEqual(1);
+    expect(Math.abs(left(card.querySelector(".pwa-published-row > svg")!) - left(card))).toBeLessThanOrEqual(1);
+  }
+  await h.screen.unmount();
+});

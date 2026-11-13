@@ -313,7 +313,7 @@ export const en = {
   pairing: {
     paired: (host: string) => `Paired with ${host}`,
     dialogTitle: "Pair a computer",
-    description: "Run /pi-reach pair in Pi on your computer, then scan the QR code or enter the pairing code.",
+    description: "Run this command in Pi on your computer, then scan the QR code or enter the pairing code.",
     close: "Close pairing",
     codeLabel: "Pairing code",
     codeHint: "8 characters, not case-sensitive.",
@@ -337,7 +337,6 @@ export const en = {
     },
   },
   confirm: {
-    kicker: "Confirm action",
     close: "Close confirmation dialog",
     newSessionTitle: "Start a fresh session?",
     newSessionBody: "Everyone viewing this Pi will move to a fresh conversation.",
@@ -353,13 +352,12 @@ export const en = {
     clearPending: "Clearing local data…",
   },
   rename: {
-    kicker: "Pairing record",
-    title: "Rename pairing",
+    title: "Rename computer",
     close: "Close rename dialog",
     descriptionBefore: "Choose a local name for ",
     descriptionAfter: ". This only changes the label in this browser.",
-    label: "Pairing name",
-    saveFailed: "Could not save this pairing name. Try again.",
+    label: "Computer name",
+    saveFailed: "Could not save this computer name. Try again.",
     saving: "Saving…",
     save: "Save",
   },

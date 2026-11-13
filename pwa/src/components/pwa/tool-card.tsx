@@ -1,5 +1,5 @@
 import type { Ref } from "react";
-import { CircleAlert, CircleHelp, CircleStop, Eye, FilePlus, LoaderCircle, Pencil, Search, Terminal, Wrench, type LucideIcon } from "lucide-react";
+import { CircleAlert, CircleHelp, CircleStop, Eye, FileDiff, LoaderCircle, Pencil, Search, Terminal, Wrench, type LucideIcon } from "lucide-react";
 
 import { isToolPreparing, toolAction, toolCallCopy, toolDiffStats, toolIdentity, toolStatus, type ToolIconKind, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
@@ -15,8 +15,9 @@ type ToolCardProps = {
   indicatorKeys?: readonly string[];
 };
 
-// 只有修改用文件外形；读取用眼睛、写入用铅笔、命令用不带框的提示符，16px 下靠外形而非细节区分。
-const TOOL_TYPE_ICONS = { read: Eye, terminal: Terminal, search: Search, edit: FilePlus, write: Pencil, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
+// 只有修改用文件外形，内含 ± 与增删行数呼应；带加号的文件读作新建，且与 /new 命令图标相近，不用。
+// 读取用眼睛、写入用铅笔、命令用不带框的提示符，16px 下靠外形而非细节区分。
+const TOOL_TYPE_ICONS = { read: Eye, terminal: Terminal, search: Search, edit: FileDiff, write: Pencil, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
 
 /** 工具类型图标：工具行成功时与整组同类工具成功时的组头共用。 */
 export function ToolTypeIcon({ icon, iconRef }: { icon: ToolIconKind; iconRef?: Ref<SVGSVGElement> }) {

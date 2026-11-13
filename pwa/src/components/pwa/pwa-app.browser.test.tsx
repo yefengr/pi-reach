@@ -3768,7 +3768,7 @@ test("closes mobile navigation before opening the rename dialog", async () => {
     await expect.element(screen.getByRole("dialog", { name: "Choose computer" })).toBeVisible();
     await screen.getByRole("button", { name: "Computer actions for test-host" }).click();
     await screen.getByRole("menuitem", { name: "Rename test-host" }).click();
-    await expect.element(screen.getByRole("dialog", { name: "Rename pairing" })).toBeVisible();
+    await expect.element(screen.getByRole("dialog", { name: "Rename computer" })).toBeVisible();
     expect(document.querySelector(".pwa-session-sheet")).toBeNull();
     await screen.getByRole("button", { name: "Cancel" }).click();
     await expect.element(navigationTrigger).toHaveFocus();

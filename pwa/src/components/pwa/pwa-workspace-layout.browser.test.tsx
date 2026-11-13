@@ -730,6 +730,11 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         }
         expect(button.querySelector(".pwa-peer-presence")?.textContent).toContain(["2 Pis running", "0 Pis running", "1 Pi running", "Checking"][index]);
         expect(button.querySelector(".pwa-peer-icon")?.classList.contains("online")).toBe(index === 0 || index === 2);
+        // 行首为裸图标：不加色调底块，盒子只包住图标本身，图标到文字 10。
+        const peerIcon = button.querySelector<HTMLElement>(".pwa-peer-icon")!;
+        expect(getComputedStyle(peerIcon).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+        expect(Math.round(peerIcon.getBoundingClientRect().width)).toBe(Math.round(peerIcon.querySelector("svg")!.getBoundingClientRect().width));
+        expect(Math.round(button.querySelector(".pwa-peer-copy")!.getBoundingClientRect().left - peerIcon.getBoundingClientRect().right)).toBe(10);
         if (index === 0 || index === 2) {
           // 在线电脑的图标与标签只用正文色，标签为中性色调底，不铺主色底。
           const probe = document.createElement("span");

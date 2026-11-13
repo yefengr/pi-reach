@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Button, Radio, Switch, TextInput, UnstyledButton } from "@mantine/core";
-import { ALargeSmall, CaseSensitive, Check, ChevronLeft, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, Globe, Monitor, Moon, RotateCcw, Smartphone, Sun, Trash2 } from "lucide-react";
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
@@ -114,9 +114,9 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
         <Radio.Group aria-label={s.textSize} name="pwa-text-size" value={textSize} onChange={(next) => setTextSize(next as PwaTextSizePreference)}>
           <div className="pwa-card pwa-settings-group">
             {textSizeFollowsSystem ? <SettingsChoice value="system" icon={<Smartphone size={20} />} title={s.textSizeSystem} hint={s.textSizeSystemHint} /> : null}
-            <SettingsChoice value="standard" icon={<Type size={20} />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
-            <SettingsChoice value="large" icon={<ALargeSmall size={20} />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
-            <SettingsChoice value="xlarge" icon={<CaseSensitive size={20} />} title={s.textSizeXLarge} hint={s.textSizeXLargeHint} />
+            <SettingsChoice value="standard" icon={<TextSizeGlyph size="standard" />} title={s.textSizeStandard} hint={s.textSizeStandardHint} />
+            <SettingsChoice value="large" icon={<TextSizeGlyph size="large" />} title={s.textSizeLarge} hint={s.textSizeLargeHint} />
+            <SettingsChoice value="xlarge" icon={<TextSizeGlyph size="xlarge" />} title={s.textSizeXLarge} hint={s.textSizeXLargeHint} />
           </div>
         </Radio.Group>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.textSizeHint}</p>
@@ -215,4 +215,9 @@ function SettingsChoice({ value, icon, title, hint, lang }: { value: string; ico
 /** 语言选项的行首标记：Lucide 没有区分具体语言的图标，用该语言的文字代替，与图标同占 20 × 20。 */
 function LanguageGlyph({ lang, children }: { lang: string; children: string }) {
   return <span className="pwa-settings-choice-glyph" lang={lang} aria-hidden="true">{children}</span>;
+}
+
+/** 字号选项的行首字母：三档用逐级增大的同一个 A 直接示意大小，与语言选项的文字标记同一做法。 */
+function TextSizeGlyph({ size }: { size: "standard" | "large" | "xlarge" }) {
+  return <span className="pwa-settings-choice-glyph" data-text-size={size} lang="en" aria-hidden="true">A</span>;
 }

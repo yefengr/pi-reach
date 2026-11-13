@@ -103,7 +103,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-message-list", property: "--pwa-timeline-pad-bottom", values: [88], reason: "消息区底部为浮动「最新」入口预留" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-composer-hint-action", property: "margin-block", values: [-10], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back", property: "margin-left", values: [-8], reason: ALIGN },
-  { file: "app/globals.css", selector: ".pwa-pairing-head", property: "margin", values: [-10], reason: ALIGN },
+  { file: "app/globals.css", selector: ".pwa-ui-scope :is(.pwa-pairing-head, .pwa-rename-head, .pwa-confirm-head) > .mantine-Modal-close", property: "margin", values: [-10], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-field-error svg", property: "margin-top", values: [1], reason: OPTICAL },
   { file: "app/globals.css", selector: ".pwa-pairing-methods", property: "margin", values: [-8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-runtime-notice .pwa-runtime-notice-dismiss", property: "margin", values: [-4], reason: ALIGN },

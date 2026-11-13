@@ -120,10 +120,11 @@ test.each([390, 1280])("keeps pairing dialog margins and grouping at %ipx", asyn
   await Promise.allSettled(document.getAnimations().map((animation) => animation.finished));
   const title = document.querySelector(".pwa-pairing-title")!.getBoundingClientRect();
   const description = document.querySelector(".pwa-pairing-description")!.getBoundingClientRect();
+  const command = document.querySelector(".pwa-pairing-dialog .pwa-command-block")!.getBoundingClientRect();
   const label = document.querySelector(".pwa-pairing-form label")!.getBoundingClientRect();
   const input = document.querySelector(".pwa-pairing-form input")!.getBoundingClientRect();
-  // 标题与关闭按钮同一行居中，标题到说明约 19px；各分组间距保持 16–20px，标签紧贴输入框。
-  for (const gap of [description.top - title.bottom, label.top - description.bottom].map(Math.round)) {
+  // 标题与关闭按钮同一行居中，标题到说明约 19px；说明、命令块与表单之间各 16，标签紧贴输入框。
+  for (const gap of [description.top - title.bottom, command.top - description.bottom, label.top - command.bottom].map(Math.round)) {
     expect(gap).toBeGreaterThanOrEqual(16);
     expect(gap).toBeLessThanOrEqual(20);
   }

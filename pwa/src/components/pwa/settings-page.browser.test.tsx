@@ -329,6 +329,19 @@ test("applies and remembers a text size tier immediately", async () => {
   await screen.unmount();
 });
 
+test("marks the text size tiers with the same letter in increasing sizes", async () => {
+  const screen = await renderPwa(<SettingsHarness />);
+  await expect.element(screen.getByRole("radio", { name: /^Standard/ })).toBeVisible();
+  const glyphs = ["standard", "large", "xlarge"].map((size) => document.querySelector<HTMLElement>(`.pwa-settings-choice-glyph[data-text-size="${size}"]`)!);
+  // 与语言选项同为文字标记：同一个 A 逐级增大，对读屏隐藏，不再混用三个无关的字号图标。
+  expect(glyphs.map((glyph) => glyph.textContent)).toEqual(["A", "A", "A"]);
+  expect(glyphs.every((glyph) => glyph.getAttribute("aria-hidden") === "true")).toBe(true);
+  const sizes = glyphs.map((glyph) => parseFloat(getComputedStyle(glyph).fontSize));
+  expect(sizes[0]).toBeLessThan(sizes[1]);
+  expect(sizes[1]).toBeLessThan(sizes[2]);
+  await screen.unmount();
+});
+
 test("offers following the system text size only where the browser can read it", async () => {
   let screen = await renderPwa(<SettingsHarness />);
   // 读不到系统字号的浏览器不显示该选项，默认偏好按标准档显示。
@@ -378,7 +391,8 @@ test("single-choice rows lead with the icon, mark the selection with a trailing 
   expect(getComputedStyle(large.element().parentElement!).opacity).toBe("0");
   expect(Math.round(large.element().getBoundingClientRect().width)).toBe(Math.round(rows[1]!.getBoundingClientRect().width));
   const row = rows[1]!.getBoundingClientRect();
-  const icon = rows[1]!.querySelector(".pwa-settings-choice-copy > svg")!.getBoundingClientRect();
+  // 字号选项行首为文字标记 A（与语言选项同为 20 宽的槽），取行首第一个元素。
+  const icon = rows[1]!.querySelector(".pwa-settings-choice-copy > :first-child")!.getBoundingClientRect();
   expect(Math.round(icon.left - row.left)).toBe(16);
   const text = rows[1]!.querySelector(".pwa-settings-choice-text")!.getBoundingClientRect();
   expect(Math.round(text.left - row.left)).toBe(46);

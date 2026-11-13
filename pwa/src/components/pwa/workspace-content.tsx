@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, type ReactNode, type Ref } from "react";
-import { CopyButton } from "@/components/pwa/copy-button";
+import { CopyCommand, PAIR_COMMAND } from "@/components/pwa/copy-command";
 import { Button } from "@mantine/core";
 import { ChevronRight, CloudOff, Computer, Download, History, Link2, LoaderCircle, Radio, WifiOff } from "lucide-react";
 import { BrandMark } from "@/components/pwa/brand-mark";
@@ -21,7 +21,6 @@ import { useDelayedVisibility } from "./use-delayed-visibility";
 
 export { useDelayedVisibility };
 
-const PAIR_COMMAND = "/pi-reach pair";
 
 /** 会话主区：时间线加底部操作区；在线会话与只读历史共用，只换底部输入区。 */
 export function TimelineWorkspace({ timeline, footer }: { timeline: ReactNode; footer: ReactNode }) {
@@ -93,12 +92,6 @@ function WorkspaceEmptyState({ icon, title, children, detail, action, progress, 
     {detail}
     {action}
   </div>;
-}
-
-/** 命令单独成行：等宽命令加复制按钮，说明文字不再夹着按钮。 */
-function CopyCommand({ command }: { command: string }) {
-  const { t } = useI18n();
-  return <div className="pwa-command-block"><code>{command}</code><CopyButton className="pwa-command-copy-button" text={command} label={t.workspace.copyCommand} /></div>;
 }
 
 /**

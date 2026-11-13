@@ -316,7 +316,7 @@ export const zh: Messages = {
   pairing: {
     paired: (host) => `已与 ${host} 配对`,
     dialogTitle: "配对电脑",
-    description: "在电脑上的 Pi 中运行 /pi-reach pair，然后扫描二维码或输入配对码。",
+    description: "在电脑上的 Pi 中运行下面的命令，然后扫描二维码或输入配对码。",
     close: "关闭配对",
     codeLabel: "配对码",
     codeHint: "共 8 位，不区分大小写。",
@@ -340,7 +340,6 @@ export const zh: Messages = {
     },
   },
   confirm: {
-    kicker: "确认操作",
     close: "关闭确认对话框",
     newSessionTitle: "开始新会话？",
     newSessionBody: "所有正在查看这个 Pi 的人都会转到新会话。",
@@ -356,13 +355,12 @@ export const zh: Messages = {
     clearPending: "正在清除本地数据…",
   },
   rename: {
-    kicker: "配对记录",
-    title: "重命名配对",
+    title: "重命名电脑",
     close: "关闭重命名对话框",
     descriptionBefore: "为 ",
     descriptionAfter: " 设置本地名称，只会修改此浏览器中的显示名称。",
-    label: "配对名称",
-    saveFailed: "无法保存这个配对名称，请重试。",
+    label: "电脑名称",
+    saveFailed: "无法保存这个电脑名称，请重试。",
     saving: "正在保存…",
     save: "保存",
   },
