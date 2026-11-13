@@ -5,6 +5,8 @@
 - 覆盖：[DESIGN「嵌套、圆形与胶囊」](../DESIGN.md#嵌套圆形与胶囊)原有的「嵌套不递减」规则，以及 Composer 圆角 16、浮层面板圆角 8 与内边距 6；次级按钮「surface＋1px line」、危险入口「错误色轮廓」与状态标签「只用描边」的外观；[ADR-20261028](20261028-square-navigation-and-drawers.md) 中底部电脑选择 Drawer 的直角规则
 - 后续调整：见[决策记录索引](20260518-closed-decisions.md#决策记录索引)。
 
+> 原型清理（2026-11-13）：旧评审原型已从当前目录移除，下方链接固定到删除前提交的历史源码。原决策与后续取代关系保持不变，当前规则仍以 DESIGN 和后续 ADR 为准。
+
 ## 背景
 
 [动效分层 ADR](20261031-motion-layers-ios-spring.md) 让内容与空间变化参照 iOS 弹簧之后，界面静态部分与 iOS 还有三处差异：
@@ -73,4 +75,4 @@
 
 没有采用的方案：附件与排队各自一块独立面板，虽然结构统一，但同时出现时占去半屏，只有提示行时仍是旧衔接；三者都放进输入框卡片，会让已发出的排队消息看起来像草稿的一部分；三者合成一块抽屉，折叠后附件可能整组被藏起来，草稿与已发出的消息也混在同一个列表里。
 
-评审原型见 [`docs/prototypes/20261104-composer-tray/`](../prototypes/20261104-composer-tray/page.html)。当前规则以 [DESIGN「组件规则」](../DESIGN.md#组件规则)的 Composer 与会话附件条目和[「动效」](../DESIGN.md#动效)为准。
+评审原型见 [`docs/prototypes/20261104-composer-tray/`](https://github.com/yefengr/pi-reach/blob/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261104-composer-tray/page.html)。当前规则以 [DESIGN「组件规则」](../DESIGN.md#组件规则)的 Composer 与会话附件条目和[「动效」](../DESIGN.md#动效)为准。

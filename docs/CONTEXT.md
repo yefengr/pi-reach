@@ -23,7 +23,7 @@ PWA 不会启动、唤醒或恢复 Pi。没有当前在线 Pi 时，Relay 和浏
 | device | Host 电脑的稳定身份，也是 pairing 与 ACL 的范围。 |
 | endpoint | 一个可路由的当前 Pi 入口。每个普通 Pi 进程生成新的 endpoint，不能由 cwd 推导。 |
 | runtime | endpoint 对应的当前 Pi 进程实例。一个进程中的 Extension reload 保持 endpoint/runtime；新进程生成新的身份。 |
-| session / history generation | Pi 的当前会话与权威时间线代次。`/new` 只替换 session/generation。 |
+| session / leaf | Pi 的会话与当前分支 tip。普通追加推进 leaf，`/new` 更换 session；两者都不更换 endpoint/runtime。 |
 | pairing / ACL | Owner 与单台 device 的本地授权关系；不跨电脑传播。 |
 | 正式 timeline | PWA 已收到并按 scope 保存的正式事件；它不是 Relay inventory 或远程 Pi 历史列表。 |
 
@@ -33,7 +33,7 @@ PWA 不会启动、唤醒或恢复 Pi。没有当前在线 Pi 时，Relay 和浏
 
 浏览器、Host 和 Relay 各自拥有不同状态：
 
-- 浏览器 IndexedDB 保存 Owner identity、device pairing、最近 endpoint metadata、设置和正式 timeline。timeline key 是 `device_id + endpoint_id + session_id + history_generation`；下线不删除。
+- 浏览器 IndexedDB 保存 Owner identity、device pairing、最近 endpoint metadata、设置和正式 timeline。正式历史按 `device_id + endpoint_id + session_id` 稳定分区；`leaf_id` 是分支 tip 元数据，不进入持久键。下线不删除，存储细节见[架构说明](ARCHITECTURE.md#状态与持久化所有权)。
 - Host 保存 device identity、Owner pairing/ACL、Relay 配置和 Pi 自己的 session 状态。
 - Relay registry 只保存实时连接、endpoint、ACL、订阅及短期 pairing offer；重启或下线后不会保留电脑或历史 inventory。
 

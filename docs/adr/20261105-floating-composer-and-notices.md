@@ -5,6 +5,8 @@
 - 覆盖：[ADR-20261101](20261101-hairline-concentric-radii.md) 补充决策「消息列表与输入框圆角重叠并渐隐（2026-11-02）」第 3 条，以及补充决策「附件进入输入框卡片，排队消息收进卡片后方的抽屉（2026-11-05）」第 4 条；[DESIGN「反馈呈现」](../DESIGN.md#反馈呈现)中连接提示条、标题区连接状态、局部错误条与安装提示的呈现位置
 - 后续调整：见[决策记录索引](20260518-closed-decisions.md#决策记录索引)。
 
+> 原型清理（2026-11-13）：旧评审原型已从当前目录移除，下方链接固定到删除前提交的历史源码。原决策与后续取代关系保持不变，当前规则仍以 DESIGN 和后续 ADR 为准。
+
 ## 背景
 
 附件移入输入框卡片、排队消息收进卡片后方的抽屉之后，输入区的高度仍随草稿、排队、附件与提示变化，消息列表的可视高度随之改变：提示或附件出现时卡片上沿瞬间跳动，抽屉进出时正文整块跳动，而抽屉的滑动仍在播放。为不拖慢时间线的锚点补偿，输入区高度只能一次到位，动画只能用位移与透明度。
@@ -64,7 +66,7 @@
 
 ## 后果与验证边界
 
-- 评审原型见 [`docs/prototypes/20261105-floating-composer-notices/`](../prototypes/20261105-floating-composer-notices/page.html)。
+- 评审原型见 [`docs/prototypes/20261105-floating-composer-notices/`](https://github.com/yefengr/pi-reach/blob/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261105-floating-composer-notices/page.html)。
 - 本记录只改变 PWA 呈现，不改变协议、Relay、Extension、连接重试策略或本地历史模型。
 - 分阶段实施，详细范围与验收见[实施方案](../plans/completed/20261105-floating-composer-and-notices.md)：先只改结构、不改观感，再改为高度过渡，最后重做提示。DESIGN 与 ARCHITECTURE 随各阶段的实现同步更新，未实现前仍以现有规则为准。
 - 列表留白同步、跟随贴底、发送过渡、历史前插锚点、「最新」入口、iOS 键盘与安全区、矮窗口密度须逐项复核；验收沿用时间线视口集成测试，并以真机录屏为准。

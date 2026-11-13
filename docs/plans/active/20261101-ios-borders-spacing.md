@@ -5,7 +5,7 @@
 - 项目级状态：见 [ROADMAP](../../ROADMAP.md)，本文不另设状态表。决策见 [ADR-20261101](../../adr/20261101-hairline-concentric-radii.md)。
 - 基线：`main` 的 `8c94c87`。
 - 当前事实来源：[DESIGN「基础层」](../../DESIGN.md#基础层)、[「嵌套、圆形与胶囊」](../../DESIGN.md#嵌套圆形与胶囊)、[「间距」](../../DESIGN.md#间距)。
-- 对比原型：[`docs/prototypes/20261101-ios-borders-spacing/page.html`](../../prototypes/20261101-ios-borders-spacing/page.html)（静态评审稿，可切换浅色与深色）。
+- 原型清理（2026-11-13）：旧对比稿已从当前目录移除；[删除前源码](https://github.com/yefengr/pi-reach/blob/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261101-ios-borders-spacing/page.html)仅供追溯。当前组件在开发环境 `/app/ui-states` 查看，Safari 与 iOS 真机可见度仍待验收。
 
 ## 1. 背景
 
@@ -251,7 +251,7 @@ DESIGN「嵌套不递减」改为：
 
 ### 8.6 最终对照与调整
 
-评审确认 Pi Reach 是网页应用，借鉴平台规则而不照搬外观，并允许推翻不合理的现有规则。最终对照原型见 [`final.html`](../../prototypes/20261101-ios-borders-spacing/final.html)（PR 之前的 main 与最新建议并排）。在 8.1–8.5 的基础上：
+评审确认 Pi Reach 是网页应用，借鉴平台规则而不照搬外观，并允许推翻不合理的现有规则。最终对照原型当时将 PR 之前的 main 与建议并排展示，已按头部清理记录移除；[历史源码](https://github.com/yefengr/pi-reach/blob/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261101-ios-borders-spacing/final.html)保留当时的比较。在 8.1–8.5 的基础上：
 
 | 类别 | 调整 |
 | --- | --- |

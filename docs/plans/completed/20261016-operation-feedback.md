@@ -1,6 +1,8 @@
 # 操作反馈与摘要阅读实施方案
 
-本方案解决耗时操作没有及时反馈、受理被误当完成，以及长摘要直接铺在会话中的问题。交互依据为[操作反馈原型](../../prototypes/20261016-operation-feedback/README.md)，设计基线为 [DESIGN](../../DESIGN.md)。项目级状态以 [ROADMAP](../../ROADMAP.md) 为准；本文件记录实施设计与末尾验证结果；项目级完成状态以 ROADMAP 为准。
+本方案解决耗时操作没有及时反馈、受理被误当完成，以及长摘要直接铺在会话中的问题。交互依据为当时已确认的操作反馈评审，设计基线为 [DESIGN](../../DESIGN.md)。项目级状态以 [ROADMAP](../../ROADMAP.md) 为准；本文件记录实施设计与末尾验证结果；项目级完成状态以 ROADMAP 为准。
+
+> 原型清理（2026-11-13）：旧操作反馈原型及专用截图已移除，[删除前记录](https://github.com/yefengr/pi-reach/blob/2c4e9f635bfef87d46c915d65a43200ee2b4dd60/docs/prototypes/20261016-operation-feedback/README.md)仅供追溯。当前组件在开发环境 `/app/ui-states` 查看；以下实施与验证记录、未覆盖的真机及真实链路边界保持不变。
 
 ## 交付范围
 
