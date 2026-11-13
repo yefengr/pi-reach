@@ -8,7 +8,7 @@ export const PWA_DIALOG_SIZE = 480;
 export const PWA_CONFIRM_DIALOG_SIZE = 400;
 
 /**
- * 居中 Modal 统一轻量进出：单层遮罩淡入，弹窗轻微位移并淡入；进入 180ms（进入曲线），退出 140ms（退出曲线）。
+ * 居中 Modal 统一轻量进出：单层遮罩淡入，弹窗轻微位移并淡入；进入用 --pwa-duration-modal-in 与内容曲线，退出用 --pwa-duration-modal-out 与退出曲线，时长取值见 DESIGN「动效时长」。
  * 退出期间不接收指针；焦点由 Mantine 在关闭开始时交还来源控件。减少动态效果时位移为 0，只保留淡化。
  */
 export const pwaModalTransition = {
