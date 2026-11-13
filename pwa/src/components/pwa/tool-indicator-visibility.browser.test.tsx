@@ -149,13 +149,13 @@ test.each(cases)("a running heading keeps its status icon and layout while membe
   expect(spin).toBeDefined();
   const frames = await sampleTransition(() => update(["a", "b", "c", "d", "e"].map(running)));
   // 当前活动是最后开始且仍有效的成员；其余运行数量以 +N 表达，不排队轮播。
-  expect(head().querySelector(".pwa-process-tool-detail")?.textContent).toBe("e.ts");
+  expect(head().querySelector(".pwa-tool-target")?.textContent).toBe("e.ts");
   expect(head().querySelector(".pwa-process-more")?.textContent).toBe("+4");
   expect(headIcon()).toBe(spinner);
   expect(spinner.getAnimations()[0]).toBe(spin);
   for (const frame of frames) expect(frame).toMatchObject({ spinner: true, working: false, bottom: before.bottom });
   update([running("a"), running("b"), running("c"), running("d"), completed("e")]);
-  expect(head().querySelector(".pwa-process-tool-detail")?.textContent).toBe("d.ts");
+  expect(head().querySelector(".pwa-tool-target")?.textContent).toBe("d.ts");
   expect(snapshot()).toMatchObject({ spinner: true, working: false, bottom: before.bottom });
   expect(headIcon()).toBe(spinner);
   expect(spinner.getAnimations()[0]).toBe(spin);

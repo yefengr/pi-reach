@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { cdp, page } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { buttonHeight } from "@/test/browser/button-height";
 import { getLanguageState } from "@/lib/i18n/locale";
 import { setLanguagePreference } from "@/lib/i18n";
 import { en } from "@/lib/i18n/messages/en";
@@ -199,9 +200,12 @@ test.each(sizes)("short connectors, fixed left status slots and single-line rows
   const entries = [...view.root().querySelectorAll<HTMLElement>(".pwa-process-entry")];
   expect(entries).toHaveLength(3);
   const slots = entries.map(entry => entry.querySelector<HTMLElement>(".pwa-process-status-slot, .pwa-tool-status")!);
+  // 明细行高与常规按钮同一判定：纯细指针 36，粗指针或不可悬停 44；组头始终保持 44 点击区。
+  const rowHeight = buttonHeight();
+  expect(round(rect(view.head()).height)).toBeGreaterThanOrEqual(44);
   for (const [index, entry] of entries.entries()) {
     const control = entry.querySelector<HTMLElement>("button")!;
-    expect(round(rect(control).height)).toBeGreaterThanOrEqual(44);
+    expect(round(rect(control).height)).toBe(round(rowHeight));
     expect(round(rect(control).width)).toBe(round(rect(entry).width));
     expect(round(rect(slots[index]!).width)).toBe(16);
     expect(round(rect(slots[index]!).left)).toBe(round(rect(slots[0]!).left));
@@ -209,7 +213,11 @@ test.each(sizes)("short connectors, fixed left status slots and single-line rows
     if (index === 0) expect(line.content).toMatch(/^(none|normal)$/);
     else {
       expect(line.content).not.toMatch(/^(none|normal)$/);
-      expect(round(Number.parseFloat(line.height))).toBe(16);
+      // 竖线取断口一半再加 2（44 行为 16、36 行为 12），并居中于上下两个图标之间。
+      const height = Number.parseFloat(line.height);
+      expect(round(height)).toBe(round((rowHeight - 16) / 2 + 2));
+      const center = rect(entry).top + Number.parseFloat(line.top) + height / 2;
+      expect(Math.abs(center - (rect(slots[index - 1]!).bottom + rect(slots[index]!).top) / 2)).toBeLessThanOrEqual(1);
       expect(round(Number.parseFloat(line.width))).toBe(1);
       expect(line.pointerEvents).toBe("none");
     }
@@ -234,6 +242,51 @@ test.each(sizes)("short connectors, fixed left status slots and single-line rows
   }
 });
 
+test("completed rows show neutral type icons, failures stay red and a finished group's check is neutral", async () => {
+  const view = await harness({ entries: [tool("done", "complete"), tool("failed", "error")], live: false, running: false, ended: true });
+  const tokenColor = (token: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${token})`;
+    view.root().append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  };
+  await page.elementLocator(view.head()).click();
+  await finish(view.root());
+  const [done, failed] = [...view.root().querySelectorAll<HTMLElement>(".pwa-tool-card")];
+  expect(done!.querySelector(".pwa-tool-status .lucide-square-terminal")).not.toBeNull();
+  expect(view.root().querySelector(".pwa-process-entry .lucide-check")).toBeNull();
+  expect(getComputedStyle(done!.querySelector(".pwa-tool-status")!).color).toBe(tokenColor("--pwa-secondary"));
+  expect(done!.querySelector(".pwa-tool-action-copy strong")!.textContent).toBe("Run");
+  expect(getComputedStyle(done!.querySelector(".pwa-tool-target")!).color).toBe(tokenColor("--pwa-soft-ink"));
+  expect(failed!.querySelector(".pwa-tool-status .lucide-circle-alert")).not.toBeNull();
+  expect(getComputedStyle(failed!.querySelector(".pwa-tool-action-copy strong")!).color).toBe(tokenColor("--pwa-error"));
+  expect(getComputedStyle(view.head().querySelector(".pwa-process-status-slot")!).color).toBe(tokenColor("--pwa-error"));
+  view.update({ entries: [tool("done", "complete"), tool("again", "complete")] });
+  const slot = view.head().querySelector<HTMLElement>(".pwa-process-status-slot")!;
+  expect(slot.querySelector(".lucide-check")).not.toBeNull();
+  expect(getComputedStyle(slot).color).toBe(tokenColor("--pwa-secondary"));
+});
+
+test("narrow rows keep the verb and file name whole and shorten the directory first", async () => {
+  await page.viewport(320, 900);
+  const read: ToolEntry = { kind: "tool", key: "read", value: {
+    ...scope, kind: "tool", event_id: "read", timestamp: 1, tool_call_id: "read", tool: "read", args: { path: `${"pwa/src/components/".repeat(4)}tool-card.tsx` }, truncated: false, status: "complete", result: "ok",
+  } };
+  const view = await harness({ entries: [read, tool("other", "complete")] });
+  const row = view.root().querySelector<HTMLElement>(".pwa-tool-card .pwa-tool-action-copy")!;
+  const fits = (selector: string) => {
+    const node = row.querySelector<HTMLElement>(selector)!;
+    return node.scrollWidth <= node.clientWidth;
+  };
+  expect(row.querySelector("strong")!.textContent).toBe("Read");
+  expect(fits("strong")).toBe(true);
+  expect(fits(".pwa-tool-target")).toBe(true);
+  expect(fits(".pwa-tool-context")).toBe(false);
+  expect(getComputedStyle(row.querySelector(".pwa-tool-context")!).textOverflow).toBe("ellipsis");
+});
+
 test("the head keeps a full-width hit row while its chevron glyph reaches the reading column's right edge", async () => {
   const view = await harness({ entries: [tool("read", "complete", "README.md"), tool("bash", "complete", "pnpm test")] });
   const chevron = view.head().querySelector<SVGElement>(".pwa-timeline-chevron")!;
@@ -253,7 +306,7 @@ test("a running Thinking title moves into the expanded head; its row keeps only 
   expect(row().querySelector(".pwa-process-thinking-heading, .pwa-process-status-slot")).toBeNull();
   const tail = row().querySelector<HTMLButtonElement>("button.pwa-thinking-tail-action")!;
   expect(tail.getAttribute("aria-label")).toBe(en.timeline.readThinking);
-  expect(round(rect(tail).height)).toBeGreaterThanOrEqual(44);
+  expect(round(rect(tail).height)).toBeGreaterThanOrEqual(round(buttonHeight()));
   await page.elementLocator(tail).click();
   expect(view.read).toHaveBeenCalledTimes(1);
   // 思考结束、本轮仍在运行：组头回到分类摘要，标题回到本行并淡入，预览收起。

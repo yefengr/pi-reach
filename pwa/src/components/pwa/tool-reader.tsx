@@ -4,7 +4,7 @@ import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide
 import { ReaderShell } from "./reader-shell";
 import { useToolDetails } from "@/lib/pwa/use-tool-details";
 import { ToolImage } from "./tool-output";
-import { toolContentBlocks, toolError, toolReaderArguments, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolStatus, type ToolValue } from "./tool-presentation";
+import { diffLineKind, toolContentBlocks, toolError, toolReaderArguments, toolReaderCall, toolStatus, toolWasTruncated, type ToolContentBlock, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import { READER_FOLLOW_THRESHOLD_PX } from "./reader-shared";
 import "./tool-reader.css";
@@ -19,9 +19,8 @@ type ToolReaderProps = {
 };
 
 function diffLineClass(line: string): string {
-  if (line.startsWith("+") && !line.startsWith("+++")) return "pwa-reader-line pwa-reader-line-add";
-  if (line.startsWith("-") && !line.startsWith("---")) return "pwa-reader-line pwa-reader-line-remove";
-  return "pwa-reader-line";
+  const kind = diffLineKind(line);
+  return kind === undefined ? "pwa-reader-line" : `pwa-reader-line pwa-reader-line-${kind}`;
 }
 
 /** 原始输出与 Pi 原生一致不带行号，与调用行同一左边线；diff 逐行以轻底和左侧色条区分增删。 */

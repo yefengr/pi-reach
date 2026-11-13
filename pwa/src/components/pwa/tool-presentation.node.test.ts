@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { JsonValue, TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
-import { reliableToolDiff, safeJsonText, toolAction, toolContentBlocks, toolHeaderSummary, toolReaderCall } from "./tool-presentation";
+import { diffLineKind, reliableToolDiff, safeJsonText, toolAction, toolCallCopy, toolContentBlocks, toolDiffStats, toolHeaderSummary, toolReaderCall } from "./tool-presentation";
 
 const base = { event_id: "e", session_id: "s", leaf_id: "g", group_id: "group", timestamp: 1, kind: "tool" as const, tool_call_id: "call", truncated: false, status: "complete" as const };
 function event(tool: string, args: JsonValue, result: JsonValue): Extract<TimelineEvent, { kind: "tool"; status: "complete"; args: JsonValue }> {
@@ -8,7 +8,7 @@ function event(tool: string, args: JsonValue, result: JsonValue): Extract<Timeli
 }
 
 test("uses specialized views only when tool name and required input are clear", () => {
-  expect(toolAction(event("read", { path: "src/file.ts" }, "text"))).toMatchObject({ kind: "read", label: "Read file", detail: "src/file.ts" });
+  expect(toolAction(event("read", { path: "src/file.ts" }, "text"))).toMatchObject({ kind: "read", icon: "file", label: "Read", detail: "src/file.ts" });
   expect(toolAction(event("bread", { path: "src/file.ts" }, "text")).kind).toBe("generic");
   expect(toolAction(event("bash", {}, "text")).kind).toBe("generic");
 });
@@ -26,6 +26,26 @@ test("keeps command and search summaries on one line and unknown tools conservat
   expect(toolHeaderSummary(event("grep", { pattern: "needle", path: "src" }, "result"))).toBe("needle");
   expect(toolHeaderSummary(event("edit", { path: "file.ts", newText: "private content" }, "result"))).toBe("file.ts");
   expect(toolHeaderSummary(event("custom", { path: "not inferred", token: "private" }, "result"))).toBe("path · token");
+});
+
+test("row copy leads with a verb and keeps the file name ahead of its directory", () => {
+  expect(toolCallCopy(event("read", { path: "pwa/src/a.tsx", offset: 1, limit: 120 }, "text"))).toEqual({ kind: "read", label: "Read", target: "a.tsx · L1–120", context: "pwa/src", title: "pwa/src/a.tsx · L1–120" });
+  expect(toolCallCopy(event("edit", { path: "C:\\repo\\b.css" }, "ok"))).toMatchObject({ label: "Edit", target: "b.css", context: "C:\\repo" });
+  expect(toolCallCopy(event("write", { path: "notes.md" }, "ok"))).toMatchObject({ label: "Write", target: "notes.md", context: "" });
+  expect(toolCallCopy(event("write", { path: "/notes.md" }, "ok"))).toMatchObject({ target: "/notes.md", context: "" });
+  // 命令与搜索词不拆分路径；无法分类的工具保留原始工具名与参数摘要。
+  expect(toolCallCopy(event("bash", { command: "pnpm --filter pwa lint" }, "ok"))).toMatchObject({ label: "Run", target: "pnpm --filter pwa lint", context: "" });
+  expect(toolCallCopy(event("grep", { pattern: "needle", path: "src" }, "ok"))).toMatchObject({ label: "Search", target: "needle", context: "" });
+  expect(toolCallCopy(event("deploy", { target: "prod" }, "ok"))).toMatchObject({ label: "deploy", target: "target", context: "" });
+});
+
+test("diff stats count only lines of a diff the edit tool actually returned", () => {
+  const diff = "--- a/file.ts\n+++ b/file.ts\n@@ -1,3 +1,3 @@\n context\n-old\n-older\n+new\n+--flag\n";
+  expect(toolDiffStats(event("edit", { path: "file.ts" }, { diff }))).toEqual({ added: 2, removed: 2 });
+  expect(toolDiffStats(event("edit", { path: "file.ts", oldText: "old", newText: "new" }, "Applied"))).toBeUndefined();
+  expect(toolDiffStats(event("bash", { command: "git diff" }, diff))).toBeUndefined();
+  expect(diffLineKind("+++ b/file.ts")).toBeUndefined();
+  expect(diffLineKind("-removed")).toBe("remove");
 });
 
 test("does not present edit input as an applied diff", () => {

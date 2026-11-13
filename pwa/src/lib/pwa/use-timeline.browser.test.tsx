@@ -261,7 +261,7 @@ test.each(["missing run_end", "run_end", "run_end with residual partial"] as con
     // 并行工具从第一条起进入同一组；运行中默认展开，明细按开始顺序排列，不排队轮播。
     await expect.poll(() => cards().length).toBe(2);
     expect(groups()).toHaveLength(1);
-    expect([...cards()].map(card => card.querySelector(".pwa-tool-action-copy")?.textContent)).toEqual(["readfirst.ts", "readsecond.ts"]);
+    expect([...cards()].map(card => card.querySelector(".pwa-tool-action-copy")?.textContent)).toEqual(["Readfirst.ts", "Readsecond.ts"]);
     // 转动的工具图标可见时不显示 Working。
     expect(workingShown()).toBeNull();
     expect(headWorking()).toBeNull();

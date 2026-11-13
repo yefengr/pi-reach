@@ -1,6 +1,6 @@
-import { Check, CircleAlert, CircleHelp, CircleStop, LoaderCircle } from "lucide-react";
+import { CircleAlert, CircleHelp, CircleStop, FilePen, FilePlus, FileText, LoaderCircle, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
 
-import { isToolPreparing, toolHeaderSummary, toolIdentity, toolInlineText, toolStatus, type ToolStatus, type ToolValue } from "./tool-presentation";
+import { isToolPreparing, toolAction, toolCallCopy, toolDiffStats, toolIdentity, toolStatus, type ToolIconKind, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
 import { useToolIndicatorRef } from "./tool-indicator-visibility";
 import "./tool-reader.css";
@@ -14,20 +14,42 @@ type ToolCardProps = {
   indicatorKeys?: readonly string[];
 };
 
-function ToolStatusIcon({ status, toolKeys }: { status: ToolStatus; toolKeys: readonly string[] }) {
+const TOOL_TYPE_ICONS = { file: FileText, terminal: SquareTerminal, search: Search, edit: FilePen, write: FilePlus, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
+
+/** 图标表示做了什么：成功时显示工具类型，运行、失败、中断与未知才换成状态图标。 */
+function ToolStatusIcon({ status, icon, toolKeys }: { status: ToolStatus; icon: ToolIconKind; toolKeys: readonly string[] }) {
   const indicatorRef = useToolIndicatorRef(toolKeys);
   if (status === "running") return <LoaderCircle ref={indicatorRef} className="pwa-tool-spinner" size={16} aria-hidden="true" />;
-  if (status === "complete") return <Check size={16} aria-hidden="true" />;
   if (status === "error") return <CircleAlert size={16} aria-hidden="true" />;
   if (status === "interrupted") return <CircleStop size={16} aria-hidden="true" />;
-  return <CircleHelp size={16} aria-hidden="true" />;
+  if (status === "unknown") return <CircleHelp size={16} aria-hidden="true" />;
+  const TypeIcon = TOOL_TYPE_ICONS[icon];
+  return <TypeIcon size={16} aria-hidden="true" />;
 }
 
-/** 完成的工具只显示对勾，运行中、失败、中断与未知状态保留文字；各状态的可访问名称不变。 */
+/**
+ * 工具行与收起组头共用的文案：动词（无法分类时为工具名）、对象、修改工具真实返回的增删行数，最后是目录。
+ * 动词与行数不参与省略；目录只占剩余空间，放不下时先于文件名省略。
+ */
+export function ToolCallCopy({ value }: { value: ToolValue }) {
+  const { t } = useI18n();
+  const copy = toolCallCopy(value);
+  const stats = toolDiffStats(value);
+  return <>
+    <strong className={copy.kind === "generic" ? undefined : "pwa-tool-verb"} title={value.tool}>{copy.label}</strong>
+    {copy.target ? <span className="pwa-tool-target" title={copy.title}>{copy.target}</span> : null}
+    {stats ? <span className="pwa-tool-diff" title={t.tools.diffStats(stats.added, stats.removed)}>
+      <span className="pwa-tool-diff-add">+{stats.added}</span>
+      <span className="pwa-tool-diff-remove">−{stats.removed}</span>
+    </span> : null}
+    {copy.context ? <span className="pwa-tool-context" title={copy.title}>{copy.context}</span> : null}
+  </>;
+}
+
+/** 完成的工具只显示类型图标，运行中、失败、中断与未知状态保留文字；各状态的可访问名称不变。 */
 export function ToolCard({ value, onRead, status: statusOverride, timelineKey, indicatorKeys }: ToolCardProps) {
   const { t } = useI18n();
   const status = toolStatus(value, statusOverride);
-  const summary = toolInlineText(toolHeaderSummary(value));
   // 准备中按运行处理状态，只换图标颜色与读屏文案。
   const preparing = status === "running" && isToolPreparing(value);
   const statusText = preparing ? t.tools.preparing : status === "unknown" ? t.timeline.unknown : t.tools.status[status];
@@ -35,8 +57,8 @@ export function ToolCard({ value, onRead, status: statusOverride, timelineKey, i
   return <article className={`pwa-tool-card pwa-tool-card-${status} pwa-timeline-row`} data-tool-status={status} data-tool-preparing={preparing ? "true" : undefined} data-tool-key={toolIdentity(value)} data-viewport-row={timelineKey}>
     <div className="pwa-tool-head">
       <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
-        <span className="pwa-tool-action-copy"><strong title={value.tool}>{value.tool}</strong>{summary ? <span title={summary}>{summary}</span> : null}</span>
-        <span className={`pwa-tool-status pwa-tool-status-${status}${preparing ? " pwa-tool-status-preparing" : ""}`} role="status" aria-label={t.tools.statusLabel(value.tool, preparing ? t.tools.preparing : t.tools.status[status])}><ToolStatusIcon status={status} toolKeys={indicatorKeys ?? [toolIdentity(value)]} />{status === "complete" ? null : <span>{statusText}</span>}</span>
+        <span className="pwa-tool-action-copy"><ToolCallCopy value={value} /></span>
+        <span className={`pwa-tool-status pwa-tool-status-${status}${preparing ? " pwa-tool-status-preparing" : ""}`} role="status" aria-label={t.tools.statusLabel(value.tool, preparing ? t.tools.preparing : t.tools.status[status])}><ToolStatusIcon status={status} icon={toolAction(value).icon} toolKeys={indicatorKeys ?? [toolIdentity(value)]} />{status === "complete" ? null : <span>{statusText}</span>}</span>
       </button>
     </div>
   </article>;

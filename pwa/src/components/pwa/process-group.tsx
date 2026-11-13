@@ -8,9 +8,9 @@ import { Collapse } from "./collapse";
 import { isSettleCollapse, processGroupSummary, type ProcessGroupState, type ProcessStatus } from "./process-group-state";
 import type { ProcessEntry, ProcessGroup as ProcessGroupModel } from "./process-groups";
 import { ThinkingParserContext, ThinkingProcessHeading, ThinkingProcessRow } from "./thinking-process-row";
-import { ToolCard } from "./tool-card";
+import { ToolCallCopy, ToolCard } from "./tool-card";
 import { ToolIndicatorContext, useToolIndicatorRef, useVisibleToolIndicators, type RunningToolsChange } from "./tool-indicator-visibility";
-import { isToolPreparing, toolHeaderSummary, toolInlineText, type ToolStatus } from "./tool-presentation";
+import { isToolPreparing, type ToolStatus } from "./tool-presentation";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import "./process-group.css";
 
@@ -34,7 +34,7 @@ type ProcessGroupProps = {
 
 type IconRef = (node: SVGSVGElement | null) => void;
 
-/** 状态槽只表达真实状态；Thinking 用 Lightbulb，工具与 Waiting 用旋转图标。 */
+/** 组头状态槽只表达真实状态；Thinking 用 Lightbulb，工具与 Waiting 用旋转图标，整组完成为中性对勾（见 process-group.css）。 */
 function ProcessStatusIcon({ status, thinking, iconRef }: { status: ProcessStatus; thinking: boolean; iconRef: IconRef }) {
   if (status === "running") {
     return thinking
@@ -138,11 +138,7 @@ function ProcessGroupHead({ group, state, summary, thinkingInHead, detailsId, on
   if (shown?.kind === "thinking") {
     copy = <ThinkingProcessHeading key={shown.key} entry={shown} status={state.entryStatuses.get(shown.key) ?? "neutral"} />;
   } else if (shown?.kind === "tool") {
-    const toolDetail = toolInlineText(toolHeaderSummary(shown.value));
-    copy = <>
-      <strong title={shown.value.tool}>{shown.value.tool}</strong>
-      {toolDetail ? <span className="pwa-process-tool-detail" title={toolDetail}>{toolDetail}</span> : null}
-    </>;
+    copy = <ToolCallCopy value={shown.value} />;
   } else {
     copy = <span className="pwa-process-summary" title={summary.fullLabel}>{summary.fullLabel}</span>;
   }
