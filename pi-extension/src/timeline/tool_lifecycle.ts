@@ -52,7 +52,7 @@ export function assistantCallEntries(branch: readonly SessionEntry[]): Map<strin
 }
 
 /** 只复制小摘要与稳定引用，不保留完整参数或结果。 */
-export function recoverToolCalls(branch: readonly SessionEntry[]): Map<string, ToolCallDetails> {
+export function recoverToolCalls(branch: readonly SessionEntry[], cwd?: string): Map<string, ToolCallDetails> {
   const ids = assistantCallEntries(branch);
   const calls = new Map<string, ToolCallDetails>();
   const results = new Map<string, ToolCallDetails>();
@@ -61,7 +61,7 @@ export function recoverToolCalls(branch: readonly SessionEntry[]): Map<string, T
     const message = entry.message;
     if (message.role === "assistant") {
       for (const call of nativeToolCalls(message.content)) calls.set(call.id, {
-        tool: call.tool, summary: toolSummary(call.tool, call.args), toolRef: { call_entry_id: ids.get(entry.id)!, tool_call_id: call.id },
+        tool: call.tool, summary: toolSummary(call.tool, call.args, cwd), toolRef: { call_entry_id: ids.get(entry.id)!, tool_call_id: call.id },
       });
     } else if (message.role === "toolResult") {
       const call = calls.get(message.toolCallId);
@@ -98,6 +98,8 @@ export function toolPartial<T>(
 
 export class ToolLifecycleTracker<T> {
   private readonly associations = new Map<string, ToolAssociation<T>>();
+  /** 当前会话的工作目录，用于把摘要路径显示为相对路径。 */
+  constructor(private readonly cwd: () => string | undefined = () => undefined) {}
   clear(): void { this.associations.clear(); }
   get(toolCallId: string): ToolAssociation<T> | undefined { return this.associations.get(toolCallId); }
   find(ref: ToolRef): ToolAssociation<T> | undefined {
@@ -109,14 +111,14 @@ export class ToolLifecycleTracker<T> {
   }
   indexAssistantContent(content: unknown, context: ToolContext<T>): void {
     for (const call of nativeToolCalls(content)) this.associations.set(call.id, { ...context, tool: call.tool,
-      summary: toolSummary(call.tool, call.args), toolRef: { call_entry_id: context.callEntryId, tool_call_id: call.id } });
+      summary: toolSummary(call.tool, call.args, this.cwd()), toolRef: { call_entry_id: context.callEntryId, tool_call_id: call.id } });
   }
   start(toolCallId: string, toolName: string, args: unknown, fallback?: ToolContext<T>): ToolAssociation<T> | null {
     const existing = this.associations.get(toolCallId);
     const context = existing ?? fallback;
     const tool = toolName || existing?.tool;
     if (!toolCallId || !context || !tool) return null;
-    const association = { ...context, tool, summary: args === undefined && existing ? existing.summary : toolSummary(tool, args),
+    const association = { ...context, tool, summary: args === undefined && existing ? existing.summary : toolSummary(tool, args, this.cwd()),
       toolRef: { call_entry_id: context.callEntryId, tool_call_id: toolCallId } };
     this.associations.set(toolCallId, association);
     return association;

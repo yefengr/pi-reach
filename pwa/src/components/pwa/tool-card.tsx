@@ -50,7 +50,7 @@ export function ToolCallCopy({ value }: { value: ToolValue }) {
       <span className="pwa-tool-diff-add">+{stats.added}</span>
       <span className="pwa-tool-diff-remove">−{stats.removed}</span>
     </span> : null}
-    {copy.context ? <span className="pwa-tool-context" title={copy.title}>{copy.context}</span> : null}
+    {copy.context ? <span className="pwa-tool-context" title={copy.title}><span className="pwa-tool-context-path">{copy.context}</span></span> : null}
   </>;
 }
 

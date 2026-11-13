@@ -98,7 +98,7 @@ export class TimelineRuntime {
     toolResult: [],
   };
   private readonly publications: TimelinePublications;
-  private readonly toolAssociations = new ToolLifecycleTracker<Correlation>();
+  private readonly toolAssociations = new ToolLifecycleTracker<Correlation>(() => this.sessionCwd());
   private readonly toolPreparation = new ToolPreparation(call => this.publishPreparing(call));
   private readonly preparingContext = new Map<string, { groupId: string; correlation: Correlation; callEntryId: string }>();
   private readonly detailPrefix = `${randomUUID()}:`;
@@ -153,6 +153,11 @@ export class TimelineRuntime {
 
   get sessionId(): string | null {
     return this.sessionManager?.getSessionId() ?? null;
+  }
+
+  /** 会话头记录的工作目录；工具摘要据此显示相对路径。 */
+  private sessionCwd(manager: SessionManager | null = this.sessionManager): string | undefined {
+    return manager?.getCwd();
   }
 
   get leafId(): string | null {
@@ -290,7 +295,7 @@ export class TimelineRuntime {
     } else if (update.type === "thinking_delta" && update.delta) {
       this.publishPartial(pending, "thinking", contentIndex, "delta", update.delta);
     } else if (update.type === "toolcall_start" || update.type === "toolcall_delta") {
-      const call = preparingCall(update.partial.content[update.contentIndex]);
+      const call = preparingCall(update.partial.content[update.contentIndex], this.sessionCwd());
       if (call) this.prepareTool(pending, call, false, (update.partial.content[update.contentIndex] as { arguments?: unknown }).arguments);
     } else if (update.type === "toolcall_end") {
       this.toolAssociations.indexAssistantContent([update.toolCall], {
@@ -298,7 +303,7 @@ export class TimelineRuntime {
         callEntryId: pending.marker.event_id,
         correlation: { ...pending.correlation },
       });
-      const call = preparingCall(update.toolCall);
+      const call = preparingCall(update.toolCall, this.sessionCwd());
       if (call) this.prepareTool(pending, call, true, update.toolCall.arguments);
     }
   }
@@ -466,7 +471,7 @@ export class TimelineRuntime {
     this.attach(sessionManager);
     const branch = sessionManager.getBranch();
     const legacyGroup = `legacy:${sessionManager.getSessionId()}`;
-    const recoveryTools = recoverToolCalls(branch);
+    const recoveryTools = recoverToolCalls(branch, this.sessionCwd(sessionManager));
     const attachmentMessages = attachmentRecords(sessionManager);
     const files = collectPublications(sessionManager);
     const positions = new Map(branch.map((entry, index) => [entry.id, index]));

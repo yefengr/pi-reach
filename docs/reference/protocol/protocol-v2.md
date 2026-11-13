@@ -388,7 +388,7 @@ PWA 同时最多一个获取任务和一片在途，请求超时 15 秒。完成
 
 `session_hello` 与 `session_ready` 可携带 `tool_details: 1`。新 PWA 首次发送不含该字段的原样 hello，以连接旧 Extension；新 Extension 对未声明能力的 hello 返回 `protocol_upgrade_required`，不登记 ready，也不发送新工具历史。新 PWA 仅对当前 hello 的该回复补发一次含能力的 hello，ready 回显能力后进入摘要模式；其他失败不无限重试或降级。
 
-新模式的正式 tool event 和工具 partial 使用 `representation: "summary"`，携带 `summary` 与 `tool_ref`，不携带完整 `args`、`result` 或图片正文。`summary` 包含操作类型，以及必要的有界 command、path、query、offset、limit；每个字符串最多 512 个 code unit，摘要 JSON 不超过 4 KiB。`tool_ref = {call_entry_id, tool_call_id}` 以原生 assistant 调用的 marker/entry 身份和工具调用 ID 定位原件，且引用内外的 `tool_call_id` 一致；不能仅凭工具调用 ID 查询。
+新模式的正式 tool event 和工具 partial 使用 `representation: "summary"`，携带 `summary` 与 `tool_ref`，不携带完整 `args`、`result` 或图片正文。`summary` 包含操作类型，以及必要的有界 command、path、query、offset、limit；每个字符串最多 512 个 code unit，摘要 JSON 不超过 4 KiB。摘要只供展示：位于会话工作目录内的绝对 `path` 写成相对该目录的路径，工作目录外的路径与原本就是相对的路径保持原样，`command` 不改写；需要原始参数时按需获取详情。`tool_ref = {call_entry_id, tool_call_id}` 以原生 assistant 调用的 marker/entry 身份和工具调用 ID 定位原件，且引用内外的 `tool_call_id` 一致；不能仅凭工具调用 ID 查询。
 
 Extension 仅向已协商 channel 定向发送工具摘要；PWA 先过滤发给其他 channel 的定向帧，再严格解码属于自己的帧。新 PWA 仍可读取旧 Extension 的既有 v2 inline 工具事件，但该组合没有源头轻量化收益。新 Extension 不向未协商页面回退发送完整工具结果。已经加载的旧页面可能只有通用错误提示，需要刷新到新版；服务端升级错误码不保证旧 JavaScript 已有专用升级文案。
 

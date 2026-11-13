@@ -16,6 +16,12 @@
 .pwa-root .pwa-tool-context { min-width: 0; overflow: hidden; font: var(--pwa-weight-regular) var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-target { flex: 0 1 auto; color: var(--pwa-soft-ink); }
 .pwa-root .pwa-tool-context { flex: 1 1 0; color: var(--pwa-secondary); }
+/*
+ * 目录从左侧省略，保留靠近文件名的末几级：容器按 RTL 排版让溢出与省略号落在左侧，放得下时仍左对齐；
+ * 路径本身隔离为 LTR，开头的斜杠与点号不会被双向算法挪到另一端。
+ */
+.pwa-root .pwa-tool-context { direction: rtl; text-align: left; }
+.pwa-root .pwa-tool-context-path { direction: ltr; unicode-bidi: isolate; }
 .pwa-root .pwa-tool-diff { flex: none; display: inline-flex; gap: var(--pwa-space-2xs); font: var(--pwa-weight-regular) var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); }
 .pwa-root .pwa-tool-diff-add { color: var(--pwa-complete); }
 .pwa-root .pwa-tool-diff-remove { color: var(--pwa-error); }

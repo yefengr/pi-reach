@@ -293,6 +293,29 @@ test("narrow rows keep the verb and file name whole and shorten the directory fi
   expect(fits(".pwa-tool-target")).toBe(true);
   expect(fits(".pwa-tool-context")).toBe(false);
   expect(getComputedStyle(row.querySelector(".pwa-tool-context")!).textOverflow).toBe("ellipsis");
+  // 目录从左侧省略：路径末尾贴住可见区右缘，开头越出左缘；文字顺序保持原样。
+  const context = row.querySelector<HTMLElement>(".pwa-tool-context")!;
+  const path = context.querySelector<HTMLElement>(".pwa-tool-context-path")!;
+  expect(path.textContent).toBe(`${"pwa/src/components/".repeat(4)}`.replace(/\/$/, ""));
+  expect(Math.round(path.getBoundingClientRect().right)).toBe(Math.round(context.getBoundingClientRect().right));
+  expect(Math.round(path.getBoundingClientRect().left)).toBeLessThan(Math.round(context.getBoundingClientRect().left));
+});
+
+test("a short directory that fits stays left-aligned right after the file name", async () => {
+  const read: ToolEntry = { kind: "tool", key: "read", value: {
+    ...scope, kind: "tool", event_id: "read", timestamp: 1, tool_call_id: "read", tool: "read", args: { path: "/src/a.ts" }, truncated: false, status: "complete", result: "ok",
+  } };
+  const view = await harness({ entries: [read, tool("other", "complete")] });
+  const context = view.root().querySelector<HTMLElement>(".pwa-tool-card .pwa-tool-context")!;
+  const path = context.querySelector<HTMLElement>(".pwa-tool-context-path")!;
+  // 开头的斜杠仍画在最左侧，没有被双向排版挪到末尾。
+  expect(path.textContent).toBe("/src");
+  const slash = document.createRange();
+  slash.setStart(path.firstChild!, 0);
+  slash.setEnd(path.firstChild!, 1);
+  expect(Math.round(slash.getBoundingClientRect().left)).toBe(Math.round(path.getBoundingClientRect().left));
+  expect(Math.round(path.getBoundingClientRect().left)).toBe(Math.round(context.getBoundingClientRect().left));
+  expect(Math.round(path.getBoundingClientRect().right)).toBeLessThan(Math.round(context.getBoundingClientRect().right));
 });
 
 test("the head keeps a full-width hit row while its chevron glyph reaches the reading column's right edge", async () => {
