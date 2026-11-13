@@ -21,6 +21,7 @@ const GALLERY_SCOPE: ToolDetailsCacheScope = { ownerId: "gallery-owner", deviceI
 /** 完整详情只缓存在本页内存，再次打开直接命中；不打开 IndexedDB。 */
 class MemoryToolDetailsCache implements ToolDetailsCache {
   private readonly records = new Map<string, string>();
+  clear(): void { this.records.clear(); }
   async get(key: string): Promise<ToolDetailsContent | undefined> {
     const text = this.records.get(key);
     return text === undefined ? undefined : toolDetailsContentSchema.parse(JSON.parse(text));
@@ -44,10 +45,11 @@ function errorFrame(request: OpenFrame) {
 
 /**
  * 复用正式详情控制器，连接与缓存换成内存实现。阅读器是模态抽屉，打开后无法操作页面控件，
- * 所以回包方式在打开前选定，请求到达后按选择立即回包，不模拟传输计时。
+ * 所以回包方式在打开前选定，请求到达后按选择立即回包；只有「预览后完成」按固定间隔补发正式结果。
  */
 export function useGalleryToolDetails(sourceKey: string) {
-  const [controller] = useState(() => new ToolDetailsController(new MemoryToolDetailsCache()));
+  const [cache] = useState(() => new MemoryToolDetailsCache());
+  const [controller] = useState(() => new ToolDetailsController(cache));
   const [online, setOnline] = useState(true);
   const [reply, setReplyState] = useState<GalleryDetailsReply>("details");
   const replyRef = useRef(reply);
@@ -57,7 +59,14 @@ export function useGalleryToolDetails(sourceKey: string) {
   const [completed, setCompleted] = useState<{ sourceKey: string; ids: ReadonlySet<string> }>({ sourceKey, ids: NO_COMPLETED });
   const sourceKeyRef = useRef(sourceKey);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
-  useLayoutEffect(() => { sourceKeyRef.current = sourceKey; }, [sourceKey]);
+  // 换场景或重放后时间线回到初始状态：缓存与待完成的演示一并重置，避免时间线仍在运行而详情已完成。
+  useLayoutEffect(() => {
+    if (sourceKeyRef.current === sourceKey) return;
+    sourceKeyRef.current = sourceKey;
+    cache.clear();
+    for (const timer of timers.current) clearTimeout(timer);
+    timers.current.clear();
+  }, [cache, sourceKey]);
   // 卸载时取消订阅与待完成的演示，清除控制器的续租计时器。
   useEffect(() => {
     const pending = timers.current;

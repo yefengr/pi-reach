@@ -85,4 +85,12 @@ test("a running tool's preview is replaced in place by its formal result while t
   await expect.poll(() => document.querySelectorAll(".pwa-tool-card[data-tool-status='complete']").length).toBe(3);
   await closeReader();
   expect(document.querySelector(".pwa-composer-stop")).toBeNull();
+  // 切走再返回即重放：时间线回到运行中，缓存也一并清空，再次打开重新请求详情。
+  await page.getByLabelText("演示状态", { exact: true }).selectOptions("tools");
+  await page.getByLabelText("演示状态", { exact: true }).selectOptions("tool-details");
+  await expect.poll(() => document.querySelectorAll(".pwa-tool-card[data-tool-status='complete']").length).toBe(2);
+  await reply("loading");
+  await openTool(2);
+  await expect.poll(notice).toBe(t.detailsLoading);
+  await closeReader();
 });

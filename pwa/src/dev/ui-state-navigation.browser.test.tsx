@@ -142,6 +142,13 @@ test("switching computers filters history and opens local history without an onl
   await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe("history");
   expect(document.querySelector<HTMLElement>(".pwa-ui-states-frame-content")!.hidden).toBe(false);
   expect(document.querySelector(".pwa-ui-states-frame")?.textContent).toContain("离线电脑的已保存会话");
+  // 切回在线电脑：主区随所选 Pi 回到运行中的会话，不停在只读历史。
+  await userEvent.click(desktop.querySelector<HTMLButtonElement>(".pwa-device-trigger")!);
+  await expect.poll(() => document.querySelector(".pwa-device-popover")).not.toBeNull();
+  await userEvent.click([...document.querySelectorAll<HTMLElement>(".pwa-device-popover .pwa-computer-select")].find(row => row.textContent?.includes("工作电脑"))!);
+  await expect.poll(() => document.querySelector(".pwa-ui-states")?.getAttribute("data-state")).toBe("tools");
+  expect(document.querySelector<HTMLElement>(".pwa-ui-states-frame-content")!.hidden).toBe(false);
+  expect(desktop.querySelector(".pwa-history-row[aria-current]")).toBeNull();
 });
 
 test("a computer renamed in the gallery appears in the navigation like the formal workspace", async () => {

@@ -45,6 +45,8 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
   const selectedHistory = history.find(item => item.id === selectedHistoryId) ?? null;
   const title = selectedHistory?.name ?? endpoint?.name ?? selectedDevice?.nickname ?? "Pi Reach";
   const emptyWorkspace = enabled && !selectedHistory && (!selectedDevice || !endpoint);
+  // 主区按所选 Pi 的状态切换：运行中的 Pi 演示运行工具，已完成的演示已结束的一轮。
+  const showEndpoint = (id: string) => onSceneChange(GALLERY_ENDPOINTS.find(item => item.endpointId === id)?.working ? "tools" : "tool-types");
   const navigation: WorkspaceNavigationProps = {
     devices, endpoints: GALLERY_ENDPOINTS, history,
     activeDeviceId: selectedDevice?.id ?? null, activeEndpointId, selectedHistoryId: selectedHistory?.id ?? null,
@@ -55,12 +57,15 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
       [GALLERY_DEVICES[1].id]: { status: "offline", onlineEndpoints: 0, totalEndpoints: 0 },
     },
     onPair: () => onOpenSurface("pairing"), onSettings: () => { setSheetOpen(false); onOpenSurface("settings"); },
-    onSelectDevice: id => { setScene("paired"); setActiveDeviceId(id); setSelectedHistoryId(null); setNotice("已选择演示电脑，未建立连接。"); },
-    // 主区按所选 Pi 的状态切换：运行中的 Pi 演示运行工具，已完成的演示已结束的一轮。
-    onSelectEndpoint: id => {
-      setActiveEndpointId(id); setSelectedHistoryId(null);
-      onSceneChange(GALLERY_ENDPOINTS.find(item => item.endpointId === id)?.working ? "tools" : "tool-types");
+    onSelectDevice: id => {
+      setScene("paired"); setActiveDeviceId(id); setSelectedHistoryId(null);
+      // 切换电脑同步主区：沿用该电脑上的当前 Pi，否则取第一个；没有 Pi 时主区为空态。
+      const deviceId = GALLERY_DEVICES.find(item => item.id === id)?.deviceId;
+      const next = GALLERY_ENDPOINTS.find(item => item.deviceId === deviceId && item.endpointId === activeEndpointId) ?? GALLERY_ENDPOINTS.find(item => item.deviceId === deviceId);
+      if (next) { setActiveEndpointId(next.endpointId); showEndpoint(next.endpointId); }
+      setNotice("已选择演示电脑，未建立连接。");
     },
+    onSelectEndpoint: id => { setActiveEndpointId(id); setSelectedHistoryId(null); showEndpoint(id); },
     onSelectHistory: history => { setSelectedHistoryId(history.id); onSceneChange("history"); },
     onRename: device => onOpenSurface("rename", device), onRemove: setRemoveDevice,
   };
