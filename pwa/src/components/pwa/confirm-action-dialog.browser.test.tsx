@@ -182,6 +182,8 @@ test.each(confirmLayoutCases)("lays out the $action.kind confirmation at $width 
   expect(box.bottom).toBeLessThanOrEqual(844);
   expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth);
   const title = document.querySelector<HTMLElement>(".pwa-confirm-title")!;
+  // 关闭按钮由主题统一换成 Lucide X，与其他图标同一套画法。
+  expect(document.querySelector(".pwa-confirm-head .pwa-icon-button svg")).toHaveClass("lucide-x");
   const close = document.querySelector<HTMLElement>(".pwa-confirm-head .pwa-icon-button")!.getBoundingClientRect();
   const description = document.querySelector<HTMLElement>(".pwa-confirm-description")!.getBoundingClientRect();
   const actions = document.querySelector<HTMLElement>(".pwa-confirm-actions")!.getBoundingClientRect();

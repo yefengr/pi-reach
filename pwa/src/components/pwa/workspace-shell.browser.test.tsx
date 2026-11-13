@@ -137,6 +137,8 @@ test("moves the toggle from the sidebar brand row to the title bar start, preser
   const before = buttonNode.getBoundingClientRect();
   const mainBefore = screen.getByRole("main").element().getBoundingClientRect();
   expect(before.width).toBeGreaterThanOrEqual(44);
+  // 展开与收起共用不带箭头的侧栏图标，只有名称随状态变化。
+  expect(buttonNode.querySelector("svg")).toHaveClass("lucide-panel-left");
   await button.click();
   await settleLayout();
   const after = buttonNode.getBoundingClientRect();
@@ -150,6 +152,7 @@ test("moves the toggle from the sidebar brand row to the title bar start, preser
   const heading = document.querySelector(".pwa-title-bar-heading")!.getBoundingClientRect();
   expect(heading.left).toBeGreaterThanOrEqual(after.right);
   expect(screen.getByRole("button", { name: "Expand sidebar" }).element()).toBe(buttonNode);
+  expect(buttonNode.querySelector("svg")).toHaveClass("lucide-panel-left");
   expect(screen.getByRole("main").element().getBoundingClientRect().width).toBeGreaterThan(mainBefore.width + 250);
   expect(document.querySelector("#pwa-desktop-navigation")?.hasAttribute("inert")).toBe(true);
   expect(draft.element()).toBe(draftNode);

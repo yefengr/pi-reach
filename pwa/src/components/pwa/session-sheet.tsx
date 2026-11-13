@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "@mantine/core";
+import { PanelLeft } from "lucide-react";
 import { PWA_DRAWER_EASE, pwaDrawerTransitions, usePwaMotionDuration } from "@/components/pwa/use-pwa-motion";
 import { useI18n } from "@/lib/i18n";
 import { getActiveDevice, WorkspaceHistorySection, WorkspaceNavigationFooter, WorkspaceRunningPiSection, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
@@ -285,7 +286,7 @@ export function SessionSheet({ onClose, focusOrigin = null, withinPortal = true,
     <Drawer.Content ref={setContentRef} role="dialog" aria-modal="true" data-swipe-drag={dragPreview ? "" : undefined} onFocusCapture={(event) => {
       if (event.target instanceof HTMLElement) onFocusedElement(event.target);
     }}>
-      <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={20} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} /></Drawer.Header>
+      <Drawer.Header><Drawer.Title className="pwa-sidebar-brand"><BrandMark className="pwa-brand-mark" size={20} /><span>Pi Reach</span><span className="pwa-sr-only"> · {t.navigation.workspace}</span></Drawer.Title><Drawer.CloseButton className="pwa-icon-button pwa-navigation-close" aria-label={t.navigation.close} title={t.navigation.close} icon={<PanelLeft size={20} />} /></Drawer.Header>
       <Drawer.Body>
         <div className="pwa-navigation-content">
           <div className="pwa-navigation-scroll" ref={scrollRef}>

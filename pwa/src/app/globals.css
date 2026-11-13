@@ -266,7 +266,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .lucide[width="16"] { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); stroke-width: var(--pwa-icon-inline-stroke); }
 /* 按钮文字为 600 字重，同行图标的线宽随之加重。 */
 .pwa-button .lucide[width="16"] { stroke-width: var(--pwa-icon-inline-stroke-strong); }
-.pwa-icon-button .lucide[width="20"], .pwa-settings-back .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
+.pwa-icon-button .lucide[width="20"], .pwa-settings-back .lucide[width="20"], .pwa-session-trigger-icon .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
 
 .pwa-ui-scope .pwa-button { min-height: var(--pwa-button-height); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-button-radius); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }

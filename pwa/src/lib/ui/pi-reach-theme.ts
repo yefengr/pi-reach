@@ -1,4 +1,6 @@
-import { ActionIcon, Badge, Button, createTheme, Modal, type CSSVariablesResolver, type MantineTransition } from "@mantine/core";
+import { createElement } from "react";
+import { ActionIcon, Badge, Button, CloseButton, createTheme, Modal, type CSSVariablesResolver, type MantineTransition } from "@mantine/core";
+import { X } from "lucide-react";
 import { PWA_MOTION_FALLBACK_MS } from "./motion-duration";
 
 /** 居中 Modal 宽度只由 Mantine size 决定（DESIGN「表单与叠层」）：表单类与快捷键取主题默认，确认类单独指定。 */
@@ -75,6 +77,8 @@ export function createPiReachTheme(modalInDuration: number, modalOutDuration: nu
   components: {
     Button: Button.extend({ classNames: { root: "pwa-button" }, defaultProps: { size: "md", variant: "filled" } }),
     ActionIcon: ActionIcon.extend({ classNames: { root: "pwa-icon-button" }, defaultProps: { size: "var(--pwa-hit-target)", variant: "subtle" } }),
+    // Modal、Drawer 与通知的关闭按钮改用 Lucide X，与其他图标同一线宽；Mantine 自带的关闭图标是另一套画法。
+    CloseButton: CloseButton.extend({ defaultProps: { icon: createElement(X, { size: 20, "aria-hidden": true }) } }),
     // 标签在上、说明与错误在输入框下方。
     TextInput: { defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
     Textarea: { defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
