@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { getMessages } from "@/lib/i18n";
+import { getTextSizeState, resetTextSizeStateForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import { UiStateGalleryPage } from "./ui-states";
 import { GALLERY_CODE, type GalleryState } from "./ui-state-fixtures";
 
@@ -236,4 +238,44 @@ test("theme, menus and fixtures leave browser storage/network untouched and rele
   expect(database).not.toHaveBeenCalled(); expect(network).not.toHaveBeenCalled();
   expect(create).toHaveBeenCalledTimes(2);
   expect(revoke.mock.calls.map(call => call[0]).sort()).toEqual(create.mock.results.map(result => result.value).sort());
+});
+
+test("main region renders the real empty, startup and notice components for every scene", async () => {
+  await render(<UiStateGalleryPage />);
+  await page.getByLabelText("展示区域", { exact: true }).selectOptions("main");
+  const scenes: [string, string][] = [
+    ["first-run-prompt", ".pwa-workspace-state"], ["first-run-ios", ".pwa-workspace-state"], ["first-run-mac", ".pwa-workspace-state"],
+    ["choose-pi", ".pwa-card-row"], ["relay-reconnecting", ".pwa-workspace-state-busy"], ["relay-retry", ".pwa-workspace-state .pwa-button"],
+    ["network", ".pwa-workspace-state"], ["startup-loading", ".pwa-loading"], ["startup-error", ".pwa-startup-card"],
+    ["status-error", ".pwa-main-notices .pwa-status-error"], ["exited", ".pwa-composer textarea[disabled], .pwa-composer textarea[readonly]"], ["browser-notice", ".pwa-runtime-notice"],
+  ];
+  for (const [scene, selector] of scenes) {
+    await page.getByLabelText("主区状态", { exact: true }).selectOptions(scene);
+    await expect.poll(() => document.querySelector(selector), { message: scene }).not.toBeNull();
+  }
+  // 首次使用的引导由受控安装状态驱动：可直接安装时有「安装应用」，进入第二步后显示配对命令块。
+  await page.getByLabelText("主区状态", { exact: true }).selectOptions("first-run-prompt");
+  await expect.element(page.getByRole("button", { name: "Install app" })).toBeVisible();
+  await page.getByRole("button", { name: "Use in browser for now" }).click();
+  await expect.poll(() => document.querySelector(".pwa-workspace-state .pwa-command-block")).not.toBeNull();
+});
+
+test("the actual gallery text size ignores the stored preference and follows only the memory selection", async () => {
+  const stored = localStorage.getItem(TEXT_SIZE_STORAGE_KEY);
+  localStorage.setItem(TEXT_SIZE_STORAGE_KEY, "xlarge");
+  resetTextSizeStateForTest();
+  try {
+    await render(<UiStateGalleryPage />);
+    // Composer 读取全局字号状态，得到的也是展厅的内存档位，而非存储里的「特大」。
+    await expect.poll(() => document.documentElement.dataset.pwaTextSize).toBe("standard");
+    expect(getTextSizeState().preference).toBe("standard");
+    await page.getByLabelText("展示区域", { exact: true }).selectOptions("surfaces");
+    await page.getByRole("button", { name: "预览设置页", exact: true }).click();
+    await page.getByRole("radio", { name: new RegExp(`^${getMessages().settings.textSizeLarge}`) }).click();
+    await expect.poll(() => document.documentElement.dataset.pwaTextSize).toBe("large");
+    expect(localStorage.getItem(TEXT_SIZE_STORAGE_KEY)).toBe("xlarge");
+  } finally {
+    if (stored === null) localStorage.removeItem(TEXT_SIZE_STORAGE_KEY); else localStorage.setItem(TEXT_SIZE_STORAGE_KEY, stored);
+    resetTextSizeStateForTest();
+  }
 });

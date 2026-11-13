@@ -1,12 +1,14 @@
 .pwa-root .pwa-published-file { min-width: 0; color: var(--pwa-ink); }
-.pwa-root .pwa-published-file.is-image { max-width: 560px; }
-.pwa-root .pwa-published-row { display: flex; align-items: center; gap: 8px; min-height: var(--pwa-hit-target); padding: 4px 8px; border-radius: var(--pwa-radius-md); }
+/* 只限制图片预览的宽度；文件名与操作行始终占满阅读列，各文件的操作列落在同一条竖线上。 */
+.pwa-root .pwa-published-file.is-image > .pwa-published-image, .pwa-root .pwa-published-file.is-image > .pwa-published-placeholder { max-width: 560px; }
+/* 行首图标与行尾操作图标的字形贴齐阅读列左右边缘，点击区向外越出。 */
+.pwa-root .pwa-published-row { display: flex; align-items: center; gap: 8px; min-height: var(--pwa-hit-target); padding: 4px 0; border-radius: var(--pwa-radius-md); }
 .pwa-root .pwa-published-row > svg { flex: none; color: var(--pwa-secondary); }
 .pwa-root .pwa-published-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--pwa-space-pair); }
 .pwa-root .pwa-published-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); }
 .pwa-root .pwa-published-meta, .pwa-root .pwa-published-error { font-size: var(--pwa-text-meta); line-height: 1.4; color: var(--pwa-secondary); overflow-wrap: anywhere; }
 .pwa-root .pwa-published-error { color: var(--pwa-error); }
-.pwa-root .pwa-published-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px; }
+.pwa-root .pwa-published-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px; margin-inline-end: calc((var(--pwa-icon-control) - var(--pwa-hit-target)) / 2); }
 /* 可预览文件保留两个44px操作槽和既有间隔，获取／取消交接不挤动名称。 */
 .pwa-root .pwa-published-actions[data-previewable] { min-width: calc(var(--pwa-hit-target) * 2 + 2px); }
 /* 进度占用大小行：行高与大小文字一致，状态文字等宽数字避免百分比变化时抖动。 */

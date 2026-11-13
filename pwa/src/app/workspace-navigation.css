@@ -151,15 +151,12 @@
   color: var(--pwa-running);
 }
 
+/* 行首电脑图标与设置页单选行同为裸图标（不加底色块），在线与离线只靠图标颜色区分；到文字的间隔由行的 gap 10 负责。 */
 .pwa-root .pwa-peer-icon {
-  width: 31px;
-  height: 31px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: var(--pwa-radius-md);
   color: var(--pwa-secondary);
-  background: var(--pwa-tonal);
 }
 
 .pwa-root .pwa-peer-icon.online {

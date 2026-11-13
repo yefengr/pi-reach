@@ -297,6 +297,8 @@ test("shows failure under the input, keeps its value and disables the form while
   await expect.element(screen.getByRole("button", { name: "Scan QR code" })).toBeDisabled();
   (screen.getByRole("button", { name: "Fail" }).element() as HTMLButtonElement).click();
   await expect.element(screen.getByText("This pairing code has expired. Run /pi-reach pair in Pi again.")).toBeVisible();
+  // 错误句中的命令以行内代码呈现，与说明下方的命令块一致；整句仍可按原文读取。
+  expect(document.querySelector(".pwa-field-error .pwa-inline-command")?.textContent).toBe("/pi-reach pair");
   await expect.element(input).toHaveAttribute("aria-invalid", "true");
   await expect.element(input).toHaveValue("K7MP-4Q2D");
   await expect.element(input).toHaveFocus();

@@ -182,12 +182,17 @@ test.each(confirmLayoutCases)("lays out the $action.kind confirmation at $width 
   expect(box.bottom).toBeLessThanOrEqual(844);
   expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth);
   const title = document.querySelector<HTMLElement>(".pwa-confirm-title")!;
+  // 关闭按钮由主题统一换成 Lucide X，与其他图标同一套画法。
+  expect(document.querySelector(".pwa-confirm-head .pwa-icon-button svg")).toHaveClass("lucide-x");
   const close = document.querySelector<HTMLElement>(".pwa-confirm-head .pwa-icon-button")!.getBoundingClientRect();
   const description = document.querySelector<HTMLElement>(".pwa-confirm-description")!.getBoundingClientRect();
   const actions = document.querySelector<HTMLElement>(".pwa-confirm-actions")!.getBoundingClientRect();
   expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
   expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(close.left);
-  expect(Math.round(description.top - title.getBoundingClientRect().bottom)).toBe(16);
+  // 三种居中弹窗共用同一标题行（与配对弹窗一致），标题到说明 16–20。
+  const titleGap = Math.round(description.top - title.getBoundingClientRect().bottom);
+  expect(titleGap).toBeGreaterThanOrEqual(16);
+  expect(titleGap).toBeLessThanOrEqual(20);
   const errorBox = document.querySelector<HTMLElement>(".pwa-confirm-error")?.getBoundingClientRect();
   if (error) {
     expect(errorBox).toBeDefined();

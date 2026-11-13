@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { flushSync } from "react-dom";
-import { ActionIcon } from "@mantine/core";
 import { useLocalStorage } from "@mantine/hooks";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { PwaDesktopNavigation } from "@/components/pwa/pwa-desktop-chrome";
 import { PwaMobileNavigation } from "@/components/pwa/pwa-mobile-chrome";
@@ -17,7 +15,8 @@ import { useSwipe } from "@/components/pwa/use-swipe";
 import type { SettingsOrigin, SettingsRoute } from "@/lib/pwa/settings-route";
 import { useI18n } from "@/lib/i18n";
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
-import { hasKeyboardOverlay, isKeyboardInput, shortcutLabel, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
+import { SidebarToggle } from "./sidebar-toggle";
+import { hasKeyboardOverlay, isKeyboardInput, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 function focusable(element: HTMLElement | null): element is HTMLElement {
@@ -277,7 +276,6 @@ export function PwaWorkspaceLayout({
     document.addEventListener("keydown", handleShortcut);
     return () => document.removeEventListener("keydown", handleShortcut);
   }, [onOpenSettings, settingsRoute.open, showShortcuts, toggleSidebar, transitioning, workspaceDrag.dragging]);
-  const toggleLabel = sidebarCollapsed ? t.navigation.expandSidebar : t.navigation.collapseSidebar;
 
   const backLabel = settingsRoute.origin?.kind === "navigation" ? t.settings.backToNavigation : t.settings.backToWorkspace;
   const settingsView = settingsRoute.open ? "settings" : "workspace";
@@ -289,9 +287,7 @@ export function PwaWorkspaceLayout({
       <div id="pwa-desktop-navigation" className="pwa-desktop-navigation" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed || undefined}><PwaDesktopNavigation navigation={desktopNavigation} collapsed={sidebarCollapsed} /></div>
       <div className="pwa-sidebar-resizer" role="separator" aria-label={t.navigation.resizeSidebar} aria-orientation="vertical" aria-controls="pwa-desktop-navigation" aria-valuemin={SIDEBAR_MIN_WIDTH} aria-valuemax={sidebarWidth.cap} aria-valuenow={sidebarWidth.width} tabIndex={sidebarWidth.enabled ? 0 : -1} aria-hidden={!sidebarWidth.enabled || undefined} onPointerDown={sidebarWidth.onPointerDown} onKeyDown={sidebarWidth.onKeyDown} onDoubleClick={sidebarWidth.onDoubleClick} />
       {/* 收展入口展开时在侧栏品牌行右端，收起后在会话标题区左端。 */}
-      <ActionIcon ref={sidebarToggleRef} className="pwa-sidebar-toggle" type="button" aria-label={toggleLabel} title={`${toggleLabel} (${shortcutLabel("toggleSidebar")})`} aria-keyshortcuts={shortcutLabel("toggleSidebar").replaceAll(" ", "").replace("⌘", "Meta").replace("Ctrl", "Control")} aria-expanded={!sidebarCollapsed} aria-controls="pwa-desktop-navigation" onPointerDown={(event) => { if (event.pointerType === "mouse") event.preventDefault(); }} onClick={toggleSidebar}>
-        {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-      </ActionIcon>
+      <SidebarToggle ref={sidebarToggleRef} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       <main ref={setMainElement} className="pwa-main" data-connection={connectionState}>
         <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={presentNavigation} />
         <div ref={noticesRef} className="pwa-main-notices">

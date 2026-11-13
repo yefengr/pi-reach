@@ -83,7 +83,7 @@ export function ConfirmActionDialog({ action, pending, error, onConfirm, onClose
   return <Modal
     opened={action !== null}
     onClose={onClose}
-    title={<div><span className="pwa-kicker">{t.confirm.kicker}</span><Text component="h2" id={titleId} className="pwa-confirm-title">{copy.title}</Text></div>}
+    title={<span id={titleId} className="pwa-confirm-title">{copy.title}</span>}
     aria-labelledby={titleId}
     aria-describedby={descriptionId}
     centered
@@ -98,7 +98,7 @@ export function ConfirmActionDialog({ action, pending, error, onConfirm, onClose
     closeOnEscape={!pending}
     closeButtonProps={{ disabled: pending, "aria-label": t.confirm.close, title: t.confirm.close }}
     classNames={{ content: "pwa-confirm-dialog", header: "pwa-confirm-head", close: "pwa-icon-button" }}
-    styles={{ header: { minHeight: 0, padding: 0 }, body: { padding: 0 } }}
+    styles={{ body: { padding: 0 } }}
   >
     <Stack gap={0}>
       <Text component="p" id={descriptionId} className="pwa-confirm-description">{copy.description}{fetchingFiles && visibleAction.kind !== "leave-attachments" ? ` ${t.files.cancelFetching}` : ""}</Text>

@@ -1,14 +1,17 @@
-import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, PUBLISHED_FILE_TYPE, type AttachmentMetadata, type PublishedFileDescriptor } from "@pi-reach/protocol/session";
+import { ATTACHMENT_MESSAGE_TYPE, ATTACHMENT_METADATA_TYPE, PUBLISHED_FILE_TYPE, type AttachmentMetadata, type JsonValue, type PublishedFileDescriptor, type ToolDetailsContent, type ToolRef, type ToolSummary } from "@pi-reach/protocol/session";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { ComposerAttachmentItem } from "@/components/pwa/attachment-cards";
 import type { PublishedFileViewState } from "@/components/pwa/published-files-context";
+import type { WireModel } from "@/lib/pi-reach/types";
 
-export type GalleryState = "thinking" | "tools" | "failure" | "long" | "files"
+export type GalleryState = "thinking" | "tools" | "tool-types" | "tool-details" | "failure" | "long" | "files"
   | "empty" | "offline" | "reconnecting" | "loading" | "models-loading" | "models-error"
   | "uploading" | "pending" | "history" | "summaries" | "delivery" | "flow";
 export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[] = [
   { id: "thinking", label: "运行中 · 思考", note: "展开查看思考正文；运行状态仅由本页控件改变。" },
   { id: "tools", label: "运行中 · 工具", note: "运行中的过程组默认展开，点击工具行查看真实详情。" },
+  { id: "tool-types", label: "已完成 · 工具类型", note: "展开过程组查看读取、运行、搜索、修改、写入五类图标与修改的增删行数；只有修改的组，组头显示该类图标。" },
+  { id: "tool-details", label: "工具详情 · 按需加载", note: "工具行只带摘要，打开后才请求详情；打开前选好返回方式，查看加载中、运行预览、完整详情、失败重试与离线不可用。" },
   { id: "failure", label: "失败与重试", note: "附件可原位重试；工具重试会替换本页演示结果。" },
   { id: "long", label: "长文字", note: "检查中英文、长路径、Markdown 与代码的阅读和复制。" },
   { id: "files", label: "文件", note: "文本与图片已就绪；获取进度由明确控件演示，不传输文件。" },
@@ -22,7 +25,7 @@ export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[]
   { id: "pending", label: "命令待确认", note: "真实 pending 门禁；点击完成或取消恢复操作。" },
   { id: "history", label: "只读历史", note: "正式历史工作区与只读输入区，不借用实时文件缓存。" },
   { id: "summaries", label: "摘要与服务错误", note: "正式压缩、分支摘要和服务错误阅读入口。" },
-  { id: "delivery", label: "消息投递", note: "普通待发送不占状态行；未知可核对、失败可重试、排队可撤回。" },
+  { id: "delivery", label: "消息投递", note: "普通待发送不占状态行；未知可核对、失败可重试；排队消息在输入框上方的排队抽屉中，可插入或撤回编辑。" },
   { id: "flow", label: "连续运行流程", note: "逐步推进流式输出、正式结果与 leaf；最后切换会话关闭旧详情。" },
 ];
 const base = { session_id: "ui-states", leaf_id: "leaf", group_id: "demo", timestamp: 1 };
@@ -36,6 +39,55 @@ export const GALLERY_FILES: PublishedFileDescriptor[] = [
 ];
 function text(id: string, value: string): TimelineViewItem {
   return { kind: "event", event: { ...base, event_id: id, kind: "assistant", status: "complete", blocks: [{ type: "text", text: value }] } };
+}
+/** 已完成的工具调用：只用于展示类型图标与文案，不执行任何命令。 */
+function completedTool(id: string, tool: string, args: { [key: string]: JsonValue }, output: string, details?: { [key: string]: JsonValue }): TimelineViewItem {
+  return { kind: "event", event: { ...base, event_id: id, kind: "tool", tool_call_id: id, tool, args, status: "complete", truncated: false, result: { content: [{ type: "text", text: output }], ...(details ? { details } : {}) } } };
+}
+const EDIT_DIFF = "--- a/pwa/src/components/pwa/tool-card.tsx\n+++ b/pwa/src/components/pwa/tool-card.tsx\n@@ -18,2 +18,3 @@\n-// 只有修改用文件外形\n+// 只有修改用文件外形，内含 ± 与增删行数呼应\n+// 读取用眼睛、写入用铅笔\n const TOOL_TYPE_ICONS = {};";
+function toolTypeItems(): TimelineViewItem[] {
+  return [
+    text("types-intro", "五类工具各一次，展开过程组查看类型图标。"),
+    completedTool("types-read", "read", { path: "pwa/src/components/pwa/tool-card.tsx", offset: 1, limit: 40 }, "仅本页演示：读取内容。"),
+    completedTool("types-run", "bash", { command: "pnpm typecheck" }, "仅本页演示：命令没有实际执行。"),
+    completedTool("types-search", "grep", { pattern: "TOOL_TYPE_ICONS" }, "仅本页演示：搜索结果。"),
+    completedTool("types-edit", "edit", { path: "pwa/src/components/pwa/tool-card.tsx" }, "仅本页演示：已替换。", { diff: EDIT_DIFF }),
+    completedTool("types-write", "write", { path: "docs/notes.md", content: "演示" }, "仅本页演示：已写入。"),
+    text("types-edit-only", "下面这组只有修改，组头显示修改图标。"),
+    completedTool("types-edit-a", "edit", { path: "pwa/src/app/globals.css" }, "仅本页演示：已替换。", { diff: "--- a/pwa/src/app/globals.css\n+++ b/pwa/src/app/globals.css\n@@ -1 +1 @@\n-old\n+new" }),
+    completedTool("types-edit-b", "edit", { path: "docs/DESIGN.md" }, "仅本页演示：已替换。", { diff: "--- a/docs/DESIGN.md\n+++ b/docs/DESIGN.md\n@@ -1 +1,2 @@\n-old\n+new\n+added" }),
+    text("types-end", "以上调用均为内存演示。"),
+    { kind: "event", event: { ...base, event_id: "types-run-end", kind: "run_end", status: "complete", timestamp: 1000 } },
+  ];
+}
+type GalleryDetailTool = { id: string; tool: string; running: boolean; summary: ToolSummary; args: { [key: string]: JsonValue }; output: string };
+/** 摘要工具行：时间线只带摘要，参数与输出由详情演示在打开后返回。 */
+export const GALLERY_DETAIL_TOOLS: GalleryDetailTool[] = [
+  { id: "details-read", tool: "read", running: false, summary: { action: "read", path: "pwa/src/components/pwa/tool-reader.tsx" }, args: { path: "pwa/src/components/pwa/tool-reader.tsx" },
+    output: "仅本页演示：按需返回的完整读取结果。\n" + "export function ToolReader() { /* 演示内容 */ }\n".repeat(24) },
+  { id: "details-check", tool: "bash", running: false, summary: { action: "execute", command: "pnpm typecheck" }, args: { command: "pnpm typecheck" },
+    output: "仅本页演示：命令没有实际执行。\n类型检查通过。" },
+  { id: "details-test", tool: "bash", running: true, summary: { action: "execute", command: "pnpm test" }, args: { command: "pnpm test" },
+    output: "仅本页演示：运行中的输出预览。\n正式结果保存后，阅读器原位换成完整详情。" },
+];
+const detailToolRef = (id: string): ToolRef => ({ call_entry_id: `${id}-entry`, tool_call_id: id });
+/** `completed` 中的运行工具已收到正式结果，以完成的摘要事件原位接管运行行。 */
+export function detailToolItems(completed: ReadonlySet<string> = new Set()): TimelineViewItem[] {
+  return [
+    text("details-intro", "工具行只带摘要；点开工具行后，阅读器才请求详情。"),
+    ...GALLERY_DETAIL_TOOLS.map(({ id, tool, running, summary }): TimelineViewItem => running && !completed.has(id)
+      ? { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: `tool:${id}`, kind: "tool", tool_call_id: id, tool, representation: "summary", summary, tool_ref: detailToolRef(id), status: "running" } }
+      : { kind: "event", event: { ...base, event_id: id, kind: "tool", tool_call_id: id, tool, representation: "summary", summary, tool_ref: detailToolRef(id), status: "complete" } }),
+  ];
+}
+/** 运行中的工具返回受限预览，`final` 时返回其正式结果；已完成的工具返回可缓存的完整详情。 */
+export function galleryToolDetails(ref: ToolRef, final = false): ToolDetailsContent | null {
+  const entry = GALLERY_DETAIL_TOOLS.find(item => item.id === ref.tool_call_id);
+  if (!entry) return null;
+  const preview = entry.running && !final;
+  const output = entry.running && final ? `${entry.output}\n正式结果：测试通过。` : entry.output;
+  return { tool_ref: ref, tool: entry.tool, source: preview ? "preview" : "session", status: preview ? "running" : "complete",
+    args: entry.args, result: { content: [{ type: "text", text: output }] }, limited: preview };
 }
 function tool(status: "complete" | "error"): TimelineViewItem {
   return { kind: "event", event: { ...base, event_id: "read-result", kind: "tool", tool_call_id: "read-result", tool: "read", args: { path: "pwa/src/components/pwa/reader-shell.tsx" }, ...(status === "error" ? { status: "error" as const, error: "演示读取失败" } : { status: "complete" as const }), truncated: false, result: { content: [{ type: "text", text: status === "error" ? "演示读取失败：文件暂不可用。" : "仅本页演示：重试完成。\n" + "Independent reading content. 保持阅读与对话独立。\n".repeat(60) }] } } };
@@ -56,6 +108,8 @@ function sentAttachmentItems(): TimelineViewItem[] {
 export function galleryItems(state: GalleryState, retried: boolean): TimelineViewItem[] {
   if (state === "thinking") return [text("intro", "正在整理阅读布局。"), { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "thinking", kind: "thinking", status: "delta", delta: "**检查阅读与输入的关系**\n\n在本页展开思考，检查标题、正文和运行提示。没有连接远程会话。" } }];
   if (state === "tools") return [text("intro", "正在检查工作面板；点击工具行查看原始输出。"), { kind: "partial", createdAt: 2, partial: { protocol_version: 2, type: "timeline_partial", ...base, partial_id: "tool:check", kind: "tool", tool_call_id: "check", tool: "bash", args: { command: "pnpm typecheck" }, status: "running", blocks: [{ type: "text", text: "演示输出：正在检查类型。\n此命令没有实际执行。" }] } }];
+  if (state === "tool-types") return toolTypeItems();
+  if (state === "tool-details") return detailToolItems();
   if (state === "failure") return [tool(retried ? "complete" : "error"), text("failure-note", retried ? "演示工具重试已完成。" : "工具失败保留原始输出，附件失败保留独立重试入口。")];
   if (state === "long") return [text("long", `## 阅读与换行\n\n中英文正文保持原有排版。Long English text should wrap inside the reading column without widening the page.\n\n\`pwa/src/components/pwa/very-long-directory-name/another-long-directory-name/reader-drawer-and-state.tsx\`\n\n> 阅读位置和输入草稿应在宽度切换时保持。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n| 状态 | 说明 |\n| --- | --- |\n| 内存 | 不连接远程服务 |\n| 草稿 | 仅保留在本页 |\n\n${"长段落用于检查自然换行。Keep the reading column comfortable. ".repeat(14)}`)];
   if (state !== "files") return conversationItems(state);
@@ -94,7 +148,9 @@ function conversationItems(state: GalleryState): TimelineViewItem[] {
     { kind: "pending", id: "sending", clientRequestId: "sending", requestId: "sending", createdAt: 1, text: "这条消息正在等接收回执，气泡下方不再显示发送状态。", delivery: "pending" },
     { kind: "pending", id: "unknown", clientRequestId: "unknown", requestId: "unknown", createdAt: 2, text: "这条消息的投递状态未知。", delivery: "unknown_delivery" },
     { kind: "pending", id: "failed", clientRequestId: "failed", requestId: "failed", createdAt: 3, text: "这条消息没有发送出去。", delivery: "failed", deliveryFailure: { code: "transport_unavailable", retryable: true } },
-    { kind: "pending", id: "queued", clientRequestId: "queued", requestId: "queued", createdAt: 4, text: "这条排队消息可以取消。", delivery: "accepted", cancelable: true },
+    // 排队消息与正式应用一样留在输入框上方的排队抽屉，不进入对话区。
+    { kind: "pending", id: "queued", clientRequestId: "queued", requestId: "queued", createdAt: 4, text: "这条排队消息可以插入或撤回编辑。", delivery: "accepted", queued: true, cancelable: true },
+    { kind: "pending", id: "inserted", clientRequestId: "inserted", requestId: "inserted", createdAt: 5, text: "这条插入请求尚未确认。", delivery: "accepted", queued: true, cancelable: true, insertionStatus: "unconfirmed" },
   ];
   if (state === "history") return [
     ...Array.from({ length: 36 }, (_, index): TimelineViewItem => ({ kind: "event", event: { ...base, session_id: "gallery-history", event_id: `history-${index}`, event_seq: index + 1, kind: "assistant", status: "complete", blocks: [{ type: "text", text: `已保存的演示记录 ${index + 1}。只读内容不修改当前草稿。` }] } })),
@@ -138,3 +194,13 @@ export function createGalleryAssets() {
     : { phase: "ready", receivedBytes: GALLERY_FILES[0].byte_length, byteLength: GALLERY_FILES[0].byte_length, preview: { kind: "text" }, text: GALLERY_DOCUMENT, url: textUrl };
   return { ready, dispose: () => { URL.revokeObjectURL(textUrl); URL.revokeObjectURL(imageUrl); } };
 }
+
+/** 模型菜单演示：含一个长名称，检查窄宽度下的省略与完整说明。 */
+export const GALLERY_MODELS: WireModel[] = Array.from({ length: 14 }, (_, index) => ({
+  id: index === 0 ? "model-standard" : `model-gallery-${index + 1}`,
+  name: index === 0 ? "model-standard" : index === 1 ? "长名称模型 · 保留完整说明与 English context for narrow screens" : `model-gallery-${index + 1} · 展厅演示`,
+  provider: "demo",
+  reasoning: true,
+  context_window: 128_000,
+  vision: false,
+}));

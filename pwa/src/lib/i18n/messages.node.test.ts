@@ -25,12 +25,19 @@ test("the model chip describes the shared model and thinking settings in both la
   expect(zh.commands.modelChipLabel("示例模型", "high")).toBe("模型与思考设置，当前 示例模型，思考级别 high");
 });
 
-test("conversation thinking labels stay English in both interface languages", () => {
+test("registered conversation terms stay English in both interface languages", () => {
   expect(en.timeline.thinkingTrace).toBe("Thinking");
   expect(en.timeline.thinking).toBe("Thinking…");
-  for (const key of ["thinking", "thinkingTrace"] as const) {
+  expect(en.timeline.working).toBe("Working…");
+  for (const key of ["thinking", "thinkingTrace", "working"] as const) {
     expect(zh.timeline[key], key).toBe(en.timeline[key]);
   }
+  expect([en.tools.actionRead, en.tools.actionCommand, en.tools.actionSearch, en.tools.actionEdit, en.tools.actionWrite]).toEqual(["Read", "Run", "Search", "Edit", "Write"]);
+  for (const key of ["actionRead", "actionCommand", "actionSearch", "actionEdit", "actionWrite"] as const) {
+    expect(zh.tools[key], key).toBe(en.tools[key]);
+  }
+  // 分类摘要是整句，随界面语言。
+  expect(zh.tools.groupRead(2)).toBe("读取 2 个文件");
 });
 
 test("every safe feedback message has a Chinese translation", () => {

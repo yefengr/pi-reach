@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
-import { Check, ChevronRight, CircleAlert, CircleHelp, CircleStop, Lightbulb, LoaderCircle } from "lucide-react";
+import { ChevronRight, CircleAlert, CircleHelp, CircleStop, Lightbulb, ListTree, LoaderCircle } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import type { ThinkingEntry } from "@/lib/pwa/timeline-presentation";
@@ -8,9 +8,9 @@ import { Collapse } from "./collapse";
 import { isSettleCollapse, processGroupSummary, type ProcessGroupState, type ProcessStatus } from "./process-group-state";
 import type { ProcessEntry, ProcessGroup as ProcessGroupModel } from "./process-groups";
 import { ThinkingParserContext, ThinkingProcessHeading, ThinkingProcessRow } from "./thinking-process-row";
-import { ToolCard } from "./tool-card";
+import { ToolCallCopy, ToolCard, ToolTypeIcon } from "./tool-card";
 import { ToolIndicatorContext, useToolIndicatorRef, useVisibleToolIndicators, type RunningToolsChange } from "./tool-indicator-visibility";
-import { isToolPreparing, toolHeaderSummary, toolInlineText, type ToolStatus } from "./tool-presentation";
+import { isToolPreparing, toolAction, type ToolIconKind, type ToolStatus } from "./tool-presentation";
 import { usePwaMotionDuration } from "./use-pwa-motion";
 import "./process-group.css";
 
@@ -34,14 +34,26 @@ type ProcessGroupProps = {
 
 type IconRef = (node: SVGSVGElement | null) => void;
 
-/** 状态槽只表达真实状态；Thinking 用 Lightbulb，工具与 Waiting 用旋转图标。 */
-function ProcessStatusIcon({ status, thinking, iconRef }: { status: ProcessStatus; thinking: boolean; iconRef: IconRef }) {
+/** 整组成功时组头图标表示内容：工具同属一类时返回该类，类型混合时为 null（步骤列表）。 */
+function contentIconKind(group: ProcessGroupModel): ToolIconKind | null {
+  const icons = new Set(group.entries.flatMap(entry => entry.kind === "tool" ? [toolAction(entry.value).icon] : []));
+  return icons.size === 1 ? [...icons][0]! : null;
+}
+
+/**
+ * 组头状态槽：运行、失败、中断与未知表达真实状态；Thinking 用 Lightbulb，工具与 Waiting 用旋转图标。
+ * 整组成功是常态，不再打勾，改为中性色的内容图标（见 process-group.css）。
+ */
+function ProcessStatusIcon({ status, thinking, group, iconRef }: { status: ProcessStatus; thinking: boolean; group: ProcessGroupModel; iconRef: IconRef }) {
   if (status === "running") {
     return thinking
       ? <Lightbulb ref={iconRef} size={16} aria-hidden="true" />
       : <LoaderCircle ref={iconRef} className="pwa-spin" size={16} aria-hidden="true" />;
   }
-  if (status === "complete") return <Check ref={iconRef} size={16} aria-hidden="true" />;
+  if (status === "complete") {
+    const kind = contentIconKind(group);
+    return kind === null ? <ListTree ref={iconRef} size={16} aria-hidden="true" /> : <ToolTypeIcon icon={kind} iconRef={iconRef} />;
+  }
   if (status === "error") return <CircleAlert ref={iconRef} size={16} aria-hidden="true" />;
   if (status === "interrupted") return <CircleStop ref={iconRef} size={16} aria-hidden="true" />;
   if (status === "neutral") return <Lightbulb ref={iconRef} size={16} aria-hidden="true" />;
@@ -138,11 +150,7 @@ function ProcessGroupHead({ group, state, summary, thinkingInHead, detailsId, on
   if (shown?.kind === "thinking") {
     copy = <ThinkingProcessHeading key={shown.key} entry={shown} status={state.entryStatuses.get(shown.key) ?? "neutral"} />;
   } else if (shown?.kind === "tool") {
-    const toolDetail = toolInlineText(toolHeaderSummary(shown.value));
-    copy = <>
-      <strong title={shown.value.tool}>{shown.value.tool}</strong>
-      {toolDetail ? <span className="pwa-process-tool-detail" title={toolDetail}>{toolDetail}</span> : null}
-    </>;
+    copy = <ToolCallCopy value={shown.value} />;
   } else {
     copy = <span className="pwa-process-summary" title={summary.fullLabel}>{summary.fullLabel}</span>;
   }
@@ -152,7 +160,7 @@ function ProcessGroupHead({ group, state, summary, thinkingInHead, detailsId, on
   }
 
   return <button className="pwa-process-head pwa-timeline-toggle" type="button" aria-expanded={state.expanded} aria-controls={detailsId} aria-label={t.tools.groupToggle(state.expanded, ariaSummary)} title={summary.fullLabel} onClick={() => onToggle(group.key, !state.expanded)}>
-    <span className={`pwa-process-status-slot pwa-process-status-${iconStatus}${preparing ? " pwa-process-status-preparing" : ""}`}><ProcessStatusIcon status={iconStatus} thinking={thinking} iconRef={indicatorRef} /></span>
+    <span className={`pwa-process-status-slot pwa-process-status-${iconStatus}${preparing ? " pwa-process-status-preparing" : ""}`}><ProcessStatusIcon status={iconStatus} thinking={thinking} group={group} iconRef={indicatorRef} /></span>
     <span key={copyKey} className={`pwa-process-copy${copyKey === mountedCopyKey ? "" : " pwa-process-copy-swap"}`}>{copy}</span>
     {alertKind === null ? null : <span className={`pwa-process-alert pwa-process-alert-${alertKind}`} role="img" aria-label={alertLabel ?? undefined}>
       {alertKind === "error" ? <CircleAlert size={16} aria-hidden="true" /> : alertKind === "unknown" ? <CircleHelp size={16} aria-hidden="true" /> : <CircleStop size={16} aria-hidden="true" />}

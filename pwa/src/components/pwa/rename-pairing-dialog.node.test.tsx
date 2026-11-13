@@ -18,8 +18,8 @@ test("renders the rename dialog with Mantine controls instead of a browser promp
   expect(html).toMatch(/mantine-Modal-content/);
   expect(html).toMatch(/pwa-input/);
   expect(html).toMatch(/pwa-button/);
-  expect(html).toMatch(/Rename pairing/);
-  expect(html).toMatch(/Pairing name/);
+  expect(html).toMatch(/Rename computer/);
+  expect(html).toMatch(/Computer name/);
   expect(html).toMatch(/Choose a local name for/);
   expect(html).toMatch(/This only changes the label in this browser/);
   expect(html).toMatch(/value="office"/);

@@ -339,7 +339,6 @@
   --pwa-duration-modal-in: var(--pwa-tier-appear);
   --pwa-duration-modal-out: var(--pwa-tier-leave);
   /* 思考行左侧旋转图标槽展开与收回，两个方向同长。 */
-  --pwa-duration-status-slot: var(--pwa-tier-short);
   --pwa-duration-collapse-in: var(--pwa-tier-appear);
   --pwa-duration-collapse-out: var(--pwa-tier-return);
   /* 过程组自动收起（正文接续或本轮结束）：与手动收起同长，正文不为它多等。 */
@@ -422,7 +421,7 @@
   --pwa-app-height: 100dvh;
 }
 
-/* 字号档位：只放大字号，间距、图标、点击区与断点不随档位缩放。 */
+/* 字号档位：放大字号与行内图标，间距、其他图标、点击区与断点不随档位缩放。 */
 :root[data-pwa-text-size="large"] {
   --pwa-text-meta: 14px;
   --pwa-text-list: 16px;

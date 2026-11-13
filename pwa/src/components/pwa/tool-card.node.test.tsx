@@ -72,7 +72,10 @@ test("renders separate calls as separate dialog actions", () => {
 test("keeps command title and localized detail action without echoing the call inline", () => {
   const current: ToolValue = { ...base, tool: "bash", args: { command: "pnpm --filter pwa test:unit" }, result: "3 passed", status: "complete" };
   const html = renderCard(<ToolCard value={current} onRead={() => {}} />);
-  expect(html).toContain('<span title="pnpm --filter pwa test:unit">pnpm --filter pwa test:unit</span>');
+  expect(html).toContain('<strong class="pwa-tool-verb" title="bash">Run</strong>');
+  // 无法分类的工具保留原始工具名，不当作动词处理。
+  expect(renderCard(<ToolCard value={{ ...base, tool: "deploy", args: { target: "prod" }, status: "complete", result: "ok" }} onRead={() => {}} />)).toContain('<strong title="deploy">deploy</strong>');
+  expect(html).toContain('<span class="pwa-tool-target" title="pnpm --filter pwa test:unit">pnpm --filter pwa test:unit</span>');
   expect(html).not.toContain("$ pnpm");
   expect(html).not.toContain("3 passed");
   expect(en.tools.viewDetails("bash")).toBe("View bash tool details");
@@ -97,4 +100,28 @@ test("interrupted tools use a stop icon and failures use an alert", () => {
   expect(interrupted).toContain("lucide-circle-stop");
   expect(interrupted).not.toContain("lucide-circle-alert");
   expect(renderCard(<ToolCard value={fixtures.error} onRead={() => {}} />)).toContain("lucide-circle-alert");
+});
+
+test.each([
+  ["read", { path: "a.ts" }, "lucide-eye"],
+  ["bash", { command: "pnpm test" }, "lucide-terminal"],
+  ["grep", { pattern: "needle" }, "lucide-search"],
+  ["edit", { path: "a.ts" }, "lucide-file-diff"],
+  ["write", { path: "a.ts" }, "lucide-pencil"],
+  ["deploy", { target: "prod" }, "lucide-wrench"],
+] as const)("a completed %s call shows its type icon instead of a check", (tool, args, icon) => {
+  const html = renderCard(<ToolCard value={{ ...base, tool, args, status: "complete", result: "ok" }} onRead={() => {}} />);
+  expect(html).toContain(icon);
+  expect(html).not.toContain("lucide-check");
+  // 运行中仍换成旋转图标，类型图标不与状态图标并存。
+  const running = renderCard(<ToolCard value={{ ...base, tool, args, status: "complete", result: "ok" }} status="running" onRead={() => {}} />);
+  expect(running).toContain("lucide-loader-circle");
+  expect(running).not.toContain(icon);
+});
+
+test("edit rows show returned diff line counts and nothing without a returned diff", () => {
+  const html = renderCard(<ToolCard value={value} onRead={() => {}} />);
+  expect(html).toContain('<span class="pwa-tool-diff" title="1 line added, 1 removed"><span class="pwa-tool-diff-add">+1</span><span class="pwa-tool-diff-remove">−1</span></span>');
+  expect(renderCard(<ToolCard value={{ ...base, status: "complete", result: "Applied" }} onRead={() => {}} />)).not.toContain("pwa-tool-diff");
+  expect(zh.tools.diffStats(12, 3)).toBe("新增 12 行，删除 3 行");
 });

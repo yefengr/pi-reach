@@ -195,6 +195,8 @@ test("mobile title bar and navigation head share the top bar below a translucent
     expect(Math.round(titleBar.height)).toBe(48 + safeTop);
     const menuIcon = document.querySelector(".pwa-session-trigger-icon")!.getBoundingClientRect();
     expect(Math.round(menuIcon.left)).toBe(4);
+    // 移动导航入口为三条递减横线：比等长横线轻，长短错落提示内容从左侧展开。
+    expect(document.querySelector(".pwa-session-trigger-icon svg")).toHaveClass("lucide-text-align-start");
     expect(Math.abs(center(menuIcon) - (safeTop + 24))).toBeLessThanOrEqual(1);
     await open.click();
     await expect.element(screen.getByRole("dialog", { name: /Workspace/ })).toBeVisible();
@@ -208,6 +210,8 @@ test("mobile title bar and navigation head share the top bar below a translucent
     // 品牌标识与桌面侧栏同为 20。
     expect(Math.round(brand.width)).toBe(20);
     expect(Math.abs(center(brand) - (safeTop + 24))).toBeLessThanOrEqual(1);
+    // 移动导航是盖在内容上的抽屉，头部右端与其他浮层同为 Lucide X 关闭。
+    expect(document.querySelector(".pwa-session-sheet-head .pwa-icon-button svg")).toHaveClass("lucide-x");
     const close = document.querySelector(".pwa-session-sheet-head .pwa-icon-button")!.getBoundingClientRect();
     expect(Math.abs(center(close) - (safeTop + 24))).toBeLessThanOrEqual(1);
     const heading = document.querySelector(".pwa-session-sheet .pwa-nav-section-heading")!.getBoundingClientRect();
@@ -730,6 +734,11 @@ test.each(emptyViewports.flatMap((viewport) => ["light", "dark"].map((scheme) =>
         }
         expect(button.querySelector(".pwa-peer-presence")?.textContent).toContain(["2 Pis running", "0 Pis running", "1 Pi running", "Checking"][index]);
         expect(button.querySelector(".pwa-peer-icon")?.classList.contains("online")).toBe(index === 0 || index === 2);
+        // 行首为裸图标：不加色调底块，盒子只包住图标本身，图标到文字 10。
+        const peerIcon = button.querySelector<HTMLElement>(".pwa-peer-icon")!;
+        expect(getComputedStyle(peerIcon).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+        expect(Math.round(peerIcon.getBoundingClientRect().width)).toBe(Math.round(peerIcon.querySelector("svg")!.getBoundingClientRect().width));
+        expect(Math.round(button.querySelector(".pwa-peer-copy")!.getBoundingClientRect().left - peerIcon.getBoundingClientRect().right)).toBe(10);
         if (index === 0 || index === 2) {
           // 在线电脑的图标与标签只用正文色，标签为中性色调底，不铺主色底。
           const probe = document.createElement("span");

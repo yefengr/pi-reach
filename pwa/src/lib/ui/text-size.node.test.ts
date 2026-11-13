@@ -45,8 +45,8 @@ describe("text size preference", () => {
     expect(shouldRestoreTextSize("")).toBe(true);
     expect(shouldRestoreTextSize("/app")).toBe(true);
     expect(shouldRestoreTextSize("/app/settings")).toBe(true);
-    expect(shouldRestoreTextSize("/app/ui-review")).toBe(false);
-    expect(shouldRestoreTextSize("/app/ui-review-stage-a")).toBe(false);
+    // 已删除的历史评审页地址按正式应用处理，恢复持久化字号。
+    expect(shouldRestoreTextSize("/app/ui-review")).toBe(true);
     expect(shouldRestoreTextSize("/app/ui-states")).toBe(false);
   });
 });

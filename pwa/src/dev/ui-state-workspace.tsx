@@ -3,23 +3,31 @@ import { flushSync } from "react-dom";
 import { Button } from "@mantine/core";
 import { MessageComposer } from "@/components/pwa/message-composer";
 import { MessageList } from "@/components/pwa/message-list";
+import { QueuedMessages } from "@/components/pwa/queued-messages";
+import { isQueuedMessage, queuedMessageView } from "@/components/pwa/queued-messages-panel";
+import { useI18n } from "@/lib/i18n";
 import { PublishedFilesProvider, type PublishedFilesView, type PublishedFileViewState } from "@/components/pwa/published-files-context";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import type { ThinkingLevel } from "@/lib/pi-reach/types";
-import { UI_REVIEW_MODELS } from "./ui-review-fixtures";
-import { createGalleryAssets, galleryAttachment, galleryItems, type GalleryState } from "./ui-state-fixtures";
+import { createGalleryAssets, detailToolItems, GALLERY_DETAIL_TOOLS, GALLERY_MODELS, galleryAttachment, galleryItems, type GalleryState } from "./ui-state-fixtures";
 import { fileKey, isAttachmentFile } from "@/lib/pwa/file-source";
 import { GalleryConversationControls, GalleryHistory, useGalleryConversation } from "./ui-state-conversation";
+import { ToolDetailsProvider } from "@/components/pwa/tool-details-context";
+import { GalleryToolDetailsControls, useGalleryToolDetails } from "./ui-state-tool-details";
 
-function GalleryTimeline({ state, conversation }: { state: GalleryState; conversation: ReturnType<typeof useGalleryConversation> }) {
+function GalleryTimeline({ state, sourceKey, conversation, running, completedTools }: {
+  state: GalleryState; sourceKey: string; conversation: ReturnType<typeof useGalleryConversation>; running: boolean; completedTools: ReadonlySet<string>;
+}) {
   const [retried, setRetried] = useState(false);
-  const failureItems = useMemo(() => state === "failure" ? galleryItems(state, retried) : null, [state, retried]);
-  const items: TimelineViewItem[] = failureItems ?? conversation.items;
+  const localItems = useMemo(() => state === "failure" ? galleryItems(state, retried)
+    : state === "tool-details" ? detailToolItems(completedTools) : null, [state, retried, completedTools]);
+  // 排队消息与正式应用一样只在排队抽屉中显示。
+  const items: TimelineViewItem[] = localItems ?? conversation.items.filter(item => !isQueuedMessage(item));
   const viewport = useTimelineViewport(items);
   return <>
     {state === "failure" ? <div className="pwa-ui-states-actions"><Button variant="default" disabled={retried} onClick={() => setRetried(true)}>演示工具重试</Button></div> : null}
-    <MessageList sourceKey={JSON.stringify(["gallery", state, conversation.epoch, conversation.sourceChanged])} items={items} hasEarlier={false} running={conversation.running} isLive={conversation.online}
+    <MessageList sourceKey={sourceKey} items={items} hasEarlier={false} running={running} isLive={conversation.online}
       loading={conversation.loading} skeletonVisible={conversation.skeletonVisible}
       emptyContext={state === "empty" ? "pi-reach · 内存演示模型 · medium" : null}
       onRetryFailed={conversation.retryFailed} onCheckStatus={conversation.checkStatus} onCancelQueued={conversation.cancelQueued}
@@ -32,15 +40,25 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState(galleryAttachment);
   const [attachmentVisible, setAttachmentVisible] = useState(true);
-  const [model, setModel] = useState(UI_REVIEW_MODELS[0]);
+  const [model, setModel] = useState(GALLERY_MODELS[0]);
   const [thinking, setThinking] = useState<ThinkingLevel>("medium");
   const [result, setResult] = useState("发送、停止与菜单操作只影响本页演示。");
   const [states, setStates] = useState<Map<string, PublishedFileViewState>>(new Map());
   const currentStates = useRef(states);
   const assets = useRef<ReturnType<typeof createGalleryAssets> | null>(null);
   const conversation = useGalleryConversation(state);
+  const { t } = useI18n();
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  const queued = conversation.items.filter(isQueuedMessage).filter(item => !(noticeDismissed && item.insertionStatus === "unconfirmed"));
   const { epoch, sourceChanged } = conversation;
   const scopeToken = useMemo(() => ({ state, epoch, sourceChanged }), [state, epoch, sourceChanged]);
+  // 详情只交给同一来源的阅读器，与正式工作区一致。
+  const sourceKey = JSON.stringify(["gallery", state, epoch, sourceChanged]);
+  const toolDetails = useGalleryToolDetails(sourceKey);
+  // 详情场景的运行工具收到正式结果后，本轮不再运行。
+  const running = state === "tool-details"
+    ? conversation.running && GALLERY_DETAIL_TOOLS.some(tool => tool.running && !toolDetails.completed.has(tool.id))
+    : conversation.running;
   const updateStates = (next: Map<string, PublishedFileViewState>) => {
     currentStates.current = next;
     setStates(next);
@@ -77,8 +95,9 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
     pin() {}, unpin() {},
   };
   const uploading = state === "uploading" && conversation.uploads.some(item => item.status !== "complete");
-  return <PublishedFilesProvider value={files}>
+  return <PublishedFilesProvider value={files}><ToolDetailsProvider value={toolDetails.view}>
     <GalleryConversationControls state={state} conversation={conversation} onResult={setResult} />
+    {state === "tool-details" ? <GalleryToolDetailsControls details={toolDetails} /> : null}
     {state === "files" ? <div className="pwa-ui-states-actions"><Button variant="default" disabled={states.get("reading")?.phase === "ready"} onClick={() => {
       if (!assets.current) return;
       const next = new Map(currentStates.current);
@@ -86,22 +105,25 @@ export function UiStateWorkspace({ state }: { state: GalleryState }) {
       updateStates(next);
     }}>演示获取完成</Button><span>获取中固定为 50%，只在点击后改变。</span></div> : null}
     <div className="pwa-workspace-body"><div className="pwa-workspace-column">
-      {state === "history" ? <GalleryHistory items={conversation.items} /> : <GalleryTimeline key={`${state}:${epoch}`} state={state} conversation={conversation} />}
+      {state === "history" ? <GalleryHistory items={conversation.items} /> : <GalleryTimeline key={`${state}:${epoch}`} state={state} sourceKey={sourceKey} conversation={conversation}
+        running={running} completedTools={toolDetails.completed} />}
       <div className="pwa-chat-footer" ref={initializeAssets} hidden={state === "history"} inert={state === "history"} style={state === "history" ? { display: "none" } : undefined}>
-        <MessageComposer enterSends={true} draft={draft} onDraftChange={setDraft} attachmentNotice={conversation.online ? result : null}
+        <MessageComposer enterSends={true} queuedMessages={queued.length ? <QueuedMessages items={queued.map(item => queuedMessageView(item, t.queued))} isOnline={conversation.online}
+          onInsert={() => setResult("已演示插入排队消息；未发送到 Pi。")} onCancel={conversation.cancelQueued} onDismissNotice={() => setNoticeDismissed(true)} /> : undefined}
+          draft={draft} onDraftChange={setDraft} attachmentNotice={conversation.online ? result : null}
           connectionHint={conversation.online ? null : state === "offline"
             ? { text: "网络不可用，恢复后自动重新连接", tone: "neutral", busy: false }
             : { text: "无法连接 Relay，正在自动重试…", tone: "neutral", busy: true, action: { label: "立即重试", onAction: () => setResult("已演示立即重试；不连接远程服务。") } }}
           attachments={state === "uploading" ? conversation.uploads : state === "failure" && attachmentVisible ? [attachment] : []} canAttach={false} sendingAttachments={uploading}
-          isOnline={conversation.online} isWorking={conversation.running} stopping={false}
+          isOnline={conversation.online} isWorking={running} stopping={false}
           onSend={() => setResult("已演示发送，草稿保留；未发送到 Pi。")} onStop={() => setResult("已演示停止；通过上方控件切换状态。")}
           onAddFiles={() => {}} onRemoveAttachment={id => state === "uploading" ? conversation.removeUpload(id) : setAttachmentVisible(false)}
           onRetryAttachment={() => { setAttachment(previous => ({ ...previous, status: "complete", errorText: undefined })); setResult("演示附件重试完成，未上传文件。"); }}
-          commandModels={conversation.modelsStatus === "success" ? UI_REVIEW_MODELS : []} commandModelsStatus={conversation.modelsStatus} commandCurrentModel={model} commandCurrentModelFallback={null}
+          commandModels={conversation.modelsStatus === "success" ? GALLERY_MODELS : []} commandModelsStatus={conversation.modelsStatus} commandCurrentModel={model} commandCurrentModelFallback={null}
           commandThinking={thinking} commandPendingAction={conversation.pending} onSetModel={setModel} onSetThinking={setThinking} onCommandsOpen={conversation.requestModels}
           onNewSession={() => setResult("已演示新会话，草稿保留；未创建远程会话。")}
           onCompactSession={() => setResult("已演示压缩；未执行远程操作。")} />
       </div>
     </div></div>
-  </PublishedFilesProvider>;
+  </ToolDetailsProvider></PublishedFilesProvider>;
 }

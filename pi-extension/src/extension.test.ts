@@ -627,7 +627,7 @@ describe("Pi Reach endpoint extension", () => {
     owners.push({ name: "owner-a", remote_epk: ownerA, paired_at: "now" });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -662,7 +662,7 @@ describe("Pi Reach endpoint extension", () => {
     nextRelayConnect = () => new Promise<void>((resolve) => { resolveConnect = resolve; });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-pair", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-pair" } });
+    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-pair", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-pair" } });
       const pairContext = ctx();
       const pairPromise = pi.commands.get("pi-reach pair")!("", pairContext);
       expect(relays).toHaveLength(0);
@@ -695,7 +695,7 @@ describe("Pi Reach endpoint extension", () => {
     nextRelayConnect = () => new Promise<void>(() => undefined);
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-stop", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-stop" } });
+    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-stop", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-stop" } });
       await vi.waitFor(() => expect(relays).toHaveLength(1));
       const pairContext = ctx();
       const pairPromise = pi.commands.get("pi-reach pair")!("", pairContext);
@@ -719,7 +719,7 @@ describe("Pi Reach endpoint extension", () => {
     nextIdentity = () => new Promise((resolve) => { resolveOldIdentity = resolve; });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-identity-stop", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-identity-stop" } });
+    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-identity-stop", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-identity-stop" } });
       const pairContext = ctx();
       const pairPromise = pi.commands.get("pi-reach pair")!("", pairContext);
       expect(relays).toHaveLength(0);
@@ -748,7 +748,7 @@ describe("Pi Reach endpoint extension", () => {
     nextPeerList = () => new Promise((resolve) => { resolvePeers = resolve; });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-options-stop", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-options-stop" } });
+    pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: { getSessionId: () => "session-options-stop", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-options-stop" } });
       await vi.waitFor(() => expect(listPeers).toHaveBeenCalledOnce());
       expect(relays).toHaveLength(0);
       const pairContext = ctx();
@@ -936,7 +936,7 @@ describe("Pi Reach endpoint extension", () => {
   test("rolls back and leaves the request retryable when Relay rejects the ACL update", async () => {
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -959,7 +959,7 @@ describe("Pi Reach endpoint extension", () => {
   test("replays pair_ok for the same Owner request after the first send fails", async () => {
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -980,7 +980,7 @@ describe("Pi Reach endpoint extension", () => {
   test("replays pair_ok without replacing an active Owner session binding", async () => {
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1007,7 +1007,7 @@ describe("Pi Reach endpoint extension", () => {
     nextAddPeer = () => new Promise<void>((resolve) => { releaseAddPeer = resolve; });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1030,7 +1030,7 @@ describe("Pi Reach endpoint extension", () => {
       nextAddPeer = () => new Promise<void>((resolve) => { releaseAddPeer = resolve; });
       const pi = makePi();
       (extension as ExtensionFactory)(pi);
-      const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+      const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
       pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
       await _connectForTest(ctx());
       const oldRelay = relays[0]!;
@@ -1066,7 +1066,7 @@ describe("Pi Reach endpoint extension", () => {
     nextAddPeer = () => new Promise<void>((resolve) => { releaseAddPeer = resolve; });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1086,7 +1086,7 @@ describe("Pi Reach endpoint extension", () => {
     nextAddPeer = () => new Promise<void>((resolve) => { releaseAddPeer = resolve; });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1131,7 +1131,7 @@ describe("Pi Reach endpoint extension", () => {
     );
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-revoke", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-revoke" };
+    const manager = { getSessionId: () => "session-revoke", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-revoke" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1183,7 +1183,7 @@ describe("Pi Reach endpoint extension", () => {
     owners.push({ name: "owner-b", remote_epk: ownerB, paired_at: "now" });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-before-replacement", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-before-replacement" };
+    const manager = { getSessionId: () => "session-before-replacement", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-before-replacement" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1209,7 +1209,7 @@ describe("Pi Reach endpoint extension", () => {
     owners.push({ name: "owner-b", remote_epk: ownerB, paired_at: "now" });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-revoke", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-revoke" };
+    const manager = { getSessionId: () => "session-revoke", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-revoke" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1291,7 +1291,7 @@ describe("Pi Reach endpoint extension", () => {
     const pi = makePi();
     (pi as { sendUserMessage?: unknown }).sendUserMessage = vi.fn().mockResolvedValue(undefined);
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1341,7 +1341,7 @@ describe("Pi Reach endpoint extension", () => {
     owners.push({ name: "owner", remote_epk: sourceOwner(), paired_at: "now" });
     const pi = makePi();
     (extension as ExtensionFactory)(pi);
-    const oldManager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const oldManager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     const newManager = { ...oldManager, getSessionId: () => "session-2", getLeafId: () => "session-2" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: oldManager });
     await _connectForTest(ctx());
@@ -1364,7 +1364,7 @@ describe("Pi Reach endpoint extension", () => {
     const pi = makePi();
     (pi as { sendUserMessage?: unknown }).sendUserMessage = vi.fn().mockRejectedValue(new Error("dispatch unavailable"));
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1385,7 +1385,7 @@ describe("Pi Reach endpoint extension", () => {
     const pi = makePi();
     (pi as { sendUserMessage?: unknown }).sendUserMessage = vi.fn().mockResolvedValue(undefined);
     (extension as ExtensionFactory)(pi);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;
@@ -1408,7 +1408,7 @@ describe("Pi Reach endpoint extension", () => {
     (pi as { sendUserMessage?: unknown }).sendUserMessage = vi.fn().mockResolvedValue(undefined);
     (extension as ExtensionFactory)(pi);
     _setSessionNewBridgeTimeoutForTest(5);
-    const manager = { getSessionId: () => "session-1", getBranch: () => [], appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
+    const manager = { getSessionId: () => "session-1", getBranch: () => [], getCwd: () => "/workspace",appendCustomEntry: vi.fn(), getLeafId: () => "session-1" };
     pi.handlers.get("session_start")?.({}, { ...ctx(), sessionManager: manager });
     await _connectForTest(ctx());
     const relay = relays.at(-1)!;

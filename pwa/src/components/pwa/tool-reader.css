@@ -8,7 +8,23 @@
 .pwa-root .pwa-tool-action-copy { min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
 .pwa-root .pwa-tool-action-copy strong { min-width: 0; max-width: 45%; flex: 0 1 auto; overflow: hidden; color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-action-copy strong:only-child { max-width: 100%; }
-.pwa-root .pwa-tool-action-copy span { min-width: 0; flex: 1 1 0; overflow: hidden; color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); text-overflow: ellipsis; white-space: nowrap; }
+/*
+ * 对象（文件名、命令、搜索词）比目录深一档；增删行数不参与省略。
+ * 目录以 0 为基础宽度只占剩余空间：按比例收缩时哪怕分到零点几像素也会出现省略号，所以不能靠收缩权重让它先省略。
+ */
+.pwa-root .pwa-tool-target,
+.pwa-root .pwa-tool-context { min-width: 0; overflow: hidden; font: var(--pwa-weight-regular) var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.pwa-root .pwa-tool-target { flex: 0 1 auto; color: var(--pwa-soft-ink); }
+.pwa-root .pwa-tool-context { flex: 1 1 0; color: var(--pwa-secondary); }
+/*
+ * 目录从左侧省略，保留靠近文件名的末几级：容器按 RTL 排版让溢出与省略号落在左侧，放得下时仍左对齐；
+ * 路径本身隔离为 LTR，开头的斜杠与点号不会被双向算法挪到另一端。
+ */
+.pwa-root .pwa-tool-context { direction: rtl; text-align: left; }
+.pwa-root .pwa-tool-context-path { direction: ltr; unicode-bidi: isolate; }
+.pwa-root .pwa-tool-diff { flex: none; display: inline-flex; gap: var(--pwa-space-2xs); font: var(--pwa-weight-regular) var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); }
+.pwa-root .pwa-tool-diff-add { color: var(--pwa-complete); }
+.pwa-root .pwa-tool-diff-remove { color: var(--pwa-error); }
 .pwa-root .pwa-tool-status { min-width: 0; display: inline-flex; align-items: center; gap: var(--pwa-space-status); color: var(--pwa-secondary); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
 .pwa-root .pwa-tool-status-running { color: var(--pwa-running); }
 /* 准备中：模型仍在生成调用，沿用旋转图标但用中性色，与真正执行区分。 */

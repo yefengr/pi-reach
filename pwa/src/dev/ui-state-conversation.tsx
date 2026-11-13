@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@mantine/core";
 import type { ComposerCommandAction, ModelListStatus } from "@/components/pwa/composer-command-menu";
 import { HistoryConversation } from "@/components/pwa/workspace-content";
@@ -7,10 +7,14 @@ import type { TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { useTimelineViewport } from "@/lib/pwa/use-timeline-viewport";
 import { GALLERY_FLOW_STEPS, galleryFlowItems, galleryItems, galleryUploadingAttachments, type GalleryState } from "./ui-state-fixtures";
 
+/** 自动推进的固定节拍；业务节奏不随动画慢放改变，留出打开阅读器的时间。 */
+export const FLOW_AUTO_STEP_MS = 1500;
+const LAST_FLOW_STEP = GALLERY_FLOW_STEPS.length - 1;
+
 function initialConversation(state: GalleryState, epoch = 0) {
   const pending: ComposerCommandAction | null = state === "pending" ? "session_new" : null;
   return {
-    state, epoch, step: 0, recovered: false, loaded: false, modelsReady: false, modelsRequested: false,
+    state, epoch, step: 0, auto: false, recovered: false, loaded: false, modelsReady: false, modelsRequested: false,
     pending,
     uploads: galleryUploadingAttachments(), unknownChecked: false, failedRetried: false, queuedCancelled: false, delivered: false,
   };
@@ -36,13 +40,22 @@ export function useGalleryConversation(state: GalleryState) {
       return [item];
     });
   }, [state, local.step, local.loaded, local.delivered, local.queuedCancelled, local.unknownChecked, local.failedRetried]);
+  // 阅读器是模态抽屉，打开期间「下一步」在遮罩后；自动推进让输出增长、正式结果接管与来源切换在阅读器打开时发生。
+  useEffect(() => {
+    if (state !== "flow" || !local.auto) return;
+    const timer = setTimeout(() => setLocal(value => {
+      const step = Math.min(value.step + 1, LAST_FLOW_STEP);
+      return { ...value, step, auto: step < LAST_FLOW_STEP };
+    }), FLOW_AUTO_STEP_MS);
+    return () => clearTimeout(timer);
+  }, [state, local.auto, local.step]);
   const modelsStatus: ModelListStatus = local.modelsReady ? "success"
     : state === "models-loading" ? "loading" : state === "models-error" ? "error" : "success";
   return {
     items, online, loading: loading || skeletonVisible, skeletonVisible, modelsStatus,
     epoch: local.epoch, sourceChanged: state === "flow" && local.step === 6,
-    running: online && (state === "thinking" || state === "tools" || (state === "flow" && local.step < 4)),
-    step: local.step, pending: local.pending, uploads: local.uploads, delivered: local.delivered,
+    running: online && (state === "thinking" || state === "tools" || state === "tool-details" || (state === "flow" && local.step < 4)),
+    step: local.step, auto: local.auto, pending: local.pending, uploads: local.uploads, delivered: local.delivered,
     recover: () => setLocal(value => ({ ...value, recovered: true })),
     completeLoading: () => setLocal(value => ({ ...value, loaded: true })),
     completeModels: () => setLocal(value => ({ ...value, modelsReady: true })),
@@ -55,7 +68,8 @@ export function useGalleryConversation(state: GalleryState) {
     checkStatus: () => setLocal(value => ({ ...value, unknownChecked: true })),
     cancelQueued: () => setLocal(value => ({ ...value, queuedCancelled: true })),
     completeDelivery: () => setLocal(value => ({ ...value, delivered: true })),
-    next: () => setLocal(value => ({ ...value, step: Math.min(value.step + 1, GALLERY_FLOW_STEPS.length - 1) })),
+    next: () => setLocal(value => ({ ...value, step: Math.min(value.step + 1, LAST_FLOW_STEP) })),
+    toggleAuto: () => setLocal(value => ({ ...value, auto: !value.auto && value.step < LAST_FLOW_STEP })),
     reset: () => setLocal(value => initialConversation(state, value.epoch + 1)),
   };
 }
@@ -84,8 +98,10 @@ export function GalleryConversationControls({ state, conversation: c, onResult }
   if (state === "delivery") return <div className="pwa-ui-states-actions"><Button variant="default" disabled={c.delivered} onClick={() => { c.completeDelivery(); onResult("演示投递已完成；没有发送真实消息。"); }}>演示投递完成</Button></div>;
   if (state === "flow") return <div className="pwa-ui-states-actions" data-flow-step={c.step}>
     <span role="status">步骤 {c.step + 1}/{GALLERY_FLOW_STEPS.length} · {GALLERY_FLOW_STEPS[c.step]}</span>
-    <Button variant="default" disabled={c.step === GALLERY_FLOW_STEPS.length - 1} onClick={c.next}>下一步</Button>
+    <Button variant="default" disabled={c.step === LAST_FLOW_STEP || c.auto} onClick={c.next}>下一步</Button>
+    <Button variant="default" aria-pressed={c.auto} disabled={c.step === LAST_FLOW_STEP} onClick={c.toggleAuto}>{c.auto ? "停止自动推进" : "自动推进"}</Button>
     <Button variant="default" onClick={c.reset}>重放流程</Button>
+    <span>自动推进每 {FLOW_AUTO_STEP_MS / 1000} 秒前进一步，可在途中打开工具或文件阅读器观察原位交接。</span>
   </div>;
   return null;
 }

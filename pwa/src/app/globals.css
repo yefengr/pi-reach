@@ -139,7 +139,6 @@ body:has(.pwa-root) { overflow: hidden; }
 
 .pwa-brand-mark { flex: 0 0 auto; color: var(--pwa-ink); }
 
-.pwa-kicker { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); letter-spacing: 0; }
 
 /* 无框图标按钮：透明底、44px 点击区域，悬停时直径 36 的圆形浅底；键盘聚焦为圆形轮廓。 */
 .pwa-ui-scope .pwa-icon-button {
@@ -266,7 +265,7 @@ body:has(.pwa-root) { overflow: hidden; }
 .lucide[width="16"] { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); stroke-width: var(--pwa-icon-inline-stroke); }
 /* 按钮文字为 600 字重，同行图标的线宽随之加重。 */
 .pwa-button .lucide[width="16"] { stroke-width: var(--pwa-icon-inline-stroke-strong); }
-.pwa-icon-button .lucide[width="20"], .pwa-settings-back .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
+.pwa-icon-button .lucide[width="20"], .pwa-settings-back .lucide[width="20"], .pwa-session-trigger-icon .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
 
 .pwa-ui-scope .pwa-button { min-height: var(--pwa-button-height); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-button-radius); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
@@ -429,6 +428,9 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-settings-choice-copy > .pwa-settings-choice-check { color: var(--pwa-accent); visibility: hidden; }
 /* 语言选项用该语言的文字作行首标记，与 20 图标同宽同色。 */
 .pwa-settings-choice-glyph { flex: 0 0 auto; width: 20px; height: 20px; display: inline-grid; place-items: center; color: var(--pwa-secondary); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: 1; }
+/* 字号选项的 A 逐级增大，随字号档位一起放大；大于 20 的字形向槽外居中溢出，不改变行布局。 */
+.pwa-settings-choice-glyph[data-text-size="standard"] { font-size: var(--pwa-text-meta); }
+.pwa-settings-choice-glyph[data-text-size="xlarge"] { font-size: var(--pwa-text-heading); }
 .pwa-root .pwa-settings-choice:has(.mantine-Radio-radio:checked) .pwa-settings-choice-check { visibility: visible; }
 .pwa-settings-choice-text { min-width: 0; flex: 1; display: grid; gap: var(--pwa-space-pair); }
 .pwa-settings-choice-text strong { font-size: var(--pwa-text-list); font-weight: var(--pwa-weight-strong); }
@@ -486,10 +488,13 @@ body:has(.pwa-root) { overflow: hidden; }
 
 .pwa-rename-dialog,
 .pwa-confirm-dialog { min-width: 0; padding: 24px; border-radius: var(--pwa-radius-2xl); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); }
-.pwa-rename-head,
-.pwa-confirm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.pwa-rename-head h2,
-.pwa-confirm-title { margin: 8px 0 0; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
+/* 三种居中弹窗共用同一标题行，标题上方不加眉题：行高只由标题撑开，关闭按钮的 44 点击区向上、右、下各越出 10，
+   与标题首行对齐且不撑高标题行，标题换行时到说明的距离仍不变。 */
+.pwa-ui-scope :is(.pwa-pairing-head, .pwa-rename-head, .pwa-confirm-head) { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: 0; margin: 0; padding: 0; background: transparent; }
+.pwa-ui-scope :is(.pwa-pairing-head, .pwa-rename-head, .pwa-confirm-head) > .mantine-Modal-close { flex: none; margin: -10px -10px -10px 0; }
+.pwa-pairing-title,
+.pwa-rename-title,
+.pwa-confirm-title { font-family: var(--pwa-font-ui); font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-rename-description,
 .pwa-confirm-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-rename-description { margin-bottom: 16px; }
@@ -512,14 +517,16 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root:has(.mantine-Modal-overlay) .mantine-Drawer-overlay { opacity: 0 !important; }
 /* 配对弹窗（表单类，480）：与重命名弹窗同一表面；扫码取景、配对码输入与其他方式的文字按钮自上而下排列。 */
 .pwa-pairing-dialog { min-width: 0; max-height: min(92dvh, 760px); padding: 24px; border-radius: var(--pwa-radius-2xl); color: var(--pwa-ink); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-modal); overscroll-behavior: contain; }
-.pwa-pairing-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px -10px 0 0; padding: 0; background: transparent; }
-.pwa-pairing-title { font-size: var(--pwa-text-title); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); }
 .pwa-pairing-body { min-width: 0; padding: 0; }
-.pwa-pairing-description { margin: 8px 0 16px; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
+.pwa-pairing-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
+/* 配对命令与未配对空态同一命令块：说明到命令块 16（命令块自带上外边距），命令块到下方表单或取景同为 16。 */
+.pwa-pairing-dialog .pwa-command-block { margin-bottom: 16px; }
 .pwa-pairing-form { display: grid; gap: var(--pwa-space-md); }
 .pwa-ui-scope .pwa-pairing-input input { font-family: var(--pwa-font-mono); letter-spacing: 0.04em; }
 .pwa-field-error { display: inline-flex; align-items: flex-start; gap: var(--pwa-space-status); }
 .pwa-field-error svg { flex: 0 0 auto; margin-top: 1px; }
+/* 错误句中的命令用等宽行内代码，颜色沿用错误色，不另换底色以免削弱错误提示。 */
+.pwa-field-error .pwa-inline-command { font-family: var(--pwa-font-mono); }
 .pwa-pairing-hint { margin: 0; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-pairing-error { margin: 8px 0 0; color: var(--pwa-error); font-size: var(--pwa-text-meta); }
 .pwa-pairing-status { display: flex; align-items: center; gap: var(--pwa-space-status); margin: 12px 0 0; color: var(--pwa-running); font-size: var(--pwa-text-meta); }
@@ -539,11 +546,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-startup-card { width: min(520px, 100%); padding: 32px; }
 .pwa-startup-icon,
 .pwa-chat-empty-icon { display: grid; place-items: center; border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
-.pwa-startup-icon { width: 48px; height: 48px; margin-bottom: 16px; }
+/* 卡片内容整体居中，与主区空状态同一排布：图标块、标题、说明与操作都在中线上。 */
+.pwa-startup-icon { width: 48px; height: 48px; margin: 0 auto 16px; }
 .pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-title); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: var(--pwa-text-meta) !important; }
-.pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.pwa-startup-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; }
 .pwa-startup-actions a { text-decoration: none; }
 .pwa-spin { color: var(--pwa-running); animation: pwa-rotate var(--pwa-duration-spin) linear infinite; }
 .pwa-loading { color: var(--pwa-secondary); font-size: var(--pwa-text-body); }

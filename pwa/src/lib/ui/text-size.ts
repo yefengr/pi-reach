@@ -1,4 +1,4 @@
-// 字号偏好：跟随系统或标准／大／特大三档，只放大字号，不缩放间距、图标与点击区。
+// 字号偏好：跟随系统或标准／大／特大三档，放大字号与行内图标，不缩放间距、其他图标与点击区。
 // 保持为纯模块，使启动恢复、设置页与测试共用同一存储键与解析规则。
 export const TEXT_SIZE_STORAGE_KEY = "pi-reach-text-size";
 
@@ -11,8 +11,8 @@ export const DEFAULT_TEXT_SIZE_PREFERENCE: PwaTextSizePreference = "system";
 
 const TEXT_SIZES: readonly PwaTextSize[] = ["standard", "large", "xlarge"];
 
-/** 这些开发展厅使用受控字号，不继承正式应用的持久化偏好。 */
-const REVIEW_ONLY_PATHS = new Set(["/app/ui-review", "/app/ui-review-stage-a", "/app/ui-states"]);
+/** 开发展厅使用受控字号，不继承正式应用的持久化偏好。 */
+const REVIEW_ONLY_PATHS = new Set(["/app/ui-states"]);
 
 /**
  * WebKit 的系统正文字体关键字：字号随 iOS「文字大小」设置变化（默认 17px）。
@@ -117,6 +117,11 @@ export function setTextSize(preference: PwaTextSizePreference): void {
   const next = isPwaTextSizePreference(preference) ? preference : DEFAULT_TEXT_SIZE_PREFERENCE;
   writeStoredPreference(next);
   publish(next);
+}
+
+/** 只改当前页面的档位、不写存储：开发展厅用它让实际字号与内存中的选择保持同一份。 */
+export function previewTextSize(preference: PwaTextSizePreference): void {
+  publish(isPwaTextSizePreference(preference) ? preference : DEFAULT_TEXT_SIZE_PREFERENCE);
 }
 
 export function subscribeTextSize(listener: () => void): () => void {

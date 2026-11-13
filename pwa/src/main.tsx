@@ -9,32 +9,27 @@ import { PwaInstallProvider } from "@/components/pwa/pwa-install";
 import { PwaUiProvider } from "@/components/pwa/pwa-ui-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { installHairlineDetection } from "@/lib/ui/hairline";
-import { applyStoredTextSize, installSystemTextSizeTracking, shouldRestoreTextSize } from "@/lib/ui/text-size";
+import { applyStoredTextSize, DEFAULT_TEXT_SIZE, installSystemTextSizeTracking, previewTextSize, shouldRestoreTextSize } from "@/lib/ui/text-size";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing PWA root element");
 
-// 开发评审不挂载连接、数据库或 Service Worker；生产构建会移除整个动态入口。
+// 开发展厅不挂载连接、数据库或 Service Worker；生产构建会移除整个动态入口。
 const reviewPath = import.meta.env.DEV ? window.location.pathname : "";
 // 渲染前恢复字号，避免首屏先按标准档排版再跳变；展厅保持受控字号。
 if (shouldRestoreTextSize(reviewPath)) {
   applyStoredTextSize();
   installSystemTextSizeTracking();
+} else {
+  // 先占住字号状态，后续组件读取时不会再从存储加载正式偏好。
+  previewTextSize(DEFAULT_TEXT_SIZE);
 }
 // 同理在渲染前确定发丝线档位，避免分隔线先粗后细。
 installHairlineDetection();
 
 const appRoot = createRoot(root);
 
-if (reviewPath === "/app/ui-review") {
-  void import("./dev/ui-review").then(({ UiReviewPage }) => {
-    appRoot.render(<StrictMode><UiReviewPage /></StrictMode>);
-  });
-} else if (reviewPath === "/app/ui-review-stage-a") {
-  void import("./dev/ui-review-stage-a").then(({ UiReviewStageAPage }) => {
-    appRoot.render(<StrictMode><UiReviewStageAPage /></StrictMode>);
-  });
-} else if (reviewPath === "/app/ui-states") {
+if (reviewPath === "/app/ui-states") {
   void import("./dev/ui-states").then(({ UiStateGalleryPage }) => {
     appRoot.render(<StrictMode><UiStateGalleryPage /></StrictMode>);
   });

@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { readPwaMotionDuration } from "@/lib/ui/motion-duration";
 import { cdp, page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
+import { buttonHeight } from "@/test/browser/button-height";
 import { MessageList } from "./message-list";
 import { toolHeaderSummary, toolInlineText } from "./tool-presentation";
 import type { TimelineEvent, TimelinePartial } from "@/lib/pi-reach/protocol-v2/schema";
@@ -348,16 +349,16 @@ test.each([1280, 390])("Working stays hidden while a member still runs, even aft
   // 手动收起后组头显示仍有效的成员，不排队补播已完成调用。
   await userEvent.click(groupButton());
   await expect.poll(() => document.querySelector(".pwa-process-details")).toBeNull();
-  expect(groupButton().querySelector(".pwa-process-tool-detail")?.textContent).toBe("b.ts");
+  expect(groupButton().querySelector(".pwa-tool-target")?.textContent).toBe("b.ts");
   const spinner = groupButton().querySelector(".pwa-process-status-running > .pwa-spin");
   expect(spinner).not.toBeNull();
   await update([run("a"), finish("b")]);
-  expect(groupButton().querySelector(".pwa-process-tool-detail")?.textContent).toBe("a.ts");
+  expect(groupButton().querySelector(".pwa-tool-target")?.textContent).toBe("a.ts");
   expect(groupButton().querySelector(".pwa-process-status-running > .pwa-spin")).toBe(spinner);
   const after = eventItem({ ...assistantEvent, event_id: "after-tools", blocks: [{ type: "text", text: "After tools" }] });
   // 即使后续正文已出现，较早工具还在运行时不伪造结束，组头的转动图标继续压住 Working。
   await update([run("a"), finish("b"), after]);
-  expect(groupButton().querySelector(".pwa-process-tool-detail")?.textContent).toBe("a.ts");
+  expect(groupButton().querySelector(".pwa-tool-target")?.textContent).toBe("a.ts");
   await pastIdle();
   expect(workingShown()).toBeNull();
   await update([finish("a"), finish("b"), after]);
@@ -1059,7 +1060,7 @@ test.each([1280, 390])("reply and process groups align without inline details in
       expect(entries).toHaveLength(4);
       for (const action of entries) {
         const rect = action.getBoundingClientRect();
-        expect(Math.round(rect.height)).toBeGreaterThanOrEqual(44);
+        expect(Math.round(rect.height)).toBeGreaterThanOrEqual(Math.round(buttonHeight()));
         expect(Math.round(rect.left)).toBe(replyLeft);
         expect(Math.round(rect.right)).toBeLessThanOrEqual(width);
         expect(action.hasAttribute("aria-expanded")).toBe(false);
@@ -1128,7 +1129,7 @@ test.each([1280, 390])("completed process groups summarize calls with a right ch
       expect(list.textContent).not.toContain("Requested changes");
       expect(list.textContent).not.toContain("Tests passed: 12");
       for (const action of document.querySelectorAll<HTMLElement>(".pwa-tool-card .pwa-tool-action")) {
-        expect(Math.round(action.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        expect(Math.round(action.getBoundingClientRect().height)).toBeGreaterThanOrEqual(Math.round(buttonHeight()));
         expect(Math.round(action.getBoundingClientRect().left)).toBe(Math.round(group.getBoundingClientRect().left));
         // 子项与组头同用正文字号，层级靠状态槽与短竖线区分。
         expect(getComputedStyle(action.querySelector("strong")!).fontSize).toBe("16px");
@@ -1233,7 +1234,7 @@ test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width,
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
     };
     assertLayout();
-    const detail = group.querySelector<HTMLElement>(".pwa-process-tool-detail")!;
+    const detail = group.querySelector<HTMLElement>(".pwa-tool-target")!;
     expect(detail.textContent).toBe(toolInlineText(toolHeaderSummary(running)));
     expect(getComputedStyle(detail).textOverflow).toBe("ellipsis");
     expect(detail.scrollWidth).toBeGreaterThan(detail.clientWidth);
@@ -1245,14 +1246,14 @@ test.each([390, 1280].flatMap(width => ["light", "dark"].map(scheme => ({ width,
     expect(group.querySelector(".pwa-process-alert-error")).not.toBeNull();
     await userEvent.click(group);
     await expect.poll(() => group.getAttribute("aria-expanded")).toBe("true");
-    for (const [status, token] of [["complete", "--pwa-complete"], ["error", "--pwa-error"], ["interrupted", "--pwa-secondary"]] as const) {
+    for (const [status, token] of [["complete", "--pwa-secondary"], ["error", "--pwa-error"], ["interrupted", "--pwa-secondary"]] as const) {
       const ended: Extract<TimelineEvent, { kind: "tool" }> = status === "error" ? { ...finished, status, error: "failed" }
         : status === "interrupted" ? { ...finished, status, result: undefined } : finished;
       await update([reply, eventItem(earlierFailure), eventItem(ended), runEndItem()]);
       assertLayout();
       expect(group.querySelector(".pwa-process-status-running")).toBeNull();
       for (const node of group.querySelectorAll<HTMLElement>(".pwa-process-copy *")) expect(getComputedStyle(node).color).not.toBe(runningColor);
-      // 组状态不反写成员：较早失败始终让组头显示错误，成员各自保留真实状态色；状态槽已表达失败时不重复右侧图标。
+      // 组状态不反写成员：较早失败始终让组头显示错误，成员各自保留真实状态（成功为中性类型图标）；状态槽已表达失败时不重复右侧图标。
       expect(getComputedStyle(slot()).color).toBe(tokenColor("--pwa-error"));
       expect(group.querySelector(".pwa-process-alert")).toBeNull();
       const member = document.querySelectorAll<HTMLElement>(".pwa-process-group .pwa-tool-card .pwa-tool-status")[1]!;

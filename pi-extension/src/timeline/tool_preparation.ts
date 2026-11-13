@@ -9,11 +9,11 @@ export type PreparingCall = Readonly<{ id: string; tool: string; summary: ToolSu
 type Slot = { latest: PreparingCall; lastAt: number; timer: ReturnType<typeof setTimeout> | null };
 
 /** 从 SDK 的 toolCall 内容块取出可发布的调用；ID 或名称尚未到达时返回 null，等后续增量补齐。 */
-export function preparingCall(block: unknown): PreparingCall | null {
+export function preparingCall(block: unknown, cwd?: string): PreparingCall | null {
   if (!block || typeof block !== "object") return null;
   const call = block as { type?: unknown; id?: unknown; name?: unknown; arguments?: unknown };
   if (call.type !== "toolCall" || typeof call.id !== "string" || !call.id || typeof call.name !== "string" || !call.name) return null;
-  return { id: call.id, tool: call.name, summary: toolSummary(call.name, call.arguments) };
+  return { id: call.id, tool: call.name, summary: toolSummary(call.name, call.arguments, cwd) };
 }
 
 /**

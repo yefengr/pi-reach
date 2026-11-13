@@ -688,13 +688,24 @@ test("the first row covered by a floating local error scrolls out below the card
 });
 
 /** 同轮的长过程组：16 个已完成工具在运行中默认展开，超过一屏；正式 run_end 到达时自动收起并出现完成时间。 */
+/**
+ * 收起场景按 44px 明细行设计：组的总高度决定是否需要滚动、组头是否越出顶边。
+ * 纯细指针下明细行为 36（DESIGN「按钮尺寸」），按实际行高补足成员数，保持组的总高度不随指针类型变化。
+ */
+function membersFor(count: number): number {
+  const style = getComputedStyle(document.documentElement);
+  const designed = Number.parseFloat(style.getPropertyValue("--pwa-hit-target"));
+  const row = Number.parseFloat(style.getPropertyValue("--pwa-button-height"));
+  return designed > 0 && row > 0 ? Math.ceil(count * designed / row) : count;
+}
+
 function collapsingRun(options: { reply?: boolean; runningLast?: boolean; toolCount?: number } = {}) {
   const history = answer("live-output", paragraphs("Earlier", 30));
   const tool = (id: string): TimelineViewItem => ({ kind: "event", event: {
     ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id,
     tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok",
   } });
-  const toolCount = options.toolCount ?? 16;
+  const toolCount = membersFor(options.toolCount ?? 16);
   const tools = Array.from({ length: toolCount }, (_, index) => tool(`t${index}`));
   // 最后一个调用仍在运行时，后续正文已出现也不收起；它结束后才让位。
   const last = `t${toolCount - 1}`;
@@ -842,11 +853,11 @@ function shortRun() {
   const tool = (id: string, running: boolean): TimelineViewItem => running
     ? { kind: "partial", createdAt: 1, partial: { ...scope, protocol_version: 2, type: "timeline_partial", group_id: "live-output", partial_id: `tool:${id}`, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "running" } }
     : { kind: "event", event: { ...scope, event_id: `event:${id}`, group_id: "live-output", timestamp: 1, kind: "tool", tool_call_id: id, tool: "read", args: { path: `${id}.ts` }, status: "complete", truncated: false, result: "ok" } };
-  const ids = ["a", "b", "c", "d", "e", "f"];
+  const ids = Array.from({ length: membersFor(6) }, (_, index) => `t${index}`);
   const reply = (text: string): TimelineViewItem => ({ kind: "event", event: { ...scope, event_id: "reply", group_id: "live-output", timestamp: 2, kind: "assistant", status: "complete", blocks: [{ type: "text", text }] } });
   const ended: TimelineViewItem = { kind: "event", event: { ...scope, event_id: "end", group_id: "live-output", timestamp: 3, kind: "run_end", status: "complete" } };
   const done = [history, ...ids.map(id => tool(id, false))];
-  return { running: [history, ...ids.slice(0, -1).map(id => tool(id, false)), tool("f", true)], done, reply, ended };
+  return { running: [history, ...ids.slice(0, -1).map(id => tool(id, false)), tool(ids.at(-1)!, true)], done, reply, ended };
 }
 
 test("a following collapse keeps the group head in place while the space waits for the reply, then returns it smoothly when the turn ends", async () => {

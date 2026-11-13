@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Loader, Modal, TextInput } from "@mantine/core";
 import { CircleAlert, Keyboard, ScanLine } from "lucide-react";
 import { cameraSupported, QrCamera } from "@/components/pwa/qr-scanner";
+import { CopyCommand, PAIR_COMMAND, withInlineCommand } from "@/components/pwa/copy-command";
 import { isPairingCameraDevice } from "@/lib/pwa/pairing-device";
 import { normalizePairCode } from "@/lib/pi-reach/pairing";
 import type { PairingErrorCode } from "@/lib/pwa/use-device-pairing";
@@ -139,6 +140,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
     classNames={{ content: "pwa-pairing-dialog", header: "pwa-pairing-head", title: "pwa-pairing-title-wrap", close: "pwa-icon-button", body: "pwa-pairing-body" }}
   >
     <p className="pwa-pairing-description">{p.description}</p>
+    <CopyCommand command={PAIR_COMMAND} />
     {scanning ? <QrCamera onScan={receiveScan} onUnavailable={() => { setNotice("cameraUnavailable"); setMode("code"); }} /> : <form className="pwa-pairing-form" onSubmit={(event) => { event.preventDefault(); submit(value); }}>
       {notice === "cameraUnavailable" ? <p className="pwa-pairing-hint" role="status">{p.cameraUnavailable}</p> : null}
       <TextInput
@@ -146,7 +148,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
         className="pwa-input pwa-pairing-input"
         label={p.codeLabel}
         description={errorText ? undefined : p.codeHint}
-        error={errorText ? <span className="pwa-field-error"><CircleAlert size={16} aria-hidden="true" />{errorText}</span> : undefined}
+        error={errorText ? <span className="pwa-field-error"><CircleAlert size={16} aria-hidden="true" /><span>{withInlineCommand(errorText, PAIR_COMMAND)}</span></span> : undefined}
         value={value}
         onChange={(event) => changeValue(event.target.value)}
         placeholder="K7MP4Q2D"

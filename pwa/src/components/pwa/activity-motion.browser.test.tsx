@@ -216,20 +216,8 @@ test("nested mutation roots reconcile only the outermost node", async () => {
   contains.mockRestore();
 });
 
-test("DEV review is untouched and unmount disconnects observers and listeners", async () => {
+test("unmount disconnects observers and listeners", async () => {
   const view = await harness();
-  const review = document.createElement("div");
-  review.className = "pwa-ui-review";
-  const historical = view.spin.cloneNode(true) as SVGSVGElement;
-  historical.removeAttribute(marker);
-  review.append(historical);
-  view.fixture.append(review);
-  await frames();
-  expect(historical.hasAttribute(marker)).toBe(false);
-  review.classList.remove("pwa-ui-review");
-  await expect.poll(() => historical.getAttribute(marker)).toBe("running");
-  review.classList.add("pwa-ui-review");
-  await expect.poll(() => historical.hasAttribute(marker)).toBe(false);
   const intersection = vi.spyOn(IntersectionObserver.prototype, "disconnect");
   const mutation = vi.spyOn(MutationObserver.prototype, "disconnect");
   const listener = vi.spyOn(document, "removeEventListener");

@@ -73,7 +73,7 @@ export function usePwaPressFeedback() {
       clearTapped();
       if (!event.isPrimary || event.button !== 0 || !(event.target instanceof Element) || outsideTapSwallowed(event)) return;
       const element = event.target.closest<HTMLElement>(PRESS_TARGET);
-      if (!element || !scope.contains(element) || unavailable(element) || (import.meta.env.DEV && element.closest(".pwa-ui-review"))) return;
+      if (!element || !scope.contains(element) || unavailable(element)) return;
       const row = !element.matches(BUTTON_TARGET);
       settleRelease(element);
       held = { element, pointerId: event.pointerId, row, x: event.clientX, y: event.clientY };

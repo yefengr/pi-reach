@@ -7,7 +7,7 @@ import type { ToolDetailsContent } from "@pi-reach/protocol/session";
 export type ToolValue = Extract<TimelineEvent, { kind: "tool" }> | Extract<TimelinePartial, { kind: "tool" }> | (Omit<ToolDetailsContent, "status"> & { kind: "tool"; tool_call_id: string; session_id: string; group_id: string; leaf_id: string | null; status: "running" | "complete" | "error" | "interrupted"; truncated: boolean });
 export type ToolStatus = "running" | "complete" | "error" | "interrupted" | "unknown";
 export type ToolKind = "read" | "command" | "search" | "edit" | "write" | "generic";
-export type ToolIconKind = "file" | "terminal" | "search" | "edit" | "write" | "tool";
+export type ToolIconKind = "read" | "terminal" | "search" | "edit" | "write" | "tool";
 
 type RecordValue = Record<string, unknown>;
 
@@ -96,38 +96,91 @@ export function toolAction(value: ToolValue): ToolAction {
   const t = getMessages().tools;
 
   if (hasName(tool, ["read"], ["read", "file"]) && path) {
-    return { kind: "read", icon: "file", label: t.readFile, detail: path };
+    return { kind: "read", icon: "read", label: t.actionRead, detail: path };
   }
   if (hasName(tool, ["bash"], ["shell"], ["exec"], ["execute"], ["run", "command"]) && command) {
-    return { kind: "command", icon: "terminal", label: t.runCommand, detail: command };
+    return { kind: "command", icon: "terminal", label: t.actionCommand, detail: command };
   }
   if (hasName(tool, ["grep"], ["rg"], ["search"], ["find"], ["glob"]) && query) {
-    return { kind: "search", icon: "search", label: t.searchQuery, detail: query };
+    return { kind: "search", icon: "search", label: t.actionSearch, detail: query };
   }
   if (hasName(tool, ["edit"], ["edit", "file"], ["patch"], ["apply", "patch"]) && path) {
-    return { kind: "edit", icon: "edit", label: t.editFile, detail: path };
+    return { kind: "edit", icon: "edit", label: t.actionEdit, detail: path };
   }
   if (hasName(tool, ["write"], ["write", "file"], ["create", "file"]) && path) {
-    return { kind: "write", icon: "write", label: t.writeFile, detail: path };
+    return { kind: "write", icon: "write", label: t.actionWrite, detail: path };
   }
   return { kind: "generic", icon: "tool", label: genericLabel(tool), detail: parameterSummary(args) };
 }
 
-/** 折叠行只概括真实参数，结果和预览留给展开内容；展开前后标题保持一致。 */
-export function toolHeaderSummary(value: ToolValue): string {
-  const action = toolAction(value);
-  const detail = action.detail.replace(/[\r\n\t]+/g, " ").trim();
-  const args = isToolSummary(value) ? value.summary : toolInput(value);
-  if (action.kind !== "read" || !isRecord(args)) return detail;
+const singleLine = (text: string) => text.replace(/[\r\n\t]+/g, " ").trim();
 
+/** 读取请求的行范围，只来自真实参数，不按结果长度推断。 */
+function readRange(value: ToolValue): string | undefined {
+  const args = isToolSummary(value) ? value.summary : toolInput(value);
+  if (!isRecord(args)) return undefined;
   const offset = isToolSummary(value) ? value.summary.offset : readLineOffset(value);
   const limit = args.limit;
   if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
     const start = offset ?? 1;
     const end = start + (limit - 1);
-    if (Number.isSafeInteger(end)) return `${detail} · L${start}–${end}`;
+    if (Number.isSafeInteger(end)) return `L${start}–${end}`;
   }
-  return offset === undefined ? detail : `${detail} · L${offset}+`;
+  return offset === undefined ? undefined : `L${offset}+`;
+}
+
+/** 折叠行只概括真实参数，结果和预览留给展开内容；展开前后标题保持一致。 */
+export function toolHeaderSummary(value: ToolValue): string {
+  const action = toolAction(value);
+  const detail = singleLine(action.detail);
+  const range = action.kind === "read" ? readRange(value) : undefined;
+  return range === undefined ? detail : `${detail} · ${range}`;
+}
+
+/**
+ * 时间线工具行文案：动词＋对象，无法分类时为工具名＋参数摘要。
+ * 路径拆成文件名与目录，目录排在后面并最先被省略，窄屏上文件名始终可见；完整摘要留给悬停提示。
+ */
+export type ToolCallCopy = { kind: ToolKind; label: string; target: string; context: string; title: string };
+
+export function toolCallCopy(value: ToolValue): ToolCallCopy {
+  const action = toolAction(value);
+  const title = toolInlineText(toolHeaderSummary(value));
+  if (action.kind === "generic") return { kind: action.kind, label: value.tool, target: title, context: "", title };
+  if (action.kind === "command" || action.kind === "search") return { kind: action.kind, label: action.label, target: title, context: "", title };
+  const { name, directory } = splitPath(singleLine(action.detail));
+  const range = action.kind === "read" ? readRange(value) : undefined;
+  return { kind: action.kind, label: action.label, target: toolInlineText(range === undefined ? name : `${name} · ${range}`), context: toolInlineText(directory), title };
+}
+
+function splitPath(path: string): { name: string; directory: string } {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (index <= 0) return { name: trimmed || path, directory: "" };
+  return { name: trimmed.slice(index + 1), directory: trimmed.slice(0, index) };
+}
+
+/** diff 增删行判定：时间线行数统计与阅读器色条共用，文件头 `+++`／`---` 不计。 */
+export function diffLineKind(line: string): "add" | "remove" | undefined {
+  if (line.startsWith("+") && !line.startsWith("+++")) return "add";
+  if (line.startsWith("-") && !line.startsWith("---")) return "remove";
+  return undefined;
+}
+
+export type ToolDiffStats = { added: number; removed: number };
+
+/** 修改工具真实返回 diff 时统计增删行数；没有 diff 不显示，不从请求参数推算。 */
+export function toolDiffStats(value: ToolValue): ToolDiffStats | undefined {
+  if (toolAction(value).kind !== "edit") return undefined;
+  const diff = reliableToolDiff(value);
+  if (diff === undefined) return undefined;
+  const stats = { added: 0, removed: 0 };
+  for (const line of diff.split("\n")) {
+    const kind = diffLineKind(line);
+    if (kind === "add") stats.added += 1;
+    else if (kind === "remove") stats.removed += 1;
+  }
+  return stats.added + stats.removed > 0 ? stats : undefined;
 }
 
 function parameterSummary(args: unknown): string {

@@ -86,7 +86,7 @@ export function RenamePairingDialog({ device, onSave, onClose, focusOrigin = nul
     opened
     zIndex="var(--pwa-z-modal)"
     onClose={restoreFocusAndClose}
-    title={<div><span className="pwa-kicker">{t.rename.kicker}</span><Text component="h2" id="pwa-rename-title">{t.rename.title}</Text></div>}
+    title={<span id="pwa-rename-title" className="pwa-rename-title">{t.rename.title}</span>}
     aria-labelledby="pwa-rename-title"
     aria-describedby="pwa-rename-description"
     centered
@@ -97,7 +97,7 @@ export function RenamePairingDialog({ device, onSave, onClose, focusOrigin = nul
     closeOnEscape={!saving}
     closeButtonProps={{ disabled: saving, "aria-label": t.rename.close, title: t.common.close }}
     classNames={{ content: "pwa-rename-dialog", header: "pwa-rename-head", close: "pwa-icon-button" }}
-    styles={{ header: { minHeight: 0, padding: 0 }, body: { padding: 0 } }}
+    styles={{ body: { padding: 0 } }}
   >
     <Stack gap={0}>
       <Text component="p" id="pwa-rename-description" className="pwa-rename-description">{t.rename.descriptionBefore}<Text component="strong">{displayDevice(device)}</Text>{t.rename.descriptionAfter}</Text>

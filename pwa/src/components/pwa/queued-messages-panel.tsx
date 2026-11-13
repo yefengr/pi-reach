@@ -1,11 +1,32 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { QueuedMessages } from "./queued-messages";
-import { useI18n } from "@/lib/i18n";
+import { QueuedMessages, type QueuedMessageView } from "./queued-messages";
+import { useI18n, type Messages } from "@/lib/i18n";
 import type { PeerChannel } from "@/lib/pi-reach/peer-channel";
-import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, type TimelineRuntime, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
+import { QUEUED_INSERTION_CONFIRMATION_TIMEOUT_MS, type TimelinePending, type TimelineRuntime, type TimelineRuntimeChange, type TimelineViewItem } from "@/lib/pwa/timeline-runtime";
 import { isQueuedMessage } from "@/lib/pwa/queued-message-display";
 
 export { isQueuedMessage };
+
+/** 排队区单行的展示状态：只由 pending 字段推导，正式排队区与开发展厅共用，保证两处显示一致。 */
+export function queuedMessageView(item: TimelinePending, q: Messages["queued"]): QueuedMessageView {
+  const status = item.insertionStatus === "unconfirmed" ? q.unconfirmed
+    : item.insertionStatus === "waiting" ? q.inserting
+      : item.delivery === "unknown_delivery" ? q.waitingReconnect
+        : item.queuedAction === "cancel" ? q.cancelling
+          : item.cancelable ? q.queued : q.sending;
+  return {
+    id: item.clientRequestId,
+    text: item.text,
+    images: item.images,
+    attachments: item.attachments,
+    status,
+    ...(status === q.queued ? { waiting: true } : {}),
+    ...(status === q.inserting || status === q.cancelling || status === q.sending ? { pending: true } : {}),
+    ...(item.insertionStatus === "unconfirmed" ? { notice: q.unconfirmedNotice, attention: true, dismissible: true } : {}),
+    canManage: item.insertionStatus === undefined && item.cancelable === true && item.delivery !== "unknown_delivery",
+    busy: item.queuedAction !== undefined || item.insertionStatus !== undefined,
+  };
+}
 
 function nearestInsertionDeadline(items: TimelineViewItem[]): number | null {
   let deadline: number | null = null;
@@ -74,25 +95,7 @@ export function QueuedMessagesPanel({ items, isOnline, isWorking = false, runtim
     onError("Could not update the queued message. Check the connection and try again.");
   };
   return <QueuedMessages
-    items={queued.map((item) => {
-      const status = item.insertionStatus === "unconfirmed" ? q.unconfirmed
-        : item.insertionStatus === "waiting" ? q.inserting
-          : item.delivery === "unknown_delivery" ? q.waitingReconnect
-            : item.queuedAction === "cancel" ? q.cancelling
-              : item.cancelable ? q.queued : q.sending;
-      return {
-        id: item.clientRequestId,
-        text: item.text,
-        images: item.images,
-        attachments: item.attachments,
-        status,
-        ...(status === q.queued ? { waiting: true } : {}),
-        ...(status === q.inserting || status === q.cancelling || status === q.sending ? { pending: true } : {}),
-        ...(item.insertionStatus === "unconfirmed" ? { notice: q.unconfirmedNotice, attention: true, dismissible: true } : {}),
-        canManage: item.insertionStatus === undefined && item.cancelable === true && item.delivery !== "unknown_delivery",
-        busy: item.queuedAction !== undefined || item.insertionStatus !== undefined,
-      };
-    })}
+    items={queued.map((item) => queuedMessageView(item, q))}
     isOnline={isOnline}
     onInsert={(requestId) => act(requestId, "insert")}
     onCancel={(requestId) => act(requestId, "cancel")}

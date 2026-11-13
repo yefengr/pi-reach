@@ -26,8 +26,7 @@ export function usePwaAnimationVisibility(scopeRef: RefObject<HTMLDivElement | n
       }
     });
     const reconcile = (element: Element) => {
-      const eligible = scope.contains(element) && element.matches(LOOPS)
-        && !(import.meta.env.DEV && element.closest(".pwa-ui-review"));
+      const eligible = scope.contains(element) && element.matches(LOOPS);
       if (!eligible) {
         intersection?.unobserve(element);
         visible.delete(element);
