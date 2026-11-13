@@ -1,4 +1,4 @@
-import { CircleAlert, CircleHelp, CircleStop, FilePen, FilePlus, FileText, LoaderCircle, Search, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
+import { CircleAlert, CircleHelp, CircleStop, FilePlus, FileText, LoaderCircle, Pencil, Search, Terminal, Wrench, type LucideIcon } from "lucide-react";
 
 import { isToolPreparing, toolAction, toolCallCopy, toolDiffStats, toolIdentity, toolStatus, type ToolIconKind, type ToolStatus, type ToolValue } from "./tool-presentation";
 import { useI18n } from "@/lib/i18n";
@@ -14,7 +14,8 @@ type ToolCardProps = {
   indicatorKeys?: readonly string[];
 };
 
-const TOOL_TYPE_ICONS = { file: FileText, terminal: SquareTerminal, search: Search, edit: FilePen, write: FilePlus, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
+// 只有读取与写入用文件外形；修改用铅笔、命令用不带框的提示符，16px 下靠外形而非细节区分。
+const TOOL_TYPE_ICONS = { file: FileText, terminal: Terminal, search: Search, edit: Pencil, write: FilePlus, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
 
 /** 图标表示做了什么：成功时显示工具类型，运行、失败、中断与未知才换成状态图标。 */
 function ToolStatusIcon({ status, icon, toolKeys }: { status: ToolStatus; icon: ToolIconKind; toolKeys: readonly string[] }) {

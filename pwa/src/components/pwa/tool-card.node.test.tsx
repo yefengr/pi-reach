@@ -104,9 +104,9 @@ test("interrupted tools use a stop icon and failures use an alert", () => {
 
 test.each([
   ["read", { path: "a.ts" }, "lucide-file-text"],
-  ["bash", { command: "pnpm test" }, "lucide-square-terminal"],
+  ["bash", { command: "pnpm test" }, "lucide-terminal"],
   ["grep", { pattern: "needle" }, "lucide-search"],
-  ["edit", { path: "a.ts" }, "lucide-file-pen"],
+  ["edit", { path: "a.ts" }, "lucide-pencil"],
   ["write", { path: "a.ts" }, "lucide-file-plus"],
   ["deploy", { target: "prod" }, "lucide-wrench"],
 ] as const)("a completed %s call shows its type icon instead of a check", (tool, args, icon) => {

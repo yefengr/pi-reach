@@ -255,7 +255,7 @@ test("completed rows show neutral type icons, failures stay red and a finished g
   await page.elementLocator(view.head()).click();
   await finish(view.root());
   const [done, failed] = [...view.root().querySelectorAll<HTMLElement>(".pwa-tool-card")];
-  expect(done!.querySelector(".pwa-tool-status .lucide-square-terminal")).not.toBeNull();
+  expect(done!.querySelector(".pwa-tool-status .lucide-terminal")).not.toBeNull();
   expect(view.root().querySelector(".pwa-process-entry .lucide-check")).toBeNull();
   expect(getComputedStyle(done!.querySelector(".pwa-tool-status")!).color).toBe(tokenColor("--pwa-secondary"));
   expect(done!.querySelector(".pwa-tool-action-copy strong")!.textContent).toBe("Run");
