@@ -237,3 +237,23 @@ test("theme, menus and fixtures leave browser storage/network untouched and rele
   expect(create).toHaveBeenCalledTimes(2);
   expect(revoke.mock.calls.map(call => call[0]).sort()).toEqual(create.mock.results.map(result => result.value).sort());
 });
+
+test("main region renders the real empty, startup and notice components for every scene", async () => {
+  await render(<UiStateGalleryPage />);
+  await page.getByLabelText("展示区域", { exact: true }).selectOptions("main");
+  const scenes: [string, string][] = [
+    ["first-run-prompt", ".pwa-workspace-state"], ["first-run-ios", ".pwa-workspace-state"], ["first-run-mac", ".pwa-workspace-state"],
+    ["choose-pi", ".pwa-card-row"], ["relay-reconnecting", ".pwa-workspace-state-busy"], ["relay-retry", ".pwa-workspace-state .pwa-button"],
+    ["network", ".pwa-workspace-state"], ["startup-loading", ".pwa-loading"], ["startup-error", ".pwa-startup-card"],
+    ["status-error", ".pwa-main-notices .pwa-status-error"], ["exited", ".pwa-composer textarea[disabled], .pwa-composer textarea[readonly]"], ["browser-notice", ".pwa-runtime-notice"],
+  ];
+  for (const [scene, selector] of scenes) {
+    await page.getByLabelText("主区状态", { exact: true }).selectOptions(scene);
+    await expect.poll(() => document.querySelector(selector), { message: scene }).not.toBeNull();
+  }
+  // 首次使用的引导由受控安装状态驱动：可直接安装时有「安装应用」，进入第二步后显示配对命令块。
+  await page.getByLabelText("主区状态", { exact: true }).selectOptions("first-run-prompt");
+  await expect.element(page.getByRole("button", { name: "Install app" })).toBeVisible();
+  await page.getByRole("button", { name: "Use in browser for now" }).click();
+  await expect.poll(() => document.querySelector(".pwa-workspace-state .pwa-command-block")).not.toBeNull();
+});

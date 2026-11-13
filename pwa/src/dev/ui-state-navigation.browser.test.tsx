@@ -35,9 +35,9 @@ test("navigation, sidebar, saved history and settings retain the original Compos
   await expect.poll(() => document.querySelector<HTMLElement>(".pwa-ui-states-settings")?.hidden).toBe(true);
   expect(input()).toBe(composer);
   expect(composer.value).toBe("跨展示区域保留草稿");
-  await page.getByRole("button", { name: "收起侧栏", exact: true }).click();
+  await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expect.poll(() => desktop.hasAttribute("inert")).toBe(true);
-  await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
+  await page.getByRole("button", { name: "Expand sidebar", exact: true }).click();
   expect(desktop.hasAttribute("inert")).toBe(false);
 });
 

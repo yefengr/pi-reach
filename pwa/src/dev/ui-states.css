@@ -50,6 +50,12 @@
 .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation][data-collapsed] .pwa-layout { grid-template-columns: 0px minmax(0, 1fr); }
 .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-desktop-navigation { visibility: hidden; }
 .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-main { border-radius: 0; }
+/* 正式收展入口相对应用根定位；展厅以导航框架为定位基准，收起状态由框架的 data-collapsed 表达。 */
+.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation] .pwa-layout { position: relative; }
+.pwa-ui-scope .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-icon-button.pwa-sidebar-toggle { left: calc(8px + var(--pwa-safe-left)); }
+.pwa-root.pwa-ui-states .pwa-ui-states-frame[data-collapsed] .pwa-title-bar { padding-left: calc(56px + var(--pwa-main-safe-left)); }
+/* 启动页在正式应用中铺满应用壳；展厅中按应用壳的同一规则占满主区剩余高度，超出时在区内滚动。 */
+.pwa-ui-states-frame-content > :is(.pwa-loading, .pwa-startup-error) { flex: 1 1 0; height: auto; min-height: 0; overflow-y: auto; }
 .pwa-ui-states-local-result { margin: 0; padding: var(--pwa-space-xs) var(--pwa-space-md); color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }
 .pwa-ui-states-surfaces { flex: none; display: flex; flex-direction: column; gap: var(--pwa-space-sm); padding: var(--pwa-space-md); border-bottom: 1px solid var(--pwa-line); }
 .pwa-ui-states-surface-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--pwa-space-sm); }
@@ -63,6 +69,5 @@
   .pwa-ui-states-controls { align-items: stretch; }
   .pwa-ui-states-controls > * { flex: 1 1 160px; }
   .pwa-root.pwa-ui-states .pwa-ui-states-frame[data-navigation] .pwa-layout { grid-template-columns: minmax(0, 1fr); }
-  .pwa-root.pwa-ui-states .pwa-ui-states-frame .pwa-desktop-navigation,
-  .pwa-ui-states-sidebar-control { display: none; }
+  .pwa-root.pwa-ui-states .pwa-ui-states-frame .pwa-desktop-navigation { display: none; }
 }

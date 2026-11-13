@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Button, NativeSelect } from "@mantine/core";
+import { NativeSelect } from "@mantine/core";
 import { DesktopSidebar, type ConnectionViewState, type WorkspaceNavigationProps } from "@/components/pwa/workspace-view";
 import { SessionSheet } from "@/components/pwa/session-sheet";
+import { SidebarToggle } from "@/components/pwa/sidebar-toggle";
 import { WorkspaceTitleBar } from "@/components/pwa/workspace-title-bar";
 import { SessionActionsMenu } from "@/components/pwa/session-actions-menu";
 import { ConfirmActionDialog } from "@/components/pwa/confirm-action-dialog";
@@ -64,13 +65,14 @@ export function UiStateNavigation({ enabled, settingsOpen, children, onSceneChan
         { value: "online", label: "已连接" }, { value: "connecting", label: "连接中" }, { value: "retrying", label: "重连中" },
         { value: "offline", label: "离线" }, { value: "no_network", label: "无网络" },
       ]} />
-      <Button className="pwa-ui-states-sidebar-control" variant="default" aria-pressed={collapsed} onClick={() => setCollapsed(value => !value)}>{collapsed ? "展开侧栏" : "收起侧栏"}</Button>
       <span>导航、会话选择和刷新只改变本页；路由与跟手手势请在测试环境验收。</span>
     </div> : null}
     <div className="pwa-layout">
       <div className="pwa-desktop-navigation" hidden={!enabled} inert={!enabled || collapsed} aria-hidden={!enabled || collapsed || undefined}>
         <DesktopSidebar {...navigation} collapsed={collapsed} />
       </div>
+      {/* 与正式工作区同一个收展入口，展开时在品牌行右端，收起后停在标题区左端。 */}
+      {enabled ? <SidebarToggle collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} /> : null}
       <div className="pwa-main">
         {enabled ? <WorkspaceTitleBar title={title} prefix="pi-reach" showTitle={Boolean(endpoint || selectedHistoryId)} navigationExpanded={sheetOpen}
           onOpenNavigation={button => { setOrigin(button); setSheetOpen(true); }}

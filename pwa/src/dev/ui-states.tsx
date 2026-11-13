@@ -6,6 +6,7 @@ import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appea
 import { applyGallerySlowMotion, createGalleryColorSchemeManager } from "./gallery-runtime";
 import { GALLERY_STATES, type GalleryState } from "./ui-state-fixtures";
 import { UiStateWorkspace } from "./ui-state-workspace";
+import { UiStateMain } from "./ui-state-main";
 import { UiStateNavigation } from "./ui-state-navigation";
 import { UiStateSurfaces, type GallerySurface } from "./ui-state-surfaces";
 import { GALLERY_DEVICES } from "./ui-state-shell-fixtures";
@@ -50,7 +51,7 @@ function GalleryContent({ slow, onSlowChange, reducedMotion }: { slow: boolean; 
       <div className="pwa-ui-states-heading"><h1>界面状态展厅</h1><p>只展示当前正式组件，仅本页内存演示，不连接 Pi / Relay，不保存设置或草稿。</p></div>
       <div className="pwa-ui-states-controls">
         <NativeSelect label="展示区域" value={region} onChange={event => setRegion(event.currentTarget.value)} data={[
-          { value: "conversation", label: "对话、边界与连续流程" }, { value: "navigation", label: "导航与会话" }, { value: "surfaces", label: "设置、确认与反馈" },
+          { value: "conversation", label: "对话、边界与连续流程" }, { value: "navigation", label: "导航与会话" }, { value: "main", label: "主区空态、启动与提示" }, { value: "surfaces", label: "设置、确认与反馈" },
         ]} />
         <NativeSelect label="演示状态" value={state} onChange={event => setState(event.currentTarget.value as GalleryState)} data={GALLERY_STATES.map(entry => ({ value: entry.id, label: entry.label }))} />
         <NativeSelect label="外观 · 仅本页" value={appearance} onChange={event => setAppearance(event.currentTarget.value as PwaAppearance)} data={[{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }, { value: "system", label: "跟随系统" }]} />
@@ -62,14 +63,14 @@ function GalleryContent({ slow, onSlowChange, reducedMotion }: { slow: boolean; 
       <details className="pwa-ui-states-coverage">
         <summary>覆盖范围与操作说明</summary>
         <p>“演示状态”提供 {GALLERY_STATES.length} 组正式组件状态。连续流程使用“下一步”推进输出、工具完成与会话失效，可先写草稿并打开工具详情观察连续性。</p>
-        <p>“导航与会话”补充电脑选择、在线 Pi、只读历史、侧栏与手机导航；“设置、确认与反馈”补充设置、配对码、重命名、确认、帮助与通知。选择、保存、重试和清理均只影响本页。</p>
+        <p>“导航与会话”补充电脑选择、在线 Pi、只读历史、侧栏与手机导航；“主区空态、启动与提示”补充首次使用的安装引导、多个 Pi 待选择、连接故障、启动加载与失败、局部错误卡片、Pi 已退出的只读输入区与浏览器能力提示；“设置、确认与反馈”补充设置、配对码、重命名、确认、帮助与通知。选择、保存、重试和清理均只影响本页。</p>
         <p>这里只展示当前正式组件，不保留历史版本或候选方案；组件改动后同步更新演示数据。原生路由、真实连接、摄像头、安装与设备手势仍在测试环境验收。</p>
       </details>
     </header>
     <UiStateSurfaces surface={surface} onSurfaceChange={changeSurface} showControls={region === "surfaces"} device={surfaceDevice} />
     <section className="pwa-ui-states-workspace" data-narrow={narrow || undefined} aria-label="真实组件演示工作区" inert={settingsOpen} aria-hidden={settingsOpen || undefined}>
       <UiStateNavigation enabled={region === "navigation"} settingsOpen={settingsOpen} onSceneChange={setState} onOpenSurface={(next, device) => { setSurfaceDevice(device ?? GALLERY_DEVICES[0]); changeSurface(next); }}>
-        <UiStateWorkspace state={state} />
+        {region === "main" ? <UiStateMain /> : <UiStateWorkspace state={state} />}
       </UiStateNavigation>
     </section>
   </main>;
