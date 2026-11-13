@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { ActionIcon, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
-import { PanelLeft, RefreshCw } from "lucide-react";
+import { RefreshCw, TextAlignStart } from "lucide-react";
 import { refreshPwaApp } from "@/lib/pwa/service-worker-update";
 import { useI18n } from "@/lib/i18n";
 
@@ -39,7 +39,7 @@ export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, 
       aria-expanded={navigationExpanded}
       title={title || undefined}
     >
-      <span className="pwa-session-trigger-icon" aria-hidden="true"><PanelLeft size={20} />{navigationNotice ? <span className="pwa-notice-dot" /> : null}</span>
+      <span className="pwa-session-trigger-icon" aria-hidden="true"><TextAlignStart size={20} />{navigationNotice ? <span className="pwa-notice-dot" /> : null}</span>
       <span className="pwa-session-trigger-copy"><span className="pwa-session-trigger-title">{title}</span></span>
     </UnstyledButton>
     <div className="pwa-title-bar-heading">
