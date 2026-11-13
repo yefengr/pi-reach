@@ -139,7 +139,6 @@ body:has(.pwa-root) { overflow: hidden; }
 
 .pwa-brand-mark { flex: 0 0 auto; color: var(--pwa-ink); }
 
-.pwa-kicker { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); letter-spacing: 0; }
 
 /* 无框图标按钮：透明底、44px 点击区域，悬停时直径 36 的圆形浅底；键盘聚焦为圆形轮廓。 */
 .pwa-ui-scope .pwa-icon-button {
@@ -547,11 +546,12 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-startup-card { width: min(520px, 100%); padding: 32px; }
 .pwa-startup-icon,
 .pwa-chat-empty-icon { display: grid; place-items: center; border-radius: var(--pwa-radius-md); color: var(--pwa-running); background: var(--pwa-running-wash); }
-.pwa-startup-icon { width: 48px; height: 48px; margin-bottom: 16px; }
+/* 卡片内容整体居中，与主区空状态同一排布：图标块、标题、说明与操作都在中线上。 */
+.pwa-startup-icon { width: 48px; height: 48px; margin: 0 auto 16px; }
 .pwa-startup-card h1 { margin: 12px 0 8px; font-family: var(--pwa-font-ui); font-size: var(--pwa-text-page); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-title); }
 .pwa-startup-card p { color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-startup-action-note { color: var(--pwa-secondary) !important; font-size: var(--pwa-text-meta) !important; }
-.pwa-startup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.pwa-startup-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; }
 .pwa-startup-actions a { text-decoration: none; }
 .pwa-spin { color: var(--pwa-running); animation: pwa-rotate var(--pwa-duration-spin) linear infinite; }
 .pwa-loading { color: var(--pwa-secondary); font-size: var(--pwa-text-body); }

@@ -293,6 +293,14 @@ test("startup notices keep icons on the 16/20/24 scale and the mobile gutter", a
   const title = document.querySelector(".pwa-startup-card h1")!.getBoundingClientRect();
   const description = document.querySelector(".pwa-startup-card h1 + p")!.getBoundingClientRect();
   expect(Math.round(description.top - title.bottom)).toBe(8);
+  // 与主区空状态同一排布：图标块与操作都在卡片中线上，图标到标题 16，不加眉题；失败图标表示需要关注，不用无网络图标。
+  const cardBox = card.getBoundingClientRect();
+  const middle = (rect: DOMRect) => rect.left + rect.width / 2;
+  expect(Math.abs(middle(icon) - middle(cardBox))).toBeLessThanOrEqual(1);
+  expect(Math.abs(middle(document.querySelector(".pwa-startup-actions .pwa-button")!.getBoundingClientRect()) - middle(cardBox))).toBeLessThanOrEqual(1);
+  expect(Math.round(title.top - icon.bottom)).toBe(16);
+  expect(card.querySelector(".pwa-kicker")).toBeNull();
+  expect(card.querySelector(".pwa-startup-icon svg")).toHaveClass("lucide-circle-alert");
   await screen.unmount();
   await page.viewport(1280, 900);
 });

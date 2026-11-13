@@ -1,6 +1,6 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StartupErrorView, StartupLoading } from "./pwa-startup";
+import { describeStartupFailure, StartupErrorView, StartupLoading } from "./pwa-startup";
 import { PwaUiProvider } from "./pwa-ui-provider";
 
 test("renders the startup error with a Mantine reload action", () => {
@@ -33,4 +33,17 @@ test("startup loading keeps only the background until it is due, then shows the 
   const due = render(true);
   expect(due).toContain("pwa-loading-mark");
   expect(due).toContain("Opening local workspace…");
+});
+
+afterEach(() => { vi.unstubAllGlobals(); });
+
+test("unrecognized startup failures show the generic explanation instead of the raw exception", () => {
+  // 让环境检查都通过，走到未识别失败的分支。
+  vi.stubGlobal("window", { isSecureContext: true });
+  vi.stubGlobal("indexedDB", {});
+  const failure = describeStartupFailure(new Error("QuotaExceededError: internal path /private/var/db"));
+  expect(failure.title).toBe("Could not open local workspace");
+  expect(failure.message).toBe("The browser could not initialize the local PWA database.");
+  expect(JSON.stringify(failure)).not.toContain("/private/var/db");
+  expect(describeStartupFailure("startup_timeout").title).toBe("Local workspace timed out");
 });

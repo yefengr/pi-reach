@@ -308,7 +308,6 @@ export const zh: Messages = {
     genericBody: "浏览器无法初始化本地 PWA 数据库。",
     reloadAction: "重新加载应用",
     opening: "正在打开本地工作区…",
-    kicker: "Pi Reach / 浏览器工作区",
     unavailableTitle: "PWA 不可用",
     unavailableBody: "浏览器无法启动本地工作区。",
     reload: "重新加载",

@@ -305,7 +305,6 @@ export const en = {
     genericBody: "The browser could not initialize the local PWA database.",
     reloadAction: "Reload the app",
     opening: "Opening local workspace…",
-    kicker: "Pi Reach / browser workspace",
     unavailableTitle: "PWA unavailable",
     unavailableBody: "The browser could not start the local workspace.",
     reload: "Reload",
