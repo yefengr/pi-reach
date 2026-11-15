@@ -83,6 +83,69 @@ test("zero-prefetch, revision snapshots, close cancellation and native final han
   expect(decode(env.sent)).toMatchObject({ source: "session" });
 });
 
+test("edit previews and native final handoff retain only actual returned diff metadata", () => {
+  const env = setup();
+  const open = active(env, "edit", { path: "synthetic.txt", edits: [{ oldText: "requested old", newText: "requested new" }] });
+  env.service.handle(open);
+  env.sent.length = 0;
+  const content = [{ type: "text", text: "Successfully replaced 1 block(s) in synthetic.txt." }];
+  const details = { diff: "-8 actual old\n+8 actual new", patch: "@@ -8 +8 @@\n-actual old\n+actual new", firstChangedLine: 8 };
+  const result = { content, details: { ...details, full_output_path: "/private/synthetic", unknown: "hidden" } };
+  env.runtime.onToolExecutionUpdate({ type: "tool_execution_update", toolCallId: "call", partialResult: result } as never, env.session);
+  expect(decode(env.sent)).toMatchObject({ source: "preview", result: { content, details } });
+  expect(JSON.stringify(decode(env.sent).result)).not.toContain("requested");
+  expect(JSON.stringify(decode(env.sent).result)).not.toContain("/private/synthetic");
+  env.sent.length = 0;
+  env.runtime.onToolExecutionEnd({ type: "tool_execution_end", toolCallId: "call", toolName: "edit", result, isError: false } as never, env.session);
+  const message = { role: "toolResult", toolCallId: "call", toolName: "edit", ...result, isError: false, timestamp: 2 };
+  env.runtime.onMessageStart(message, env.session);
+  env.session.appendMessage(message as never);
+  env.runtime.onMessageEnd(message, env.session);
+  env.runtime.onTurnEnd(env.session);
+  expect(decode(env.sent)).toMatchObject({ source: "session", limited: false, result: { content, details } });
+  expect(decode(env.sent).result).toEqual({ content, details });
+});
+
+test.each([false, true])("history retains actual edit details with error status %s and accepts the unchanged wire schema", (isError) => {
+  const session = SessionManager.inMemory(process.cwd());
+  const entry = session.appendMessage({ role: "assistant", content: [{ type: "toolCall", id: "edit-call", name: "edit", arguments: {} }], timestamp: 1 } as never);
+  const result = { content: [{ type: "text", text: isError ? "execution failed after output" : "saved" }], details: { patch: "actual patch", firstChangedLine: 3 } };
+  session.appendMessage({ role: "toolResult", toolCallId: "edit-call", toolName: "edit", ...result, isError, timestamp: 2 } as never);
+  expect(sessionToolDetails(session, { call_entry_id: entry, tool_call_id: "edit-call" })).toEqual({ content: {
+    tool_ref: { call_entry_id: entry, tool_call_id: "edit-call" }, tool: "edit", source: "session", status: isError ? "error" : "complete",
+    args: {}, result, limited: false,
+  } });
+});
+
+test("selected edit metadata counts toward exact UTF-8 final byte bounds, while unknown metadata is ignored", () => {
+  const session = SessionManager.inMemory(process.cwd());
+  const entry = session.appendMessage({ role: "assistant", content: [{ type: "toolCall", id: "edit-bound", name: "edit", arguments: {} }], timestamp: 1 } as never);
+  const result = { role: "toolResult", toolCallId: "edit-bound", toolName: "edit", content: [{ type: "text", text: "saved" }],
+    details: { patch: "", full_output_path: "private".repeat(MAX_TOOL_DETAILS_BYTES) }, isError: false, timestamp: 2 };
+  session.appendMessage(result as never);
+  const ref = { call_entry_id: entry, tool_call_id: "edit-bound" };
+  const baseline = sessionToolDetails(session, ref);
+  if (!("content" in baseline)) throw new Error("Expected selected details");
+  const available = MAX_TOOL_DETAILS_BYTES - Buffer.byteLength(JSON.stringify(baseline.content));
+  result.details.patch = "界".repeat(Math.floor(available / 3)) + "x".repeat(available % 3);
+  const atLimit = sessionToolDetails(session, ref);
+  if (!("content" in atLimit)) throw new Error("Expected details at byte limit");
+  expect(Buffer.byteLength(JSON.stringify(atLimit.content))).toBe(MAX_TOOL_DETAILS_BYTES);
+  result.details.patch += "x";
+  expect(sessionToolDetails(session, ref)).toEqual({ code: "too_large", terminal: true });
+});
+
+test("edit preview metadata remains subject to existing preview limits", () => {
+  const env = setup();
+  const open = active(env, "edit", {});
+  env.runtime.onToolExecutionEnd({ type: "tool_execution_end", toolCallId: "call", toolName: "edit", isError: false,
+    result: { content: [{ type: "text", text: "saved" }], details: { diff: "界".repeat(MAX_TOOL_DETAILS_BYTES), patch: "actual patch" } } } as never, env.session);
+  env.service.handle(open);
+  const preview = decode(env.sent);
+  expect(preview).toMatchObject({ source: "preview", limited: true, result: { content: [{ type: "text", text: "saved" }], details: { patch: "actual patch" } } });
+  expect(Buffer.byteLength(JSON.stringify(preview))).toBeLessThanOrEqual(MAX_TOOL_PREVIEW_BYTES);
+});
+
 test("preparing details avoid history projection and yield to native completion without execution-start", () => {
   const env = setup();
   const message = { role: "assistant", timestamp: 1, content: [{ type: "toolCall", id: "call", name: "read", arguments: { path: "synthetic.txt" } }] };

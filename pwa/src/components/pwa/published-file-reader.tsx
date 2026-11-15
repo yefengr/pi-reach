@@ -5,7 +5,10 @@ import { ChevronLeft, Download, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { fileKey, isAttachmentFile, type FileSourceDescriptor } from "@/lib/pwa/file-source";
 import { useI18n } from "@/lib/i18n";
 import { FILE_TEXT_PREVIEW_BYTES, fileSaveName, textFilePreview } from "@/lib/pwa/file-preview";
-import { FileTextContent } from "./file-text-content";
+import { FileTextContent, type DocumentHeading } from "./file-text-content";
+import { ReaderDocument } from "./reader-document";
+import { ReaderToc } from "./reader-toc";
+import { attachmentSizeLabel } from "./attachment-cards";
 import { useSwipe } from "./use-swipe";
 import { useDrawerSwipeClose } from "./use-drawer-swipe-close";
 import { usePublishedFilesView } from "./published-files-context";
@@ -172,14 +175,17 @@ export function PublishedFileReader(props: PublishedFileReaderProps) {
 }
 
 function PublishedTextReader({ file, opened, onClose, onExitTransitionEnd }: PublishedFileReaderProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const files = usePublishedFilesView();
   const state = files?.getState(fileKey(file));
   const name = state?.fileName ?? file.file_name;
-  const [entered, setEntered] = useState(false);
+  // 条件挂载的已打开 Drawer 不会触发进入结束回调。
+  const [entered, setEntered] = useState(opened);
   const [scroll, setScroll] = useState<HTMLDivElement | null>(null);
+  const [headings, setHeadings] = useState<readonly DocumentHeading[]>([]);
+  const [documentPreview, setDocumentPreview] = useState(false);
   const text = state?.text;
-  const size = state?.byteLength;
+  const size = state?.byteLength ?? file.byte_length;
   const preview = useMemo(() => {
     if (!entered || text === undefined) return null;
     const bytes = new TextEncoder().encode(text.slice(0, FILE_TEXT_PREVIEW_BYTES + 1));
@@ -194,11 +200,18 @@ function PublishedTextReader({ file, opened, onClose, onExitTransitionEnd }: Pub
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(scroll);
-    if (scroll.firstElementChild) observer.observe(scroll.firstElementChild);
+    const content = scroll.querySelector(".pwa-reader-document");
+    if (content) observer.observe(content);
     return () => observer.disconnect();
   }, [scroll, preview]);
-  return <ReaderShell opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd} onEnterTransitionEnd={() => setEntered(true)} title={name} closeLabel={t.files.closeReader} historyKey="piReachFileReader" className="pwa-file-reader" actions={state?.phase === "ready" && state.url ? <ActionIcon component="a" className="pwa-icon-button" href={state.url} download={fileSaveName(name)} aria-label={t.files.save} title={t.files.save}><Download size={20} aria-hidden="true" /></ActionIcon> : null}>
-    {!entered && text !== undefined ? <div className="pwa-file-reader-scroll" aria-busy="true" /> : preview ? <div ref={setScroll} className="pwa-file-reader-scroll"><FileTextContent text={preview.text} markdown={markdown} />{preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}</div> : <p className="pwa-published-meta">{t.files.noPreview}</p>}
+  return <ReaderShell opened={opened} onClose={onClose} onExitTransitionEnd={onExitTransitionEnd} onEnterTransitionEnd={() => setEntered(true)} title={name} closeLabel={t.files.closeReader} historyKey="piReachFileReader" className="pwa-file-reader" actions={<>
+    {documentPreview ? <ReaderToc headings={headings} scroll={scroll} partial={preview?.truncated} /> : null}
+    {state?.phase === "ready" && state.url ? <ActionIcon component="a" className="pwa-icon-button" href={state.url} download={fileSaveName(name)} aria-label={t.files.save} title={t.files.save}><Download size={20} aria-hidden="true" /></ActionIcon> : null}
+  </>}>
+    {!entered && text !== undefined ? <div className="pwa-file-reader-scroll" aria-busy="true" /> : preview ? <div ref={setScroll} className="pwa-file-reader-scroll">
+      <ReaderDocument text={preview.text} markdown={markdown} fileInfo={`${markdown ? t.files.markdown : t.files.plainText} · ${attachmentSizeLabel(size, locale)}${preview.truncated ? ` · ${t.files.partialPreview}` : ""}`} partial={preview.truncated} onHeadings={setHeadings} onPreviewChange={setDocumentPreview} />
+      {preview.truncated ? <p className="pwa-published-meta" role="status">{t.files.truncated}</p> : null}
+    </div> : <p className="pwa-published-meta">{t.files.noPreview}</p>}
   </ReaderShell>;
 }
 

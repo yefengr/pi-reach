@@ -108,7 +108,8 @@ test.each([390, 1440].flatMap(width => [false, true].map(reduce => ({ width, red
     const enter = await entering;
     const card = document.querySelector<HTMLElement>(selector)!;
     await expect.poll(() => getComputedStyle(card).opacity).toBe("1");
-    const command = card.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
+    await expect.poll(() => card.querySelector(".pwa-reader-document")).not.toBeNull();
+    const command = card.querySelector<HTMLElement>(".pwa-reader-source")!;
     expect(getComputedStyle(command).fontSize).toBe("14px");
     expect(getComputedStyle(command).lineHeight).toBe("21.7px");
 

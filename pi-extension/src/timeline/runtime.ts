@@ -16,6 +16,7 @@ import { collectPublications } from "../files/publications.js";
 import type { ToolRef } from "@pi-reach/protocol/session";
 import { previewContent, toolDetailStore } from "./tool_detail_store.js";
 import { sessionToolDetails, type DetailResult } from "./tool_detail_source.js";
+import { toolDetailResult } from "./tool_detail_result.js";
 
 export const TIMELINE_MARKER = "pi-reach:timeline-v2" as const;
 
@@ -435,7 +436,7 @@ export class TimelineRuntime {
     if (!association || !sessionId) return;
     if (result !== undefined) {
       const previous = toolDetailStore.get(this.detailKey(association.toolRef));
-      toolDetailStore.put(this.detailKey(association.toolRef), previewContent({ tool_ref: association.toolRef, tool: association.tool, status: "running" }, previous?.args ?? "[preview unavailable]", (result as { content?: unknown } | null)?.content));
+      toolDetailStore.put(this.detailKey(association.toolRef), previewContent({ tool_ref: association.toolRef, tool: association.tool, status: "running" }, previous?.args ?? "[preview unavailable]", toolDetailResult(association.tool, result)));
     }
     const partial = toolPartial(toolCallId, association, { sessionId, leafId }, result);
     const previous = this.toolPartialWatermarks.get(association);

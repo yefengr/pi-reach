@@ -33,7 +33,7 @@ const statuses: ToolStatus[] = ["running", "complete", "error", "interrupted", "
 test.each(statuses)("%s tools expose a dialog action and status without inline content or a chevron", status => {
   const html = renderCard(<ToolCard value={fixtures[status]} status={status} onRead={() => {}} />);
   const label = status === "unknown" ? "Status unknown" : status[0].toUpperCase() + status.slice(1);
-  expect(html).toContain('aria-label="View edit tool details"');
+  expect(html).toContain('aria-label="View edit tool details: Edit src/file.ts');
   expect(html).toContain('aria-haspopup="dialog"');
   expect(html).toContain(`role="status" aria-label="edit: ${label}"`);
   expect(html).toContain('title="src/file.ts"');
@@ -53,7 +53,7 @@ test("short read output and long write input use the same direct dialog entry", 
   ];
   for (const current of values) {
     const html = renderCard(<ToolCard value={current} onRead={() => {}} />);
-    expect(html).toContain(`aria-label="View ${current.tool} tool details"`);
+    expect(html).toContain(`aria-label="View ${current.tool} tool details: `);
     expect(html).not.toContain("SHORT_OUTPUT_MARKER");
     expect(html).not.toContain("FINAL_WRITE_LINE");
     expect(html).not.toContain("View all");
@@ -67,6 +67,18 @@ test("renders separate calls as separate dialog actions", () => {
   expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2);
   expect(html).not.toContain("aria-expanded");
   expect(html).toContain("second-call");
+});
+
+test("the dialog action keeps the full path, range and diff counts instead of the truncated summary", () => {
+  const longPath = `packages/${"deep/".repeat(40)}tool-card.tsx`;
+  const read: ToolValue = { ...base, tool: "read", args: { path: longPath, offset: 53, limit: 100 }, result: "line output", status: "complete" };
+  // 长路径与行范围都进完整摘要，不受单行截断影响。
+  expect(renderCard(<ToolCard value={read} onRead={() => {}} />)).toContain(`aria-label="View read tool details: Read ${longPath} · L53–152"`);
+  // 增删行数来自真实 diff，接在完整路径之后。
+  expect(renderCard(<ToolCard value={value} onRead={() => {}} />)).toContain('aria-label="View edit tool details: Edit src/file.ts +1 −1"');
+  const command = `pnpm --filter pwa test:unit${' --reporter=verbose'.repeat(20)}`;
+  const html = renderCard(<ToolCard value={{ ...base, tool: "bash", args: { command }, result: "ok", status: "complete" }} onRead={() => {}} />);
+  expect(/aria-label="(View bash tool details: [^"]*)"/.exec(html)?.[1]).toBe(`View bash tool details: Run ${command}`);
 });
 
 test("keeps command title and localized detail action without echoing the call inline", () => {

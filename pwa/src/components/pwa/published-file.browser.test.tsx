@@ -216,6 +216,9 @@ test("safe bounded file reader escapes raw HTML and blocks external resources", 
   const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 110000, byteLength: 110000, preview: { kind: "text" }, mimeType: "text/markdown", text, url: blobUrl() } });
   await h.screen.getByRole("button", { name: "View", exact: true }).click();
   await expect.element(h.screen.getByRole("dialog", { name: descriptor.file_name, exact: true })).toBeVisible();
+  await expect.element(h.screen.getByRole("button", { name: "Source", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(document.querySelector(".pwa-reader-file-info")?.textContent).toContain("107.4 KiB");
+  await h.screen.getByRole("button", { name: "Preview", exact: true }).click();
   await expect.element(h.screen.getByRole("heading", { name: "Report" })).toBeVisible();
   expect(document.querySelector(".pwa-file-reader img, .pwa-file-reader script, .pwa-file-reader iframe")).toBeNull();
   expect(document.querySelector('.pwa-file-reader a[href^="javascript:"], .pwa-file-reader a[href^="file:"]')).toBeNull();
@@ -232,6 +235,43 @@ test("safe bounded file reader escapes raw HTML and blocks external resources", 
   await raw.screen.getByRole("button", { name: "Close file reader" }).click();
   await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
   await raw.screen.unmount();
+});
+
+test("published Markdown shares document preview, original metadata, TOC and save capability", async () => {
+  await page.viewport(320, 740);
+  setTextSize("xlarge");
+  const text = "# First\n\n## Second\n\n".padEnd(3072, "x");
+  const file = { ...descriptor, file_name: "a-very-long-published-document-name.md", byte_length: 3072 };
+  const url = blobUrl();
+  const h = await harness({ file, items: [event(published(file))], initial: { phase: "ready", receivedBytes: 3072, preview: { kind: "text" }, text, url } });
+  await h.screen.getByRole("button", { name: "View", exact: true }).click();
+  await expect.element(h.screen.getByRole("heading", { name: "First", exact: true })).toBeVisible();
+  expect(document.querySelector(".pwa-reader-file-info")?.textContent).toBe("Markdown · 3 KiB");
+  const toolbar = document.querySelector<HTMLElement>(".pwa-file-reader .pwa-reader-document-toolbar")!;
+  expect(toolbar.contains(document.querySelector(".pwa-reader-file-info"))).toBe(true);
+  expect(document.querySelectorAll(".pwa-file-reader .pwa-reader-document-toolbar")).toHaveLength(1);
+  expect(Math.round(document.querySelector(".pwa-file-markdown")!.getBoundingClientRect().top - toolbar.getBoundingClientRect().bottom)).toBe(16);
+  const contents = h.screen.getByRole("button", { name: "Contents", exact: true });
+  const header = document.querySelector<HTMLElement>(".pwa-file-reader-header")!;
+  expect(header.scrollWidth).toBe(header.clientWidth);
+  const save = header.querySelector<HTMLElement>('a[download]')!;
+  expect(Math.round(contents.element().getBoundingClientRect().right)).toBeLessThanOrEqual(Math.round(save.getBoundingClientRect().left));
+  expect(Math.round(save.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44);
+  (contents.element() as HTMLButtonElement).focus();
+  await contents.click();
+  await expect.element(h.screen.getByRole("menuitem", { name: "Second", exact: true })).toBeVisible();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => document.querySelector(".pwa-reader-toc")).toBeNull();
+  expect(document.activeElement).toBe(contents.element());
+  expect(document.querySelector(".pwa-file-reader")).not.toBeNull();
+  await h.screen.getByRole("button", { name: "Source", exact: true }).click();
+  expect(contents.query()).toBeNull();
+  expect(document.querySelector(".pwa-file-plain")?.textContent).toBe(text);
+  expect(document.querySelector(".pwa-file-reader a[download]")?.getAttribute("href")).toBe(url);
+  await h.screen.getByRole("button", { name: "Close file reader" }).click();
+  await expect.poll(() => document.querySelector(".pwa-file-reader")).toBeNull();
+  await expect.poll(() => window.history.state?.piReachFileReader).toBeFalsy();
+  await h.screen.unmount();
 });
 
 test("plain text reader follows the code text size token", async () => {
@@ -564,7 +604,7 @@ test("the mobile file reader header starts with a back button and keeps the name
 test("reader mounts text only after its enter motion ends", async () => {
   const width = 390;
   await page.viewport(width, 844);
-  const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 20, preview: { kind: "text" }, mimeType: "text/markdown", text: "# Report\nbody", url: blobUrl() } });
+  const h = await harness({ items: [event(published())], initial: { phase: "ready", receivedBytes: 13, byteLength: 13, preview: { kind: "text" }, mimeType: "text/markdown", text: "# Report\nbody", url: blobUrl() } });
   let pendingSeen = false;
   let contentLeft: number | null = null;
   const observer = new MutationObserver(() => {

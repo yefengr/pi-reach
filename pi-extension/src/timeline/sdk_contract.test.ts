@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { Type } from "typebox";
 import { TimelineRuntime } from "./runtime.js";
+import { sessionToolDetails } from "./tool_detail_source.js";
+import { toolDetailStore } from "./tool_detail_store.js";
 import { encodeServerFrameV2, type TimelineEvent, type TimelinePartial } from "../protocol/v2/index.js";
 import { TimelineV2Service } from "./v2_service.js";
 import { decodeServerFrameV2 } from "../../../pwa/src/lib/pi-reach/protocol-v2/codec.ts";
@@ -19,6 +21,7 @@ vi.mock("../../../pwa/src/lib/pwa/timeline-store.ts", () => ({
 }));
 import {
   createAgentSession,
+  createEditToolDefinition,
   DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
@@ -1393,6 +1396,69 @@ describe("plan/63 SDK timeline contracts", () => {
     expect(branch.map((entry) => entry.id)).toContain(currentLeaf);
     expect(branch.map((entry) => entry.id)).not.toContain(abandoned);
     expect(sessionManager.getLeafId()).toBe(currentLeaf);
+  });
+
+  test("builtin edit details survive real execution, native persistence and SessionManager reopen", async () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "pi-reach-edit-contract-"));
+    let session: TestSession | undefined;
+    try {
+      const sessionManager = SessionManager.create(temporaryRoot, join(temporaryRoot, "sessions"));
+      const runtime = new TimelineRuntime();
+      runtime.attach(sessionManager);
+      let stored = "first\nold value\nlast\n";
+      let toolRef: { call_entry_id: string; tool_call_id: string } | undefined;
+      let nativeResult: unknown;
+      let preview: unknown;
+      const edit = createEditToolDefinition(temporaryRoot, { operations: {
+        access: async () => {},
+        readFile: async () => Buffer.from(stored),
+        writeFile: async (_path, content) => { stored = content; },
+      } });
+      const extensionFactory: ExtensionFactory = (pi) => {
+        pi.registerTool(edit);
+        pi.on("agent_start", () => runtime.onAgentStart());
+        pi.on("message_start", (event, ctx) => {
+          const started = runtime.onMessageStart(event.message, ctx.sessionManager);
+          if (event.message.role === "assistant" && event.message.content.some((part) => part.type === "toolCall") && started) {
+            toolRef = { call_entry_id: started.eventId, tool_call_id: "builtin-edit-call" };
+          }
+        });
+        pi.on("message_update", (event, ctx) => runtime.onMessageUpdate(event, ctx.sessionManager));
+        pi.on("message_end", (event, ctx) => runtime.onMessageEnd(event.message, ctx.sessionManager));
+        pi.on("tool_execution_start", (event, ctx) => runtime.onToolExecutionStart(event, ctx.sessionManager));
+        pi.on("tool_execution_end", (event, ctx) => {
+          runtime.onToolExecutionEnd(event, ctx.sessionManager);
+          nativeResult = event.result;
+          if (toolRef) preview = toolDetailStore.get(runtime.detailKey(toolRef));
+        });
+        pi.on("turn_end", (_event, ctx) => { runtime.onTurnEnd(ctx.sessionManager); });
+        pi.on("agent_end", (event) => runtime.onAgentEnd(event.messages));
+      };
+      const streamFn: LocalStreamFn = (_model, context) => context.messages.some((message) => message.role === "toolResult")
+        ? fakeStream(makeAssistant([{ type: "text", text: "edit consumed" }], "stop"))
+        : fakeStream(makeAssistant([{ type: "toolCall", id: "builtin-edit-call", name: "edit",
+          arguments: { path: "synthetic.txt", edits: [{ oldText: "old value", newText: "new value" }] } }], "toolUse"));
+      session = await createHarness({ cwd: temporaryRoot, agentDir: join(temporaryRoot, "agent"), sessionManager,
+        extensionFactories: [extensionFactory], streamFn, enableExtensionTools: true });
+      await session.prompt("execute the isolated builtin edit");
+      await nextMacrotask();
+      expect(stored).toBe("first\nnew value\nlast\n");
+      expect(nativeResult).toMatchObject({ details: { diff: expect.stringContaining("new value"), patch: expect.stringContaining("@@"), firstChangedLine: 2 } });
+      expect(preview).toMatchObject({ source: "preview", limited: true, result: nativeResult });
+      if (!toolRef) throw new Error("Missing native edit reference");
+      const final = sessionToolDetails(sessionManager, toolRef);
+      expect(final).toMatchObject({ content: { source: "session", status: "complete", limited: false, result: nativeResult } });
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) throw new Error("Missing persisted session file");
+      session.dispose();
+      session = undefined;
+      const reopened = SessionManager.open(sessionFile);
+      expect(sessionToolDetails(reopened, toolRef)).toEqual(final);
+      expect(reopened.getBranch()).toContainEqual(expect.objectContaining({ type: "message", message: expect.objectContaining({ role: "toolResult", ...nativeResult as object }) }));
+    } finally {
+      session?.dispose();
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
   test("persists each marker and message in a complete tool turn to the temporary JSONL session", async () => {

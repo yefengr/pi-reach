@@ -30,7 +30,7 @@ export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[]
 ];
 const base = { session_id: "ui-states", leaf_id: "leaf", group_id: "demo", timestamp: 1 };
 export const GALLERY_CODE = 'const panel = { mode: "memory", connected: false };\nconsole.log(panel);';
-export const GALLERY_DOCUMENT = "# 阅读与对话并排\n\n此文件仅在本页内存中生成，不连接 Pi 或 Relay。\n\n" + Array.from({ length: 20 }, (_, index) => `## 阅读段落 ${index + 1}\n\n在空间足够时，详情在右侧打开，输入区保持可用。Keep the draft and reading position while the layout changes.\n\n`).join("");
+export const GALLERY_DOCUMENT = `# 阅读与对话并排\n\n此文件仅在本页内存中生成，不连接 Pi 或 Relay。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n` + Array.from({ length: 20 }, (_, index) => `## 阅读段落 ${index + 1}\n\n在空间足够时，详情在右侧打开，输入区保持可用。Keep the draft and reading position while the layout changes.\n\n`).join("");
 export const GALLERY_FILES: PublishedFileDescriptor[] = [
   { publication_id: "notes", file_name: "界面演示.md", mime_type: "text/markdown", byte_length: new TextEncoder().encode(GALLERY_DOCUMENT).length, tool_call_id: "publish" },
   { publication_id: "picture", file_name: "内存布局.png", mime_type: "image/png", byte_length: 4096, tool_call_id: "publish" },
@@ -48,14 +48,14 @@ const EDIT_DIFF = "--- a/pwa/src/components/pwa/tool-card.tsx\n+++ b/pwa/src/com
 function toolTypeItems(): TimelineViewItem[] {
   return [
     text("types-intro", "五类工具各一次，展开过程组查看类型图标。"),
-    completedTool("types-read", "read", { path: "pwa/src/components/pwa/tool-card.tsx", offset: 1, limit: 40 }, "仅本页演示：读取内容。"),
-    completedTool("types-run", "bash", { command: "pnpm typecheck" }, "仅本页演示：命令没有实际执行。"),
-    completedTool("types-search", "grep", { pattern: "TOOL_TYPE_ICONS" }, "仅本页演示：搜索结果。"),
-    completedTool("types-edit", "edit", { path: "pwa/src/components/pwa/tool-card.tsx" }, "仅本页演示：已替换。", { diff: EDIT_DIFF }),
-    completedTool("types-write", "write", { path: "docs/notes.md", content: "演示" }, "仅本页演示：已写入。"),
+    completedTool("types-read", "read", { path: "pwa/src/components/pwa/tool-card.tsx", offset: 53, limit: 40 }, "export function ToolCard() {\n  return <button>Read file</button>;\n}\n"),
+    completedTool("types-run", "bash", { command: "pnpm typecheck" }, "仅本页演示：命令没有实际执行。\n" + "检查模块与类型…\n".repeat(80) + "类型检查完成。"),
+    completedTool("types-search", "grep", { pattern: "TOOL_TYPE_ICONS", path: "pwa/src" }, "pwa/src/components/pwa/tool-card.tsx:16: export const TOOL_TYPE_ICONS = {\npwa/src/components/pwa/tool-reader.tsx:7: import { TOOL_TYPE_ICONS } from \"./tool-card\";"),
+    completedTool("types-edit", "edit", { path: "pwa/src/components/pwa/tool-card.tsx" }, "Successfully replaced 1 block(s) in pwa/src/components/pwa/tool-card.tsx.", { patch: EDIT_DIFF }),
+    completedTool("types-write", "write", { path: "docs/notes.md", content: GALLERY_DOCUMENT }, "Successfully wrote to docs/notes.md"),
     text("types-edit-only", "下面这组只有修改，组头显示修改图标。"),
-    completedTool("types-edit-a", "edit", { path: "pwa/src/app/globals.css" }, "仅本页演示：已替换。", { diff: "--- a/pwa/src/app/globals.css\n+++ b/pwa/src/app/globals.css\n@@ -1 +1 @@\n-old\n+new" }),
-    completedTool("types-edit-b", "edit", { path: "docs/DESIGN.md" }, "仅本页演示：已替换。", { diff: "--- a/docs/DESIGN.md\n+++ b/docs/DESIGN.md\n@@ -1 +1,2 @@\n-old\n+new\n+added" }),
+    completedTool("types-edit-a", "edit", { path: "pwa/src/app/globals.css" }, "Successfully replaced 1 block(s) in pwa/src/app/globals.css.", { patch: "--- a/pwa/src/app/globals.css\n+++ b/pwa/src/app/globals.css\n@@ -1 +1 @@\n-old\n+new" }),
+    completedTool("types-edit-b", "edit", { path: "docs/DESIGN.md" }, "Successfully replaced 1 block(s) in docs/DESIGN.md.", { patch: "--- a/docs/DESIGN.md\n+++ b/docs/DESIGN.md\n@@ -1 +1,2 @@\n-old\n+new\n+added" }),
     text("types-end", "以上调用均为内存演示。"),
     { kind: "event", event: { ...base, event_id: "types-run-end", kind: "run_end", status: "complete", timestamp: 1000 } },
   ];

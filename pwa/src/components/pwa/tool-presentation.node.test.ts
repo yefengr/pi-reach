@@ -28,11 +28,11 @@ test("keeps command and search summaries on one line and unknown tools conservat
   expect(toolHeaderSummary(event("custom", { path: "not inferred", token: "private" }, "result"))).toBe("path · token");
 });
 
-test("row copy leads with a verb and keeps the file name ahead of its directory", () => {
-  expect(toolCallCopy(event("read", { path: "pwa/src/a.tsx", offset: 1, limit: 120 }, "text"))).toEqual({ kind: "read", label: "Read", target: "a.tsx · L1–120", context: "pwa/src", title: "pwa/src/a.tsx · L1–120" });
-  expect(toolCallCopy(event("edit", { path: "C:\\repo\\b.css" }, "ok"))).toMatchObject({ label: "Edit", target: "b.css", context: "C:\\repo" });
+test("row copy separates a continuous path and the requested range", () => {
+  expect(toolCallCopy(event("read", { path: "pwa/src/a.tsx", offset: 1, limit: 120 }, "text"))).toEqual({ kind: "read", label: "Read", target: "a.tsx", context: "pwa/src/", range: "L1–120", title: "pwa/src/a.tsx · L1–120" });
+  expect(toolCallCopy(event("edit", { path: "C:\\repo\\b.css" }, "ok"))).toMatchObject({ label: "Edit", target: "b.css", context: "C:\\repo\\" });
   expect(toolCallCopy(event("write", { path: "notes.md" }, "ok"))).toMatchObject({ label: "Write", target: "notes.md", context: "" });
-  expect(toolCallCopy(event("write", { path: "/notes.md" }, "ok"))).toMatchObject({ target: "/notes.md", context: "" });
+  expect(toolCallCopy(event("write", { path: "/notes.md" }, "ok"))).toMatchObject({ target: "notes.md", context: "/" });
   // 命令与搜索词不拆分路径；无法分类的工具保留原始工具名与参数摘要。
   expect(toolCallCopy(event("bash", { command: "pnpm --filter pwa lint" }, "ok"))).toMatchObject({ label: "Run", target: "pnpm --filter pwa lint", context: "" });
   expect(toolCallCopy(event("grep", { pattern: "needle", path: "src" }, "ok"))).toMatchObject({ label: "Search", target: "needle", context: "" });

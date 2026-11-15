@@ -1,0 +1,29 @@
+.pwa-root .pwa-reader-document { min-width: 0; }
+.pwa-root .pwa-reader-file-info { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-reader-document-toolbar { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--pwa-hit-target); margin-bottom: 16px; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-reader-source-label { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.pwa-root .pwa-reader-document-actions { display: flex; flex: none; align-items: center; margin-inline-start: auto; }
+.pwa-root .pwa-reader-view-switch { display: flex; flex: none; }
+.pwa-root .pwa-reader-view-switch .pwa-button { min-width: var(--pwa-hit-target); min-height: var(--pwa-hit-target); padding: 0 8px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--pwa-secondary); background: transparent; font-size: inherit; font-weight: var(--pwa-weight-regular); }
+.pwa-root .pwa-reader-view-switch .pwa-button[aria-pressed="true"] { border-bottom-color: var(--pwa-ink); color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); }
+.pwa-root .pwa-file-markdown h1 { margin: 24px 0 12px; font-size: var(--pwa-text-page); line-height: var(--pwa-leading-title); }
+.pwa-root .pwa-file-markdown h2 { margin: 24px 0 8px; font-size: var(--pwa-text-heading); line-height: var(--pwa-leading-title); }
+.pwa-root .pwa-file-markdown h3 { margin: 16px 0 8px; font-size: var(--pwa-text-body); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-file-markdown > :first-child { margin-top: 0; }
+/* 工具与文件正文共享预览样式，不依赖文件阅读器的样式是否已被加载。 */
+.pwa-root .pwa-file-markdown .pwa-code-block pre { box-sizing: border-box; max-width: 100%; margin: 0; padding: 4px 12px 12px; overflow-x: auto; border-radius: 0; color: inherit; background: transparent; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
+.pwa-root .pwa-file-markdown .pwa-code-block pre code { padding: 0; color: inherit; background: transparent; font: inherit; white-space: pre; overflow-wrap: normal; }
+.pwa-root .pwa-file-plain { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); }
+.pwa-root .pwa-reader-source { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pwa-root .pwa-reader-source-row { display: grid; grid-template-columns: var(--pwa-reader-line-width) minmax(0, 1fr); gap: 16px; min-height: 1lh; }
+.pwa-root .pwa-reader-line-number { color: var(--pwa-code-dim); text-align: right; white-space: nowrap; user-select: none; }
+.pwa-root .pwa-reader-source-text { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pwa-root .pwa-reader-toc { box-sizing: border-box; display: flex; flex-direction: column; max-width: min(calc(100vw - 32px), var(--pwa-reader-drawer-width)); max-height: calc(100dvh - 96px - var(--pwa-safe-top) - var(--pwa-safe-bottom)); border-radius: var(--pwa-radius-lg); }
+.pwa-root .pwa-reader-toc-head { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 8px; padding-left: 8px; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); color: var(--pwa-secondary); font-size: var(--pwa-text-meta); font-weight: var(--pwa-weight-strong); }
+.pwa-root .pwa-reader-toc-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pwa-root .pwa-reader-toc-item { min-height: var(--pwa-hit-target); padding: 8px 12px; color: var(--pwa-soft-ink); font: var(--pwa-weight-regular) var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: normal; overflow-wrap: anywhere; }
+.pwa-root .pwa-reader-toc-item[data-level="1"] { color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); }
+.pwa-root .pwa-reader-toc-item[data-level="2"] { padding-inline-start: 24px; }
+.pwa-root .pwa-reader-toc-item[data-level="3"] { padding-inline-start: 32px; }
+.pwa-root .pwa-reader-toc-item[data-reader-current="true"] { color: var(--pwa-ink); background: var(--pwa-selected); font-weight: var(--pwa-weight-strong); }
+.pwa-root .pwa-reader-toc-notice { flex-shrink: 0; padding: 8px 12px 12px; border-top: var(--pwa-hairline) solid var(--pwa-separator); white-space: normal; overflow-wrap: anywhere; color: var(--pwa-secondary); font-size: var(--pwa-text-meta); }

@@ -22,7 +22,9 @@ const navigation: WorkspaceNavigationProps = {
   snapshotReady: true, pairingPresence: {}, onPair() {}, onSettings() {}, onSelectDevice() {}, onSelectEndpoint() {}, onSelectHistory() {}, onRename() {}, onRemove() {},
 };
 const base = { session_id: "reader-drawer", leaf_id: "leaf", group_id: "group", timestamp: 1 };
-const file: PublishedFileDescriptor = { publication_id: "note", file_name: "Reader notes.md", mime_type: "text/markdown", byte_length: 8000, tool_call_id: "publish" };
+const fileText = "# Reading notes\n\n" + "Keep this independent reading position.\n\n".repeat(160);
+const fileBytes = new TextEncoder().encode(fileText).length;
+const file: PublishedFileDescriptor = { publication_id: "note", file_name: "Reader notes.md", mime_type: "text/markdown", byte_length: fileBytes, tool_call_id: "publish" };
 function tool(id: string, name: string): TimelineViewItem {
   return { kind: "event", event: { ...base, event_id: id, kind: "tool", tool_call_id: id, tool: name, args: { path: `${id}.txt` }, status: "complete", truncated: false, result: { content: [{ type: "text", text: `Output from ${id}\n` + "Independent reading content\n".repeat(80) }] } } };
 }
@@ -51,7 +53,7 @@ function Harness({ controls, pending = false, details }: { controls: Ref<Control
   const viewport = useTimelineViewport(items);
   const view = useMemo<PublishedFilesView>(() => ({
     scopeToken, canFetch: true, active: false,
-    getState: () => ready ? { phase: "ready", receivedBytes: 8000, byteLength: 8000, preview: { kind: "text" }, text: "# Reading notes\n\n" + "Keep this independent reading position.\n\n".repeat(160), url } : undefined,
+    getState: () => ready ? { phase: "ready", receivedBytes: fileBytes, byteLength: fileBytes, preview: { kind: "text" }, text: fileText, url } : undefined,
     open: () => deferred.promise, cancel() {}, pin, unpin,
   }), [scopeToken, ready, url, deferred]);
   useImperativeHandle(controls, () => ({
@@ -136,11 +138,11 @@ test("summary readers do not prefetch and atomically follow preview to saved ses
     const request = fixture.opens()[0]!;
     const body = toolReader()!;
     await pushDetails(fixture.controller, request, "preview", 1, "SYNTHETIC_PREVIEW");
-    await expect.poll(() => body.querySelector(".pwa-reader-text")?.textContent).toBe("SYNTHETIC_PREVIEW");
+    await expect.poll(() => body.querySelector(".pwa-reader-source-text")?.textContent).toBe("SYNTHETIC_PREVIEW");
     expect(fixture.cache.put).not.toHaveBeenCalled();
     // 中间 revision 可以被源头合并，不要求逐帧送达。
     await pushDetails(fixture.controller, request, "session", 3, "SYNTHETIC_FINAL");
-    await expect.poll(() => body.querySelector(".pwa-reader-text")?.textContent).toBe("SYNTHETIC_FINAL");
+    await expect.poll(() => body.querySelector(".pwa-reader-source-text")?.textContent).toBe("SYNTHETIC_FINAL");
     expect(toolReader()).toBe(body);
     expect(fixture.opens()).toHaveLength(1);
     expect(fixture.cache.put).toHaveBeenCalledOnce();
@@ -277,13 +279,13 @@ test.each([1440, 390])("a running tool keeps one reader body and follows complet
   await settle();
   const body = toolReader()!;
   flushSync(() => controls.current!.setRows([{ ...running, partial: { ...running.partial, blocks: [{ type: "text", text: "Later output" }] } }]));
-  await expect.poll(() => body.querySelector(".pwa-reader-text")?.textContent).toBe("Later output");
+  await expect.poll(() => body.querySelector(".pwa-reader-log")?.textContent).toBe("Later output");
   const completed: TimelineViewItem = { kind: "event", event: {
     ...base, leaf_id: "completed-leaf", event_id: "stream-result", kind: "tool", tool_call_id: "stream", tool: "bash",
     args: { command: "fixed fixture" }, status: "complete", truncated: false, result: [{ type: "text", text: "Complete output" }],
   } };
   flushSync(() => controls.current!.setRows([completed]));
-  await expect.poll(() => toolReader()?.querySelector(".pwa-reader-text")?.textContent).toBe("Complete output");
+  await expect.poll(() => toolReader()?.querySelector(".pwa-reader-log")?.textContent).toBe("Complete output");
   expect(toolReader()).toBe(body);
   expect(document.querySelector(".pwa-tool-card .pwa-tool-action")).toBe(source);
   expect(group.getAttribute("aria-expanded")).toBe("true");
@@ -294,9 +296,9 @@ test.each([1440, 390])("a running tool keeps one reader body and follows complet
 test("appended output never takes over the open reader and the single reader keeps one pin", async () => {
   const { screen, controls } = await mount();
   await openTool();
-  expect(toolReader()?.closest(".pwa-tool-reader")?.querySelector("h2")?.textContent).toBe("read");
+  expect(toolReader()?.closest(".pwa-tool-reader")?.querySelector("h2")?.getAttribute("aria-label")).toBe("Read read.txt");
   flushSync(() => controls.current!.append());
-  expect(dialog()?.querySelector("h2")?.textContent).toBe("read");
+  expect(dialog()?.querySelector("h2")?.getAttribute("aria-label")).toBe("Read read.txt");
   expect(document.querySelectorAll(".pwa-tool-reader[role='dialog']")).toHaveLength(1);
   // 可继续在遮罩外读取的只有阅读器本身；关闭后草稿仍在。
   await settle();
@@ -315,7 +317,7 @@ test("a late file result does not replace an open tool reader", async () => {
   await openTool();
   flushSync(() => controls.current!.ready());
   await settle();
-  expect(dialog()?.querySelector("h2")?.textContent).toBe("read");
+  expect(dialog()?.querySelector("h2")?.getAttribute("aria-label")).toBe("Read read.txt");
   expect(fileReader()).toBeNull();
   // 可见文件卡片自持一份 pin；阅读器随点击才引用。
   expect(pin).toHaveBeenCalledTimes(1);
