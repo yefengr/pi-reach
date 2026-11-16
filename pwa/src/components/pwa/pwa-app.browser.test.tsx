@@ -5246,6 +5246,292 @@ test("a handoff triggered synchronously by capability recovery keeps its lease f
   } finally { channelHarness.beforeUserSend = null; await screen.unmount(); }
 });
 
+async function requestDraftNewSession(screen: OperationHarness["screen"]) {
+  await screen.getByRole("button", { name: "Pi commands" }).click();
+  await screen.getByRole("menuitem", { name: /\/new/ }).click();
+}
+
+test.each([
+  ["text", "result-first"], ["files", "ready-first"], ["mixed", "data-first"],
+] as const)("local new session retains idle %s draft until a confirmed handoff (%s)", async (kind, order) => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    const text = kind === "files" ? "" : "Keep my unsent draft";
+    await input.fill(text);
+    if (kind !== "text") {
+      pasteAttachments(input.element(), new File(["one"], "first.txt"), new File(["two"], "second.txt"));
+      await expect.element(screen.getByRole("group", { name: "first.txt", exact: true })).toBeVisible();
+    }
+    await requestDraftNewSession(screen);
+    await screen.getByRole("button", { name: "Start fresh session", exact: true }).click();
+    await expect.poll(() => channel.frames.some((frame) => frame.type === "session_new")).toBe(true);
+    await expect.element(input).toHaveValue(text);
+    const request = channel.frames.findLast((frame) => frame.type === "session_new")!;
+    const result = { protocol_version: 2, type: "action_ok", action: "session_new", target_channel_id: channel.channelId, in_reply_to: request.id, session_id: "session-2" };
+    if (order === "result-first") channel.emit(result);
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "session-2", 1));
+    await expect.poll(() => historyRequests(next).length).toBeGreaterThan(0);
+    if (order === "ready-first") next.emit(result);
+    expect(next.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "user_message")).toBe(false);
+    next.emit(recentHistoryFrame(next, "session-2", sessionEvents("session-2", "New session", 1)));
+    if (order === "data-first") {
+      await expect.poll(async () => (await loadTimeline({ deviceId: "owner-device-key", endpointId: "daemon-endpoint", sessionId: "session-2", leafId: "generation-session-2" })).length).toBe(1);
+      next.emit(result);
+    }
+    await expect.element(screen.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
+    await expect.element(input).toHaveValue(text);
+    await expect.element(input).not.toHaveAttribute("readonly");
+    if (kind !== "text") {
+      await expect.element(screen.getByRole("group", { name: "first.txt", exact: true })).toBeVisible();
+      expect([...document.querySelectorAll(".pwa-attachment-tile")].map((item) => item.getAttribute("aria-label"))).toEqual(["first.txt", "second.txt"]);
+    }
+    expect(next.frames.some((frame) => frame.type === "user_message" || frame.type === "attachment_begin")).toBe(false);
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => next.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(next.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ session_id: "session-2", text: text.trim() });
+    expect(next.frames.filter((frame) => frame.type === "attachment_begin").map((frame) => frame.type === "attachment_begin" ? frame.file_name : "")).toEqual(kind === "text" ? [] : ["first.txt", "second.txt"]);
+    next.emit(result);
+    await input.fill("Later editing");
+    next.emit(result);
+    await expect.element(input).toHaveValue("Later editing");
+    next.emit({ protocol_version: 2, type: "bye", session_id: "session-2", leaf_id: "generation-session-2", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(3);
+    const returned = channelHarness.channels[2]!;
+    returned.emit(readyFrame(returned, "session-1"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(input).toHaveValue("");
+    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-tile")).toHaveLength(0);
+  } finally { await screen.unmount(); }
+});
+
+test.each(["cancel", "send-failed", "action-error", "protocol-error"])("local new session preserves the whole idle draft on %s", async (outcome) => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Keep every original");
+    pasteAttachments(input.element(), new File(["original"], "retained.txt"));
+    await expect.element(screen.getByRole("group", { name: "retained.txt", exact: true })).toBeVisible();
+    if (outcome === "cancel") {
+      await requestDraftNewSession(screen);
+      await screen.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+      expect(channel.frames.some((frame) => frame.type === "session_new")).toBe(false);
+    } else {
+      const request = await issueOperation(context, "session_new", outcome !== "send-failed");
+      if (outcome === "send-failed") {
+        await expect.element(screen.getByText("Could not start a fresh session. Check the connection and try again.", { exact: true })).toBeVisible();
+        await screen.getByRole("button", { name: "Cancel", exact: true }).click();
+      } else {
+        if (outcome === "action-error") replyOperation(channel, request);
+        else channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId, in_reply_to: request.id, code: "internal_error", message: rawOperationError });
+        await expect.element(screen.getByText("Could not start a new session. Try again.", { exact: true })).toBeVisible();
+      }
+    }
+    await expect.element(input).toHaveValue("Keep every original");
+    await expect.element(screen.getByRole("group", { name: "retained.txt", exact: true })).toBeVisible();
+    expect(channel.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "user_message")).toBe(false);
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+  } finally { await screen.unmount(); }
+});
+
+test("local new session blocks descriptor-only drafts in the existing confirmation and keeps all content", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Restore without File");
+    pasteAttachments(input.element(), new File(["original"], "descriptor.txt"));
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channel.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    const message = channel.frames.findLast((frame) => frame.type === "user_message")!;
+    if (message.type !== "user_message") throw new Error("Expected message");
+    channel.emit(queuedStateFrame([{ id: message.client_request_id, text: message.text }], "descriptor-before"));
+    await screen.getByRole("button", { name: /^Edit queued message 1/ }).click();
+    channel.emit(queuedStateFrame([], "descriptor-after"));
+    await expect.poll(() => channel.frames.some((frame) => frame.type === "user_message_status_request")).toBe(true);
+    const query = channel.frames.findLast((frame) => frame.type === "user_message_status_request")!;
+    channel.emit({ protocol_version: 2, type: "user_message_status", target_channel_id: channel.channelId, in_reply_to: query.id,
+      client_request_id: message.client_request_id, session_id: "session-1", leaf_id: "generation-session-1", status: "cancelled" });
+    await expect.element(input).toHaveValue("Restore without File");
+    pasteAttachments(input.element(), new File(["local"], "local.txt"));
+    await expect.element(screen.getByRole("group", { name: "local.txt", exact: true })).toBeVisible();
+    await requestDraftNewSession(screen);
+    await expect.element(screen.getByRole("button", { name: "Start fresh session", exact: true })).toBeVisible();
+    const dialog = document.querySelector(".pwa-confirm-dialog");
+    await screen.getByRole("button", { name: "Start fresh session", exact: true }).click();
+    await expect.element(screen.getByText("Reselect some attachments before taking them into a new session.", { exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-confirm-dialog")).toBe(dialog);
+    expect(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).toHaveLength(1);
+    expect(channel.frames.some((frame) => frame.type === "session_new")).toBe(false);
+    await screen.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+    await expect.element(input).toHaveValue("Restore without File");
+    expect(document.querySelectorAll(".pwa-composer .pwa-attachment-tile")).toHaveLength(2);
+    expect(channel.frames.filter((frame) => frame.type === "attachment_begin")).toHaveLength(1);
+  } finally { await screen.unmount(); }
+});
+
+test("local new session excludes the cancelled original upload batch and ignores late completion", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Already uploading");
+    pasteAttachments(input.element(), new File(["old"], "active-original.txt"));
+    channelHarness.holdFinish = true;
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => channelHarness.finishReplies.length).toBe(1);
+    const request = await issueOperation(context, "session_new");
+    channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: channel.channelId, in_reply_to: request.id, action: "session_new", session_id: "session-2" });
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "session-2"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    channelHarness.finishReplies[0]?.();
+    await queueCommitFrames();
+    await expect.element(input).toHaveValue("");
+    await expect.poll(() => document.querySelectorAll(".pwa-composer .pwa-attachment-tile").length).toBe(0);
+    expect(next.frames.some((frame) => frame.type === "user_message" || frame.type === "attachment_begin")).toBe(false);
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(false);
+    next.emit({ protocol_version: 2, type: "bye", session_id: "session-2", leaf_id: "generation-session-2", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(3);
+    const returned = channelHarness.channels[2]!;
+    returned.emit(readyFrame(returned, "session-1"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(input).toHaveValue("Already uploading");
+    await expect.element(screen.getByRole("group", { name: "active-original.txt", exact: true })).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
+test.each([
+  ["manual", "completed"], ["manual", "failed"], ["manual", "cancelled"],
+  ["auto", "completed"], ["auto", "failed"], ["auto", "cancelled"],
+] as const)("compaction retains idle text and File through %s %s and channel or leaf advancement", async (mode, outcome) => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen, channel } = context;
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Survive compaction");
+    pasteAttachments(input.element(), new File(["original"], "compact-original.txt"));
+    await expect.element(screen.getByRole("group", { name: "compact-original.txt", exact: true })).toBeVisible();
+    const request = mode === "manual" ? await issueOperation(context, "session_compact") : null;
+    const activity = { protocol_version: 2, type: "compaction_activity", session_id: "session-1", leaf_id: "generation-session-1", reason: mode === "manual" ? "manual" : "threshold" };
+    channel.emit({ ...activity, status: "running" });
+    await expect.element(screen.getByText("Compacting context…", { exact: true })).toBeVisible();
+    await expect.element(input).toHaveValue("Survive compaction");
+    await expect.element(screen.getByRole("group", { name: "compact-original.txt", exact: true })).toBeVisible();
+    if (request) channel.emit({ protocol_version: 2, type: outcome === "failed" ? "action_error" : "action_ok", target_channel_id: channel.channelId,
+      in_reply_to: request.id, action: "session_compact", ...(outcome === "failed" ? { error: rawOperationError } : { phase: outcome }) });
+    channel.emit({ ...activity, status: outcome });
+    await expect.poll(() => document.querySelector(".pwa-compaction-status")).toBeNull();
+    let current = channel;
+    if (outcome === "completed") {
+      channel.emit({ protocol_version: 2, type: "reset", session_id: "session-1", reason: "branch_changed" });
+      await expect.poll(() => channelHarness.channels.length).toBe(2);
+      current = channelHarness.channels[1]!;
+      current.emit({ ...readyFrame(current, "session-1"), leaf_id: "compacted-leaf" });
+    }
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(input).toHaveValue("Survive compaction");
+    await expect.element(screen.getByRole("group", { name: "compact-original.txt", exact: true })).toBeVisible();
+    expect(current.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "user_message")).toBe(false);
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => current.frames.filter((frame) => frame.type === "user_message").length).toBe(1);
+    expect(current.frames.findLast((frame) => frame.type === "user_message")).toMatchObject({ text: "Survive compaction", session_id: "session-1", leaf_id: outcome === "completed" ? "compacted-leaf" : "generation-session-1" });
+  } finally { await screen.unmount(); }
+});
+
+test("local new session hands off after same-runtime reconnect only when its late result matches", async () => {
+  const context = await renderReadyTimeline(renderWorkspaceApp);
+  const { screen } = context;
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Reconnect draft");
+    pasteAttachments(input.element(), new File(["original"], "reconnect-draft.txt"));
+    await expect.element(screen.getByRole("group", { name: "reconnect-draft.txt", exact: true })).toBeVisible();
+    const request = await issueOperation(context, "session_new");
+    const relay = relayHarness.instances[0]!;
+    relay.emitState("closed");
+    await expect.element(screen.getByText("New session not confirmed. Reconnect to check before creating another.", { exact: true })).toBeVisible();
+    relay.emitState("open");
+    relay.emitControl(onlineEndpointsFrame());
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const resumed = channelHarness.channels[1]!;
+    resumed.emit(readyFrame(resumed, "session-2"));
+    await expect.poll(() => resumed.frames.some((frame) => frame.type === "list_models")).toBe(true);
+    await expect.element(input).toHaveValue("");
+    expect(resumed.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "user_message")).toBe(false);
+    resumed.emit({ protocol_version: 2, type: "action_ok", target_channel_id: resumed.channelId, in_reply_to: "unrelated-request", action: "session_new", session_id: "session-2" });
+    await queueCommitFrames();
+    await expect.element(input).toHaveValue("");
+    resumed.emit({ protocol_version: 2, type: "action_ok", target_channel_id: resumed.channelId, in_reply_to: request.id, action: "session_new", session_id: "session-2" });
+    await expect.element(input).toHaveValue("Reconnect draft");
+    await expect.element(screen.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
+    await expect.element(screen.getByRole("group", { name: "reconnect-draft.txt", exact: true })).toBeVisible();
+    expect(resumed.frames.some((frame) => frame.type === "attachment_begin" || frame.type === "user_message")).toBe(false);
+  } finally { await screen.unmount(); }
+});
+
+test("ordinary session replacement never migrates an idle text and File draft", async () => {
+  const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
+  try {
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Stay in source");
+    pasteAttachments(input.element(), new File(["source"], "idle-source.txt"));
+    await expect.element(screen.getByRole("group", { name: "idle-source.txt", exact: true })).toBeVisible();
+    channel.emit({ protocol_version: 2, type: "bye", session_id: "session-1", leaf_id: "generation-session-1", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const next = channelHarness.channels[1]!;
+    next.emit(readyFrame(next, "session-2"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(input).toHaveValue("");
+    await expect.element(screen.getByRole("group", { name: "idle-source.txt", exact: true })).not.toBeInTheDocument();
+    next.emit({ protocol_version: 2, type: "bye", session_id: "session-2", leaf_id: "generation-session-2", reason: "session_replaced" });
+    await expect.poll(() => channelHarness.channels.length).toBe(3);
+    channelHarness.channels[2]!.emit(readyFrame(channelHarness.channels[2]!, "session-1"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(input).toHaveValue("Stay in source");
+    await expect.element(screen.getByRole("group", { name: "idle-source.txt", exact: true })).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
+test("switching Pi invalidates local new-session handoff and preserves its source for return", async () => {
+  const screen = await renderTwoPis();
+  const channel = channelHarness.channels[0]!;
+  channel.emit(readyFrame(channel, "session-1"));
+  try {
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Only source Pi");
+    pasteAttachments(input.element(), new File(["original"], "source-pi.txt"));
+    await expect.element(screen.getByRole("group", { name: "source-pi.txt", exact: true })).toBeVisible();
+    await requestDraftNewSession(screen);
+    await screen.getByRole("button", { name: "Start fresh session", exact: true }).click();
+    await expect.poll(() => channel.frames.some((frame) => frame.type === "session_new")).toBe(true);
+    const request = channel.frames.findLast((frame) => frame.type === "session_new")!;
+    await selectPi("Second Pi");
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const other = channelHarness.channels[1]!;
+    other.emit(readyFrame(other, "session-2"));
+    other.emit({ protocol_version: 2, type: "action_ok", target_channel_id: other.channelId, in_reply_to: request.id, action: "session_new", session_id: "session-2" });
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(input).toHaveValue("");
+    await expect.element(screen.getByRole("group", { name: "source-pi.txt", exact: true })).not.toBeInTheDocument();
+    await selectPi("Test Pi");
+    await expect.poll(() => channelHarness.channels.length).toBe(3);
+    channelHarness.channels[2]!.emit(readyFrame(channelHarness.channels[2]!, "session-1"));
+    await expect.element(screen.getByRole("button", { name: "Add attachments" })).toBeEnabled();
+    await expect.element(input).toHaveValue("Only source Pi");
+    await expect.element(screen.getByRole("group", { name: "source-pi.txt", exact: true })).toBeVisible();
+  } finally { await screen.unmount(); }
+});
+
 test("session replacement preserves old text and File without automatically sending to the new session", async () => {
   const { screen, channel } = await renderReadyTimeline(renderWorkspaceApp);
   try {

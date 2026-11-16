@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
 import { actionReply, observeNewSession, OPERATION_CONFIRMATION_TIMEOUT_MS, type PendingSessionAction, type PendingStop } from "./operation-feedback";
 
 /** 复用调用方的 request id 与连接作用域；ref 是同步门禁，state 只负责呈现。 */
-export function useSessionActions() {
+export function useSessionActions(onNewSessionReady?: (pending: PendingSessionAction, sessionId: string) => void) {
+  const onReadyRef = useRef(onNewSessionReady);
+  useLayoutEffect(() => { onReadyRef.current = onNewSessionReady; }, [onNewSessionReady]);
   const [pendingAction, setActionState] = useState<PendingSessionAction | null>(null);
   const pendingActionRef = useRef<PendingSessionAction | null>(null);
   const [stopRequest, setStopState] = useState<PendingStop | null>(null);
@@ -19,12 +21,17 @@ export function useSessionActions() {
   const receiveAction = useCallback((frame: Extract<ServerFrame, { type: "action_ok" | "action_error" }>) => {
     const previous = pendingActionRef.current;
     const next = actionReply(previous, frame);
-    if (previous !== next) setPendingAction(next);
+    if (previous !== next) {
+      setPendingAction(next);
+      if (previous?.action === "session_new" && next === null && frame.type === "action_ok" && frame.action === "session_new") onReadyRef.current?.(previous, frame.session_id);
+    }
   }, [setPendingAction]);
   const observeSession = useCallback((sessionId: string, dataReady: boolean) => {
     const previous = pendingActionRef.current;
     if (previous?.action !== "session_new" || previous.readySessionId === sessionId && (!dataReady || previous.dataSessionId === sessionId)) return;
-    setPendingAction(observeNewSession(previous, sessionId, dataReady));
+    const next = observeNewSession(previous, sessionId, dataReady);
+    setPendingAction(next);
+    if (next === null) onReadyRef.current?.(previous, sessionId);
   }, [setPendingAction]);
   const disconnectActions = useCallback(() => {
     const pending = pendingActionRef.current;

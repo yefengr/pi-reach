@@ -54,7 +54,7 @@ function GallerySurfaceControls({ inactive, open, outcome, setOutcome, controlle
       <Button variant="default" onClick={() => open("confirm")}>操作确认</Button>
       <Button variant="default" onClick={() => open("rename")}>重命名电脑</Button>
       <Button variant="default" onClick={() => open("shortcuts")}>快捷键帮助</Button>
-      <NativeSelect label="确认操作结果" value={outcome} onChange={event => setOutcome(event.currentTarget.value)} data={[{ value: "success", label: "成功" }, { value: "error", label: "失败（保留确认框）" }]} />
+      <NativeSelect label="确认操作结果" value={outcome} onChange={event => setOutcome(event.currentTarget.value)} data={[{ value: "success", label: "成功" }, { value: "error", label: "失败（保留确认框）" }, { value: "attachments", label: "新会话附件需重选" }]} />
     </div>
     <div className="pwa-ui-states-surface-controls">
       <Button variant="default" onClick={() => controller.notify("操作成功（仅本页演示）。")}>成功 Toast</Button>
@@ -111,6 +111,10 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
   const closeOverlay = () => onSurfaceChange(settingsVisible ? "settings" : null);
   const confirm = async () => {
     if (confirmPendingRef.current) return;
+    if (outcome === "attachments" && confirmAction.kind === "new-session") {
+      setConfirmError("Reselect some attachments before taking them into a new session.");
+      return;
+    }
     confirmPendingRef.current = true;
     setConfirmPending(true);
     setConfirmError(null);
