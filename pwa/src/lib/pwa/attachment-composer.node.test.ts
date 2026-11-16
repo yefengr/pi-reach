@@ -43,6 +43,65 @@ function setup(ready: (message: AttachmentReadyMessage) => SubmitOutcome = () =>
 }
 
 describe("session attachment message intent", () => {
+  test("explicit idle handoff moves File identity, order and preview IDs with fresh upload jobs", () => {
+    const { composer, clients, client, onReady } = setup();
+    const files = [file("one"), file("two")];
+    composer.addFiles(files);
+    const ids = composer.previewItemIds();
+    const captured = composer.captureIdleDraft();
+    if (!captured || captured === "missing-files") throw new Error("Expected local File draft");
+    composer.connect({ ...scope, sessionId: "new", selfSenderRef: "new-session-sender" }, () => true);
+    expect(composer.handoffIdleDraft(captured)).toBe(true);
+    expect(composer.previewItemIds()).toEqual(ids);
+    expect(composer.snapshot().items.map((item) => item.fileName)).toEqual(["one", "two"]);
+    expect(clients[1].jobs.size).toBe(0);
+    expect(onReady).not.toHaveBeenCalled();
+    expect(composer.handoffIdleDraft(captured)).toBe(false);
+    composer.start("manual", context);
+    expect([...clients[1].jobs.values()].map((job) => job.file)).toEqual(files);
+    expect(clients[1].job("one").file).toBe(files[0]);
+    expect(client.jobs.size).toBe(0);
+    composer.connect(scope, () => true);
+    expect(composer.snapshot().items).toEqual([]);
+  });
+
+  test("descriptor-only and mixed drafts fail preflight without dropping either original", () => {
+    const { composer } = setup();
+    composer.addFiles([file("local")]);
+    composer.restoreAttachments([descriptor("remote")]);
+    const before = composer.snapshot();
+    expect(composer.captureIdleDraft()).toBe("missing-files");
+    expect(composer.snapshot()).toEqual(before);
+  });
+
+  test("an active batch is classified before cancellation and cannot supply idle handoff evidence", () => {
+    const { composer } = setup();
+    composer.addFiles([file("one")]);
+    const stale = composer.captureIdleDraft();
+    composer.start("sending", context);
+    expect(composer.captureIdleDraft()).toBeNull();
+    composer.cancelIntent();
+    composer.connect({ ...scope, sessionId: "new" }, () => true);
+    if (!stale || stale === "missing-files") throw new Error("Expected capture");
+    expect(composer.handoffIdleDraft(stale)).toBe(false);
+    composer.connect(scope, () => true);
+    expect(composer.snapshot().items[0].fileName).toBe("one");
+  });
+
+  test.each(["edited-source", "occupied-target", "runtime", "endpoint", "device"])("idle handoff rejects %s and leaves the source intact", (conflict) => {
+    const { composer } = setup();
+    composer.addFiles([file("one")]);
+    const captured = composer.captureIdleDraft();
+    if (!captured || captured === "missing-files") throw new Error("Expected capture");
+    if (conflict === "edited-source") composer.addFiles([file("later")]);
+    composer.connect({ ...scope, sessionId: "new", ...(conflict === "runtime" ? { runtimeInstanceId: "other" } : {}),
+      ...(conflict === "endpoint" ? { endpointId: "other" } : {}), ...(conflict === "device" ? { deviceId: "other" } : {}) }, () => true);
+    if (conflict === "occupied-target") composer.addFiles([file("target")]);
+    expect(composer.handoffIdleDraft(captured)).toBe(false);
+    composer.connect(scope, () => true);
+    expect(composer.snapshot().items[0].fileName).toBe("one");
+  });
+
   test("selection stays local; ready sends once with only the final retained files", async () => {
     const { composer, client, onReady } = setup();
     composer.addFiles([file("one"), file("two")]);

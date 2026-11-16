@@ -55,7 +55,9 @@ type DraftEntry = AttachmentDraftItem & {
   abort?: AbortController;
 };
 type Batch = { id: string; text: string; context: AttachmentSendContext; committing: boolean };
+export type IdleAttachmentDraft = { target: string; revision: number };
 type TargetDraft = {
+  revision: number;
   key: string;
   scope: TimelineScope;
   client: AttachmentUploadPort;
@@ -116,7 +118,7 @@ export class AttachmentComposer {
     let draft = this.drafts.get(key);
     if (!draft) {
       const client = this.options.createClient((capability) => this.capabilityChanged(key, capability));
-      draft = { key, scope, client, capability: { status: "unknown" }, items: new Map() };
+      draft = { key, scope, client, revision: 0, capability: { status: "unknown" }, items: new Map() };
       this.drafts.set(key, draft);
     }
     const wasConnected = this.connected && this.current === draft;
@@ -136,6 +138,36 @@ export class AttachmentComposer {
 
   receive(frame: ServerFrame): boolean { return this.current?.client.receive(frame) ?? false; }
 
+  /** 预检必须早于 cancelIntent：已进入批次的原件不能转成空闲稿。 */
+  captureIdleDraft(): IdleAttachmentDraft | "missing-files" | null {
+    const draft = this.current;
+    if (!draft || draft.batch) return null;
+    if ([...draft.items.values()].some((item) => !item.file)) return "missing-files";
+    return { target: draft.key, revision: draft.revision };
+  }
+
+  /** 仅新建确认成功后显式调用；原件及预览 ID 搬移，上传租约与批次始终重建。 */
+  handoffIdleDraft(captured: IdleAttachmentDraft): boolean {
+    const source = this.drafts.get(captured.target);
+    const target = this.current;
+    if (!source || !target || source === target || source.batch || target.batch || target.items.size ||
+        source.revision !== captured.revision || source.scope.deviceId !== target.scope.deviceId ||
+        source.scope.endpointId !== target.scope.endpointId || source.scope.runtimeInstanceId !== target.scope.runtimeInstanceId ||
+        [...source.items.values()].some((item) => !item.file)) return false;
+    const items = [...source.items.values()].map((item): DraftEntry => ({
+      id: item.id, file: item.file, fileName: item.fileName, byteLength: item.byteLength,
+      status: "draft", receivedBytes: 0, revision: 0, uploadId: crypto.randomUUID(),
+    }));
+    this.stop(source, true);
+    source.items.clear();
+    source.revision++;
+    for (const item of items) target.items.set(item.id, item);
+    target.revision++;
+    target.issue = undefined;
+    this.options.onChange();
+    return true;
+  }
+
   addFiles(files: readonly File[]): AttachmentComposerIssue | null {
     const draft = this.current;
     if (!draft || draft.batch || !this.connected || draft.capability.status !== "supported") return "unsupported";
@@ -145,6 +177,7 @@ export class AttachmentComposer {
         : total + files.reduce((sum, file) => sum + file.size, 0) > ATTACHMENT_MAX_MESSAGE_BYTES ? "total_too_large"
           : files.some((file) => !attachmentFileNameSchema.safeParse(file.name).success) ? "invalid_file" : null;
     if (issue) { draft.issue = issue; this.options.onChange(); return issue; }
+    draft.revision++;
     for (const file of files) {
       const id = crypto.randomUUID();
       draft.items.set(id, { id, file, uploadId: crypto.randomUUID(), fileName: file.name, byteLength: file.size,
@@ -162,6 +195,7 @@ export class AttachmentComposer {
         [...draft.items.values()].reduce((sum, item) => sum + item.byteLength, 0) +
         attachments.reduce((sum, item) => sum + item.byte_length, 0) > ATTACHMENT_MAX_MESSAGE_BYTES ||
         attachments.some((item) => !attachmentDescriptorSchema.safeParse(item).success)) return false;
+    draft.revision++;
     for (const attachment of attachments) {
       if ([...draft.items.values()].some((item) => item.attachment?.attachment_id === attachment.attachment_id)) continue;
       const id = crypto.randomUUID();
@@ -175,6 +209,7 @@ export class AttachmentComposer {
   start(text: string, context: AttachmentSendContext): boolean {
     const draft = this.current;
     if (!draft || draft.batch || !this.connected || draft.capability.status !== "supported" || draft.items.size === 0) return false;
+    draft.revision++;
     draft.batch = { id: crypto.randomUUID(), text, context, committing: false };
     draft.issue = undefined;
     for (const item of draft.items.values()) {
@@ -191,6 +226,7 @@ export class AttachmentComposer {
     const draft = this.current;
     const item = draft?.items.get(id);
     if (!draft || !item || draft.batch?.committing) return;
+    draft.revision++;
     item.revision++;
     draft.items.delete(id);
     // 先移出发送集合再做远端清理，清理回执不能重新加入本次消息。

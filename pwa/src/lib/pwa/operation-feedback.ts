@@ -1,4 +1,5 @@
 import type { ServerFrame } from "@/lib/pi-reach/protocol-v2/frames";
+import type { SessionDraftHandoff } from "./session-draft-handoff";
 import type { TimelineViewItem } from "./timeline-runtime";
 
 export type OperationAction = "session_new" | "session_compact" | "model_set" | "thinking_set";
@@ -13,6 +14,7 @@ export type PendingSessionAction = {
   targetSessionId?: string;
   readySessionId?: string;
   dataSessionId?: string;
+  draftHandoff?: SessionDraftHandoff;
   /** 仅 /new 交接期间保留当前可见投影，不作为其他会话的缓存。 */
   projection?: TimelineViewItem[];
 };

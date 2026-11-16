@@ -3,17 +3,39 @@ import { afterEach, expect, test, vi } from "vitest";
 import { renderPwa } from "@/test/browser/render";
 import { useI18n } from "@/lib/i18n";
 import { useSessionActions } from "./use-session-actions";
-import { OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint } from "./operation-feedback";
+import { OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint, type PendingSessionAction } from "./operation-feedback";
 
 type Actions = ReturnType<typeof useSessionActions>;
-function Harness({ expose }: { expose: (actions: Actions) => void }) {
-  const actions = useSessionActions();
+function Harness({ expose, onReady }: { expose: (actions: Actions) => void; onReady?: (pending: PendingSessionAction, sessionId: string) => void }) {
+  const actions = useSessionActions(onReady);
   const { t } = useI18n();
   const hint = operationHint(actions.pendingAction, actions.stopRequest, t.operationFeedback);
   useEffect(() => { expose(actions); });
   return <>{hint ? <p>{hint.text}</p> : null}<output data-testid="action">{actions.pendingAction?.phase ?? "none"}</output><output data-testid="stop">{actions.stopRequest ? actions.stopRequest.unknown ? "unknown" : "waiting" : "none"}</output></>;
 }
 afterEach(() => vi.useRealTimers());
+
+test.each(["result-first", "ready-first", "data-first"])("new-session success callback consumes correlated evidence exactly once: %s", async (order) => {
+  let actions!: Actions;
+  const onReady = vi.fn();
+  const screen = await renderPwa(<Harness expose={value => { actions = value; }} onReady={onReady} />);
+  const result = { protocol_version: 2 as const, type: "action_ok" as const, target_channel_id: "channel", in_reply_to: "new", action: "session_new" as const, session_id: "target" };
+  try {
+    actions.setPendingAction({ id: "new", sessionId: "source", action: "session_new", phase: "pending", startedAt: Date.now() });
+    if (order === "result-first") actions.receiveAction(result);
+    actions.observeSession("target", false);
+    if (order === "ready-first") actions.receiveAction(result);
+    actions.disconnectActions();
+    expect(onReady).not.toHaveBeenCalled();
+    actions.observeSession("target", true);
+    if (order === "data-first") actions.receiveAction(result);
+    expect(onReady).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: "new" }), "target");
+    actions.receiveAction(result);
+    actions.observeSession("target", true);
+    expect(onReady).toHaveBeenCalledTimes(1);
+  } finally { await screen.unmount(); }
+});
+
 
 test("timeout preserves unknown action and stop targets; it never invents failure or clears their lock", async () => {
   let actions!: Actions;

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { getMessages } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n/locale";
+import { localizeFeedback } from "@/lib/pwa/feedback-messages";
 import { ENTER_SENDS_STORAGE_KEY, shortcutLabel } from "@/lib/pwa/keyboard-shortcuts";
 import { createOperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { PwaOperationNotifications } from "@/components/pwa/pwa-operation-notifications";
@@ -84,6 +86,33 @@ test("confirmation success finishes locally and an unmounted pending operation c
   await new Promise<void>(resolve => setTimeout(resolve, 1_100));
   expect(onChange).toHaveBeenCalledTimes(calls);
   expect(document.querySelector(".pwa-operation-notification")).toBeNull();
+});
+
+test.each([390, 1280])("new-session attachment warning stays in the existing dialog at %i px and returns focus", async (width) => {
+  await page.viewport(width, 844);
+  const onChange = vi.fn();
+  const screen = await renderPwa(<Harness onChange={onChange} />);
+  await screen.getByLabelText("确认操作结果", { exact: true }).selectOptions("attachments");
+  const trigger = screen.getByRole("button", { name: "操作确认", exact: true });
+  trigger.element().focus();
+  await trigger.click();
+  const dialog = document.querySelector<HTMLElement>(".pwa-confirm-dialog")!;
+  const confirm = screen.getByRole("button", { name: getMessages().confirm.newSessionConfirm, exact: true });
+  await confirm.click();
+  await expect.element(screen.getByRole("alert")).toHaveTextContent(localizeFeedback("Reselect some attachments before taking them into a new session.", getLocale()));
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  expect(dialog.closest(".pwa-root")).not.toBeNull();
+  expect(onChange).toHaveBeenCalledTimes(1);
+  await expect.element(confirm).toBeEnabled();
+  await Promise.allSettled(document.getAnimations().map(animation => animation.finished));
+  const box = dialog.getBoundingClientRect();
+  expect(Math.round(box.left)).toBeGreaterThanOrEqual(0);
+  expect(Math.round(box.right)).toBeLessThanOrEqual(width);
+  expect(Math.round(box.bottom)).toBeLessThanOrEqual(844);
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => document.querySelector(".pwa-confirm-dialog")).toBeNull();
+  await expect.element(trigger).toHaveFocus();
 });
 
 test("pairing shows bounded local connecting then error, and rename is retained only in gallery memory", async () => {

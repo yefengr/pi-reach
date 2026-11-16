@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MessageComposer, ReadOnlyComposer } from "@/components/pwa/message-composer";
+import { handoffDraftText, type SessionDraftHandoff } from "@/lib/pwa/session-draft-handoff";
+import type { PendingSessionAction } from "@/lib/pwa/operation-feedback";
 import { useSessionActions } from "@/lib/pwa/use-session-actions";
 import { compactionTerminalKind, currentRunGroup, OPERATION_CONFIRMATION_TIMEOUT_MS, operationHint, stopHasEnded, type CompactionActivity, type CompactionNotice, type OperationHint } from "@/lib/pwa/operation-feedback";
 import type { ModelListStatus } from "./composer-command-menu";
@@ -113,7 +115,16 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const [defaultRelayUrl, setDefaultRelayUrl] = useState("");
   const [relayUrl, setRelayUrl] = useState(""); const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>(readStoredDrafts);
   useDraftPersistence(drafts);
-  const setDraftFor = useCallback((key: string, value: string) => setDrafts((current) => current[key] === value ? current : { ...current, [key]: value }), []);
+  const draftsRef = useRef(drafts);
+  const draftVersionsRef = useRef(new Map<string, number>());
+  useLayoutEffect(() => { draftsRef.current = drafts; }, [drafts]);
+  const setDraftFor = useCallback((key: string, value: string) => {
+    draftVersionsRef.current.set(key, (draftVersionsRef.current.get(key) ?? 0) + 1);
+    const current = draftsRef.current;
+    if (current[key] === value) return;
+    draftsRef.current = { ...current, [key]: value };
+    setDrafts(draftsRef.current);
+  }, []);
   const [draftSessions, setDraftSessions] = useState<Readonly<Record<string, string>>>({});
   // 当前查看的 Pi 退出后保留会话原位显示，并暂停自动选择，直到用户选择其他 Pi 或离开。
   const [exitedEndpoint, setExitedEndpoint] = useState<import("@/lib/pwa/db").PwaEndpointRecord | null>(null);
@@ -132,7 +143,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
 
   // 远程压缩的终态由关联回执反馈；hooks 只显示活动，不重复提示同一次结束。
   const remoteCompactionPresentationRef = useRef(false);
-  const { pendingAction, pendingActionRef, setPendingAction, receiveAction, observeSession, stopRequest, stopRequestRef, setStopRequest, disconnectActions, resetActions } = useSessionActions();
+  const completeDraftHandoffRef = useRef<(pending: PendingSessionAction, sessionId: string) => void>(() => {});
+  const { pendingAction, pendingActionRef, setPendingAction, receiveAction, observeSession, stopRequest, stopRequestRef, setStopRequest, disconnectActions, resetActions } = useSessionActions((pending, sessionId) => completeDraftHandoffRef.current(pending, sessionId));
   const { route: settingsRoute, openSettings, closeSettings } = useSettingsRoute();
   const [renameDevice, setRenameDevice] = useState<PwaDeviceRecord | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmActionRequest | null>(null); const [confirmPending, setConfirmPending] = useState(false);
@@ -364,7 +376,9 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     return () => { cancelled = true; };
   }, [endpoints, exitedEndpoint]);
   const liveEndpointSnapshotRef = useRef(liveEndpointSnapshot);
+  const retainLiveSnapshotRef = useRef(retainLiveSnapshot);
   useLayoutEffect(() => { liveEndpointSnapshotRef.current = liveEndpointSnapshot; }, [liveEndpointSnapshot]);
+  useLayoutEffect(() => { retainLiveSnapshotRef.current = retainLiveSnapshot; }, [retainLiveSnapshot]);
   const liveViewActive = selectedHistory === null;
   const exitedDisplay = liveViewActive && exitedEndpoint && activeDevice && exitedEndpoint.deviceId === activeDevice.deviceId ? exitedEndpoint : null;
   const displayEndpoint = activeEndpoint ?? exitedDisplay ?? (liveViewActive
@@ -382,6 +396,19 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   const currentViewKey = selectedHistory ? `history:${selectedHistory.id}` : displayEndpoint ? `live:${endpointDraftKey}` : null;
   useLayoutEffect(() => { currentViewKeyRef.current = currentViewKey; }, [currentViewKey]);
   const draft = drafts[draftKey] ?? "";
+  useLayoutEffect(() => {
+    completeDraftHandoffRef.current = (pending, sessionId) => {
+      const handoff = pending.draftHandoff;
+      const scope = timelineRuntimeRef.current.currentScope;
+      if (!handoff || !scope || scope.sessionId !== sessionId || selectedHistoryRef.current !== null) return;
+      const targetKey = JSON.stringify([scope.deviceId, scope.endpointId, scope.runtimeInstanceId, scope.sessionId]);
+      const next = handoffDraftText(draftsRef.current, handoff, targetKey, draftVersionsRef.current.get(handoff.sourceKey) ?? 0);
+      // 所有预检先完成，文字与原件之间不跨异步边界；搬移失败时源文字也保持原位。
+      if (!next || !attachmentComposer.handoffIdleDraft(handoff.attachments)) return;
+      draftsRef.current = next;
+      setDrafts(next);
+    };
+  }, [attachmentComposer, timelineRuntimeRef]);
   const activeThinking = reportedThinking ?? safeThinkingLevel(displayEndpoint?.thinking);
   const sessionDeviceId = liveViewActive ? activeDevice?.deviceId ?? null : null;
   const sessionEndpointId = liveViewActive ? activeEndpoint?.endpointId ?? null : null;
@@ -889,7 +916,8 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       const sessionIdentity = sessionDeviceId && sessionEndpointId && sessionRuntimeInstanceId
         ? `${sessionDeviceId}\u0000${sessionEndpointId}\u0000${sessionRuntimeInstanceId}`
         : null;
-      if (sessionIdentityRef.current !== sessionIdentity) {
+      // Relay 断线会暂时清空在线列表；保留快照期间不把缺席当作切换目标。
+      if (sessionIdentityRef.current !== sessionIdentity && (sessionIdentity !== null || !retainLiveSnapshotRef.current)) {
         operationNotifications.clearSession();
         sessionRecoveryStateRef.current.replacementBye();
         sessionIdentityRef.current = sessionIdentity;
@@ -1049,7 +1077,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       setStopRequest(null); operationNotifications.show("stop-send-failed");
     }
   }, [operationNotifications, setStopRequest, stopRequestRef, timelineRuntimeRef]);
-  const sendCommandAction = useCallback((request: ComposerCommandRequest): boolean => {
+  const sendCommandAction = useCallback((request: ComposerCommandRequest, draftHandoff?: SessionDraftHandoff): boolean => {
     const scope = timelineRuntimeRef.current.currentScope; const channel = channelRef.current;
     if (!scope || !channel || connection !== "online" || pendingActionRef.current) return false;
     if (request.action === "session_new") setError(null);
@@ -1068,7 +1096,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       operationNotifications.clearSession({ toastsOnly: true });
       modelRequestRef.current = null; setModelsRequestId(null);
     }
-    setPendingAction({ id: requestId, sessionId: scope.sessionId, action: request.action, phase: "pending", startedAt: Date.now(), ...(request.action === "thinking_set" ? { requestedThinking: request.level } : {}), ...(request.action === "session_new" ? { projection: timelineItemsRef.current } : {}) });
+    setPendingAction({ id: requestId, sessionId: scope.sessionId, action: request.action, phase: "pending", startedAt: Date.now(), ...(request.action === "thinking_set" ? { requestedThinking: request.level } : {}), ...(request.action === "session_new" ? { projection: timelineItemsRef.current, draftHandoff } : {}) });
     if (!channel.send(frame)) {
       setPendingAction(null);
       if (request.action === "session_compact") remoteCompactionPresentationRef.current = false;
@@ -1152,13 +1180,24 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
   useLayoutEffect(() => { restoreQueuedRef.current = restoreQueuedMessages; }, [restoreQueuedMessages]);
   const { requestConfirmation, closeBackgroundOverlay, finishConfirmationTransition } = useConfirmationOverlay(setConfirmAction, setConfirmError, confirmPendingRef);
   const confirmRequestedAction = useCallback(async () => {
-    if (!confirmAction) return;
+    if (!confirmAction || confirmPendingRef.current) return;
+    let draftHandoff: SessionDraftHandoff | undefined;
+    if (confirmAction.kind === "new-session") {
+      // 必须在取消批次之前分类；上传中的文字与 File 始终留在原会话。
+      const idle = attachmentComposer.captureIdleDraft();
+      if (idle === "missing-files") {
+        setConfirmError("Reselect some attachments before taking them into a new session.");
+        return;
+      }
+      if (idle) draftHandoff = { sourceKey: draftKeyRef.current, text: draftsRef.current[draftKeyRef.current] ?? "",
+        version: draftVersionsRef.current.get(draftKeyRef.current) ?? 0, attachments: idle };
+    }
     if (confirmAction.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id)) {
       attachmentComposer.cancelIntent();
       if (confirmAction.kind === "new-session") fileController.cancel();
       else { fileController.reset(); filesReadyRef.current = false; }
     }
-    await runConfirmAction(confirmAction, { startNewSession: () => sendCommandAction({ action: "session_new" }), removePairing, invalidateConnection: clearSessionConnection, clearLocalData, reload: reloadWorkspace }, { pendingRef: confirmPendingRef, setPending: setConfirmPending, setError: setConfirmError, onSuccess: () => setConfirmAction(null) });
+    await runConfirmAction(confirmAction, { startNewSession: () => sendCommandAction({ action: "session_new" }, draftHandoff), removePairing, invalidateConnection: clearSessionConnection, clearLocalData, reload: reloadWorkspace }, { pendingRef: confirmPendingRef, setPending: setConfirmPending, setError: setConfirmError, onSuccess: () => setConfirmAction(null) });
   }, [attachmentComposer, fileController, filesReadyRef, clearLocalData, clearSessionConnection, confirmAction, isActiveDevice, removePairing, sendCommandAction]);
   const navigate = (next: () => void) => {
     // 真正切换时新内容在同一次提交中换上；需要确认时在确认框下方恢复原会话。
