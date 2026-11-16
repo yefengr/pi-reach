@@ -22,6 +22,8 @@ async function openTool() {
   for (const head of document.querySelectorAll<HTMLButtonElement>("button.pwa-process-head[aria-expanded='false']")) await userEvent.click(head);
   await userEvent.click(document.querySelector<HTMLButtonElement>(".pwa-tool-card .pwa-tool-action")!);
   await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll")).not.toBeNull();
+  // 正文在 Drawer 进入过渡结束后才渲染，等忙碌状态清除后再交回调用方断言正文。
+  await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll")?.getAttribute("aria-busy")).toBe("false");
 }
 async function viewFile(id: string) {
   await userEvent.click(file(id).querySelector<HTMLButtonElement>(".pwa-published-actions button")!);

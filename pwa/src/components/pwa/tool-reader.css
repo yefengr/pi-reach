@@ -8,10 +8,11 @@
 .pwa-root .pwa-tool-action-copy { min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
 .pwa-root .pwa-tool-action-copy strong { min-width: 0; max-width: 45%; flex: 0 1 auto; overflow: hidden; color: var(--pwa-ink); font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-action-copy strong:only-child { max-width: 100%; }
-/*
- * 对象（文件名、命令、搜索词）比目录深一档；增删行数不参与省略。
- * 目录以 0 为基础宽度只占剩余空间：按比例收缩时哪怕分到零点几像素也会出现省略号，所以不能靠收缩权重让它先省略。
- */
+/* 文件路径连续排列：目录先从左侧省略，文件名占满后才尾部省略。 */
+.pwa-root .pwa-tool-path { min-width: 0; display: flex; flex: 0 1 auto; overflow: hidden; }
+.pwa-root .pwa-tool-path .pwa-tool-context { flex: 0 1 auto; }
+.pwa-root .pwa-tool-path .pwa-tool-target { flex: 0 0 auto; max-width: 100%; }
+.pwa-root .pwa-tool-range { flex: none; color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); }
 .pwa-root .pwa-tool-target,
 .pwa-root .pwa-tool-context { min-width: 0; overflow: hidden; font: var(--pwa-weight-regular) var(--pwa-text-code)/var(--pwa-leading-ui) var(--pwa-font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-target { flex: 0 1 auto; color: var(--pwa-soft-ink); }
@@ -53,12 +54,9 @@
 .pwa-root .pwa-tool-reader-header { gap: var(--pwa-space-2xs); padding-right: calc(8px + var(--pwa-safe-right)); padding-left: var(--pwa-gutter); background: var(--pwa-bg); }
 .pwa-root .pwa-tool-reader-title { min-width: 0; flex: 1 1 auto; margin: 0; overflow: hidden; color: var(--pwa-ink); font: var(--pwa-weight-strong) var(--pwa-text-title)/var(--pwa-leading-ui) var(--pwa-font-ui); text-overflow: ellipsis; white-space: nowrap; }
 .pwa-root .pwa-tool-reader-title:focus-visible { outline: 2px solid var(--pwa-accent); outline-offset: 0; }
-.pwa-root .pwa-tool-reader-status { flex: none; display: inline-flex; align-items: center; gap: var(--pwa-space-status); font: var(--pwa-weight-strong) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
-/* 正文首块的调用参数（每个参数一行「名称: 值」）：不截断，排满一行再按字符断开，不在路径中的连字符处提前换行；可选中复制。
-   下方以 separator 发丝线与输出分开，长参数折行后也不与输出混在一起。 */
-.pwa-root .pwa-tool-reader-command { margin: 0; padding-bottom: 12px; border-bottom: var(--pwa-hairline) solid var(--pwa-separator); color: var(--pwa-code-text); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); white-space: pre-wrap; word-break: break-all; user-select: text; }
-/* 参数名承担识别，值保持常规字重：多参数调用不会整块加重，也不与抽屉标题抢层级。 */
-.pwa-root .pwa-tool-reader-arg-name { font-weight: var(--pwa-weight-strong); }
+.pwa-root .pwa-tool-reader-status { flex: none; display: inline-flex; align-items: center; gap: var(--pwa-space-status); font: var(--pwa-weight-regular) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); white-space: nowrap; }
+.pwa-root .pwa-tool-reader-status.pwa-tool-status-complete { color: var(--pwa-secondary); }
+.pwa-root .pwa-tool-reader-status.pwa-tool-status-complete > svg { color: var(--pwa-complete); }
 .pwa-root .pwa-tool-reader-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--pwa-space-status); }
 .pwa-root .pwa-tool-reader-body { min-height: 0; display: flex; flex: 1 1 auto; flex-direction: column; padding: 0; overflow: hidden; }
 .pwa-root .pwa-tool-reader-scroll { min-width: 0; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 16px calc(var(--pwa-gutter) + var(--pwa-safe-right)) max(var(--pwa-gutter), var(--pwa-safe-bottom)) var(--pwa-gutter); background: var(--pwa-bg); }

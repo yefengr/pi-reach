@@ -7,7 +7,7 @@ import { DETAILS_COMPLETE_MS, type GalleryDetailsReply } from "./ui-state-tool-d
 
 const reader = () => document.querySelector<HTMLElement>(".pwa-tool-reader-scroll");
 const notice = () => reader()?.querySelector(".pwa-tool-notice")?.textContent ?? null;
-const output = () => reader()?.querySelector(".pwa-reader-text")?.textContent ?? "";
+const output = () => reader()?.querySelector(".pwa-reader-log, .pwa-reader-source-text")?.textContent ?? "";
 const historyOpen = () => Boolean(history.state?.piReachToolReader);
 const reply = (mode: GalleryDetailsReply) => page.getByLabelText("详情返回方式", { exact: true }).selectOptions(mode);
 async function openTool(index: number) {

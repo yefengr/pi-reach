@@ -3,6 +3,7 @@ import { boundedJsonByteLength, MAX_TOOL_DETAILS_BYTES, toolDetailsContentSchema
   type ToolRef } from "@pi-reach/protocol/session";
 import { PUBLISHED_FILE_TOOL_NAME } from "../files/publications.js";
 import { assistantCallEntries, nativeToolCalls } from "./tool_lifecycle.js";
+import { toolDetailResult } from "./tool_detail_result.js";
 
 export type DetailResult = { content: ToolDetailsContent } | { code: "not_found" | "unavailable" | "too_large"; terminal: boolean };
 
@@ -26,7 +27,7 @@ export function sessionToolDetails(manager: SessionManager, ref: ToolRef): Detai
     } else if (found && message.role === "toolResult" && message.toolCallId === ref.tool_call_id) {
       if (args === undefined || message.content === undefined) return { code: "unavailable", terminal: true };
       const content = { tool_ref: ref, tool, source: "session", status: message.isError ? "error" : "complete",
-        args: tool === PUBLISHED_FILE_TOOL_NAME ? {} : args, result: message.content, limited: false };
+        args: tool === PUBLISHED_FILE_TOOL_NAME ? {} : args, result: toolDetailResult(tool, message), limited: false };
       if (boundedJsonByteLength(content, MAX_TOOL_DETAILS_BYTES) === null) return { code: "too_large", terminal: true };
       const parsed = toolDetailsContentSchema.safeParse(content);
       return parsed.success ? { content: parsed.data } : { code: "unavailable", terminal: true };

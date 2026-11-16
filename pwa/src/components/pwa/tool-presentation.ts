@@ -139,25 +139,25 @@ export function toolHeaderSummary(value: ToolValue): string {
 
 /**
  * 时间线工具行文案：动词＋对象，无法分类时为工具名＋参数摘要。
- * 路径拆成文件名与目录，目录排在后面并最先被省略，窄屏上文件名始终可见；完整摘要留给悬停提示。
+ * 路径按目录／文件名排列，范围单独保留；完整摘要留给悬停与读屏。
  */
-export type ToolCallCopy = { kind: ToolKind; label: string; target: string; context: string; title: string };
+export type ToolCallCopy = { kind: ToolKind; label: string; target: string; context: string; title: string; range?: string };
 
 export function toolCallCopy(value: ToolValue): ToolCallCopy {
   const action = toolAction(value);
-  const title = toolInlineText(toolHeaderSummary(value));
-  if (action.kind === "generic") return { kind: action.kind, label: value.tool, target: title, context: "", title };
-  if (action.kind === "command" || action.kind === "search") return { kind: action.kind, label: action.label, target: title, context: "", title };
+  const title = toolHeaderSummary(value);
+  if (action.kind === "generic") return { kind: action.kind, label: value.tool, target: toolInlineText(title), context: "", title };
+  if (action.kind === "command" || action.kind === "search") return { kind: action.kind, label: action.label, target: toolInlineText(title), context: "", title };
   const { name, directory } = splitPath(singleLine(action.detail));
   const range = action.kind === "read" ? readRange(value) : undefined;
-  return { kind: action.kind, label: action.label, target: toolInlineText(range === undefined ? name : `${name} · ${range}`), context: toolInlineText(directory), title };
+  return { kind: action.kind, label: action.label, target: name, context: directory, title, ...(range ? { range } : {}) };
 }
 
 function splitPath(path: string): { name: string; directory: string } {
   const trimmed = path.replace(/[\\/]+$/, "");
   const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  if (index <= 0) return { name: trimmed || path, directory: "" };
-  return { name: trimmed.slice(index + 1), directory: trimmed.slice(0, index) };
+  if (index < 0) return { name: trimmed || path, directory: "" };
+  return { name: trimmed.slice(index + 1), directory: trimmed.slice(0, index + 1) };
 }
 
 /** diff 增删行判定：时间线行数统计与阅读器色条共用，文件头 `+++`／`---` 不计。 */
@@ -285,6 +285,8 @@ function outputBlock(value: unknown): ToolOutputBlock {
 export function reliableToolDiff(value: ToolValue): string | undefined {
   const result = toolResult(value);
   if (isRecord(result)) {
+    const patch = isRecord(result.details) ? result.details.patch : undefined;
+    if (typeof patch === "string" && patch.trim()) return patch;
     const diff = typeof result.diff === "string" ? result.diff : isRecord(result.details) ? result.details.diff : undefined;
     if (typeof diff === "string" && diff.trim()) return diff;
   }

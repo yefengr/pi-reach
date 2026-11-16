@@ -16,6 +16,7 @@ type ReaderShellProps = {
   onExitTransitionEnd?: () => void;
   onEnterTransitionEnd?: () => void;
   title: string;
+  titleNode?: ReactNode;
   closeLabel: string;
   historyKey: string;
   className?: string;
@@ -28,7 +29,7 @@ type ReaderShellProps = {
  * 工具与文本阅读器共用的右侧 Drawer：桌面 720px，移动全屏。
  * 打开时压入一条不改变 URL 的历史记录，系统返回或浏览器后退只关闭阅读器。
  */
-export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTransitionEnd, title, closeLabel, historyKey, className = "", describedBy, actions, children }: ReaderShellProps) {
+export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTransitionEnd, title, titleNode, closeLabel, historyKey, className = "", describedBy, actions, children }: ReaderShellProps) {
   const duration = usePwaMotionDuration("--pwa-duration-drawer");
   const exitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY) ?? false;
@@ -50,7 +51,7 @@ export function ReaderShell({ opened, onClose, onExitTransitionEnd, onEnterTrans
       <Drawer.Content ref={setSurface} classNames={{ content: `pwa-tool-reader ${className}`.trim() }} data-pwa-moving={motion.moving || undefined} aria-describedby={describedBy}>
         <header className={`pwa-topbar pwa-tool-reader-header${className === "pwa-file-reader" ? " pwa-file-reader-header" : ""}`}>
           {mobile ? <ActionIcon className="pwa-icon-button pwa-topbar-back pwa-tool-reader-close" aria-label={closeLabel} title={closeLabel} onClick={requestClose}><ChevronLeft size={20} /></ActionIcon> : null}
-          <Drawer.Title className="pwa-tool-reader-title" tabIndex={-1} data-autofocus title={title}>{title}</Drawer.Title>
+          <Drawer.Title className="pwa-tool-reader-title" tabIndex={-1} data-autofocus title={title} aria-label={title}>{titleNode ?? title}</Drawer.Title>
           {className === "pwa-file-reader" ? controls : <div className="pwa-tool-reader-actions">{controls}</div>}
         </header>
         <div className={`pwa-tool-reader-body${className === "pwa-file-reader" ? " pwa-file-reader-body" : ""}`}>{children}</div>

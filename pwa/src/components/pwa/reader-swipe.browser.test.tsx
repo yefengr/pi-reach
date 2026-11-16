@@ -66,7 +66,7 @@ async function toolHarness(synthetic = true) {
   const scroll = element(".pwa-tool-reader-scroll");
   scroll.scrollTop = 0;
   if (synthetic) syntheticCapture(surface);
-  return { screen, surface, scroll, child: element(".pwa-reader-text"), close, modal };
+  return { screen, surface, scroll, child: element(".pwa-reader-source-text"), close, modal };
 }
 async function fileHarness({ text = longText, markdown = false, image = false, synthetic = true }: { text?: string; markdown?: boolean; image?: boolean; synthetic?: boolean } = {}) {
   const file = { ...descriptor, file_name: image ? "image.png" : markdown ? "notes.md" : "notes.txt", mime_type: image ? "image/png" : markdown ? "text/markdown" : "text/plain" };

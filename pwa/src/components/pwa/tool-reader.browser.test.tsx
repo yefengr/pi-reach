@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { ToolReader } from "./tool-reader";
@@ -48,8 +48,11 @@ test.each([1280, 390])("reader images stay 12px and small thumbnails stay 4px at
       expect(Math.round(queued.getBoundingClientRect().width)).toBe(24);
       await screen.getByRole("button", { name: "Open image fixture" }).click();
       await expect.element(screen.getByRole("dialog")).toBeVisible();
+      await expect.poll(() => {
+        const image = document.querySelector<HTMLImageElement>(".pwa-tool-reader img");
+        return image?.complete === true && image.naturalWidth > 0;
+      }).toBe(true);
       const readerImage = document.querySelector<HTMLImageElement>(".pwa-tool-reader img")!;
-      await expect.poll(() => readerImage.complete && readerImage.naturalWidth > 0).toBe(true);
       expect(getComputedStyle(readerImage).borderRadius).toBe("12px");
       expect(getComputedStyle(readerImage).maxHeight).toBe("none");
       await userEvent.keyboard("{Escape}");
@@ -63,140 +66,203 @@ test.each([1280, 390])("reader images stay 12px and small thumbnails stay 4px at
   }
 });
 
-test("the reader shows the call as the first body block on the main background", async () => {
+test("Run shows the original command and log on the shared background with separate copy actions", async () => {
   const command = "pnpm --filter pwa test:unit --reporter=verbose --coverage --project browser --project node";
-  const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
+  const current: ToolValue = { ...base, tool: "bash", args: { command, timeout: 30 }, result: [{ type: "text", text: "3 passed" }] };
+  const copied = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
   try {
-    await expect.element(screen.getByRole("dialog")).toBeVisible();
-    const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!;
-    expect(header.textContent).not.toContain(command);
+    await expect.element(screen.getByRole("button", { name: "Copy command", exact: true })).toBeVisible();
     const body = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
-    const call = body.firstElementChild as HTMLElement;
-    expect(call.matches(".pwa-tool-reader-command")).toBe(true);
-    // 参数原样列出且不截断：文字全部在块内，没有被裁切。
-    expect(call.textContent).toBe(`command: ${command}`);
-    expect(call.scrollHeight).toBeLessThanOrEqual(call.clientHeight);
-    expect(body.textContent).not.toContain("$ pnpm");
-    expect(body.textContent).toContain("3 passed");
-    // 顶栏与正文同用主界面底色，状态栏与主界面一致；调用行与输出之间是发丝线分隔。
-    const probe = document.createElement("div");
-    probe.style.background = "var(--pwa-bg)";
-    probe.style.borderTop = "var(--pwa-hairline) solid var(--pwa-separator)";
-    document.querySelector(".pwa-root")!.append(probe);
-    const main = getComputedStyle(probe).backgroundColor;
-    const [hairline, separator] = [getComputedStyle(probe).borderTopWidth, getComputedStyle(probe).borderTopColor];
-    probe.remove();
-    expect(getComputedStyle(call).borderBottomWidth).toBe(hairline);
-    expect(getComputedStyle(call).borderBottomColor).toBe(separator);
-    const output = call.nextElementSibling!.getBoundingClientRect();
-    expect(output.top).toBeGreaterThan(call.getBoundingClientRect().bottom);
-    for (const element of [header, body, document.querySelector<HTMLElement>(".pwa-tool-reader")!]) {
-      expect(getComputedStyle(element).backgroundColor).toBe(main);
+    const call = body.querySelector<HTMLElement>(".pwa-reader-command")!;
+    expect(call.querySelector("pre")!.textContent).toBe(`$ ${command}`);
+    expect(body.textContent).not.toContain("timeout:");
+    expect(body.querySelector("details, .pwa-tool-reader-command")).toBeNull();
+    expect(getComputedStyle(call).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(call).borderRadius).toBe("0px");
+    expect(getComputedStyle(body).backgroundColor).toBe(getComputedStyle(document.querySelector(".pwa-tool-reader-header")!).backgroundColor);
+    await screen.getByRole("button", { name: "Copy command", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith(command);
+    await screen.getByRole("button", { name: "Copy log", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith("3 passed");
+  } finally { copied.mockRestore(); await screen.unmount(); }
+});
+
+test.each(["pwa/src", undefined])("Search separates its term, real scope and matching results with scope %s", async scope => {
+  await page.viewport(320, 740);
+  const term = `TOOL_TYPE_ICONS ${"long-search-term-".repeat(16)}`;
+  const output = "pwa/src/a.ts:12: TOOL_TYPE_ICONS\npwa/src/b.ts:4: TOOL_TYPE_ICONS";
+  const current: ToolValue = { ...base, tool: "grep", args: { pattern: term, ...(scope ? { path: scope } : {}) }, result: [{ type: "text", text: output }] };
+  const copied = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    const search = document.querySelector<HTMLElement>(".pwa-reader-search")!;
+    expect(search.querySelector(".pwa-reader-toolbar span")?.textContent).toBe(scope ? `Search · ${scope}` : "Search");
+    expect(search.querySelector(".pwa-reader-text")?.textContent).toBe(term);
+    expect(search.querySelector(".pwa-reader-file-path")).toBeNull();
+    const result = document.querySelector<HTMLElement>(".pwa-reader-block")!;
+    expect(result.querySelector(".pwa-reader-toolbar span")?.textContent).toBe("Matching results");
+    expect(result.querySelector("pre")?.textContent).toBe(output);
+    const body = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
+    expect(body.scrollWidth).toBe(body.clientWidth);
+    await screen.getByRole("button", { name: "Copy search term", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith(term);
+    await screen.getByRole("button", { name: "Copy search results", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith(output);
+  } finally { copied.mockRestore(); await screen.unmount(); }
+});
+
+test("structured search results use the same matching-results section", async () => {
+  const current: ToolValue = { ...base, tool: "grep", args: { pattern: "needle", path: "src" }, result: { matches: [{ path: "src/a.ts", line: 12, text: "needle" }] } };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("region", { name: "Matching results", exact: true })).toBeVisible();
+    expect(document.querySelector(".pwa-reader-block pre")?.textContent).toContain("src/a.ts:12");
+  } finally { await screen.unmount(); }
+});
+
+test("Edit without saved differences retains the confirmed title and explanatory empty state", async () => {
+  const current: ToolValue = { ...base, tool: "edit", args: { path: "src/a.ts", oldText: "PRIVATE_OLD", newText: "PRIVATE_NEW" }, result: [{ type: "text", text: "Successfully replaced 1 block(s) in src/a.ts." }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("heading", { name: "No diff was returned for this operation", exact: true })).toBeVisible();
+    await expect.element(screen.getByText("The details of this edit are not available.", { exact: true })).toBeVisible();
+    const empty = document.querySelector<HTMLElement>(".pwa-reader-diff-empty")!;
+    expect(getComputedStyle(empty).paddingTop).toBe("24px");
+    expect(getComputedStyle(empty.querySelector("h2")!).fontWeight).toBe("600");
+    expect(document.querySelector(".pwa-tool-reader-scroll")?.textContent).not.toMatch(/PRIVATE_|Successfully replaced/);
+    expect(document.querySelector(".pwa-reader-diff")).toBeNull();
+  } finally { await screen.unmount(); }
+});
+
+test("Read shows actual file lines and copies only the returned source", async () => {
+  const current: ToolValue = { ...base, args: { path: "notes.txt", offset: 20, limit: 100 }, result: [{ type: "text", text: "alpha\nbeta\n\n[3 more lines in file. Use offset=22 to continue.]" }] };
+  const copied = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByText("Showing lines 20–21")).toBeVisible();
+    const body = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
+    expect(body.textContent).not.toContain("offset:");
+    expect(body.textContent).toContain("3 more lines in file");
+    await screen.getByRole("button", { name: "Copy content", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith("alpha\nbeta");
+    expect(body.querySelector(".pwa-tool-reader-command")).toBeNull();
+  } finally { copied.mockRestore(); await screen.unmount(); }
+});
+
+test("Read preserves a selected empty last line and copies its original newline", async () => {
+  const current: ToolValue = { ...base, args: { path: "a.ts", offset: 1, limit: 2 }, result: [{ type: "text", text: "alpha\n\n\n[2 more lines in file. Use offset=3 to continue.]" }] };
+  const copied = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByText("Showing lines 1–2")).toBeVisible();
+    const rows = document.querySelectorAll(".pwa-reader-source-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[1].querySelector(".pwa-reader-line-number")?.textContent).toBe("2");
+    expect(rows[1].querySelector(".pwa-reader-source-text")?.textContent).toBe("");
+    await screen.getByRole("button", { name: "Copy content", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith("alpha\n");
+  } finally { copied.mockRestore(); await screen.unmount(); }
+});
+
+test.each([390, 320])("full paths wrap without a toggle or body overflow at %s", async width => {
+  await page.viewport(width, 844);
+  const path = `docs/${"very-long-directory/".repeat(8)}20260824-pwa-hardening.md`;
+  const current: ToolValue = { ...base, args: { path, offset: 53, limit: 60 }, result: [{ type: "text", text: "body" }] };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByText("Showing lines 53–53")).toBeVisible();
+    const body = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
+    const pathNode = body.querySelector<HTMLElement>(".pwa-reader-file-path")!;
+    expect(pathNode.textContent).toBe(path);
+    expect(pathNode.clientHeight).toBeGreaterThan(parseFloat(getComputedStyle(pathNode).lineHeight));
+    expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+    expect(body.querySelector("details, [aria-expanded]")).toBeNull();
+    const status = document.querySelector(".pwa-tool-reader-status")!.getBoundingClientRect();
+    const back = document.querySelector(".pwa-topbar-back")!.getBoundingClientRect();
+    expect(Math.round(status.left)).toBeGreaterThanOrEqual(Math.round(back.right));
+  } finally { await screen.unmount(); }
+});
+
+test("Write presents submitted content once, hides the receipt and keeps real failure reasons", async () => {
+  const current = { ...base, tool: "write", args: { path: "a.ts", content: "const FILE_BODY = 1;" }, result: [{ type: "text", text: "Successfully wrote to a.ts" }] } satisfies ToolValue;
+  let fail!: () => void;
+  function Harness() {
+    const [value, setValue] = useState<ToolValue>(current);
+    fail = () => setValue({ ...current, status: "error", error: "Disk is full", result: [{ type: "text", text: "Disk is full" }] });
+    return <ToolReader value={value} opened onClose={() => {}} />;
+  }
+  const screen = await renderPwa(<Harness />);
+  try {
+    await expect.element(screen.getByText("Written content")).toBeVisible();
+    const body = document.querySelector(".pwa-tool-reader-scroll")!;
+    expect(body.textContent?.split("FILE_BODY")).toHaveLength(2);
+    expect(body.textContent).not.toContain("Successfully wrote");
+    expect(body.textContent).not.toContain("content:");
+    flushSync(fail);
+    await expect.element(screen.getByText("Attempted write content")).toBeVisible();
+    expect(body.textContent).toContain("Disk is full");
+  } finally { await screen.unmount(); }
+});
+
+test("Edit hides hunk headers visually, preserves gaps and copies the full returned patch", async () => {
+  const patch = "--- a/a.ts\n+++ b/a.ts\n@@ -18,2 +18,2 @@\n-old\n+new\n context\n@@ -90 +90 @@\n-last\n+end\n";
+  const current: ToolValue = { ...base, tool: "edit", args: { path: "src/a.ts", oldText: "PRIVATE_OLD", newText: "PRIVATE_NEW" }, result: { content: [{ type: "text", text: "Successfully replaced 1 block(s) in src/a.ts." }], details: { patch } } };
+  const copied = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("region", { name: "Unified diff: old and new line numbers" })).toBeVisible();
+    const body = document.querySelector(".pwa-tool-reader-scroll")!;
+    expect(body.textContent).not.toMatch(/@@|PRIVATE_|Successfully replaced/);
+    expect(body.querySelector(".pwa-reader-diff-omission")?.getAttribute("aria-label")).toBe("Content in between is omitted");
+    await screen.getByRole("button", { name: "Copy diff", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith(patch);
+  } finally { copied.mockRestore(); await screen.unmount(); }
+});
+
+test.each(["patch", "native"] as const)("Edit keeps its content columns aligned across line-number widths in %s differences", async format => {
+  await page.viewport(320, 740);
+  const source = format === "patch" ? "--- a/a.ts\n+++ b/a.ts\n@@ -999,2 +1000,2 @@\n-before\n+after\n same" : "-999 before\n+1000 after\n 1000 same";
+  const current: ToolValue = { ...base, tool: "edit", args: { path: "a.ts" }, result: { content: [], details: { [format === "patch" ? "patch" : "diff"]: source } } };
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await expect.element(screen.getByRole("region", { name: "Unified diff: old and new line numbers" })).toBeVisible();
+    const rows = [...document.querySelectorAll<HTMLElement>(".pwa-reader-diff-row")];
+    expect(rows).toHaveLength(3);
+    for (const selector of [".pwa-reader-diff-text", ".pwa-reader-diff-sign"]) {
+      expect(new Set(rows.map(row => Math.round(row.querySelector(selector)!.getBoundingClientRect().left))).size).toBe(1);
     }
-  } finally {
-    await screen.unmount();
-  }
+    const scroll = document.querySelector<HTMLElement>(".pwa-tool-reader-scroll")!;
+    expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+  } finally { await screen.unmount(); }
 });
 
-test("reader output has no line numbers and shares the call line's left edge", async () => {
-  const current: ToolValue = { ...base, args: { path: "notes.txt", offset: 20, limit: 2 }, result: [{ type: "text", text: "alpha\nbeta" }] };
+test("unknown tools keep real results without exposing their arguments", async () => {
+  const current: ToolValue = { ...base, tool: "deploy", args: { target: "PRIVATE_ARG" }, result: [{ type: "text", text: "Published: https://example.test/preview" }] };
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
   try {
-    await expect.element(screen.getByRole("dialog")).toBeVisible();
-    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
-    const output = document.querySelector<HTMLElement>(".pwa-reader-text")!;
-    // 与 Pi 原生一致不带行号：正文即原始输出。
-    expect(output.textContent).toBe("alpha\nbeta");
-    expect(Math.round(output.getBoundingClientRect().left)).toBe(Math.round(call.getBoundingClientRect().left));
-  } finally {
-    await screen.unmount();
-  }
+    await expect.element(screen.getByRole("dialog", { name: "deploy", exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Published: https://example.test/preview")).toBeVisible();
+    expect(document.querySelector(".pwa-tool-reader-scroll")!.textContent).not.toContain("PRIVATE_ARG");
+    expect(document.querySelector(".pwa-reader-block .pwa-reader-toolbar span")?.textContent).toBe("Result");
+  } finally { await screen.unmount(); }
 });
 
-test("the reader call line fills its first line before wrapping a hyphenated path", async () => {
-  await page.viewport(390, 844);
-  const path = "docs/plans/active/20260824-pwa-hardening.md";
-  const current: ToolValue = { ...base, args: { path, offset: 1, limit: 60 }, result: [{ type: "text", text: "body" }] };
+test("the desktop header identifies the action with readable status and keeps close available", async () => {
+  const current: ToolValue = { ...base, tool: "bash", args: { command: "pnpm test" }, result: [{ type: "text", text: "3 passed" }] };
   const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
   try {
-    await expect.element(screen.getByRole("dialog")).toBeVisible();
-    const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command")!;
-    const range = document.createRange();
-    range.selectNodeContents(call);
-    // 参数名与值是不同元素，同一行会返回多个矩形：按首行最高边取最右一个再比较。
-    const rects = [...range.getClientRects()];
-    expect(rects.length).toBeGreaterThan(1);
-    const firstTop = Math.min(...rects.map(rect => Math.round(rect.top)));
-    const firstLineRight = Math.max(...rects.filter(rect => Math.round(rect.top) === firstTop).map(rect => rect.right));
-    // 首行排到距右缘不足一个字符宽才换行，不在 "pwa-" 的连字符处提前断开。
-    const character = document.createRange();
-    const firstText = document.createTreeWalker(call, NodeFilter.SHOW_TEXT).nextNode() as Text;
-    character.setStart(firstText, 0);
-    character.setEnd(firstText, 1);
-    // 按整像素比较，避免 Linux CI 字体栅格化带来的亚像素差异。
-    const characterWidth = Math.ceil(character.getBoundingClientRect().width);
-    expect(Math.round(call.getBoundingClientRect().right - firstLineRight)).toBeLessThanOrEqual(characterWidth);
-  } finally {
-    await screen.unmount();
-  }
-});
-
-test("every tool lists its arguments as is in the first block, without duplicating them in the body", async () => {
-  const cases: { tool: string; args: Record<string, string | boolean | number>; expected?: string }[] = [
-    { tool: "deploy", args: { target: "prod", force: true }, expected: "target: prod\nforce: true" },
-    { tool: "read", args: { path: "read", offset: 20, limit: 10 }, expected: "path: read\noffset: 20\nlimit: 10" },
-    { tool: "bash", args: { command: "build", cwd: "/tmp" }, expected: "command: build\ncwd: /tmp" },
-    { tool: "status", args: {} },
-    // 写入内容只在参数中出现一次，正文只放真实结果。
-    { tool: "write", args: { path: "a.txt", content: "FILE BODY" }, expected: "path: a.txt\ncontent: FILE BODY" },
-  ];
-  for (const { tool, args, expected } of cases) {
-    const current: ToolValue = { ...base, tool, args, result: [{ type: "text", text: "ok" }] };
-    const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
-    try {
-      await expect.element(screen.getByRole("dialog", { name: tool, exact: true })).toBeVisible();
-      const call = document.querySelector<HTMLElement>(".pwa-tool-reader-command");
-      expect(call?.textContent).toBe(expected);
-      if (call) expect(call).toBe(document.querySelector(".pwa-tool-reader-scroll")!.firstElementChild);
-      const body = document.querySelector(".pwa-tool-reader-scroll")!.textContent ?? "";
-      expect(body).not.toContain('"target"');
-      expect(body.split("FILE BODY").length).toBeLessThanOrEqual(2);
-    } finally {
-      await screen.unmount();
-    }
-  }
-});
-
-test("the desktop reader header is a left-aligned tool name with status and close on the right", async () => {
-  const command = "pnpm --filter pwa test:unit";
-  const current: ToolValue = { ...base, tool: "bash", args: { command }, result: [{ type: "text", text: "3 passed" }] };
-  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
-  try {
-    // 对话框以工具名为可访问名称。
-    await expect.element(screen.getByRole("dialog", { name: "bash", exact: true })).toBeVisible();
-    const header = document.querySelector<HTMLElement>(".pwa-tool-reader-header")!.getBoundingClientRect();
+    await expect.element(screen.getByRole("dialog", { name: "Run pnpm test", exact: true })).toBeVisible();
     const title = document.querySelector<HTMLElement>(".pwa-tool-reader-title")!;
-    expect(title.textContent).toBe("bash");
+    const status = document.querySelector<HTMLElement>(".pwa-tool-reader-status")!;
+    expect(title.textContent).toBe("Runpnpm test");
     expect(getComputedStyle(title).fontSize).toBe("18px");
-    // 标题靠左，从 20px 左边距开始，不水平居中。
-    expect(Math.round(title.getBoundingClientRect().left - header.left)).toBe(20);
-    expect(title.querySelector(".pwa-tool-reader-status")).toBeNull();
-    const status = document.querySelector<HTMLElement>(".pwa-tool-reader-actions .pwa-tool-reader-status")!;
-    // 与会话内工具行一致只显示图标：文字仍供读屏，但不占可见宽度。
     expect(status.textContent).toBe("Complete");
-    expect(Math.round(status.getBoundingClientRect().width)).toBe(16);
-    expect(status.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.getBoundingClientRect().right);
-    // 状态图标与关闭按钮之间只由 actions 的 6px gap 负责，图标自身不再叠加 margin。
-    expect(getComputedStyle(status).gap).toBe("6px");
-    expect(getComputedStyle(status).marginRight).toBe("0px");
-    expect(getComputedStyle(document.querySelector<HTMLElement>(".pwa-tool-reader-actions")!).gap).toBe("6px");
+    expect(status.querySelector(".pwa-sr-only")).toBeNull();
+    expect(getComputedStyle(status).fontWeight).toBe("400");
+    expect(Math.round(status.getBoundingClientRect().left)).toBeGreaterThanOrEqual(Math.round(title.getBoundingClientRect().right));
     expect(document.querySelector(".pwa-tool-reader-actions .pwa-tool-reader-close")).not.toBeNull();
-    expect(document.querySelector(".pwa-topbar-back")).toBeNull();
-    expect(getComputedStyle(document.querySelector(".pwa-tool-reader")!).borderRadius).toBe("0px");
-  } finally {
-    await screen.unmount();
-  }
+  } finally { await screen.unmount(); }
 });
 
 test("the mobile full-screen reader stays square while it slides", async () => {

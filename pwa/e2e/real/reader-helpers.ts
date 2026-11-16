@@ -36,11 +36,12 @@ async function openStreamTool(page: Page, saved = false): Promise<Locator> {
   await expect(group).toHaveCount(1);
   const toggle = group.locator(":scope > button.pwa-process-head");
   if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
-  const tool = group.getByRole("button", { name: "View bash tool details", exact: true });
+  // 可访问名称以本地化「查看 … 工具详情」为前缀，后面接完整可见摘要。
+  const tool = group.getByRole("button", { name: /^View bash tool details: / });
   await expect(tool).toBeVisible();
   await tool.focus();
   await tool.click();
-  const panel = page.getByRole("dialog", { name: "bash", exact: true });
+  const panel = page.getByRole("dialog", { name: /^Run / });
   await expect(panel).toBeVisible();
   await expect(panel.locator(".pwa-tool-reader-scroll")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Close tool details", exact: true })).toBeVisible();
@@ -55,9 +56,9 @@ async function expectSameBody(body: ElementHandle<HTMLElement | SVGElement>): Pr
 async function verifyPhoneBack(page: Page): Promise<void> {
   const url = page.url();
   await page.setViewportSize(PHONE);
-  const dialog = page.getByRole("dialog", { name: "bash", exact: true });
+  const dialog = page.getByRole("dialog", { name: /^Run / });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator(".pwa-reader-text")).toContainText("E2E stream complete");
+  await expect(dialog.locator(".pwa-reader-log")).toContainText("E2E stream complete");
   await expect.poll(() => dialog.evaluate(node => Math.round(node.getBoundingClientRect().width))).toBe(PHONE.width);
   await expect.poll(() => page.evaluate(() => Boolean(history.state?.piReachToolReader))).toBe(true);
   await page.evaluate(() => history.back());
@@ -95,7 +96,7 @@ async function verifySavedHistory(page: Page, newDraft: string): Promise<void> {
     await expect(file.getByText("Connect and open the original session to fetch", { exact: true })).toBeVisible();
   }
   const panel = await openStreamTool(page, true);
-  await expect(panel.locator(".pwa-reader-text")).toContainText("E2E stream complete");
+  await expect(panel.locator(".pwa-reader-log")).toContainText("E2E stream complete");
   await expect(panel.locator(".pwa-tool-reader-status")).toHaveClass(/pwa-tool-status-complete/);
   await panel.getByRole("button", { name: "Close tool details", exact: true }).click();
   await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
@@ -124,7 +125,7 @@ export async function verifyReaderDrawerLive(
   await expect(page.getByRole("button", { name: "Stop current task", exact: true })).toBeVisible();
   await expect(streamGroup(page)).toHaveCount(1);
   const panel = await openStreamTool(page);
-  const output = panel.locator(".pwa-reader-text");
+  const output = panel.locator(".pwa-reader-log");
   await expect(output).toContainText("E2E stream start");
   await expect(panel.locator(".pwa-tool-reader-status")).toHaveClass(/pwa-tool-status-running/);
   await expect(page.getByRole("button", { name: "Stop current task", exact: true })).toBeVisible();
@@ -164,7 +165,7 @@ export async function verifyReaderDrawerLive(
   await expectDurableMessage(owners, "E2E second Owner advances leaf");
   // leaf 推进只更新正文，不重建抽屉或阅读内容。
   await expectSameBody(reopenedBody);
-  await expect(reopened.locator(".pwa-reader-text")).toContainText("E2E stream complete");
+  await expect(reopened.locator(".pwa-reader-log")).toContainText("E2E stream complete");
   await reopened.getByRole("button", { name: "Close tool details", exact: true }).click();
   await expect(page.locator(".pwa-tool-reader-scroll")).toHaveCount(0);
   await expect(composer).toHaveValue(nextDraft);

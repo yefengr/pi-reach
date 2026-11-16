@@ -17,7 +17,7 @@ type ToolCardProps = {
 
 // 只有修改用文件外形，内含 ± 与增删行数呼应；带加号的文件读作新建，且与 /new 命令图标相近，不用。
 // 读取用眼睛、写入用铅笔、命令用不带框的提示符，16px 下靠外形而非细节区分。
-const TOOL_TYPE_ICONS = { read: Eye, terminal: Terminal, search: Search, edit: FileDiff, write: Pencil, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
+export const TOOL_TYPE_ICONS = { read: Eye, terminal: Terminal, search: Search, edit: FileDiff, write: Pencil, tool: Wrench } satisfies Record<ToolIconKind, LucideIcon>;
 
 /** 工具类型图标：工具行成功时与整组同类工具成功时的组头共用。 */
 export function ToolTypeIcon({ icon, iconRef }: { icon: ToolIconKind; iconRef?: Ref<SVGSVGElement> }) {
@@ -36,8 +36,8 @@ function ToolStatusIcon({ status, icon, toolKeys }: { status: ToolStatus; icon: 
 }
 
 /**
- * 工具行与收起组头共用的文案：动词（无法分类时为工具名）、对象、修改工具真实返回的增删行数，最后是目录。
- * 动词与行数不参与省略；目录只占剩余空间，放不下时先于文件名省略。
+ * 工具行与收起组头共用的文案：动词、连续路径、独立范围与真实增删行数。
+ * 路径中的目录优先省略，范围始终保留。
  */
 export function ToolCallCopy({ value }: { value: ToolValue }) {
   const { t } = useI18n();
@@ -45,13 +45,22 @@ export function ToolCallCopy({ value }: { value: ToolValue }) {
   const stats = toolDiffStats(value);
   return <>
     <strong className={copy.kind === "generic" ? undefined : "pwa-tool-verb"} title={value.tool}>{copy.label}</strong>
-    {copy.target ? <span className="pwa-tool-target" title={copy.title}>{copy.target}</span> : null}
+    {copy.context ? <span className="pwa-tool-path" title={copy.title}><span className="pwa-tool-context"><span className="pwa-tool-context-path">{copy.context}</span></span><span className="pwa-tool-target">{copy.target}</span></span> : copy.target ? <span className="pwa-tool-target" title={copy.title}>{copy.target}</span> : null}
+    {copy.range ? <span className="pwa-tool-range">· {copy.range}</span> : null}
     {stats ? <span className="pwa-tool-diff" title={t.tools.diffStats(stats.added, stats.removed)}>
       <span className="pwa-tool-diff-add">+{stats.added}</span>
       <span className="pwa-tool-diff-remove">−{stats.removed}</span>
     </span> : null}
-    {copy.context ? <span className="pwa-tool-context" title={copy.title}><span className="pwa-tool-context-path">{copy.context}</span></span> : null}
   </>;
+}
+
+/** 完整可见摘要：动作词＋完整路径／命令＋行范围与增删计数，不经单行截断；供可访问名称使用。 */
+function toolAccessibleSummary(value: ToolValue): string {
+  const copy = toolCallCopy(value);
+  const stats = toolDiffStats(value);
+  const parts = [`${copy.label} ${copy.title}`.trim()];
+  if (stats) parts.push(`+${stats.added} −${stats.removed}`);
+  return parts.filter(Boolean).join(" ");
 }
 
 /** 完成的工具只显示类型图标，运行中、失败、中断与未知状态保留文字；各状态的可访问名称不变。 */
@@ -64,7 +73,7 @@ export function ToolCard({ value, onRead, status: statusOverride, timelineKey, i
 
   return <article className={`pwa-tool-card pwa-tool-card-${status} pwa-timeline-row`} data-tool-status={status} data-tool-preparing={preparing ? "true" : undefined} data-tool-key={toolIdentity(value)} data-viewport-row={timelineKey}>
     <div className="pwa-tool-head">
-      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={t.tools.viewDetails(value.tool)} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
+      <button className="pwa-tool-action pwa-timeline-toggle pwa-timeline-heading" type="button" aria-label={`${t.tools.viewDetails(value.tool)}: ${toolAccessibleSummary(value)}`} aria-haspopup="dialog" onClick={event => onRead(event.currentTarget)}>
         <span className="pwa-tool-action-copy"><ToolCallCopy value={value} /></span>
         <span className={`pwa-tool-status pwa-tool-status-${status}${preparing ? " pwa-tool-status-preparing" : ""}`} role="status" aria-label={t.tools.statusLabel(value.tool, preparing ? t.tools.preparing : t.tools.status[status])}><ToolStatusIcon status={status} icon={toolAction(value).icon} toolKeys={indicatorKeys ?? [toolIdentity(value)]} />{status === "complete" ? null : <span>{statusText}</span>}</span>
       </button>

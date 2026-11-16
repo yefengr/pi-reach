@@ -860,7 +860,7 @@ test("one keyboard action opens live output and partial updates and formalizatio
   await expect.element(screen.getByText("New live output")).not.toBeInTheDocument();
   await expandToolGroups();
   const origin = toolButton();
-  expect(origin.getAttribute("aria-label")).toBe("View read tool details");
+  expect(origin.getAttribute("aria-label")).toBe("View read tool details: Read README.md");
   origin.focus();
   await userEvent.keyboard("{Enter}");
   await expect.element(screen.getByRole("dialog")).toBeVisible();
@@ -951,7 +951,7 @@ test("an offline partial has an unknown status and hides its content until opene
   await expandToolGroups();
   await expect.element(screen.getByRole("status", { name: "read: Status unknown" })).toBeVisible();
   await expect.element(screen.getByText("Streaming output")).not.toBeInTheDocument();
-  expect(toolButton().getAttribute("aria-label")).toBe("View read tool details");
+  expect(toolButton().getAttribute("aria-label")).toBe("View read tool details: Read README.md");
 });
 
 test("a repeated tool id in another session cannot inherit the old reader", async () => {
@@ -1091,7 +1091,7 @@ test.each([1280, 390])("completed process groups summarize calls with a right ch
     { ...toolEvent, event_id: "source", tool_call_id: "source", args: { path: "src/status.ts" }, result: "const status = 'ready';" },
     { ...toolEvent, event_id: "command", tool_call_id: "command", tool: "bash", args: { command: "pnpm test" }, result: "Tests passed: 12\nAll checks passed." },
     { ...toolEvent, event_id: "write", tool_call_id: "write", tool: "write", args: { path: "src/settings.ts", content: "export const enabled = true;" }, result: "Wrote file" },
-    { ...toolEvent, event_id: "edit", tool_call_id: "edit", tool: "edit", args: { path: "src/settings.ts", oldText: "enabled = false", newText: "enabled = true" }, result: "Successfully replaced text" },
+    { ...toolEvent, event_id: "edit", tool_call_id: "edit", tool: "edit", args: { path: "src/settings.ts", oldText: "enabled = false", newText: "enabled = true" }, result: "Successfully replaced 1 block(s) in src/settings.ts." },
   ];
   const { screen } = await liveList([...calls.map(eventItem), runEndItem()]);
   const originalTheme = document.documentElement.getAttribute("data-mantine-color-scheme");
@@ -1137,14 +1137,12 @@ test.each([1280, 390])("completed process groups summarize calls with a right ch
       }
       expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
       await userEvent.click(toolButton(4));
-      // 阅读器首块原样列出参数，正文只放真实结果，不再拼出请求修改。
-      await expect.element(screen.getByText("Successfully replaced text")).toBeVisible();
-      expect(document.querySelector(".pwa-tool-reader-command")?.textContent).toBe("path: src/settings.ts\noldText: enabled = false\nnewText: enabled = true");
-      // 参数名承担识别、值保持常规字重；整块不再与抽屉标题等重。
-      const argumentNames = [...document.querySelectorAll<HTMLElement>(".pwa-tool-reader-arg-name")];
-      expect(argumentNames.map(node => node.textContent)).toEqual(["path:", "oldText:", "newText:"]);
-      expect(argumentNames.every(node => getComputedStyle(node).fontWeight === "600")).toBe(true);
-      expect(getComputedStyle(document.querySelector<HTMLElement>(".pwa-tool-reader-command")!).fontWeight).toBe("400");
+      await expect.element(screen.getByText("No diff was returned for this operation")).toBeVisible();
+      expect(document.querySelector(".pwa-tool-reader-command, .pwa-tool-reader-arg-name")).toBeNull();
+      const readerBody = document.querySelector(".pwa-tool-reader-scroll")!;
+      expect(readerBody.textContent).not.toContain("Successfully replaced");
+      expect(readerBody.textContent).not.toContain("enabled = false");
+      expect(readerBody.querySelector(".pwa-reader-file-path")?.textContent).toBe("src/settings.ts");
       expect(document.querySelector(".pwa-tool-reader-scroll")!.textContent).not.toContain("Requested changes");
       expect(document.querySelector(".pwa-tool-reader-scroll .hljs")).toBeNull();
       await closeReader();

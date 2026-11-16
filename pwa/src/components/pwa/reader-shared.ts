@@ -74,7 +74,7 @@ export function readerFocusable(element: Element | null | undefined): element is
 
 /** 阅读器之上还有可见叠层（确认框、菜单等）时，关闭与返回交给上层处理。 */
 export function readerHasOverlay(surface: HTMLElement | null) {
-  return [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')]
+  return [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-pwa-reader-overlay]')]
     .some(overlay => overlay !== surface && readerFocusable(overlay));
 }
 
