@@ -7,6 +7,7 @@ import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "
 import type { ConnectionHintStage, ConnectionIssueKind } from "@/lib/pwa/connection-hint";
 import { SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { OnlinePiRow } from "@/components/pwa/workspace-view";
+import { sortOnlinePis } from "@/components/pwa/online-pi-state";
 import { MessageList } from "@/components/pwa/message-list";
 import { ReadOnlyComposer } from "@/components/pwa/message-composer";
 import { PwaMessageActions } from "@/components/pwa/pwa-app-actions";
@@ -195,10 +196,10 @@ export function ChooseComputerWorkspace() {
   return <WorkspaceEmptyState icon={<Computer size={24} />} title={t.workspace.chooseComputerTitle}>{t.workspace.chooseComputerBody}</WorkspaceEmptyState>;
 }
 
-/** 多个在线 Pi 且没有可沿用的选择时，直接在主区列出供选择；运行中的排在前面，其余保持原顺序。 */
+/** 多个在线 Pi 且没有可沿用的选择时，直接在主区列出供选择；与导航同一排序：完成未查看、运行中、其余。 */
 export function ChoosePiWorkspace({ endpoints, completedEndpointIds, onSelect }: { endpoints: readonly PwaEndpointRecord[]; completedEndpointIds?: ReadonlySet<string>; onSelect: (endpointId: string) => void }) {
   const { t } = useI18n();
-  const ordered = [...endpoints].sort((left, right) => Number(right.working === true) - Number(left.working === true));
+  const ordered = sortOnlinePis(endpoints, completedEndpointIds);
   return <div className="pwa-workspace-state pwa-choose-pi">
     <h2>{t.workspace.choosePiTitle(endpoints.length)}</h2>
     <div className="pwa-choose-pi-list">
