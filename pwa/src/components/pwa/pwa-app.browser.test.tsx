@@ -567,7 +567,8 @@ test("tool-details app integration opens restored summaries only on explicit sel
     channel.emit({ protocol_version: 2, type: "tool_details_chunk", target_channel_id: channel.channelId, in_reply_to: request.id,
       session_id: request.session_id, leaf_id: request.leaf_id, group_id: request.group_id, tool_ref: request.tool_ref, revision: 1, index: 0,
       data_base64: encodeBase64(bytes), final: true, total_bytes: bytes.length, sha256 });
-    await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll .pwa-reader-text")?.textContent).toBe("SYNTHETIC_TOOL_APP_FINAL");
+    // Read 正文经 ReaderDocument 以纯文本行渲染；完整详情帧只影响阅读器，不回填历史事件。
+    await expect.poll(() => document.querySelector(".pwa-tool-reader-scroll .pwa-reader-source-text")?.textContent).toBe("SYNTHETIC_TOOL_APP_FINAL");
     const db = await openPwaDatabase();
     await expect.poll(() => db.toolDetails.count()).toBe(1);
     const stored = await db.events.toArray();

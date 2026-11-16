@@ -295,7 +295,7 @@ test("system Back while TOC is open preserves the reader history and reading sur
   await h.close();
 });
 
-test("TOC owns its scroll, preserves URL/history, jumps only within the reader and reveals the current chapter", async () => {
+test.each([null, 0.75, "none"] as const)("TOC owns its scroll, preserves URL/history, jumps only within the reader and reveals the current chapter (scale=%s)", async scale => {
   await page.viewport(390, 740);
   const longTitle = "A long chapter title with enough words to wrap over multiple lines on a narrow phone viewport";
   const text = Array.from({ length: 36 }, (_, index) => `## Chapter ${index} ${longTitle}\n\n${"Paragraph content. ".repeat(30)}`).join("\n\n");
@@ -322,8 +322,18 @@ test("TOC owns its scroll, preserves URL/history, jumps only within the reader a
     const target = [...scroll.querySelectorAll("h2")][18];
     return Math.round(target.getBoundingClientRect().top - scroll.getBoundingClientRect().top);
   }).toBe(0);
-  await trigger.click();
-  await expect.poll(() => getComputedStyle(document.querySelector(".pwa-reader-toc")!).opacity).toBe("1");
+  // 固定菜单进入期的缩放，放大视觉坐标与 scrollTop 布局坐标的差异。
+  const enteringStyle = document.createElement("style");
+  enteringStyle.textContent = scale === null ? "" : `.pwa-reader-toc { transform: ${scale === "none" ? "none" : `scale(${scale})`} !important; }`;
+  document.head.append(enteringStyle);
+  try {
+    await trigger.click();
+    await expect.poll(() => getComputedStyle(document.querySelector(".pwa-reader-toc")!).opacity).toBe("1");
+    await expect.poll(() => document.querySelector(".pwa-reader-toc")!.getAnimations().length).toBe(0);
+  } finally {
+    enteringStyle.remove();
+  }
+  await expect.poll(() => document.querySelector(".pwa-reader-toc")!.getAnimations().length).toBe(0);
   const selected = document.querySelector<HTMLElement>('[data-reader-current="true"]')!;
   expect(selected.textContent).toBe(`Chapter 18 ${longTitle}`);
   const bounds = document.querySelector(".pwa-reader-toc-scroll")!.getBoundingClientRect();

@@ -67,8 +67,12 @@ export function ReaderToc({ headings, scroll, partial = false }: ReaderTocProps)
     if (!container || !selected) return;
     const bounds = container.getBoundingClientRect();
     const item = selected.getBoundingClientRect();
-    if (item.top < bounds.top) container.scrollTop -= Math.ceil(bounds.top - item.top);
-    else if (item.bottom > bounds.bottom) container.scrollTop += Math.ceil(item.bottom - bounds.bottom);
+    // 菜单进入时带缩放；视觉差值须还原成 scrollTop 使用的布局像素。
+    const dropdown = container.closest<HTMLElement>(".pwa-reader-toc")!;
+    const transform = getComputedStyle(dropdown).transform;
+    const scaleY = transform === "none" ? 1 : new DOMMatrixReadOnly(transform).m22;
+    if (item.top < bounds.top) container.scrollTop -= Math.ceil((bounds.top - item.top) / scaleY);
+    else if (item.bottom > bounds.bottom) container.scrollTop += Math.ceil((item.bottom - bounds.bottom) / scaleY);
   }, []);
   useLayoutEffect(() => { if (opened) revealActive(); }, [opened, active, revealActive]);
   if (headings.length < 2) return null;
