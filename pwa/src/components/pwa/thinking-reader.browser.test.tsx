@@ -74,9 +74,10 @@ async function harness(options: Partial<Config> = {}) {
     });
     const [url] = useState(() => URL.createObjectURL(new Blob(["Original file body"], { type: "text/plain" })));
     useEffect(() => () => URL.revokeObjectURL(url), [url]);
-    const scopeToken = useMemo(() => ({}), [config.sourceKey]);
+    const scopeToken = useMemo(() => ({ sourceKey: config.sourceKey }), [config.sourceKey]);
     const viewport = useTimelineViewport(config.items);
-    const onReadingChange = useCallback((active: boolean) => { reading(active); viewport.setReadingDetails(active); }, [viewport.setReadingDetails]);
+    const { setReadingDetails } = viewport;
+    const onReadingChange = useCallback((active: boolean) => { reading(active); setReadingDetails(active); }, [setReadingDetails]);
     const files = useMemo<PublishedFilesView>(() => ({
       scopeToken, canFetch: true, active: false,
       getState: () => fileStore.ready ? { phase: "ready", receivedBytes: 128, byteLength: 128, preview: { kind: "text" }, text: "# Original file body\n\nFile reading.", url } : undefined,

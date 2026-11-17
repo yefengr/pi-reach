@@ -68,24 +68,23 @@ class ComposerBridge {
 }
 
 export function useAttachmentComposer(onReady: (message: AttachmentReadyMessage) => SubmitOutcome, t: Messages["attachments"]) {
-  const [revision, render] = useState(0);
   const [bridge] = useState(() => new ComposerBridge());
+  const composer = bridge.composer;
+  // 所有业务变更都经 bridge 通知；无关的时间线 render 保持快照和附件 props 稳定。
+  const [snapshot, setSnapshot] = useState(() => composer.snapshot());
   const [previews, setPreviews] = useState<ReadonlyMap<string, AttachmentPreview>>(() => new Map());
   useLayoutEffect(() => {
     bridge.callbacks(onReady, () => {
       setPreviews((current) => pruneAttachmentPreviews(current, bridge.composer.previewItemIds()));
-      render((value) => value + 1);
+      setSnapshot(bridge.composer.snapshot());
     });
   }, [bridge, onReady]);
   const aliveRef = useRef(true);
-  const composer = bridge.composer;
   useEffect(() => {
     const pageHide = (event: PageTransitionEvent) => { if (!event.persisted) composer.dispose(); };
     window.addEventListener("pagehide", pageHide);
     return () => { aliveRef.current = false; bridge.callbacks(() => "not-handled", () => {}); window.removeEventListener("pagehide", pageHide); composer.dispose(); };
   }, [bridge, composer]);
-  // 所有业务变更都经 bridge 通知；无关的时间线 render 不重新构造附件 props。
-  const snapshot = useMemo(() => composer.snapshot(), [composer, revision]);
   const items: readonly ComposerAttachmentItem[] = useMemo(() => snapshot.items.map((item) => ({
     ...item, preview: item.attachment?.preview ?? previews.get(item.id),
     ...(item.errorCode ? { errorText: attachmentErrorText(item.errorCode, t) } : {}),
