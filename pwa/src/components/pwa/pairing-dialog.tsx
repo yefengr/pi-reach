@@ -161,7 +161,7 @@ export function PairingDialog({ opened, connecting, error, onSubmit, onClearErro
       />
       <Button type="submit" disabled={connecting || !value.trim()}>{p.submit}</Button>
     </form>}
-    {connecting ? <p className="pwa-pairing-status" role="status"><Loader size={16} type="oval" color="var(--pwa-running)" aria-hidden="true" />{p.connecting}</p> : null}
+    {connecting ? <p className="pwa-pairing-status" role="status"><Loader size="1em" type="oval" color="var(--pwa-running)" aria-hidden="true" />{p.connecting}</p> : null}
     {methodButton ? <div className="pwa-pairing-methods">{methodButton}</div> : null}
   </Modal>;
 }

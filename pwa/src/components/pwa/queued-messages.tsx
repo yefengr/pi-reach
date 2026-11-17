@@ -4,7 +4,6 @@ import { useI18n, type Messages } from "@/lib/i18n";
 import { presenceProps, usePresence } from "./use-presence";
 import { detachInPlace, useLeavingItems, withLeavingItems } from "./use-leaving-items";
 import { FLIP_KEY_ATTRIBUTE, useFlipLayout } from "./use-flip-layout";
-import { SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { ArrowUp, ChevronDown, CircleAlert, Clock, LoaderCircle, Paperclip, Pencil, X } from "lucide-react";
 import type { AttachmentDescriptor } from "@pi-reach/protocol/session";
 
@@ -41,7 +40,7 @@ function queuedMessageDescription(item: QueuedMessageView, index: number, t: Mes
 
 function QueuedMessageStatus({ item }: { item: QueuedMessageView }) {
   const icon = item.waiting ? <Clock size={16} aria-hidden="true" />
-    : item.pending ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} aria-hidden="true" />
+    : item.pending ? <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" />
       : item.attention ? <CircleAlert size={16} aria-hidden="true" />
         : null;
   return <span className="pwa-queued-message-status" data-pending={item.pending ? "" : undefined} title={item.waiting ? item.status : undefined}>

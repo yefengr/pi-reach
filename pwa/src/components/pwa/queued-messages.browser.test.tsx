@@ -306,7 +306,8 @@ test("keeps a single queued message on one compact row with icon actions", async
     expect(cancel.querySelector(".lucide-pencil")).not.toBeNull();
     const clock = row.querySelector<SVGElement>(".pwa-queued-message-status .lucide-clock")!;
     const middle = (rect: DOMRect) => rect.top + rect.height / 2;
-    expect(Math.round(clock.getBoundingClientRect().width)).toBe(16);
+    const statusFontSize = Math.round(Number.parseFloat(getComputedStyle(clock.parentElement!).fontSize));
+    expect(Math.round(clock.getBoundingClientRect().width)).toBe(statusFontSize);
     expect(Math.abs(Math.round(middle(clock.getBoundingClientRect()) - middle(text.getBoundingClientRect())))).toBeLessThanOrEqual(1);
     expect(row.querySelector(".pwa-queued-message-status .pwa-sr-only")?.textContent).toBe("Waiting for the current task");
     expect(row.querySelector(".pwa-queued-message-index")).toBeNull();

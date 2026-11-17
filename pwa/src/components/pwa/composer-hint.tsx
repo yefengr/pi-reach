@@ -2,7 +2,6 @@ import { useRef } from "react";
 import { UnstyledButton } from "@mantine/core";
 import { LoaderCircle } from "lucide-react";
 import type { OperationHint } from "@/lib/pwa/operation-feedback";
-import { SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 import { hideDuringOwnSend, presenceProps, usePresence } from "./use-presence";
 
 function sameHint(a: OperationHint, b: OperationHint): boolean {
@@ -24,7 +23,7 @@ export function ComposerHint({ hint, instant = false }: { hint: OperationHint | 
   if (!shown) return null;
   return <div ref={slotRef} className="pwa-composer-grow pwa-composer-hint-slot" data-instant={instant || undefined} {...presenceProps(presence)}><p className={presence.leaving ? "pwa-composer-hint-line pwa-presence" : "pwa-composer-hint pwa-composer-hint-line pwa-presence"}
     role={presence.leaving ? undefined : "status"} data-tone={shown.tone} {...presenceProps(presence)}>
-    {shown.busy ? <LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} aria-hidden="true" /> : null}
+    {shown.busy ? <LoaderCircle className="pwa-spin" size={16} aria-hidden="true" /> : null}
     <span>{shown.text}</span>
     {shown.action && !presence.leaving ? <UnstyledButton className="pwa-composer-hint-action" type="button" disabled={shown.action.disabled} onClick={shown.action.onAction}>{shown.action.label}</UnstyledButton> : null}
   </p></div>;

@@ -130,7 +130,7 @@ export function ToolReader({ value: sourceValue, sourceKey, status: statusOverri
   const title = action ? action.kind === "generic" ? value!.tool : `${action.label} ${action.detail}` : t.tools.noToolSelected;
   const TypeIcon = action ? TOOL_TYPE_ICONS[action.icon] : null;
   return <ReaderShell opened={opened} onClose={close} onExitTransitionEnd={onExitTransitionEnd} onEnterTransitionEnd={() => setEntered(true)}
-    title={title} titleNode={action ? <span className="pwa-reader-heading">{TypeIcon ? <TypeIcon size={20} aria-hidden="true" /> : null}<span className="pwa-reader-verb">{action.kind === "generic" ? value!.tool : action.label}</span>{action.kind !== "generic" ? <span className="pwa-reader-object">{object}</span> : null}</span> : undefined}
+    title={title} titleNode={action ? <span className="pwa-reader-heading">{TypeIcon ? <TypeIcon size={16} aria-hidden="true" /> : null}<span className="pwa-reader-verb">{action.kind === "generic" ? value!.tool : action.label}</span>{action.kind !== "generic" ? <span className="pwa-reader-object">{object}</span> : null}</span> : undefined}
     closeLabel={t.tools.closeReader} historyKey="piReachToolReader" describedBy="pwa-tool-reader-description"
     actions={<><span id="pwa-tool-reader-description" className={`pwa-tool-reader-status pwa-tool-status-${status}${preparing ? " pwa-tool-status-preparing" : ""}`} role="status" aria-live="polite" aria-atomic="true"><StatusIcon status={status} /><span>{statusLabel}</span></span>
       {documentState.identity === identity && documentState.preview ? <ReaderToc headings={documentState.headings} scroll={scroll} partial={value ? toolWasTruncated(value) : false} /> : null}</>}>

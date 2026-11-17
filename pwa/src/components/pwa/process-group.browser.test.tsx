@@ -207,15 +207,17 @@ test.each(sizes)("short connectors, fixed left status slots and single-line rows
     const control = entry.querySelector<HTMLElement>("button")!;
     expect(round(rect(control).height)).toBe(round(rowHeight));
     expect(round(rect(control).width)).toBe(round(rect(entry).width));
-    expect(round(rect(slots[index]!).width)).toBe(16);
+    const font = Number.parseFloat(getComputedStyle(control).fontSize);
+    expect(round(rect(slots[index]!).width)).toBe(round(font));
+    expect(round(Number.parseFloat(getComputedStyle(slots[index]!.querySelector("svg")!).width))).toBe(round(font));
     expect(round(rect(slots[index]!).left)).toBe(round(rect(slots[0]!).left));
     const line = getComputedStyle(entry, "::before");
     if (index === 0) expect(line.content).toMatch(/^(none|normal)$/);
     else {
       expect(line.content).not.toMatch(/^(none|normal)$/);
-      // 竖线取断口一半再加 2（44 行为 16、36 行为 12），并居中于上下两个图标之间。
+      // 竖线随当前文字与图标尺寸取断口一半再加 2，并居中于上下两个图标之间。
       const height = Number.parseFloat(line.height);
-      expect(round(height)).toBe(round((rowHeight - 16) / 2 + 2));
+      expect(round(height)).toBe(round((rowHeight - font) / 2 + 2));
       const center = rect(entry).top + Number.parseFloat(line.top) + height / 2;
       expect(Math.abs(center - (rect(slots[index - 1]!).bottom + rect(slots[index]!).top) / 2)).toBeLessThanOrEqual(1);
       expect(round(Number.parseFloat(line.width))).toBe(1);
@@ -464,11 +466,12 @@ test("large text and reduced motion retain icon alignment without geometric titl
   const left = round(rect(title()).left);
   // 运行中与结束后的纯思考组都由组头显示标题，图标槽与标题左缘保持不动。
   const slot = view.head().querySelector<HTMLElement>(".pwa-process-status-slot")!;
-  expect(round(rect(slot).width)).toBe(16);
+  expect(round(rect(slot).width)).toBe(24);
   expect(getComputedStyle(title()).fontSize).toBe("24px");
+  expect(round(rect(view.root().querySelector(".pwa-thinking-tail")!).left)).toBe(left);
   view.update({ entries: [thinking("**Finished title**\nDetails.", false)], ended: true });
   expect(round(rect(title()).left)).toBe(left);
-  expect(round(rect(slot).width)).toBe(16);
+  expect(round(rect(slot).width)).toBe(24);
   expect(title().getAnimations({ subtree: true })).toHaveLength(0);
   expect(getComputedStyle(title()).transitionProperty).not.toMatch(/width|transform/);
   expect(view.root().scrollWidth).toBeLessThanOrEqual(view.root().clientWidth + CHEVRON_OUTSET);

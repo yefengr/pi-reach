@@ -940,7 +940,8 @@ test.each([1280, 390])("operation feedback model keeps current value until actua
     expect(chip.element().textContent).toContain("Text model");
     expect(chip.element().getAttribute("aria-busy")).toBe("true");
     const spinner = chip.element().querySelector<SVGElement>(".pwa-spin")!;
-    expect(Math.round(Number.parseFloat(getComputedStyle(spinner).width))).toBe(16);
+    const fontSize = Math.round(Number.parseFloat(getComputedStyle(chip.element().querySelector(".pwa-composer-model-name")!).fontSize));
+    expect(Math.round(Number.parseFloat(getComputedStyle(spinner).width))).toBe(fontSize);
     const actual = { id: "actual-model", provider: "test", name: "Actual model", reasoning: true, context_window: 200_000, vision: false };
     context.channel.emit({ protocol_version: 2, type: "action_ok", target_channel_id: context.channel.channelId, in_reply_to: "stale-model-request", action: "model_set", model: actual, thinking_level: "max" });
     await flushMicrotasks();

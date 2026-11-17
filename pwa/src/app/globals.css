@@ -153,6 +153,7 @@ body:has(.pwa-root) { overflow: hidden; }
   padding: 0;
   border: 0;
   border-radius: 50%;
+  font-size: inherit;
   color: var(--pwa-secondary);
   background: transparent;
   cursor: pointer;
@@ -261,11 +262,14 @@ body:has(.pwa-root) { overflow: hidden; }
 :is(.pwa-root, .pwa-startup-error) .pwa-card { border: 0; border-radius: var(--pwa-radius-xl); background: var(--pwa-card); box-shadow: none; }
 :is(.pwa-root, .pwa-startup-error) .pwa-card-row { border-radius: var(--pwa-radius-md); }
 
-/* 图标尺寸由 token 决定：行内图标随字号档位放大，图标按钮内的图标在触控设备上加大；线宽换算回 24 画布，实际线宽不变。 */
-.lucide[width="16"] { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); stroke-width: var(--pwa-icon-inline-stroke); }
+/* 行内图标及布局槽随所在文字取 1em；在图元上取消线宽缩放，兼容不同字号与图标替换。 */
+.lucide[width="16"] { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); flex-shrink: 0; stroke-width: var(--pwa-icon-inline-stroke); }
+.lucide[width="16"] > * { vector-effect: non-scaling-stroke; }
 /* 按钮文字为 600 字重，同行图标的线宽随之加重。 */
 .pwa-button .lucide[width="16"] { stroke-width: var(--pwa-icon-inline-stroke-strong); }
-.pwa-icon-button .lucide[width="20"], .pwa-settings-back .lucide[width="20"], .pwa-session-trigger-icon .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
+.pwa-icon-button .lucide[width="20"], .pwa-session-trigger-icon .lucide[width="20"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-control-stroke); }
+/* 停止方块、附件移除角标与局部错误关闭是固定尺寸的独立图形。 */
+:is(.pwa-composer-action-stop, .pwa-attachment-tile-badge, .pwa-status-error-dismiss) .lucide[width="16"] { width: var(--pwa-icon-compact); height: var(--pwa-icon-compact); }
 
 .pwa-ui-scope .pwa-button { min-height: var(--pwa-button-height); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--pwa-button-radius); font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); cursor: pointer; white-space: nowrap; transition: background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard), color var(--pwa-duration-fade) var(--pwa-ease-standard); }
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
@@ -656,6 +660,7 @@ body:has(.pwa-root) { overflow: hidden; }
   @media (hover: hover) { .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; } }
   .pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back .mantine-Button-section { margin: 0; }
   .pwa-root .pwa-settings-back-label { display: none; }
+  .pwa-settings-back .lucide[width="16"] { width: var(--pwa-icon-control); height: var(--pwa-icon-control); stroke-width: var(--pwa-icon-inline-stroke); }
   .pwa-root .pwa-settings-title { font-size: var(--pwa-text-title); line-height: var(--pwa-leading-ui); }
   .pwa-startup-card { padding: 24px 16px; }
   .pwa-runtime-notice { margin-top: 6px; padding: 10px 6px 10px 12px; }

@@ -1490,15 +1490,17 @@ test("holds the scrollbar while earlier records load and releases it afterwards"
   } finally { await idle.unmount(); }
 });
 
-test("shows the delayed earlier-records loader with the small status spinner beside 13px text", async () => {
+test("shows the delayed earlier-records loader with a spinner matching its status text", async () => {
   const screen = await renderMessageList([eventItem(assistantEvent)], { hasEarlier: true, loadingEarlier: true, onLoadEarlier: () => {} });
   try {
-    // 300ms 内完成不显示，之后与 13px 状态文字同行的旋转图标为 12；固定实际线宽 1.5px，换算到 24 画布为 3（DESIGN「基础层」图标）。
+    // 300ms 内完成不显示；出现后图标与状态文字同号，实际线宽保持 1.5px。
     await expect.poll(() => document.querySelector(".pwa-earlier-loading svg"), { timeout: 3000 }).not.toBeNull();
     const icon = document.querySelector(".pwa-earlier-loading svg")!;
-    expect(icon.getAttribute("width")).toBe("12");
-    expect(icon.getAttribute("stroke-width")).toBe("3");
-    expect(getComputedStyle(document.querySelector(".pwa-earlier")!).fontSize).toBe("13px");
+    const fontSize = Math.round(Number.parseFloat(getComputedStyle(document.querySelector(".pwa-earlier-loading")!).fontSize));
+    expect(Math.round(Number.parseFloat(getComputedStyle(icon).width))).toBe(fontSize);
+    expect(Math.round(Number.parseFloat(getComputedStyle(icon).height))).toBe(fontSize);
+    expect(getComputedStyle(icon.firstElementChild!).vectorEffect).toBe("non-scaling-stroke");
+    expect(Number.parseFloat(getComputedStyle(icon.firstElementChild!).strokeWidth)).toBe(1.5);
   } finally { await screen.unmount(); }
 });
 

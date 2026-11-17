@@ -20,7 +20,6 @@ import { usePwaMotionDuration } from "./use-pwa-motion";
 import { TIMELINE_GEOMETRY_EVENT } from "@/lib/pwa/use-timeline-viewport";
 import { observeKeyboardDismissOnLookBack } from "@/lib/pwa/dismiss-keyboard-on-look-back";
 import type { CompactionNotice } from "@/lib/pwa/operation-feedback";
-import { SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
 
 const NO_NOTICES: readonly CompactionNotice[] = [];
 
@@ -121,7 +120,7 @@ function EarlierRecords({ loading, failed, offline, onLoad }: { loading: boolean
   if (failed && !loading) return <div className="pwa-earlier" role="status"><span>{t.timeline.loadEarlierFailed}</span><Button className="pwa-earlier-button" variant="transparent" size="compact-sm" type="button" onClick={onLoad} aria-label={t.timeline.retryEarlier}>{t.common.retry}</Button></div>;
   if (loading || loaderVisible) return <div className="pwa-earlier" aria-busy="true">
     <span className="pwa-sr-only" role="status">{t.timeline.loadingRecords}</span>
-    {loaderVisible ? <span className="pwa-earlier-loading" aria-hidden="true"><LoaderCircle className="pwa-spin" size={SMALL_SPINNER_SIZE} />{t.timeline.loadingRecords}</span> : null}
+    {loaderVisible ? <span className="pwa-earlier-loading" aria-hidden="true"><LoaderCircle className="pwa-spin" size={16} />{t.timeline.loadingRecords}</span> : null}
   </div>;
   return <div className="pwa-earlier"><Button variant="default" className="pwa-earlier-button" type="button" onClick={onLoad}>{t.timeline.loadMore}</Button></div>;
 }

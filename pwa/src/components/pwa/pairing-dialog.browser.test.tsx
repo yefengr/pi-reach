@@ -73,8 +73,9 @@ test.each(pairingViewports.flatMap((viewport) => ["light", "dark"].map((scheme) 
       await expect.element(screen.getByText("Connecting to your computer…")).toBeVisible();
       const card = dialog.element() as HTMLElement;
       const loader = card.querySelector<HTMLElement>(".pwa-pairing-status .mantine-Loader-root")!;
-      await expect.poll(() => Math.round(loader.getBoundingClientRect().width)).toBe(16);
-      await expect.poll(() => Math.round(loader.getBoundingClientRect().height)).toBe(16);
+      const font = Math.round(parseFloat(getComputedStyle(card.querySelector(".pwa-pairing-status")!).fontSize));
+      await expect.poll(() => Math.round(loader.getBoundingClientRect().width)).toBe(font);
+      await expect.poll(() => Math.round(loader.getBoundingClientRect().height)).toBe(font);
       expect(loader.getAttribute("aria-hidden")).toBe("true");
       // 配对中的图标与状态文字按状态行取 6px。
       expect(getComputedStyle(card.querySelector<HTMLElement>(".pwa-pairing-status")!).gap).toBe("6px");
