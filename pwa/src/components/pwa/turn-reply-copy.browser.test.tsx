@@ -114,29 +114,25 @@ test.each(["thinking", "tool"] as const)("a completed %s-only turn keeps its tim
   expect(copyButton()).toBeNull();
 });
 
-test.each([1280, 390])("fine-pointer controls reveal on hover and keyboard focus at %ipx", async width => {
+test.each([1280, 390])("reply copy stays visible without hover or focus and remains keyboard accessible at %ipx", async width => {
   await page.viewport(width, 900);
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   await fixture([answer("final", "Reply without a link or code block."), end()]);
   const button = copyButton()!;
   const meta = button.closest<HTMLElement>(".pwa-turn-meta")!;
   const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
   const reply = document.querySelector<HTMLElement>(".pwa-message.assistant")!;
-  expect(matchMedia("(hover: hover) and (pointer: fine)").matches).toBe(true);
-  expect(matchMedia("(any-pointer: coarse)").matches).toBe(false);
-  // 在正文上移动鼠标，明确离开完成时间行；不依赖滚动容器中心落在哪里。
   list.focus();
   await userEvent.hover(reply);
   expect(meta.matches(":hover, :focus-within")).toBe(false);
-  await expect.poll(() => getComputedStyle(button).opacity).toBe("0");
-  await userEvent.hover(meta);
-  await expect.poll(() => getComputedStyle(button).opacity).toBe("1");
-  await userEvent.hover(reply);
-  expect(meta.matches(":hover, :focus-within")).toBe(false);
-  await expect.poll(() => getComputedStyle(button).opacity).toBe("0");
+  expect(getComputedStyle(button).opacity).toBe("1");
+  expect(getComputedStyle(button).pointerEvents).toBe("auto");
+  await userEvent.click(button);
+  expect(write).toHaveBeenCalledExactlyOnceWith("Reply without a link or code block.");
   list.focus();
   await userEvent.keyboard("{Tab}");
   expect(document.activeElement).toBe(button);
-  await expect.poll(() => getComputedStyle(button).opacity).toBe("1");
+  expect(getComputedStyle(button).opacity).toBe("1");
 });
 
 test("coarse-pointer devices show the copy action even at desktop width", async () => {
