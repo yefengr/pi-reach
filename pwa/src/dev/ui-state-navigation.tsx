@@ -53,7 +53,7 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
     snapshotReady: scene !== "loading", historyListStatus: scene === "loading" ? "loading" : scene === "error" ? "error" : "success",
     onRetryHistory: () => setScene("paired"), completedEndpointIds: new Set([GALLERY_ENDPOINTS[1].endpointId]),
     pairingPresence: {
-      [GALLERY_DEVICES[0].id]: { status: "online", onlineEndpoints: 2, totalEndpoints: 2 },
+      [GALLERY_DEVICES[0].id]: { status: "online", onlineEndpoints: 3, totalEndpoints: 3 },
       [GALLERY_DEVICES[1].id]: { status: "offline", onlineEndpoints: 0, totalEndpoints: 0 },
     },
     onPair: () => onOpenSurface("pairing"), onSettings: () => { setSheetOpen(false); onOpenSurface("settings"); },

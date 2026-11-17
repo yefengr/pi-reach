@@ -9,6 +9,8 @@ export const GALLERY_DEVICES: PwaDeviceRecord[] = [
 export const GALLERY_ENDPOINTS: PwaEndpointRecord[] = [
   { id: "gallery-live", deviceId: "gallery-computer", endpointId: "gallery-live", runtimeInstanceId: "gallery-runtime", kind: "interactive", name: "阅读与对话布局", cwd: "/workspace/pi-reach", working: true, online: true, updatedAt: 1 },
   { id: "gallery-idle", deviceId: "gallery-computer", endpointId: "gallery-idle", runtimeInstanceId: "gallery-other-runtime", kind: "interactive", name: "另一段已完成的会话", cwd: "/workspace/pi-reach/pwa", working: false, online: true, updatedAt: 1 },
+  // 普通空闲 Pi：与运行中、完成未查看一起演示在线列表的三档排序。
+  { id: "gallery-quiet", deviceId: "gallery-computer", endpointId: "gallery-quiet", runtimeInstanceId: "gallery-quiet-runtime", kind: "interactive", name: "普通空闲会话", cwd: "/workspace/pi-reach/docs", working: false, online: true, updatedAt: 2 },
 ];
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 历史条目按打开展厅时的「昨天」取时间，列表显示「昨天」而不是 1970 年前后的日期。 */

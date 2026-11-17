@@ -232,6 +232,41 @@ test("online Pi row omits the directory line when cwd is missing", () => {
   expect(html).not.toContain("pwa-pi-directory");
 });
 
+test("online Pi list and choose list share completed, running, idle tiers and current suppression", () => {
+  const base = navigationProps();
+  const endpoints: PwaEndpointRecord[] = [
+    { id: "endpoint-working", deviceId: "e5FRoCabBqVX", endpointId: "working", runtimeInstanceId: "runtime-working", kind: "interactive", name: "Working Pi", cwd: "/workspace/working", working: true, online: true, updatedAt: 3 },
+    { id: "endpoint-finished", deviceId: "e5FRoCabBqVX", endpointId: "finished", runtimeInstanceId: "runtime-finished", kind: "interactive", name: "Finished Pi", cwd: "/workspace/finished", working: false, online: true, updatedAt: 2 },
+    { id: "endpoint-idle", deviceId: "e5FRoCabBqVX", endpointId: "idle", runtimeInstanceId: "runtime-idle", kind: "interactive", name: "Idle Pi", cwd: "/workspace/idle", working: false, online: true, updatedAt: 1 },
+    // 当前查看的会话仍残留完成提醒：行不显示完成点，也不进入完成档。
+    { id: "endpoint-current", deviceId: "e5FRoCabBqVX", endpointId: "current", runtimeInstanceId: "runtime-current", kind: "interactive", name: "Zulu Current", cwd: "/workspace/current", working: false, online: true, updatedAt: 4 },
+  ];
+  const completedEndpointIds = new Set(["finished", "current"]);
+  const liveHtml = renderToStaticMarkup(<PwaUiProvider><DesktopSidebar {...base} endpoints={endpoints} activeEndpointId="current" selectedHistoryId={null} completedEndpointIds={completedEndpointIds} /></PwaUiProvider>);
+  const chooseHtml = renderToStaticMarkup(<PwaUiProvider><ChoosePiWorkspace endpoints={endpoints} completedEndpointIds={completedEndpointIds} onSelect={() => {}} /></PwaUiProvider>);
+  const liveOrder = ["Finished Pi", "Working Pi", "Idle Pi", "Zulu Current"];
+  const chooseOrder = ["Finished Pi", "Zulu Current", "Working Pi", "Idle Pi"];
+  const positions = (html: string, labels: string[]) => labels.map((name) => html.indexOf(`>${name}</span>`));
+
+  const ascending = (values: number[]) => [...values].sort((left, right) => left - right);
+  const livePositions = positions(liveHtml, liveOrder);
+  const choosePositions = positions(chooseHtml, chooseOrder);
+  expect(livePositions.every((position) => position >= 0)).toBe(true);
+  expect(choosePositions.every((position) => position >= 0)).toBe(true);
+  expect(ascending(livePositions)).toEqual(livePositions);
+  expect(ascending(choosePositions)).toEqual(choosePositions);
+  expect(navLinkMarkup(liveHtml, "Finished Pi")).toContain("pwa-notice-dot");
+  expect(navLinkMarkup(liveHtml, "Working Pi")).toContain("pwa-running-indicator");
+  expect(navLinkMarkup(liveHtml, "Idle Pi")).not.toContain("pwa-notice-dot");
+  expect(navLinkMarkup(liveHtml, "Zulu Current")).not.toContain("pwa-notice-dot");
+  expect(navLinkMarkup(liveHtml, "Zulu Current")).toContain('aria-current="true"');
+  // 阅读本地历史不算查看在线 Pi：同一提醒恢复显示并进入完成档。
+  const historyHtml = renderToStaticMarkup(<PwaUiProvider><DesktopSidebar {...base} endpoints={endpoints} activeEndpointId="current" selectedHistoryId="history-current" completedEndpointIds={completedEndpointIds} /></PwaUiProvider>);
+  expect(navLinkMarkup(historyHtml, "Zulu Current")).toContain("pwa-notice-dot");
+  const historyPositions = positions(historyHtml, ["Finished Pi", "Working Pi", "Idle Pi", "Zulu Current"]);
+  expect(historyPositions[3]).toBeLessThan(historyPositions[1]);
+});
+
 test("choose Pi list keeps the action chevron beside the new status slot", () => {
   const endpoints: PwaEndpointRecord[] = [
     { id: "endpoint-working", deviceId: "e5FRoCabBqVX", endpointId: "working", runtimeInstanceId: "runtime-working", kind: "interactive", name: "Working Pi", cwd: "/workspace/working", working: true, online: true, updatedAt: 2 },

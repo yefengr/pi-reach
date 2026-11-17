@@ -13,6 +13,7 @@ import { useI18n } from "@/lib/i18n";
 import { useDelayedVisibility } from "./use-delayed-visibility";
 import { RunningIndicator } from "./running-indicator";
 import { FLIP_KEY_ATTRIBUTE, useFlipLayout } from "./use-flip-layout";
+import { getOnlinePiStatus, sortOnlinePis } from "./online-pi-state";
 
 export { displayDevice } from "@/components/pwa/workspace-device-control";
 export { displayPi } from "@/components/pwa/session-title";
@@ -111,10 +112,11 @@ export function cwdName(cwd?: string | null): string | null {
 export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = "desktop", trailing, className }: { endpoint: PwaEndpointRecord; current: boolean; completed: boolean; onSelect: () => void; variant?: NavigationVariant; trailing?: ReactNode; className?: string }) {
   const { t } = useI18n();
   const directory = cwdName(endpoint.cwd);
-  // 运行优先于后台完成提醒；提醒记录本身不清除，运行结束后完成点自动恢复。
-  const status = endpoint.working
+  // 行状态与列表档位同源；提醒记录本身不清除，运行结束后完成点自动恢复。
+  const status = getOnlinePiStatus(endpoint, current, completed);
+  const statusMark = status === "running"
     ? <RunningIndicator size="compact" label={t.actions.running} />
-    : completed && !current
+    : status === "completed"
       ? <span className="pwa-notice-dot" role="img" aria-label={t.navigation.newReply} title={t.navigation.newReply} />
       : null;
   return <NavLink
@@ -126,7 +128,7 @@ export function OnlinePiRow({ endpoint, current, completed, onSelect, variant = 
     label={<span className="pwa-pi-title">{displayPi(endpoint)}</span>}
     title={displayPi(endpoint)}
     description={directory ? <span className="pwa-pi-directory">{directory}</span> : null}
-    rightSection={<span className="pwa-pi-row-end"><span className="pwa-pi-status-slot">{status}</span>{trailing}</span>}
+    rightSection={<span className="pwa-pi-row-end"><span className="pwa-pi-status-slot">{statusMark}</span>{trailing}</span>}
     active={current}
     aria-current={current ? "true" : undefined}
     noWrap
@@ -144,14 +146,20 @@ export function WorkspaceRunningPiSection({ activeDevice, endpoints, activeEndpo
   // Pi 上线或离线时其余行平滑补位。
   const flip = useFlipLayout(sectionRef);
   if (!activeDevice) return null;
-  const activePis = endpoints.filter((endpoint) => endpoint.deviceId === activeDevice.deviceId && endpoint.online !== false).sort((left, right) => displayPi(left).localeCompare(displayPi(right)));
+  // 阅读本地历史不算查看在线 Pi；当前项抑制完成档，排序与行状态使用同一个判断。
+  const currentEndpointId = selectedHistoryId === null ? activeEndpointId : null;
+  const activePis = sortOnlinePis(
+    endpoints.filter((endpoint) => endpoint.deviceId === activeDevice.deviceId && endpoint.online !== false),
+    completedEndpointIds,
+    currentEndpointId,
+  );
   return <section ref={sectionRef} className={sectionClassName(variant)} aria-labelledby={headingId} aria-busy={!snapshotReady || undefined}>
     {flip}
     <div className={sectionHeadingClassName(variant)} id={headingId}><Bot size={16} /><span>{t.navigation.onlinePi}</span>{snapshotReady ? <small className="pwa-tabular">{activePis.length}</small> : null}</div>
     {!snapshotReady ? <><span className="pwa-sr-only">{t.navigation.checkingPi}</span><SkeletonRows /></> : activePis.length === 0 ? <p className="pwa-nav-empty">{t.navigation.noPiOnline}</p> : activePis.map((endpoint) => <OnlinePiRow
       key={endpoint.id}
       endpoint={endpoint}
-      current={selectedHistoryId === null && endpoint.endpointId === activeEndpointId}
+      current={currentEndpointId !== null && endpoint.endpointId === currentEndpointId}
       completed={completedEndpointIds?.has(endpoint.endpointId) ?? false}
       onSelect={() => onSelectEndpoint(endpoint.endpointId)}
       variant={variant}
