@@ -27,7 +27,7 @@
 .pwa-root .pwa-process-group .pwa-process-thinking-heading { color: var(--pwa-secondary); font-style: italic; }
 .pwa-root .pwa-process-group .pwa-process-more { flex: none; color: var(--pwa-secondary); font: var(--pwa-weight-regular) var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }
 
-/* 状态槽与行内图标同宽（标准档 16px，随字号档位放大），不随标题或计数伸缩。 */
+/* 状态槽与同行文字同宽，不随标题内容或计数伸缩。 */
 .pwa-root .pwa-process-group .pwa-process-status-slot { width: var(--pwa-icon-inline); height: var(--pwa-icon-inline); display: inline-flex; align-items: center; justify-content: center; color: var(--pwa-secondary); }
 .pwa-root .pwa-process-group .pwa-process-status-slot > svg { flex: none; }
 .pwa-root .pwa-process-group .pwa-process-status-slot.pwa-process-status-running { color: var(--pwa-running); }
@@ -40,7 +40,7 @@
 .pwa-root .pwa-process-group .pwa-process-alert { flex: none; display: inline-flex; align-items: center; color: var(--pwa-secondary); }
 .pwa-root .pwa-process-group .pwa-process-alert-error { color: var(--pwa-error); }
 
-/* 单个空思考的静态痕迹：无按钮、无箭头、无明细壳；图标槽与明细同样固定 16px＋8px 间隔。 */
+/* 单个空思考的静态痕迹：无按钮、无箭头、无明细壳；图标槽为 1em，间隔为 8px。 */
 .pwa-root .pwa-process-group .pwa-process-head-static { display: flex; align-items: center; gap: var(--pwa-space-xs); min-height: var(--pwa-hit-target); color: var(--pwa-secondary); font-style: italic; }
 
 /* 明细：行紧邻排列、行间不留空隙，子行不再叠加时间线外边距。
@@ -49,7 +49,7 @@
 .pwa-root .pwa-process-group .pwa-process-entries { min-width: 0; display: grid; gap: 0; }
 .pwa-root .pwa-process-group .pwa-process-entry { position: relative; min-width: 0; }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-timeline-row { margin: 0; }
-.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action { min-height: var(--pwa-button-height); }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action { min-height: var(--pwa-button-height); font-size: var(--pwa-text-body); }
 /*
  * 竖线居中于相邻两行图标之间的断口（行高减图标，行间无空隙），只连接相邻明细；
  * 长度取断口一半再加 2，两端留白随行高收放：44 行断口 28、竖线 16，36 行断口 20、竖线 12。
@@ -89,7 +89,7 @@
 /* 工具明细：图标移到左侧图标列，状态文字留给读屏，现有 aria-label 不变。
    成功时图标表示工具类型、用中性色；失败时图标与动词都用错误色。 */
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action { grid-template-columns: var(--pwa-icon-inline) minmax(0, 1fr); }
-.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status { grid-area: 1 / 1; justify-content: center; min-width: var(--pwa-icon-inline); }
+.pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status { grid-area: 1 / 1; justify-content: center; min-width: var(--pwa-icon-inline); font: inherit; }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status > span { display: none; }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-status-complete { color: var(--pwa-secondary); }
 .pwa-root .pwa-process-group .pwa-process-entry .pwa-tool-action-copy { grid-area: 1 / 2; }
@@ -98,7 +98,7 @@
 /* 动词很短，窄屏上不省略；无法分类时的原始工具名仍按 45% 上限省略。 */
 .pwa-root .pwa-process-group :is(.pwa-process-copy, .pwa-tool-action-copy) > strong.pwa-tool-verb { flex: none; max-width: none; }
 
-/* 思考明细：可读整行按钮与静态空行共用同一 16px 槽位与单行省略几何。 */
+/* 思考明细：可读整行按钮与静态空行共用同一 1em 槽位与单行省略几何。 */
 .pwa-root .pwa-process-group .pwa-thinking-process-row { min-width: 0; }
 .pwa-root .pwa-process-group .pwa-thinking-process-row-action,
 .pwa-root .pwa-process-group .pwa-thinking-process-row-static {
@@ -125,13 +125,13 @@
 .pwa-root .pwa-process-group .pwa-thinking-process-row-static { cursor: default; }
 
 /*
- * 运行中思考的尾部预览：与标题同左缘（16px 槽＋间隔），单行；放得下时左对齐，放不下时从左侧溢出、最新内容贴右，
+ * 运行中思考的尾部预览：与标题同左缘（正文字号槽＋间隔），单行；放得下时左对齐，放不下时从左侧溢出、最新内容贴右，
  * 溢出时左缘渐隐（data-overflow 由组件测量）。末尾伪元素只吸收剩余空间：有余量时把文字留在左侧，溢出时宽度为 0。
  */
 .pwa-root .pwa-process-group .pwa-thinking-tail {
   box-sizing: border-box;
   height: calc(var(--pwa-text-list) * var(--pwa-leading-ui));
-  margin: 0 0 4px calc(var(--pwa-icon-inline) + var(--pwa-space-xs));
+  margin: 0 0 4px calc(var(--pwa-text-body) + var(--pwa-space-xs));
   overflow: hidden;
   display: flex;
   justify-content: flex-end;

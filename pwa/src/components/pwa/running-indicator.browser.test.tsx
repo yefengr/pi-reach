@@ -169,8 +169,9 @@ test.each(["standard", "large", "xlarge"] as const)("Working spinner centers its
   const inline = { standard: 16, large: 18, xlarge: 20 }[size];
   expect([rounded(icon.getBoundingClientRect().width), rounded(icon.getBoundingClientRect().height)]).toEqual([inline, inline]);
   expect([getComputedStyle(spinner).width, getComputedStyle(spinner).height]).toEqual([`${inline}px`, `${inline}px`]);
-  // 实际线宽固定 1.5px：换算回 24 画布的线宽随尺寸变化。
-  expect(Number.parseFloat(getComputedStyle(spinner).strokeWidth)).toBeCloseTo(1.5 * 24 / inline, 3);
+  // 图元使用 non-scaling-stroke，实际线宽固定 1.5px。
+  expect(Number.parseFloat(getComputedStyle(spinner).strokeWidth)).toBe(1.5);
+  expect(getComputedStyle(spinner.firstElementChild!).vectorEffect).toBe("non-scaling-stroke");
   expect(center(icon.getBoundingClientRect())).toBe(center(slot.getBoundingClientRect()));
   expect(center(label.getBoundingClientRect())).toBe(center(slot.getBoundingClientRect()));
   expect(rounded(label.getBoundingClientRect().left - icon.getBoundingClientRect().right)).toBe(6);

@@ -51,8 +51,8 @@ export function ComposerAttachmentMenu({ disabled, opened, onChange, onChooseFil
       <ActionIcon ref={triggerRef} className="pwa-composer-icon" type="button" disabled={disabled} aria-label={t.attachments.add} title={t.attachments.add}><Plus size={20} /></ActionIcon>
     </Menu.Target>
     <Menu.Dropdown inert={!opened} className="pwa-composer-menu-panel pwa-menu-motion" style={{ bottom: "auto" }}>
-      <Menu.Item leftSection={<Files size={20} />} onClick={onChooseFiles} disabled={disabled}>{t.attachments.choose}</Menu.Item>
-      <Menu.Item leftSection={<Camera size={20} />} onClick={onUseCamera} disabled={disabled}>{t.composer.useCamera}</Menu.Item>
+      <Menu.Item leftSection={<Files size={16} />} onClick={onChooseFiles} disabled={disabled}>{t.attachments.choose}</Menu.Item>
+      <Menu.Item leftSection={<Camera size={16} />} onClick={onUseCamera} disabled={disabled}>{t.composer.useCamera}</Menu.Item>
     </Menu.Dropdown>
   </Menu>;
 }

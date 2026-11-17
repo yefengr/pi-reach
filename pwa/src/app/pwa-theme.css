@@ -242,14 +242,15 @@
   --pwa-weight-strong: 600;
 
   /*
-   * 图标：行内图标（TSX 中 size 16）随字号档位放大，图标按钮内的图标（size 20）在触控设备上加大。
-   * *-stroke 是换算回 24 画布的线宽（1.5 × 24 ÷ 尺寸），使实际线宽保持 lib/ui/icon-metrics.ts 的 1.5px；
-   * 写成算好的数值而不用 calc()，由守卫校验与尺寸对应。
-   * *-stroke-strong 用于按钮内与 600 字重文字并排的行内图标，实际线宽 2px（lib/ui/icon-metrics.ts）。
+   * 行内图标与所在文字同号；图标按钮内的图标（size 20）在触控设备上加大。
+   * 行内图标用 non-scaling-stroke 保持实际线宽，按钮内与 600 字重文字并排时为 2px，其余为 1.5px。
+   * control-stroke 换算回 24 画布（1.5 × 24 ÷ 尺寸），由守卫校验与尺寸对应。
    */
-  --pwa-icon-inline: 16px;
-  --pwa-icon-inline-stroke: 2.25;
-  --pwa-icon-inline-stroke-strong: 3;
+  --pwa-icon-inline: 1em;
+  --pwa-icon-inline-stroke: 1.5;
+  --pwa-icon-inline-stroke-strong: 2;
+  /* 无同行文字的小型独立图形沿用原有三档尺寸。 */
+  --pwa-icon-compact: 16px;
   --pwa-icon-control: 20px;
   --pwa-icon-control-stroke: 1.8;
 
@@ -431,9 +432,7 @@
   --pwa-text-page: 28px;
   --pwa-text-heading: 22px;
   --pwa-text-subheading: 20px;
-  --pwa-icon-inline: 18px;
-  --pwa-icon-inline-stroke: 2;
-  --pwa-icon-inline-stroke-strong: 2.667;
+  --pwa-icon-compact: 18px;
 }
 
 :root[data-pwa-text-size="xlarge"] {
@@ -445,9 +444,7 @@
   --pwa-text-page: 32px;
   --pwa-text-heading: 24px;
   --pwa-text-subheading: 22px;
-  --pwa-icon-inline: 20px;
-  --pwa-icon-inline-stroke: 1.8;
-  --pwa-icon-inline-stroke-strong: 2.4;
+  --pwa-icon-compact: 20px;
 }
 
 /*

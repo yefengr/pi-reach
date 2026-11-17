@@ -185,17 +185,17 @@ test("renders online Pi rows with directory and run state, and history rows with
   expect(waitingHtml).toContain("**Pinned history**");
 });
 
-test("12px connection spinners override the global stroke to match 16px icons", () => {
+test("connection spinners use the shared inline icon size marker", () => {
   const spinner = (html: string) => html.match(/<svg\b[^>]*\bpwa-spin\b[^>]*>/)?.[0] ?? "";
-  // 连接问题的进行中状态在输入框提示行与主区空态里以 12px 动态图标表达（ADR-20261105）。
+  // SSR 只核对统一的行内图标入口；跟随文字的实际尺寸与线宽由浏览器测试核验。
   const statuses = [
     renderToStaticMarkup(<PwaUiProvider><ComposerHint hint={{ text: "Reconnecting…", tone: "neutral", busy: true }} /></PwaUiProvider>),
     renderToStaticMarkup(<PwaUiProvider><ConnectionIssueWorkspace kind="relay" stage="retry" busy onRetry={() => {}} retryDisabled={false} /></PwaUiProvider>),
   ];
 
   for (const html of statuses) {
-    expect(spinner(html)).toContain('width="12"');
-    expect(spinner(html)).toContain('stroke-width="3"');
+    expect(spinner(html)).toContain('width="16"');
+    expect(spinner(html)).toContain('stroke-width="2.25"');
   }
 });
 

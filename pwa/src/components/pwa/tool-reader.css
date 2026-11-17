@@ -64,7 +64,7 @@
 .pwa-root .pwa-thinking-reader-scroll { font: var(--pwa-text-body)/var(--pwa-leading-body) var(--pwa-font-ui); overflow-wrap: anywhere; }
 .pwa-root .pwa-thinking-reader-scroll .pwa-code-block pre,
 .pwa-root .pwa-thinking-reader-scroll .pwa-markdown-table { touch-action: auto; }
-.pwa-root .pwa-reader-error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-error); background: var(--pwa-error-wash); }
+.pwa-root .pwa-reader-error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--pwa-radius-lg); color: var(--pwa-error); background: var(--pwa-error-wash); font-size: var(--pwa-text-code); }
 .pwa-root .pwa-reader-error > svg { flex: 0 0 auto; margin-top: 2px; }
 .pwa-root .pwa-reader-error pre { min-width: 0; margin: 0; color: var(--pwa-ink); font: var(--pwa-text-code)/var(--pwa-leading-code) var(--pwa-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .pwa-root .pwa-reader-block-label { margin: 0 0 4px; color: var(--pwa-code-dim); font: var(--pwa-text-meta)/var(--pwa-leading-ui) var(--pwa-font-ui); }

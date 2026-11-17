@@ -7,7 +7,7 @@ import { describe, expect, test } from "vitest";
 import { CONTENT_ENTER_OPACITY } from "@/components/pwa/use-timeline-enter-fade";
 import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 import { piReachTheme } from "@/lib/ui/pi-reach-theme";
-import { ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG, SMALL_SPINNER_SIZE } from "@/lib/ui/icon-metrics";
+import { ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG } from "@/lib/ui/icon-metrics";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 const SOURCE_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -19,8 +19,8 @@ const VIEWPORT_QUERIES_FILE = "lib/ui/viewport-queries.ts";
 const MOTION_READER_FILES = new Set(["lib/ui/motion-duration.ts", "lib/ui/motion.ts"]);
 const MOTION_TOKEN_READ = /getPropertyValue\(\s*["'`]--pwa-(?:duration|ease)-/g;
 const DESKTOP_MIN_WIDTH = 768;
-/** 16 按钮内与状态行、20 图标按钮与导航、24 大尺寸；12 只经具名常量出现。 */
-const ICON_SIZES = new Set(["16", "20", "24", "SMALL_SPINNER_SIZE"]);
+/** 16 标记行内图标，实际为 1em；20 为独立操作与导航，24 为空状态等大尺寸。 */
+const ICON_SIZES = new Set(["16", "20", "24"]);
 // 线宽只由 LucideProvider 注入的全局值决定，单个图标不另写。
 const ICON_STROKES = new Set(["ICON_STROKE_WIDTH"]);
 
@@ -139,16 +139,18 @@ describe("script token guard", () => {
   });
 
   test("Lucide icons use the documented sizes and named stroke widths", () => {
-    expect([ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG, SMALL_SPINNER_SIZE]).toEqual([1.5, 2, 12]);
-    // 样式改写图标尺寸时同步改写线宽：每组 --pwa-icon-* 的线宽须等于 实际线宽 × 24 ÷ 尺寸，与脚本注入的实际线宽一致。
-    const sizes = [...THEME.matchAll(/--pwa-icon-(inline|control):\s*(\d+)px;\s*--pwa-icon-\1-stroke:\s*([\d.]+);/g)];
-    expect(sizes.map((match) => `${match[1]} ${match[2]}`)).toEqual(["inline 16", "control 20", "inline 18", "inline 20", "control 22"]);
-    for (const [, , size, stroke] of sizes) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH * 24 / Number(size), 3);
-    // 按钮内的行内图标另有加重线宽，随行内图标尺寸的每一档给出。
-    const strong = [...THEME.matchAll(/--pwa-icon-inline:\s*(\d+)px;\s*--pwa-icon-inline-stroke:\s*[\d.]+;\s*--pwa-icon-inline-stroke-strong:\s*([\d.]+);/g)];
-    expect(strong.map((match) => match[1])).toEqual(["16", "18", "20"]);
-    for (const [, size, stroke] of strong) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH_STRONG * 24 / Number(size), 3);
-    expect(THEME.match(/--pwa-icon-[a-z-]+:/g)).toHaveLength(sizes.length * 2 + strong.length);
+    expect([ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG]).toEqual([1.5, 2]);
+    const tokens = declarations("\n:root {");
+    // 行内图标按当前文字的 em 取尺寸，图元使用 non-scaling-stroke，线宽直接取实际像素值。
+    expect(tokens["--pwa-icon-inline"]).toBe("1em");
+    expect(Number(tokens["--pwa-icon-inline-stroke"])).toBe(ICON_STROKE_WIDTH);
+    expect(Number(tokens["--pwa-icon-inline-stroke-strong"])).toBe(ICON_STROKE_WIDTH_STRONG);
+    // 独立图标仍换算回 24 画布，触控设备的尺寸保持独立于文字。
+    const sizes = [...THEME.matchAll(/--pwa-icon-control:\s*(\d+)px;\s*--pwa-icon-control-stroke:\s*([\d.]+);/g)];
+    expect(sizes.map((match) => match[1])).toEqual(["20", "22"]);
+    for (const [, size, stroke] of sizes) expect(Number(stroke)).toBeCloseTo(ICON_STROKE_WIDTH * 24 / Number(size), 3);
+    expect([...THEME.matchAll(/--pwa-icon-inline:\s*([^;]+);/g)].map(match => match[1])).toEqual(["1em"]);
+    expect([...THEME.matchAll(/--pwa-icon-compact:\s*(\d+)px;/g)].map(match => Number(match[1]))).toEqual([16, 18, 20]);
     const offenders = sourceFiles(SOURCE_ROOT, [".tsx"]).sort().flatMap((path) => {
       const text = readFileSync(path, "utf8");
       const file = relative(SOURCE_ROOT, path);
