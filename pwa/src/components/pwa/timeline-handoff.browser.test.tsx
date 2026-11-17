@@ -270,8 +270,9 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
       event_id: "completion-run-end", event_seq: 4, session_id: HANDOFF_SCOPE.sessionId,
       leaf_id: event.leaf_id, group_id: "handoff-turn", timestamp: 3, kind: "run_end", status: "complete",
     }));
-    // run_end 等本轮显示放完才呈现：回复仍在收尾时不出现完成时间，也不改变布局。
+    // run_end 等本轮显示放完才呈现：回复仍在收尾时不出现完成时间和复制入口，也不改变布局。
     expect(h.list.querySelector(".pwa-turn-meta")).toBeNull();
+    expect(h.list.querySelector(".pwa-turn-copy")).toBeNull();
     expect(completion.before.partial && completion.after.partial).toBe(true);
     expect(completion.before.queued && completion.after.queued).toBe(true);
     expect(completion.after.header).toBe(completion.before.header);
@@ -285,8 +286,9 @@ test.each(replayCases.flatMap(replay => [0, replay.frameMs].map(delay => ({ ...r
       }
     }
     await assertSettled(h, clock, event);
-    // 回复放完后完成时间出现，整个过程没有同步跳变。
+    // 回复放完后完成时间与复制入口一起出现，整个过程没有同步跳变。
     expect(h.list.querySelector(".pwa-turn-meta")).not.toBeNull();
+    expect(h.list.querySelectorAll(".pwa-turn-meta .pwa-turn-copy")).toHaveLength(1);
     expect(synchronousJumps(recording.samples)).toEqual([]);
   } finally { recording.close(); await h.screen.unmount(); clock.restore(); }
 });

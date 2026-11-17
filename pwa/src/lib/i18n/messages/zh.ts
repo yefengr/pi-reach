@@ -428,6 +428,7 @@ export const zh: Messages = {
     working: en.timeline.working,
     turnInterrupted: "已中断",
     turnError: "出错",
+    copyReply: "复制回复原文",
     deliveryUnknown: "尚未确认",
     deliveryCheck: "核对状态",
     deliveryRetry: "重试发送",

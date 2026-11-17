@@ -299,7 +299,7 @@ describe("turn presentation", () => {
     const compaction: TimelineEvent = { ...scope, event_id: "c1", timestamp: 3, kind: "compaction", payload: "Summary", truncated: false };
     const html = renderList(events(user("u1", "g1", 1), answer("a1", "g1", 2), compaction, answer("b1", "g1", 4), runEnd("r1", "g1", 5, "error"),
       user("u2", "g2", 6), answer("a2", "g2", 7), runEnd("r2", "g2", 8)), { hasEarlier: false });
-    expect(html.match(/class="pwa-turn-meta"/g)).toHaveLength(2);
+    expect(html.match(/data-viewport-completion=/g)).toHaveLength(2);
     const first = html.indexOf('data-viewport-completion="g1"');
     expect(first).toBeGreaterThan(html.indexOf("Answer b1"));
     expect(first).toBeLessThan(html.indexOf("Question u2"));
@@ -308,8 +308,8 @@ describe("turn presentation", () => {
   test("shows the completion time once at the end of a finished turn without visible sender labels", () => {
     const finished = Date.UTC(2026, 0, 1, 9, 30);
     const html = renderList(events(user("u1", "g1", finished - 5000), answer("a1", "g1", finished - 1000), runEnd("r1", "g1", finished)), { hasEarlier: false });
-    expect(html.match(/class="pwa-turn-meta"/g)).toHaveLength(1);
-    expect(html).toMatch(/class="pwa-turn-meta"[^>]*><time[^>]*dateTime="2026-01-01T09:30:00.000Z"/);
+    expect(html.match(/data-viewport-completion=/g)).toHaveLength(1);
+    expect(html).toMatch(/data-viewport-completion="g1"[^>]*>.*?<time[^>]*dateTime="2026-01-01T09:30:00.000Z"/);
     expect(html).toMatch(/<span class="pwa-sr-only">You:<\/span>/);
     expect(html).toMatch(/<span class="pwa-sr-only">Pi:<\/span>/);
     expect(html).not.toMatch(/>Agent</);
