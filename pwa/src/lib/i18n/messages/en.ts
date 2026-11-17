@@ -424,6 +424,7 @@ export const en = {
     working: "Working…",
     turnInterrupted: "Interrupted",
     turnError: "Error",
+    copyReply: "Copy reply source",
     deliveryUnknown: "Not confirmed",
     deliveryCheck: "Check status",
     deliveryRetry: "Retry send",

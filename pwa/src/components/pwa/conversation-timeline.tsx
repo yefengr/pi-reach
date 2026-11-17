@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { MarkdownContent } from "./timeline-content";
+import { CopyButton } from "./copy-button";
 import { useStreamRevealAnimation, useStreamRevealMarks } from "./use-stream-reveal";
 import { ToolReader } from "./tool-reader";
 import { ThinkingReader } from "./thinking-reader";
@@ -74,13 +75,16 @@ function TextRow({ entry, entering, afterSettle }: { entry: TextEntry; entering:
   </article>;
 }
 
-/** 一轮结束后在末尾显示一次完成时间；中断或出错时附状态。 */
-function TurnMeta({ completion, interrupted, groupId, entering, afterSettle }: { completion: RunCompletion; interrupted: boolean; groupId: string; entering: boolean; afterSettle: boolean }) {
+/** 一轮结束后在末尾显示一次完成时间；复制入口与时间共用呈现条件。 */
+function TurnMeta({ completion, interrupted, groupId, replyText, entering, afterSettle }: { completion: RunCompletion; interrupted: boolean; groupId: string; replyText?: string; entering: boolean; afterSettle: boolean }) {
   const { t, format } = useI18n();
   // 在线会话新结束的一轮淡入完成时间；没有正文的组同时自动收起时等收起结束再出现。挂载时已有的不播放。
   const [motion] = useState(() => entering ? afterSettle ? " pwa-turn-meta-in pwa-enter-after-settle" : " pwa-turn-meta-in" : "");
   const status = completion.status === "error" ? t.timeline.turnError : completion.status === "interrupted" || interrupted ? t.timeline.turnInterrupted : null;
-  return <p className={`pwa-turn-meta${motion}`} data-viewport-completion={groupId}><time className="pwa-tabular" dateTime={new Date(completion.timestamp).toISOString()}>{format.time(completion.timestamp)}</time>{status ? <span className={completion.status === "error" ? "pwa-turn-status-error" : "pwa-turn-status"}> · {status}</span> : null}</p>;
+  return <p className={`pwa-turn-meta${replyText ? " pwa-turn-meta-copy" : ""}${motion}`} data-viewport-completion={groupId}>
+    <span><time className="pwa-tabular" dateTime={new Date(completion.timestamp).toISOString()}>{format.time(completion.timestamp)}</time>{status ? <span className={completion.status === "error" ? "pwa-turn-status-error" : "pwa-turn-status"}> · {status}</span> : null}</span>
+    {replyText ? <CopyButton className="pwa-turn-copy" text={replyText} label={t.timeline.copyReply} /> : null}
+  </p>;
 }
 
 /**
@@ -140,25 +144,30 @@ function conversationRows(entries: readonly PresentationEntry[], completions: Co
     const turn = groupId === undefined ? undefined : turns.get(groupId);
     const completion = groupId === undefined ? undefined : completions?.get(groupId);
     if (groupId === undefined || turn?.last !== index || !turn.output || !completion) return;
-    rows.push(<TurnMeta key={`turn:${groupId}`} completion={completion} interrupted={turn.interrupted} groupId={groupId} entering={meta.entering(groupId)} afterSettle={meta.afterSettle(groupId)} />);
+    rows.push(<TurnMeta key={`turn:${groupId}`} completion={completion} interrupted={turn.interrupted} groupId={groupId} replyText={turn.replyText} entering={meta.entering(groupId)} afterSettle={meta.afterSettle(groupId)} />);
   });
   flushNotices(Infinity);
   return rows;
 }
 
+type TurnEnd = { last: number; output: boolean; interrupted: boolean; replyText?: string };
+
 /**
- * 每轮最后一条的位置、是否有 Pi 输出与是否中断。完成时间只在这里输出一次：
+ * 每轮最后一条的位置、最后一段正文与结束信息。完成时间只在这里输出一次：
  * 压缩摘要等不带轮次的记录会把同一轮隔开，按连续段输出会重复，重复的 key 还会让 React 在更新中残留旧节点。
  */
-function turnEnds(entries: readonly PresentationEntry[]): Map<string, { last: number; output: boolean; interrupted: boolean }> {
-  const turns = new Map<string, { last: number; output: boolean; interrupted: boolean }>();
+function turnEnds(entries: readonly PresentationEntry[]): Map<string, TurnEnd> {
+  const turns = new Map<string, TurnEnd>();
   entries.forEach((entry, index) => {
     const groupId = entryGroupId(entry);
     if (groupId === undefined) return;
     const turn = turns.get(groupId) ?? { last: index, output: false, interrupted: false };
     turn.last = index;
     if (isPiOutputEntry(entry)) turn.output = true;
-    if (entry.kind === "text" && entry.interrupted) turn.interrupted = true;
+    if (entry.kind === "text") {
+      if (entry.text.trim()) turn.replyText = entry.text;
+      if (entry.interrupted) turn.interrupted = true;
+    }
     turns.set(groupId, turn);
   });
   return turns;

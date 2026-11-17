@@ -16,7 +16,7 @@ class UploadPort implements AttachmentUploadPort {
   readonly jobs = new Map<string, { file: File; resolve(value: AttachmentDescriptor): void; reject(error: unknown): void;
     progress(value: AttachmentUploadProgress): void; signal?: AbortSignal }>();
   readonly cancel = vi.fn(async () => undefined);
-  readonly cancelAttachment = vi.fn(async (_id: string, _scope: string) => undefined);
+  readonly cancelAttachment = vi.fn<AttachmentUploadPort["cancelAttachment"]>(async () => undefined);
   readonly release = vi.fn();
   readonly disconnect = vi.fn();
   readonly dispose = vi.fn();

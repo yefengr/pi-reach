@@ -39,7 +39,7 @@ function Harness() {
   useLayoutEffect(() => {
     update = patch => setProps(current => ({ ...current, ...patch }));
     updateQueue = setQueue;
-  });
+  }, []);
   return <MessageComposer {...props} queuedMessages={<span data-testid="queue">Queue {queue}</span>} />;
 }
 
