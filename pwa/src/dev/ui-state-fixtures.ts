@@ -30,7 +30,7 @@ export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[]
 ];
 const base = { session_id: "ui-states", leaf_id: "leaf", group_id: "demo", timestamp: 1 };
 export const GALLERY_CODE = 'const panel = { mode: "memory", connected: false };\nconsole.log(panel);';
-export const GALLERY_DOCUMENT = `---\nname: pi-reach-reader\ndescription: 带有 YAML 元数据的 Markdown 文件预览\n---\n\n# 阅读与对话并排\n\n此文件仅在本页内存中生成，不连接 Pi 或 Relay。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n` + Array.from({ length: 20 }, (_, index) => `## 阅读段落 ${index + 1}\n\n在空间足够时，详情在右侧打开，输入区保持可用。Keep the draft and reading position while the layout changes.\n\n`).join("");
+export const GALLERY_DOCUMENT = `---\nname: pi-reach-reader\ndescription: 带有 YAML 元数据的 Markdown 文件预览\n---\n\n# 阅读与对话并排\n\n此文件仅在本页内存中生成，不连接 Pi 或 Relay。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n## 表格\n\n| 状态 | 名称 | 说明 |\n| --- | --- | --- |\n| 就绪 | 文档 | 常见三列表格优先排进阅读宽度，说明较长时完整换行。 |\n| 就绪 | 预览 | 不截断内容，也不强制压缩为两行。 |\n\n| 状态 | 名称 | 说明 | 负责人 | 更新时间 |\n| --- | :---: | --- | --- | ---: |\n| 完成 | 阅读 | 五列表格也按容器宽度分配列宽，长说明完整展开。 | 维护者 | 昨天 |\n\n` + Array.from({ length: 20 }, (_, index) => `## 阅读段落 ${index + 1}\n\n在空间足够时，详情在右侧打开，输入区保持可用。Keep the draft and reading position while the layout changes.\n\n`).join("");
 export const GALLERY_FILES: PublishedFileDescriptor[] = [
   { publication_id: "notes", file_name: "界面演示.md", mime_type: "text/markdown", byte_length: new TextEncoder().encode(GALLERY_DOCUMENT).length, tool_call_id: "publish" },
   { publication_id: "picture", file_name: "内存布局.png", mime_type: "image/png", byte_length: 4096, tool_call_id: "publish" },
@@ -111,7 +111,7 @@ export function galleryItems(state: GalleryState, retried: boolean): TimelineVie
   if (state === "tool-types") return toolTypeItems();
   if (state === "tool-details") return detailToolItems();
   if (state === "failure") return [tool(retried ? "complete" : "error"), text("failure-note", retried ? "演示工具重试已完成。" : "工具失败保留原始输出，附件失败保留独立重试入口。")];
-  if (state === "long") return [text("long", `## 阅读与换行\n\n中英文正文保持原有排版。Long English text should wrap inside the reading column without widening the page.\n\n\`pwa/src/components/pwa/very-long-directory-name/another-long-directory-name/reader-drawer-and-state.tsx\`\n\n> 阅读位置和输入草稿应在宽度切换时保持。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n| 状态 | 说明 |\n| --- | --- |\n| 内存 | 不连接远程服务 |\n| 草稿 | 仅保留在本页 |\n\n${"长段落用于检查自然换行。Keep the reading column comfortable. ".repeat(14)}`),
+  if (state === "long") return [text("long", `## 阅读与换行\n\n中英文正文保持原有排版。Long English text should wrap inside the reading column without widening the page.\n\n\`pwa/src/components/pwa/very-long-directory-name/another-long-directory-name/reader-drawer-and-state.tsx\`\n\n> 阅读位置和输入草稿应在宽度切换时保持。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n| 状态 | 名称 | 说明 | 负责人 | 更新时间 |\n| --- | :---: | --- | --- | ---: |\n| 完成 | 阅读 | 五列表格在窄屏上按容器宽度完整展开，说明较长时也不截断。 | 维护者 | 昨天 |\n\n| 名称 | 标识 | 状态 |\n| --- | --- | --- |\n| 长标识 | 9f2c4d8e7a1b6c3d5e0f2a4b8c6d1e3f5a7b9c0d2e4f6a8b1c3d5e7f9a0b2c4d | 由外层横滚 |\n\n${"长段落用于检查自然换行。Keep the reading column comfortable. ".repeat(14)}`),
     { kind: "event", event: { ...base, event_id: "long-run-end", kind: "run_end", status: "complete", timestamp: 1000 } },
   ];
   if (state !== "files") return conversationItems(state);

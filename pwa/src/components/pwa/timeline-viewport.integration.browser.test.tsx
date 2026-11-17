@@ -75,7 +75,7 @@ test.each([1280, 390])("Markdown growth, shrink and completion keep the follower
   const history = answer("history", paragraphs("Earlier"));
   const drafts = [
     "| Column | Value |",
-    "| Column | Value |\n| --- | --- |\n| a | b |\n| c | d |",
+    "| 状态 | 名称 | 说明 |\n| --- | --- | --- |\n| 完成 | 阅读 | 长单元格在窄屏上完整换行，不截断也不撑宽正文。 |",
     "```ts\nconst value = 1;\nconst next = value + 1;\n```\n\n- one\n- two",
     "A short final response.",
   ];
@@ -116,7 +116,7 @@ test.each([1280, 390])("reading a later message survives Markdown height changes
     const target = screen.getByText("This is the paragraph being read.").element();
     await readAt(target);
     const top = offset(target, list);
-    for (const text of [paragraphs("Above", 12), "| Item | Result |\n| --- | --- |\n| first | ready |", "```\nline one\nline two\n```\n\nLast paragraph."]) {
+    for (const text of [paragraphs("Above", 12), "| 状态 | 名称 | 说明 |\n| --- | --- | --- |\n| 完成 | 阅读 | 长单元格在宽度变化后仍完整显示，不截断内容。 |", "```\nline one\nline two\n```\n\nLast paragraph."]) {
       update([partial("above", text), reading, tail]);
       await settleLayout();
       expect(Math.abs(offset(target, list) - top)).toBeLessThanOrEqual(1);
