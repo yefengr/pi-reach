@@ -30,7 +30,7 @@ export const GALLERY_STATES: { id: GalleryState; label: string; note: string }[]
 ];
 const base = { session_id: "ui-states", leaf_id: "leaf", group_id: "demo", timestamp: 1 };
 export const GALLERY_CODE = 'const panel = { mode: "memory", connected: false };\nconsole.log(panel);';
-export const GALLERY_DOCUMENT = `# 阅读与对话并排\n\n此文件仅在本页内存中生成，不连接 Pi 或 Relay。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n` + Array.from({ length: 20 }, (_, index) => `## 阅读段落 ${index + 1}\n\n在空间足够时，详情在右侧打开，输入区保持可用。Keep the draft and reading position while the layout changes.\n\n`).join("");
+export const GALLERY_DOCUMENT = `---\nname: pi-reach-reader\ndescription: 带有 YAML 元数据的 Markdown 文件预览\n---\n\n# 阅读与对话并排\n\n此文件仅在本页内存中生成，不连接 Pi 或 Relay。\n\n\`\`\`typescript\n${GALLERY_CODE}\n\`\`\`\n\n` + Array.from({ length: 20 }, (_, index) => `## 阅读段落 ${index + 1}\n\n在空间足够时，详情在右侧打开，输入区保持可用。Keep the draft and reading position while the layout changes.\n\n`).join("");
 export const GALLERY_FILES: PublishedFileDescriptor[] = [
   { publication_id: "notes", file_name: "界面演示.md", mime_type: "text/markdown", byte_length: new TextEncoder().encode(GALLERY_DOCUMENT).length, tool_call_id: "publish" },
   { publication_id: "picture", file_name: "内存布局.png", mime_type: "image/png", byte_length: 4096, tool_call_id: "publish" },
