@@ -1,8 +1,9 @@
 import { isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { useI18n } from "@/lib/i18n";
 import { CopyButton } from "./copy-button";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkFrontmatter from "remark-frontmatter";
 import { safeFileLink } from "@/lib/pwa/file-preview";
 import { markdownTableComponents } from "./markdown-table";
 import "./timeline-content.css";
@@ -50,13 +51,23 @@ const fileMarkdownComponents: Components = {
   ...markdownTableComponents,
 };
 
+// frontmatter 默认不进入 HTML；复用代码块呈现，并从原文保留边界与换行。
+function frontmatterOptions(text: string): Options["remarkRehypeOptions"] {
+  return { handlers: { yaml: (state, node, parent) => {
+    const code = { type: "code" as const, lang: "yaml", value: text.slice(node.position!.start.offset!, node.position!.end.offset!), position: node.position };
+    return state.one(code, parent);
+  } } };
+}
+
 /** 文件正文不继承聊天 Markdown 的图片资源与代码高亮策略。 */
-export function FileTextContent({ text, markdown, onHeadings }: { text: string; markdown: boolean; onHeadings?: (headings: readonly DocumentHeading[]) => void }) {
+export function FileTextContent({ text, markdown, allowFrontmatter = true, onHeadings }: { text: string; markdown: boolean; allowFrontmatter?: boolean; onHeadings?: (headings: readonly DocumentHeading[]) => void }) {
   const id = useId();
   const collected = useMemo(() => {
     const headings: DocumentHeading[] = [];
-    return { headings, plugin: headingCollector(id, headings), text };
-  }, [id, text]);
+    return { headings, plugin: headingCollector(id, headings), text,
+      remarkPlugins: allowFrontmatter ? [remarkGfm, remarkFrontmatter] : [remarkGfm],
+      remarkRehypeOptions: frontmatterOptions(text) };
+  }, [id, text, allowFrontmatter]);
   const headingsCallback = useRef(onHeadings);
   useLayoutEffect(() => { headingsCallback.current = onHeadings; }, [onHeadings]);
   useEffect(() => {
@@ -64,7 +75,8 @@ export function FileTextContent({ text, markdown, onHeadings }: { text: string; 
   }, [collected, markdown]);
   if (!markdown) return <pre className="pwa-file-plain">{text}</pre>;
   return <div className="pwa-markdown pwa-file-markdown"><ReactMarkdown
-    remarkPlugins={[remarkGfm]}
+    remarkPlugins={collected.remarkPlugins}
+    remarkRehypeOptions={collected.remarkRehypeOptions}
     rehypePlugins={[collected.plugin]}
     skipHtml
     urlTransform={(url) => safeFileLink(url) ?? ""}

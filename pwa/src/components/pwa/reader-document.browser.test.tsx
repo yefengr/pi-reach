@@ -22,6 +22,53 @@ test("rendered heading descriptors match actual targets, including duplicates an
   await screen.unmount();
 });
 
+const frontmatter = '---\nname: example-skill\ndescription: |\n  # literal metadata\n  ![private](https://remote.test/private.png)\n---';
+
+test.each([320, 1280])("frontmatter stays literal, out of the TOC, and lossless in source and copy at width %s", async width => {
+  await page.viewport(width, 740);
+  const text = `${frontmatter}\n\n# Body\n\n## Next`;
+  const onHeadings = vi.fn();
+  const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const screen = await renderPwa(<div style={{ width: width === 320 ? "288px" : "680px" }}><ReaderDocument text={text} markdown startLine={1} onHeadings={onHeadings} /></div>);
+  try {
+    await expect.poll(() => onHeadings.mock.lastCall?.[0]?.map((heading: DocumentHeading) => heading.text)).toEqual(["Body", "Next"]);
+    const content = document.querySelector<HTMLElement>(".pwa-file-markdown")!;
+    const code = content.querySelector<HTMLElement>(".pwa-code-block pre code")!;
+    expect(code.textContent).toBe(frontmatter);
+    expect(content.querySelector("hr, img")).toBeNull();
+    expect(content.scrollWidth).toBe(content.clientWidth);
+    expect(Number.parseFloat(getComputedStyle(code).fontSize)).toBeLessThan(Number.parseFloat(getComputedStyle(content.querySelector("h1")!).fontSize));
+    await screen.getByRole("button", { name: "Copy code", exact: true }).click();
+    expect(copy).toHaveBeenLastCalledWith(frontmatter);
+    await screen.getByRole("button", { name: "Copy content", exact: true }).click();
+    expect(copy).toHaveBeenLastCalledWith(text);
+    await screen.getByRole("button", { name: "Source", exact: true }).click();
+    expect([...document.querySelectorAll(".pwa-reader-source-text")].map(line => line.textContent).join("\n")).toBe(text);
+    await expect.poll(() => onHeadings.mock.lastCall?.[0]).toEqual([]);
+  } finally {
+    copy.mockRestore();
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});
+
+test.each([
+  { startLine: 1, allowFrontmatter: true, recognized: true },
+  { startLine: 41, allowFrontmatter: true, recognized: false },
+  { startLine: undefined, allowFrontmatter: false, recognized: false },
+])("partial preview recognizes metadata only at a confirmed file beginning: %j", async ({ startLine, allowFrontmatter, recognized }) => {
+  const text = "---\nname: example-skill\ndescription: metadata\n---\n\n# Body";
+  const screen = await renderPwa(<ReaderDocument text={text} markdown partial startLine={startLine} allowFrontmatter={allowFrontmatter} />);
+  try {
+    await screen.getByRole("button", { name: "Preview", exact: true }).click();
+    expect(document.querySelector(".pwa-code-language")?.textContent === "yaml").toBe(recognized);
+    expect(document.querySelector(".pwa-file-markdown hr") !== null).toBe(!recognized);
+    expect(document.querySelector(".pwa-file-markdown h1")?.textContent).toBe("Body");
+  } finally {
+    await screen.unmount();
+  }
+});
+
 test("partial Markdown starts in source, preserves file line numbers, and copies the unchanged original", async () => {
   const text = '# Title\n\n## Next\n';
   const onHeadings = vi.fn();

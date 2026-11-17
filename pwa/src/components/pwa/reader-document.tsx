@@ -8,6 +8,7 @@ import "./reader-document.css";
 export type ReaderDocumentProps = {
   text: string;
   markdown: boolean;
+  allowFrontmatter?: boolean;
   partial?: boolean;
   sourceLabel?: string;
   fileInfo?: string;
@@ -34,7 +35,7 @@ function NumberedSource({ lines, startLine }: { lines: readonly string[]; startL
 }
 
 /** 直接复制原文；文档排版和行号均不参与复制内容转换。 */
-export function ReaderDocument({ text, markdown, partial = false, sourceLabel, fileInfo, onHeadings, onPreviewChange, initialSource, startLine, endLine }: ReaderDocumentProps) {
+export function ReaderDocument({ text, markdown, allowFrontmatter = true, partial = false, sourceLabel, fileInfo, onHeadings, onPreviewChange, initialSource, startLine, endLine }: ReaderDocumentProps) {
   const { t } = useI18n();
   const [source, setSource] = useState(initialSource ?? partial);
   const preview = markdown && !source;
@@ -56,7 +57,7 @@ export function ReaderDocument({ text, markdown, partial = false, sourceLabel, f
         <CopyButton text={text} label={t.files.copyContent} className="pwa-icon-button" />
       </div>
     </div>
-    {preview ? <FileTextContent text={text} markdown onHeadings={onHeadings} /> : <>
+    {preview ? <FileTextContent text={text} markdown allowFrontmatter={allowFrontmatter && (startLine === undefined || startLine === 1)} onHeadings={onHeadings} /> : <>
       {numbered ? <NumberedSource lines={lines} startLine={startLine!} /> : <FileTextContent text={text} markdown={false} />}
     </>}
   </div>;

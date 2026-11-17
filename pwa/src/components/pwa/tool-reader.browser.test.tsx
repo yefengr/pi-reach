@@ -135,6 +135,27 @@ test("Edit without saved differences retains the confirmed title and explanatory
   } finally { await screen.unmount(); }
 });
 
+test.each([
+  { tool: "read", offset: undefined, recognized: true },
+  { tool: "read", offset: 41, recognized: false },
+  { tool: "read", offset: 0, recognized: false },
+  { tool: "write", offset: undefined, recognized: true },
+])("Markdown frontmatter follows the real tool source origin: %j", async ({ tool, offset, recognized }) => {
+  const text = "---\nname: example-skill\ndescription: metadata\n---\n\n# Body";
+  const current: ToolValue = { ...base, tool, args: { path: "notes.md", ...(offset === undefined ? {} : { offset }), ...(tool === "write" ? { content: text } : {}) }, result: [{ type: "text", text: tool === "write" ? "Successfully wrote to notes.md" : text }] };
+  const copied = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const screen = await renderPwa(<ToolReader value={current} opened onClose={() => {}} />);
+  try {
+    await screen.getByRole("button", { name: "Preview", exact: true }).click();
+    const body = document.querySelector(".pwa-tool-reader-scroll")!;
+    expect(body.querySelector(".pwa-code-language")?.textContent === "yaml").toBe(recognized);
+    expect(body.querySelector(".pwa-file-markdown hr") !== null).toBe(!recognized);
+    expect(body.querySelector(".pwa-file-markdown h1")?.textContent).toBe("Body");
+    await screen.getByRole("button", { name: "Copy content", exact: true }).click();
+    expect(copied).toHaveBeenLastCalledWith(text);
+  } finally { copied.mockRestore(); await screen.unmount(); }
+});
+
 test("Read shows actual file lines and copies only the returned source", async () => {
   const current: ToolValue = { ...base, args: { path: "notes.txt", offset: 20, limit: 100 }, result: [{ type: "text", text: "alpha\nbeta\n\n[3 more lines in file. Use offset=22 to continue.]" }] };
   const copied = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();

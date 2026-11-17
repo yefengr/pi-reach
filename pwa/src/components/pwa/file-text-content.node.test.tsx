@@ -3,6 +3,46 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MantineProvider } from "@mantine/core";
 import { FileTextContent } from "./file-text-content";
 
+describe("file Markdown frontmatter", () => {
+  test.each(["\n", "\r\n"])("preserves YAML as literal code with %j line endings", newline => {
+    const metadata = ["---", "name: example-skill", "description: |", "  # not a heading", '  <img src="https://remote.test/private">', "---"].join(newline);
+    const html = renderToStaticMarkup(<MantineProvider><FileTextContent markdown text={`${metadata}${newline}${newline}# Body`} /></MantineProvider>);
+    expect(html).toContain('class="pwa-code-language">yaml</span>');
+    expect(html).toContain(`---${newline}name: example-skill${newline}`);
+    expect(html).toContain("# not a heading");
+    expect(html).toContain("&lt;img");
+    expect(html).not.toMatch(/<hr\b|<h2\b|<img\b/);
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+    expect(html).toMatch(/<h1 id="[^"]+">Body<\/h1>/);
+  });
+
+  test("leaves ordinary rules, setext headings, and fenced metadata unchanged", () => {
+    const text = 'Introduction\n\n---\n\nname: ordinary text\n---\n\n```yaml\n---\nname: fenced\n---\n```';
+    const html = renderToStaticMarkup(<MantineProvider><FileTextContent markdown text={text} /></MantineProvider>);
+    expect(html.match(/<hr\/>/g)).toHaveLength(1);
+    expect(html).toMatch(/<h2 id="[^"]+">name: ordinary text<\/h2>/);
+    expect(html.match(/class="pwa-code-language">yaml<\/span>/g)).toHaveLength(1);
+    expect(html).toContain("---\nname: fenced\n---");
+  });
+
+  test("preserves UTF-8 BOM input and an empty metadata section", () => {
+    for (const metadata of ["\uFEFF---\nname: example-skill\n---", "---\n---"]) {
+      const html = renderToStaticMarkup(<MantineProvider><FileTextContent markdown text={`${metadata}\n\n# Body`} /></MantineProvider>);
+      expect(html).toContain('class="pwa-code-language">yaml</span>');
+      expect(html).not.toContain("<hr/>");
+      expect(html).toMatch(/<h1 id="[^"]+">Body<\/h1>/);
+    }
+  });
+
+  test("does not swallow an unclosed metadata block", () => {
+    const html = renderToStaticMarkup(<FileTextContent markdown text={"---\nname: example-skill\ndescription: unfinished\n\n# Body"} />);
+    expect(html).toContain("name: example-skill");
+    expect(html).toContain("description: unfinished");
+    expect(html).toContain("<hr/>");
+    expect(html).toMatch(/<h1 id="[^"]+">Body<\/h1>/);
+  });
+});
+
 describe("file Markdown never acquires resources", () => {
   test("images and HTML cannot become active elements", () => {
     const html = renderToStaticMarkup(<FileTextContent markdown text={'# 文档\n![remote](https://remote.test/a.png)\n![local](file:///tmp/a.svg)\n<img src="https://remote.test/b"><script>alert(1)</script><iframe src="/app"></iframe>'} />);
