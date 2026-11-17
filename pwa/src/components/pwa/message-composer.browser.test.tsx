@@ -1350,7 +1350,7 @@ test("keeps the model settings and the Pi command menu exclusive, closes on Esca
 });
 
 
-test("operation hint owns the single notice line and keeps a 12px spinner 8px above the card", async () => {
+test("operation hint owns the single in-card notice line with a text-sized spinner", async () => {
   await page.viewport(390, 844);
   const screen = await renderPwa(<ComposerHarness operationHint={{ text: "Creating a new session…", tone: "running", busy: true }} attachmentNotice="Uploads paused" />);
   try {
@@ -1361,7 +1361,8 @@ test("operation hint owns the single notice line and keeps a 12px spinner 8px ab
     expect(hint.getAttribute("data-tone")).toBe("running");
     const spinner = hint.querySelector("svg")!;
     const text = hint.querySelector("span")!;
-    expect(Math.round(spinner.getBoundingClientRect().width)).toBe(12);
+    const fontSize = Math.round(Number.parseFloat(getComputedStyle(text).fontSize));
+    expect(Math.round(Number.parseFloat(getComputedStyle(spinner).width))).toBe(fontSize);
     expect(Math.round(text.getBoundingClientRect().left - spinner.getBoundingClientRect().right)).toBe(6);
     const card = document.querySelector<HTMLElement>(".pwa-composer-card")!;
     expect(card.contains(hint)).toBe(true);
