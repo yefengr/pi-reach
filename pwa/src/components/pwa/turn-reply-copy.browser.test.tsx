@@ -45,10 +45,15 @@ async function fixture(initial: TimelineViewItem[], isLive = true) {
   return { screen, update: (items: TimelineViewItem[]) => flushSync(() => updateItems(items)) };
 }
 
-beforeEach(() => { setLanguagePreference("en"); });
+beforeEach(async () => {
+  setLanguagePreference("en");
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+});
 afterEach(async () => {
   vi.restoreAllMocks();
   await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  await cdp().send("Emulation.setEmulatedMedia", { features: [] });
   await page.viewport(1280, 900);
   setLanguagePreference("system");
 });
@@ -114,13 +119,21 @@ test.each([1280, 390])("fine-pointer controls reveal on hover and keyboard focus
   await fixture([answer("final", "Reply without a link or code block."), end()]);
   const button = copyButton()!;
   const meta = button.closest<HTMLElement>(".pwa-turn-meta")!;
-  await userEvent.hover(document.querySelector<HTMLElement>(".pwa-message-list")!);
+  const list = document.querySelector<HTMLElement>(".pwa-message-list")!;
+  const reply = document.querySelector<HTMLElement>(".pwa-message.assistant")!;
+  expect(matchMedia("(hover: hover) and (pointer: fine)").matches).toBe(true);
+  expect(matchMedia("(any-pointer: coarse)").matches).toBe(false);
+  // 在正文上移动鼠标，明确离开完成时间行；不依赖滚动容器中心落在哪里。
+  list.focus();
+  await userEvent.hover(reply);
+  expect(meta.matches(":hover, :focus-within")).toBe(false);
   await expect.poll(() => getComputedStyle(button).opacity).toBe("0");
   await userEvent.hover(meta);
   await expect.poll(() => getComputedStyle(button).opacity).toBe("1");
-  await userEvent.hover(document.querySelector<HTMLElement>(".pwa-message-list")!);
+  await userEvent.hover(reply);
+  expect(meta.matches(":hover, :focus-within")).toBe(false);
   await expect.poll(() => getComputedStyle(button).opacity).toBe("0");
-  document.querySelector<HTMLElement>(".pwa-message-list")!.focus();
+  list.focus();
   await userEvent.keyboard("{Tab}");
   expect(document.activeElement).toBe(button);
   await expect.poll(() => getComputedStyle(button).opacity).toBe("1");
