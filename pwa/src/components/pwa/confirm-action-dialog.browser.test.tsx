@@ -116,6 +116,31 @@ test("traps focus in the dialog and returns it to the explicit trigger after clo
   await expect.element(trigger).toHaveFocus();
 });
 
+test.each([1280, 390])("shows keyboard focus outlines on both confirmation actions at %ipx", async width => {
+  await page.viewport(width, 844);
+  const { screen, dialog, trigger } = await openConfirmation();
+  const actions = new Set<Element>([
+    screen.getByRole("button", { name: "Cancel", exact: true }).element(),
+    screen.getByRole("button", { name: "Start fresh session", exact: true }).element(),
+  ]);
+  await expect.poll(() => dialog.element().contains(document.activeElement)).toBe(true);
+  screen.getByRole("button", { name: "Close confirmation dialog", exact: true }).element().focus();
+  const visited = new Set<Element>();
+  for (let step = 0; step < actions.size; step += 1) {
+    await userEvent.tab();
+    const focused = document.activeElement!;
+    expect(actions.has(focused)).toBe(true);
+    expect(focused.matches(":focus-visible")).toBe(true);
+    const style = getComputedStyle(focused);
+    expect([style.outlineStyle, style.outlineWidth, style.outlineOffset]).toEqual(["solid", "2px", "0px"]);
+    visited.add(focused);
+  }
+  expect(visited.size).toBe(actions.size);
+  await userEvent.keyboard("{Escape}");
+  await expect.element(dialog).not.toBeInTheDocument();
+  await expect.element(trigger).toHaveFocus();
+});
+
 test("locks every close path while confirmation is pending", async () => {
   let resolveConfirmation!: () => void;
   const pendingConfirmation = new Promise<void>((resolve) => {

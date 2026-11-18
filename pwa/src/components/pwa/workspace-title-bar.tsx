@@ -5,6 +5,7 @@ import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 import { RefreshCw, TextAlignStart } from "lucide-react";
 import { refreshPwaApp } from "@/lib/pwa/service-worker-update";
 import { useI18n } from "@/lib/i18n";
+import { useNavigationFocusRing } from "./use-navigation-focus-ring";
 
 export type WorkspaceTitleBarProps = {
   /** 当前会话名；移动端导航入口在没有会话时显示电脑名或「导航」。 */
@@ -30,8 +31,11 @@ export function WorkspaceTitleBar({ title, showTitle, prefix, status, moreMenu, 
   const { t } = useI18n();
   // 按断点卸载入口及其 Portal，避免桌面留下隐藏焦点或重现已打开的信息层。
   const mobile = useMediaQuery(MOBILE_LAYOUT_QUERY);
+  // 入口自身的输入方式标记：已知普通触摸关闭后不残留焦点圆圈，其余输入仍走原生 :focus-visible。
+  const navigationFocusRef = useNavigationFocusRing<HTMLButtonElement>();
   return <header className="pwa-topbar pwa-title-bar">
     <UnstyledButton
+      ref={navigationFocusRef}
       className="pwa-session-trigger"
       onClick={(event) => onOpenNavigation(event.currentTarget)}
       aria-label={t.navigation.open}

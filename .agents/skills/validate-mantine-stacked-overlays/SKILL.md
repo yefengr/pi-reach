@@ -33,6 +33,8 @@ description: 在 Pi Reach PWA 中实现或审查 Mantine Modal、Drawer、Menu�
 - 阅读器 history 标记可能早于 Portal 挂载。系统返回测试先等真实 Dialog 可见，再触发返回；返回后先等 history 标记清除，再确认 DOM 卸载。否则把尚未挂载误判为已关闭，提前 cleanup 可触发第二次 `history.back()` 并退出测试页面。
 - `renderPwa` 提供测试根，真实 PwaApp 集成路径不得再套额外同名 `.pwa-root`；核对实际父节点。Mantine 可能重写 `aria-labelledby`，先查真实可访问名称，再限定容器或精确定位。
 - 浏览器点击不保证触发器先成为 `document.activeElement`；验证回焦前显式 focus，再 click。短 accessible name 可能匹配关闭按钮，不猜定位器。
+- 程序回焦后的 `:focus-visible` 可能沿用之前的可见状态，不能仅凭最后一次操作是触摸就假定没有焦点环。移动导航需分别检查实际 DOM 焦点与入口图标的 computed outline，覆盖触屏关闭后回焦、键盘接管和虚拟激活；修正显示条件时保留焦点交接，不用 `blur()` 或移动断点统一关闭轮廓。
+- Mantine 的 `.mantine-focus-never:focus` 会压过只有元素名的 `:focus-visible` 兜底；修正按钮／链接的选择器时，验证确认按钮与设置保存按钮的 computed outline，并保留图标／模型入口的专用偏移和单选行的整行轮廓，避免把输入控件一并提权后画出双圈。
 - 从 Drawer 打开非 Portal 或低层级子 Modal，可能被底层覆盖；按已确认流程先完成 Drawer 退出（如移动导航进入配对／重命名），或使用正确 Portal 与层级，不能静默改动作交接规则。
 - `Drawer.Content` 的 class 可能同时落在 inner 与 content；尺寸、纵向 flex 和定位用实际节点与 Styles API 核对。Group 的内联 flex 可能覆盖低特异性移动 CSS，检查 computed style 而不只看截图。
 - 全屏外框高度不证明正文可滚动。核对 content 的纵向 flex、header 不收缩、正文 `min-height: 0` 与剩余高度；使用超出视口的真实内容实际滚到末尾，再验焦点和关闭。
