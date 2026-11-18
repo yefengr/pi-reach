@@ -146,7 +146,7 @@
 
   function cardExtRows(items) {
     if (!items.length) return "";
-    const rows = items.map((item) => "<dt>" + esc(item.label) + '</dt><dd class="ext-text"' + toneAttr(item) + ' title="' + esc(item.text) + '">' + esc(item.text) + "</dd>").join("");
+    const rows = items.map((item) => "<dt>" + esc(item.label) + '</dt><dd class="ext-text num"' + toneAttr(item) + ' title="' + esc(item.text) + '">' + esc(item.text) + "</dd>").join("");
     return '<dl class="card-grid ext">' + rows + "</dl>";
   }
 
@@ -241,7 +241,7 @@
   function mobileExtRows(items) {
     return items.map((item) => {
       const stack = item.text.length > EXT_INLINE_CHARS ? " stack" : "";
-      return '<div class="m-row' + stack + '"><span class="k">' + esc(item.label) + '</span><span class="v ext-text"' + toneAttr(item) + ">" + esc(item.text) + "</span></div>";
+      return '<div class="m-row' + stack + '"><span class="k">' + esc(item.label) + '</span><span class="v ext-text num"' + toneAttr(item) + ">" + esc(item.text) + "</span></div>";
     }).join("");
   }
 
