@@ -354,6 +354,10 @@
   .pwa-root .pwa-session-trigger-icon > svg { position: relative; }
   @media (hover: hover) { .pwa-root .pwa-session-trigger:hover .pwa-session-trigger-icon::before { background: var(--pwa-hover); } }
   .pwa-root .pwa-session-trigger:focus-visible .pwa-session-trigger-icon { outline: 2px solid var(--pwa-accent); outline-offset: -4px; }
+  /* 已知普通触摸关闭后不残留入口圆圈；键盘与虚拟激活会先清掉标记，强制颜色模式保留原生可见焦点。 */
+  @media (forced-colors: none) {
+    .pwa-root .pwa-session-trigger[data-navigation-touch]:focus-visible .pwa-session-trigger-icon { outline: none; }
+  }
   .pwa-root .pwa-session-trigger-icon .pwa-notice-dot { position: absolute; top: 9px; right: 9px; }
   .pwa-root .pwa-session-trigger-copy { min-width: 0; display: grid; text-align: left; }
   .pwa-root .pwa-session-trigger-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

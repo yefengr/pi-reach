@@ -43,6 +43,9 @@ select,
 textarea,
 [tabindex] { -webkit-tap-highlight-color: transparent; }
 
+/* 控件作用域提高按钮与链接的兜底优先级，覆盖 Mantine 的 .mantine-focus-never:focus。 */
+.pwa-ui-scope button:focus-visible,
+.pwa-ui-scope a:focus-visible,
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,

@@ -186,8 +186,9 @@ test("keeps the mobile Composer clear of the home indicator in a standalone app 
   const view = await renderWorkspace();
   const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
   const bottom = () => getComputedStyle(composer).paddingBottom;
-  // 浏览器标签页沿用 16；主屏 PWA 不设 viewport-fit=cover，系统不报告底部安全区，移动布局下限为 24。
-  expect(bottom()).toBe("16px");
+  // 标签页留白按实际输入能力取 8 或 16；主屏 PWA 不报告底部安全区时，移动布局下限为 24。
+  const browserGap = matchMedia("(any-pointer: coarse), (hover: none)").matches ? "8px" : "16px";
+  expect(bottom()).toBe(browserGap);
   const standalone = applyStandaloneRules();
   try {
     expect(bottom()).toBe("24px");
@@ -373,16 +374,17 @@ test("grows the single-line Composer input with the extra-large text size", asyn
   await view.screen.unmount();
 });
 
-test("keeps the mobile Composer bottom gap on focus without a touch screen", async () => {
-  // 窄桌面窗口聚焦时没有软键盘，留白保持不变。
+test("keeps the mobile Composer browser-tab bottom gap on focus for the current input capabilities", async () => {
+  // Linux 关闭触控模拟后可能仍报告 hover: none；没有软键盘时，两种输入布局聚焦后都应保持原留白。
   await page.viewport(390, 844);
-  await expect.poll(() => matchMedia("(any-pointer: coarse), (hover: none)").matches).toBe(false);
+  const expectedGap = matchMedia("(any-pointer: coarse), (hover: none)").matches ? "8px" : "16px";
   const view = await renderWorkspace();
   const composer = document.querySelector<HTMLElement>(".pwa-composer")!;
   try {
+    expect(getComputedStyle(composer).paddingBottom).toBe(expectedGap);
     view.input.focus({ preventScroll: true });
     await finishCssTransitions();
-    expect(getComputedStyle(composer).paddingBottom).toBe("16px");
+    expect(getComputedStyle(composer).paddingBottom).toBe(expectedGap);
   } finally {
     await view.screen.unmount();
   }

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
-import { ActionIcon, Badge, Button, Menu, NavLink, TextInput } from "@mantine/core";
+import { ActionIcon, Badge, Button, Menu, NavLink, TextInput, UnstyledButton } from "@mantine/core";
 import { Copy } from "lucide-react";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
@@ -12,6 +12,7 @@ import { usePwaAppearance } from "./pwa-appearance";
 import { usePwaMenuTransition } from "./use-pwa-motion";
 import { PRESS_ROW_DELAY_MS, PRESS_ROW_SLOP_PX } from "./use-pwa-press-feedback";
 import { ComputerRow } from "./workspace-device-control";
+import { enableTouch, touchOrigin, touchTap } from "@/test/browser/swipe";
 
 const setMotion = (reduce: boolean) => cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: reduce ? "reduce" : "no-preference" }] });
 const matrix = (element: Element, pseudo?: string) => new DOMMatrix(getComputedStyle(element, pseudo).transform === "none" ? undefined : getComputedStyle(element, pseudo).transform);
@@ -28,6 +29,65 @@ afterEach(async () => {
   localStorage.removeItem(APPEARANCE_STORAGE_KEY);
   setLanguagePreference("system");
   await page.viewport(1280, 900);
+});
+
+const focusCases = [1280, 390].flatMap(width => (["light", "dark"] as const).map(appearance => ({ width, appearance })));
+
+test.each(focusCases)("keeps shared keyboard focus visible and specialized offsets intact at $width px in $appearance", async ({ width, appearance }) => {
+  await page.viewport(width, 900);
+  localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance);
+  const screen = await renderPwa(<div data-testid="focus-controls" style={{ color: "var(--pwa-accent)" }}>
+    <button type="button">Focus start</button>
+    <Button>Primary focus</Button>
+    <Button variant="default">Secondary focus</Button>
+    <Button variant="transparent">Text focus</Button>
+    <Button variant="outline">Danger focus</Button>
+    <UnstyledButton>Unstyled focus</UnstyledButton>
+    <Button component="a" href="#focus-controls">Link focus</Button>
+    <ActionIcon aria-label="Icon focus"><Copy size={16} /></ActionIcon>
+    <UnstyledButton className="pwa-composer-model">Model focus</UnstyledButton>
+    <TextInput className="pwa-input" label="Input focus" />
+  </div>);
+  await expect.poll(() => document.documentElement.dataset.mantineColorScheme).toBe(appearance);
+  const accent = getComputedStyle(screen.getByTestId("focus-controls").element()).color;
+  screen.getByRole("button", { name: "Focus start", exact: true }).element().focus();
+  const targets = [
+    ...["Primary focus", "Secondary focus", "Text focus", "Danger focus", "Unstyled focus"].map(name => [screen.getByRole("button", { name, exact: true }), "0px"] as const),
+    [screen.getByRole("link", { name: "Link focus", exact: true }), "0px"],
+    [screen.getByRole("button", { name: "Icon focus", exact: true }), "-4px"],
+    [screen.getByRole("button", { name: "Model focus", exact: true }), "-6px"],
+    [screen.getByRole("textbox", { name: "Input focus", exact: true }), "0px"],
+  ] as const;
+  for (const [target, offset] of targets) {
+    await userEvent.tab();
+    await expect.element(target).toHaveFocus();
+    expect(target.element().matches(":focus-visible")).toBe(true);
+    const style = getComputedStyle(target.element());
+    expect([style.outlineStyle, style.outlineWidth, style.outlineColor, style.outlineOffset]).toEqual(["solid", "2px", accent, offset]);
+  }
+});
+
+test("keeps shared keyboard focus visible in forced colors", async () => {
+  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "forced-colors", value: "active" }] });
+  const screen = await renderPwa(<><button type="button">Focus start</button><Button>High contrast focus</Button></>);
+  screen.getByRole("button", { name: "Focus start", exact: true }).element().focus();
+  await userEvent.tab();
+  const target = screen.getByRole("button", { name: "High contrast focus", exact: true });
+  await expect.element(target).toHaveFocus();
+  expect(target.element().matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(target.element()).outlineStyle).toBe("solid");
+  expect(getComputedStyle(target.element()).outlineWidth).toBe("2px");
+});
+
+test("ordinary touch focus does not acquire a shared keyboard outline", async () => {
+  await page.viewport(390, 844);
+  await enableTouch();
+  const screen = await renderPwa(<Button>Touch focus</Button>);
+  const target = screen.getByRole("button", { name: "Touch focus", exact: true }).element();
+  await touchTap(touchOrigin(target));
+  await expect.poll(() => document.activeElement).toBe(target);
+  expect(target.matches(":focus-visible")).toBe(false);
+  expect(getComputedStyle(target).outlineStyle).toBe("none");
 });
 
 test("presses only internal Button and ActionIcon layers while target geometry stays fixed", async () => {

@@ -79,6 +79,26 @@ test("forwards the raw relay value and prevents duplicate saves until its deferr
   await expect.poll(() => savedValues).toEqual([rawValue, rawValue]);
 });
 
+test.each([1280, 390])("shows keyboard focus on Save settings without doubling the radio row outline at %ipx", async width => {
+  await page.viewport(width, 844);
+  const screen = await renderPwa(<SettingsHarness />);
+  screen.getByRole("textbox", { name: "Relay URL", exact: true }).element().focus();
+  await userEvent.tab();
+  const save = screen.getByRole("button", { name: "Save settings", exact: true });
+  await expect.element(save).toHaveFocus();
+  expect(save.element().matches(":focus-visible")).toBe(true);
+  const style = getComputedStyle(save.element());
+  expect([style.outlineStyle, style.outlineWidth, style.outlineOffset]).toEqual(["solid", "2px", "0px"]);
+
+  const radio = document.querySelector<HTMLInputElement>(".pwa-settings-choice input[type=radio]")!;
+  radio.focus();
+  expect(document.activeElement).toBe(radio);
+  expect(radio.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(radio).outlineStyle).toBe("none");
+  const row = getComputedStyle(radio.closest(".pwa-settings-choice")!);
+  expect([row.outlineStyle, row.outlineWidth, row.outlineOffset]).toEqual(["solid", "2px", "-2px"]);
+});
+
 test("routes back, reset and clear to the parent while staying on the page", async () => {
   const events: string[] = [];
   const screen = await renderPwa(<SettingsHarness events={events} backLabel="Back to navigation" />);
