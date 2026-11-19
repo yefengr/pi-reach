@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { stripVTControlCharacters } from "node:util";
+import { execFile } from "node:child_process";
+import { promisify, stripVTControlCharacters } from "node:util";
 import type { ExtensionContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
   SESSION_STATUS_BRANCH_CHARS, SESSION_STATUS_KEY_CHARS, SESSION_STATUS_LABEL_CHARS,
@@ -10,16 +10,19 @@ import {
 export type StatusContext = Pick<ExtensionContext, "sessionManager" | "getContextUsage" | "cwd">;
 export type StatusSnapshot = { sessionId: string; leafId: string | null; status: SessionStatus };
 
-export function readStatusBranch(cwd: string): string | null {
+const execFileAsync = promisify(execFile);
+
+export async function readStatusBranch(cwd: string): Promise<string | null> {
   try {
-    const branch = execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 1_000 }).trim();
+    const { stdout } = await execFileAsync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
+      { encoding: "utf8", timeout: 1_000 });
+    const branch = stdout.trim();
     return branch ? (branch === "HEAD" ? "detached" : branch.slice(0, SESSION_STATUS_BRANCH_CHARS)) : null;
   } catch { return null; }
 }
 
 export function readSessionStatus(ctx: StatusContext, settings: ReturnType<ExtensionAPI["getSettings"]>,
-  extensions: SessionStatusExtension[], branch = readStatusBranch(ctx.cwd)): StatusSnapshot {
+  extensions: SessionStatusExtension[], branch: string | null): StatusSnapshot {
   const usage: SessionStatus["usage"] = { input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0,
     cache_hit_rate_session: null, cache_hit_rate_latest: null };
   let latest: number | null = null;
@@ -64,7 +67,7 @@ export class SessionStatusExtensions {
   private readonly entries = new Map<string, SessionStatusExtension>();
   clear(): void { this.entries.clear(); }
   snapshot(): SessionStatusExtension[] {
-    return [...this.entries.values()].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0).slice(0, SESSION_STATUS_MAX_EXTENSIONS);
+    return [...this.entries.values()].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   }
   update(payload: unknown): boolean {
     if (!payload || typeof payload !== "object") return false;
@@ -80,6 +83,12 @@ export class SessionStatusExtensions {
     const next: SessionStatusExtension = { key: item.key, label, text,
       ...(item.tone === "warning" || item.tone === "error" ? { tone: item.tone } : {}), ...(section ? { section } : {}) };
     if (JSON.stringify(this.entries.get(item.key)) === JSON.stringify(next)) return false;
+    if (!this.entries.has(item.key) && this.entries.size >= SESSION_STATUS_MAX_EXTENSIONS) {
+      const last = this.snapshot().at(-1)!;
+      if (item.key > last.key) return false;
+      // 超限条目不留后备缓存；后续空位只能由来源重新上报补齐。
+      this.entries.delete(last.key);
+    }
     this.entries.set(item.key, next);
     return true;
   }

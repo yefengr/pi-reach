@@ -84,7 +84,8 @@ export class SessionStatusController {
     const ownReply = (frame.type === "pong" || frame.type === "protocol_error") && frame.in_reply_to?.startsWith(PREFIX);
     const isStatus = frame.type === "session_status";
     if (!current || origin !== current.connection.origin || "target_channel_id" in frame && frame.target_channel_id !== current.connection.channelId) return Boolean(ownReply || isStatus);
-    if (frame.type === "protocol_error" && (frame.in_reply_to === current.id || frame.in_reply_to === current.ping?.id)) {
+    if (frame.type === "protocol_error" && frame.in_reply_to !== undefined
+      && (frame.in_reply_to === current.id || frame.in_reply_to === current.ping?.id)) {
       this.fail(current, frame.in_reply_to === current.id && frame.code === "protocol_upgrade_required");
       return true;
     }
@@ -103,6 +104,7 @@ export class SessionStatusController {
     if (!current.confirmed) {
       if (Date.now() - current.renewedAt >= SESSION_STATUS_REQUEST_TIMEOUT_MS) { this.fail(current); return true; }
       current.confirmed = true;
+      current.retry = false;
       this.schedule(() => this.heartbeat(current), current.renewedAt + SESSION_STATUS_KEEPALIVE_MS - Date.now());
     }
     if (Date.now() >= current.renewedAt + SESSION_STATUS_LEASE_MS) { this.recover(current); return true; }

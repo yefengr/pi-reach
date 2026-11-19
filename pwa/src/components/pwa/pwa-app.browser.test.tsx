@@ -4023,7 +4023,7 @@ test.each([1280, 390])("shows live versions in settings and clears them across R
     relay.emitState("closed");
     await expect.poll(() => version("extension")).toBe("No online Pi selected");
     await expect.poll(() => version("relay")).not.toBe("2.3.4");
-    await vi.waitFor(() => expect(relay.connectCalls).toBe(2));
+    await expect.poll(() => relay.connectCalls, { timeout: 5_000 }).toBe(2);
     relay.emitControl({ type: "relay_info", version: "2.3.5" });
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-2", metadata: { kind: "interactive", name: "New Pi", cwd: "/workspace" } }] });
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));

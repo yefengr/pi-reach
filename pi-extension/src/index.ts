@@ -21,7 +21,7 @@ import { createOwnerBinding, type OwnerBinding } from "./runtime/create_owner_bi
 import { TimelineV2Service, type V2ActionFrame } from "./timeline/v2_service.js";
 import { TimelineRuntime } from "./timeline/runtime.js";
 import { SessionStatusService } from "./timeline/session-status-service.js";
-import { SessionStatusExtensions, readSessionStatus, type StatusContext } from "./timeline/session-status-data.js";
+import { SessionStatusExtensions, readSessionStatus, readStatusBranch, type StatusContext } from "./timeline/session-status-data.js";
 import { UserDeliveryBinding } from "./timeline/user_delivery_binding.js";
 import { handleModelSet, handleSessionCompact, handleThinkingSet, getModelsList, type ActionCtx, type ActionReplySender, type CurrentModelHint } from "./actions/handlers.js";
 import { ensureModelRegistry } from "./actions/registry.js";
@@ -64,8 +64,14 @@ let working = false;
 let currentSessionManager: SessionManager | null = null;
 let statusContext: StatusContext | null = null;
 const statusExtensions = new SessionStatusExtensions();
-const sessionStatus = new SessionStatusService(() => statusContext && piApi
-  ? readSessionStatus(statusContext, piApi.getSettings(), statusExtensions.snapshot()) : null);
+const sessionStatus = new SessionStatusService(async () => {
+  const ctx = statusContext;
+  if (!ctx || !piApi) return null;
+  const cwd = ctx.cwd;
+  const snapshot = readSessionStatus(ctx, piApi.getSettings(), statusExtensions.snapshot(), null);
+  snapshot.status.branch = await readStatusBranch(cwd);
+  return snapshot;
+});
 let timeline: TimelineRuntime | null = null;
 let piApi: ExtensionAPI | null = null;
 let footerCtx: Pick<ExtensionContext, "ui" | "mode"> | null = null;

@@ -238,10 +238,10 @@ export const en = {
     workingHint: "While Pi is working, Enter adds a new line. Use the stop button to stop Pi.",
   },
   sessionStatus: {
-    title: "Session status", context: "Context", high: "High", full: "Nearly full", window: "Window",
+    title: "Session status", context: "Context", occupied: "Used", high: "High", full: "Nearly full", window: "Window",
     autoCompact: "Auto-compaction", autoCompactOff: "Auto-compaction off", usage: "Usage", input: "Input", output: "Output",
     cacheRead: "Cache read", cacheWrite: "Cache write", cacheHit: "Cache hit rate", cacheHitLatest: "Latest cache hit rate",
-    cost: "Cost", usageNote: "Session totals, preserved after compaction.", session: "Session", name: "Name", computer: "Computer", branch: "Branch",
+    cost: "Cost", usageNote: "Session totals, preserved after compaction.", session: "Session", otherStatus: "Other status", name: "Name", computer: "Computer", branch: "Branch",
     loading: "Getting status…", unavailable: "Status is temporarily unavailable.", unsupported: "Update the Pi Reach extension to view session status.", offline: "Status is unavailable for offline sessions.",
   },
   actions: {

@@ -95,25 +95,57 @@ export function PwaWorkspaceLayout({
   const [statusOpen, setStatusOpen] = useState(false);
   const [statusMounted, setStatusMounted] = useState(false);
   const statusBlockedRef = useRef(false);
+  const statusPresentFrameRef = useRef<number | null>(null);
   const pendingSettingsRef = useRef<SettingsOrigin | null>(null);
+  const releaseStatus = useCallback(() => {
+    setStatusMounted(false);
+    const origin = pendingSettingsRef.current;
+    pendingSettingsRef.current = null;
+    if (origin) onOpenSettings(origin);
+  }, [onOpenSettings]);
+  const cancelPendingStatus = useCallback(() => {
+    if (statusPresentFrameRef.current === null) return false;
+    cancelAnimationFrame(statusPresentFrameRef.current);
+    statusPresentFrameRef.current = null;
+    // 收起态尚未经历打开，Mantine 不会发出退出通知，必须在这里释放实例和待交接动作。
+    releaseStatus();
+    return true;
+  }, [releaseStatus]);
+  const closeStatus = useCallback(() => {
+    if (!cancelPendingStatus()) setStatusOpen(false);
+  }, [cancelPendingStatus]);
   const requestSettings = useCallback((origin: SettingsOrigin) => {
     if (!statusMounted) { onOpenSettings(origin); return; }
     closeBackgroundOverlay(() => {
       pendingSettingsRef.current = origin;
-      setStatusOpen(false);
+      closeStatus();
     });
-  }, [statusMounted, onOpenSettings, closeBackgroundOverlay]);
+  }, [statusMounted, onOpenSettings, closeBackgroundOverlay, closeStatus]);
   useSessionStatusSpace(mainElement, Boolean(sessionStatus && sessionStatus.view.kind !== "offline"));
   const openStatus = useCallback(() => {
+    if (statusPresentFrameRef.current !== null) {
+      cancelAnimationFrame(statusPresentFrameRef.current);
+      statusPresentFrameRef.current = null;
+    }
     setStatusMounted(true);
     setStatusOpen(true);
   }, []);
   const statusDrag = useNavigationDrag({ rootRef, mainElement, sheetOpen: statusOpen, setSheetOpen: setStatusOpen, openNavigation: openStatus, selector: ".pwa-session-status-drawer", triggerSelector: ".pwa-session-status-trigger", side: "right" });
   const presentStatus = useCallback(() => {
-    if (!sessionStatus || settingsRoute.open || transitioning || sheetOpen || statusMounted || (mainElement && swipeBlocked(mainElement))) return;
+    if (!sessionStatus || settingsRoute.open || transitioning || sheetOpen || statusMounted || statusPresentFrameRef.current !== null || (mainElement && swipeBlocked(mainElement))) return;
     flushSync(() => setStatusMounted(true));
-    requestAnimationFrame(() => { if (window.matchMedia(MOBILE_LAYOUT_QUERY).matches) setStatusOpen(true); });
-  }, [sessionStatus, settingsRoute.open, transitioning, sheetOpen, statusMounted, mainElement]);
+    statusPresentFrameRef.current = requestAnimationFrame(() => {
+      if (!window.matchMedia(MOBILE_LAYOUT_QUERY).matches) {
+        cancelPendingStatus();
+        return;
+      }
+      statusPresentFrameRef.current = null;
+      setStatusOpen(true);
+    });
+  }, [sessionStatus, settingsRoute.open, transitioning, sheetOpen, statusMounted, mainElement, cancelPendingStatus]);
+  useEffect(() => () => {
+    if (statusPresentFrameRef.current !== null) cancelAnimationFrame(statusPresentFrameRef.current);
+  }, []);
   useEffect(() => {
     if (!mainElement) return;
     const down = (event: PointerEvent) => { statusBlockedRef.current = !window.matchMedia("(display-mode: standalone)").matches && event.clientX > window.innerWidth - SWIPE_EDGE_EXCLUSION_PX; };
@@ -123,10 +155,13 @@ export function PwaWorkspaceLayout({
   useSwipe(mainElement, { direction: "left", enabled: Boolean(sessionStatus) && !settingsRoute.open && !transitioning && (!statusOpen || statusDrag.gesture === "dragging"), onSwipe: () => { if (!statusBlockedRef.current) presentStatus(); }, canSwipe: () => !statusBlockedRef.current && (!sheetOpen || Boolean(rootRef.current?.querySelector('.pwa-session-sheet[data-swipe-drag]'))) && statusDrag.canSwipe(), drag: statusDrag.drag });
   useEffect(() => {
     const media = window.matchMedia(MOBILE_LAYOUT_QUERY);
-    const close = () => { if (!media.matches) setStatusOpen(false); };
+    const close = () => { if (!media.matches) closeStatus(); };
     media.addEventListener("change", close);
     return () => media.removeEventListener("change", close);
-  }, []);
+  }, [closeStatus]);
+  useLayoutEffect(() => {
+    if (settingsRoute.open || !sessionStatus || transitioning || sheetOpen) cancelPendingStatus();
+  }, [settingsRoute.open, sessionStatus, transitioning, sheetOpen, cancelPendingStatus]);
   const [statusContext, setStatusContext] = useState({ settingsOpen: settingsRoute.open, available: Boolean(sessionStatus) });
   if (statusContext.settingsOpen !== settingsRoute.open || statusContext.available !== Boolean(sessionStatus)) {
     setStatusContext({ settingsOpen: settingsRoute.open, available: Boolean(sessionStatus) });
@@ -345,13 +380,10 @@ export function PwaWorkspaceLayout({
         {sessionStatus && sessionStatus.view.kind !== "offline" ? <aside className="pwa-session-status-card" aria-label={t.sessionStatus.title}><h2>{t.sessionStatus.title}</h2><SessionStatusContent {...sessionStatus} /></aside> : null}
       </main>
     </div>
-    {statusMounted && sessionStatus ? <SessionStatusDrawer {...sessionStatus} opened={statusOpen || statusDrag.gesture === "dragging"} gesture={statusDrag.gesture} onClose={() => closeBackgroundOverlay(() => setStatusOpen(false))} onExitTransitionEnd={() => {
+    {statusMounted ? <SessionStatusDrawer {...(sessionStatus ?? { view: { kind: "offline" }, title: titleBar.title })} opened={Boolean(sessionStatus) && (statusOpen || statusDrag.gesture === "dragging")} gesture={statusDrag.gesture} onClose={() => closeBackgroundOverlay(closeStatus)} onExitTransitionEnd={() => {
       if (statusOpen) return;
       statusDrag.onExitTransitionEnd();
-      setStatusMounted(false);
-      const origin = pendingSettingsRef.current;
-      pendingSettingsRef.current = null;
-      if (origin) onOpenSettings(origin);
+      releaseStatus();
     }} /> : null}
     {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={navigationDrag.gesture === "rollback" ? null : sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={onNavigationExitTransitionEnd} /> : null}
     </div>

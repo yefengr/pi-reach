@@ -105,6 +105,15 @@ test("旧版错误局部消费，同一 ready 前后台不重试；其他错误�
   expect(controller.getSnapshot()).toEqual({ kind: "unavailable" });
   expect(receive({ protocol_version: 2, type: "protocol_error", in_reply_to: "unrelated", code: "internal_error", message: "synthetic" })).toBe(false);
 });
+test("未带请求 ID 的通用错误交给主会话处理", () => {
+  const { controller, receive, snapshot } = setup();
+  const error = { protocol_version: 2, type: "protocol_error", target_channel_id: "channel", code: "internal_error", message: "synthetic" } as const;
+  expect(receive(error)).toBe(false);
+  expect(controller.getSnapshot()).toEqual({ kind: "loading" });
+  receive(snapshot());
+  expect(receive(error)).toBe(false);
+  expect(controller.getSnapshot()).toEqual({ kind: "ready", status });
+});
 test("发送失败不改变主会话，隐藏不心跳，恢复前台获取新首份", () => {
   const { controller, connection, receive, snapshot, frames } = setup();
   receive(snapshot()); controller.setVisible(false);
@@ -127,6 +136,21 @@ test("心跳超时仅重订阅一次，第二次失败停止；迟到 pong 不�
   vi.advanceTimersByTime(SESSION_STATUS_REQUEST_TIMEOUT_MS * 4);
   expect(controller.getSnapshot()).toEqual({ kind: "unavailable" });
   expect(frames.filter(frame => frame.type === "session_status_subscribe")).toHaveLength(2);
+});
+test("成功恢复后下一次心跳超时仍有一次恢复机会", () => {
+  const { controller, frames, receive, snapshot } = setup();
+  receive(snapshot());
+  vi.advanceTimersByTime(SESSION_STATUS_KEEPALIVE_MS * 2);
+  const recovered = frames.at(-1)!;
+  expect(recovered.type).toBe("session_status_subscribe");
+  receive(snapshot(recovered.id));
+  expect(controller.getSnapshot()).toEqual({ kind: "ready", status });
+  vi.advanceTimersByTime(SESSION_STATUS_KEEPALIVE_MS * 2);
+  expect(frames.at(-1)?.type).toBe("session_status_subscribe");
+  expect(frames.at(-1)?.id).not.toBe(recovered.id);
+  vi.advanceTimersByTime(SESSION_STATUS_REQUEST_TIMEOUT_MS * 2);
+  expect(controller.getSnapshot()).toEqual({ kind: "unavailable" });
+  expect(frames.filter(frame => frame.type === "session_status_subscribe")).toHaveLength(3);
 });
 test("工具详情与状态共用心跳，pong 按发送时刻续租且仍交工具详情消费", () => {
   const { controller, connection, frames, receive, snapshot } = setup();

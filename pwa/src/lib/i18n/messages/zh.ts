@@ -241,10 +241,10 @@ export const zh: Messages = {
     workingHint: "Pi 运行中，Enter 用于换行；停止运行请使用停止按钮。",
   },
   sessionStatus: {
-    title: "会话状态", context: "上下文", high: "偏高", full: "将满", window: "窗口",
+    title: "会话状态", context: "上下文", occupied: "占用", high: "偏高", full: "将满", window: "窗口",
     autoCompact: "自动压缩", autoCompactOff: "自动压缩已关闭", usage: "用量", input: "输入", output: "输出",
     cacheRead: "缓存读取", cacheWrite: "缓存写入", cacheHit: "缓存命中率", cacheHitLatest: "最近缓存命中率",
-    cost: "费用", usageNote: "本会话累计，压缩后不清零。", session: "会话", name: "名称", computer: "电脑", branch: "分支",
+    cost: "费用", usageNote: "本会话累计，压缩后不清零。", session: "会话", otherStatus: "其他状态", name: "名称", computer: "电脑", branch: "分支",
     loading: "正在获取状态…", unavailable: "暂时无法获取状态。", unsupported: "扩展版本较旧，请更新 Pi Reach 扩展以查看会话状态。", offline: "离线会话不提供实时状态。",
   },
   actions: {

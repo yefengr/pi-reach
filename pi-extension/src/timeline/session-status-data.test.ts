@@ -60,17 +60,44 @@ test("extension reports sanitize, normalize, replace, clear, bound lengths and d
   store.clear(); expect(store.snapshot()).toEqual([]);
 });
 
-test("Git status reads ordinary repo, worktree, detached and non-repo without watchers", () => {
+test("extensions retain only the first 12 keys and require discarded sources to report again", () => {
+  const store = new SessionStatusExtensions();
+  const report = (key: string, text = "value") => store.update({ version: 1, key, label: "Label", text });
+  const keys = ["z", "a", "Z", "A", "é", "10", "2", "b", "c", "d", "e", "f", "g", "h"];
+  for (const key of keys) report(key);
+  expect(store.snapshot().map((item) => item.key)).toEqual([...keys].sort().slice(0, 12));
+  expect(report("z", "discarded update")).toBe(false);
+  expect(report("é")).toBe(false);
+  expect(report("A")).toBe(false);
+  expect(report("A", "updated")).toBe(true);
+  expect(store.snapshot().find((item) => item.key === "A")?.text).toBe("updated");
+  expect(report("0")).toBe(true);
+  expect(store.snapshot().map((item) => item.key)).toEqual(["0", ...keys.sort().slice(0, 11)]);
+  expect(report("0", "")).toBe(true);
+  expect(store.snapshot()).toHaveLength(11);
+  expect(store.snapshot().some((item) => item.key === "h")).toBe(false);
+  expect(report("h")).toBe(true);
+  expect(store.snapshot()).toHaveLength(12);
+  expect(report("h", "")).toBe(true);
+  expect(report("h", "")).toBe(false);
+  expect(store.snapshot().some((item) => item.key === "z" || item.key === "é")).toBe(false);
+  expect(report("z", "reported again")).toBe(true);
+  expect(store.snapshot().at(-1)).toMatchObject({ key: "z", text: "reported again" });
+});
+
+test("Git status reads ordinary repo, worktree, detached and non-repo without watchers", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-reach-status-"));
   const repo = join(root, "repo"), worktree = join(root, "worktree");
   const git = (...args: string[]) => execFileSync("git", args, { stdio: "ignore" });
   try {
     git("init", "-b", "status-main", repo);
     git("-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "--allow-empty", "-m", "fixture");
-    expect(readStatusBranch(repo)).toBe("status-main");
+    const branch = readStatusBranch(repo);
+    expect(branch).toBeInstanceOf(Promise);
+    expect(await branch).toBe("status-main");
     git("-C", repo, "worktree", "add", "-b", "status-worktree", worktree);
-    expect(readStatusBranch(worktree)).toBe("status-worktree");
-    git("-C", repo, "checkout", "--detach"); expect(readStatusBranch(repo)).toBe("detached");
-    expect(readStatusBranch(root)).toBeNull();
+    expect(await readStatusBranch(worktree)).toBe("status-worktree");
+    git("-C", repo, "checkout", "--detach"); expect(await readStatusBranch(repo)).toBe("detached");
+    expect(await readStatusBranch(root)).toBeNull();
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

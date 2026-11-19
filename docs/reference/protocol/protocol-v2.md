@@ -470,6 +470,6 @@ internal_error
 
 PWA 与 Pi Extension 必须使用相容的 Protocol v2 契约；独立附件或诊断能力不足只使对应功能不可用，不构成协议降级。v2 timeline 不读取旧 cursor、旧 wire shape 或历史 timeline 数据，也不提供 v1 双栈或 fallback。既有 v2 inline 工具事件与新增 summary 变体同属当前共享 schema，不是 v1 回退；工具摘要能力未协商时按上文拒绝新模式握手。
 
-只有匹配当前 `session_status_subscribe` 请求的 `protocol_upgrade_required` 会显示「扩展版本较旧」，同次 ready 不重试。首份超时或其他订阅失败只影响状态区域，不触发主会话重连；前台续租中断时可在同一 ready 连接上重新订阅一次。未订阅的页面不接收发给自己的 `session_status`；同一 Owner 的其他标签页靠 `target_channel_id` 区分，支持定向过滤的旧页面在解码前跳过不属于自己的帧。
+只有匹配当前 `session_status_subscribe` 请求的 `protocol_upgrade_required` 会显示「扩展版本较旧」，同次 ready 不重试。首份超时或其他订阅失败只影响状态区域，不触发主会话重连；前台续租中断时可在同一 ready 连接上重新订阅一次。若收到有效首份，下一次续租中断仍可重新订阅一次。未订阅的页面不接收发给自己的 `session_status`；同一 Owner 的其他标签页靠 `target_channel_id` 区分，支持定向过滤的旧页面在解码前跳过不属于自己的帧。
 
 未知 frame、未知字段、方向错误、缺少版本、v1 或未知版本都必须 fail closed。任何一端不得根据旧字段猜测 endpoint、runtime、channel 或 session。兼容读取旧 `daemon` metadata 不构成这一规则的例外。

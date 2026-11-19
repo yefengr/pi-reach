@@ -61,6 +61,7 @@ const DEDICATED_RADII = new Map([
   ["var(--pwa-radius-pill)", [
     "app/globals.css | .pwa-ui-scope .pwa-button.pwa-latest-button",
     "app/workspace-navigation.css | .pwa-root .pwa-presence-label, .pwa-root .pwa-current-label",
+    "app/session-status.css | .pwa-root .pwa-session-status-level",
   ]],
 ]);
 /** 边框与轮廓宽度只用细线。 */

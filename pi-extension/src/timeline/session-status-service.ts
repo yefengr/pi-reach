@@ -15,7 +15,8 @@ export class SessionStatusService {
   private lastComputed = -Infinity;
   private dirty = true;
   private generation = 0;
-  constructor(private readonly read: () => StatusSnapshot | null) {}
+  private inFlight: { generation: number } | undefined;
+  constructor(private readonly read: () => StatusSnapshot | null | Promise<StatusSnapshot | null>) {}
 
   bind(valid: Binding["valid"], send: Binding["send"]): StatusBinding {
     const binding: Binding = { valid, send, subscriptions: new Map() };
@@ -29,7 +30,7 @@ export class SessionStatusService {
           timer: setTimeout(() => close(request.channel_id), SESSION_STATUS_LEASE_MS) };
         subscription.timer.unref?.();
         binding.subscriptions.set(request.channel_id, subscription);
-        if (!this.dirty && this.cached && Date.now() - this.lastComputed < UPDATE_INTERVAL_MS) this.deliver(binding, subscription, this.cached);
+        if (!this.dirty && !this.inFlight && this.cached && Date.now() - this.lastComputed < UPDATE_INTERVAL_MS) this.deliver(binding, subscription, this.cached);
         else this.schedule();
       },
       renew: (channel) => {
@@ -52,6 +53,8 @@ export class SessionStatusService {
   changed(): void { this.dirty = true; this.schedule(); }
   invalidate(): void {
     this.generation += 1;
+    this.inFlight = undefined;
+    this.lastComputed = -Infinity;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     this.cached = null;
@@ -74,7 +77,7 @@ export class SessionStatusService {
     }
   }
   private schedule(): void {
-    if (this.timer || ![...this.bindings].some((item) => item.subscriptions.size > 0)) return;
+    if (this.timer || this.inFlight || ![...this.bindings].some((item) => item.subscriptions.size > 0)) return;
     const delay = Math.max(0, this.lastComputed + UPDATE_INTERVAL_MS - Date.now());
     if (delay === 0) { this.compute(); return; }
     this.timer = setTimeout(() => { this.timer = undefined; this.compute(); }, delay);
@@ -85,20 +88,33 @@ export class SessionStatusService {
       if (!this.active(binding, subscription)) this.close(binding, subscription.request.channel_id);
     }
     if (![...this.bindings].some((item) => item.subscriptions.size > 0)) return;
-    const generation = this.generation;
+    const computation = { generation: this.generation };
+    this.inFlight = computation;
     this.lastComputed = Date.now();
-    let snapshot: StatusSnapshot | null = null;
-    try { snapshot = this.read(); } catch { /* 错误帧只能携带固定描述，不转发状态或 SDK 异常。 */ }
-    if (generation !== this.generation) return;
-    this.cached = snapshot;
+    // 只消费开始前的变更，等待 reader 期间的变更需在完成后追赶。
     this.dirty = false;
+    let snapshot: StatusSnapshot | null | Promise<StatusSnapshot | null> = null;
+    try { snapshot = this.read(); } catch { /* 错误帧只携带固定描述，不转发状态或 SDK 异常。 */ }
+    if (snapshot !== null && "then" in snapshot) {
+      void snapshot.then((value) => this.complete(computation, value), () => this.complete(computation, null));
+      return;
+    }
+    this.complete(computation, snapshot);
+  }
+  private complete(computation: { generation: number }, snapshot: StatusSnapshot | null): void {
+    if (computation.generation !== this.generation || this.inFlight !== computation) return;
+    this.cached = snapshot;
     for (const binding of this.bindings) for (const subscription of binding.subscriptions.values()) {
+      if (computation.generation !== this.generation) return;
       if (snapshot) { this.deliver(binding, subscription, snapshot); continue; }
       if (this.active(binding, subscription)) binding.send({ protocol_version: 2, type: "protocol_error",
         target_channel_id: subscription.request.channel_id, in_reply_to: subscription.request.id,
         code: "internal_error", message: "Session status is unavailable." });
       this.close(binding, subscription.request.channel_id);
     }
+    if (computation.generation !== this.generation || this.inFlight !== computation) return;
+    this.inFlight = undefined;
+    if (this.dirty) this.schedule();
   }
   private deliver(binding: Binding, subscription: Subscription, snapshot: StatusSnapshot): void {
     const request = subscription.request;

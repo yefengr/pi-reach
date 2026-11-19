@@ -7,6 +7,7 @@ import { WorkspaceTitleBar } from "@/components/pwa/workspace-title-bar";
 import { SessionStatusContent } from "@/components/pwa/session-status";
 import { SessionStatusDrawer } from "@/components/pwa/session-status-drawer";
 import { useSessionStatusSpace } from "@/components/pwa/use-session-status-space";
+import { useI18n } from "@/lib/i18n";
 import type { SessionStatusView } from "@/lib/pwa/session-status";
 import { ConfirmActionDialog } from "@/components/pwa/confirm-action-dialog";
 import { readerFocusable } from "@/components/pwa/reader-shared";
@@ -29,6 +30,7 @@ type UiStateNavigationProps = {
 
 /** 复用无存储的正式导航；固定主区子树，切换展示区域不会卸载 Composer。 */
 export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, onSceneChange, onOpenSurface }: UiStateNavigationProps) {
+  const { t } = useI18n();
   const [scene, setScene] = useState<NavigationScene>("paired");
   const [collapsed, setCollapsed] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -96,7 +98,7 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
           onOpenNavigation={button => { if (statusOpen) return; setOrigin(button); setSheetOpen(true); }}
           onRefresh={() => setNotice("已演示刷新，未重新加载页面或连接远程服务。")}
           onOpenStatus={emptyWorkspace ? undefined : () => { if (!sheetOpen && !settingsOpen) setStatusOpen(true); }} statusExpanded={statusOpen} /> : null}
-        {enabled && !emptyWorkspace && !selectedHistory ? <aside className="pwa-session-status-card"><SessionStatusContent {...status} /></aside> : null}
+        {enabled && !emptyWorkspace && !selectedHistory ? <aside className="pwa-session-status-card" aria-label={t.sessionStatus.title}><h2>{t.sessionStatus.title}</h2><SessionStatusContent {...status} /></aside> : null}
         {enabled && notice ? <p className="pwa-ui-states-local-result" role="status">{notice}</p> : null}
         <div className="pwa-ui-states-frame-content" hidden={emptyWorkspace} inert={emptyWorkspace}>{children}</div>
         {emptyWorkspace ? scene === "unpaired" ? <UnpairedWorkspace onPair={() => onOpenSurface("pairing")} />
