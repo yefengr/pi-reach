@@ -31,8 +31,10 @@
           <option value="high">在线 · 上下文偏高</option>
           <option value="full">在线 · 上下文将满</option>
           <option value="compacted">在线 · 刚压缩，占用未知</option>
-          <option value="subscription">在线 · 订阅计费，非 Git 目录</option>
+          <option value="edge">在线 · 恰好 70%（不提醒）</option>
+          <option value="subscription">在线 · 费用为 0，非 Git 目录</option>
           <option value="waiting">在线 · 等待首个状态</option>
+          <option value="unavailable">在线 · 暂时无法获取状态</option>
           <option value="legacy">在线 · 扩展版本过旧</option>
           <option value="history">离线 · 本地历史或 Pi 已退出</option>
         </select>
@@ -133,7 +135,7 @@
   <footer class="notes">
     <p class="scene-note" id="layoutNote"></p>
     <ul class="review-list" id="reviewList"></ul>
-    <p class="hint">交互原型：数据为合成样例；手势只模拟跟手与过半提交，未实现惯性投影、系统返回、焦点恢复细节与真实协议。模型与思考级别已在输入区显示，状态中不重复。</p>
+    <p class="hint">交互原型：数据为合成样例；手势只模拟跟手与过半提交，未实现惯性投影、系统返回、焦点恢复细节与真实协议。连接中断时卡片保留最后状态原样显示，与常规场景外观相同，未单列。模型与思考级别已在输入区显示，状态中不重复。</p>
   </footer>
 </div>
 <script src="./shared.js"></script>

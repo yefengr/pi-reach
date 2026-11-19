@@ -11,7 +11,7 @@
   const CARD_GAP = 16;
   const CARD_LANE = CARD_WIDTH + CARD_RIGHT + CARD_GAP;
   const DESK_HEIGHT = 760;
-  // 与 Pi 终端状态栏一致的上下文着色阈值
+  // 与 Pi 终端状态栏一致的上下文提醒阈值：超过才升档，恰好等于不提醒（正式实现由 Extension 计算后下发）
   const LEVEL_HIGH = 70;
   const LEVEL_FULL = 90;
   // 手势：方向锁定距离与惯性投影时长（简化）
@@ -25,22 +25,27 @@
     path: "/Users/yefeng/code/pi-reach",
     computer: "MacBook Pro",
   };
-  const BASE_USAGE = { input: 1240000, output: 48200, cacheRead: 982000, cacheWrite: 121000, hit: 87.3 };
+  // hit 为最近一次请求的命中率（与终端一致）；累计命中率由各项累计值算出
+  const BASE_USAGE = { input: 186000, output: 48200, cacheRead: 2140000, cacheWrite: 121000, hit: 92.4 };
   const BRANCH = "bugfix/261117-mobile-navigation-focus";
 
   const SCENES = {
-    normal: { kind: "live", ctx: { tokens: 84000, window: 200000, auto: true }, usage: BASE_USAGE, cost: 1.284, sub: false, branch: BRANCH,
+    normal: { kind: "live", ctx: { tokens: 84000, window: 200000, auto: true }, usage: BASE_USAGE, cost: 1.284, branch: BRANCH,
       note: "常规在线会话。上下文只用文字呈现，不画进度条；百分比保持中性色，只有偏高、将满时附加着色标签。" },
-    high: { kind: "live", ctx: { tokens: 156000, window: 200000, auto: true }, usage: { ...BASE_USAGE, input: 3410000, cacheRead: 2870000 }, cost: 3.912, sub: false, branch: BRANCH,
-      note: "占用 ≥ 70%：百分比旁出现琥珀色「偏高」标签，与 Pi 终端的警告阈值一致；状态不只靠颜色表达。" },
-    full: { kind: "live", ctx: { tokens: 187000, window: 200000, auto: false }, usage: { ...BASE_USAGE, input: 5120000, cacheRead: 4300000 }, cost: 6.035, sub: false, branch: BRANCH,
-      note: "占用 ≥ 90% 且关闭了自动压缩：百分比旁出现红色「将满」标签。是否在这里提供「压缩上下文」入口待评审，原型未放。" },
-    compacted: { kind: "live", ctx: { tokens: null, window: 200000, auto: true }, usage: { ...BASE_USAGE, input: 3410000, cacheRead: 2870000 }, cost: 3.958, sub: false, branch: BRANCH,
+    high: { kind: "live", ctx: { tokens: 156000, window: 200000, auto: true }, usage: { ...BASE_USAGE, input: 402000, cacheRead: 5870000 }, cost: 3.912, branch: BRANCH,
+      note: "占用超过 70%：百分比旁出现琥珀色「偏高」标签，与 Pi 终端规则一致；状态不只靠颜色表达。" },
+    full: { kind: "live", ctx: { tokens: 187000, window: 200000, auto: false }, usage: { ...BASE_USAGE, input: 610000, cacheRead: 8300000 }, cost: 6.035, branch: BRANCH,
+      note: "占用超过 90% 且关闭了自动压缩：百分比旁出现红色「将满」标签。卡片不提供「压缩上下文」入口，仍从输入区进入。" },
+    compacted: { kind: "live", ctx: { tokens: null, window: 200000, auto: true }, usage: { ...BASE_USAGE, input: 402000, cacheRead: 5870000 }, cost: 3.958, branch: BRANCH,
       note: "刚压缩后 Pi 也不知道当前占用（终端显示 ?/200k），要到下一次回复结束才更新。累计用量与费用不随压缩清零。" },
-    subscription: { kind: "live", ctx: { tokens: 31000, window: 400000, auto: true }, usage: { input: 212000, output: 9800, cacheRead: 160000, cacheWrite: 30500, hit: 71.2 }, cost: 0.412, sub: true, branch: null,
-      note: "订阅计费时按 Pi 的口径仍显示估算费用并标注「订阅」；工作目录不是 Git 仓库时不显示分支行，不补占位。" },
+    edge: { kind: "live", ctx: { tokens: 140000, window: 200000, auto: true }, usage: BASE_USAGE, cost: 2.106, branch: BRANCH,
+      note: "恰好 70.0%：与 Pi 终端一致，等于临界值时不提醒，超过才标「偏高」。" },
+    subscription: { kind: "live", ctx: { tokens: 31000, window: 400000, auto: true }, usage: { input: 212000, output: 9800, cacheRead: 160000, cacheWrite: 30500, hit: 71.2 }, cost: 0, branch: null,
+      note: "费用为 0 时照常显示 $0.000；首期不标「订阅」。工作目录不是 Git 仓库时不显示分支行，不补占位。" },
     waiting: { kind: "waiting",
       note: "已连接、尚未收到第一份状态快照。快照随会话建立发送，正常只闪现很短时间。" },
+    unavailable: { kind: "unavailable",
+      note: "订阅请求发送失败、10 秒内没有首份快照或收到其他协议错误：显示「暂时无法获取状态」，不影响会话其他功能。" },
     legacy: { kind: "legacy",
       note: "电脑上的 Pi Reach 扩展未声明状态能力（旧版本）：不推送也不报错，只提示更新扩展。" },
     history: { kind: "history",
@@ -75,10 +80,12 @@
   function contextView(ctx) {
     // 刚压缩后占用未知：只保留虚线外框，不显示数值
     if (ctx.tokens === null) return { level: "unknown", pct: null, value: "", tag: "" };
-    const pct = Math.round((ctx.tokens / ctx.window) * 100);
-    if (pct >= LEVEL_FULL) return { level: "full", pct, value: pct + "%", tag: "将满" };
-    if (pct >= LEVEL_HIGH) return { level: "high", pct, value: pct + "%", tag: "偏高" };
-    return { level: "normal", pct, value: pct + "%", tag: "" };
+    const pct = (ctx.tokens / ctx.window) * 100;
+    // 与 Pi 终端一样显示一位小数，避免 70.4% 显示成「70%」却已提醒
+    const value = pct.toFixed(1) + "%";
+    if (pct > LEVEL_FULL) return { level: "full", pct, value, tag: "将满" };
+    if (pct > LEVEL_HIGH) return { level: "high", pct, value, tag: "偏高" };
+    return { level: "normal", pct, value, tag: "" };
   }
 
   function ctxMeta(ctx) {
@@ -102,15 +109,21 @@
   }
 
   function costText(scene) {
-    return "$" + scene.cost.toFixed(3) + (scene.sub ? " · 订阅" : "");
+    return "$" + scene.cost.toFixed(3);
   }
 
   function usageRows(usage) {
     return [
       ["输入", formatTokens(usage.input)], ["输出", formatTokens(usage.output)],
       ["缓存读取", formatTokens(usage.cacheRead)], ["缓存写入", formatTokens(usage.cacheWrite)],
-      ["缓存命中率", usage.hit.toFixed(1) + "%"],
+      ["缓存命中率", sessionHitRate(usage)], ["最近缓存命中率", usage.hit.toFixed(1) + "%"],
     ];
+  }
+
+  // 累计命中率：按 token 加权，与终端「最近一次」同一公式，只是换成整个会话的累计值
+  function sessionHitRate(usage) {
+    const prompt = usage.input + usage.cacheRead + usage.cacheWrite;
+    return (usage.cacheRead / prompt * 100).toFixed(1) + "%";
   }
 
   /* ---------- 桌面卡片 ---------- */
@@ -120,6 +133,7 @@
     // 本地历史不显示卡片，也没有可渲染的状态
     if (scene.kind === "history") return "";
     if (scene.kind === "waiting") return '<p class="placeholder"><span class="pulse" aria-hidden="true"></span>正在获取状态…</p>';
+    if (scene.kind === "unavailable") return '<p class="placeholder">暂时无法获取状态</p>';
     if (scene.kind === "legacy") return '<p class="placeholder">这台电脑上的 Pi Reach 扩展版本较旧，暂不提供状态。更新扩展后可查看。</p>';
     const view = contextView(scene.ctx);
     const grid = usageRows(scene.usage).concat([["费用", costText(scene)]])
@@ -250,6 +264,7 @@
     let status = "";
     if (scene.kind === "live") status = drawerLive(scene);
     if (scene.kind === "waiting") status = '<section class="m-section"><h3>状态</h3><div class="m-group"><div class="m-row"><span class="placeholder"><span class="pulse" aria-hidden="true"></span>正在获取状态…</span></div></div></section>';
+    if (scene.kind === "unavailable") status = '<section class="m-section"><h3>状态</h3><div class="m-group"><div class="m-row"><span class="placeholder">暂时无法获取状态</span></div></div></section>';
     if (scene.kind === "legacy") status = '<section class="m-section"><h3>状态</h3><div class="m-group"><div class="m-row"><span class="placeholder">这台电脑上的 Pi Reach 扩展版本较旧，暂不提供状态。更新扩展后可查看。</span></div></div></section>';
     if (scene.kind === "history") status = '<p class="m-note history-note">没有运行中的 Pi，不提供上下文与用量。</p>';
     // 与桌面卡片同序：状态在前，会话信息在后
