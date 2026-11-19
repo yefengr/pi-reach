@@ -126,7 +126,7 @@ function pixels(value: number) {
 async function expectLane(visible: boolean) {
   // 让位可能先于侧栏网格结束；下一次改窗口宽度前需等真实网格收尾，避免人为制造中途反向。
   await expect.poll(() => layoutElement(".pwa-layout").getAnimations().length).toBe(0);
-  const reserve = visible ? 260 : 0;
+  const reserve = visible ? 272 : 0;
   await expect.poll(() => {
     const main = layoutElement(".pwa-main");
     const mainStyle = getComputedStyle(main);
@@ -167,39 +167,40 @@ test("desktop reading, composer, Latest, error and Toast share the fixed status 
   expect(layoutElement(".pwa-root").hasAttribute("data-sidebar-collapsed")).toBe(false);
   await expectLane(true);
   const main = layoutElement(".pwa-main");
-  expect(Math.round(center(".pwa-composer-card") - (main.getBoundingClientRect().left + main.clientWidth / 2))).toBe(-130);
+  expect(Math.round(center(".pwa-composer-card") - (main.getBoundingClientRect().left + main.clientWidth / 2))).toBe(-136);
   const card = layoutElement(".pwa-session-status-card").getBoundingClientRect();
   expect(Math.round(card.width)).toBe(248);
   expect(Math.round(main.getBoundingClientRect().right - card.right)).toBe(12);
+  expect(Math.round(card.left - layoutElement(".pwa-message-list").getBoundingClientRect().right)).toBe(12);
   notifications.show("model_set-error");
   await expect.poll(() => document.querySelector(".pwa-operation-notification")).not.toBeNull();
   await expect.poll(() => Math.round(center(".pwa-operation-notification") - center(".pwa-composer-card"))).toBe(0);
 });
 
-test("desktop hysteresis retains both directions at 990 and crosses only 980 / 1000", async () => {
-  await page.viewport(1272, 900);
+test("desktop hysteresis retains both directions at 1002 and crosses only 992 / 1012", async () => {
+  await page.viewport(1284, 900);
   const screen = await renderLayout();
   await expectLane(true);
-  // 默认侧栏占 292px；第一次测量主区恰为 980 即显示。
-  await page.viewport(1282, 900);
+  // 默认侧栏占 292px；第一次测量主区恰为 992 即显示。
+  await page.viewport(1294, 900);
   await expectLane(true);
-  await page.viewport(1271, 900);
+  await page.viewport(1283, 900);
   await expectLane(false);
-  await page.viewport(1282, 900);
+  await page.viewport(1294, 900);
   await expectLane(false);
-  await page.viewport(1291, 900);
+  await page.viewport(1303, 900);
   await expectLane(false);
-  await page.viewport(1292, 900);
+  await page.viewport(1304, 900);
   await expectLane(true);
   await screen.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expectLane(true);
-  await page.viewport(980, 900);
+  await page.viewport(992, 900);
   await expectLane(true);
-  await page.viewport(979, 900);
+  await page.viewport(991, 900);
   await expectLane(false);
-  await page.viewport(990, 900);
+  await page.viewport(1002, 900);
   await expectLane(false);
-  await page.viewport(1000, 900);
+  await page.viewport(1012, 900);
   await expectLane(true);
   await page.viewport(1200, 900);
   await expectLane(true);
@@ -220,9 +221,9 @@ test("safe areas are deducted once and a taller title keeps the card below it", 
   await expect.poll(() => Math.round(layoutElement(".pwa-session-status-card").getBoundingClientRect().top - title.getBoundingClientRect().bottom)).toBe(8);
   await screen.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expectLane(true);
-  await page.viewport(1057, 900);
+  await page.viewport(1069, 900);
   await expectLane(true);
-  await page.viewport(1056, 900);
+  await page.viewport(1068, 900);
   await expectLane(false);
 });
 
@@ -250,12 +251,12 @@ test("window resize and sidebar width changes run real lane and card opacity tra
   };
   main.addEventListener("transitionrun", record);
   try {
-    await page.viewport(979, 900);
+    await page.viewport(991, 900);
     await expectLane(false);
     expect(main.hasAttribute("data-session-status-instant")).toBe(false);
     expect(transitions).toEqual(expect.arrayContaining(["body:padding-right", "notices:right", "card:opacity"]));
     transitions.length = 0;
-    await page.viewport(1000, 900);
+    await page.viewport(1012, 900);
     await expectLane(true);
     expect(transitions).toEqual(expect.arrayContaining(["body:padding-right", "notices:right", "card:opacity"]));
     await page.viewport(1200, 900);
@@ -312,13 +313,13 @@ test("mobile status keeps its top-bar trigger and drawer with the desktop card s
 });
 
 test("empty state keeps measuring the width latch and leaving a session fades before unmount", async () => {
-  await page.viewport(1272, 900);
+  await page.viewport(1284, 900);
   const fixture = (available: boolean) => <PwaUiProvider><PwaAppShell runtimeNotice={null}><Layout statusAvailable={available} /></PwaAppShell></PwaUiProvider>;
   const screen = await render(fixture(false));
   await expectLane(false);
   expect(document.querySelector(".pwa-session-status-card")).toBeNull();
-  // 没有会话时初次主区 980 仍使 latch 进入 fit，主区 990 打开会话即可让位。
-  await page.viewport(1282, 900);
+  // 没有会话时初次主区 992 仍使 latch 进入 fit，主区 1002 打开会话即可让位。
+  await page.viewport(1294, 900);
   await screen.rerender(fixture(true));
   await expectLane(true);
   const root = layoutElement(".pwa-root");
@@ -335,12 +336,12 @@ test("empty state keeps measuring the width latch and leaving a session fades be
   await expectLane(false);
   await screen.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expectLane(false);
-  await page.viewport(979, 900);
+  await page.viewport(991, 900);
   await expectLane(false);
-  await page.viewport(990, 900);
+  await page.viewport(1002, 900);
   await screen.rerender(fixture(true));
   await expectLane(false);
-  await page.viewport(1000, 900);
+  await page.viewport(1012, 900);
   await expectLane(true);
 });
 

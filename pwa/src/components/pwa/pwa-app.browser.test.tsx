@@ -3992,9 +3992,9 @@ test("keeps the desktop status lane while opening history, returning online and 
     channel.emit(readyFrame(channel, "session-1"));
     await expect.poll(connectionState).toBe("online");
     await expect.element(card.getByText("Getting status…")).toBeVisible();
-    await expect.poll(() => getComputedStyle(document.querySelector(".pwa-workspace-body")!).paddingRight).toBe("260px");
+    await expect.poll(() => getComputedStyle(document.querySelector(".pwa-workspace-body")!).paddingRight).toBe("272px");
     const onlineLayout = layout();
-    expect(onlineLayout).toMatchObject({ reserve: "260px", composerCenter: expect.any(Number) });
+    expect(onlineLayout).toMatchObject({ reserve: "272px", composerCenter: expect.any(Number) });
 
     await screen.getByRole("button", { name: /Archived note/ }).click();
     await expect.element(card.getByText(offline)).toBeVisible();
