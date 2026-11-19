@@ -131,7 +131,13 @@ function makePi(): ExtensionAPI & { handlers: Map<string, Function>; commands: M
   const handlers = new Map<string, Function>();
   const commands = new Map<string, Function>();
   const sent: unknown[] = [];
+  const events = new EventEmitter();
   return {
+    events: {
+      on: (name: string, handler: (...args: unknown[]) => void) => { events.on(name, handler); return () => { events.off(name, handler); }; },
+      emit: (name: string, payload: unknown) => { events.emit(name, payload); },
+    },
+    getSettings: vi.fn(() => ({})),
     handlers,
     commands,
     sent,
@@ -158,6 +164,7 @@ function ctx(mode: TestMode = "tui") {
     },
     abort: vi.fn(),
     isIdle: vi.fn(() => true),
+    getContextUsage: vi.fn(() => undefined),
   };
 }
 
@@ -486,6 +493,35 @@ describe("Pi Reach endpoint extension", () => {
 
     relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "extension_info_request", id: "info-1", channel_id: "channel-info", session_id: ready.session_id, leaf_id: ready.leaf_id }, "session"));
     await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "extension_info", in_reply_to: "info-1", version: packageVersion, target_channel_id: "channel-info" })));
+  });
+
+  test("requests adapter reports on startup and reload and routes status only to subscribers", async () => {
+    owners.push({ name: "owner", remote_epk: sourceOwner(), paired_at: "now" });
+    const pi = makePi();
+    const requested = vi.fn(() => pi.events.emit("pi-reach:status", { version: 1, key: "ci", label: "CI", text: "ready" }));
+    pi.events.on("pi-reach:status-request", requested);
+    (extension as ExtensionFactory)(pi);
+    const manager = SessionManager.inMemory(process.cwd());
+    const context = { ...ctx(), sessionManager: manager };
+    pi.handlers.get("session_start")!({ reason: "startup" }, context);
+    expect(requested).toHaveBeenCalledWith({ version: 1 });
+    await _connectForTest(context);
+    const relay = relays.at(-1)!;
+    const frames = () => relay.send.mock.calls.map(([line]) => decodeServerFrameV2(Buffer.from(JSON.parse(line).ct, "base64").toString("utf8")));
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_hello", tool_details: 1,
+      id: "hello-status", channel_id: "status-channel" }, "session"));
+    await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "session_ready" })));
+    expect(frames().some((frame) => frame.type === "session_status")).toBe(false);
+    relay.emit("message", inbound(processEndpointIdentity(), { protocol_version: 2, type: "session_status_subscribe",
+      id: "status-sub", channel_id: "status-channel", session_id: manager.getSessionId(), leaf_id: manager.getLeafId() }, "session"));
+    await vi.waitFor(() => expect(frames()).toContainEqual(expect.objectContaining({ type: "session_status", subscription_id: "status-sub",
+      in_reply_to: "status-sub", target_channel_id: "status-channel", status: expect.objectContaining({ extensions: [{ key: "ci", label: "CI", text: "ready" }] }) })));
+    pi.handlers.get("session_shutdown")!({ reason: "reload" });
+    const next = makePi();
+    const requestedAgain = vi.fn(); next.events.on("pi-reach:status-request", requestedAgain);
+    (extension as ExtensionFactory)(next);
+    next.handlers.get("session_start")!({ reason: "reload" }, context);
+    expect(requestedAgain).toHaveBeenCalledWith({ version: 1 });
   });
 
   test("broadcasts tool lifecycle snapshots and a persisted final result through the production handlers", async () => {

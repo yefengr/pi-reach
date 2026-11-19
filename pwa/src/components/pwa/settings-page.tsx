@@ -4,19 +4,24 @@ import { Check, ChevronLeft, ChevronRight, Download, Globe, Monitor, Moon, Rotat
 import { usePwaAppearance, type PwaAppearance } from "@/components/pwa/pwa-appearance";
 import { usePwaTextSize } from "@/components/pwa/use-pwa-text-size";
 import { setLanguagePreference, useI18n, type LanguagePreference } from "@/lib/i18n";
-import type { PwaTextSizePreference } from "@/lib/ui/text-size";
+import { DEFAULT_TEXT_SIZE_PREFERENCE, type PwaTextSizePreference } from "@/lib/ui/text-size";
 import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "@/components/pwa/pwa-install";
 import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
+import { useSessionStatusCardPreference } from "@/lib/pwa/session-status-card-preference";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
 import { version as pwaVersion } from "../../../package.json";
 
 export type SettingsPagePreferences = {
+  appearance?: PwaAppearance;
+  setAppearance?: (value: PwaAppearance) => void;
   language: LanguagePreference;
   setLanguage: (value: LanguagePreference) => void;
   enterSends: boolean;
   setEnterSends: (value: boolean) => void;
+  showSessionStatusCard: boolean;
+  setShowSessionStatusCard: (value: boolean) => void;
   textSize: PwaTextSizePreference;
   setTextSize: (value: PwaTextSizePreference) => void;
   /** 浏览器能读到系统文字大小时才提供「跟随系统」；否则该偏好按标准档显示。 */
@@ -39,7 +44,7 @@ type SettingsPageProps = {
   /** 返回按钮的可访问名称随来源为「返回导航」或「返回工作区」。 */
   backLabel: string;
   onClearData: () => void;
-  onResetLayout: () => void;
+  onResetSettings?: (reset: () => void) => void;
   onShowShortcuts: (origin: HTMLButtonElement) => void;
   titleRef?: Ref<HTMLHeadingElement>;
 };
@@ -55,19 +60,30 @@ export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
 function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   const { preference } = useI18n();
   const [enterSends, setEnterSends] = useEnterSends();
+  const [showSessionStatusCard, setShowSessionStatusCard] = useSessionStatusCardPreference();
   const { preference: textSize, followsSystem, setTextSize } = usePwaTextSize();
-  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize, textSizeFollowsSystem: followsSystem }} />;
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, textSize, setTextSize, textSizeFollowsSystem: followsSystem }} />;
 }
 
-function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
+function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetSettings, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
   const [value, setValue] = useState(relayUrl);
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
-  const { appearance, setAppearance } = usePwaAppearance();
+  const persistedAppearance = usePwaAppearance();
+  const appearance = preferences.appearance ?? persistedAppearance.appearance;
+  const setAppearance = preferences.setAppearance ?? persistedAppearance.setAppearance;
   const { t } = useI18n();
-  const { enterSends, setEnterSends, setTextSize, textSizeFollowsSystem = false } = preferences;
+  const { enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, setTextSize, textSizeFollowsSystem = false } = preferences;
   const textSize = preferences.textSize === "system" && !textSizeFollowsSystem ? "standard" : preferences.textSize;
   const s = t.settings;
+  const resetSettings = () => {
+    setTextSize(DEFAULT_TEXT_SIZE_PREFERENCE);
+    preferences.setLanguage("system");
+    setEnterSends(true);
+    setShowSessionStatusCard(true);
+    // 已经跟随系统时不触发无变化的整屏交叉淡化。
+    if (appearance !== "system") setAppearance("system");
+  };
   const versionText = (version: string | null, status: ConnectionViewState) => {
     if (status === "online") return version ?? s.versionUnavailable;
     if (status === "connecting" || status === "retrying") return s.gettingVersion;
@@ -121,6 +137,12 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
         </Radio.Group>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.textSizeHint}</p>
       </section>
+      <section className="pwa-settings-section" aria-labelledby="pwa-workspace-heading">
+        <h2 id="pwa-workspace-heading" className="pwa-settings-section-title">{s.workspace}</h2>
+        <div className="pwa-card pwa-settings-group">
+          <Switch className="pwa-settings-row pwa-settings-switch" size="md" labelPosition="left" checked={showSessionStatusCard} onChange={(event) => setShowSessionStatusCard(event.currentTarget.checked)} label={s.showSessionStatus} description={s.showSessionStatusHint} />
+        </div>
+      </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
         <Radio.Group aria-label={s.language} name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
@@ -135,7 +157,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-keyboard-heading">
         <h2 id="pwa-keyboard-heading" className="pwa-settings-section-title">{s.keyboard}</h2>
         <div className="pwa-card pwa-settings-group">
-          <Switch className="pwa-settings-row pwa-keyboard-setting" size="md" labelPosition="left" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
+          <Switch className="pwa-settings-row pwa-settings-switch" size="md" labelPosition="left" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
           <UnstyledButton className="pwa-settings-row pwa-settings-row-button" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>
             <span className="pwa-settings-row-label">{t.shortcuts.title}</span>
             <ChevronRight className="pwa-settings-row-chevron" size={16} aria-hidden="true" />
@@ -154,11 +176,11 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-browser-data-heading">
         <h2 id="pwa-browser-data-heading" className="pwa-settings-section-title">{s.browserData}</h2>
         <div className="pwa-card pwa-settings-group pwa-settings-group-actions">
-          <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
+          {onResetSettings ? <Button variant="default" className="pwa-settings-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={() => onResetSettings(resetSettings)}>{s.resetSettings}</Button> : null}
           <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.localOnlyNote}</p>
-        <p className="pwa-settings-section-description pwa-settings-footnote">{s.resetLayoutNote}</p>
+        {onResetSettings ? <p className="pwa-settings-section-description pwa-settings-footnote">{s.resetSettingsNote}</p> : null}
       </section>
       {viewportDiagnostics ? <ViewportDiagnosticsSettings online={viewportDiagnosticsOnline} /> : null}
       <section className="pwa-settings-section" aria-labelledby="pwa-about-heading">

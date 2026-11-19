@@ -20,6 +20,8 @@ import { createPublishFileTool } from "./files/publish-tool.js";
 import { createOwnerBinding, type OwnerBinding } from "./runtime/create_owner_binding.js";
 import { TimelineV2Service, type V2ActionFrame } from "./timeline/v2_service.js";
 import { TimelineRuntime } from "./timeline/runtime.js";
+import { SessionStatusService } from "./timeline/session-status-service.js";
+import { SessionStatusExtensions, readSessionStatus, readStatusBranch, type StatusContext } from "./timeline/session-status-data.js";
 import { UserDeliveryBinding } from "./timeline/user_delivery_binding.js";
 import { handleModelSet, handleSessionCompact, handleThinkingSet, getModelsList, type ActionCtx, type ActionReplySender, type CurrentModelHint } from "./actions/handlers.js";
 import { ensureModelRegistry } from "./actions/registry.js";
@@ -60,6 +62,16 @@ let currentModel: CurrentModelHint | undefined;
 let currentThinking: string | undefined;
 let working = false;
 let currentSessionManager: SessionManager | null = null;
+let statusContext: StatusContext | null = null;
+const statusExtensions = new SessionStatusExtensions();
+const sessionStatus = new SessionStatusService(async () => {
+  const ctx = statusContext;
+  if (!ctx || !piApi) return null;
+  const cwd = ctx.cwd;
+  const snapshot = readSessionStatus(ctx, piApi.getSettings(), statusExtensions.snapshot(), null);
+  snapshot.status.branch = await readStatusBranch(cwd);
+  return snapshot;
+});
 let timeline: TimelineRuntime | null = null;
 let piApi: ExtensionAPI | null = null;
 let footerCtx: Pick<ExtensionContext, "ui" | "mode"> | null = null;
@@ -260,6 +272,7 @@ function detachOwner(ownerId: string): void {
 function closeOwner(ownerId: string, reason: "peer_stop"): void {
   const binding = activeOwners.get(ownerId);
   if (!binding) return;
+  binding.service.dispose();
   binding.channel.sendV2({
     protocol_version: 2,
     type: "bye",
@@ -302,6 +315,7 @@ function ensureTimeline(sessionManager: SessionManager): TimelineRuntime {
 }
 
 function refreshOwnerScopes(reason: "branch_changed" | "session_replaced"): void {
+  sessionStatus.invalidate();
   files.invalidate();
   userDelivery.clearAll();
   if (currentSessionManager) attachmentRuntime.reset(currentSessionManager.getSessionId());
@@ -346,7 +360,7 @@ function createBinding(relayClient: RelayClient, ownerId: string): OwnerBinding 
   const manager = currentSessionManager;
   if (!manager) return null;
   return createOwnerBinding({ relayClient, ownerId, manager, runtime: ensureTimeline(manager),
-    identity: routeIdentity(), extensionVersion: EXTENSION_VERSION, delivery: userDelivery, attachments: attachments(),
+    identity: routeIdentity(), extensionVersion: EXTENSION_VERSION, delivery: userDelivery, attachments: attachments(), sessionStatus,
     onFrame: (frame) => routeClientFrame(ownerId, frame), onTurn: (id) => { currentTurnId = id; },
     onCancel: () => {
       const abort = lastEventCtx?.abort ?? lastCommandCtx?.abort;
@@ -420,6 +434,7 @@ const pairingCoordinator = new PairingCoordinator({
 });
 
 function closeRelay(reason?: "peer_stop" | "session_replaced" | "shutdown"): void {
+  sessionStatus.invalidate();
   files.invalidate();
   userDelivery.clearAll();
   attachmentRuntime.close();
@@ -487,6 +502,12 @@ const extension: ExtensionFactory = (api): void => {
   appliedSet().add(api);
   const owner = new ExtensionOwner();
   const pi = owner.guard(api);
+  const unwatchStatus = pi.events.on("pi-reach:status", (payload: unknown) => {
+    if (owner.isCurrent() && statusExtensions.update(payload)) sessionStatus.changed();
+  });
+  const refreshStatus = (_event: unknown, ctx: ExtensionContext) => { statusContext = ctx; sessionStatus.changed(); };
+  pi.on("session_compact", refreshStatus);
+  pi.on("session_compact_failed", refreshStatus);
   registerCommands(pi, commandDependencies);
   registerCompactionActivity(pi, (frame) => broadcastV2((service) => service.sessionId === frame.session_id ? [frame] : []),
     (entry, manager) => { ensureTimeline(manager).publishSessionEntry(entry, manager); });
@@ -504,7 +525,8 @@ const extension: ExtensionFactory = (api): void => {
   });
   pi.on("session_before_switch", (event) => sessionNewBridge.beforeSwitch(event.reason)); pi.on("session_before_fork", () => sessionNewBridge.beforeFork());
   pi.on("session_info_changed", () => { void updateEndpoint(); });
-  pi.on("model_select", (event) => {
+  pi.on("model_select", (event, ctx) => {
+    statusContext = ctx; sessionStatus.changed();
     setCurrentModel(event.model as CurrentModelHint);
     void updateEndpoint();
   });
@@ -514,7 +536,8 @@ const extension: ExtensionFactory = (api): void => {
   });
   // working 按整次运行计算，工具调用之间的 turn 边界不改变运行状态。
   pi.on("agent_start", () => { timeline?.onAgentStart(); working = true; void updateEndpoint(); });
-  pi.on("agent_end", (event) => {
+  pi.on("agent_end", (event, ctx) => {
+    statusContext = ctx; sessionStatus.changed();
     timeline?.onAgentEnd(event.messages);
     working = false;
     void updateEndpoint();
@@ -523,6 +546,7 @@ const extension: ExtensionFactory = (api): void => {
   });
   pi.on("agent_settled", () => userDelivery.scheduleDrain());
   pi.on("turn_end", (_event, ctx) => {
+    statusContext = ctx; sessionStatus.changed();
     const manager = (ctx as unknown as { sessionManager?: SessionManager }).sessionManager;
     if (manager) ensureTimeline(manager).onTurnEnd(manager);
   });
@@ -552,7 +576,10 @@ const extension: ExtensionFactory = (api): void => {
   });
   api.on("session_start", (event, ctx) => {
     if (!owner.activate(event, ctx)) return;
+    sessionStatus.invalidate();
+    statusContext = ctx;
     piApi = api;
+    pi.events.emit("pi-reach:status-request", { version: 1 });
     lastEventCtx = ctx;
     footerCtx = ctx;
     refreshFooter();
@@ -577,6 +604,9 @@ const extension: ExtensionFactory = (api): void => {
   pi.on("session_tree", () => refreshOwnerScopes("branch_changed"));
   api.on("session_shutdown", (event) => {
     if (!owner.isCurrent()) return;
+    sessionStatus.invalidate();
+    statusContext = null;
+    if (event.reason === "reload" || event.reason === "quit") { unwatchStatus(); statusExtensions.clear(); }
     files.invalidate();
     userDelivery.clearAll();
     footerCtx = null;

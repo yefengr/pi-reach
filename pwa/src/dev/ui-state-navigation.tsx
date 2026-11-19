@@ -4,7 +4,10 @@ import { DesktopSidebar, type WorkspaceNavigationProps } from "@/components/pwa/
 import { SessionSheet } from "@/components/pwa/session-sheet";
 import { SidebarToggle } from "@/components/pwa/sidebar-toggle";
 import { WorkspaceTitleBar } from "@/components/pwa/workspace-title-bar";
-import { SessionActionsMenu } from "@/components/pwa/session-actions-menu";
+import { SessionStatusCard } from "@/components/pwa/session-status";
+import { SessionStatusDrawer } from "@/components/pwa/session-status-drawer";
+import { useSessionStatusSpace } from "@/components/pwa/use-session-status-space";
+import type { SessionStatusView } from "@/lib/pwa/session-status";
 import { ConfirmActionDialog } from "@/components/pwa/confirm-action-dialog";
 import { readerFocusable } from "@/components/pwa/reader-shared";
 import { ChooseComputerWorkspace, NoPiWorkspace, UnpairedWorkspace } from "@/components/pwa/workspace-content";
@@ -28,6 +31,8 @@ type UiStateNavigationProps = {
 export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, onSceneChange, onOpenSurface }: UiStateNavigationProps) {
   const [scene, setScene] = useState<NavigationScene>("paired");
   const [collapsed, setCollapsed] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [mainElement, setMainElement] = useState<HTMLDivElement | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeDeviceId, setActiveDeviceId] = useState(GALLERY_DEVICES[0].id);
   const [activeEndpointId, setActiveEndpointId] = useState(GALLERY_ENDPOINTS[0].endpointId);
@@ -45,6 +50,15 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
   const selectedHistory = history.find(item => item.id === selectedHistoryId) ?? null;
   const title = selectedHistory?.name ?? endpoint?.name ?? selectedDevice?.nickname ?? "Pi Reach";
   const emptyWorkspace = enabled && !selectedHistory && (!selectedDevice || !endpoint);
+  const statusView: SessionStatusView = selectedHistory ? { kind: "offline" } : { kind: "ready", status: { context: { tokens: 84_000, window: 200_000, auto_compact: true, level: "normal" }, usage: { input: 1_200_000, output: 48_000, cache_read: 840_000, cache_write: 120_000, cost: 1.284, cache_hit_rate_session: 87.5, cache_hit_rate_latest: 92.4 }, branch: "feature/session-status", extensions: [{ key: "ci", label: "CI", text: "Checks passed" }] } };
+  const status = { view: statusView, title, deviceName: selectedDevice?.nickname, cwd: endpoint?.cwd };
+  const statusAvailable = enabled && !emptyWorkspace;
+  useSessionStatusSpace(mainElement, statusAvailable);
+  const [statusWasAvailable, setStatusWasAvailable] = useState(statusAvailable);
+  if (statusWasAvailable !== statusAvailable) {
+    setStatusWasAvailable(statusAvailable);
+    if (!statusAvailable) setStatusOpen(false);
+  }
   // 主区按所选 Pi 的状态切换：运行中的 Pi 演示运行工具，已完成的演示已结束的一轮。
   const showEndpoint = (id: string) => onSceneChange(GALLERY_ENDPOINTS.find(item => item.endpointId === id)?.working ? "tools" : "tool-types");
   const navigation: WorkspaceNavigationProps = {
@@ -83,17 +97,19 @@ export function UiStateNavigation({ enabled, settingsOpen, nicknames, children, 
       </div>
       {/* 与正式工作区同一个收展入口，展开时在品牌行右端，收起后停在标题区左端。 */}
       {enabled ? <SidebarToggle collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} /> : null}
-      <div className="pwa-main">
+      <div className="pwa-main" ref={setMainElement}>
         {enabled ? <WorkspaceTitleBar title={title} prefix="pi-reach" showTitle={Boolean(endpoint || selectedHistoryId)} navigationExpanded={sheetOpen}
-          onOpenNavigation={button => { setOrigin(button); setSheetOpen(true); }}
+          onOpenNavigation={button => { if (statusOpen) return; setOrigin(button); setSheetOpen(true); }}
           onRefresh={() => setNotice("已演示刷新，未重新加载页面或连接远程服务。")}
-          moreMenu={<SessionActionsMenu info={{ name: title, cwd: endpoint?.cwd, computer: selectedDevice?.nickname ?? "未配对电脑", status: "仅本页演示" }} />} /> : null}
+          onOpenStatus={emptyWorkspace ? undefined : () => { if (!sheetOpen && !settingsOpen) setStatusOpen(true); }} statusExpanded={statusOpen} /> : null}
+        <SessionStatusCard status={statusAvailable ? status : undefined} />
         {enabled && notice ? <p className="pwa-ui-states-local-result" role="status">{notice}</p> : null}
         <div className="pwa-ui-states-frame-content" hidden={emptyWorkspace} inert={emptyWorkspace}>{children}</div>
         {emptyWorkspace ? scene === "unpaired" ? <UnpairedWorkspace onPair={() => onOpenSurface("pairing")} />
           : selectedDevice ? <NoPiWorkspace /> : <ChooseComputerWorkspace /> : null}
       </div>
     </div>
+    <SessionStatusDrawer {...(statusAvailable ? status : { ...status, view: { kind: "offline" } })} opened={statusOpen && statusAvailable && !settingsOpen} gesture={null} onClose={() => setStatusOpen(false)} onExitTransitionEnd={() => {}} />
     <SessionSheet {...navigation} opened={enabled && sheetOpen && !settingsOpen} onClose={() => setSheetOpen(false)} focusOrigin={origin}
       portalTarget=".pwa-ui-states-workspace" preview={settingsOpen} instant={settingsOpen} />
     <ConfirmActionDialog action={removeDevice ? { kind: "remove-pairing", label: removeDevice.nickname ?? removeDevice.hostname ?? "演示电脑" } : null} pending={false}

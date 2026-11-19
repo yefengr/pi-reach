@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPwaDatabase, type PwaDeviceRecord, type PwaEndpointRecord } from "@/lib/pwa/db";
+import { ACTIVE_DEVICE_SETTING, activeEndpointSettingKey } from "./active-selection-keys";
 
-export const ACTIVE_DEVICE_SETTING = "active_device";
-export const ACTIVE_ENDPOINT_SETTING_PREFIX = "active_endpoint:";
-
-export function activeEndpointSettingKey(deviceId: string): string {
-  return `${ACTIVE_ENDPOINT_SETTING_PREFIX}${deviceId}`;
-}
+export { ACTIVE_DEVICE_SETTING, ACTIVE_ENDPOINT_SETTING_PREFIX, activeEndpointSettingKey } from "./active-selection-keys";
 
 export type EndpointSelectionOrigin = "manual" | "restored" | "automatic" | null;
 type SavedEndpointSelectionOrigin = Exclude<EndpointSelectionOrigin, "automatic" | null>;

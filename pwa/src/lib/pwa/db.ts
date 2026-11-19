@@ -1,6 +1,9 @@
 import Dexie, { type Table } from "dexie";
 import type { ToolDetailsCacheRecord } from "./tool-details-cache";
 import type { TimelineEvent } from "../pi-reach/protocol-v2/schema";
+import { ACTIVE_DEVICE_SETTING, ACTIVE_ENDPOINT_SETTING_PREFIX } from "./active-selection-keys";
+
+export const RELAY_SETTING = "relay_url";
 
 const DATABASE_NAME = "pi-reach";
 const DATABASE_OPEN_TIMEOUT_MS = 10000;
@@ -311,7 +314,8 @@ export async function clearPwaData(): Promise<void> {
       db.endpoints.clear(),
       db.events.clear(),
       db.sessions.clear(),
-      db.settings.clear(),
+      db.settings.delete(ACTIVE_DEVICE_SETTING),
+      db.settings.where("key").startsWith(ACTIVE_ENDPOINT_SETTING_PREFIX).delete(),
     ]);
   });
 }

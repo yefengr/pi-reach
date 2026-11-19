@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { flushSync } from "react-dom";
 import { setLanguagePreference } from "@/lib/i18n";
+import { getLanguageState, LANGUAGE_STORAGE_KEY } from "@/lib/i18n/locale";
+import { APPEARANCE_STORAGE_KEY } from "@/lib/ui/appearance";
+import { getTextSizeState, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
+import { ENTER_SENDS_STORAGE_KEY, isAppleKeyboard } from "@/lib/pwa/keyboard-shortcuts";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { renderPwa } from "@/test/browser/render";
-import { readStoredDrafts } from "@/lib/pwa/draft-storage";
+import { DRAFT_STORAGE_KEY, readStoredDrafts, resetDraftStorageForTest } from "@/lib/pwa/draft-storage";
 import { SESSION_POSITION_STORAGE_KEY } from "@/lib/pwa/session-position-store";
+import { SESSION_STATUS_CARD_STORAGE_KEY } from "@/lib/pwa/session-status-card-preference";
+import { reloadWorkspace } from "@/lib/pwa/settings-route";
 import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
 import { encodeBase64 } from "@/lib/pi-reach/encoding";
@@ -19,7 +25,8 @@ import { SCROLL_IDLE_MS } from "@/lib/pwa/scroll-idle-gate";
 import { listTimelineSessions, loadTimeline, mergeTimelineEvents, TimelineStoreConflictError } from "@/lib/pwa/timeline-store";
 import { DELIVERY_STATUS_QUERY_TIMEOUT_MS, PendingCapacityError, TimelineRuntime, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS } from "@/lib/pwa/timeline-runtime";
 import { DELIVERY_STATUS_RETRY_DELAYS_MS } from "@/lib/pwa/delivery-query-retry";
-import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
+import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase, RELAY_SETTING } from "@/lib/pwa/db";
+import { ACTIVE_DEVICE_SETTING } from "@/lib/pwa/active-selection-keys";
 import { PwaApp } from "./pwa-app";
 import { viewportDiagnosticCapture } from "@/lib/pwa/timeline-viewport-diagnostics";
 import { CONNECTION_HINT_TIMING } from "@/lib/pwa/connection-hint";
@@ -73,6 +80,7 @@ const channelHarness = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/pwa/timeline-store", { spy: true });
+vi.mock("@/lib/pwa/settings-route", { spy: true });
 vi.mock("./use-composer-autosize", { spy: true });
 
 vi.mock("@/lib/pi-reach/relay-client", () => ({
@@ -432,7 +440,7 @@ test.each([1280, 390])("focuses only a new empty desktop session, without openin
   const screen = await renderOnlineApp(() => renderPwa(<PwaApp />));
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: width === 1280 ? "Refresh app" : "Session details" });
+    const action = screen.getByRole("button", { name: width === 1280 ? "Refresh app" : "Session status" });
     action.element().focus();
     channel.emit(readyFrame(channel, "empty-session"));
     const input = screen.getByRole("textbox", { name: /Message your agent/i });
@@ -3539,7 +3547,7 @@ test("routes session actions through the live channel with current model and thi
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [model], current: model, thinking_level: "off" });
 
     // 桌面标题区只保留状态和刷新；命令仍走输入区，不新增桌面替代信息入口。
-    await expect.element(screen.getByRole("button", { name: "Session details" })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Session status" })).not.toBeInTheDocument();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(1);
     await screen.getByRole("button", { name: "Pi commands" }).click();
@@ -3691,7 +3699,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(screen.getByRole("tab", { name: "History" })).not.toBeInTheDocument();
     await navigation.getByRole("button", { name: /Saved session note/ }).click();
     await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
-    // 标题与在线会话一致，不再标注只读；输入区保留在线样式但全部禁用，提示区说明只读，「更多」只含信息区。
+    // 标题与在线会话一致，不再标注只读；输入区保留在线样式但全部禁用，顶栏状态入口打开会话状态抽屉。
     const historyTrigger = screen.getByRole("button", { name: "Open navigation" });
     await expect.element(historyTrigger).toHaveTextContent("Saved session note");
     await expect.element(historyTrigger).not.toHaveTextContent("Read only");
@@ -3700,10 +3708,14 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(historyInput).toBeDisabled();
     for (const name of ["Add attachments", "Pi commands", "Send message"]) await expect.element(screen.getByRole("button", { name, exact: true })).toBeDisabled();
     expect(document.querySelector(".pwa-composer-stop")).toBeNull();
-    await screen.getByRole("button", { name: "Session details" }).click();
-    await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+    await screen.getByRole("button", { name: "Session status" }).click();
+    const statusDrawer = screen.getByRole("dialog", { name: "Session status" });
+    await expect.element(statusDrawer).toBeVisible();
+    await expect.element(statusDrawer.getByText("Status is unavailable for offline sessions.")).toBeVisible();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector(".pwa-session-status-drawer")).toBeNull();
+    await expect.poll(() => window.history.state?.piReachSessionStatus).toBeUndefined();
 
     relayHarness.instances[0]?.emitControl({
       type: "endpoints",
@@ -3731,7 +3743,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     expect(channelHarness.channels[1]?.channelId).toBe(originalChannel?.channelId);
     await expect.element(screen.getByRole("button", { name: "Open navigation" })).toHaveTextContent("Renamed live Pi");
     await expect.element(screen.getByRole("textbox")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Session details" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Session status" })).toBeVisible();
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
@@ -3935,6 +3947,77 @@ test.each(["protocol_upgrade_required", "unsupported_type", "internal_error"])('
   }
 });
 
+test("an older Extension rejects only the status subscription without triggering the app upgrade flow", async () => {
+  await page.viewport(1600, 900);
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const channel = channelHarness.channels[0]!;
+  try {
+    channel.emit(readyFrame(channel, "session-1"));
+    const subscribe = channel.frames.find((frame) => frame.type === "session_status_subscribe");
+    expect(subscribe).toMatchObject({ channel_id: channel.channelId, session_id: "session-1" });
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId,
+      in_reply_to: subscribe!.id, code: "protocol_upgrade_required", message: "Unrecognized frame type" });
+    const card = screen.getByRole("complementary", { name: "Session status" });
+    await expect.element(card.getByText("Update the Pi Reach extension to view session status.")).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
+    expect(document.querySelector(".pwa-status-toast")).toBeNull();
+    expect(channel.frames.filter((frame) => frame.type === "session_hello")).toHaveLength(1);
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Status downgrade must not block sending");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(true);
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});
+
+test("keeps the desktop status lane while opening history, returning online and losing the Pi", async () => {
+  await page.viewport(1600, 900);
+  await seedArchivedSession();
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const relay = relayHarness.instances[0]!;
+  const channel = channelHarness.channels[0]!;
+  const card = screen.getByRole("complementary", { name: "Session status" });
+  const layout = () => {
+    const main = document.querySelector<HTMLElement>(".pwa-main")!;
+    const composer = document.querySelector(".pwa-composer-card")?.getBoundingClientRect();
+    return {
+      reserve: main.style.getPropertyValue("--pwa-status-reserve"),
+      composerCenter: composer ? Math.round(composer.left + composer.width / 2) : null,
+    };
+  };
+  const offline = "Status is unavailable for offline sessions.";
+  try {
+    channel.emit(readyFrame(channel, "session-1"));
+    await expect.poll(connectionState).toBe("online");
+    await expect.element(card.getByText("Getting status…")).toBeVisible();
+    await expect.poll(() => getComputedStyle(document.querySelector(".pwa-workspace-body")!).paddingRight).toBe("260px");
+    const onlineLayout = layout();
+    expect(onlineLayout).toMatchObject({ reserve: "260px", composerCenter: expect.any(Number) });
+
+    await screen.getByRole("button", { name: /Archived note/ }).click();
+    await expect.element(card.getByText(offline)).toBeVisible();
+    await expect.poll(layout).toEqual(onlineLayout);
+
+    await screen.getByRole("button", { name: /Test Pi/ }).click();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const returned = channelHarness.channels[1]!;
+    returned.emit(readyFrame(returned, "session-1"));
+    await expect.poll(connectionState).toBe("online");
+    await expect.element(card.getByText("Getting status…")).toBeVisible();
+    await expect.poll(layout).toEqual(onlineLayout);
+
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [] });
+    await expect.element(screen.getByText("This Pi has exited. The conversation is saved in local history.")).toBeVisible();
+    await expect.element(card.getByText(offline)).toBeVisible();
+    await expect.poll(layout).toEqual(onlineLayout);
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});
+
 test("does not hide an unrelated protocol error while an extension version query is pending", async () => {
   const screen = await renderOnlineApp(renderWorkspaceApp);
   const channel = channelHarness.channels[0]!;
@@ -3994,7 +4077,7 @@ test.each([1280, 390])("shows live versions in settings and clears them across R
     relay.emitState("closed");
     await expect.poll(() => version("extension")).toBe("No online Pi selected");
     await expect.poll(() => version("relay")).not.toBe("2.3.4");
-    await vi.waitFor(() => expect(relay.connectCalls).toBe(2));
+    await expect.poll(() => relay.connectCalls, { timeout: 5_000 }).toBe(2);
     relay.emitControl({ type: "relay_info", version: "2.3.5" });
     relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [{ endpoint_id: "daemon-endpoint", runtime_instance_id: "runtime-2", metadata: { kind: "interactive", name: "New Pi", cwd: "/workspace" } }] });
     await vi.waitFor(() => expect(channelHarness.channels).toHaveLength(2));
@@ -4080,6 +4163,145 @@ test.each([1280, 390])("operation notification keeps the settings page beneath c
   }
 });
 
+const customSettingsRelay = "https://custom-relay.example.test";
+const customBrowserPreferences = {
+  [APPEARANCE_STORAGE_KEY]: "dark",
+  [TEXT_SIZE_STORAGE_KEY]: "large",
+  [LANGUAGE_STORAGE_KEY]: "en",
+  [ENTER_SENDS_STORAGE_KEY]: "false",
+  [SESSION_STATUS_CARD_STORAGE_KEY]: "false",
+  "pi-reach-sidebar-collapsed": "true",
+  "pi-reach-sidebar-width": "333",
+};
+
+function seedBrowserPreferences(sidebarCollapsed = "true") {
+  const preferences = { ...customBrowserPreferences, "pi-reach-sidebar-collapsed": sidebarCollapsed };
+  const previousLanguage = getLanguageState().preference;
+  const previousTextSize = getTextSizeState().preference;
+  const previousValues = Object.keys(customBrowserPreferences).map(key => [key, localStorage.getItem(key)] as const);
+  for (const [key, value] of Object.entries(preferences)) localStorage.setItem(key, value);
+  setLanguagePreference("en");
+  setTextSize("large");
+  return () => {
+    setLanguagePreference(previousLanguage);
+    setTextSize(previousTextSize);
+    for (const [key, value] of previousValues) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+  };
+}
+
+function expectBrowserPreferencesKept(sidebarCollapsed = "true") {
+  const preferences = { ...customBrowserPreferences, "pi-reach-sidebar-collapsed": sidebarCollapsed };
+  for (const [key, value] of Object.entries(preferences)) expect(localStorage.getItem(key), key).toBe(value);
+}
+
+async function openSettingsWithSidebarCollapsed() {
+  const sidebarToggle = page.getByRole("button", { name: "Expand sidebar", exact: true });
+  await expect.element(sidebarToggle).toBeVisible();
+  (sidebarToggle.element() as HTMLElement).focus();
+  await userEvent.keyboard(isAppleKeyboard() ? "{Meta>},{/Meta}" : "{Control>},{/Control}");
+}
+
+test("clearing local data keeps browser preferences and Relay", async () => {
+  const restorePreferences = seedBrowserPreferences();
+  const db = await openPwaDatabase();
+  const relay = { key: RELAY_SETTING, value: customSettingsRelay };
+  await db.settings.bulkPut([relay, { key: ACTIVE_DEVICE_SETTING, value: makePwaDeviceId("owner-device-key") }]);
+  await seedArchivedSession();
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    await openSettingsWithSidebarCollapsed();
+    const statusSwitch = screen.getByRole("switch", { name: "Show session status on desktop" });
+    await expect.element(statusSwitch).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Reset layout", exact: true }).query()).toBeNull();
+
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ saved: { text: "Draft", at: Date.now() } }));
+    sessionStorage.setItem(SESSION_POSITION_STORAGE_KEY, JSON.stringify([["saved", { following: true }]]));
+    vi.mocked(reloadWorkspace).mockImplementationOnce(() => {});
+    await screen.getByRole("button", { name: "Clear local data", exact: true }).click();
+    const confirmation = screen.getByRole("dialog", { name: /Clear this browser/ });
+    await confirmation.getByRole("button", { name: "Clear local data", exact: true }).click();
+    await expect.poll(() => vi.mocked(reloadWorkspace).mock.calls.length).toBe(1);
+    expectBrowserPreferencesKept();
+    expect(await db.settings.toArray()).toEqual([relay]);
+    expect(await db.identities.count()).toBe(0);
+    expect(await db.devices.count()).toBe(0);
+    expect(await db.endpoints.count()).toBe(0);
+    expect(await db.sessions.count()).toBe(0);
+    expect(await db.events.count()).toBe(0);
+    expect(localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(SESSION_POSITION_STORAGE_KEY)).toBeNull();
+    await screen.unmount();
+    window.history.replaceState(null, "", "/app");
+    const reloaded = await renderWorkspaceApp();
+    try {
+      await openSettingsWithSidebarCollapsed();
+      await expect.element(reloaded.getByRole("switch", { name: "Show session status on desktop" })).not.toBeChecked();
+      await expect.element(reloaded.getByRole("textbox", { name: "Relay URL" })).toHaveValue(customSettingsRelay);
+    } finally { await reloaded.unmount(); }
+  } finally {
+    await screen.unmount();
+    vi.mocked(reloadWorkspace).mockClear();
+    window.history.replaceState(null, "", "/app");
+    sessionStorage.removeItem(SESSION_POSITION_STORAGE_KEY);
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    resetDraftStorageForTest();
+    restorePreferences();
+  }
+});
+
+test("reset settings confirms, restores live preferences and keeps pairing and history", async () => {
+  const restorePreferences = seedBrowserPreferences("false");
+  const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
+  await page.viewport(1600, 900);
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: RELAY_SETTING, value: customSettingsRelay });
+  await seedArchivedSession();
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  try {
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1"));
+    const card = screen.getByRole("complementary", { name: "Session status" });
+    await expect.element(card).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    const trigger = screen.getByRole("button", { name: "Reset settings", exact: true });
+    const confirmation = screen.getByRole("dialog", { name: "Reset settings?" });
+    await trigger.click();
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
+    await expect.element(trigger).toHaveFocus();
+    expectBrowserPreferencesKept("false");
+
+    await trigger.click();
+    await confirmation.getByRole("button", { name: "Reset settings", exact: true }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Default settings restored.", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("radio", { name: /^System/ })).toBeChecked();
+    await expect.element(screen.getByRole("radio", { name: /^Follow browser/ })).toBeChecked();
+    await expect.element(screen.getByRole("switch", { name: "Enter sends messages" })).toBeChecked();
+    await expect.element(screen.getByRole("switch", { name: "Show session status on desktop" })).toBeChecked();
+    expect(getTextSizeState().preference).toBe("system");
+    expect(localStorage.getItem("pi-reach-sidebar-collapsed")).toBe("false");
+    expect(localStorage.getItem("pi-reach-sidebar-width")).toBe(customBrowserPreferences["pi-reach-sidebar-width"]);
+    await expect.element(screen.getByRole("textbox", { name: "Relay URL" })).toHaveValue(customSettingsRelay);
+    expect(await db.devices.count()).toBe(1);
+    expect(await db.identities.count()).toBe(1);
+    expect(await db.sessions.count()).toBeGreaterThan(0);
+    expect(await db.events.count()).toBeGreaterThan(0);
+
+    await screen.getByRole("button", { name: "Back to workspace", exact: true }).click();
+    await expect.element(card).toBeVisible();
+    expect(channelHarness.channels).toEqual([channel]);
+  } finally {
+    await screen.unmount();
+    languages.mockRestore();
+    window.history.replaceState(null, "", "/app");
+    restorePreferences();
+  }
+});
+
 test("keeps mobile navigation behind deletion confirmation and restores management focus", async () => {
   await page.viewport(390, 844);
   const screen = await renderOnlineApp(renderWorkspaceApp);
@@ -4140,8 +4362,8 @@ test("keeps a stable session channel across reset and session replacement, with 
   expect(channelHarness.channels).toHaveLength(3);
   await expect.poll(connectionState).toBe("offline");
   const modelRequestsBeforeRetry = thirdChannel?.frames.filter((frame) => frame.type === "list_models").length ?? 0;
-  // 桌面没有信息入口；离线重试走输入框提示行的「立即重试」，不额外请求模型列表。
-  await expect.element(screen.getByRole("button", { name: "Session details" })).not.toBeInTheDocument();
+  // 桌面没有状态入口按钮；离线重试走输入框提示行的「立即重试」，不额外请求模型列表。
+  await expect.element(screen.getByRole("button", { name: "Session status" })).not.toBeInTheDocument();
   expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   expect(thirdChannel?.frames.filter((frame) => frame.type === "list_models")).toHaveLength(modelRequestsBeforeRetry);
   await screen.getByRole("button", { name: "Retry now" }).click();

@@ -8,9 +8,9 @@ function render(props: Partial<Parameters<typeof WorkspaceTitleBar>[0]> = {}): s
 }
 
 test("renders the session title, project line, refresh and navigation entry", () => {
-  const html = render({ prefix: "pi-reach", status: <span className="probe-status">Connected</span>, moreMenu: <button type="button">More</button> });
+  const html = render({ prefix: "pi-reach", status: <span className="probe-status">Connected</span> });
   // 会话名是唯一的 h1，title 只含会话名；项目名是它后面的普通文本行。
-  expect(html).toMatch(/<h1 class="pwa-title-bar-name" title="Release check">Release check<\/h1>/);
+  expect(html).toMatch(/<h1 class="pwa-title-bar-name" tabindex="-1" title="Release check">Release check<\/h1>/);
   expect(html).toMatch(/<div class="pwa-title-bar-project" title="pi-reach">pi-reach<\/div>/);
   expect(html).not.toContain("·");
   expect(html.indexOf("pwa-title-bar-name")).toBeLessThan(html.indexOf("pwa-title-bar-project"));
@@ -26,7 +26,7 @@ test("renders the session title, project line, refresh and navigation entry", ()
 
 test("keeps the project line out when there is no prefix", () => {
   const html = render();
-  expect(html).toMatch(/<h1 class="pwa-title-bar-name" title="Release check">Release check<\/h1>/);
+  expect(html).toMatch(/<h1 class="pwa-title-bar-name" tabindex="-1" title="Release check">Release check<\/h1>/);
   expect(html).not.toContain("pwa-title-bar-project");
 });
 

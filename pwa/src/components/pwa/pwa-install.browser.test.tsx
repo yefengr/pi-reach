@@ -62,7 +62,6 @@ function Settings() {
     onBack={() => {}}
     backLabel="Back to workspace"
     onClearData={() => {}}
-    onResetLayout={() => {}}
     onShowShortcuts={() => {}}
   /></div>;
 }

@@ -40,7 +40,7 @@
 | 移动导航是左侧 Mantine Drawer，由 `sheetOpen` / `sheetMounted` / `sheetFocusOrigin` 控制；设备选择面板打开时，`chooserOpenRef` 会拒绝关闭 | [`pwa-workspace-layout.tsx`](../../../pwa/src/components/pwa/pwa-workspace-layout.tsx)、[`session-sheet.tsx`](../../../pwa/src/components/pwa/session-sheet.tsx) |
 | 设置页通过 `pushState` / `popstate` 进出；`closeSettings` 在有设置页记录时调用 `history.back()`，来源是导航时会以展开态恢复导航 | [`settings-route.ts`](../../../pwa/src/lib/pwa/settings-route.ts) |
 | 两个阅读器打开时压入不改变 URL 的历史记录，通过按钮、Escape 或遮罩关闭时会撤回这条记录；文件阅读器在有其他模态叠在上面时拒绝关闭 | [`tool-reader.tsx`](../../../pwa/src/components/pwa/tool-reader.tsx)、[`published-file-reader.tsx`](../../../pwa/src/components/pwa/published-file-reader.tsx) |
-| 会话详情是 Popover，`role="dialog"` 且 `aria-modal="false"`，内部没有 menu 角色 | [`session-actions-menu.tsx`](../../../pwa/src/components/pwa/session-actions-menu.tsx)、`session-actions-menu.browser.test.tsx` |
+| 原会话详情 Popover 的基线已由会话状态抽屉替代 | [会话状态方案](20261118-session-status.md#82-移动抽屉) |
 | 消息列表本身是滚动容器，已设 `touch-action: pan-y`；body 设 `overscroll-behavior-y: none`；viewport 设 `user-scalable=no`；manifest 为 `standalone` | [`globals.css`](../../../pwa/src/app/globals.css)、[`index.html`](../../../pwa/index.html)、[`manifest.webmanifest`](../../../pwa/public/manifest.webmanifest) |
 | 会话时间线中的横向滚动区包括 Markdown 表格 `.pwa-markdown-table`、代码块 `.pwa-code-block pre`、工具 diff 预览 `.pwa-tool-diff-output`（由 `tool-preview.tsx` → `tool-output.tsx` 渲染）；文件阅读器的 Markdown 表格也使用 `.pwa-markdown-table`，可独立横向滚动 | `timeline-content.css`、`tool-reader.css`、[`tool-output.tsx`](../../../pwa/src/components/pwa/tool-output.tsx)、[`file-text-content.tsx`](../../../pwa/src/components/pwa/file-text-content.tsx) |
 | 工具详情阅读器用 `OutputText` 渲染，长行 `pre-wrap` 自动换行，不渲染 `.pwa-tool-diff-output`，没有横向滚动区 | [`tool-reader.tsx`](../../../pwa/src/components/pwa/tool-reader.tsx)、`tool-reader.css` 中的 `.pwa-reader-text` |
@@ -288,7 +288,7 @@ G1–G5 已完成本地实现和自动化验收，当前边界为**实现完成�
 受影响 Browser Mode 文件（均在 `pwa/src/components/pwa/`）：
 
 - 新增手势：`use-swipe.browser.test.tsx`、`mobile-swipe.browser.test.tsx`、`navigation-swipe.browser.test.tsx`、`reader-swipe.browser.test.tsx`。
-- 既有回归：`pwa-workspace-layout.browser.test.tsx`、`workspace-shell.browser.test.tsx`、`session-sheet.browser.test.tsx`、`tool-preview.browser.test.tsx`、`published-file.browser.test.tsx`、`pwa-app.browser.test.tsx`、`settings-page.browser.test.tsx`、`workspace-device-control.browser.test.tsx`、`session-actions-menu.browser.test.tsx`、`confirm-action-dialog.browser.test.tsx`、`pwa-motion.browser.test.tsx`。
+- 既有回归：`pwa-workspace-layout.browser.test.tsx`、`workspace-shell.browser.test.tsx`、`session-sheet.browser.test.tsx`、`tool-preview.browser.test.tsx`、`published-file.browser.test.tsx`、`pwa-app.browser.test.tsx`、`settings-page.browser.test.tsx`、`workspace-device-control.browser.test.tsx`、`pwa-workspace-layout-session-status.browser.test.tsx`、`confirm-action-dialog.browser.test.tsx`、`pwa-motion.browser.test.tsx`。
 
 四个新增 Browser Mode 文件共 55 项测试，其中 18 项使用真实 CDP 触摸，不替换浏览器捕获机制。已覆盖：
 

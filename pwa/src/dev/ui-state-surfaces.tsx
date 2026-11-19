@@ -9,7 +9,9 @@ import { PwaOperationNotifications } from "@/components/pwa/pwa-operation-notifi
 import { createOperationNotificationController, type OperationNotificationController } from "@/lib/pwa/operation-notifications";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 import type { PairingErrorCode } from "@/lib/pwa/use-device-pairing";
-import type { LanguagePreference } from "@/lib/i18n";
+import type { PwaAppearance } from "@/components/pwa/pwa-appearance";
+import type { ConfirmActionRequest } from "@/components/pwa/pwa-confirm-actions";
+import { getMessages, type LanguagePreference } from "@/lib/i18n";
 import { previewTextSize, type PwaTextSizePreference } from "@/lib/ui/text-size";
 import { GALLERY_DEVICES } from "./ui-state-shell-fixtures";
 
@@ -75,14 +77,16 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
   onNicknameChange: (deviceId: string, nickname: string) => void;
 }) {
   const [controller] = useState(createOperationNotificationController);
+  const [appearance, setAppearance] = useState<PwaAppearance>("system");
   const [language, setLanguage] = useState<LanguagePreference>("system");
   const [enterSends, setEnterSends] = useState(true);
+  const [showSessionStatusCard, setShowSessionStatusCard] = useState(true);
   const [textSize, setTextSize] = useState<PwaTextSizePreference>("standard");
   // 实际字号与设置里的选中项共用这份内存偏好；不写入正式偏好存储。
   useLayoutEffect(() => { previewTextSize(textSize); }, [textSize]);
   const [previousSurface, setPreviousSurface] = useState(surface);
   const [settingsVisible, setSettingsVisible] = useState(surface === "settings");
-  const [confirmAction, setConfirmAction] = useState<ConfirmActionDialogAction>({ kind: "new-session" });
+  const [confirmAction, setConfirmAction] = useState<Exclude<ConfirmActionDialogAction, { kind: "reset-settings" }> | Extract<ConfirmActionRequest, { kind: "reset-settings" }>>({ kind: "new-session" });
   const [outcome, setOutcome] = useState("success");
   const [confirmPending, setConfirmPending] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -126,7 +130,10 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
       setConfirmError("演示操作失败，请重试；本地数据保持不变。");
       return;
     }
-    controller.notify("演示操作已完成；未创建会话或清除数据。");
+    if (confirmAction.kind === "reset-settings") {
+      confirmAction.reset();
+      controller.notify(getMessages().settings.restoredDefaults);
+    } else controller.notify("演示操作已完成；未创建会话或清除数据。");
     closeOverlay();
   };
   const pair = async () => {
@@ -159,7 +166,7 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
     {refreshPreview ? <p className="pwa-ui-states-note" role="status">已演示刷新操作；当前页面保持原样。</p> : null}
     <div className="pwa-ui-states-settings" hidden={!settingsVisible}>
       <SettingsPage
-        preferences={{ language, setLanguage, enterSends, setEnterSends, textSize, setTextSize }}
+        preferences={{ appearance, setAppearance, language, setLanguage, enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, textSize, setTextSize }}
         relayUrl="https://relay.invalid"
         defaultRelayUrl="https://relay.invalid"
         relayVersion={null}
@@ -171,7 +178,7 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
         onBack={() => onSurfaceChange(null)}
         backLabel="返回展厅"
         onClearData={() => { setConfirmAction({ kind: "clear-local-data" }); onSurfaceChange("confirm"); }}
-        onResetLayout={() => controller.notify("已演示重置布局；展厅布局保持不变。")}
+        onResetSettings={(reset) => { setConfirmAction({ kind: "reset-settings", reset }); onSurfaceChange("confirm"); }}
         onShowShortcuts={() => onSurfaceChange("shortcuts")}
       />
     </div>

@@ -10,6 +10,8 @@ type ReaderHistoryOptions = {
   onClose: () => void;
   /** 为 true 时忽略本次后退（例如上层 Modal 正在处理）。 */
   ignorePop?: () => boolean;
+  /** 所属记录已消费或撤回后通知，用于向下一页面交接。 */
+  onReleased?: () => void;
 };
 
 /**
@@ -17,7 +19,7 @@ type ReaderHistoryOptions = {
  * 系统已提供原生返回转场（`hasUAVisualTransition`，如 iOS 边缘手势）时，同步提交关闭并返回 `instant`，
  * 由调用方把退出时长置 0，避免在原生转场之上再播放一次退出动画。
  */
-export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop }: ReaderHistoryOptions): { instant: boolean; skipExit: () => void; resetSkipExit: () => void } {
+export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop, onReleased }: ReaderHistoryOptions): { instant: boolean; skipExit: () => void; resetSkipExit: () => void } {
   const [instant, setInstant] = useState(false);
   // 跟手拖动已把面板移出屏幕时的即时退出标记；与系统原生转场的 instant 各自独立，互不清除。
   const [gestureInstant, setGestureInstant] = useState(false);
@@ -30,6 +32,8 @@ export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop 
       setGestureInstant(false);
     }
   }
+  const releasedRef = useRef(onReleased);
+  useLayoutEffect(() => { releasedRef.current = onReleased; }, [onReleased]);
   const onCloseRef = useRef(onClose);
   const ignorePopRef = useRef(ignorePop);
   useLayoutEffect(() => {
@@ -68,7 +72,11 @@ export function useReaderHistory({ opened, stateKey, marker, onClose, ignorePop 
       window.clearTimeout(timer);
       window.removeEventListener("popstate", onPopState);
       // 通过按钮、Escape 或遮罩关闭时撤回压入的记录，保持后退行为一致。
-      if (pushed && !closedByHistory && window.history.state?.[stateKey] === marker) window.history.back();
+      if (pushed && !closedByHistory && window.history.state?.[stateKey] === marker) {
+        const released = () => { releasedRef.current?.(); };
+        window.addEventListener("popstate", released, { once: true });
+        window.history.back();
+      } else queueMicrotask(() => releasedRef.current?.());
     };
   }, [opened, stateKey, marker]);
 

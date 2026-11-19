@@ -35,7 +35,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl tini \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global --no-audit --no-fund @earendil-works/pi-coding-agent@0.84.4 \
+    && npm install --global --no-audit --no-fund @earendil-works/pi-coding-agent@1.3.0 \
     && useradd --create-home --uid 10001 --shell /bin/bash pi \
     && mkdir -p /opt/pi-reach /workspace /home/pi/.pi/agent/sessions \
     && chown -R pi:pi /opt/pi-reach /workspace /home/pi \

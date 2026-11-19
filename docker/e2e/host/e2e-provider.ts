@@ -38,7 +38,7 @@ export default function registerE2eProvider(pi: ExtensionAPI) {
       const message: AssistantMessage = {
         role: "assistant" as const, api: model.api, provider: model.provider, model: model.id,
         content: [], timestamp: Date.now(), stopReason: "pending" as const,
-        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+        usage: { input: 17, output: 0, cacheRead: 3, cacheWrite: 0, totalTokens: 20,
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       };
       queueMicrotask(async () => {

@@ -378,7 +378,7 @@ export const CLIENT_FRAME_TYPES = [
   "queued_message_clear", "queued_message_steer", "approve_tool", "extension_info_request",
   "attachment_capabilities_request", "attachment_begin", "attachment_chunk", "attachment_finish", "attachment_status_request", "attachment_cancel", "attachment_discard",
   "file_open", "file_attachment_open", "file_read", "file_close",
-  "tool_details_open", "tool_details_close",
+  "tool_details_open", "tool_details_close", "session_status_subscribe",
 ] as const;
 export const SERVER_FRAME_TYPES = [
   "pair_ok", "pair_error", "session_ready", "user_message_started", "user_message_status", "timeline_event",
@@ -387,7 +387,7 @@ export const SERVER_FRAME_TYPES = [
   "extension_info",
   "attachment_capabilities", "attachment_state", "attachment_error", "attachment_discarded",
   "file_opened", "file_chunk", "file_closed", "file_error",
-  "tool_details_chunk", "tool_details_error",
+  "tool_details_chunk", "tool_details_error", "session_status",
 ] as const;
 export type ClientFrameType = (typeof CLIENT_FRAME_TYPES)[number];
 export type ServerFrameType = (typeof SERVER_FRAME_TYPES)[number];

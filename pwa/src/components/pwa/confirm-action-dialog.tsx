@@ -9,6 +9,7 @@ export type ConfirmActionDialogAction =
   | { kind: "new-session" }
   | { kind: "remove-pairing"; label: string }
   | { kind: "clear-local-data" }
+  | { kind: "reset-settings" }
   | { kind: "leave-attachments"; uploads?: boolean; files?: boolean };
 
 type ConfirmActionDialogProps = {
@@ -54,6 +55,14 @@ function dialogCopy(action: ConfirmActionDialogAction, t: Messages["confirm"], a
         confirmLabel: t.removeConfirm,
         pendingLabel: t.removePending,
         destructive: true,
+      };
+    case "reset-settings":
+      return {
+        title: t.resetSettingsTitle,
+        description: t.resetSettingsBody,
+        confirmLabel: t.resetSettingsConfirm,
+        pendingLabel: t.resetSettingsConfirm,
+        destructive: false,
       };
     case "clear-local-data":
       return {
@@ -101,7 +110,7 @@ export function ConfirmActionDialog({ action, pending, error, onConfirm, onClose
     styles={{ body: { padding: 0 } }}
   >
     <Stack gap={0}>
-      <Text component="p" id={descriptionId} className="pwa-confirm-description">{copy.description}{fetchingFiles && visibleAction.kind !== "leave-attachments" ? ` ${t.files.cancelFetching}` : ""}</Text>
+      <Text component="p" id={descriptionId} className="pwa-confirm-description">{copy.description}{fetchingFiles && visibleAction.kind !== "leave-attachments" && visibleAction.kind !== "reset-settings" ? ` ${t.files.cancelFetching}` : ""}</Text>
       {error ? <Text component="p" className="pwa-confirm-error" role="alert">{localizeFeedback(error, locale)}</Text> : null}
       <Group className="pwa-confirm-actions" justify="flex-end" gap="xs">
         {mobile ? confirmButton : cancelButton}

@@ -4,6 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { renderPwa } from "@/test/browser/render";
 import { SettingsPage } from "./settings-page";
 import { setLanguagePreference } from "@/lib/i18n";
+import { SESSION_STATUS_CARD_STORAGE_KEY } from "@/lib/pwa/session-status-card-preference";
 import { resetTextSizeStateForTest, setSystemBodyProbeForTest, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
 import { minimumControlHeight } from "@/test/browser/button-height";
 
@@ -31,19 +32,21 @@ function SettingsHarness({ events = [], onSave = async () => {}, backLabel = "Ba
     onBack={() => events.push("back")}
     backLabel={backLabel}
     onClearData={() => events.push("clear")}
-    onResetLayout={() => events.push("reset")}
+    onResetSettings={() => events.push("reset")}
     onShowShortcuts={() => events.push("shortcuts")}
   /></div></div>;
 }
 
 beforeEach(() => {
   window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
+  window.localStorage.removeItem(SESSION_STATUS_CARD_STORAGE_KEY);
   resetTextSizeStateForTest();
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
   window.localStorage.removeItem("pi-reach-enter-sends");
+  window.localStorage.removeItem(SESSION_STATUS_CARD_STORAGE_KEY);
   window.localStorage.removeItem(TEXT_SIZE_STORAGE_KEY);
   setSystemBodyProbeForTest(null);
   resetTextSizeStateForTest();
@@ -103,7 +106,7 @@ test("routes back, reset and clear to the parent while staying on the page", asy
   const events: string[] = [];
   const screen = await renderPwa(<SettingsHarness events={events} backLabel="Back to navigation" />);
   await screen.getByRole("button", { name: "Back to navigation" }).click();
-  await screen.getByRole("button", { name: "Reset layout" }).click();
+  await screen.getByRole("button", { name: "Reset settings" }).click();
   await screen.getByRole("button", { name: "Clear local data" }).click();
   expect(events).toEqual(["back", "reset", "clear"]);
   await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
@@ -117,7 +120,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
   expect(inner.getBoundingClientRect().width).toBeLessThanOrEqual(640);
   expect(view.scrollWidth).toBeLessThanOrEqual(view.clientWidth);
   const sections = [...document.querySelectorAll<HTMLElement>(".pwa-settings-section")];
-  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Text size", "Language", "Keyboard", "Connection", "Browser data", "About"]);
+  expect(sections.map((section) => section.querySelector("h2")!.textContent)).toEqual(["Appearance", "Text size", "Workspace", "Language", "Keyboard", "Connection", "Browser data", "About"]);
   expect(sections[1]!.getBoundingClientRect().top - sections[0]!.getBoundingClientRect().bottom).toBeCloseTo(32, 0);
   // 分组列表：标题到分组 8，分组到说明 6，行高不低于 44（DESIGN「设置页」）。
   const appearance = sections[0]!;
@@ -151,7 +154,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
     await expect.element(screen.getByText("Back to workspace", { exact: true })).toBeVisible();
   }
   await page.screenshot({ path: `../../../.vitest/screenshots/settings-page-top-${width}.png` });
-  for (const name of ["Save settings", "Reset layout", "Clear local data", "Copy version information"]) {
+  for (const name of ["Save settings", "Reset settings", "Clear local data", "Copy version information"]) {
     const action = screen.getByRole("button", { name });
     action.element().scrollIntoView({ block: "nearest" });
     await expect.element(action).toBeVisible();
@@ -324,6 +327,19 @@ test("keyboard settings save the Enter preference immediately and expose the hel
   await screen.unmount();
   screen = await renderPwa(<SettingsHarness />);
   await expect.element(screen.getByRole("switch", { name: "Enter sends messages" })).not.toBeChecked();
+});
+
+test("desktop session status defaults on, saves its switch, and restores across remounts", async () => {
+  let screen = await renderPwa(<SettingsHarness />);
+  const setting = screen.getByRole("switch", { name: "Show session status on desktop" });
+  await expect.element(setting).toBeChecked();
+  await setting.click();
+  await expect.element(setting).not.toBeChecked();
+  expect(window.localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY)).toBe("false");
+  await screen.unmount();
+  screen = await renderPwa(<SettingsHarness />);
+  await expect.element(screen.getByRole("switch", { name: "Show session status on desktop" })).not.toBeChecked();
+  await screen.unmount();
 });
 
 test("invalid stored keyboard preferences fall back to Enter sending", async () => {

@@ -247,6 +247,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `thinking_set`
 - `list_models`
 - `extension_info_request`
+- `session_status_subscribe`
 - `attachment_capabilities_request`
 - `attachment_begin`
 - `attachment_chunk`
@@ -269,6 +270,7 @@ ACL 从无权变为有权时发 `endpoint_announced`，持续有权时发 `endpo
 - `pair_error`
 - `session_ready`
 - `extension_info`
+- `session_status`
 - `attachment_capabilities`
 - `attachment_state`
 - `attachment_discarded`
@@ -421,6 +423,21 @@ Extension 仅向已协商 channel 定向发送工具摘要；PWA 先过滤发给
 
 这些是内容、队列或缓存预算，不是整个进程、浏览器或图片解码的内存峰值。详情缓存按 Owner/device/endpoint/session/group/native ref 隔离，不以临时 runtime/channel/leaf 为持久身份，不回填正式工具事件；移除配对、清会话或清数据时一并清理，并以事务阻止晚到写入重建孤立缓存。已有完整 v2 inline 记录不会被摘要擦除，omitted/truncated 记录不冒充完整原件。本地只读历史与离线阅读只使用已有内容或缓存，未命中不自动建立远端连接。
 
+## 会话状态订阅
+
+会话状态独立于握手和正式时间线。PWA 收到匹配当前连接的 `session_ready` 后，可以发送 `session_status_subscribe`（`id`、`channel_id`、`session_id`、`leaf_id`）。Extension 使用既有 ready-only 校验，按 Relay 认证的 Owner 和 channel 登记；同一 channel 的新订阅替换旧订阅。普通叶节点前进不使订阅失效。
+
+Extension 为每次成功订阅回复一份完整、定向的 `session_status`，包含 `target_channel_id`、`session_id`、计算时的 `leaf_id` 和等于本次请求 `id` 的 `subscription_id`。首份另带等于 `subscription_id` 的 `in_reply_to`；只有 `status` 变化才推送后续完整快照，不再带 `in_reply_to`。PWA 以当前连接、channel、session 和订阅关联快照；`leaf_id` 可以领先于正式时间线，不据此更新或重置时间线。真正切换分支、会话、断连或重新握手时废止旧订阅。真正切分支、换会话或退出时清除快照；PWA 可在同一会话临时断连时继续展示最后一次已确认的状态，但不会接收旧订阅的任何帧。
+
+| `status` 字段 | 内容 |
+| --- | --- |
+| `context` | `null` 表示没有可计算的上下文；否则包含 `tokens`（非负整数，未知时为 `null`）、`window`（正整数）、`auto_compact`（布尔值）和 Extension 判定的 `level`（`normal`、`high`、`full`；当且仅当 `tokens` 为 `null` 时为 `null`）。 |
+| `usage` | `input`、`output`、`cache_read`、`cache_write`（非负整数）、`cost`（非负有限数）、`cache_hit_rate_session` 与 `cache_hit_rate_latest`（分别为累计和最近命中率，0–100 或 `null`）。 |
+| `branch` | 非空字符串，最多 256 字符，无分支信息时为 `null`。 |
+| `extensions` | 最多 12 条；必填非空 `key`、`label`、`text`，长度分别不超过 64、12、160；可选 `tone` 为 `warning`／`error`，`section` 为 `context`／`usage`／`session`。来源见[扩展状态约定](../extension-status.md)。 |
+
+订阅租约为 30 秒。有有效租约时，已通过作用域校验的 `ping` 续租，不创建订阅，也不触发状态计算；PWA 前台按 10 秒周期续租，回到前台时重新订阅。首份等待上限为 10 秒，超时及不能续租时按[错误与兼容策略](#错误与兼容策略)局部降级。重新握手、解除 Owner 绑定、进程退出或真实分支／会话失效会停止发送。状态不落盘；Relay 不接收新的外层帧，也不解码 `ct`。
+
 ## Timeline 不变量
 
 - `TimelineEvent` 是实时正式事件与历史事件的唯一 shape；正式事件携带连续的正整数 `event_seq`。
@@ -452,5 +469,7 @@ internal_error
 ```
 
 PWA 与 Pi Extension 必须使用相容的 Protocol v2 契约；独立附件或诊断能力不足只使对应功能不可用，不构成协议降级。v2 timeline 不读取旧 cursor、旧 wire shape 或历史 timeline 数据，也不提供 v1 双栈或 fallback。既有 v2 inline 工具事件与新增 summary 变体同属当前共享 schema，不是 v1 回退；工具摘要能力未协商时按上文拒绝新模式握手。
+
+只有匹配当前 `session_status_subscribe` 请求的 `protocol_upgrade_required` 会显示「扩展版本较旧」，同次 ready 不重试。首份超时或其他订阅失败只影响状态区域，不触发主会话重连；前台续租中断时可在同一 ready 连接上重新订阅一次。若收到有效首份，下一次续租中断仍可重新订阅一次。未订阅的页面不接收发给自己的 `session_status`；同一 Owner 的其他标签页靠 `target_channel_id` 区分，支持定向过滤的旧页面在解码前跳过不属于自己的帧。
 
 未知 frame、未知字段、方向错误、缺少版本、v1 或未知版本都必须 fail closed。任何一端不得根据旧字段猜测 endpoint、runtime、channel 或 session。兼容读取旧 `daemon` metadata 不构成这一规则的例外。

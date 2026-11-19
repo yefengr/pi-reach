@@ -24,13 +24,16 @@ type NavigationDragOptions = {
   setSheetOpen: (open: boolean) => void;
   /** 与触发按钮点击相同的打开入口，焦点来源固定为主区的 .pwa-session-trigger。 */
   openNavigation: (origin: HTMLElement | null) => void;
+  selector?: string;
+  triggerSelector?: string;
+  side?: "left" | "right";
 };
 
 /**
  * 移动导航打开的跟手拖动（D5）。开始时同步挂载并打开导航，暂停的 WAAPI 动画把内容与遮罩压在屏幕外起点，
  * 随手指移动；松手后提交（走到打开终点再启用焦点陷阱与滚动锁）或回弹（回到起点后即时关闭，不动焦点）。
  */
-export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation }: NavigationDragOptions) {
+export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation, selector = SHEET_SELECTOR, triggerSelector = TRIGGER_SELECTOR, side = "left" }: NavigationDragOptions) {
   const duration = usePwaMotionDuration("--pwa-duration-drawer");
   const exitDuration = usePwaMotionDuration("--pwa-duration-drawer-out");
   const [gesture, setGesture] = useState<NavigationGesture | null>(null);
@@ -58,8 +61,8 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
       if (latest.current.sheetOpen) latest.current.setSheetOpen(false);
     });
     // 退出时长为 0 时过渡回调已同步触发；仍挂载时等待它收尾。
-    if (!document.querySelector(SHEET_SELECTOR)) release();
-  }, [release]);
+    if (!document.querySelector(selector)) release();
+  }, [release, selector]);
 
   const rollBack = useCallback((drag: SwipeDrag) => {
     phaseRef.current = "rollback";
@@ -100,12 +103,12 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
       const { sheetOpen: isOpen, mainElement: main, openNavigation: open, duration: enter, exitDuration: exit } = latest.current;
       if (!root || !main || isOpen || phaseRef.current !== "idle" || pwaMotionShiftDisabled(root)) return false;
       // 上一次关闭的退出过渡尚未结束时不抢占，退回触发式。
-      if (document.querySelector(SHEET_SELECTOR)) return false;
+      if (document.querySelector(selector)) return false;
       flushSync(() => {
         setGesture("dragging");
-        open(main.querySelector<HTMLElement>(TRIGGER_SELECTOR));
+        open(main.querySelector<HTMLElement>(triggerSelector));
       });
-      const sheet = root.querySelector<HTMLElement>(SHEET_SELECTOR);
+      const sheet = root.querySelector<HTMLElement>(selector);
       if (!sheet) {
         flushSync(() => {
           setGesture(null);
@@ -117,7 +120,7 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
       const width = () => sheet.offsetWidth;
       dragRef.current = createSwipeDrag({
         targets: [
-          { element: sheet, frame: (progress) => ({ transform: `translateX(${-(1 - progress) * width()}px)` }) },
+          { element: sheet, frame: (progress) => ({ transform: `translateX(${(side === "left" ? -1 : 1) * (1 - progress) * width()}px)` }) },
           ...(scrim ? [{ element: scrim, frame: (progress: number) => ({ opacity: progress }) }] : []),
         ],
         extent: width,
@@ -132,7 +135,7 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
       if (phaseRef.current === "dragging" && !voidRef.current) dragRef.current?.setDistance(distance);
     },
     extent() {
-      return rootRef.current?.querySelector<HTMLElement>(SHEET_SELECTOR)?.offsetWidth ?? 0;
+      return rootRef.current?.querySelector<HTMLElement>(selector)?.offsetWidth ?? 0;
     },
     end({ committed, velocity }) {
       const drag = dragRef.current;
@@ -148,7 +151,7 @@ export function useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpe
       // 取消原因不代表导航状态：仍打开（被我们打开）才回弹；已被外部关闭时由上面的 effect 接管。
       if (latest.current.sheetOpen) rollBack(drag);
     },
-  }), [commit, rollBack, rootRef]);
+  }), [commit, rollBack, rootRef, selector, side, triggerSelector]);
 
   const canSwipe = useCallback(() => phaseRef.current === "idle" || phaseRef.current === "dragging", []);
   return { drag: handlers, canSwipe, gesture, onExitTransitionEnd: release };

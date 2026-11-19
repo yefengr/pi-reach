@@ -19,7 +19,7 @@ export type CreateOwnerBindingOptions = {
   attachments: AttachmentDelivery;
   onFrame: (frame: ClientFrame) => void;
   onTurn: (id: string) => void;
-} & Pick<V2ServiceOptions, "onCancel" | "onAction" | "onListModels">;
+} & Pick<V2ServiceOptions, "onCancel" | "onAction" | "onListModels" | "sessionStatus">;
 
 export function createOwnerBinding(options: CreateOwnerBindingOptions): OwnerBinding {
   const { ownerId, manager, runtime, delivery, attachments } = options;
@@ -28,6 +28,8 @@ export function createOwnerBinding(options: CreateOwnerBindingOptions): OwnerBin
   service = new TimelineV2Service({ sessionManager: manager, senderRef: ownerId,
     extensionVersion: options.extensionVersion, runtime,
     onToolDetailFrame: (frame) => channel.sendV2(frame),
+    sessionStatus: options.sessionStatus,
+    onSessionStatusFrame: (frame) => channel.sendV2(frame),
     onAttachmentReplay: (frame) => attachments.replay(frame, ownerId, manager, runtime),
     onAttachmentStatus: (clientRequestId) => attachments.status(ownerId, clientRequestId, manager, runtime),
     onDeliveryStage: (clientRequestId) => delivery.lookup(ownerId, service, clientRequestId),

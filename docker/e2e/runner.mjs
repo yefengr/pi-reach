@@ -219,6 +219,21 @@ async function main() {
   const cReady = ownerCReady.frames.find((frame) => frame.sequence > cHelloCursor && frame.type === "session_ready" && frame.in_reply_to === helloC);
   assert(!!cReady, "second_owner_session_ready");
 
+  const statusSubscribeB = id("status-subscribe-b");
+  const cStatusCursor = sequenceOf(await request(ownerPorts.c, "/state"));
+  const bStatusCursor = sequenceOf(await request(ownerPorts.b, "/state"));
+  await request(ownerPorts.b, "/frame", { method: "POST", capability: ownerBCapability, body: { frame: { protocol_version: 2, type: "session_status_subscribe", id: statusSubscribeB, channel_id: channelB, session_id: sessionId, leaf_id: leafId } } });
+  await waitFor("targeted session status", async () => {
+    const state = await request(ownerPorts.b, "/state");
+    const rejection = state.frames.find((frame) => frame.sequence > bStatusCursor && frame.type === "protocol_error" && frame.in_reply_to === statusSubscribeB);
+    if (rejection) throw new Error(`session status denied (${rejection.protocol_error_code ?? "unknown"})`);
+    return eventAfter(state, bStatusCursor, (frame) => frame.type === "session_status"
+      && frame.target_channel_id === channelB && frame.subscription_id === statusSubscribeB
+      && frame.in_reply_to === statusSubscribeB && frame.session_id === sessionId);
+  });
+  assert(true, "session_status_targeted_first_snapshot");
+  assert(!eventAfter(await request(ownerPorts.c, "/state"), cStatusCursor, (frame) => frame.type === "session_status"), "session_status_not_routed_to_other_owner");
+
   const newB = id("new-b");
   const bNewCursor = sequenceOf(await request(ownerPorts.b, "/state"));
   const cReplacementCursor = sequenceOf(await request(ownerPorts.c, "/state"));

@@ -7,10 +7,10 @@ import { canCloseBackgroundOverlay, pickConfirmationFocusFallback, runConfirmAct
 import { PwaUiProvider } from "./pwa-ui-provider";
 import type { PwaDeviceRecord } from "@/lib/pwa/db";
 
-function render(action: ConfirmActionDialogAction, pending = false): string {
+function render(action: ConfirmActionDialogAction, pending = false, fetchingFiles = false): string {
   return renderToStaticMarkup(
     <PwaUiProvider>
-      <ConfirmActionDialog action={action} pending={pending} onConfirm={() => {}} onClose={() => {}} withinPortal={false} />
+      <ConfirmActionDialog action={action} pending={pending} fetchingFiles={fetchingFiles} onConfirm={() => {}} onClose={() => {}} withinPortal={false} />
     </PwaUiProvider>,
   );
 }
@@ -71,6 +71,7 @@ test("renders each confirmation action as an accessible Mantine modal", () => {
   const cases: Array<{ action: ConfirmActionDialogAction; title: string; description: string; confirmLabel: string }> = [
     { action: { kind: "new-session" }, title: "Start a fresh session?", description: "Everyone viewing this Pi will move to a fresh conversation.", confirmLabel: "Start fresh session" },
     { action: { kind: "remove-pairing", label: "office" }, title: "Delete pairing for office?", description: "This removes this computer pairing, saved Pi details, and local history from this browser.", confirmLabel: "Delete pairing" },
+    { action: { kind: "reset-settings" }, title: "Reset settings?", description: "Appearance, text size, language, workspace, and keyboard settings will return to their defaults. Pairings, history, and the Relay URL are not affected.", confirmLabel: "Reset settings" },
     { action: { kind: "clear-local-data" }, title: "Clear this browser&#x27;s Pi Reach identity, pairings, and history?", description: "This cannot be undone. It removes this browser&#x27;s Pi Reach identity, pairings, and history.", confirmLabel: "Clear local data" },
   ];
 
@@ -128,6 +129,49 @@ test("locks all close paths while an action is pending", () => {
   expect(buttonByClass(html, "pwa-button")).toMatch(/disabled=""/);
   expect(buttonByClass(html, "pwa-button")).toMatch(/Cancel/);
   expect(html).toMatch(/aria-label="Close confirmation dialog"[^>]*disabled=""/);
+});
+
+test("reset settings uses a primary confirmation without file cancellation copy", () => {
+  const html = render({ kind: "reset-settings" }, false, true);
+  expect(confirmButton(html)).toMatch(/data-variant="filled"/);
+  expect(html).not.toContain("pwa-danger-confirm");
+  // 其余确认仍保留原有取回文件的提醒。
+  expect(render({ kind: "new-session" }, false, true)).not.toBe(render({ kind: "new-session" }));
+  expect(html).toBe(render({ kind: "reset-settings" }));
+});
+
+test("reset settings runs only its callback and closes, without session or data effects", async () => {
+  const calls: string[] = [];
+  const harness = actionHarness({
+    startNewSession: () => { calls.push("new-session"); return true; },
+    removePairing: async () => { calls.push("remove-pairing"); },
+    invalidateConnection: () => { calls.push("invalidate"); },
+    clearLocalData: async () => { calls.push("clear"); },
+    reload: () => { calls.push("reload"); },
+  });
+  const action: ConfirmActionRequest = { kind: "reset-settings", reset: () => { calls.push("reset"); } };
+  const result = await runConfirmAction(action, harness.effects, harness.state);
+  expect(result).toBe("completed");
+  expect(calls).toEqual(["reset"]);
+  expect(harness.successes()).toBe(1);
+  expect(harness.pending).toEqual([true, false]);
+  expect(harness.pendingRef.current).toBe(false);
+});
+
+test("reset settings respects the pending gate and keeps failures safe and retryable", async () => {
+  const harness = actionHarness();
+  let calls = 0;
+  const action: ConfirmActionRequest = { kind: "reset-settings", reset: () => { calls++; throw new Error("INTERNAL_TOKEN database path"); } };
+  harness.pendingRef.current = true;
+  expect(await runConfirmAction(action, harness.effects, harness.state)).toBe("ignored");
+  expect(calls).toBe(0);
+  harness.pendingRef.current = false;
+  expect(await runConfirmAction(action, harness.effects, harness.state)).toBe("failed");
+  expect(calls).toBe(1);
+  expect(harness.errors).toEqual([null, "Could not complete this action. Try again."]);
+  expect(harness.successes()).toBe(0);
+  expect(harness.pending).toEqual([true, false]);
+  expect(harness.pendingRef.current).toBe(false);
 });
 
 const device: PwaDeviceRecord = {

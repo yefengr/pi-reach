@@ -14,7 +14,8 @@ const COMPOSE_PROJECT = "pi-reach-e2e";
 const CONTROL_BASE_URL = "http://127.0.0.1:18787";
 const RELAY_URL = "http://127.0.0.1:18786";
 const CONTROL_CAPABILITY_PATH = "/home/pi/.pi/pi-reach/e2e-control-capability";
-const LEGACY_DIST = process.env.PI_REACH_E2E_LEGACY_DIST;
+const PRE_FILES_LEGACY_DIST = process.env.PI_REACH_E2E_LEGACY_DIST;
+const LEGACY_DIST = PRE_FILES_LEGACY_DIST ?? process.env.PI_REACH_E2E_PRE_STATUS_DIST;
 const legacyFileRequests = new WeakMap<Page, { count: number }>();
 
 type HostState = {
@@ -150,6 +151,12 @@ async function pairOwner(page: Page, pairingCode: string): Promise<void> {
   await expectLiveSessionConnected(page, 30_000);
 }
 
+function expectLegacySessionConnected(page: Page) {
+  // 历史构建曾有标题区连接标签；后续构建改用主区连接状态。
+  const connected = page.getByLabel("Connected", { exact: true }).or(page.locator("main.pwa-main[data-connection=online]"));
+  return expect(connected.first()).toBeVisible({ timeout: 60_000 });
+}
+
 async function openLegacyPage(context: BrowserContext): Promise<Page | null> {
   if (!LEGACY_DIST) return null;
   // 同一 origin/context 复用真实 Owner；只替换旧构建资产，不读取或复制身份密钥。
@@ -174,7 +181,7 @@ async function openLegacyPage(context: BrowserContext): Promise<Page | null> {
     return route.fulfill({ path: `${LEGACY_DIST}/assets/${name}` });
   });
   await legacy.goto("/app");
-  await expect(legacy.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expectLegacySessionConnected(legacy);
   return legacy;
 }
 
@@ -432,16 +439,29 @@ test("pairs two browser Owners, verifies live work panels and exact originals, a
       await expectLiveSessionConnected(owner, 60_000);
       await expect(owner.locator('.pwa-message.user')).toHaveCount(0, { timeout: 60_000 });
     }
+    const sameOwnerTab = await ownerAContext.newPage();
+    await sameOwnerTab.goto("/app");
+    await expectLiveSessionConnected(sameOwnerTab, 60_000);
+    const inputRow = (owner: Page) => owner.getByRole("complementary", { name: "Session status" })
+      .locator(".pwa-session-status-row").filter({ has: owner.getByText("Input", { exact: true }) }).locator("dd");
+    const inputs = [ownerAPage, ownerBPage, sameOwnerTab].map(inputRow);
+    for (const input of inputs) await expect(input).toHaveText("0");
     await verifyOriginalUpload(ownerAPage, ownerBPage, attachmentSession.sessionId!);
+    for (const input of inputs) await expect(input).toHaveText(/^[1-9]/, { timeout: 30_000 });
+    const inputBeforeClose = await inputs[0]!.innerText();
+    await sameOwnerTab.close();
     await verifyPublishedFiles([ownerAPage, ownerBPage], attachmentSession.sessionId!, capability, {
       runCompose, controlFetch, waitForHostState,
     }, testInfo);
+    await expect(inputs[0]!).not.toHaveText(inputBeforeClose);
     if (legacyPage) {
-      // 合法发布 custom 不影响旧聊天，旧页面也不会显示或自动读取新文件。
-      await expect(legacyPage.locator(".pwa-published-file")).toHaveCount(0);
-      expect(legacyFileRequests.get(legacyPage)?.count).toBe(0);
+      await expect(legacyPage.locator(".pwa-session-status-card")).toHaveCount(0);
+      if (PRE_FILES_LEGACY_DIST) {
+        await expect(legacyPage.locator(".pwa-published-file")).toHaveCount(0);
+        expect(legacyFileRequests.get(legacyPage)?.count).toBe(0);
+      }
       await expect(legacyPage.locator('.pwa-message.user:not(.pending)').filter({ hasText: "E2E publish file fixtures" }).first()).toBeVisible({ timeout: 60_000 });
-      await expect(legacyPage.getByLabel("Connected", { exact: true })).toBeVisible();
+      await expectLegacySessionConnected(legacyPage);
       await expect(legacyPage.locator('.pwa-message.user').filter({ hasText: "binary-original.bin" }).first()).toBeVisible({ timeout: 60_000 });
       expect(await legacyPage.locator('.pwa-message.user').allTextContents()).not.toEqual(expect.arrayContaining([expect.stringContaining('/home/pi')]));
       await legacyPage.reload({ waitUntil: "domcontentloaded" });
@@ -449,13 +469,15 @@ test("pairs two browser Owners, verifies live work panels and exact originals, a
       await expect(legacyOnlinePi).toHaveCount(1, { timeout: 60_000 });
       await legacyOnlinePi.click();
       await expect(legacyOnlinePi).toHaveAttribute("aria-current", "true");
-      await expect(legacyPage.getByLabel("Connected", { exact: true })).toBeVisible({ timeout: 60_000 });
+      await expectLegacySessionConnected(legacyPage);
       await expect(legacyPage.locator('.pwa-message.user:not(.pending)').filter({ hasText: "binary-original.bin" }).first()).toBeVisible({ timeout: 60_000 });
       await legacyPage.getByRole("textbox").fill("Legacy page text works");
       await legacyPage.getByRole("button", { name: "Send message", exact: true }).click();
       for (const owner of [legacyPage, ownerAPage, ownerBPage]) await expect(owner.locator('.pwa-message.user:not(.pending)').filter({ hasText: "Legacy page text works" }).first()).toBeVisible({ timeout: 60_000 });
-      expect(legacyFileRequests.get(legacyPage)?.count).toBe(0);
-      await expect(legacyPage.locator(".pwa-published-file")).toHaveCount(0);
+      if (PRE_FILES_LEGACY_DIST) {
+        expect(legacyFileRequests.get(legacyPage)?.count).toBe(0);
+        await expect(legacyPage.locator(".pwa-published-file")).toHaveCount(0);
+      }
     }
     const afterSessionId = await verifyReaderDrawerLive(
       [ownerAPage, ownerBPage], attachmentSession.sessionId!,

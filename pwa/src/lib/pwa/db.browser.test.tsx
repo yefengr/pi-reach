@@ -7,8 +7,10 @@ import {
   openPwaDatabase,
   PwaDatabase,
   removePwaDeviceData,
+  RELAY_SETTING,
   type PwaTimelineEventRecord,
 } from "./db";
+import { ACTIVE_DEVICE_SETTING, activeEndpointSettingKey } from "./active-selection-keys";
 
 const legacyTimelineSchema = "id, [deviceId+endpointId+sessionId+leafId], timestamp, eventId";
 
@@ -281,7 +283,19 @@ test("removing a pairing deletes only that computer's history", async () => {
   expect(await database.sessions.where("deviceId").equals("first").count()).toBe(0);
   expect(await database.sessions.where("deviceId").equals("second").count()).toBe(1);
 
-  await clearPwaData();
-  expect(await database.sessions.count()).toBe(0);
-  expect(await database.events.count()).toBe(0);
+  const relay = { key: RELAY_SETTING, value: "https://saved-relay.example.test" };
+  await database.settings.bulkPut([
+    relay,
+    { key: ACTIVE_DEVICE_SETTING, value: makePwaDeviceId("second") },
+    ...["first", "second"].map(id => ({ key: activeEndpointSettingKey(makePwaDeviceId(id)), value: "endpoint" })),
+  ]);
+  try {
+    await clearPwaData();
+    expect(await database.settings.toArray()).toEqual([relay]);
+    expect(await database.devices.count()).toBe(0);
+    expect(await database.sessions.count()).toBe(0);
+    expect(await database.events.count()).toBe(0);
+  } finally {
+    await database.settings.delete(RELAY_SETTING);
+  }
 });
