@@ -6,6 +6,7 @@ import { getMessages } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/locale";
 import { localizeFeedback } from "@/lib/pwa/feedback-messages";
 import { ENTER_SENDS_STORAGE_KEY, shortcutLabel } from "@/lib/pwa/keyboard-shortcuts";
+import { SESSION_STATUS_CARD_STORAGE_KEY } from "@/lib/pwa/session-status-card-preference";
 import { createOperationNotificationController } from "@/lib/pwa/operation-notifications";
 import { PwaOperationNotifications } from "@/components/pwa/pwa-operation-notifications";
 import { UiStateSurfaces, type GallerySurface } from "./ui-state-surfaces";
@@ -21,13 +22,17 @@ function Harness({ onChange = () => {} }: { onChange?: (next: GallerySurface) =>
 afterEach(() => vi.restoreAllMocks());
 
 test("settings and help share memory keyboard preference, preserve the page under Escape, and write no preferences", async () => {
-  const before = [localStorage.getItem("pi-reach-language"), localStorage.getItem(ENTER_SENDS_STORAGE_KEY), location.href, document.documentElement.lang];
+  const before = [localStorage.getItem("pi-reach-language"), localStorage.getItem(ENTER_SENDS_STORAGE_KEY), localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY), location.href, document.documentElement.lang];
   const write = vi.spyOn(Storage.prototype, "setItem");
   const remove = vi.spyOn(Storage.prototype, "removeItem");
   const screen = await renderPwa(<Harness />);
   await screen.getByRole("button", { name: "预览设置页", exact: true }).click();
   const settings = document.querySelector(".pwa-settings-page")!;
   await screen.getByRole("switch", { name: getMessages().settings.enterSends }).click();
+  const statusSwitch = screen.getByRole("switch", { name: getMessages().settings.showSessionStatus });
+  await expect.element(statusSwitch).toBeChecked();
+  await statusSwitch.click();
+  await expect.element(statusSwitch).not.toBeChecked();
   const help = screen.getByRole("button", { name: getMessages().shortcuts.title, exact: true });
   help.element().focus();
   await help.click();
@@ -42,7 +47,7 @@ test("settings and help share memory keyboard preference, preserve the page unde
   await expect.element(screen.getByRole("button", { name: getMessages().shortcuts.title, exact: true })).toHaveFocus();
   await screen.getByRole("button", { name: "返回展厅" }).click();
   expect(document.querySelector<HTMLElement>(".pwa-ui-states-settings")!.hidden).toBe(true);
-  expect([localStorage.getItem("pi-reach-language"), localStorage.getItem(ENTER_SENDS_STORAGE_KEY), location.href, document.documentElement.lang]).toEqual(before);
+  expect([localStorage.getItem("pi-reach-language"), localStorage.getItem(ENTER_SENDS_STORAGE_KEY), localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY), location.href, document.documentElement.lang]).toEqual(before);
   expect(write).not.toHaveBeenCalled();
   expect(remove).not.toHaveBeenCalled();
 });

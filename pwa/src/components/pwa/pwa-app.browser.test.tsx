@@ -8,6 +8,8 @@ import { PwaAppShell } from "./pwa-app-shell";
 import { renderPwa } from "@/test/browser/render";
 import { readStoredDrafts } from "@/lib/pwa/draft-storage";
 import { SESSION_POSITION_STORAGE_KEY } from "@/lib/pwa/session-position-store";
+import { SESSION_STATUS_CARD_STORAGE_KEY } from "@/lib/pwa/session-status-card-preference";
+import { reloadWorkspace } from "@/lib/pwa/settings-route";
 import { pinMechanismMotion, unpinMechanismMotion } from "@/test/browser/motion";
 import { generateOwnerKeyPair } from "@/lib/pi-reach/crypto";
 import { encodeBase64 } from "@/lib/pi-reach/encoding";
@@ -73,6 +75,7 @@ const channelHarness = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/pwa/timeline-store", { spy: true });
+vi.mock("@/lib/pwa/settings-route", { spy: true });
 vi.mock("./use-composer-autosize", { spy: true });
 
 vi.mock("@/lib/pi-reach/relay-client", () => ({
@@ -4153,6 +4156,37 @@ test.each([1280, 390])("operation notification keeps the settings page beneath c
     await screen.unmount();
     await page.viewport(1280, 900);
   }
+});
+
+test("resetting layout preserves the desktop status preference and clearing local data restores its default", async () => {
+  localStorage.setItem(SESSION_STATUS_CARD_STORAGE_KEY, "false");
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const settingName = "Show session status on desktop";
+  try {
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    const statusSwitch = screen.getByRole("switch", { name: settingName });
+    await expect.element(statusSwitch).not.toBeChecked();
+    await screen.getByRole("button", { name: "Reset layout" }).click();
+    expect(localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY)).toBe("false");
+    await expect.element(statusSwitch).not.toBeChecked();
+
+    vi.mocked(reloadWorkspace).mockImplementationOnce(() => {});
+    await screen.getByRole("button", { name: "Clear local data", exact: true }).click();
+    const confirmation = screen.getByRole("dialog", { name: /Clear this browser/ });
+    await confirmation.getByRole("button", { name: "Clear local data", exact: true }).click();
+    await expect.poll(() => vi.mocked(reloadWorkspace).mock.calls.length).toBe(1);
+    expect(localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY)).toBeNull();
+  } finally {
+    await screen.unmount();
+    window.history.replaceState(null, "", "/app");
+    vi.mocked(reloadWorkspace).mockClear();
+    localStorage.removeItem(SESSION_STATUS_CARD_STORAGE_KEY);
+  }
+  const reloaded = await renderWorkspaceApp();
+  try {
+    await reloaded.getByRole("button", { name: "Open settings", exact: true }).click();
+    await expect.element(reloaded.getByRole("switch", { name: settingName })).toBeChecked();
+  } finally { await reloaded.unmount(); }
 });
 
 test("keeps mobile navigation behind deletion confirmation and restores management focus", async () => {

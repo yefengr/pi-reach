@@ -12,6 +12,7 @@ import { MessageList } from "@/components/pwa/message-list";
 import { PublishedFilesProvider } from "./published-files-context";
 import { ToolDetailsProvider } from "./tool-details-context";
 import { SessionStatusController } from "@/lib/pwa/session-status";
+import { SESSION_STATUS_CARD_STORAGE_KEY } from "@/lib/pwa/session-status-card-preference";
 import { ToolDetailsController } from "@/lib/pwa/tool-details";
 import { PersistentToolDetailsCache } from "@/lib/pwa/tool-details-cache";
 import { useSessionFiles } from "./use-session-files";
@@ -1168,6 +1169,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     await invalidateSessionDetails();
     await clearPwaData();
     clearStoredDrafts();
+    try { window.localStorage.removeItem(SESSION_STATUS_CARD_STORAGE_KEY); } catch { /* 存储不可访问时使用默认偏好。 */ }
     sessionPositions.clear();
   }, [invalidatePersistence, invalidateSessionDetails, sessionPositions]);
   const saveDeviceNickname = useCallback(async (device: PwaDeviceRecord, nickname: string) => { await getPwaDatabase().devices.put({ ...device, nickname }); setDevices(await listPwaDevices()); }, []);

@@ -9,6 +9,7 @@ import { ViewportDiagnosticsSettings } from "./viewport-diagnostics-settings";
 import { CopyButton } from "@/components/pwa/copy-button";
 import { InstallSteps, useInstallCopy, usePwaInstall, type InstallOffer } from "@/components/pwa/pwa-install";
 import { shortcutLabel, useEnterSends } from "@/lib/pwa/keyboard-shortcuts";
+import { useSessionStatusCardPreference } from "@/lib/pwa/session-status-card-preference";
 import type { ConnectionViewState } from "@/components/pwa/workspace-view";
 import { version as pwaVersion } from "../../../package.json";
 
@@ -17,6 +18,8 @@ export type SettingsPagePreferences = {
   setLanguage: (value: LanguagePreference) => void;
   enterSends: boolean;
   setEnterSends: (value: boolean) => void;
+  showSessionStatusCard: boolean;
+  setShowSessionStatusCard: (value: boolean) => void;
   textSize: PwaTextSizePreference;
   setTextSize: (value: PwaTextSizePreference) => void;
   /** 浏览器能读到系统文字大小时才提供「跟随系统」；否则该偏好按标准档显示。 */
@@ -55,8 +58,9 @@ export function SettingsPage({ preferences, ...props }: SettingsPageProps) {
 function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   const { preference } = useI18n();
   const [enterSends, setEnterSends] = useEnterSends();
+  const [showSessionStatusCard, setShowSessionStatusCard] = useSessionStatusCardPreference();
   const { preference: textSize, followsSystem, setTextSize } = usePwaTextSize();
-  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, textSize, setTextSize, textSizeFollowsSystem: followsSystem }} />;
+  return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, textSize, setTextSize, textSizeFollowsSystem: followsSystem }} />;
 }
 
 function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
@@ -65,7 +69,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
   const savePendingRef = useRef(false);
   const { appearance, setAppearance } = usePwaAppearance();
   const { t } = useI18n();
-  const { enterSends, setEnterSends, setTextSize, textSizeFollowsSystem = false } = preferences;
+  const { enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, setTextSize, textSizeFollowsSystem = false } = preferences;
   const textSize = preferences.textSize === "system" && !textSizeFollowsSystem ? "standard" : preferences.textSize;
   const s = t.settings;
   const versionText = (version: string | null, status: ConnectionViewState) => {
@@ -121,6 +125,12 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
         </Radio.Group>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.textSizeHint}</p>
       </section>
+      <section className="pwa-settings-section" aria-labelledby="pwa-workspace-heading">
+        <h2 id="pwa-workspace-heading" className="pwa-settings-section-title">{s.workspace}</h2>
+        <div className="pwa-card pwa-settings-group">
+          <Switch className="pwa-settings-row pwa-settings-switch" size="md" labelPosition="left" checked={showSessionStatusCard} onChange={(event) => setShowSessionStatusCard(event.currentTarget.checked)} label={s.showSessionStatus} description={s.showSessionStatusHint} />
+        </div>
+      </section>
       <section className="pwa-settings-section" aria-labelledby="pwa-language-heading">
         <h2 id="pwa-language-heading" className="pwa-settings-section-title">{s.language}</h2>
         <Radio.Group aria-label={s.language} name="pwa-language" value={preferences.language} onChange={(next) => preferences.setLanguage(next as LanguagePreference)}>
@@ -135,7 +145,7 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-keyboard-heading">
         <h2 id="pwa-keyboard-heading" className="pwa-settings-section-title">{s.keyboard}</h2>
         <div className="pwa-card pwa-settings-group">
-          <Switch className="pwa-settings-row pwa-keyboard-setting" size="md" labelPosition="left" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
+          <Switch className="pwa-settings-row pwa-settings-switch" size="md" labelPosition="left" checked={enterSends} onChange={(event) => setEnterSends(event.currentTarget.checked)} label={s.enterSends} description={s.enterSendsHint} />
           <UnstyledButton className="pwa-settings-row pwa-settings-row-button" type="button" onClick={(event) => onShowShortcuts(event.currentTarget)} title={`${t.shortcuts.title} (${shortcutLabel("showHelp")})`}>
             <span className="pwa-settings-row-label">{t.shortcuts.title}</span>
             <ChevronRight className="pwa-settings-row-chevron" size={16} aria-hidden="true" />

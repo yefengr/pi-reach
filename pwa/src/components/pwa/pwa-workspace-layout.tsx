@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n";
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
 import { SidebarToggle } from "./sidebar-toggle";
 import { hasKeyboardOverlay, isKeyboardInput, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
+import { useSessionStatusCardPreference } from "@/lib/pwa/session-status-card-preference";
 import { SessionStatusCard, type SessionStatusProps } from "./session-status";
 import { SessionStatusDrawer } from "./session-status-drawer";
 import { useSessionStatusSpace } from "./use-session-status-space";
@@ -92,6 +93,9 @@ export function PwaWorkspaceLayout({
   useLayoutEffect(() => { sheetMountedRef.current = sheetMounted; }, [sheetMounted]);
   const [sheetFocusOrigin, setSheetFocusOrigin] = useState<HTMLElement | null>(null);
   const [mainElement, setMainElement] = useState<HTMLElement | null>(null);
+  const [showSessionStatusCard] = useSessionStatusCardPreference();
+  // 桌面卡片受开关控制；移动触发、抽屉与手势仍由原 sessionStatus 决定。
+  const desktopStatus = showSessionStatusCard ? sessionStatus : undefined;
   const [statusOpen, setStatusOpen] = useState(false);
   const [statusMounted, setStatusMounted] = useState(false);
   const statusBlockedRef = useRef(false);
@@ -121,7 +125,7 @@ export function PwaWorkspaceLayout({
       closeStatus();
     });
   }, [statusMounted, onOpenSettings, closeBackgroundOverlay, closeStatus]);
-  useSessionStatusSpace(mainElement, Boolean(sessionStatus));
+  useSessionStatusSpace(mainElement, Boolean(desktopStatus));
   const openStatus = useCallback(() => {
     if (statusPresentFrameRef.current !== null) {
       cancelAnimationFrame(statusPresentFrameRef.current);
@@ -377,7 +381,7 @@ export function PwaWorkspaceLayout({
           {operationNotifications}
         </div>
         <div className="pwa-workspace-body"><div className="pwa-workspace-column">{children}</div></div>
-        <SessionStatusCard status={sessionStatus} />
+        <SessionStatusCard status={desktopStatus} />
       </main>
     </div>
     {statusMounted ? <SessionStatusDrawer {...(sessionStatus ?? { view: { kind: "offline" }, title: titleBar.title })} opened={Boolean(sessionStatus) && (statusOpen || statusDrag.gesture === "dragging")} gesture={statusDrag.gesture} onClose={() => closeBackgroundOverlay(closeStatus)} onExitTransitionEnd={() => {

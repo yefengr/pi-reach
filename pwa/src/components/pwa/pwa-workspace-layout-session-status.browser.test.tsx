@@ -16,6 +16,7 @@ import { PwaOperationNotifications } from "./pwa-operation-notifications";
 import { createOperationNotificationController, type OperationNotificationController } from "@/lib/pwa/operation-notifications";
 import type { SessionStatusView } from "@/lib/pwa/session-status";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
+import { SESSION_STATUS_CARD_STORAGE_KEY, useSessionStatusCardPreference } from "@/lib/pwa/session-status-card-preference";
 
 const view: SessionStatusView = { kind: "ready", status: {
   context: { tokens: 84_000, window: 200_000, auto_compact: true, level: "normal" },
@@ -24,11 +25,16 @@ const view: SessionStatusView = { kind: "ready", status: {
 } };
 const status = { view, title: "Status example", deviceName: "Office", cwd: "/work/pi-reach" };
 
-function Layout({ overlays = null, realSettings = false, statusAvailable = true, statusView = view, notifications }: { overlays?: ReactNode; realSettings?: boolean; statusAvailable?: boolean; statusView?: SessionStatusView; notifications?: OperationNotificationController }) {
+function StatusPreferenceToggle() {
+  const [, setShow] = useSessionStatusCardPreference();
+  return <button type="button" onClick={() => setShow((value) => !value)}>Toggle session status card</button>;
+}
+
+function Layout({ overlays = null, realSettings = false, statusAvailable = true, statusView = view, notifications, togglePreference = false }: { overlays?: ReactNode; realSettings?: boolean; statusAvailable?: boolean; statusView?: SessionStatusView; notifications?: OperationNotificationController; togglePreference?: boolean }) {
   const settings = useSettingsRoute();
   return <PwaWorkspaceLayout sessionStatus={statusAvailable ? { ...status, view: statusView } : undefined} navigation={{ devices: [], endpoints: [], history: [], activeDeviceId: null, activeEndpointId: null, selectedHistoryId: null, snapshotReady: true, pairingPresence: {}, onPair() {}, onSettings() {}, onSelectDevice() {}, onSelectEndpoint() {}, onSelectHistory() {}, onRename() {}, onRemove() {} }} titleBar={{ title: status.title, showTitle: true }} toast={<PwaStatusError message="Conversation could not be updated" onDismiss={() => {}} />} operationNotifications={notifications ? <PwaOperationNotifications controller={notifications} /> : null} settingsRoute={realSettings ? settings.route : { open: false, change: 0, animate: false, origin: null }} onOpenSettings={settings.openSettings} onSettingsBack={settings.closeSettings} renderSettings={() => <h2>Settings content</h2>} overlays={overlays} closeBackgroundOverlay={close => close()}>
     {/* 与正式会话共用消息内边距、浮动 footer、Composer 卡片和 Latest，不给夹具另造居中规则。 */}
-    <div className="pwa-message-list"><div data-reading-content>Conversation</div></div>
+    <div className="pwa-message-list"><div data-reading-content>Conversation{togglePreference ? <StatusPreferenceToggle /> : null}</div></div>
     <div className="pwa-chat-footer">
       <PwaMessageActions show showLatest showRetry={false} unreadOutput={0} onRetry={() => {}} onLatest={() => {}} />
       <div className="pwa-composer"><div className="pwa-composer-card">Composer</div></div>
@@ -81,6 +87,7 @@ function observeStatusSideEffects() {
 beforeEach(() => {
   window.localStorage.removeItem("pi-reach-sidebar-collapsed");
   window.localStorage.removeItem("pi-reach-sidebar-width");
+  window.localStorage.removeItem(SESSION_STATUS_CARD_STORAGE_KEY);
 });
 
 afterEach(async () => {
@@ -263,6 +270,45 @@ test("window resize and sidebar width changes run real lane and card opacity tra
       expect(transitions).toEqual(expect.arrayContaining(["body:padding-right", "notices:right", "card:opacity"]));
     } finally { root.removeAttribute("data-sidebar-resizing"); }
   } finally { main.removeEventListener("transitionrun", record); }
+});
+
+test("desktop card follows the persisted switch in the same tab with lane transitions", async () => {
+  await page.viewport(1600, 900);
+  const screen = await renderLayout({ togglePreference: true });
+  await expectLane(true);
+  const main = layoutElement(".pwa-main");
+  const transitions: string[] = [];
+  const record = (event: Event) => {
+    const transition = event as TransitionEvent;
+    if (event.target === layoutElement(".pwa-workspace-body")) transitions.push(`body:${transition.propertyName}`);
+    if (event.target === layoutElement(".pwa-main-notices")) transitions.push(`notices:${transition.propertyName}`);
+    if (event.target instanceof HTMLElement && event.target.classList.contains("pwa-session-status-card")) transitions.push(`card:${transition.propertyName}`);
+  };
+  main.addEventListener("transitionrun", record);
+  try {
+    await screen.getByRole("button", { name: "Toggle session status card", exact: true }).click();
+    await expectLane(false);
+    expect(window.localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY)).toBe("false");
+    expect(transitions).toEqual(expect.arrayContaining(["body:padding-right", "notices:right", "card:opacity"]));
+    await expect.poll(() => document.querySelector(".pwa-session-status-card"), { timeout: 5000 }).toBeNull();
+    transitions.length = 0;
+    await screen.getByRole("button", { name: "Toggle session status card", exact: true }).click();
+    await expectLane(true);
+    expect(window.localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY)).toBe("true");
+    expect(transitions).toEqual(expect.arrayContaining(["body:padding-right", "notices:right", "card:opacity"]));
+  } finally { main.removeEventListener("transitionrun", record); }
+});
+
+test("mobile status keeps its top-bar trigger and drawer with the desktop card switched off", async () => {
+  window.localStorage.setItem(SESSION_STATUS_CARD_STORAGE_KEY, "false");
+  await page.viewport(390, 700);
+  const screen = await renderLayout();
+  const main = layoutElement(".pwa-main");
+  await expect.poll(() => main.style.getPropertyValue("--pwa-status-reserve")).toBe("0px");
+  expect(main.hasAttribute("data-session-status-card")).toBe(false);
+  expect(document.querySelector(".pwa-session-status-card")).toBeNull();
+  await screen.getByRole("button", { name: "Session status", exact: true }).click();
+  await expect.element(page.getByRole("dialog", { name: "Session status", exact: true })).toBeVisible();
 });
 
 test("empty state keeps measuring the width latch and leaving a session fades before unmount", async () => {
