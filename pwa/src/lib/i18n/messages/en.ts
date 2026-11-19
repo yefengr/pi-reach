@@ -237,6 +237,13 @@ export const en = {
     closeOverlay: "Close the top menu or dialog",
     workingHint: "While Pi is working, Enter adds a new line. Use the stop button to stop Pi.",
   },
+  sessionStatus: {
+    title: "Session status", context: "Context", high: "High", full: "Nearly full", window: "Window",
+    autoCompact: "Auto-compaction", autoCompactOff: "Auto-compaction off", usage: "Usage", input: "Input", output: "Output",
+    cacheRead: "Cache read", cacheWrite: "Cache write", cacheHit: "Cache hit rate", cacheHitLatest: "Latest cache hit rate",
+    cost: "Cost", usageNote: "Session totals, preserved after compaction.", session: "Session", name: "Name", computer: "Computer", branch: "Branch",
+    loading: "Getting status…", unavailable: "Status is temporarily unavailable.", unsupported: "Update the Pi Reach extension to view session status.", offline: "Status is unavailable for offline sessions.",
+  },
   actions: {
     tryAgain: "Try again",
     newOutput: (count: number) => `${count} new output`,
@@ -244,7 +251,6 @@ export const en = {
     sessionActions: "Session actions",
     actions: "Actions",
     sessionUtilities: "Session utilities",
-    sessionInfo: "Session details",
     workingDirectory: "Working directory",
     idle: "Idle",
     running: "Running",

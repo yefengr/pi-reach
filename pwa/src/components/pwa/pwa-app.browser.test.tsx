@@ -432,7 +432,7 @@ test.each([1280, 390])("focuses only a new empty desktop session, without openin
   const screen = await renderOnlineApp(() => renderPwa(<PwaApp />));
   try {
     const channel = channelHarness.channels[0]!;
-    const action = screen.getByRole("button", { name: width === 1280 ? "Refresh app" : "Session details" });
+    const action = screen.getByRole("button", { name: width === 1280 ? "Refresh app" : "Session status" });
     action.element().focus();
     channel.emit(readyFrame(channel, "empty-session"));
     const input = screen.getByRole("textbox", { name: /Message your agent/i });
@@ -3539,7 +3539,7 @@ test("routes session actions through the live channel with current model and thi
     channel.emit({ protocol_version: 2, type: "models_list", in_reply_to: initialModelRequest?.id, models: [model], current: model, thinking_level: "off" });
 
     // 桌面标题区只保留状态和刷新；命令仍走输入区，不新增桌面替代信息入口。
-    await expect.element(screen.getByRole("button", { name: "Session details" })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Session status" })).not.toBeInTheDocument();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     expect(channel.frames.filter((frame) => frame.type === "list_models")).toHaveLength(1);
     await screen.getByRole("button", { name: "Pi commands" }).click();
@@ -3691,7 +3691,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(screen.getByRole("tab", { name: "History" })).not.toBeInTheDocument();
     await navigation.getByRole("button", { name: /Saved session note/ }).click();
     await expect.poll(() => document.querySelector(".pwa-session-sheet")).toBeNull();
-    // 标题与在线会话一致，不再标注只读；输入区保留在线样式但全部禁用，提示区说明只读，「更多」只含信息区。
+    // 标题与在线会话一致，不再标注只读；输入区保留在线样式但全部禁用，顶栏状态入口打开会话状态抽屉。
     const historyTrigger = screen.getByRole("button", { name: "Open navigation" });
     await expect.element(historyTrigger).toHaveTextContent("Saved session note");
     await expect.element(historyTrigger).not.toHaveTextContent("Read only");
@@ -3700,10 +3700,14 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     await expect.element(historyInput).toBeDisabled();
     for (const name of ["Add attachments", "Pi commands", "Send message"]) await expect.element(screen.getByRole("button", { name, exact: true })).toBeDisabled();
     expect(document.querySelector(".pwa-composer-stop")).toBeNull();
-    await screen.getByRole("button", { name: "Session details" }).click();
-    await expect.element(screen.getByRole("group", { name: "Session details" })).toBeVisible();
+    await screen.getByRole("button", { name: "Session status" }).click();
+    const statusDrawer = screen.getByRole("dialog", { name: "Session status" });
+    await expect.element(statusDrawer).toBeVisible();
+    await expect.element(statusDrawer.getByText("Status is unavailable for offline sessions.")).toBeVisible();
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
     await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.querySelector(".pwa-session-status-drawer")).toBeNull();
+    await expect.poll(() => window.history.state?.piReachSessionStatus).toBeUndefined();
 
     relayHarness.instances[0]?.emitControl({
       type: "endpoints",
@@ -3731,7 +3735,7 @@ test("keeps saved history read-only through endpoint updates and returns to the 
     expect(channelHarness.channels[1]?.channelId).toBe(originalChannel?.channelId);
     await expect.element(screen.getByRole("button", { name: "Open navigation" })).toHaveTextContent("Renamed live Pi");
     await expect.element(screen.getByRole("textbox")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Session details" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Session status" })).toBeVisible();
   } finally {
     await screen.unmount();
     await page.viewport(1280, 900);
@@ -3932,6 +3936,31 @@ test.each(["protocol_upgrade_required", "unsupported_type", "internal_error"])('
   } finally {
     window.history.replaceState(null, "", "/app");
     await screen.unmount();
+  }
+});
+
+test("an older Extension rejects only the status subscription without triggering the app upgrade flow", async () => {
+  await page.viewport(1600, 900);
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const channel = channelHarness.channels[0]!;
+  try {
+    channel.emit(readyFrame(channel, "session-1"));
+    const subscribe = channel.frames.find((frame) => frame.type === "session_status_subscribe");
+    expect(subscribe).toMatchObject({ channel_id: channel.channelId, session_id: "session-1" });
+    channel.emit({ protocol_version: 2, type: "protocol_error", target_channel_id: channel.channelId,
+      in_reply_to: subscribe!.id, code: "protocol_upgrade_required", message: "Unrecognized frame type" });
+    const card = screen.getByRole("complementary", { name: "Session status" });
+    await expect.element(card.getByText("Update the Pi Reach extension to view session status.")).toBeVisible();
+    await expect.poll(connectionState).toBe("online");
+    expect(document.querySelector(".pwa-status-toast")).toBeNull();
+    expect(channel.frames.filter((frame) => frame.type === "session_hello")).toHaveLength(1);
+    const input = screen.getByPlaceholder("Message your agent…");
+    await input.fill("Status downgrade must not block sending");
+    await screen.getByRole("button", { name: "Send message", exact: true }).click();
+    expect(channel.frames.some((frame) => frame.type === "user_message")).toBe(true);
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 900);
   }
 });
 
@@ -4140,8 +4169,8 @@ test("keeps a stable session channel across reset and session replacement, with 
   expect(channelHarness.channels).toHaveLength(3);
   await expect.poll(connectionState).toBe("offline");
   const modelRequestsBeforeRetry = thirdChannel?.frames.filter((frame) => frame.type === "list_models").length ?? 0;
-  // 桌面没有信息入口；离线重试走输入框提示行的「立即重试」，不额外请求模型列表。
-  await expect.element(screen.getByRole("button", { name: "Session details" })).not.toBeInTheDocument();
+  // 桌面没有状态入口按钮；离线重试走输入框提示行的「立即重试」，不额外请求模型列表。
+  await expect.element(screen.getByRole("button", { name: "Session status" })).not.toBeInTheDocument();
   expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   expect(thirdChannel?.frames.filter((frame) => frame.type === "list_models")).toHaveLength(modelRequestsBeforeRetry);
   await screen.getByRole("button", { name: "Retry now" }).click();

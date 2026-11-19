@@ -1,19 +1,26 @@
 import { useState } from "react";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { Menu } from "@mantine/core";
+import { Menu, Popover } from "@mantine/core";
 import { renderPwa } from "@/test/browser/render";
 import { enableTouch, resetTouch, touchDrag, touchOrigin, touchTap } from "@/test/browser/swipe";
-import { SessionActionsMenu } from "./session-actions-menu";
 
-const info = { name: "Release check", cwd: "/Users/pi/Code/pi-reach", computer: "Studio Mac", status: "Idle" };
+const info = "Release check";
 let presses = 0;
 let picks = 0;
+
+function StatusPopover() {
+  const [opened, setOpened] = useState(false);
+  return <Popover opened={opened} onChange={setOpened} position="bottom-end" withinPortal portalProps={{ target: ".pwa-root" }}>
+    <Popover.Target><button type="button" onClick={() => setOpened((value) => !value)}>Status popover</button></Popover.Target>
+    <Popover.Dropdown aria-label="Status popover"><span>{info}</span></Popover.Dropdown>
+  </Popover>;
+}
 
 function Harness() {
   const [, setCount] = useState(0);
   return <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 160 }}>
-    <SessionActionsMenu info={info} />
+    <StatusPopover />
     <Menu withinPortal portalProps={{ target: ".pwa-root" }} position="bottom-end">
       <Menu.Target><button type="button">Open menu</button></Menu.Target>
       <Menu.Dropdown><Menu.Item onClick={() => { picks += 1; }}>Pick</Menu.Item></Menu.Dropdown>
@@ -28,7 +35,7 @@ const visible = (element: HTMLElement | null) => !!element && !element.closest("
 
 async function mount() {
   const screen = await renderPwa(<Harness />);
-  const trigger = screen.getByRole("button", { name: "Session details" });
+  const trigger = screen.getByRole("button", { name: "Status popover" });
   const outside = screen.getByRole("button", { name: "Outside action" });
   return { screen, trigger, outside };
 }

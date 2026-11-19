@@ -1,6 +1,7 @@
 /** Protocol v2 ping -> pong over the endpoint route envelope. */
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import type { ExtensionAPI, ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import { EventEmitter } from "node:events";
 import {
   decodeClientFrameV2,
   decodeServerFrameV2,
@@ -62,7 +63,7 @@ vi.mock("../src/transport/relay_client.js", () => ({ RelayClient: MockRelay }));
 const { processEndpointIdentity, _getCachedPublicKeyForTest, _getState, _startRelayForTest, _stopForTest } = await import("../src/index.js");
 
 function makeMockCtx() {
-  return { ui: { notify: vi.fn(), setStatus: vi.fn(), setTitle: vi.fn() }, cwd: "/tmp/test", abort: vi.fn() };
+  return { ui: { notify: vi.fn(), setStatus: vi.fn(), setTitle: vi.fn() }, cwd: "/tmp/test", abort: vi.fn(), getContextUsage: vi.fn(() => undefined) };
 }
 
 function deviceId(): string { return _getCachedPublicKeyForTest()!; }
@@ -86,7 +87,13 @@ type PairContext = { ownerId: string; channelId: string; sessionId: string; leaf
 
 async function pairUp(): Promise<PairContext> {
   const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+  const events = new EventEmitter();
   const pi = {
+    events: {
+      on: (name: string, handler: (...args: unknown[]) => void) => { events.on(name, handler); return () => { events.off(name, handler); }; },
+      emit: (name: string, payload: unknown) => { events.emit(name, payload); },
+    },
+    getSettings: vi.fn(() => ({})),
     on: (name: string, handler: (event: unknown, ctx: unknown) => unknown) => { handlers.set(name, handler); },
     registerCommand: () => undefined,
     registerTool: () => undefined,
@@ -101,7 +108,7 @@ async function pairUp(): Promise<PairContext> {
   const sessionStart = handlers.get("session_start");
   if (!sessionStart) throw new Error("session_start handler was not registered");
   const { SessionManager } = await import("@earendil-works/pi-coding-agent");
-  sessionStart({ type: "session_start", reason: "startup" }, { sessionManager: SessionManager.inMemory("/tmp/test"), abort: vi.fn(), compact: vi.fn(), ui: makeMockCtx().ui });
+  sessionStart({ type: "session_start", reason: "startup" }, { ...makeMockCtx(), sessionManager: SessionManager.inMemory("/tmp/test"), compact: vi.fn() });
 
   await _startRelayForTest(makeMockCtx());
   expect(_getState()).toBe("started");

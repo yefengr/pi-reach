@@ -17,6 +17,10 @@ import { useI18n } from "@/lib/i18n";
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
 import { SidebarToggle } from "./sidebar-toggle";
 import { hasKeyboardOverlay, isKeyboardInput, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
+import { SessionStatusContent, type SessionStatusProps } from "./session-status";
+import { SessionStatusDrawer } from "./session-status-drawer";
+import { useSessionStatusSpace } from "./use-session-status-space";
+import { swipeBlocked, SWIPE_EDGE_EXCLUSION_PX } from "./swipe-guards";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 function focusable(element: HTMLElement | null): element is HTMLElement {
@@ -27,6 +31,7 @@ type PwaWorkspaceLayoutProps = {
   navigation: WorkspaceNavigationProps;
   titleBar: Omit<WorkspaceTitleBarProps, "onOpenNavigation" | "navigationExpanded">;
   /** 当前连接状态，只反映到主区的 data-connection 上；界面不再在标题区显示连接状态（ADR-20261105）。 */
+  sessionStatus?: SessionStatusProps;
   connectionState?: string;
   children: ReactNode;
   toast: ReactNode;
@@ -44,6 +49,7 @@ export function PwaWorkspaceLayout({
   navigation,
   titleBar,
   connectionState,
+  sessionStatus,
   children,
   toast,
   operationNotifications,
@@ -86,11 +92,52 @@ export function PwaWorkspaceLayout({
   useLayoutEffect(() => { sheetMountedRef.current = sheetMounted; }, [sheetMounted]);
   const [sheetFocusOrigin, setSheetFocusOrigin] = useState<HTMLElement | null>(null);
   const [mainElement, setMainElement] = useState<HTMLElement | null>(null);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [statusMounted, setStatusMounted] = useState(false);
+  const statusBlockedRef = useRef(false);
+  const pendingSettingsRef = useRef<SettingsOrigin | null>(null);
+  const requestSettings = useCallback((origin: SettingsOrigin) => {
+    if (!statusMounted) { onOpenSettings(origin); return; }
+    closeBackgroundOverlay(() => {
+      pendingSettingsRef.current = origin;
+      setStatusOpen(false);
+    });
+  }, [statusMounted, onOpenSettings, closeBackgroundOverlay]);
+  useSessionStatusSpace(mainElement, Boolean(sessionStatus && sessionStatus.view.kind !== "offline"));
+  const openStatus = useCallback(() => {
+    setStatusMounted(true);
+    setStatusOpen(true);
+  }, []);
+  const statusDrag = useNavigationDrag({ rootRef, mainElement, sheetOpen: statusOpen, setSheetOpen: setStatusOpen, openNavigation: openStatus, selector: ".pwa-session-status-drawer", triggerSelector: ".pwa-session-status-trigger", side: "right" });
+  const presentStatus = useCallback(() => {
+    if (!sessionStatus || settingsRoute.open || transitioning || sheetOpen || statusMounted || (mainElement && swipeBlocked(mainElement))) return;
+    flushSync(() => setStatusMounted(true));
+    requestAnimationFrame(() => { if (window.matchMedia(MOBILE_LAYOUT_QUERY).matches) setStatusOpen(true); });
+  }, [sessionStatus, settingsRoute.open, transitioning, sheetOpen, statusMounted, mainElement]);
+  useEffect(() => {
+    if (!mainElement) return;
+    const down = (event: PointerEvent) => { statusBlockedRef.current = !window.matchMedia("(display-mode: standalone)").matches && event.clientX > window.innerWidth - SWIPE_EDGE_EXCLUSION_PX; };
+    mainElement.addEventListener("pointerdown", down, true);
+    return () => mainElement.removeEventListener("pointerdown", down, true);
+  }, [mainElement]);
+  useSwipe(mainElement, { direction: "left", enabled: Boolean(sessionStatus) && !settingsRoute.open && !transitioning && (!statusOpen || statusDrag.gesture === "dragging"), onSwipe: () => { if (!statusBlockedRef.current) presentStatus(); }, canSwipe: () => !statusBlockedRef.current && (!sheetOpen || Boolean(rootRef.current?.querySelector('.pwa-session-sheet[data-swipe-drag]'))) && statusDrag.canSwipe(), drag: statusDrag.drag });
+  useEffect(() => {
+    const media = window.matchMedia(MOBILE_LAYOUT_QUERY);
+    const close = () => { if (!media.matches) setStatusOpen(false); };
+    media.addEventListener("change", close);
+    return () => media.removeEventListener("change", close);
+  }, []);
+  const [statusContext, setStatusContext] = useState({ settingsOpen: settingsRoute.open, available: Boolean(sessionStatus) });
+  if (statusContext.settingsOpen !== settingsRoute.open || statusContext.available !== Boolean(sessionStatus)) {
+    setStatusContext({ settingsOpen: settingsRoute.open, available: Boolean(sessionStatus) });
+    if (settingsRoute.open || !sessionStatus) setStatusOpen(false);
+  }
   const openNavigation = useCallback((origin: HTMLElement | null) => {
+    if (statusMounted) return;
     setSheetFocusOrigin(origin);
     setSheetMounted(true);
     setSheetOpen(true);
-  }, []);
+  }, [statusMounted]);
   const presentFrameRef = useRef<number | null>(null);
   useEffect(() => () => {
     if (presentFrameRef.current !== null) cancelAnimationFrame(presentFrameRef.current);
@@ -100,7 +147,7 @@ export function PwaWorkspaceLayout({
    * 因此未挂载时先同步挂载收起态，下一帧再打开；跟手拖动需要同步打开，仍直接调用 openNavigation。
    */
   const presentNavigation = useCallback((origin: HTMLElement | null) => {
-    if (presentFrameRef.current !== null) return;
+    if (statusMounted || presentFrameRef.current !== null) return;
     if (sheetMountedRef.current) {
       openNavigation(origin);
       return;
@@ -114,7 +161,7 @@ export function PwaWorkspaceLayout({
       // 等待的一帧内已切到桌面布局则放弃；收起态实例保留，下次打开直接过渡。
       if (window.matchMedia(MOBILE_LAYOUT_QUERY).matches) setSheetOpen(true);
     });
-  }, [openNavigation]);
+  }, [openNavigation, statusMounted]);
   const navigationDrag = useNavigationDrag({ rootRef, mainElement, sheetOpen, setSheetOpen, openNavigation });
   const releaseNavigationDrag = navigationDrag.onExitTransitionEnd;
   const onNavigationExitTransitionEnd = useCallback(() => {
@@ -127,7 +174,7 @@ export function PwaWorkspaceLayout({
   useSwipe(mainElement, {
     direction: "right",
     // 只豁免本次拖动自己设置的 sheetOpen；设置页、转场等其余门禁照常生效。
-    enabled: !settingsRoute.open && !transitioning && (!sheetOpen || navigationDrag.gesture === "dragging"),
+    enabled: (!statusMounted || statusDrag.gesture === "dragging") && !settingsRoute.open && !transitioning && (!sheetOpen || navigationDrag.gesture === "dragging"),
     onSwipe: () => presentNavigation(mainElement?.querySelector<HTMLElement>(".pwa-session-trigger") ?? null),
     canSwipe: navigationDrag.canSwipe,
     drag: navigationDrag.drag,
@@ -226,10 +273,10 @@ export function PwaWorkspaceLayout({
     return () => { document.title = previous; };
   }, [settingsRoute.open, t.settings.pageTitle]);
 
-  const desktopNavigation: WorkspaceNavigationProps = { ...navigation, onSettings: () => onOpenSettings({ kind: "workspace" }) };
+  const desktopNavigation: WorkspaceNavigationProps = { ...navigation, onSettings: () => requestSettings({ kind: "workspace" }) };
   const mobileNavigation: WorkspaceNavigationProps = {
     ...navigation,
-    onSettings: () => onOpenSettings({ kind: "navigation", scrollTop: document.querySelector<HTMLElement>(".pwa-session-sheet .pwa-navigation-scroll")?.scrollTop ?? 0 }),
+    onSettings: () => requestSettings({ kind: "navigation", scrollTop: document.querySelector<HTMLElement>(".pwa-session-sheet .pwa-navigation-scroll")?.scrollTop ?? 0 }),
     onRename: (device) => {
       navigation.onRename(device);
       setSheetOpen(false);
@@ -270,12 +317,12 @@ export function PwaWorkspaceLayout({
       if (!action || (settingsRoute.open && action !== "showHelp")) return;
       event.preventDefault();
       if (action === "toggleSidebar") toggleSidebar();
-      else if (action === "openSettings") onOpenSettings({ kind: "workspace" });
+      else if (action === "openSettings") requestSettings({ kind: "workspace" });
       else showShortcuts();
     };
     document.addEventListener("keydown", handleShortcut);
     return () => document.removeEventListener("keydown", handleShortcut);
-  }, [onOpenSettings, settingsRoute.open, showShortcuts, toggleSidebar, transitioning, workspaceDrag.dragging]);
+  }, [requestSettings, settingsRoute.open, showShortcuts, toggleSidebar, transitioning, workspaceDrag.dragging]);
 
   const backLabel = settingsRoute.origin?.kind === "navigation" ? t.settings.backToNavigation : t.settings.backToWorkspace;
   const settingsView = settingsRoute.open ? "settings" : "workspace";
@@ -289,14 +336,23 @@ export function PwaWorkspaceLayout({
       {/* 收展入口展开时在侧栏品牌行右端，收起后在会话标题区左端。 */}
       <SidebarToggle ref={sidebarToggleRef} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       <main ref={setMainElement} className="pwa-main" data-connection={connectionState}>
-        <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={presentNavigation} />
+        <WorkspaceTitleBar {...titleBar} navigationExpanded={sheetOpen} onOpenNavigation={presentNavigation} onOpenStatus={sessionStatus ? presentStatus : undefined} statusExpanded={statusOpen} />
         <div ref={noticesRef} className="pwa-main-notices">
           {toast}
           {operationNotifications}
         </div>
         <div className="pwa-workspace-body"><div className="pwa-workspace-column">{children}</div></div>
+        {sessionStatus && sessionStatus.view.kind !== "offline" ? <aside className="pwa-session-status-card" aria-label={t.sessionStatus.title}><h2>{t.sessionStatus.title}</h2><SessionStatusContent {...sessionStatus} /></aside> : null}
       </main>
     </div>
+    {statusMounted && sessionStatus ? <SessionStatusDrawer {...sessionStatus} opened={statusOpen || statusDrag.gesture === "dragging"} gesture={statusDrag.gesture} onClose={() => closeBackgroundOverlay(() => setStatusOpen(false))} onExitTransitionEnd={() => {
+      if (statusOpen) return;
+      statusDrag.onExitTransitionEnd();
+      setStatusMounted(false);
+      const origin = pendingSettingsRef.current;
+      pendingSettingsRef.current = null;
+      if (origin) onOpenSettings(origin);
+    }} /> : null}
     {sheetMounted ? <PwaMobileNavigation navigation={mobileNavigation} opened={sheetOpen || navigationDrag.gesture === "dragging"} onClose={() => closeBackgroundOverlay(() => setSheetOpen(false))} focusOrigin={navigationDrag.gesture === "rollback" ? null : sheetFocusOrigin} instant={sheetInstant} restoreScrollTop={sheetRestore?.scrollTop} focusSettings={sheetRestore !== null} preview={workspaceDrag.previewing} gesture={navigationDrag.gesture} onExitTransitionEnd={onNavigationExitTransitionEnd} /> : null}
     </div>
     {settingsMounted ? <div ref={scrimRef} className="pwa-page-scrim" aria-hidden="true" /> : null}

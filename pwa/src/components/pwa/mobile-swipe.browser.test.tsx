@@ -10,7 +10,7 @@ import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
 import { MarkdownContent } from "./timeline-content";
-import { SessionActionsMenu } from "./session-actions-menu";
+import type { SessionStatusProps } from "./session-status";
 import type { WorkspaceNavigationProps } from "./workspace-view";
 import "./tool-reader.css";
 
@@ -19,6 +19,20 @@ const columns = Array.from({ length: 18 }, (_, index) => `Column ${index}`);
 const markdown = `Body **child text** for swipe.\n\n\`\`\`text\n${wide}\n\`\`\`\n\n| ${columns.join(" | ")} |\n| ${columns.map(() => "---").join(" | ")} |\n| ${columns.map(() => "Cell value").join(" | ")} |`;
 let showMenu: (value: boolean) => void;
 let enterSettings: () => void;
+const sessionStatus: SessionStatusProps = {
+  view: {
+    kind: "ready",
+    status: {
+      context: { tokens: 84_000, window: 200_000, auto_compact: true, level: "normal" },
+      usage: { input: 1_200_000, output: 48_000, cache_read: 840_000, cache_write: 120_000, cost: 0, cache_hit_rate_session: 87.5, cache_hit_rate_latest: 92.4 },
+      branch: "feature/session-status",
+      extensions: [],
+    },
+  },
+  title: "Swipe Pi",
+  deviceName: "Computer",
+  cwd: "/notes",
+};
 const navigation: WorkspaceNavigationProps = {
   devices: [], endpoints: [], history: [], activeDeviceId: null, activeEndpointId: null, selectedHistoryId: null, snapshotReady: true, pairingPresence: {},
   onPair: () => {}, onSettings: () => {}, onSelectDevice: () => {}, onSelectEndpoint: () => {}, onSelectHistory: () => {}, onRename: () => {}, onRemove: () => {},
@@ -31,7 +45,7 @@ function Harness({ clicks, empty = false }: { clicks: () => void; empty?: boolea
     enterSettings = () => openSettings({ kind: "workspace" });
   }, [openSettings]);
   return <PwaUiProvider><PwaAppShell runtimeNotice={null}><PwaWorkspaceLayout
-    navigation={navigation} titleBar={{ title: "Swipe Pi", showTitle: true, moreMenu: <SessionActionsMenu info={{ name: "Swipe Pi", computer: "Computer", status: "Online", cwd: "/notes" }} /> }}
+    navigation={navigation} sessionStatus={sessionStatus} titleBar={{ title: "Swipe Pi", showTitle: true }}
     toast={null} settingsRoute={route} onOpenSettings={openSettings} onSettingsBack={closeSettings}
     renderSettings={({ titleRef }) => <><h1 ref={titleRef} id="pwa-settings-title" tabIndex={-1}>Settings</h1><button onClick={closeSettings}>Back</button></>}
     overlays={<Menu opened={menuOpen} onChange={setMenuOpen} withinPortal={false}><Menu.Target><button style={{ position: "absolute", right: 0, bottom: 0 }}>Command menu</button></Menu.Target><Menu.Dropdown><Menu.Item>New session</Menu.Item></Menu.Dropdown></Menu>}
@@ -114,19 +128,22 @@ test("G1 excludes real overflowing Markdown code and table without changing thei
   }
 });
 
-test("G1 dynamically blocks actual command menu and nonmodal session info", async () => {
+test("G1 dynamically blocks actual command menu and session status drawer", async () => {
   const { screen, child } = await setup();
   flushSync(() => showMenu(true));
   await expect.element(screen.getByRole("menu")).toBeVisible();
   syntheticSwipe(child);
   expect(navigationOpen()).toBe(false);
   flushSync(() => showMenu(false));
-  await screen.getByRole("button", { name: "Session details" }).click();
-  const info = screen.getByRole("dialog", { name: "Session details" });
-  await expect.element(info).toBeVisible();
-  expect(info.element().getAttribute("aria-modal")).toBe("false");
+  await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull();
+  await screen.getByRole("button", { name: "Session status" }).click();
+  const statusDrawer = screen.getByRole("dialog", { name: "Session status" });
+  await expect.element(statusDrawer).toBeVisible();
   syntheticSwipe(child);
   expect(navigationOpen()).toBe(false);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await expect.poll(() => document.querySelector(".pwa-session-status-drawer")).toBeNull();
+  await expect.poll(() => document.activeElement?.classList.contains("pwa-session-status-trigger")).toBe(true);
 });
 
 test("G1 rechecks overlays at commit", async () => {

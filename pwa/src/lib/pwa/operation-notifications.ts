@@ -53,7 +53,7 @@ function restoreNotificationFocus(origin: HTMLElement | null): void {
   if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
   const canFocus = (element: HTMLElement | null): element is HTMLElement => !!element?.isConnected
     && !element.matches(":disabled") && !element.closest('[aria-hidden="true"], [inert]') && element.getClientRects().length > 0;
-  const candidates = [origin, ...document.querySelectorAll<HTMLElement>('.pwa-composer-input, .pwa-session-actions-trigger, .pwa-session-trigger, .pwa-title-bar button, .pwa-settings-back, .pwa-startup-actions button')];
+  const candidates = [origin, ...document.querySelectorAll<HTMLElement>('.pwa-composer-input, .pwa-session-status-trigger, .pwa-session-trigger, .pwa-title-bar button, .pwa-settings-back, .pwa-startup-actions button')];
   // 在关闭按钮卸载前转移焦点，避免零时长退出过渡仍晚于 requestAnimationFrame。
   candidates.find(canFocus)?.focus({ preventScroll: true });
 }

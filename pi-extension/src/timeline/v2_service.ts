@@ -18,6 +18,7 @@ import { TimelineRequestScope } from "./request_scope.js";
 import type { Correlation, TimelineRuntime, TimelineStarted } from "./runtime.js";
 import type { UserDeliveryRejection } from "./user_delivery_binding.js";
 import { ToolDetailService } from "./tool_detail_service.js";
+import type { SessionStatusService, StatusBinding } from "./session-status-service.js";
 
 export type V2ActionFrame = Extract<
   ClientFrame,
@@ -37,6 +38,8 @@ export type V2ServiceOptions = {
   onAttachmentStatus?: (clientRequestId: string) => AttachmentReplay;
   onDeliveryStage?: (clientRequestId: string) => "queued" | "in_flight" | null;
   onToolDetailFrame?: (frame: ServerFrame) => boolean;
+  sessionStatus?: SessionStatusService;
+  onSessionStatusFrame?: (frame: ServerFrame) => boolean;
   onCancel?: () => boolean;
   onAction?: (frame: V2ActionFrame) => void;
   onQueueSnapshot?: () => ServerFrame[];
@@ -65,6 +68,7 @@ export class TimelineV2Service {
   private readonly requestChannels = new Map<string, string>();
   private readonly detailChannels = new Set<string>();
   private readonly details: ToolDetailService;
+  private readonly statusSubscription?: StatusBinding;
 
   constructor(options: V2ServiceOptions) {
     this.sessionManager = options.sessionManager;
@@ -74,6 +78,10 @@ export class TimelineV2Service {
     this.state = new V2SessionState({ sessionId: options.sessionManager.getSessionId(), leafId: options.sessionManager.getLeafId() ?? null });
     this.runtime = options.runtime;
     this.options = options;
+    this.statusSubscription = options.sessionStatus?.bind(
+      (frame) => this.detailChannels.has(frame.channel_id) && !this.requestScope.invalidReason(frame.channel_id,
+        { sessionId: frame.session_id, leafId: frame.leaf_id }),
+      (frame) => options.onSessionStatusFrame?.(frame) ?? false);
     this.details = new ToolDetailService(this.runtime,
       (frame) => this.detailChannels.has(frame.channel_id) && !this.requestScope.invalidReason(frame.channel_id, { sessionId: frame.session_id, leafId: frame.leaf_id }),
       options.onToolDetailFrame);
@@ -118,14 +126,18 @@ export class TimelineV2Service {
     return frames;
   }
 
-  dispose(): void { this.details.dispose(); this.detailChannels.clear(); }
+  dispose(): void { this.statusSubscription?.dispose(); this.details.dispose(); this.detailChannels.clear(); }
+
+  private clearStatus(): void { for (const channel of this.detailChannels) this.statusSubscription?.close(channel); }
 
   reset(reason: "branch_changed" | "session_replaced"): ServerFrame[] {
+    this.clearStatus();
     this.details.dispose();
     return this.state.snapshot().channels.map((channel) => this.requestScope.resetFrame(channel.channelId, reason));
   }
 
   refreshScope(): boolean {
+    this.clearStatus();
     this.details.dispose();
     this.requestScope.invalidate();
     const sessionId = this.sessionId;
@@ -139,6 +151,7 @@ export class TimelineV2Service {
   handle(frame: ClientFrame): ServerFrame[] {
     switch (frame.type) {
       case "session_hello":
+        this.statusSubscription?.close(frame.channel_id);
         if (frame.tool_details !== 1) {
           this.detailChannels.delete(frame.channel_id);
           this.details.closeChannel(frame.channel_id);
@@ -146,6 +159,12 @@ export class TimelineV2Service {
         }
         return [this.ready(frame), ...receiptReplayFrames(this.state.snapshot().records, { senderRef: this.senderRef, channelId: frame.channel_id,
           sessionId: this.sessionId, leafId: this.leafId }, (id) => this.requestChannels.get(id)), ...this.currentQueueSnapshot()];
+      case "session_status_subscribe": {
+        const error = this.validateRequest(frame);
+        if (error) return [error];
+        this.statusSubscription?.subscribe(frame);
+        return [];
+      }
       case "tool_details_open": {
         const error = this.ensureReady(frame);
         return error ? [error] : this.details.open(frame);
@@ -360,6 +379,7 @@ export class TimelineV2Service {
     const error = this.ensureReady(frame);
     if (error) return [error];
     this.details.renew(frame.channel_id);
+    this.statusSubscription?.renew(frame.channel_id);
     return this.direct(frame.channel_id, { type: "pong", in_reply_to: frame.id });
   }
 

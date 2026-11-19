@@ -12,7 +12,7 @@
 Compose project 固定为 `pi-reach-e2e`，所有容器、网络和命名卷均带 `pi-reach-e2e-` 前缀：
 
 - `pi-reach-e2e-relay`：使用仓库根上下文和 `relay/Dockerfile` 构建 Node.js + ws Relay；仅向宿主 loopback 发布 `127.0.0.1:18786`，供本机真实浏览器连接。
-- `pi-reach-e2e-interactive`：Linux Node 24，容器内安装 `@earendil-works/pi-coding-agent@0.84.4`，构建并加载当前 `pi-extension`；只运行用户当前打开的 Pi，持久化 HOME、Pi config/session、workspace。
+- `pi-reach-e2e-interactive`：Linux Node 24，容器内安装与当前 Extension 开发基线一致的 `@earendil-works/pi-coding-agent`（版本见 `host/Dockerfile`），构建并加载当前 `pi-extension`；只运行用户当前打开的 Pi，持久化 HOME、Pi config/session、workspace。
 - `pi-reach-e2e-owner-b` 与 `pi-reach-e2e-owner-c`：仅供协议 runner 使用的独立、常驻 Protocol Owner；各自拥有持久 identity/state volume。真实浏览器入口不启动也不依赖它们。
 
 三张 `internal` 数据面网络分别为 `pi-reach-e2e-relay-host`、`pi-reach-e2e-relay-owner-b`、`pi-reach-e2e-relay-owner-c`。interactive 与两个协议 Owner 各自只接入一张数据面网络，Relay 是唯一同时接入三张网络的 Pi Reach 路由节点。
@@ -78,7 +78,7 @@ pnpm --filter pwa test:e2e:remote
 
 interactive 容器显式加载 `host/e2e-provider.ts`。普通消息返回确定性的空 assistant stop；最后一条纯文本 user 消息精确为 `E2E publish file fixtures` 时，调用固定三个文件的原生 `publish_file`；精确为 `E2E stream tool fixture` 时，调用一个固定的原生 `bash` 命令。命令只运行 Node 定时器并向 stdout 输出合成标记，约 10 秒后自行结束，不插入用户参数、不读写文件或请求网络。工具由真实 Pi 执行；收到工具结果后 provider 正常结束，不重扫历史触发消息。它不读取真实模型凭据，生产启动入口不加载该 provider。
 
-可选的旧页面共存测试通过 `PI_REACH_E2E_LEGACY_DIST` 指向明确基线的旧 PWA 构建目录。同一浏览器身份下打开旧资产，检查附件文件名与规范化历史可读，并在旧页刷新后验证普通文字投递。资产拦截所需的 loopback 权限仅授予测试 origin；该场景不等于真实 Service Worker 缓存升级验收，也不保证旧页刷新前没有协议或 stale-scope 提示。未提供此变量时不运行旧页面分支。
+可选的旧页面共存测试使用旧 PWA 构建目录。`PI_REACH_E2E_LEGACY_DIST` 用于文件发布功能之前的版本，额外验证旧页面不显示或自动读取已发布文件。`PI_REACH_E2E_PRE_STATUS_DIST` 用于会话状态功能之前的版本，验证旧标签页与状态订阅方共享 Owner 时仍可加载历史和发送文字。若两项都设置，使用 `PI_REACH_E2E_LEGACY_DIST`。资产拦截所需的 loopback 权限仅授予测试 origin。Service Worker 缓存升级另行验收。
 
 ## 协议自动化矩阵
 

@@ -76,6 +76,8 @@ device_id
 | 浏览器草稿与阅读位置 | `localStorage`／`sessionStorage` | 草稿文字（`pi-reach-drafts`，有数量与期限上限）与各会话的阅读位置（`pi-reach-session-positions`，随标签页或应用关闭清除），供页面被系统回收重载后恢复；不含附件，不参与发送、投递或正式历史。 |
 | Host / Extension | 本机持久化 | device identity、Owner pairing/ACL、Relay 配置。 |
 | Extension 工具详情状态 | 进程内存 | 最新有界运行预览与定向订阅，不另存权威最终结果。 |
+| Extension 会话状态 | 进程内存 | 从当前 Pi 会话计算状态，按授权 Owner 与 channel 持有短期订阅；不保存快照历史。 |
+| PWA 会话状态 | 页面内存 | 只显示当前订阅的最新快照，不进入时间线、离线历史或持久化。 |
 | Host 的 Pi session | Pi 本机状态 | 当前 session/branch、正式历史与已保存工具详情的权威来源。 |
 | Relay registry | 内存 | 实时 endpoint、ACL、Owner 订阅、连接与短期 pairing offer。 |
 
@@ -156,7 +158,8 @@ Relay 断开不影响正在阅读的历史；附件元数据与缺口标记按�
 2. 用户选中一个当前 online endpoint 后，PWA 建立 session channel 并发送 `session_hello`。从另一个 Pi 切换过来时先撤下旧投影（未确认投递按原 scope 保留）；本地保存过该 Pi 的会话时，以末尾最多 30 条连续正式 event 作预览，预览没有 scope，不能发送。
 3. 收到 `session_ready` 后，PWA 建立 scope：与预览是同一 session 时把预览当作已保留区间，只补缺口；否则撤下预览，异步读取本地正式 timeline，并请求当前 Pi 的 recent history。
 4. 正式 event 与 history 按稳定 `event_id` 合流；不同事件不能占用同一 `event_seq`。普通追加更新当前 `leaf_id`，branch reset 的新投影在完整同步和持久化成功后原子替换旧投影；partial 和 pending 只保留内存。
-5. PWA 发送文本、会话附件或受限 typed action；附件先上传原件，再通过文件 ID 提交消息。Extension 把用户文字与本地文件清单交给当前 Pi session。Relay 只转发，不提供离线队列。
+5. 前台 PWA 可在 ready 后单独订阅[会话状态](reference/protocol/protocol-v2.md#会话状态订阅)。Extension 从 Pi 计算完整快照并定向发送给已订阅的 channel；PWA 只展示，不以状态更新推进时间线。Relay 沿既有路由转发。
+6. PWA 发送文本、会话附件或受限 typed action；附件先上传原件，再通过文件 ID 提交消息。Extension 把用户文字与本地文件清单交给当前 Pi session。Relay 只转发，不提供离线队列。
 
 事件字段、分组、错误码、尺寸限制和合流不变量见[会话协议](reference/protocol/protocol-v2.md)，本文不复制 wire schema。
 

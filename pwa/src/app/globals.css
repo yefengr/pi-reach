@@ -2,6 +2,7 @@
 @import "./pwa-theme.css";
 @import "./workspace-navigation.css";
 @import "./workspace-shell.css";
+@import "./session-status.css";
 @import "./queued-messages.css";
 @import "./keyboard-shortcuts.css";
 @import "./pwa-controls.css";
@@ -190,10 +191,6 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-ui-scope .pwa-icon-button[data-disabled]::before { border-color: transparent; }
 
 
-.pwa-session-actions { position: relative; }
-.pwa-root .pwa-session-actions-divider { margin: 6px 4px; border-top-width: var(--pwa-hairline); border-color: var(--pwa-separator); }
-.pwa-session-actions-secondary { display: grid; }
-.pwa-session-actions-secondary-item { min-height: var(--pwa-hit-target); }
 .pwa-session-title { min-width: 0; max-width: 100%; display: inline-flex; align-items: baseline; vertical-align: bottom; white-space: nowrap; }
 .pwa-session-title-name { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: var(--pwa-weight-strong); text-overflow: ellipsis; }
 .pwa-message-list { --pwa-timeline-pad-top: 24px; --pwa-timeline-pad-bottom: 88px; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; margin: 0; padding: calc(var(--pwa-timeline-pad-top) + var(--pwa-top-notices-space, 0px)) max(var(--pwa-main-inset-end), calc((100% - var(--pwa-reading-width)) / 2)) calc(var(--pwa-timeline-pad-bottom) + var(--pwa-chat-footer-space, 0px)) max(var(--pwa-main-inset-start), calc((100% - var(--pwa-reading-width)) / 2)); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-bottom: calc(var(--pwa-timeline-pad-bottom) + var(--pwa-chat-footer-space, 0px)); -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; overflow-anchor: none; }

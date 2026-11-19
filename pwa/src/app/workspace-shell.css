@@ -203,12 +203,8 @@
 .pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice .pwa-runtime-notice-title { margin-bottom: 4px; }
 .pwa-root .pwa-navigation-notice-slot .pwa-runtime-notice-content { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
 
-/* 会话「更多」的只读信息弹层：完整会话名换行，原生只读路径字段支持键盘选择与复制。
-   名称／路径／元数据是多行只读信息块，行距按「标题与说明」4。 */
-.pwa-session-info { display: grid; gap: var(--pwa-space-2xs); padding: 8px 10px; }
-.pwa-session-info-name { color: var(--pwa-ink); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-strong); line-height: var(--pwa-leading-ui); overflow-wrap: anywhere; white-space: normal; }
+/* 会话状态抽屉的只读路径字段：等宽、可换行，支持键盘选择与复制。 */
 .pwa-root .pwa-session-info-cwd { min-height: 0; padding: 0; border: 0; border-radius: 0; color: var(--pwa-secondary); background: transparent; font: var(--pwa-text-body)/var(--pwa-leading-ui) var(--pwa-font-mono); overflow-wrap: anywhere; resize: none; user-select: text; }
-.pwa-session-info-meta { color: var(--pwa-secondary); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 
 /* 顶栏：页面与全屏叠层共用 48px 单行，安全区叠加在上内边距，内容垂直居中。左右内边距与底色由各顶栏决定。 */
 .pwa-root .pwa-topbar { flex: 0 0 auto; min-width: 0; min-height: calc(var(--pwa-topbar-height) + var(--pwa-safe-top)); display: flex; align-items: center; gap: 8px; margin: 0; padding-top: var(--pwa-safe-top); padding-bottom: 0; }
