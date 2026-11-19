@@ -1,6 +1,6 @@
 /* 状态卡片与侧栏同为常驻面板：取侧栏的 panel 底、16px 圆角与 shadow-sidebar，不用临时浮层阴影。
-   状态栏只占卡片与贴边留白；尺寸由布局与测量 hook 共用，左右安全区只消费一次。 */
-.pwa-root .pwa-main { --pwa-status-card-width: 248px; --pwa-status-card-inset: 12px; }
+   卡片左侧留出间距，避免消息滚动条贴住卡片。左右安全区只消费一次。 */
+.pwa-root .pwa-main { --pwa-status-card-width: 248px; --pwa-status-card-inset: 12px; --pwa-status-card-gap: 12px; }
 .pwa-root .pwa-main .pwa-workspace-body { padding-right: calc(var(--pwa-main-safe-right) + var(--pwa-status-reserve, 0px)); transition: padding-right var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root .pwa-main-notices { right: var(--pwa-status-reserve, 0px); transition: right var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root .pwa-main[data-session-status-instant] .pwa-workspace-body,

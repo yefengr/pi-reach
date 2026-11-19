@@ -26,7 +26,7 @@ export function useSessionStatusSpace(main: HTMLElement | null, enabled: boolean
       const style = getComputedStyle(main);
       const number = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
       const width = main.clientWidth - number("--pwa-main-safe-left") - number("--pwa-main-safe-right");
-      const reserve = number("--pwa-status-card-width") + number("--pwa-status-card-inset");
+      const reserve = number("--pwa-status-card-width") + number("--pwa-status-card-inset") + number("--pwa-status-card-gap");
       const hideBelow = number("--pwa-reading-width") + reserve + 2 * number("--pwa-gutter");
       widthFits.current = width >= (widthFits.current === false ? hideBelow + STATUS_SHOW_HYSTERESIS : hideBelow);
       const available = enabled && !window.matchMedia(MOBILE_LAYOUT_QUERY).matches && widthFits.current;
