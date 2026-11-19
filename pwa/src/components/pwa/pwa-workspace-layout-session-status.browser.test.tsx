@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ConfirmActionDialog } from "./confirm-action-dialog";
 import { SessionStatusDrawer } from "./session-status-drawer";
 import { useSettingsRoute } from "@/lib/pwa/settings-route";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
@@ -11,6 +11,9 @@ import { renderPwa } from "@/test/browser/render";
 import { enableTouch, resetTouch, touch, touchReleaseAtRest } from "@/test/browser/swipe";
 import { SessionStatusContent, formatStatusTokens } from "./session-status";
 import { PwaWorkspaceLayout } from "./pwa-workspace-layout";
+import { PwaMessageActions, PwaStatusError } from "./pwa-app-actions";
+import { PwaOperationNotifications } from "./pwa-operation-notifications";
+import { createOperationNotificationController, type OperationNotificationController } from "@/lib/pwa/operation-notifications";
 import type { SessionStatusView } from "@/lib/pwa/session-status";
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
@@ -21,9 +24,16 @@ const view: SessionStatusView = { kind: "ready", status: {
 } };
 const status = { view, title: "Status example", deviceName: "Office", cwd: "/work/pi-reach" };
 
-function Layout({ overlays = null, realSettings = false, statusAvailable = true }: { overlays?: ReactNode; realSettings?: boolean; statusAvailable?: boolean }) {
+function Layout({ overlays = null, realSettings = false, statusAvailable = true, offline = false, notifications }: { overlays?: ReactNode; realSettings?: boolean; statusAvailable?: boolean; offline?: boolean; notifications?: OperationNotificationController }) {
   const settings = useSettingsRoute();
-  return <PwaWorkspaceLayout sessionStatus={statusAvailable ? status : undefined} navigation={{ devices: [], endpoints: [], history: [], activeDeviceId: null, activeEndpointId: null, selectedHistoryId: null, snapshotReady: true, pairingPresence: {}, onPair() {}, onSettings() {}, onSelectDevice() {}, onSelectEndpoint() {}, onSelectHistory() {}, onRename() {}, onRemove() {} }} titleBar={{ title: status.title, showTitle: true }} toast={null} settingsRoute={realSettings ? settings.route : { open: false, change: 0, animate: false, origin: null }} onOpenSettings={settings.openSettings} onSettingsBack={settings.closeSettings} renderSettings={() => <h2>Settings content</h2>} overlays={overlays} closeBackgroundOverlay={close => close()}><div className="pwa-message-list">Conversation</div><div className="pwa-composer">Composer</div></PwaWorkspaceLayout>;
+  return <PwaWorkspaceLayout sessionStatus={statusAvailable ? { ...status, view: offline ? { kind: "offline" } : view } : undefined} navigation={{ devices: [], endpoints: [], history: [], activeDeviceId: null, activeEndpointId: null, selectedHistoryId: null, snapshotReady: true, pairingPresence: {}, onPair() {}, onSettings() {}, onSelectDevice() {}, onSelectEndpoint() {}, onSelectHistory() {}, onRename() {}, onRemove() {} }} titleBar={{ title: status.title, showTitle: true }} toast={<PwaStatusError message="Conversation could not be updated" onDismiss={() => {}} />} operationNotifications={notifications ? <PwaOperationNotifications controller={notifications} /> : null} settingsRoute={realSettings ? settings.route : { open: false, change: 0, animate: false, origin: null }} onOpenSettings={settings.openSettings} onSettingsBack={settings.closeSettings} renderSettings={() => <h2>Settings content</h2>} overlays={overlays} closeBackgroundOverlay={close => close()}>
+    {/* 与正式会话共用消息内边距、浮动 footer、Composer 卡片和 Latest，不给夹具另造居中规则。 */}
+    <div className="pwa-message-list"><div data-reading-content>Conversation</div></div>
+    <div className="pwa-chat-footer">
+      <PwaMessageActions show showLatest showRetry={false} unreadOutput={0} onRetry={() => {}} onLatest={() => {}} />
+      <div className="pwa-composer"><div className="pwa-composer-card">Composer</div></div>
+    </div>
+  </PwaWorkspaceLayout>;
 }
 
 async function renderLayout(props: Parameters<typeof Layout>[0] = {}) {
@@ -68,6 +78,11 @@ function observeStatusSideEffects() {
   };
 }
 
+beforeEach(() => {
+  window.localStorage.removeItem("pi-reach-sidebar-collapsed");
+  window.localStorage.removeItem("pi-reach-sidebar-width");
+});
+
 afterEach(async () => {
   await resetTouch();
   await cleanup();
@@ -88,15 +103,149 @@ test("formats the terminal token bands and renders extension status as plain tex
   await expect.element(screen.getByText("<b>plain text</b>")).toBeVisible();
 });
 
-test("desktop card reserves one shared conversation and notice lane and hides when too narrow", async () => {
+function layoutElement(selector: string) {
+  return document.querySelector<HTMLElement>(selector)!;
+}
+
+function center(selector: string) {
+  const box = layoutElement(selector).getBoundingClientRect();
+  return box.left + box.width / 2;
+}
+
+function pixels(value: number) {
+  return Math.round(value) || 0;
+}
+
+async function expectLane(visible: boolean) {
+  const reserve = visible ? 260 : 0;
+  await expect.poll(() => {
+    const main = layoutElement(".pwa-main");
+    const mainStyle = getComputedStyle(main);
+    const safeLeft = parseFloat(mainStyle.getPropertyValue("--pwa-main-safe-left"));
+    const safeRight = parseFloat(mainStyle.getPropertyValue("--pwa-main-safe-right"));
+    const body = getComputedStyle(layoutElement(".pwa-workspace-body"));
+    const notices = getComputedStyle(layoutElement(".pwa-main-notices"));
+    const mainBox = main.getBoundingClientRect();
+    const laneCenter = (mainBox.left + safeLeft + mainBox.right - safeRight - reserve) / 2;
+    const reading = layoutElement("[data-reading-content]").getBoundingClientRect();
+    return {
+      visible: main.hasAttribute("data-session-status-card"),
+      reserve: main.style.getPropertyValue("--pwa-status-reserve"),
+      padding: Math.round(parseFloat(body.paddingRight)),
+      noticeRight: Math.round(parseFloat(notices.right)),
+      readingWidth: Math.round(reading.width),
+      readingCenter: pixels(reading.left + reading.width / 2 - laneCenter),
+      composerWidth: Math.round(layoutElement(".pwa-composer-card").getBoundingClientRect().width),
+      centers: [".pwa-composer-card", ".pwa-latest-button", ".pwa-status-error"].map(selector => pixels(center(selector) - laneCenter)),
+      gapDifference: pixels(reading.left - mainBox.left - safeLeft - (mainBox.right - safeRight - reserve - reading.right)),
+      safeRight: Math.round(parseFloat(body.paddingRight) - safeRight),
+    };
+  }, { timeout: 5000 }).toEqual({
+    visible, reserve: `${reserve}px`,
+    padding: Math.round(parseFloat(getComputedStyle(layoutElement(".pwa-main")).getPropertyValue("--pwa-main-safe-right"))) + reserve,
+    noticeRight: reserve, readingWidth: 680, readingCenter: 0, composerWidth: 680, centers: [0, 0, 0],
+    gapDifference: 0, safeRight: reserve,
+  });
+}
+
+test("desktop reading, composer, Latest, error and Toast share the fixed status lane", async () => {
   await page.viewport(1600, 900);
-  await renderLayout();
-  await expect.poll(() => document.querySelector(".pwa-main")?.hasAttribute("data-session-status-card")).toBe(true);
-  const body = document.querySelector<HTMLElement>(".pwa-workspace-body")!;
-  const notices = document.querySelector<HTMLElement>(".pwa-main-notices")!;
-  expect(Math.round(body.getBoundingClientRect().right)).toBe(Math.round(notices.getBoundingClientRect().right));
-  await page.viewport(1000, 500);
-  await expect.poll(() => document.querySelector(".pwa-main")?.hasAttribute("data-session-status-card")).toBe(false);
+  const notifications = createOperationNotificationController();
+  await renderLayout({ notifications });
+  expect(layoutElement(".pwa-root").hasAttribute("data-sidebar-collapsed")).toBe(false);
+  await expectLane(true);
+  const main = layoutElement(".pwa-main");
+  expect(Math.round(center(".pwa-composer-card") - (main.getBoundingClientRect().left + main.clientWidth / 2))).toBe(-130);
+  const card = layoutElement(".pwa-session-status-card").getBoundingClientRect();
+  expect(Math.round(card.width)).toBe(248);
+  expect(Math.round(main.getBoundingClientRect().right - card.right)).toBe(12);
+  notifications.show("model_set-error");
+  await expect.poll(() => document.querySelector(".pwa-operation-notification")).not.toBeNull();
+  await expect.poll(() => Math.round(center(".pwa-operation-notification") - center(".pwa-composer-card"))).toBe(0);
+});
+
+test("desktop threshold includes 1272 expanded and 980 collapsed, with one-pixel lower widths hidden", async () => {
+  await page.viewport(1272, 900);
+  const screen = await renderLayout();
+  await expectLane(true);
+  await page.viewport(1271, 900);
+  await expectLane(false);
+  await screen.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+  await expectLane(true);
+  await page.viewport(980, 900);
+  await expectLane(true);
+  await page.viewport(979, 900);
+  await expectLane(false);
+});
+
+test("safe areas are deducted once and a taller title keeps the card below it", async () => {
+  await page.viewport(1600, 900);
+  const screen = await renderLayout();
+  const root = layoutElement(".pwa-root");
+  root.style.setProperty("--pwa-safe-left", "30px");
+  root.style.setProperty("--pwa-safe-right", "47px");
+  await expectLane(true);
+  expect(Math.round(layoutElement(".pwa-main").getBoundingClientRect().right - layoutElement(".pwa-session-status-card").getBoundingClientRect().right)).toBe(12 + 47);
+  const title = layoutElement(".pwa-title-bar");
+  title.style.minHeight = "120px";
+  await expect.poll(() => Math.round(layoutElement(".pwa-session-status-card").getBoundingClientRect().top - title.getBoundingClientRect().bottom)).toBe(8);
+  await screen.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+  await expectLane(true);
+  await page.viewport(1057, 900);
+  await expectLane(true);
+  await page.viewport(1056, 900);
+  await expectLane(false);
+});
+
+test("status availability and real sidebar toggles animate the shared lane, while window resize and dragging do not", async () => {
+  await page.viewport(1200, 900);
+  const fixture = (offline: boolean) => <PwaUiProvider><PwaAppShell runtimeNotice={null}><Layout offline={offline} /></PwaAppShell></PwaUiProvider>;
+  const screen = await render(fixture(false));
+  await expectLane(false);
+  await screen.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+  await expectLane(true);
+  const main = layoutElement(".pwa-main");
+  const body = layoutElement(".pwa-workspace-body");
+  const notices = layoutElement(".pwa-main-notices");
+  const grid = getComputedStyle(layoutElement(".pwa-layout"));
+  expect(main.hasAttribute("data-session-status-instant")).toBe(false);
+  expect(getComputedStyle(body).transitionProperty).toBe("padding-right");
+  expect(getComputedStyle(notices).transitionProperty).toBe("right");
+  for (const element of [body, notices]) {
+    expect(getComputedStyle(element).transitionDuration).toBe(grid.transitionDuration);
+    expect(getComputedStyle(element).transitionTimingFunction).toBe(grid.transitionTimingFunction);
+  }
+  const mutations: MutationRecord[] = [];
+  const observer = new MutationObserver(records => mutations.push(...records));
+  observer.observe(main, { attributes: true, attributeFilter: ["style"], attributeOldValue: true });
+  await screen.rerender(fixture(true));
+  mutations.push(...observer.takeRecords());
+  observer.disconnect();
+  expect(mutations.length).toBeGreaterThan(0);
+  expect(mutations.every(record => record.oldValue?.includes("--pwa-status-reserve:"))).toBe(true);
+  await expectLane(false);
+  expect(document.querySelector(".pwa-session-status-card")).toBeNull();
+  expect(main.hasAttribute("data-session-status-instant")).toBe(false);
+  await screen.rerender(fixture(false));
+  await expectLane(true);
+  // 同步切换 enabled 后立即拖窗，正在进行的让位过渡也必须一次到位。
+  await screen.rerender(fixture(true));
+  await page.viewport(1199, 900);
+  await expectLane(false);
+  expect(main.hasAttribute("data-session-status-instant")).toBe(true);
+  expect(getComputedStyle(body).transitionProperty).toBe("none");
+  expect(getComputedStyle(notices).transitionProperty).toBe("none");
+  await screen.rerender(fixture(false));
+  await expectLane(true);
+  await screen.getByRole("button", { name: "Expand sidebar", exact: true }).click();
+  await expectLane(false);
+  // 拖动门禁来自既有侧栏控制器；只核对选择器，不用逐帧采样猜测动效。
+  const root = layoutElement(".pwa-root");
+  root.setAttribute("data-sidebar-resizing", "");
+  try {
+    expect(getComputedStyle(body).transitionProperty).toBe("none");
+    expect(getComputedStyle(notices).transitionProperty).toBe("none");
+  } finally { root.removeAttribute("data-sidebar-resizing"); }
 });
 
 test("mobile left-swipe preview rolls back without history, then commits and closes by system Back", async () => {

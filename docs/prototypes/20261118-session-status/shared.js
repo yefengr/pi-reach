@@ -8,8 +8,7 @@
   const READING_WIDTH = 680;
   const CARD_WIDTH = 248;
   const CARD_RIGHT = 12;
-  const CARD_GAP = 16;
-  const CARD_LANE = CARD_WIDTH + CARD_RIGHT + CARD_GAP;
+  const CARD_LANE = CARD_WIDTH + CARD_RIGHT;
   const DESK_HEIGHT = 760;
   // 与 Pi 终端状态栏一致的上下文提醒阈值：超过才升档，恰好等于不提醒（正式实现由 Extension 计算后下发）
   const LEVEL_HIGH = 70;
@@ -177,19 +176,17 @@
   function computeLayout() {
     const scene = SCENES[state.scene];
     const main = state.width - (state.sidebar === "open" ? SIDEBAR_SPACE : 0);
-    const colWidth = Math.min(READING_WIDTH, main - GUTTER * 2);
-    const centered = (main - colWidth) / 2;
     const wanted = scene.kind !== "history";
-    // 阅读列让位：卡片放不下时正文左移到刚好让出卡片，左移到 gutter 仍放不下才隐藏卡片
-    const threshold = READING_WIDTH + CARD_LANE + GUTTER;
-    const maxLeft = main - CARD_LANE - colWidth;
-    const fits = colWidth === READING_WIDTH && maxLeft >= GUTTER;
-    const left = fits && wanted ? Math.min(centered, maxLeft) : centered;
-    const shift = Math.round(centered - left);
-    return { main, colWidth, left, shift, visible: wanted && fits, fits, wanted, threshold };
+    // 卡片显示时固定预留右侧 260px，阅读列在剩余区域居中。
+    const threshold = READING_WIDTH + CARD_LANE + GUTTER * 2;
+    const visible = wanted && main >= threshold;
+    const readingArea = main - (visible ? CARD_LANE : 0);
+    const colWidth = Math.min(READING_WIDTH, readingArea - GUTTER * 2);
+    const left = (readingArea - colWidth) / 2;
+    return { main, colWidth, left, visible, wanted, threshold };
   }
 
-  function renderDesk() {
+  function renderDesk(instant = false) {
     const layout = computeLayout();
     const desk = $("desk");
     desk.style.width = state.width + "px";
@@ -197,6 +194,7 @@
     const mainEl = $("deskMain");
     mainEl.style.left = (state.sidebar === "open" ? SIDEBAR_SPACE : 0) + "px";
     for (const el of [$("deskColumn"), $("deskComposer")]) {
+      el.style.transition = instant ? "none" : "";
       el.style.left = layout.left + "px";
       el.style.width = layout.colWidth + "px";
     }
@@ -221,7 +219,7 @@
     let status;
     if (!layout.wanted) status = "本场景不显示卡片";
     else if (!layout.visible) status = "宽度不足，卡片隐藏";
-    else status = layout.shift > 0 ? "卡片显示，正文左移 " + layout.shift + "px" : "卡片显示，正文居中";
+    else status = "卡片显示，正文在主区左缘与卡片之间居中，偏左 " + CARD_LANE / 2 + "px";
     $("layoutNote").innerHTML = "<b>" + status + "</b>：主区 " + layout.main + "px；显示卡片需主区 ≥ " + layout.threshold
       + "px，即窗口 ≥ " + windowThreshold + "px（侧栏" + (state.sidebar === "open" ? "展开" : "收起") + "）。虚线为阅读列右缘。<br>"
       + esc(SCENES[state.scene].note);
@@ -375,7 +373,7 @@
 
   const REVIEW = {
     desktop: [
-      "阅读列让位：卡片放不下时正文与输入区左移到刚好让出卡片（侧栏展开时窗口 ≥ 1268px 显示，≥ 1524px 回到居中）；收展侧栏或拖动窗口时正文随之平移。",
+      "主区达到 980px 时显示卡片。默认展开侧栏时，窗口需达到 1272px。卡片显示时正文和输入区在主区左缘与卡片之间居中，固定偏左 130px。卡片隐藏后在整个主区居中。拖动窗口宽度滑块时位置即时更新。",
       "上下文用与文字同号的小饼图示意占用：平时为中性灰，偏高、将满时扇形与标签同色；刚压缩时只剩虚线外框。",
       "本地历史不显示卡片；等待与旧扩展场景仍占位显示提示，是否也应隐藏。",
       "标题区右侧只保留刷新，卡片不放入标题区，避免与目录副标题抢首行。",
@@ -444,7 +442,7 @@
   $("widthRange").addEventListener("input", (event) => {
     state.width = Number(event.target.value);
     $("widthOut").textContent = String(state.width);
-    renderDesk();
+    renderDesk(true);
   });
   window.addEventListener("resize", () => { if (state.viewport === "desktop") fitDesk(); });
 
