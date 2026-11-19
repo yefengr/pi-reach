@@ -130,8 +130,8 @@ body[data-viewport="phone"] .desk-only { display: none; }
 .pulse { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--running); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 
-/* 桌面常驻卡片：浮层卡片 = surface + edge 发丝线 + shadow-float，圆角 12 */
-.status-card { position: absolute; top: 84px; right: 12px; width: 248px; padding: 10px 12px 12px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-float); font: 400 var(--t-list)/1.4 var(--font-ui); transition: opacity .2s ease; }
+/* 桌面常驻卡片：与侧栏同为常驻面板 = panel + edge 发丝线 + shadow-sidebar（深色无阴影），圆角 16 */
+.status-card { position: absolute; top: 84px; right: 12px; width: 248px; padding: 10px 12px 12px; border: 1px solid var(--edge); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow-sidebar); font: 400 var(--t-list)/1.4 var(--font-ui); transition: opacity .2s ease; }
 .status-card.is-hidden { opacity: 0; pointer-events: none; }
 .card-content { transition: opacity .2s ease; }
 @starting-style { .card-content { opacity: 0; } }

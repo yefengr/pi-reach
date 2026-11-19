@@ -1,10 +1,11 @@
-/* 状态栏只占卡片与贴边留白；尺寸由布局与测量 hook 共用，左右安全区只消费一次。 */
+/* 状态卡片与侧栏同为常驻面板：取侧栏的 panel 底、16px 圆角与 shadow-sidebar，不用临时浮层阴影。
+   状态栏只占卡片与贴边留白；尺寸由布局与测量 hook 共用，左右安全区只消费一次。 */
 .pwa-root .pwa-main { --pwa-status-card-width: 248px; --pwa-status-card-inset: 12px; }
 .pwa-root .pwa-main .pwa-workspace-body { padding-right: calc(var(--pwa-main-safe-right) + var(--pwa-status-reserve, 0px)); transition: padding-right var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root .pwa-main-notices { right: var(--pwa-status-reserve, 0px); transition: right var(--pwa-sidebar-motion) var(--pwa-ease-content); }
 .pwa-root .pwa-main[data-session-status-instant] .pwa-workspace-body,
 .pwa-root .pwa-main[data-session-status-instant] .pwa-main-notices { transition: none; }
-.pwa-root .pwa-session-status-card { display: block; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard), visibility var(--pwa-duration-fade); position: absolute; top: var(--pwa-status-top); right: calc(var(--pwa-status-card-inset) + var(--pwa-main-safe-right)); width: var(--pwa-status-card-width); max-height: calc(100% - var(--pwa-status-top) - var(--pwa-status-card-inset)); overflow-y: auto; padding: 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-lg); background: var(--pwa-surface); box-shadow: var(--pwa-shadow-float); color: var(--pwa-ink); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
+.pwa-root .pwa-session-status-card { display: block; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-standard), visibility var(--pwa-duration-fade); position: absolute; top: var(--pwa-status-top); right: calc(var(--pwa-status-card-inset) + var(--pwa-main-safe-right)); width: var(--pwa-status-card-width); max-height: calc(100% - var(--pwa-status-top) - var(--pwa-status-card-inset)); overflow-y: auto; padding: 12px; border: var(--pwa-hairline) solid var(--pwa-edge); border-radius: var(--pwa-radius-xl); background: var(--pwa-panel); box-shadow: var(--pwa-shadow-sidebar); color: var(--pwa-ink); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
 .pwa-root [data-session-status-card] > .pwa-session-status-card { opacity: 1; visibility: visible; pointer-events: auto; }
 .pwa-root .pwa-session-status-card[data-presence="leaving"] { opacity: 0; visibility: visible; pointer-events: none; transition: opacity var(--pwa-duration-fade) var(--pwa-ease-exit); }
 .pwa-root .pwa-session-status-kinds { position: relative; overflow: hidden; }
