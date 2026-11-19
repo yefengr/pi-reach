@@ -128,16 +128,19 @@ async function expectLane(visible: boolean) {
     const mainBox = main.getBoundingClientRect();
     const laneCenter = (mainBox.left + safeLeft + mainBox.right - safeRight - reserve) / 2;
     const reading = layoutElement("[data-reading-content]").getBoundingClientRect();
+    // 消息列表固定预留滚动条位置：经典滚动条（如 Linux CI）在右侧占宽，覆盖式滚动条为 0。按实测宽度还原阅读列。
+    const list = layoutElement(".pwa-message-list");
+    const gutter = list.offsetWidth - list.clientWidth;
     return {
       visible: main.hasAttribute("data-session-status-card"),
       reserve: main.style.getPropertyValue("--pwa-status-reserve"),
       padding: Math.round(parseFloat(body.paddingRight)),
       noticeRight: Math.round(parseFloat(notices.right)),
-      readingWidth: Math.round(reading.width),
-      readingCenter: pixels(reading.left + reading.width / 2 - laneCenter),
+      readingWidth: Math.round(reading.width + gutter),
+      readingCenter: pixels(reading.left + (reading.width + gutter) / 2 - laneCenter),
       composerWidth: Math.round(layoutElement(".pwa-composer-card").getBoundingClientRect().width),
       centers: [".pwa-composer-card", ".pwa-latest-button", ".pwa-status-error"].map(selector => pixels(center(selector) - laneCenter)),
-      gapDifference: pixels(reading.left - mainBox.left - safeLeft - (mainBox.right - safeRight - reserve - reading.right)),
+      gapDifference: pixels(reading.left - mainBox.left - safeLeft - (mainBox.right - safeRight - reserve - reading.right - gutter)),
       safeRight: Math.round(parseFloat(body.paddingRight) - safeRight),
     };
   }, { timeout: 5000 }).toEqual({
