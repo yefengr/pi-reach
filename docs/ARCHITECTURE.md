@@ -93,6 +93,8 @@ device_id + endpoint_id + session_id
 
 PWA 只保存已收到的正式事件；pending 和 partial 不写入正式事件表。下线不会删除正式 timeline，只有用户移除 pairing 或清除本地数据才删除关联数据。
 
+清除本地数据会移除本浏览器的 Owner 身份、配对、Pi 元数据、会话历史与工具详情缓存，也会清除已选电脑、各电脑的 Pi 选择、草稿和阅读位置。Relay 地址与界面偏好保留。界面偏好的恢复范围见[设置页](DESIGN.md#设置页)。
+
 工具详情缓存不是第二份正式历史。它只保存已完成校验的原生最终详情，按 Owner、device、endpoint、session、group 与稳定原生工具引用隔离，不把临时 runtime、channel 或 leaf 放入持久身份。缓存独立按容量与使用顺序回收；常规事件不会被详情正文回填。清会话、移除配对和清数据会同步清理详情缓存，写入与清理共享事务边界，晚到写入不能重建孤立详情。旧正式事件已有的真正完整 inline 内容继续保留；省略或截断记录不被当作完整原件。
 
 endpoint metadata 可以落盘，但不是 presence。`use-endpoint-registry.ts` 持久化时移除 `online`，读取缓存时也不能把 metadata 当作在线证明。

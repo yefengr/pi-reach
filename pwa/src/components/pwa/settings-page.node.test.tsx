@@ -19,6 +19,7 @@ function renderSettings(): string {
         backLabel="Back to workspace"
         onClearData={() => {}}
         onResetLayout={() => {}}
+        onResetSettings={() => {}}
         onShowShortcuts={() => {}}
       />
     </PwaUiProvider>,
@@ -31,7 +32,8 @@ test("renders settings as a page with a focusable title, grouped sections and da
   expect(html).not.toMatch(/mantine-Drawer/);
   expect(html).toMatch(/<h1 id="pwa-settings-title" class="pwa-settings-title" tabindex="-1">Settings<\/h1>/);
   expect(html).toMatch(/aria-label="Back to workspace"/);
-  expect(html.match(/<h2 /g)).toHaveLength(7);
+  expect(html.match(/<h2 /g)).toHaveLength(8);
+  expect(html).toContain("Show session status on desktop");
   expect(html).toContain("Text size");
   expect(html).toContain("Enter sends messages");
   expect(html).toContain("Keyboard shortcuts");
@@ -43,8 +45,7 @@ test("renders settings as a page with a focusable title, grouped sections and da
   expect(html).toMatch(/Relay URL/);
   expect(html).toMatch(/value="https:\/\/relay\.example\.test"/);
   expect(html).toMatch(/Save settings/);
-  expect(html).toMatch(/Clear local data/);
-  expect(html).toMatch(/Reset layout/);
+  expect(html).toMatch(/Reset layout.*Reset settings.*Clear local data/);
   // 重置布局表示恢复默认，用 RotateCcw，与“刷新应用”的 RefreshCw 区分。
   expect(html.match(/<button\b[^>]*pwa-layout-reset-button[\s\S]*?<\/button>/)?.[0]).toContain("lucide-rotate-ccw");
   expect(html).not.toMatch(/Close settings/);

@@ -77,9 +77,10 @@ export function safeProtocolFeedbackMessage(code: string): string {
   return Object.hasOwn(protocolErrorMessages, code) ? protocolErrorMessages[code] : fallbackMessages.protocol;
 }
 
-export function safeConfirmationError(kind: "new-session" | "remove-pairing" | "clear-local-data"): string {
+export function safeConfirmationError(kind: "new-session" | "remove-pairing" | "clear-local-data" | "reset-settings"): string {
   if (kind === "new-session") return "Could not start a fresh session. Check the connection and try again.";
   if (kind === "remove-pairing") return "Could not delete pairing. Try again.";
+  if (kind === "reset-settings") return "Could not complete this action. Try again.";
   return "Could not clear local data. Try again.";
 }
 

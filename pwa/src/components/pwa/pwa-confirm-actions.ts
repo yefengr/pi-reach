@@ -6,6 +6,7 @@ export type ConfirmActionRequest =
   | { kind: "new-session" }
   | { kind: "remove-pairing"; label: string; device: PwaDeviceRecord }
   | { kind: "clear-local-data" }
+  | { kind: "reset-settings"; reset: () => void }
   | { kind: "leave-attachments"; next: () => void; uploads?: boolean; files?: boolean };
 
 type ConfirmActionEffects = {
@@ -30,6 +31,9 @@ export async function runConfirmAction(action: ConfirmActionRequest, effects: Co
   try {
     if (action.kind === "leave-attachments") {
       action.next();
+      state.onSuccess();
+    } else if (action.kind === "reset-settings") {
+      action.reset();
       state.onSuccess();
     } else if (action.kind === "new-session") {
       if (!effects.startNewSession()) throw new Error("Could not start a fresh session. Check the connection and try again.");

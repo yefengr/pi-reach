@@ -67,5 +67,8 @@ test("keeps send and local-history feedback specific through the final Toast bou
 test("confirmation failures are described by action rather than exception text", () => {
   expect(safeConfirmationError("new-session")).toBe("Could not start a fresh session. Check the connection and try again.");
   expect(safeConfirmationError("remove-pairing")).toBe("Could not delete pairing. Try again.");
+  expect(safeConfirmationError("reset-settings")).toBe("Could not complete this action. Try again.");
+  expect(localizeFeedback(safeConfirmationError("reset-settings"), "zh-CN")).toBe("无法完成此操作，请重试。");
+  expect(safeFeedbackMessage(safeConfirmationError("reset-settings"))).toBe("Could not complete this action. Try again.");
   expect(safeConfirmationError("clear-local-data")).toBe("Could not clear local data. Try again.");
 });

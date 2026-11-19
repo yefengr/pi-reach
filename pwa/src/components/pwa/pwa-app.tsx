@@ -12,7 +12,6 @@ import { MessageList } from "@/components/pwa/message-list";
 import { PublishedFilesProvider } from "./published-files-context";
 import { ToolDetailsProvider } from "./tool-details-context";
 import { SessionStatusController } from "@/lib/pwa/session-status";
-import { SESSION_STATUS_CARD_STORAGE_KEY } from "@/lib/pwa/session-status-card-preference";
 import { ToolDetailsController } from "@/lib/pwa/tool-details";
 import { PersistentToolDetailsCache } from "@/lib/pwa/tool-details-cache";
 import { useSessionFiles } from "./use-session-files";
@@ -65,6 +64,7 @@ import type { TimelineEvent } from "@/lib/pi-reach/protocol-v2/schema";
 import { getMessages, useI18n } from "@/lib/i18n";
 import {
   clearPwaData,
+  RELAY_SETTING,
   getPwaDatabase,
   listPwaDevices,
   openPwaDatabase,
@@ -76,7 +76,6 @@ import { useScrollIndicator } from "@/lib/ui/scroll-indicator";
 
 const LEGACY_DEFAULT_RELAYS = ["https://relay-pi.yefengr.cn"];
 
-const RELAY_SETTING = "relay_url";
 type StartupState = "loading" | "ready" | "error";
 type ComposerCommandRequest =
   | { action: "session_new" | "session_compact" }
@@ -1169,7 +1168,6 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     await invalidateSessionDetails();
     await clearPwaData();
     clearStoredDrafts();
-    try { window.localStorage.removeItem(SESSION_STATUS_CARD_STORAGE_KEY); } catch { /* 存储不可访问时使用默认偏好。 */ }
     sessionPositions.clear();
   }, [invalidatePersistence, invalidateSessionDetails, sessionPositions]);
   const saveDeviceNickname = useCallback(async (device: PwaDeviceRecord, nickname: string) => { await getPwaDatabase().devices.put({ ...device, nickname }); setDevices(await listPwaDevices()); }, []);
@@ -1215,7 +1213,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
       if (idle) draftHandoff = { sourceKey: draftKeyRef.current, text: draftsRef.current[draftKeyRef.current] ?? "",
         version: draftVersionsRef.current.get(draftKeyRef.current) ?? 0, attachments: idle };
     }
-    if (confirmAction.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id)) {
+    if (confirmAction.kind !== "reset-settings" && (confirmAction.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id))) {
       attachmentComposer.cancelIntent();
       if (confirmAction.kind === "new-session") fileController.cancel();
       else { fileController.reset(); filesReadyRef.current = false; }
@@ -1408,7 +1406,7 @@ function PwaAppContent({ operationNotifications, standalone = false }: { operati
     const channel = channelRef.current;
     if (selectedHistoryRef.current !== null || connectionRef.current !== "online" || !toolDetailsSupportedRef.current || !scope || !channel || channel.closed || timelineRuntimeRef.current.replacing || channel.channelId !== scope.channelId) return null;
     return { channelId: scope.channelId, sessionId: scope.sessionId, leafId: scope.leafId, runtimeInstanceId: scope.runtimeInstanceId, send: frame => sessionStatusController.send(frame, channel, request => channel.send(request)) };
-  } }}><PublishedFilesProvider value={fileView}><PwaWorkspaceLayout sessionStatus={selectedHistory || activeDevice && displayEndpoint ? { view: selectedHistory || exitedDisplay ? { kind: "offline" } : sessionStatusView, title: titleBar.title, deviceName: computerName, cwd: selectedHistory ? historyEndpoint?.cwd : displayEndpoint?.cwd } : undefined} navigation={navigation} titleBar={titleBar} connectionState={displayConnection} toast={<PwaStatusError message={selectedHistory ? historyError : error ?? recoveryError} onDismiss={() => { if (selectedHistory) setHistoryError(null); else if (error !== null) setError(null); else setRecoveryError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage viewportDiagnostics viewportDiagnosticsOnline={sessionOnline && selectedHistory === null} onShowShortcuts={onShowShortcuts} relayUrl={relayUrl} defaultRelayUrl={defaultRelayUrl} relayVersion={relayVersion} relayStatus={relayStatus} extensionVersion={extensionVersion} extensionStatus={connection} extensionTarget={sessionOnline && activeDevice && activeEndpoint ? `${displayDevice(activeDevice)} · ${displayPi(activeEndpoint)}` : null} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
+  } }}><PublishedFilesProvider value={fileView}><PwaWorkspaceLayout sessionStatus={selectedHistory || activeDevice && displayEndpoint ? { view: selectedHistory || exitedDisplay ? { kind: "offline" } : sessionStatusView, title: titleBar.title, deviceName: computerName, cwd: selectedHistory ? historyEndpoint?.cwd : displayEndpoint?.cwd } : undefined} navigation={navigation} titleBar={titleBar} connectionState={displayConnection} toast={<PwaStatusError message={selectedHistory ? historyError : error ?? recoveryError} onDismiss={() => { if (selectedHistory) setHistoryError(null); else if (error !== null) setError(null); else setRecoveryError(null); }} />} operationNotifications={standalone ? <PwaOperationNotifications controller={operationNotifications} /> : null} settingsRoute={settingsRoute} onOpenSettings={openSettings} onSettingsBack={closeSettings} renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage viewportDiagnostics viewportDiagnosticsOnline={sessionOnline && selectedHistory === null} onShowShortcuts={onShowShortcuts} relayUrl={relayUrl} defaultRelayUrl={defaultRelayUrl} relayVersion={relayVersion} relayStatus={relayStatus} extensionVersion={extensionVersion} extensionStatus={connection} extensionTarget={sessionOnline && activeDevice && activeEndpoint ? `${displayDevice(activeDevice)} · ${displayPi(activeEndpoint)}` : null} onSave={saveRelayUrl} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => requestConfirmation({ kind: "clear-local-data" })} onResetSettings={(reset) => requestConfirmation({ kind: "reset-settings", reset: () => { reset(); operationNotifications.notify(getMessages().settings.restoredDefaults); } })} onResetLayout={() => resetOutputFollowing()} />} overlays={<>{renameDevice ? <RenamePairingDialog device={renameDevice} onSave={(nickname) => saveDeviceNickname(renameDevice, nickname)} onClose={() => setRenameDevice(null)} focusOrigin={renameFocusOrigin} focusFallbackSelectors={[".pwa-session-sheet .pwa-navigation-close", ".pwa-session-trigger"]} /> : null}
     <PairingDialog opened={pairing.state !== "idle"} connecting={pairing.state === "pairing"} error={pairing.error} onSubmit={(code) => { void pairing.pairFromCode(code); }} onClearError={pairing.clearError} onClose={pairing.close} focusOrigin={pairingFocusOrigin} focusFallbackSelectors={[".pwa-session-trigger"]} />
     <ConfirmActionDialog action={confirmAction?.kind === "remove-pairing" ? { kind: "remove-pairing", label: confirmAction.label } : confirmAction} fetchingFiles={fileView.active && (confirmAction?.kind !== "remove-pairing" || isActiveDevice(confirmAction.device.id))} pending={confirmPending} error={confirmError} onConfirm={() => { void confirmRequestedAction(); }} onClose={() => { if (!confirmPendingRef.current) { setConfirmAction(null); setConfirmError(null); } }} onExitTransitionEnd={finishConfirmationTransition} /></>} closeBackgroundOverlay={closeBackgroundOverlay}>{mainContent}</PwaWorkspaceLayout></PublishedFilesProvider></ToolDetailsProvider>;
 }

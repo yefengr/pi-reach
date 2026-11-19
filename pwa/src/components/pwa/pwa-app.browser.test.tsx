@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { flushSync } from "react-dom";
 import { setLanguagePreference } from "@/lib/i18n";
+import { getLanguageState, LANGUAGE_STORAGE_KEY } from "@/lib/i18n/locale";
+import { APPEARANCE_STORAGE_KEY } from "@/lib/ui/appearance";
+import { getTextSizeState, setTextSize, TEXT_SIZE_STORAGE_KEY } from "@/lib/ui/text-size";
+import { ENTER_SENDS_STORAGE_KEY, isAppleKeyboard } from "@/lib/pwa/keyboard-shortcuts";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { PwaUiProvider } from "./pwa-ui-provider";
 import { PwaAppShell } from "./pwa-app-shell";
 import { renderPwa } from "@/test/browser/render";
-import { readStoredDrafts } from "@/lib/pwa/draft-storage";
+import { DRAFT_STORAGE_KEY, readStoredDrafts, resetDraftStorageForTest } from "@/lib/pwa/draft-storage";
 import { SESSION_POSITION_STORAGE_KEY } from "@/lib/pwa/session-position-store";
 import { SESSION_STATUS_CARD_STORAGE_KEY } from "@/lib/pwa/session-status-card-preference";
 import { reloadWorkspace } from "@/lib/pwa/settings-route";
@@ -21,7 +25,8 @@ import { SCROLL_IDLE_MS } from "@/lib/pwa/scroll-idle-gate";
 import { listTimelineSessions, loadTimeline, mergeTimelineEvents, TimelineStoreConflictError } from "@/lib/pwa/timeline-store";
 import { DELIVERY_STATUS_QUERY_TIMEOUT_MS, PendingCapacityError, TimelineRuntime, USER_MESSAGE_CONFIRMATION_TIMEOUT_MS } from "@/lib/pwa/timeline-runtime";
 import { DELIVERY_STATUS_RETRY_DELAYS_MS } from "@/lib/pwa/delivery-query-retry";
-import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase } from "@/lib/pwa/db";
+import { makePwaDeviceId, makePwaEndpointId, openPwaDatabase, RELAY_SETTING } from "@/lib/pwa/db";
+import { ACTIVE_DEVICE_SETTING } from "@/lib/pwa/active-selection-keys";
 import { PwaApp } from "./pwa-app";
 import { viewportDiagnosticCapture } from "@/lib/pwa/timeline-viewport-diagnostics";
 import { CONNECTION_HINT_TIMING } from "@/lib/pwa/connection-hint";
@@ -4158,35 +4163,145 @@ test.each([1280, 390])("operation notification keeps the settings page beneath c
   }
 });
 
-test("resetting layout preserves the desktop status preference and clearing local data restores its default", async () => {
-  localStorage.setItem(SESSION_STATUS_CARD_STORAGE_KEY, "false");
+const customSettingsRelay = "https://custom-relay.example.test";
+const customBrowserPreferences = {
+  [APPEARANCE_STORAGE_KEY]: "dark",
+  [TEXT_SIZE_STORAGE_KEY]: "large",
+  [LANGUAGE_STORAGE_KEY]: "en",
+  [ENTER_SENDS_STORAGE_KEY]: "false",
+  [SESSION_STATUS_CARD_STORAGE_KEY]: "false",
+  "pi-reach-sidebar-collapsed": "true",
+  "pi-reach-sidebar-width": "333",
+};
+
+function seedBrowserPreferences(sidebarCollapsed = "true") {
+  const preferences = { ...customBrowserPreferences, "pi-reach-sidebar-collapsed": sidebarCollapsed };
+  const previousLanguage = getLanguageState().preference;
+  const previousTextSize = getTextSizeState().preference;
+  const previousValues = Object.keys(customBrowserPreferences).map(key => [key, localStorage.getItem(key)] as const);
+  for (const [key, value] of Object.entries(preferences)) localStorage.setItem(key, value);
+  setLanguagePreference("en");
+  setTextSize("large");
+  return () => {
+    setLanguagePreference(previousLanguage);
+    setTextSize(previousTextSize);
+    for (const [key, value] of previousValues) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+  };
+}
+
+function expectBrowserPreferencesKept(sidebarCollapsed = "true") {
+  const preferences = { ...customBrowserPreferences, "pi-reach-sidebar-collapsed": sidebarCollapsed };
+  for (const [key, value] of Object.entries(preferences)) expect(localStorage.getItem(key), key).toBe(value);
+}
+
+async function openSettingsWithSidebarCollapsed() {
+  const sidebarToggle = page.getByRole("button", { name: "Expand sidebar", exact: true });
+  await expect.element(sidebarToggle).toBeVisible();
+  (sidebarToggle.element() as HTMLElement).focus();
+  await userEvent.keyboard(isAppleKeyboard() ? "{Meta>},{/Meta}" : "{Control>},{/Control}");
+}
+
+test("resetting layout and clearing local data keep browser preferences and Relay", async () => {
+  const restorePreferences = seedBrowserPreferences();
+  const db = await openPwaDatabase();
+  const relay = { key: RELAY_SETTING, value: customSettingsRelay };
+  await db.settings.bulkPut([relay, { key: ACTIVE_DEVICE_SETTING, value: makePwaDeviceId("owner-device-key") }]);
+  await seedArchivedSession();
   const screen = await renderOnlineApp(renderWorkspaceApp);
-  const settingName = "Show session status on desktop";
   try {
-    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
-    const statusSwitch = screen.getByRole("switch", { name: settingName });
+    await openSettingsWithSidebarCollapsed();
+    const statusSwitch = screen.getByRole("switch", { name: "Show session status on desktop" });
     await expect.element(statusSwitch).not.toBeChecked();
-    await screen.getByRole("button", { name: "Reset layout" }).click();
-    expect(localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY)).toBe("false");
+    await screen.getByRole("button", { name: "Reset layout", exact: true }).click();
+    expectBrowserPreferencesKept();
     await expect.element(statusSwitch).not.toBeChecked();
 
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ saved: { text: "Draft", at: Date.now() } }));
+    sessionStorage.setItem(SESSION_POSITION_STORAGE_KEY, JSON.stringify([["saved", { following: true }]]));
     vi.mocked(reloadWorkspace).mockImplementationOnce(() => {});
     await screen.getByRole("button", { name: "Clear local data", exact: true }).click();
     const confirmation = screen.getByRole("dialog", { name: /Clear this browser/ });
     await confirmation.getByRole("button", { name: "Clear local data", exact: true }).click();
     await expect.poll(() => vi.mocked(reloadWorkspace).mock.calls.length).toBe(1);
-    expect(localStorage.getItem(SESSION_STATUS_CARD_STORAGE_KEY)).toBeNull();
-  } finally {
+    expectBrowserPreferencesKept();
+    expect(await db.settings.toArray()).toEqual([relay]);
+    expect(await db.identities.count()).toBe(0);
+    expect(await db.devices.count()).toBe(0);
+    expect(await db.endpoints.count()).toBe(0);
+    expect(await db.sessions.count()).toBe(0);
+    expect(await db.events.count()).toBe(0);
+    expect(localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(SESSION_POSITION_STORAGE_KEY)).toBeNull();
     await screen.unmount();
     window.history.replaceState(null, "", "/app");
+    const reloaded = await renderWorkspaceApp();
+    try {
+      await openSettingsWithSidebarCollapsed();
+      await expect.element(reloaded.getByRole("switch", { name: "Show session status on desktop" })).not.toBeChecked();
+      await expect.element(reloaded.getByRole("textbox", { name: "Relay URL" })).toHaveValue(customSettingsRelay);
+    } finally { await reloaded.unmount(); }
+  } finally {
+    await screen.unmount();
     vi.mocked(reloadWorkspace).mockClear();
-    localStorage.removeItem(SESSION_STATUS_CARD_STORAGE_KEY);
+    window.history.replaceState(null, "", "/app");
+    sessionStorage.removeItem(SESSION_POSITION_STORAGE_KEY);
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    resetDraftStorageForTest();
+    restorePreferences();
   }
-  const reloaded = await renderWorkspaceApp();
+});
+
+test("reset settings confirms, restores live preferences and keeps pairing and history", async () => {
+  const restorePreferences = seedBrowserPreferences("false");
+  const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
+  await page.viewport(1600, 900);
+  const db = await openPwaDatabase();
+  await db.settings.put({ key: RELAY_SETTING, value: customSettingsRelay });
+  await seedArchivedSession();
+  const screen = await renderOnlineApp(renderWorkspaceApp);
   try {
-    await reloaded.getByRole("button", { name: "Open settings", exact: true }).click();
-    await expect.element(reloaded.getByRole("switch", { name: settingName })).toBeChecked();
-  } finally { await reloaded.unmount(); }
+    const channel = channelHarness.channels[0]!;
+    channel.emit(readyFrame(channel, "session-1"));
+    const card = screen.getByRole("complementary", { name: "Session status" });
+    await expect.element(card).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Open settings", exact: true }).click();
+    const trigger = screen.getByRole("button", { name: "Reset settings", exact: true });
+    const confirmation = screen.getByRole("dialog", { name: "Reset settings?" });
+    await trigger.click();
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
+    await expect.element(trigger).toHaveFocus();
+    expectBrowserPreferencesKept("false");
+
+    await trigger.click();
+    await confirmation.getByRole("button", { name: "Reset settings", exact: true }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Default settings restored.", { exact: true })).toBeVisible();
+    await expect.element(screen.getByRole("radio", { name: /^System/ })).toBeChecked();
+    await expect.element(screen.getByRole("radio", { name: /^Follow browser/ })).toBeChecked();
+    await expect.element(screen.getByRole("switch", { name: "Enter sends messages" })).toBeChecked();
+    await expect.element(screen.getByRole("switch", { name: "Show session status on desktop" })).toBeChecked();
+    expect(getTextSizeState().preference).toBe("system");
+    expect(localStorage.getItem("pi-reach-sidebar-collapsed")).toBe("false");
+    expect(localStorage.getItem("pi-reach-sidebar-width")).toBe(customBrowserPreferences["pi-reach-sidebar-width"]);
+    await expect.element(screen.getByRole("textbox", { name: "Relay URL" })).toHaveValue(customSettingsRelay);
+    expect(await db.devices.count()).toBe(1);
+    expect(await db.identities.count()).toBe(1);
+    expect(await db.sessions.count()).toBeGreaterThan(0);
+    expect(await db.events.count()).toBeGreaterThan(0);
+
+    await screen.getByRole("button", { name: "Back to workspace", exact: true }).click();
+    await expect.element(card).toBeVisible();
+    expect(channelHarness.channels).toEqual([channel]);
+  } finally {
+    await screen.unmount();
+    languages.mockRestore();
+    window.history.replaceState(null, "", "/app");
+    restorePreferences();
+  }
 });
 
 test("keeps mobile navigation behind deletion confirmation and restores management focus", async () => {
