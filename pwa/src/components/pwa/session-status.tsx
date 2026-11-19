@@ -1,8 +1,33 @@
 import { GitBranch } from "lucide-react";
 import type { SessionStatusView } from "@/lib/pwa/session-status";
 import { useI18n } from "@/lib/i18n";
+import { presenceProps, usePresence } from "./use-presence";
 
 export type SessionStatusProps = { view: SessionStatusView; title: string; deviceName?: string | null; cwd?: string | null };
+
+const PLACEHOLDER_KINDS = ["offline", "loading", "unsupported", "unavailable"] as const;
+
+/** 只保留非实时占位文案；离开层脱离文档流并受新内容边界裁切。 */
+function SessionStatusPlaceholder({ status, kind }: { status?: SessionStatusProps; kind: typeof PLACEHOLDER_KINDS[number] }) {
+  const presence = usePresence(status?.view.kind === kind ? status : null);
+  if (!presence.rendered) return null;
+  return <div className="pwa-session-status-kind pwa-presence" data-kind={kind} {...presenceProps(presence)}><SessionStatusContent {...presence.rendered} /></div>;
+}
+
+/** 会话离开时保留外壳淡出；状态切换立即替换内容，不把旧数值留到离线态。 */
+export function SessionStatusCard({ status }: { status?: SessionStatusProps }) {
+  const { t } = useI18n();
+  const presence = usePresence(status ?? null);
+  if (!presence.rendered) return null;
+  const content = status ?? (presence.rendered.view.kind !== "ready" ? presence.rendered : undefined);
+  return <aside className="pwa-session-status-card pwa-presence" aria-label={t.sessionStatus.title} {...presenceProps(presence)}>
+    <h2>{t.sessionStatus.title}</h2>
+    <div className="pwa-session-status-kinds">
+      {content?.view.kind === "ready" ? <div className="pwa-session-status-kind pwa-presence" data-kind="ready"><SessionStatusContent {...content} /></div> : null}
+      {PLACEHOLDER_KINDS.map(kind => <SessionStatusPlaceholder key={kind} status={content} kind={kind} />)}
+    </div>
+  </aside>;
+}
 
 export function formatStatusTokens(value: number): string {
   if (value < 1_000) return String(value);

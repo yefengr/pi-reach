@@ -131,8 +131,11 @@ body[data-viewport="phone"] .desk-only { display: none; }
 @keyframes pulse { 50% { opacity: .3; } }
 
 /* 桌面常驻卡片：浮层卡片 = surface + edge 发丝线 + shadow-float，圆角 12 */
-.status-card { position: absolute; top: 84px; right: 12px; width: 248px; padding: 10px 12px 12px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-float); font: 400 var(--t-list)/1.4 var(--font-ui); transition: opacity .2s ease, transform .2s var(--ease-enter); }
-.status-card.is-hidden { opacity: 0; transform: translateX(8px); pointer-events: none; }
+.status-card { position: absolute; top: 84px; right: 12px; width: 248px; padding: 10px 12px 12px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-float); font: 400 var(--t-list)/1.4 var(--font-ui); transition: opacity .2s ease; }
+.status-card.is-hidden { opacity: 0; pointer-events: none; }
+.card-content { transition: opacity .2s ease; }
+@starting-style { .card-content { opacity: 0; } }
+.desk[data-instant] :is(.desk-column, .desk-composer, .status-card, .card-content) { transition: none; }
 .card-title { margin: 0 0 8px; color: var(--secondary); font: 600 var(--t-meta)/1.4 var(--font-ui); }
 .card-ctx-head { display: flex; align-items: center; gap: 6px; }
 .card-ctx-head .label { color: var(--secondary); font-size: var(--t-meta); }

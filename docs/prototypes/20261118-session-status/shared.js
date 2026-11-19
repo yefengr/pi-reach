@@ -9,6 +9,8 @@
   const CARD_WIDTH = 248;
   const CARD_RIGHT = 12;
   const CARD_LANE = CARD_WIDTH + CARD_RIGHT;
+  const CARD_HIDE_BELOW = READING_WIDTH + CARD_LANE + GUTTER * 2;
+  const CARD_SHOW_AT = 1000;
   const DESK_HEIGHT = 760;
   // 与 Pi 终端状态栏一致的上下文提醒阈值：超过才升档，恰好等于不提醒（正式实现由 Extension 计算后下发）
   const LEVEL_HIGH = 70;
@@ -48,7 +50,7 @@
     legacy: { kind: "legacy",
       note: "电脑上的 Pi Reach 扩展未声明状态能力（旧版本）：不推送也不报错，只提示更新扩展。" },
     history: { kind: "history",
-      note: "本地历史或 Pi 已退出：没有实时状态。桌面不显示卡片；移动抽屉只保留会话信息并说明原因。" },
+      note: "本地历史或 Pi 已退出时，桌面卡片保留位置并显示离线说明。移动抽屉还会显示会话信息。" },
   };
 
   // 已适配扩展通过事件约定上报的状态（合成样例）：按 key 排序，与终端状态栏一致
@@ -64,7 +66,7 @@
     branch: '<svg class="i" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
   };
 
-  const state = { scene: "normal", viewport: "desktop", width: 1440, sidebar: "open", ext: false };
+  const state = { scene: "normal", viewport: "desktop", width: 1440, sidebar: "open", ext: false, cardVisible: null };
 
   const $ = (id) => document.getElementById(id);
   const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -129,8 +131,7 @@
 
   // 两端统一顺序：上下文 → 用量 → 未指定区块的扩展 → 会话；扩展条目排在所在块的内置行之后
   function cardBody(scene) {
-    // 本地历史不显示卡片，也没有可渲染的状态
-    if (scene.kind === "history") return "";
+    if (scene.kind === "history") return '<p class="placeholder">离线会话不提供实时状态。</p>';
     if (scene.kind === "waiting") return '<p class="placeholder"><span class="pulse" aria-hidden="true"></span>正在获取状态…</p>';
     if (scene.kind === "unavailable") return '<p class="placeholder">暂时无法获取状态</p>';
     if (scene.kind === "legacy") return '<p class="placeholder">这台电脑上的 Pi Reach 扩展版本较旧，暂不提供状态。更新扩展后可查看。</p>';
@@ -168,33 +169,35 @@
   }
 
   function renderCard() {
-    $("statusCard").innerHTML = '<h3 class="card-title">会话状态</h3>' + cardBody(SCENES[state.scene]);
+    const card = $("statusCard");
+    const body = cardBody(SCENES[state.scene]);
+    if (card.children.length && card.lastElementChild.innerHTML === body) return;
+    card.innerHTML = '<h3 class="card-title">会话状态</h3><div class="card-content">' + body + '</div>';
   }
 
   /* ---------- 桌面布局：按主区宽度决定卡片显隐 ---------- */
 
   function computeLayout() {
-    const scene = SCENES[state.scene];
     const main = state.width - (state.sidebar === "open" ? SIDEBAR_SPACE : 0);
-    const wanted = scene.kind !== "history";
-    // 卡片显示时固定预留右侧 260px，阅读列在剩余区域居中。
-    const threshold = READING_WIDTH + CARD_LANE + GUTTER * 2;
-    const visible = wanted && main >= threshold;
+    const instant = state.cardVisible === null;
+    const threshold = state.cardVisible === false ? CARD_SHOW_AT : CARD_HIDE_BELOW;
+    const visible = main >= threshold;
     const readingArea = main - (visible ? CARD_LANE : 0);
     const colWidth = Math.min(READING_WIDTH, readingArea - GUTTER * 2);
     const left = (readingArea - colWidth) / 2;
-    return { main, colWidth, left, visible, wanted, threshold };
+    return { main, colWidth, left, visible, instant };
   }
 
-  function renderDesk(instant = false) {
+  function renderDesk() {
     const layout = computeLayout();
+    state.cardVisible = layout.visible;
     const desk = $("desk");
+    desk.toggleAttribute("data-instant", layout.instant);
     desk.style.width = state.width + "px";
     desk.dataset.sidebar = state.sidebar;
     const mainEl = $("deskMain");
     mainEl.style.left = (state.sidebar === "open" ? SIDEBAR_SPACE : 0) + "px";
     for (const el of [$("deskColumn"), $("deskComposer")]) {
-      el.style.transition = instant ? "none" : "";
       el.style.left = layout.left + "px";
       el.style.width = layout.colWidth + "px";
     }
@@ -215,13 +218,9 @@
 
   function renderLayoutNote(layout) {
     const sidebarExtra = state.sidebar === "open" ? SIDEBAR_SPACE : 0;
-    const windowThreshold = layout.threshold + sidebarExtra;
-    let status;
-    if (!layout.wanted) status = "本场景不显示卡片";
-    else if (!layout.visible) status = "宽度不足，卡片隐藏";
-    else status = "卡片显示，正文在主区左缘与卡片之间居中，偏左 " + CARD_LANE / 2 + "px";
-    $("layoutNote").innerHTML = "<b>" + status + "</b>：主区 " + layout.main + "px；显示卡片需主区 ≥ " + layout.threshold
-      + "px，即窗口 ≥ " + windowThreshold + "px（侧栏" + (state.sidebar === "open" ? "展开" : "收起") + "）。虚线为阅读列右缘。<br>"
+    const status = layout.visible ? "卡片显示，正文偏左 " + CARD_LANE / 2 + "px" : "卡片隐藏，正文在主区居中";
+    $("layoutNote").innerHTML = "<b>" + status + "</b>。当前主区 " + layout.main + "px。按当前侧栏状态，窗口达到 "
+      + (CARD_SHOW_AT + sidebarExtra) + "px 时重新显示，低于 " + (CARD_HIDE_BELOW + sidebarExtra) + "px 时隐藏。虚线为阅读列右缘。<br>"
       + esc(SCENES[state.scene].note);
   }
 
@@ -373,9 +372,9 @@
 
   const REVIEW = {
     desktop: [
-      "主区达到 980px 时显示卡片。默认展开侧栏时，窗口需达到 1272px。卡片显示时正文和输入区在主区左缘与卡片之间居中，固定偏左 130px。卡片隐藏后在整个主区居中。拖动窗口宽度滑块时位置即时更新。",
+      "首次加载时，主区达到 980px 即显示卡片。之后低于 980px 隐藏，达到 1000px 再显示。宽度介于两者时保持原有显隐状态，拖动滑块跨过门槛时正文和输入区同步平移。",
       "上下文用与文字同号的小饼图示意占用：平时为中性灰，偏高、将满时扇形与标签同色；刚压缩时只剩虚线外框。",
-      "本地历史不显示卡片；等待与旧扩展场景仍占位显示提示，是否也应隐藏。",
+      "本地历史、Pi 已退出、等待状态和旧扩展只切换卡片内容，正文位置保持不变。",
       "标题区右侧只保留刷新，卡片不放入标题区，避免与目录副标题抢首行。",
       "扩展适配：默认只显示 Pi 内置状态；有扩展按约定上报时，可指定放入上下文、用量或会话块，排在该块内置行之后；未指定的放在用量与会话之间的无标题块。每条为短名称加单行文字（过长省略，悬停看全文），琥珀与红色只用于扩展声明的提醒与错误。",
     ],
@@ -442,7 +441,7 @@
   $("widthRange").addEventListener("input", (event) => {
     state.width = Number(event.target.value);
     $("widthOut").textContent = String(state.width);
-    renderDesk(true);
+    renderDesk();
   });
   window.addEventListener("resize", () => { if (state.viewport === "desktop") fitDesk(); });
 

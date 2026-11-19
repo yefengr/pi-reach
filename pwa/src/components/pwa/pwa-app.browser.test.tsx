@@ -3964,6 +3964,52 @@ test("an older Extension rejects only the status subscription without triggering
   }
 });
 
+test("keeps the desktop status lane while opening history, returning online and losing the Pi", async () => {
+  await page.viewport(1600, 900);
+  await seedArchivedSession();
+  const screen = await renderOnlineApp(renderWorkspaceApp);
+  const relay = relayHarness.instances[0]!;
+  const channel = channelHarness.channels[0]!;
+  const card = screen.getByRole("complementary", { name: "Session status" });
+  const layout = () => {
+    const main = document.querySelector<HTMLElement>(".pwa-main")!;
+    const composer = document.querySelector(".pwa-composer-card")?.getBoundingClientRect();
+    return {
+      reserve: main.style.getPropertyValue("--pwa-status-reserve"),
+      composerCenter: composer ? Math.round(composer.left + composer.width / 2) : null,
+    };
+  };
+  const offline = "Status is unavailable for offline sessions.";
+  try {
+    channel.emit(readyFrame(channel, "session-1"));
+    await expect.poll(connectionState).toBe("online");
+    await expect.element(card.getByText("Getting status…")).toBeVisible();
+    await expect.poll(() => getComputedStyle(document.querySelector(".pwa-workspace-body")!).paddingRight).toBe("260px");
+    const onlineLayout = layout();
+    expect(onlineLayout).toMatchObject({ reserve: "260px", composerCenter: expect.any(Number) });
+
+    await screen.getByRole("button", { name: /Archived note/ }).click();
+    await expect.element(card.getByText(offline)).toBeVisible();
+    await expect.poll(layout).toEqual(onlineLayout);
+
+    await screen.getByRole("button", { name: /Test Pi/ }).click();
+    await expect.poll(() => channelHarness.channels.length).toBe(2);
+    const returned = channelHarness.channels[1]!;
+    returned.emit(readyFrame(returned, "session-1"));
+    await expect.poll(connectionState).toBe("online");
+    await expect.element(card.getByText("Getting status…")).toBeVisible();
+    await expect.poll(layout).toEqual(onlineLayout);
+
+    relay.emitControl({ type: "endpoints", device_id: "owner-device-key", endpoints: [] });
+    await expect.element(screen.getByText("This Pi has exited. The conversation is saved in local history.")).toBeVisible();
+    await expect.element(card.getByText(offline)).toBeVisible();
+    await expect.poll(layout).toEqual(onlineLayout);
+  } finally {
+    await screen.unmount();
+    await page.viewport(1280, 900);
+  }
+});
+
 test("does not hide an unrelated protocol error while an extension version query is pending", async () => {
   const screen = await renderOnlineApp(renderWorkspaceApp);
   const channel = channelHarness.channels[0]!;

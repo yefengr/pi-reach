@@ -1,12 +1,17 @@
 import { useLayoutEffect, useRef } from "react";
 import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
-/** 使用主区实际可用宽度；侧栏收展与调宽均复用同一列预算。 */
+const STATUS_HIDE_WIDTH = 980;
+const STATUS_SHOW_WIDTH = 1000;
+
+/** 宽度回差独立于会话存在性；安全区只在主区预算中扣除一次。 */
 export function useSessionStatusSpace(main: HTMLElement | null, enabled: boolean) {
-  const windowWidth = useRef<number | null>(null);
+  const widthFits = useRef<boolean | null>(null);
+  const measured = useRef(false);
   useLayoutEffect(() => {
     if (!main) return;
-    windowWidth.current = null;
+    widthFits.current = null;
+    measured.current = false;
     return () => {
       main.removeAttribute("data-session-status-card");
       main.removeAttribute("data-session-status-instant");
@@ -22,14 +27,12 @@ export function useSessionStatusSpace(main: HTMLElement | null, enabled: boolean
       const number = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
       const width = main.clientWidth - number("--pwa-main-safe-left") - number("--pwa-main-safe-right");
       const reserve = number("--pwa-status-card-width") + number("--pwa-status-card-inset");
-      const available = enabled && !window.matchMedia(MOBILE_LAYOUT_QUERY).matches
-        && width >= number("--pwa-reading-width") + reserve + 2 * number("--pwa-gutter");
+      widthFits.current = width >= (widthFits.current === false ? STATUS_SHOW_WIDTH : STATUS_HIDE_WIDTH);
+      const available = enabled && !window.matchMedia(MOBILE_LAYOUT_QUERY).matches && widthFits.current;
       const changed = main.hasAttribute("data-session-status-card") !== available;
-      // 浏览器没有拖窗起止信号：所有窗口宽度变化都即时跟随，也要取消已经在途的让位过渡。
-      const resized = windowWidth.current !== window.innerWidth;
-      if (resized) main.setAttribute("data-session-status-instant", "");
-      else if (changed) main.removeAttribute("data-session-status-instant");
-      windowWidth.current = window.innerWidth;
+      // 只让第一次主区测量直接到位；后续拖窗、调宽及会话变化都沿用同一空间过渡。
+      main.toggleAttribute("data-session-status-instant", !measured.current);
+      measured.current = true;
       // 同一显隐状态下不重复写 reserve，避免侧栏 grid 的逐帧测量重启让位动画。
       if (changed || !main.style.getPropertyValue("--pwa-status-reserve")) {
         main.toggleAttribute("data-session-status-card", available);

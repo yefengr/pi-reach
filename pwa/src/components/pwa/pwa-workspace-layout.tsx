@@ -17,7 +17,7 @@ import { useI18n } from "@/lib/i18n";
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
 import { SidebarToggle } from "./sidebar-toggle";
 import { hasKeyboardOverlay, isKeyboardInput, workspaceShortcut } from "@/lib/pwa/keyboard-shortcuts";
-import { SessionStatusContent, type SessionStatusProps } from "./session-status";
+import { SessionStatusCard, type SessionStatusProps } from "./session-status";
 import { SessionStatusDrawer } from "./session-status-drawer";
 import { useSessionStatusSpace } from "./use-session-status-space";
 import { swipeBlocked, SWIPE_EDGE_EXCLUSION_PX } from "./swipe-guards";
@@ -121,7 +121,7 @@ export function PwaWorkspaceLayout({
       closeStatus();
     });
   }, [statusMounted, onOpenSettings, closeBackgroundOverlay, closeStatus]);
-  useSessionStatusSpace(mainElement, Boolean(sessionStatus && sessionStatus.view.kind !== "offline"));
+  useSessionStatusSpace(mainElement, Boolean(sessionStatus));
   const openStatus = useCallback(() => {
     if (statusPresentFrameRef.current !== null) {
       cancelAnimationFrame(statusPresentFrameRef.current);
@@ -377,7 +377,7 @@ export function PwaWorkspaceLayout({
           {operationNotifications}
         </div>
         <div className="pwa-workspace-body"><div className="pwa-workspace-column">{children}</div></div>
-        {sessionStatus && sessionStatus.view.kind !== "offline" ? <aside className="pwa-session-status-card" aria-label={t.sessionStatus.title}><h2>{t.sessionStatus.title}</h2><SessionStatusContent {...sessionStatus} /></aside> : null}
+        <SessionStatusCard status={sessionStatus} />
       </main>
     </div>
     {statusMounted ? <SessionStatusDrawer {...(sessionStatus ?? { view: { kind: "offline" }, title: titleBar.title })} opened={Boolean(sessionStatus) && (statusOpen || statusDrag.gesture === "dragging")} gesture={statusDrag.gesture} onClose={() => closeBackgroundOverlay(closeStatus)} onExitTransitionEnd={() => {
