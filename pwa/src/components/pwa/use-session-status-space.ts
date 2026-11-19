@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef } from "react";
 import { MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
-const STATUS_HIDE_WIDTH = 980;
-const STATUS_SHOW_WIDTH = 1000;
+// 隐藏门槛由阅读列、卡片预留与两侧 gutter 算出；重新显示需再多出这段回差，避免在门槛附近反复切换。
+const STATUS_SHOW_HYSTERESIS = 20;
 
 /** 宽度回差独立于会话存在性；安全区只在主区预算中扣除一次。 */
 export function useSessionStatusSpace(main: HTMLElement | null, enabled: boolean) {
@@ -27,7 +27,8 @@ export function useSessionStatusSpace(main: HTMLElement | null, enabled: boolean
       const number = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
       const width = main.clientWidth - number("--pwa-main-safe-left") - number("--pwa-main-safe-right");
       const reserve = number("--pwa-status-card-width") + number("--pwa-status-card-inset");
-      widthFits.current = width >= (widthFits.current === false ? STATUS_SHOW_WIDTH : STATUS_HIDE_WIDTH);
+      const hideBelow = number("--pwa-reading-width") + reserve + 2 * number("--pwa-gutter");
+      widthFits.current = width >= (widthFits.current === false ? hideBelow + STATUS_SHOW_HYSTERESIS : hideBelow);
       const available = enabled && !window.matchMedia(MOBILE_LAYOUT_QUERY).matches && widthFits.current;
       const changed = main.hasAttribute("data-session-status-card") !== available;
       // 只让第一次主区测量直接到位；后续拖窗、调宽及会话变化都沿用同一空间过渡。

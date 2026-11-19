@@ -7,9 +7,16 @@ export type SessionStatusProps = { view: SessionStatusView; title: string; devic
 
 const PLACEHOLDER_KINDS = ["offline", "loading", "unsupported", "unavailable"] as const;
 
+// 调用方每次渲染都会新建 props 对象；按字段比较，内容不变时 usePresence 不必为同步保留值再渲染一次。
+function sameStatus(left: SessionStatusProps, right: SessionStatusProps): boolean {
+  // 非实时状态只有类型，没有数据（离线视图也是每次新建的对象），按类型比较即可。
+  const sameView = left.view === right.view || (left.view.kind !== "ready" && left.view.kind === right.view.kind);
+  return sameView && left.title === right.title && left.deviceName === right.deviceName && left.cwd === right.cwd;
+}
+
 /** 只保留非实时占位文案；离开层脱离文档流并受新内容边界裁切。 */
 function SessionStatusPlaceholder({ status, kind }: { status?: SessionStatusProps; kind: typeof PLACEHOLDER_KINDS[number] }) {
-  const presence = usePresence(status?.view.kind === kind ? status : null);
+  const presence = usePresence(status?.view.kind === kind ? status : null, sameStatus);
   if (!presence.rendered) return null;
   return <div className="pwa-session-status-kind pwa-presence" data-kind={kind} {...presenceProps(presence)}><SessionStatusContent {...presence.rendered} /></div>;
 }
@@ -17,7 +24,7 @@ function SessionStatusPlaceholder({ status, kind }: { status?: SessionStatusProp
 /** 会话离开时保留外壳淡出；状态切换立即替换内容，不把旧数值留到离线态。 */
 export function SessionStatusCard({ status }: { status?: SessionStatusProps }) {
   const { t } = useI18n();
-  const presence = usePresence(status ?? null);
+  const presence = usePresence(status ?? null, sameStatus);
   if (!presence.rendered) return null;
   const content = status ?? (presence.rendered.view.kind !== "ready" ? presence.rendered : undefined);
   return <aside className="pwa-session-status-card pwa-presence" aria-label={t.sessionStatus.title} {...presenceProps(presence)}>
