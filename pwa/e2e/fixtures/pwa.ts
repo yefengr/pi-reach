@@ -1,8 +1,8 @@
 import { expect, test as base, type Page } from "playwright/test";
 
 const DATABASE_NAME = "pi-reach";
-// Dexie schema v11 对应原生 IndexedDB version 110。
-const DATABASE_VERSION = 110;
+// Dexie schema v12 对应原生 IndexedDB version 120。
+const DATABASE_VERSION = 120;
 const FIXTURE_RELAY_URL = "http://127.0.0.1:9";
 const FIXTURE_DEVICE_ID = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const FIXTURE_ENDPOINT_ID = "e2e-old-process";

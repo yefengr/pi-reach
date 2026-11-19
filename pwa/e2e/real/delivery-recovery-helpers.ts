@@ -33,6 +33,8 @@ export async function installDeliveryRecoveryProbe(page: Page) {
   let heldQueryReply: { route: WebSocketRoute; payload: string | Buffer } | undefined;
   let queryStatus: string | undefined;
   let queryHasMessage = false;
+  let queryMessageId: string | undefined;
+  const observedMessages = new Map<string, string>();
   const queries: Array<FrameIdentity & { connection: number }> = [];
   const statusReplies = new Set<string>();
   await page.routeWebSocket(url => url.hostname === "127.0.0.1" && url.port === "18786", route => {
@@ -45,15 +47,24 @@ export async function installDeliveryRecoveryProbe(page: Page) {
         messageCount += 1;
       }
       if (frame?.type === "user_message_status_request") queries.push({ ...frame, connection });
+      if (frame?.type === "user_message_observed" && frame.clientRequestId && frame.messageId) {
+        observedMessages.set(frame.clientRequestId, frame.messageId);
+      }
       server.send(payload);
     });
     server.onMessage(payload => {
       const frame = frameIdentity(payload);
-      if (mode === "recover" && frame?.type === "user_message_status" && queries.some(query => query.id === frame.replyTo)) {
-        heldQueryReply = { route, payload };
-        queryStatus = frame.status;
-        queryHasMessage = Boolean(frame.messageId);
-        return;
+      if (mode === "recover" && frame?.type === "user_message_status") {
+        const query = queries.find(item => item.id === frame.replyTo);
+        if (query) {
+          // 同一条回复可能经已关闭的旧连接补推：只认发起查询的连接，旧 route 副本不得抢占迟到回执。
+          if (query.connection !== connection) return;
+          heldQueryReply = { route, payload };
+          queryStatus = frame.status;
+          queryHasMessage = Boolean(frame.messageId);
+          queryMessageId = frame.messageId;
+          return;
+        }
       }
       // 重新握手后 Extension 以原发送尝试补推确认；查询场景丢弃它，才能覆盖查询兜底。
       if (mode === "recover" && frame?.type === "user_message_status" && frame.clientRequestId === original?.clientRequestId
@@ -85,6 +96,8 @@ export async function installDeliveryRecoveryProbe(page: Page) {
       heldQueryReply = undefined;
       queryStatus = undefined;
       queryHasMessage = false;
+      queryMessageId = undefined;
+      observedMessages.clear();
       queries.length = 0;
     },
     async reconnectOwner() {
@@ -107,6 +120,8 @@ export async function installDeliveryRecoveryProbe(page: Page) {
         queryId: query?.id,
         queriedOnNewConnection: Boolean(query && query.connection !== original?.connection),
         replyReceived: Boolean(query?.id && statusReplies.has(query.id)),
+        messageObserved: Boolean(original?.clientRequestId && queryMessageId
+          && observedMessages.get(original.clientRequestId) === queryMessageId),
       };
     },
     hasStatusReply(id: string) { return statusReplies.has(id); },
@@ -144,8 +159,11 @@ export async function verifyMessageDeliveryRecovery(input: DeliveryRecoveryInput
   await expect(check).toBeDisabled();
   // 真实浏览器等待超时，不改生产常量或伪造回执；迟到的真实 Pi 状态仍须合并正式记录。
   await expect(check).toBeEnabled({ timeout: 20_000 });
+  expect(probe.snapshot().queryCount).toBe(1);
   probe.releaseQueryReply();
   await expect.poll(() => probe.snapshot().replyReceived).toBe(true);
+  // observed 由 PWA 在正式记录与待确认消息合并后发出，证明浏览器实际消费了迟到回执。
+  await expect.poll(() => probe.snapshot().messageObserved).toBe(true);
   await expect(page.locator(".pwa-message.user").filter({ hasText: text })).toHaveCount(1);
   await expect(page.locator(".pwa-message.user.pending")).toHaveCount(0);
   await expect(page.getByText("Not confirmed", { exact: true })).toHaveCount(0);

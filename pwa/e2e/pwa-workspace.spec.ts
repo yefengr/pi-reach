@@ -37,7 +37,7 @@ test("shows saved history without treating a cached Pi as online", async ({ page
   // 桌面在标题区显示会话名，移动端在顶栏导航入口；标题不标注只读，输入区保留在线样式但全部禁用，由提示区说明只读。
   if (!mobile) await expect(main.getByRole("heading", { level: 1, name: workspace.historyPreview })).toBeVisible();
   await expect(main.getByText("Read only")).toHaveCount(0);
-  await expect(main.getByRole("note")).toContainText("It's read-only.");
+  await expect(main.getByRole("status").filter({ hasText: "It's read-only." })).toBeVisible();
   await expect(main.getByRole("textbox")).toBeDisabled();
   await expect(main.getByRole("button", { name: "Send message" })).toBeDisabled();
   await expect(main.getByRole("button", { name: "Pi commands" })).toBeDisabled();
