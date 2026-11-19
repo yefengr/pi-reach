@@ -4204,7 +4204,7 @@ async function openSettingsWithSidebarCollapsed() {
   await userEvent.keyboard(isAppleKeyboard() ? "{Meta>},{/Meta}" : "{Control>},{/Control}");
 }
 
-test("resetting layout and clearing local data keep browser preferences and Relay", async () => {
+test("clearing local data keeps browser preferences and Relay", async () => {
   const restorePreferences = seedBrowserPreferences();
   const db = await openPwaDatabase();
   const relay = { key: RELAY_SETTING, value: customSettingsRelay };
@@ -4215,9 +4215,7 @@ test("resetting layout and clearing local data keep browser preferences and Rela
     await openSettingsWithSidebarCollapsed();
     const statusSwitch = screen.getByRole("switch", { name: "Show session status on desktop" });
     await expect.element(statusSwitch).not.toBeChecked();
-    await screen.getByRole("button", { name: "Reset layout", exact: true }).click();
-    expectBrowserPreferencesKept();
-    await expect.element(statusSwitch).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Reset layout", exact: true }).query()).toBeNull();
 
     localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ saved: { text: "Draft", at: Date.now() } }));
     sessionStorage.setItem(SESSION_POSITION_STORAGE_KEY, JSON.stringify([["saved", { following: true }]]));

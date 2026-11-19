@@ -81,7 +81,7 @@ function LayoutHarness({ events, rejectClose = false, historyMode = false, runti
     settingsRoute={route}
     onSettingsBack={closeSettings}
     onOpenSettings={(origin) => { events.push(`settings:${origin.kind}`); openSettings(origin); }}
-    renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage onShowShortcuts={onShowShortcuts} relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.example.test" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmOpen(true)} onResetLayout={() => {}} />}
+    renderSettings={({ backLabel, titleRef, onShowShortcuts }) => <SettingsPage onShowShortcuts={onShowShortcuts} relayUrl="https://relay.example.test" defaultRelayUrl="https://relay.example.test" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={async () => {}} onBack={closeSettings} backLabel={backLabel} titleRef={titleRef} onClearData={() => setConfirmOpen(true)} />}
     overlays={<ConfirmActionDialog action={confirmOpen ? { kind: "clear-local-data" } : null} pending={false} error={null} onConfirm={() => {}} onClose={() => setConfirmOpen(false)} />}
     closeBackgroundOverlay={(close) => { events.push("close-request"); if (!rejectClose) close(); }}
   >

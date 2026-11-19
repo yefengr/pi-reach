@@ -204,8 +204,6 @@ export const en = {
     saved: "Settings saved",
     browserData: "Browser data",
     localOnlyNote: "Owner identity and session history live in this browser only.",
-    resetLayout: "Reset layout",
-    resetLayoutNote: "Resumes following the latest message and recalculates the viewport. Local data and settings are kept.",
     resetSettings: "Reset settings",
     resetSettingsNote: "Restore appearance, text size, language, workspace, and keyboard settings to their defaults. Pairings, history, and the Relay URL are kept.",
     restoredDefaults: "Default settings restored.",

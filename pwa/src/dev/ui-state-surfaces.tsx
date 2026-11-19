@@ -179,7 +179,6 @@ export function UiStateSurfaces({ surface, onSurfaceChange, showControls = true,
         backLabel="返回展厅"
         onClearData={() => { setConfirmAction({ kind: "clear-local-data" }); onSurfaceChange("confirm"); }}
         onResetSettings={(reset) => { setConfirmAction({ kind: "reset-settings", reset }); onSurfaceChange("confirm"); }}
-        onResetLayout={() => controller.notify("已演示重置布局；展厅布局保持不变。")}
         onShowShortcuts={() => onSurfaceChange("shortcuts")}
       />
     </div>

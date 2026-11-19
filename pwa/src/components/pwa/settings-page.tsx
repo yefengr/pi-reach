@@ -44,7 +44,6 @@ type SettingsPageProps = {
   /** 返回按钮的可访问名称随来源为「返回导航」或「返回工作区」。 */
   backLabel: string;
   onClearData: () => void;
-  onResetLayout: () => void;
   onResetSettings?: (reset: () => void) => void;
   onShowShortcuts: (origin: HTMLButtonElement) => void;
   titleRef?: Ref<HTMLHeadingElement>;
@@ -66,7 +65,7 @@ function PersistedSettingsPage(props: Omit<SettingsPageProps, "preferences">) {
   return <SettingsPageContent {...props} preferences={{ language: preference, setLanguage: setLanguagePreference, enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, textSize, setTextSize, textSizeFollowsSystem: followsSystem }} />;
 }
 
-function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetLayout, onResetSettings, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
+function SettingsPageContent({ preferences, viewportDiagnostics = false, viewportDiagnosticsOnline = false, relayUrl, defaultRelayUrl, relayVersion, relayStatus, extensionVersion, extensionStatus, extensionTarget, onSave, onBack, backLabel, onClearData, onResetSettings, onShowShortcuts, titleRef }: Omit<SettingsPageProps, "preferences"> & { preferences: SettingsPagePreferences }) {
   const [value, setValue] = useState(relayUrl);
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
@@ -177,12 +176,10 @@ function SettingsPageContent({ preferences, viewportDiagnostics = false, viewpor
       <section className="pwa-settings-section" aria-labelledby="pwa-browser-data-heading">
         <h2 id="pwa-browser-data-heading" className="pwa-settings-section-title">{s.browserData}</h2>
         <div className="pwa-card pwa-settings-group pwa-settings-group-actions">
-          <Button variant="default" className="pwa-layout-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={onResetLayout}>{s.resetLayout}</Button>
-          {onResetSettings ? <Button variant="default" type="button" leftSection={<RotateCcw size={16} />} onClick={() => onResetSettings(resetSettings)}>{s.resetSettings}</Button> : null}
+          {onResetSettings ? <Button variant="default" className="pwa-settings-reset-button" type="button" leftSection={<RotateCcw size={16} />} onClick={() => onResetSettings(resetSettings)}>{s.resetSettings}</Button> : null}
           <Button variant="outline" type="button" leftSection={<Trash2 size={16} />} onClick={onClearData}>{s.clearData}</Button>
         </div>
         <p className="pwa-settings-section-description pwa-settings-footnote">{s.localOnlyNote}</p>
-        <p className="pwa-settings-section-description pwa-settings-footnote">{s.resetLayoutNote}</p>
         {onResetSettings ? <p className="pwa-settings-section-description pwa-settings-footnote">{s.resetSettingsNote}</p> : null}
       </section>
       {viewportDiagnostics ? <ViewportDiagnosticsSettings online={viewportDiagnosticsOnline} /> : null}

@@ -14,7 +14,7 @@ function Harness({ onSave = async () => {}, onResetSettings, setAppearance = () 
   const [enterSends, setEnterSends] = useState(true);
   const [showSessionStatusCard, setShowSessionStatusCard] = useState(true);
   const [textSize, setTextSize] = useState<PwaTextSizePreference>("standard");
-  return <SettingsPage preferences={{ appearance: "system", setAppearance, language, setLanguage, enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, textSize, setTextSize }} relayUrl="https://relay.invalid" defaultRelayUrl="https://relay.invalid" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={onSave} onBack={() => {}} backLabel="Back" onClearData={() => {}} onResetLayout={() => {}} onResetSettings={onResetSettings} onShowShortcuts={() => {}} />;
+  return <SettingsPage preferences={{ appearance: "system", setAppearance, language, setLanguage, enterSends, setEnterSends, showSessionStatusCard, setShowSessionStatusCard, textSize, setTextSize }} relayUrl="https://relay.invalid" defaultRelayUrl="https://relay.invalid" relayVersion={null} relayStatus="offline" extensionVersion={null} extensionStatus="offline" extensionTarget={null} onSave={onSave} onBack={() => {}} backLabel="Back" onClearData={() => {}} onResetSettings={onResetSettings} onShowShortcuts={() => {}} />;
 }
 
 afterEach(() => {

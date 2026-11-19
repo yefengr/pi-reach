@@ -207,8 +207,6 @@ export const zh: Messages = {
     saved: "设置已保存",
     browserData: "浏览器数据",
     localOnlyNote: "Owner 身份和会话历史只保存在此浏览器中。",
-    resetLayout: "重置布局",
-    resetLayoutNote: "恢复对话跟随最新消息并重新计算视口。本地数据和设置会保留。",
     resetSettings: "恢复默认设置",
     resetSettingsNote: "把外观、字体大小、语言、工作区与键盘设置恢复为默认值，不影响配对、历史和 Relay 地址。",
     restoredDefaults: "已恢复默认设置",

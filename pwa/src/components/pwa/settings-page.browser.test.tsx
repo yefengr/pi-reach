@@ -32,7 +32,7 @@ function SettingsHarness({ events = [], onSave = async () => {}, backLabel = "Ba
     onBack={() => events.push("back")}
     backLabel={backLabel}
     onClearData={() => events.push("clear")}
-    onResetLayout={() => events.push("reset")}
+    onResetSettings={() => events.push("reset")}
     onShowShortcuts={() => events.push("shortcuts")}
   /></div></div>;
 }
@@ -106,7 +106,7 @@ test("routes back, reset and clear to the parent while staying on the page", asy
   const events: string[] = [];
   const screen = await renderPwa(<SettingsHarness events={events} backLabel="Back to navigation" />);
   await screen.getByRole("button", { name: "Back to navigation" }).click();
-  await screen.getByRole("button", { name: "Reset layout" }).click();
+  await screen.getByRole("button", { name: "Reset settings" }).click();
   await screen.getByRole("button", { name: "Clear local data" }).click();
   expect(events).toEqual(["back", "reset", "clear"]);
   await expect.element(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
@@ -154,7 +154,7 @@ test.each([1280, 390])("lays out sections, back entry and reachable actions with
     await expect.element(screen.getByText("Back to workspace", { exact: true })).toBeVisible();
   }
   await page.screenshot({ path: `../../../.vitest/screenshots/settings-page-top-${width}.png` });
-  for (const name of ["Save settings", "Reset layout", "Clear local data", "Copy version information"]) {
+  for (const name of ["Save settings", "Reset settings", "Clear local data", "Copy version information"]) {
     const action = screen.getByRole("button", { name });
     action.element().scrollIntoView({ block: "nearest" });
     await expect.element(action).toBeVisible();

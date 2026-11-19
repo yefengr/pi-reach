@@ -18,7 +18,6 @@ function renderSettings(): string {
         onBack={() => {}}
         backLabel="Back to workspace"
         onClearData={() => {}}
-        onResetLayout={() => {}}
         onResetSettings={() => {}}
         onShowShortcuts={() => {}}
       />
@@ -45,8 +44,9 @@ test("renders settings as a page with a focusable title, grouped sections and da
   expect(html).toMatch(/Relay URL/);
   expect(html).toMatch(/value="https:\/\/relay\.example\.test"/);
   expect(html).toMatch(/Save settings/);
-  expect(html).toMatch(/Reset layout.*Reset settings.*Clear local data/);
-  // 重置布局表示恢复默认，用 RotateCcw，与“刷新应用”的 RefreshCw 区分。
-  expect(html.match(/<button\b[^>]*pwa-layout-reset-button[\s\S]*?<\/button>/)?.[0]).toContain("lucide-rotate-ccw");
+  expect(html).not.toMatch(/Reset layout/);
+  expect(html).toMatch(/Reset settings.*Clear local data/);
+  // 恢复默认设置表示恢复默认，用 RotateCcw，与“刷新应用”的 RefreshCw 区分。
+  expect(html.match(/<button\b[^>]*pwa-settings-reset-button[\s\S]*?<\/button>/)?.[0]).toContain("lucide-rotate-ccw");
   expect(html).not.toMatch(/Close settings/);
 });
