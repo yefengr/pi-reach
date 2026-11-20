@@ -39,8 +39,9 @@ export function useSessionStatusSpace(main: HTMLElement | null, enabled: boolean
         main.toggleAttribute("data-session-status-card", available);
         main.style.setProperty("--pwa-status-reserve", `${available ? reserve : 0}px`);
       }
+      // 卡片与标题区的间距取右侧留白，四周留白一致。
       const title = main.querySelector<HTMLElement>(".pwa-title-bar");
-      main.style.setProperty("--pwa-status-top", `${(title?.offsetHeight ?? 0) + 8}px`);
+      main.style.setProperty("--pwa-status-top", `${(title?.offsetHeight ?? 0) + number("--pwa-status-card-inset")}px`);
     };
     measure();
     const observer = new ResizeObserver(measure);

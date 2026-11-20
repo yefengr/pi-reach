@@ -171,6 +171,7 @@ test("desktop reading, composer, Latest, error and Toast share the fixed status 
   const card = layoutElement(".pwa-session-status-card").getBoundingClientRect();
   expect(Math.round(card.width)).toBe(248);
   expect(Math.round(main.getBoundingClientRect().right - card.right)).toBe(12);
+  expect(Math.round(card.top - layoutElement(".pwa-title-bar").getBoundingClientRect().bottom)).toBe(12);
   expect(Math.round(card.left - layoutElement(".pwa-message-list").getBoundingClientRect().right)).toBe(12);
   notifications.show("model_set-error");
   await expect.poll(() => document.querySelector(".pwa-operation-notification")).not.toBeNull();
@@ -218,7 +219,7 @@ test("safe areas are deducted once and a taller title keeps the card below it", 
   expect(Math.round(layoutElement(".pwa-main").getBoundingClientRect().right - layoutElement(".pwa-session-status-card").getBoundingClientRect().right)).toBe(12 + 47);
   const title = layoutElement(".pwa-title-bar");
   title.style.minHeight = "120px";
-  await expect.poll(() => Math.round(layoutElement(".pwa-session-status-card").getBoundingClientRect().top - title.getBoundingClientRect().bottom)).toBe(8);
+  await expect.poll(() => Math.round(layoutElement(".pwa-session-status-card").getBoundingClientRect().top - title.getBoundingClientRect().bottom)).toBe(12);
   await screen.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expectLane(true);
   await page.viewport(1069, 900);
