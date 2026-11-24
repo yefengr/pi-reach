@@ -8,7 +8,6 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY pwa/package.json ./pwa/package.json
 COPY pi-extension/package.json ./pi-extension/package.json
 COPY packages/protocol/ ./packages/protocol/
-COPY packages/pwa-foundation/ ./packages/pwa-foundation/
 RUN pnpm --filter pwa... install --frozen-lockfile
 
 FROM node:24.20.0-alpine AS builder

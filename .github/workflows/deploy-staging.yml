@@ -17,14 +17,12 @@ on:
       - pi-extension/package.json
       - pi-extension/install.sh
       - packages/protocol/**
-      - packages/pwa-foundation/**
       - relay/**
       - pwa/**
       - '!pwa/README.md'
       - '!pwa/AGENTS.md'
       - '!relay/README.md'
       - '!relay/AGENTS.md'
-      - '!packages/pwa-foundation/README.md'
   workflow_dispatch:
 
 permissions:

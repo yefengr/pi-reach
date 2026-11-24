@@ -11,7 +11,7 @@
 
 省略 scope 时默认 `both`。本机备用部署没有隔离测试阶段，须单独授权并在执行前完成受影响验证（见仓库根 `AGENTS.md` 的常用验证）。本机脚本默认不推送 Docker Hub，镜像经 SSH 传输，不要求服务器从镜像仓库拉取应用镜像；自动部署则由服务器从 GHCR 按摘要拉取。本机 Buildx 构建仍需能够取得 Dockerfile 使用的基础镜像和构建依赖。Caddy 只在首次初始化或域名/端口变化时调整，普通版本部署不修改 Caddy。
 
-Node 工程使用根 pnpm workspace；开发工具链由根 `package.json`、`.node-version` 和 `pnpm-workspace.yaml` 固定。私有共享包 `packages/protocol` 由根安装的 `prepare` 与 workspace 构建流程产出；PWA 及 E2E Host、Owner 的 Docker 构建输入均包含其源码，并通过根 workspace 安装和构建，不依赖独立发布的共享包。PWA Dockerfile 位于 `pwa/`，构建上下文必须是仓库根，由 `pwa/Dockerfile.dockerignore` 限定可复制的输入。PWA 在 Node 构建阶段生成 `pwa/dist/`，运行镜像以非 root Nginx 托管 `/usr/share/nginx/html`，不运行 Node 应用服务器。Nginx 配置真源为 [`pwa/nginx.conf.template`](../pwa/nginx.conf.template)，由容器入口使用 `PORT` 渲染，默认端口仍为 3000；保留 curl 和根路径健康检查。入口 HTML 的公开默认 Relay 由启动脚本注入，生产和测试使用同一镜像，见「PWA 运行时配置」。
+Node 工程使用根 pnpm workspace；开发工具链由根 `package.json`、`.node-version` 和 `pnpm-workspace.yaml` 固定。私有协议包 `packages/protocol` 由根安装的 `prepare` 与 workspace 构建流程产出；PWA 及 E2E Host、Owner 的 Docker 构建输入均包含其源码。公开基础包 `@yefengr/pwa-foundation` 的维护源码位于 `packages/pwa-foundation`，根验证会构建并测试它；PWA 则从 npm 安装清单锁定的明确版本，Docker 不复制其维护源码，也不使用工作区链接。PWA Dockerfile 位于 `pwa/`，构建上下文必须是仓库根，由 `pwa/Dockerfile.dockerignore` 限定可复制的输入。PWA 在 Node 构建阶段生成 `pwa/dist/`，运行镜像以非 root Nginx 托管 `/usr/share/nginx/html`，不运行 Node 应用服务器。Nginx 配置真源为 [`pwa/nginx.conf.template`](../pwa/nginx.conf.template)，由容器入口使用 `PORT` 渲染，默认端口仍为 3000；保留 curl 和根路径健康检查。入口 HTML 的公开默认 Relay 由启动脚本注入，生产和测试使用同一镜像，见「PWA 运行时配置」。
 
 PWA 根路径返回 307 到 `/app`；`/app/` 规范化到 `/app`，`/app/<子路径>`（如 `/app/settings`）返回应用入口 HTML 并由前端识别；其他缺失页面和资源返回 404，不统一回退到 HTML。HTML、`/sw.js` 和 `/manifest.webmanifest` 使用 `Cache-Control: no-cache`，存在的 `/assets/` 哈希资源使用长期 immutable 缓存。`pnpm start` 和 E2E 启动脚本仅供本地 Vite preview，生产运行方式以 Dockerfile 为准。
 

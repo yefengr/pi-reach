@@ -144,8 +144,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/protocol
       '@yefengr/pwa-foundation':
-        specifier: workspace:*
-        version: link:../packages/pwa-foundation
+        specifier: 0.0.1
+        version: 0.0.1(react@19.2.4)
       dexie:
         specifier: ^4.4.5
         version: 4.4.5
@@ -1592,6 +1592,11 @@ packages:
 
   '@vitest/utils@4.1.12':
     resolution: {integrity: sha512-Q3awXrwOfEV+qc3WmO5ONyE0yO7Q1gQ9/oyHxGLZ/pl7N3NO/ZztqQwKLuwMkV+CA1JYSIeO3gkHnRDIo4AVaA==}
+
+  '@yefengr/pwa-foundation@0.0.1':
+    resolution: {integrity: sha512-AqRAKvt0ZxI40UPbV+QmYNt9Ps5dIYfekBTKb/KyNpdxIPxX6JMdTOeXtt3Acm0GQ6ELxS9NqfVX4V6AwU0ePw==}
+    peerDependencies:
+      react: ^19.2.4
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -5105,6 +5110,10 @@ snapshots:
       '@vitest/pretty-format': 4.1.12
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
+
+  '@yefengr/pwa-foundation@0.0.1(react@19.2.4)':
+    dependencies:
+      react: 19.2.4
 
   acorn-jsx@5.3.2(acorn@8.16.0):
     dependencies:

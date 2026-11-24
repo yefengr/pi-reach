@@ -6,11 +6,11 @@ import { pathToFileURL } from 'node:url';
 const SHARED_INPUTS = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'pi-extension/package.json', 'packages/protocol/'];
 export const COMPONENT_INPUTS = {
   relay: [...SHARED_INPUTS, 'relay/'],
-  pwa: [...SHARED_INPUTS, 'pi-extension/install.sh', 'packages/pwa-foundation/', 'pwa/'],
+  pwa: [...SHARED_INPUTS, 'pi-extension/install.sh', 'pwa/'],
 };
 
 // 包根说明文档位于组件目录内，但不进入构建产物；只改它们时不重建、不覆盖 staging。
-export const EXCLUDED_INPUTS = ['pwa/README.md', 'pwa/AGENTS.md', 'relay/README.md', 'relay/AGENTS.md', 'packages/pwa-foundation/README.md'];
+export const EXCLUDED_INPUTS = ['pwa/README.md', 'pwa/AGENTS.md', 'relay/README.md', 'relay/AGENTS.md'];
 
 function matches(file, input) {
   return input.endsWith('/') ? file.startsWith(input) : file === input;
