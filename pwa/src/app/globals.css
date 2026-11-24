@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@yefengr/pwa-foundation/foundation.css";
 @import "./pwa-theme.css";
 @import "./workspace-navigation.css";
 @import "./workspace-shell.css";

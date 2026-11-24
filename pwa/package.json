@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
     "sync:install": "node scripts/sync-install-sh.mjs",
-    "build": "pnpm --filter @pi-reach/protocol build && node scripts/sync-install-sh.mjs && vite build",
+    "build": "pnpm --filter 'pwa^...' build && node scripts/sync-install-sh.mjs && vite build",
     "start": "node scripts/start-e2e-server.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -32,6 +32,7 @@
     "@mantine/notifications": "9.5.2",
     "@noble/ed25519": "catalog:",
     "@pi-reach/protocol": "workspace:*",
+    "@yefengr/pwa-foundation": "workspace:*",
     "dexie": "^4.4.5",
     "highlight.js": "11.12.0",
     "jsqr": "1.4.0",

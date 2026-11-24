@@ -15,6 +15,12 @@
 !packages/protocol/tsconfig.json
 !packages/protocol/src/
 !packages/protocol/src/**
+!packages/pwa-foundation/
+!packages/pwa-foundation/package.json
+!packages/pwa-foundation/tsconfig.json
+!packages/pwa-foundation/foundation.css
+!packages/pwa-foundation/src/
+!packages/pwa-foundation/src/**
 
 **/node_modules/
 **/.next/
