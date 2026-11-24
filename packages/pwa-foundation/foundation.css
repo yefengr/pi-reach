@@ -1,0 +1,12 @@
+/*
+ * 安全区与最小点击区：四边安全区取 env(safe-area-inset-*)，无安全区时为 0。
+ * 安全区只由实际贴住该屏幕边缘的布局层使用，同一边只计算一次：贴边层背景延伸进安全区、内容内缩，子层不再叠加。
+ * 最小点击区同高的行、输入框与操作槽共用，不随字号档位缩放。
+ */
+:root {
+  --pwa-safe-top: env(safe-area-inset-top, 0px);
+  --pwa-safe-right: env(safe-area-inset-right, 0px);
+  --pwa-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --pwa-safe-left: env(safe-area-inset-left, 0px);
+  --pwa-hit-target: 44px;
+}

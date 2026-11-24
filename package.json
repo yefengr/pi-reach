@@ -6,12 +6,12 @@
     "node": ">=24.20.0 <25"
   },
   "scripts": {
-    "prepare": "pnpm --filter @pi-reach/protocol build",
-    "dev:pwa": "pnpm --filter @pi-reach/protocol build && pnpm --filter pwa dev",
+    "prepare": "pnpm --filter @pi-reach/protocol --filter @yefengr/pwa-foundation build",
+    "dev:pwa": "pnpm --filter 'pwa^...' build && pnpm --filter pwa dev",
     "dev:protocol": "pnpm --filter @pi-reach/protocol exec tsc --watch",
-    "typecheck": "pnpm --filter @pi-reach/protocol build && pnpm -r typecheck",
+    "typecheck": "pnpm prepare && pnpm -r typecheck",
     "lint": "pnpm --filter pwa lint",
-    "test": "pnpm --filter @pi-reach/protocol build && pnpm -r test && pnpm test:scripts",
+    "test": "pnpm prepare && pnpm -r test && pnpm test:scripts",
     "test:scripts": "node --test pwa/scripts/*.test.mjs scripts/*.test.mjs",
     "check:docs": "node scripts/check-doc-links.mjs",
     "test:relay": "pnpm --filter @pi-reach/relay test",

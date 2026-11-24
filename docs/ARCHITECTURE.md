@@ -17,6 +17,7 @@ PWA 不启动或唤醒 Pi；Relay 也不运行 Pi。Extension 在 Pi `session_st
 | 子项目 | 职责 |
 | --- | --- |
 | [`packages/protocol/`](../packages/protocol/) | 私有 workspace 包 `@pi-reach/protocol`，提供跨端共享 outer 与 session 实现。 |
+| [`packages/pwa-foundation/`](../packages/pwa-foundation/) | 公开 npm 包 `@yefengr/pwa-foundation` 的维护源码，提供安全区变量、最小点击区与浮层 shift 参数。 |
 | [`pwa/`](../pwa/) | 浏览器入口，负责 pairing、0/1/N 活动 Pi 选择、会话输入、正式 timeline 持久化和只读历史展示。 |
 | [`relay/`](../relay/) | WebSocket Relay，负责实时 endpoint 注册、ACL、订阅、短期 pairing-code target 与消息路由。 |
 | [`pi-extension/`](../pi-extension/) | Pi Extension，负责设备身份、Owner pairing/ACL、当前 Pi endpoint 和 Protocol v2 会话。 |
@@ -25,7 +26,9 @@ PWA 不启动或唤醒 Pi；Relay 也不运行 Pi。Extension 在 Pi `session_st
 
 ## 工程与构建边界
 
-PWA、Extension、Node Relay 与 `packages/protocol` 由根 pnpm workspace 统一安装，依赖 catalog、构建许可和安全 overrides 集中在根 `pnpm-workspace.yaml`，使用单一 `pnpm-lock.yaml`。端侧编译器基线通过命名 catalog 分别保留；Relay 使用 TypeScript、Node.js 与 `ws`，身份验证使用 Node 内置 Ed25519。
+PWA、Extension、Node Relay、`packages/protocol` 与 `packages/pwa-foundation` 的维护源码由根 pnpm workspace 统一安装，依赖 catalog、构建许可和安全 overrides 集中在根 `pnpm-workspace.yaml`，使用单一 `pnpm-lock.yaml`。端侧编译器基线通过命名 catalog 分别保留；Relay 使用 TypeScript、Node.js 与 `ws`，身份验证使用 Node 内置 Ed25519。
+
+`packages/pwa-foundation` 以 `@yefengr/pwa-foundation` 独立发布到 npm。PWA 清单锁定明确版本，安装和生产构建消费 registry 中的 JS、类型声明与 CSS，不链接该目录的维护源码；根验证仍检查维护源码与测试。包只提供四向安全区变量、44px 点击区和浮层 `shift.padding`，不携带应用品牌、配色、业务状态或安装／离线策略。
 
 `packages/protocol` 是私有包 `@pi-reach/protocol`，只导出 `@pi-reach/protocol/outer` 和 `@pi-reach/protocol/session`。它输出 ESM `dist/*.js` 及对应 `.d.ts`，使用浏览器原生 API，唯一生产依赖为 Zod；不引入 Pi SDK、React、Node 的 crypto/fs 或网络客户端。
 
@@ -34,7 +37,7 @@ PWA、Extension、Node Relay 与 `packages/protocol` 由根 pnpm workspace 统�
 | `outer` | 认证、registry、control 与 route 类型，以及 PWA 原有 strict 校验与编解码。 |
 | `session` | Protocol v2 的纯 schema、类型、codec 与常量。 |
 
-PWA 将共享包作为 workspace dependency，保留的 `pi-reach/protocol` 与 `protocol-v2` 入口只作薄适配。Extension 将共享包作为 workspace devDependency；marker、Pi SDK 绑定与 session state 继续保留在本地。Extension 构建后由 `scripts/vendor-protocol.mjs` 将共享 `dist` 复制到 `dist/vendor/protocol`，并以 AST 重写 JavaScript 和声明文件中的模块引用。共享包不独立发布，安装 Extension 的用户不需要 workspace；`prepack` 先构建，`pnpm pack` 消除 catalog 与 workspace 引用。
+PWA 将协议共享包作为 workspace dependency，保留的 `pi-reach/protocol` 与 `protocol-v2` 入口只作薄适配。Extension 将共享包作为 workspace devDependency；marker、Pi SDK 绑定与 session state 继续保留在本地。Extension 构建后由 `scripts/vendor-protocol.mjs` 将共享 `dist` 复制到 `dist/vendor/protocol`，并以 AST 重写 JavaScript 和声明文件中的模块引用。共享包不独立发布，安装 Extension 的用户不需要 workspace；`prepack` 先构建，`pnpm pack` 消除 catalog 与 workspace 引用。
 
 Relay 把共享包作为生产依赖，复用 outer 类型与版本常量；服务端入站校验留在 Relay，保留 canonical 公钥、UUID hex 布局、nullable 字段归一与完整 u64/i64 整数 token。客户端 decoder 不承担服务端授权校验。Relay 本地 lossless JSON 编解码避免 JavaScript 对超安全整数静默舍入，`ct` 始终不透明，Node 特有实现不进入共享包。生产镜像用 pnpm 的自包含 deploy 产物，只在该命令中启用 workspace 注入，不改变本地开发依赖布局。
 

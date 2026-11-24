@@ -31,7 +31,7 @@ Limits, leases and host storage are documented in
 - Mantine components, Tailwind 4 and business CSS
 - Serwist service worker, Dexie storage and system font stacks (no bundled or downloaded web fonts)
 - ESLint, Vitest Node / Browser Mode and Playwright E2E
-- pnpm workspace and the private shared package [`@pi-reach/protocol`](../packages/protocol/)
+- pnpm workspace, the private protocol package [`@pi-reach/protocol`](../packages/protocol/), and an exact npm version of [`@yefengr/pwa-foundation`](../packages/pwa-foundation/) for safe-area tokens and floating middleware
 
 Versions and scripts are defined in [package.json](package.json) and the root
 workspace configuration. Protocol ownership is documented in

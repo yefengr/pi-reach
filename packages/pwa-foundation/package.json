@@ -1,0 +1,42 @@
+{
+  "name": "@yefengr/pwa-foundation",
+  "version": "0.0.1",
+  "description": "Shared safe-area CSS tokens and floating overlay middleware for React PWAs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yefengr/pi-reach.git",
+    "directory": "packages/pwa-foundation"
+  },
+  "homepage": "https://github.com/yefengr/pi-reach/tree/pwa-foundation-v0.0.1/packages/pwa-foundation",
+  "bugs": "https://github.com/yefengr/pi-reach/issues",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "sideEffects": ["**/*.css"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./foundation.css": "./foundation.css"
+  },
+  "files": ["dist", "foundation.css"],
+  "scripts": {
+    "build": "tsc",
+    "prepack": "pnpm build && pnpm test",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "19.2.4",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

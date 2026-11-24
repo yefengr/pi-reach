@@ -11,6 +11,8 @@ test('component selection follows each Dockerfile build input', () => {
   assert.deepEqual(branchComponents(['pwa/src/App.tsx']), { relay: false, pwa: true });
   assert.deepEqual(branchComponents(['relay/src/server.ts']), { relay: true, pwa: false });
   assert.deepEqual(branchComponents(['pi-extension/install.sh']), { relay: false, pwa: true });
+  // 基础包经 npm 精确版本消费；只改维护源码不改变当前应用构建，升级由清单和锁触发。
+  assert.deepEqual(branchComponents(['packages/pwa-foundation/foundation.css']), { relay: false, pwa: false });
   for (const shared of ['packages/protocol/src/index.ts', 'pnpm-lock.yaml', 'package.json', 'pi-extension/package.json']) {
     assert.deepEqual(branchComponents([shared]), { relay: true, pwa: true });
   }
