@@ -440,6 +440,26 @@ IMAGE=your-dockerhub-user/pi-reach-relay ./relay/push-docker.sh
 
 不传 `IMAGE` 时使用 `REGISTRY_NAMESPACE`，再没有时使用本地占位命名空间。日常服务器部署不需要调用这两个发布脚本，直接执行 `./scripts/deploy-self-hosted.sh` 即可。
 
+## 公共基础包 npm 发布
+
+`@yefengr/pwa-foundation` 使用独立的 [PWA foundation npm 工作流](../.github/workflows/pwa-foundation-npm.yml)，不复用 Extension 发布、标签或 GitHub Release 流程。公开版本不可覆盖，已公开的 `0.0.3` 也不会重传。
+
+### 验证与提交待审
+
+- 本地运行 `bash packages/pwa-foundation/publish-npm.sh`，或在 Actions 的 `main` 上手动运行并保持 `stage=false`，只做类型检查、打包（prepack 包含构建与测试）和内容检查，不上传 npm。Actions 保存 tarball 与 `metadata.json`，含源码 SHA、包版本、文件清单及 SHA-256/SHA-512；本地默认临时目录退出即清理。需要保留时，可将 `PWA_FOUNDATION_PACK_DIR` 设为父目录已存在、目标自身尚不存在的绝对路径，脚本不会覆盖既有目录。
+- `main` 推送中 `packages/pwa-foundation/package.json` 的版本号确有变化时自动提交待审；手动运行只有勾选 `stage=true` 才提交。所有运行仅允许 `yefengr/pi-reach` 的 `main`。已公开版本跳过上传，registry 网络失败或非明确 200/404 时停止。
+- 安装、类型检查、prepack 构建与测试、一次打包及制品上传全部位于只有 `contents:read`、无 OIDC 的 `prepare` 作业。独立 `stage` 作业才有 `id-token:write`：只 checkout、用 setup-node 按 `.node-version` 配置 Node、下载同一 run/attempt/commit 的制品并校验上传，不安装依赖、不运行生命周期、不重新打包。使用 Node 自带 npm，脚本要求 npm >=11.15.0，不在有发布权限的作业中另装 npm。
+- 提交待审只接受 GitHub Actions OIDC，拒绝 `NPM_TOKEN`、`NODE_AUTH_TOKEN`，不使用 `whoami` 或已登录 npm 会话。脚本显式用法为 `bash packages/pwa-foundation/publish-npm.sh --stage <已准备目录>`，只读消费既有制品；SHA-256 和版本必须匹配 prepare 作业输出，源码必须匹配 checkout HEAD 与本次 `GITHUB_SHA`，元数据中的摘要、来源、版本与文件清单必须和同一 tarball 一致，不会重写元数据掩盖不符。
+- tarball 只打包一次，检查包名、精确版本、公共 exports 目标、必要文档与文件白名单后，执行 `npm stage publish <已审核tgz> --access public --ignore-scripts --registry=https://registry.npmjs.org/`。流程不直接发布、不自动批准，也不创建标签或 Release。
+
+公开 registry 的 404 **不能证明没有待审版本**。手动勾选 `stage` 或重跑上传前，维护者须在 npmjs.com 的 Staged Packages 人工确认不存在同版本待审；OIDC 不能运行待审查询或审批命令。上传失败或结果不明时不要直接重跑：先核对待审区、本次 Actions 日志和制品摘要，再决定后续操作。脚本不会自动重试上传。
+
+### Trusted Publisher 与人工批准
+
+代码合入后，由维护者在 npm 包设置绑定 Trusted Publisher：GitHub 用户 `yefengr`、仓库 `pi-reach`、精确工作流文件名 `pwa-foundation-npm.yml`，Environment 留空。不新增 GitHub 环境，不允许直接 publish 或 dist-tags；只使用默认允许的 stage。工作流不修改 npm 账户设置，不保存长期 token，npm 通过 OIDC 自动生成 provenance。
+
+提交成功只表示进入待审区。维护者在 npm 核对包版本、来源提交与 Actions 制品摘要后，用 2FA 批准。公开后执行 `npm view @yefengr/pwa-foundation@X.Y.Z version dist.integrity --registry=https://registry.npmjs.org/ --prefer-online`，确认精确版本及 tarball 完整性（`dist.integrity` 的 SHA-512 为 base64，制品元数据为 hex）。随后分别在两个消费端更新 npm 精确版本与锁文件，核对安装来源、构建和实际界面/交互；发布基础包本身不等于消费端已升级。
+
 ## Extension npm 发布
 
 Extension 以 `@yefengr/pi-reach` 发布到 npm。常规发布由 Extension npm 工作流（`.github/workflows/release.yml`）完成：`pi-extension/package.json` 的版本号变更合并到 `main` 后，工作流以 npm trusted publishing（GitHub OIDC）认证，运行 `pi-extension/publish-npm.sh --stage` 把新版本提交到 npm 待审区，维护者在 npmjs.com 用双重验证批准后才正式上线。仓库和 GitHub 中不保存 npm token。版本号一经发布不可复用。
