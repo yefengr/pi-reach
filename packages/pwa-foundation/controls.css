@@ -137,7 +137,7 @@
 .pwa-ui-scope .pwa-scrim { background: var(--pwa-scrim); }
 .pwa-ui-scope .pwa-confirm-description { margin: 16px 0 0; color: var(--pwa-secondary); font-size: var(--pwa-text-body); line-height: var(--pwa-leading-body); }
 .pwa-ui-scope .pwa-confirm-error { margin: 12px 0 0; color: var(--pwa-error); font-size: var(--pwa-text-meta); line-height: var(--pwa-leading-ui); }
-/* 确认在前、取消在后，视觉顺序与 DOM 一致；不使用 order。 */
+/* 宿主按布局生成 DOM：桌面取消、确认；手机确认、取消。不使用 order。 */
 .pwa-ui-scope .pwa-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .pwa-ui-scope .pwa-confirm-actions .pwa-button { min-width: 120px; margin-top: 0; }
 /* 沿用来源：pending/禁用时仍保留危险确认的实心错误色，不在提取时改良。 */

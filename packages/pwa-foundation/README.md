@@ -2,10 +2,12 @@
 
 PWA 基础包：安全区与最小点击区 CSS 变量、浮层 shift 中间件，以及从 0.0.2 起提供的可选主题与 Mantine 控件样式。
 
-## 公共规则
+## 规范与消费契约
 
-- 安全区只由实际贴住该屏幕边缘的布局层使用，同一边只计算一次；贴边层的背景延伸进安全区、内容内缩，子层不再叠加。
-- 不贴边的居中叠层与屏幕边缘的距离取基础留白与安全区中的较大值，不相加。
+共享颜色、字体、间距、表面、动效、确认顺序与可访问性以 [公共设计与交互规范](DESIGN.md) 为唯一公共来源；本 README 只维护安装与接线契约。规范自 `0.0.3` 随包分发，旧版 `0.0.2` 不含 DESIGN.md，不回写该版本。
+
+## 安全区 API 边界
+
 - `useFloatingSafeMiddlewares` 只提供 `shift.padding`：对每侧取 5px 与安全区中的较大值。Popover、Menu 与 Combobox 可共用这组值；实际能否移动仍由浮层的定位、宽度和启用轴决定。例如 Mantine 上下定位且与锚点同宽时，默认关闭横向 shift。
 - 浏览器与客户端的差异留在宿主应用内处理，本包不引入设备判断。
 
@@ -51,10 +53,15 @@ import "@yefengr/pwa-foundation/theme.css";
 import "@yefengr/pwa-foundation/controls.css";
 import { MantineProvider, Button, Modal } from "@mantine/core";
 import { LucideProvider } from "lucide-react";
+import { useMediaQuery } from "@mantine/hooks";
 import { usePwaTheme, pwaCssVariablesResolver, PWA_CONFIRM_DIALOG_SIZE } from "@yefengr/pwa-foundation/mantine";
 
+// useMediaQuery 来自 @mantine/hooks；以布局宽度判断，不以指针类型判断。
 function Ui({ opened, onClose, onConfirm }) {
   const theme = usePwaTheme();
+  const mobile = useMediaQuery("(max-width: 767.98px)", undefined, { getInitialValueInEffect: false });
+  const confirm = <Button key="confirm" onClick={onConfirm}>确认</Button>;
+  const cancel = <Button key="cancel" variant="default" onClick={onClose}>取消</Button>;
   return <LucideProvider strokeWidth={1.5} absoluteStrokeWidth>
     <MantineProvider theme={theme} cssVariablesResolver={pwaCssVariablesResolver}>
       <div className="pwa-ui-scope">
@@ -63,8 +70,7 @@ function Ui({ opened, onClose, onConfirm }) {
           portalProps={{ target: "#overlay-root" }}>
           <p className="pwa-confirm-description">请确认后继续。</p>
           <div className="pwa-confirm-actions">
-            <Button onClick={onConfirm}>确认</Button>
-            <Button variant="default" onClick={onClose}>取消</Button>
+            {mobile ? [confirm, cancel] : [cancel, confirm]}
           </div>
         </Modal>
       </div>
@@ -79,10 +85,14 @@ LucideProvider 使用实际线宽 1.5px（`absoluteStrokeWidth`）；按钮文�
 
 `controls.css` 仅作用于 `.pwa-ui-scope` 后代；Portal 节点也必须位于该作用域内。主题自动分配 Button 的 `pwa-button`、ActionIcon/关闭按钮的 `pwa-icon-button`、TextInput 的 `pwa-input`、Textarea 的 `pwa-textarea`、Select/NativeSelect 的 `pwa-select`，以及 Modal 的 `pwa-dialog`／`pwa-dialog-head`／`pwa-dialog-title`／`pwa-dialog-body`、Drawer 的 `pwa-drawer`／`pwa-drawer-head`／`pwa-drawer-title`。Modal 遮罩通过主题 `classNames.overlay` 自动使用 `pwa-scrim`，传入 `overlayProps`（如 `blur: 0`）不会丢失该默认类；宿主仍可明确覆盖样式。桌面外侧留白沿用 Mantine 默认值（5vw），24px 是内容内边距；手机外侧留白为 16px 与左右安全区的较大值。
 
-宿主显式使用的辅助类为 `pwa-confirm-description`、`pwa-confirm-error`、`pwa-confirm-actions`、`pwa-danger-confirm`。确认操作 DOM 必须确认在前、取消在后；手机纵向全宽，桌面横排，不用 CSS order 颠倒读屏顺序。主操作默认 filled，次级使用 default，危险入口使用 outline，最终危险确认使用 filled 加 `pwa-danger-confirm`，不要传 color。危险确认在 pending/禁用时仍保留实心错误色，这是沿用来源的外观，不代表宿主可以省略 pending 操作门禁。
+宿主显式使用的辅助类为 `pwa-confirm-description`、`pwa-confirm-error`、`pwa-confirm-actions`、`pwa-danger-confirm`。`pwa-confirm-actions` 不排序节点：宿主根据布局生成桌面「取消、确认」、手机「确认、取消」的真实 DOM；排法与变体见 [控件与确认操作](DESIGN.md#控件与确认操作)。危险确认的 pending/禁用外观仍为实心错误色，宿主不能因此省略操作门禁。
+
+此处修正 `0.0.2` README 将「确认在前」写成全尺寸要求的错误；既有规则的手机限定不能省略。按旧描述实现桌面的消费者需按上例调整 JSX 顺序，无需 CSS 反转或新组件。此修正随 `0.0.3` 文档分发，不回写公开 `0.0.2`。
+
+上例只演示消费结构。真实宿主保留 Modal 实例，让 `opened` 从 true 变 false，退出后再清理快照；同时接入有效回焦后备、同步 pending 门禁与错误保留，见 [关闭、焦点与异步操作](DESIGN.md#关闭焦点与异步操作)。不要在 `onClose` 中直接条件卸载整个 Modal。
 
 `usePwaTheme` 挂载后读取 CSS Modal 进入/退出时长并监听系统减少动态效果变化，SSR/首次水合回退 400/200ms；样式缺失且系统要求减少动态效果时回退 120ms。非浏览器消费者可直接调用工厂。本批不迁移完整动效框架。
 
 只迁移原生 `:active` 按钮绘制与 reduced-motion CSS，不提供 `usePwaButtonPressFeedback`；部分触控浏览器不保持 `:active` 时不保证与 Pi Reach 的触控补绘制相同。业务行按下、outside-tap guard、Drawer 转场/手势/导航、Portal 目标、层级、单层遮罩互斥、焦点返回、实例存活与 pending 门禁仍由宿主负责。
 
-只使用安全区的现有消费者可继续锁定 npm 0.0.1。使用新增主题与控件时，显式安装 npm 精确 0.0.2、所需 peer 和样式，接入 Provider/scope，并验证真实 Portal、键盘焦点、移动与桌面表现；本地制品验证不是正式升级，不要留下长期 file/workspace 依赖。
+只使用安全区的现有消费者可继续锁定 npm 0.0.1。使用主题与控件时，显式安装 npm 精确版本（本版为 0.0.3）、所需 peer 和样式，接入 Provider/scope，并验证真实 Portal、键盘焦点、移动与桌面表现；本地制品验证不是正式升级，不要留下长期 file/workspace 依赖。
