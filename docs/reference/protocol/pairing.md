@@ -160,10 +160,10 @@ Host identity：
 
 - 已有 `~/.pi/pi-reach/identity.json` 时优先读取该身份；没有文件身份时仅读取 `dev.pireach.pi` 平台 keyring 服务（macOS Keychain、Linux secret service、Windows Credential Manager），不读取或迁移旧品牌身份。
 - 首次生成优先写入 keyring；允许的 headless/degraded fallback 使用身份文件，文件权限 `0600`，父目录 `0700`，以同目录临时文件原子替换方式发布。
-- 初始化通过 `~/.pi/pi-reach/identity.lock` 跨进程互斥，取得锁后重新读取身份。等待有上限，不按锁龄强抢；普通结束释放锁，keyring 写入超时则先报错，并保留锁直到底层操作真正结束。
+- 初始化通过 `~/.pi/pi-reach/identity.lock` 在本机跨进程互斥，取得锁后重新读取身份。身份目录需要位于支持硬链接的本地文件系统；锁内容完整写入并同步后才原子发布。等待有上限，持有者仍存活或进程状态无法确认时，不因锁龄强抢；普通结束释放锁，keyring 写入超时则先报错，并保留锁直到底层操作真正结束。
 - 已有 pairing 但 identity 不可读时不得静默生成新 identity，否则会使全部 pairing 失效；应上报确定性 failure。身份文件损坏或不可读也不能被当成首次运行覆盖。
 
-进程异常退出可能留下初始化锁。遇到锁等待超时，先检查并结束同一用户下正在初始化 Pi Reach 的进程，处理系统 keyring 尚未完成的授权或写入；确认没有初始化者或未完成操作后，才可精确删除 `~/.pi/pi-reach/identity.lock` 并重试。不能在另一个 Pi 仍初始化时删除锁，也不要删除 `identity.json`、`peers.json` 或整个 `~/.pi/pi-reach` 来恢复。
+进程异常退出可能留下初始化锁。记录中的 PID 确认已退出时可自动恢复；空文件、无法解析或字段损坏的锁，仅在达到写入宽限、且未识别到存活或状态不明的持有者时恢复。删除前还会复核文件对象、修改时间和内容未变，并防止多个恢复者误删新锁；恢复日志只记录原因，不记录锁内容。若仍遇到锁等待超时，先检查同一用户下正在初始化 Pi Reach 的进程，以及系统 keyring 尚未完成的授权或写入；确认没有初始化者或未完成操作后，才可精确删除 `~/.pi/pi-reach/identity.lock` 并重试。不能在另一个 Pi 仍初始化时删除锁，也不要删除 `identity.json`、`peers.json` 或整个 `~/.pi/pi-reach` 来恢复。
 
 Owner ACL：
 
