@@ -52,30 +52,39 @@ jobs:
           fi
           echo "stage=$stage" >> "$GITHUB_OUTPUT"
 
-  validate:
+  prepare:
     needs: decide
-    if: needs.decide.outputs.stage == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      sha256: ${{ steps.pack.outputs.sha256 }}
+      version: ${{ steps.pack.outputs.version }}
+      artifact-name: ${{ steps.pack.outputs.artifact-name }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Validate and pack only
+        id: pack
         env:
           PWA_FOUNDATION_PACK_DIR: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}
-        run: bash packages/pwa-foundation/publish-npm.sh
+        run: |
+          set -euo pipefail
+          bash packages/pwa-foundation/publish-npm.sh
+          echo 'artifact-name=pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}' >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v6
         with:
-          name: pwa-foundation-${{ github.sha }}-${{ github.run_attempt }}
+          name: ${{ steps.pack.outputs.artifact-name }}
           path: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: error
           retention-days: 14
       - run: echo '验证与打包完成，未上传 npm。制品包含 tarball、源码 SHA、文件清单与摘要。' >> "$GITHUB_STEP_SUMMARY"
 
   stage:
-    needs: decide
+    needs: [decide, prepare]
     if: >-
       needs.decide.outputs.stage == 'true' &&
       github.repository == 'yefengr/pi-reach' && github.ref == 'refs/heads/main'
@@ -88,16 +97,22 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-workspace
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      # 只重跑失败的 stage 时，仍下载 prepare 原 attempt 生产的制品。
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.prepare.outputs.artifact-name }}
+          path: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}/
       - name: Stage inspected tarball through OIDC
         env:
-          PWA_FOUNDATION_PACK_DIR: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}
-        run: bash packages/pwa-foundation/publish-npm.sh --stage
-      - uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: pwa-foundation-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}/
-          if-no-files-found: ignore
-          retention-days: 14
+          ARTIFACT_NAME: ${{ needs.prepare.outputs.artifact-name }}
+          EXPECTED_SHA256: ${{ needs.prepare.outputs.sha256 }}
+          EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
+          ARTIFACT_DIR: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          [[ -n "$ARTIFACT_NAME" ]]
+          bash packages/pwa-foundation/publish-npm.sh --stage "$ARTIFACT_DIR"
       - run: echo '请核对脚本结果：已公开版本会跳过；提交待审不等于公开。上传失败或结果不明时，先人工检查 npm 待审区，不要直接重跑。批准需要维护者 2FA。' >> "$GITHUB_STEP_SUMMARY"

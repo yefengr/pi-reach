@@ -10,7 +10,9 @@ PWA 基础包：安全区与最小点击区 CSS 变量、浮层 shift 中间件�
 
 维护者可在 [PWA foundation npm 工作流](https://github.com/yefengr/pi-reach/actions/workflows/pwa-foundation-npm.yml)运行验证；手动运行的 `stage` 默认关闭，只检查类型、构建、测试并保存审核 tarball 与摘要，不上传 npm。也可在仓库中运行 `bash packages/pwa-foundation/publish-npm.sh`，本地临时包在退出时清理。
 
-新版本合入 `main` 且包版本变化时，工作流通过 GitHub OIDC 将同一个审核 tarball 提交 npm 待审；手动勾选 `stage` 前应确认没有同版本待审。待审不是公开发布，需维护者在 npm 用 2FA 批准。已公开版本跳过，不重传；上传失败或结果不明时，先检查 npm 待审区，不直接重跑。
+类型检查、安装、构建、测试与一次打包均在无 OIDC 权限的 `prepare` 作业执行。独立 `stage` 作业不安装依赖、不运行生命周期、不重新打包；它下载本次运行的制品，核对 prepare 输出的 SHA-256、版本、当前源码 SHA 与元数据后，才通过 GitHub OIDC 上传同一个 tarball。
+
+新版本合入 `main` 且包版本变化时，工作流将审核 tarball 提交 npm 待审；手动勾选 `stage` 前应确认没有同版本待审。待审不是公开发布，需维护者在 npm 用 2FA 批准。已公开版本跳过，不重传；上传失败或结果不明时，先检查 npm 待审区，不直接重跑。
 
 发布基础包不会自动升级消费者。消费端仍需显式更新 npm 精确版本与锁文件，并完成各自的界面和交互验证；本地验证制品不能代替正式 npm 消费。
 

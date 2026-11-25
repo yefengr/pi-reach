@@ -4,12 +4,20 @@ set -Eeuo pipefail
 # 默认只验证打包；只有 main 的可信发布作业可以显式提交待审。
 fail() { printf '基础包发布中止：%s\n' "$1" >&2; exit 1; }
 stage=0
-for arg in "$@"; do
-  case "$arg" in --stage) stage=1 ;; *) fail '未知参数（用法：publish-npm.sh [--stage]）' ;; esac
-done
+artifact_dir=''
+if (( $# )); then
+  [[ $# -eq 2 && "$1" == --stage && -n "$2" ]] || fail '用法：publish-npm.sh [--stage <artifact-directory>]'
+  stage=1
+  artifact_dir="$2"
+fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
-for cli in node npm pnpm tar git curl; do command -v "$cli" >/dev/null || fail "找不到命令：$cli"; done
+for cli in node tar git; do command -v "$cli" >/dev/null || fail "找不到命令：$cli"; done
+if (( stage )); then
+  for cli in npm curl; do command -v "$cli" >/dev/null || fail "找不到命令：$cli"; done
+else
+  command -v pnpm >/dev/null || fail '找不到命令：pnpm'
+fi
 registry='https://registry.npmjs.org/'
 name='@yefengr/pwa-foundation'
 version="$(node -e 'const p=require("./package.json"); if(p.name!=="@yefengr/pwa-foundation" || !/^\d+\.\d+\.\d+$/.test(p.version)) process.exit(1); process.stdout.write(p.version)')" || fail '包名或精确 X.Y.Z 版本无效'
@@ -21,7 +29,14 @@ cleanup() {
   if [[ -n "$out" && "$keep" == 0 ]]; then rm -rf -- "$out"; fi
 }
 trap cleanup EXIT
+source_sha="$(git rev-parse HEAD)"
+[[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || fail '无法确认源码 SHA'
 if (( stage )); then
+  [[ "${GITHUB_SHA:-}" == "$source_sha" ]] || fail 'GITHUB_SHA 与源码不符'
+  [[ "${EXPECTED_SHA256:-}" =~ ^[0-9a-f]{64}$ && "${EXPECTED_VERSION:-}" == "$version" ]] || fail '缺少可信 prepare 摘要或版本'
+  [[ -d "$artifact_dir" && ! -L "$artifact_dir" ]] || fail '缺少准备制品目录'
+  out="$(cd "$artifact_dir" && pwd)"
+  keep=1
   [[ "${GITHUB_ACTIONS:-}" == true && "${GITHUB_REPOSITORY:-}" == yefengr/pi-reach && "${GITHUB_REF:-}" == refs/heads/main ]] || fail '提交待审仅允许自身仓库 main 的 GitHub Actions'
   [[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" && -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail '缺少 OIDC 请求环境'
   [[ -z "${NPM_TOKEN:-}" && -z "${NODE_AUTH_TOKEN:-}" ]] || fail '不允许长期 token 回退'
@@ -33,37 +48,32 @@ if (( stage )); then
   export NPM_CONFIG_USERCONFIG="$auth_dir/user.npmrc" NPM_CONFIG_GLOBALCONFIG="$auth_dir/global.npmrc"
   npm_version="$(npm --version)"
   node -e 'const v=process.argv[1]; if(!/^\d+\.\d+\.\d+$/.test(v)) process.exit(1); const [a,b]=v.split(".").map(Number); process.exit(a>11 || a===11 && b>=15 ? 0 : 1)' "$npm_version" || fail 'npm stage publish 需要 npm >=11.15.0'
-  status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "${registry}@yefengr%2fpwa-foundation/$version")" || fail 'registry 请求失败，未上传'
-  case "$status" in
-    200) printf '%s@%s 已公开，跳过上传。\n' "$name" "$version"; exit 0 ;;
-    404) ;;
-    *) fail 'registry 未返回明确的 200/404，未上传' ;;
-  esac
-fi
-
-if [[ -n "${PWA_FOUNDATION_PACK_DIR:-}" ]]; then
-  # 只认领不存在的新目录，避免覆盖、上传或清理别人的产物。
-  [[ "$PWA_FOUNDATION_PACK_DIR" == /* ]] || fail '输出目录必须是绝对路径'
-  mkdir -m 700 -- "$PWA_FOUNDATION_PACK_DIR" || fail '输出目录已存在或不可创建'
-  out="$PWA_FOUNDATION_PACK_DIR"
-  keep=1
 else
-  out="$(mktemp -d "${TMPDIR:-/tmp}/pwa-foundation-pack.XXXXXX")"
+  [[ -z "${GITHUB_SHA:-}" || "$GITHUB_SHA" == "$source_sha" ]] || fail 'GITHUB_SHA 与源码不符'
+  if [[ -n "${PWA_FOUNDATION_PACK_DIR:-}" ]]; then
+    # 只认领不存在的新目录，避免覆盖、上传或清理别人的产物。
+    [[ "$PWA_FOUNDATION_PACK_DIR" == /* ]] || fail '输出目录必须是绝对路径'
+    mkdir -m 700 -- "$PWA_FOUNDATION_PACK_DIR" || fail '输出目录已存在或不可创建'
+    out="$PWA_FOUNDATION_PACK_DIR"
+    keep=1
+  else
+    out="$(mktemp -d "${TMPDIR:-/tmp}/pwa-foundation-pack.XXXXXX")"
+  fi
+  pnpm --filter "$name" typecheck
+  pnpm pack --pack-destination "$out"
 fi
-pnpm --filter "$name" typecheck
-pnpm pack --pack-destination "$out"
-source_sha="$(git rev-parse HEAD)"
-[[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || fail '无法确认源码 SHA'
-node --input-type=commonjs - "$out" "$version" "$source_sha" <<'NODE'
+node --input-type=commonjs - "$out" "$version" "$source_sha" "$stage" <<'NODE'
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {execFileSync} = require('node:child_process');
-const [out, version, sourceSha] = process.argv.slice(2);
+const [out, version, sourceSha, stage] = process.argv.slice(2);
 function fail() { throw new Error('tarball 内容不符合公共包清单'); }
 const entries = fs.readdirSync(out);
-if(entries.length !== 1 || !entries[0].endsWith('.tgz')) fail();
-const tgz = path.join(out, entries[0]);
+const tarballs = entries.filter(file => file.endsWith('.tgz'));
+if(tarballs.length !== 1 || entries.length !== (stage === '1' ? 2 : 1)) fail();
+if(stage === '1' && (!entries.includes('metadata.json') || !fs.lstatSync(path.join(out,'metadata.json')).isFile())) fail();
+const tgz = path.join(out, tarballs[0]);
 if(!fs.lstatSync(tgz).isFile()) fail();
 const tar = (...args) => execFileSync('tar', args, {encoding:'utf8', maxBuffer:16*1024*1024});
 const listing = tar('-tzf', tgz).trim().split('\n');
@@ -89,9 +99,23 @@ function checkTargets(value) {
 checkTargets(pkg.exports);
 const bytes=fs.readFileSync(tgz);
 const digest = algorithm => crypto.createHash(algorithm).update(bytes).digest('hex');
-fs.writeFileSync(path.join(out,'metadata.json'), JSON.stringify({name:pkg.name,version,sourceSha,tarball:entries[0],sha256:digest('sha256'),sha512:digest('sha512'),files:files.sort()},null,2)+'\n');
+const metadata = {name:pkg.name,version,sourceSha,tarball:tarballs[0],sha256:digest('sha256'),sha512:digest('sha512'),files:files.sort()};
+if(stage === '1') {
+  if(metadata.sha256 !== process.env.EXPECTED_SHA256) fail();
+  const recorded = JSON.parse(fs.readFileSync(path.join(out,'metadata.json'),'utf8'));
+  if(!require('node:util').isDeepStrictEqual(recorded,metadata)) fail();
+} else {
+  fs.writeFileSync(path.join(out,'metadata.json'), JSON.stringify(metadata,null,2)+'\n');
+  if(process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT,`sha256=${metadata.sha256}\nversion=${version}\n`);
+}
 NODE
 if (( stage )); then
+  status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "${registry}@yefengr%2fpwa-foundation/$version")" || fail 'registry 请求失败，未上传'
+  case "$status" in
+    200) printf '%s@%s 已公开，跳过上传。\n' "$name" "$version"; exit 0 ;;
+    404) ;;
+    *) fail 'registry 未返回明确的 200/404，未上传' ;;
+  esac
   tarballs=("$out"/*.tgz)
   [[ ${#tarballs[@]} -eq 1 && -f "${tarballs[0]}" ]] || fail '没有唯一审核 tarball'
   # 不自动重试：失败可能已经被 npm 接收，必须人工核对待审区。
