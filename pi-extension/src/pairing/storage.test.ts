@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -237,7 +238,7 @@ describe("getOrCreateEd25519Keypair — keyring path", () => {
     );
   });
 
-  test("an existing lock times out without generating or being removed", async () => {
+  test("a fresh malformed lock waits, then recovers after its write grace", async () => {
     mkdirSync(join(_tmpHome, ".pi", "pi-reach"), { recursive: true });
     writeFileSync(_IDENTITY_LOCK_FILE_FOR_TEST, "crashed-initializer", { mode: 0o600 });
     const backend = new InMemoryBackend();
@@ -248,7 +249,7 @@ describe("getOrCreateEd25519Keypair — keyring path", () => {
     expect(readFileSync(_IDENTITY_LOCK_FILE_FOR_TEST, "utf8")).toBe("crashed-initializer");
     expect(backend.writes).toHaveLength(0);
 
-    rmSync(_IDENTITY_LOCK_FILE_FOR_TEST);
+    utimesSync(_IDENTITY_LOCK_FILE_FOR_TEST, new Date(0), new Date(0));
     await expect(getOrCreateEd25519Keypair()).resolves.toBeDefined();
   });
 

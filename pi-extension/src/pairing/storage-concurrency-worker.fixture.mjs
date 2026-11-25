@@ -76,6 +76,9 @@ if (mode === "keyring") {
 } else if (mode === "file") {
   storage._setKeyStoreBackendForTest(new UnavailableTestKeyring());
   storage._setKeyringExpectedForTest(false);
+} else if (mode === "crash-lock") {
+  const { withIdentityLock } = await import("./identity-lock.ts");
+  await withIdentityLock(resolve(testHome, ".pi", "pi-reach"), async () => process.exit(17));
 } else if (mode === "crash") {
   storage._setKeyStoreBackendForTest(new CrashingTestKeyring());
 } else {
@@ -86,6 +89,7 @@ try {
   const keypair = await storage.getOrCreateEd25519Keypair();
   process.stdout.write(`${JSON.stringify({
     publicKey: Buffer.from(keypair.publicKey).toString("base64"),
+    peers: await storage.listPeers(),
   })}\n`);
 } catch (error) {
   process.stdout.write(`${JSON.stringify({
