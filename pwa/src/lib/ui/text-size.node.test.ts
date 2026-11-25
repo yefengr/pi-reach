@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { cssRules, readStyles } from "@/test/node/foundation-styles";
 import { describe, expect, test } from "vitest";
 import { DEFAULT_TEXT_SIZE, TEXT_SIZE_STORAGE_KEY, isPwaTextSize, resolveTextSize, resolveTextSizePreference, shouldRestoreTextSize, textSizeForSystemBody } from "./text-size";
 
@@ -53,20 +53,20 @@ describe("text size preference", () => {
 
 // 触控基准用静态读取校验：浏览器测试中的触控模拟在 Linux 无头 Chromium 关闭后无法复位，会影响后续用例。
 describe("type scale tokens", () => {
-  const theme = readFileSync(new URL("../../app/pwa-theme.css", import.meta.url), "utf8");
+  const rules = cssRules(readStyles(new URL("../../app/pwa-theme.css", import.meta.url)));
   const TOKENS = ["meta", "list", "body", "code", "title", "page", "heading", "subheading"];
-  const block = (source: string, selector: string) => {
-    const open = source.indexOf("{", source.indexOf(`${selector} {`));
-    return Object.fromEntries([...source.slice(open + 1, source.indexOf("}", open)).matchAll(/--pwa-text-([a-z]+):\s*(\d+)px;/g)].map(match => [match[1], Number(match[2])]));
-  };
+  // 合并真实安装的公共主题和应用扩展，不能再假定每档只在本地出现一个块。
+  const block = (media: string, selector: string) => Object.fromEntries(rules
+    .filter(rule => rule.media === media && rule.selector.split(/,\s*/).includes(selector.trim()))
+    .flatMap(rule => [...rule.body.matchAll(/--pwa-text-([a-z]+):\s*(\d+)px;/g)].map(match => [match[1], Number(match[2])])));
   const scale = (source: string, base: Record<string, number> = {}) => {
     const standard = { ...base, ...block(source, "\n:root") };
     return [standard, { ...standard, ...block(source, ':root[data-pwa-text-size="large"]') }, { ...standard, ...block(source, ':root[data-pwa-text-size="xlarge"]') }]
       .map(tier => TOKENS.map(name => tier[name]).join(" "));
   };
-  const touchStart = theme.indexOf("@media (pointer: coarse) {");
-  const desktop = theme.slice(0, touchStart);
-  const touch = theme.slice(touchStart).replace(/^ {2}/gm, "");
+  const touch = "@media (pointer: coarse)";
+  const touchStart = rules.findIndex(rule => rule.media === touch);
+  const desktop = "";
 
   test("desktop keeps the 16px base at every tier", () => {
     expect(scale(desktop)).toEqual(["13 14 16 14 18 24 20 18", "14 16 18 16 20 28 22 20", "15 18 20 18 22 32 24 22"]);

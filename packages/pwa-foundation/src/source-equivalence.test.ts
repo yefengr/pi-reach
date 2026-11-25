@@ -54,9 +54,10 @@ function declarations(list: Rule[], selector: string, media = "") {
   return Object.assign({}, ...matched.map((rule) => rule.declarations)) as Record<string, string>;
 }
 const controls = rules(read("../controls.css"));
-const globals = rules(read("../../../pwa/src/app/globals.css"));
-const sourceControls = rules(read("../../../pwa/src/app/pwa-controls.css"));
-const sourceTheme = rules(read("../../../pwa/src/app/pwa-theme.css"));
+// 4287cfc 发布基线的历史数据，仅用于回归，不参与应用运行或 npm 发布。
+const globals = rules(read("./fixtures/pre-extraction/globals.css"));
+const sourceControls = rules(read("./fixtures/pre-extraction/pwa-controls.css"));
+const sourceTheme = rules(read("./fixtures/pre-extraction/pwa-theme.css"));
 const scope = ".pwa-ui-scope ";
 const hover = "@media (hover: hover)";
 const mobile = "@media (max-width: 767.98px)";
@@ -164,8 +165,9 @@ test("Modal 重命名、合并声明及确认区桌面/手机映射", () => {
   equal(`${scope}.pwa-dialog-head`, originalHead);
   equal(`${scope}.pwa-dialog-head > .mantine-Modal-close`, `${originalHead} > .mantine-Modal-close`);
   equal(`${scope}:is(.pwa-dialog-title, .pwa-drawer-title)`, ".pwa-confirm-title");
-  expect(read("../../../pwa/src/components/pwa/confirm-action-dialog.tsx")).toContain("styles={{ body: { padding: 0 } }}");
-  expect(declarations(controls, `${scope}.pwa-dialog-body`)).toEqual({ padding: "0" }); // 源由实例 styles 提供。
+  // 提取前确认框实例显式 styles.body.padding = 0；作为历史约束保留，不读取当前宿主。
+  const historicalBodyPadding = "0";
+  expect(declarations(controls, `${scope}.pwa-dialog-body`)).toEqual({ padding: historicalBodyPadding }); // 源由实例 styles 提供。
   equal(`${scope}.pwa-confirm-description`, ".pwa-confirm-description");
   equal(`${scope}.pwa-confirm-error`, ".pwa-confirm-error");
   equal(`${scope}.pwa-confirm-actions`, ".pwa-confirm-actions");

@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Badge, Button, Drawer, Menu, Modal, Select, TextInput } from "@mantine/core";
 import { PwaUiProvider } from "./pwa-ui-provider";
+import { piReachTheme } from "@/lib/ui/pi-reach-theme";
 
 function renderPilot(): string {
   return renderToStaticMarkup(
@@ -46,5 +47,5 @@ test("Mantine PWA pilot renders core controls with the Pi Reach provider", () =>
   expect(html).toMatch(/mantine-Badge-root/);
   expect(html).toMatch(/data-variant="filled"/);
   expect(html).toMatch(/:root\[data-mantine-color-scheme="dark"\]/);
-  expect(html).toMatch(/--mantine-color-piReach-filled/);
+  expect(html).toMatch(new RegExp(`--mantine-color-${piReachTheme.primaryColor}-filled:\\s*var\\(--pwa-accent\\)`));
 });

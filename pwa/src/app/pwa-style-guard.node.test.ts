@@ -1,9 +1,10 @@
 // CSS 静态守卫：防止样式字面量回退，不替代盒模型、点击区域与行为测试。
 // 只扫描 pwa/src 下的 CSS；TSX 中的 Mantine props、内联样式与 theme 字面量不在范围内。
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+import { readStyles } from "@/test/node/foundation-styles";
 
 const SOURCE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const THEME_FILE = "app/pwa-theme.css";
@@ -104,7 +105,7 @@ const EXCEPTIONS: Exception[] = [
   { file: "app/globals.css", selector: ".pwa-message-list", property: "--pwa-timeline-pad-bottom", values: [88], reason: "消息区底部为浮动「最新」入口预留" },
   { file: "app/workspace-shell.css", selector: ".pwa-root .pwa-composer-hint-action", property: "margin-block", values: [-10], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-root .pwa-button.pwa-settings-back", property: "margin-left", values: [-8], reason: ALIGN },
-  { file: "app/globals.css", selector: ".pwa-ui-scope :is(.pwa-pairing-head, .pwa-rename-head, .pwa-confirm-head) > .mantine-Modal-close", property: "margin", values: [-10], reason: ALIGN },
+  { file: "app/globals.css", selector: ".pwa-ui-scope .pwa-dialog-head > .mantine-Modal-close", property: "margin", values: [-10], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-field-error svg", property: "margin-top", values: [1], reason: OPTICAL },
   { file: "app/globals.css", selector: ".pwa-pairing-methods", property: "margin", values: [-8], reason: ALIGN },
   { file: "app/globals.css", selector: ".pwa-runtime-notice .pwa-runtime-notice-dismiss", property: "margin", values: [-4], reason: ALIGN },
@@ -143,7 +144,7 @@ function cssFiles(directory: string): string[] {
 function declarations(): Declaration[] {
   return cssFiles(SOURCE_ROOT).sort().flatMap((path) => {
     const file = relative(SOURCE_ROOT, path);
-    const text = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const text = readStyles(path).replace(/\/\*[\s\S]*?\*\//g, "");
     return [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap((block) => {
       const selector = block[1].split(";").at(-1)!.trim().replace(/\s+/g, " ");
       return block[2].split(";").flatMap((raw) => {
@@ -159,7 +160,7 @@ function declarations(): Declaration[] {
 function hoverRulesOutsideHoverMedia(): HoverRule[] {
   return cssFiles(SOURCE_ROOT).sort().flatMap((path) => {
     const file = relative(SOURCE_ROOT, path);
-    const text = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const text = readStyles(path).replace(/\/\*[\s\S]*?\*\//g, "");
     const stack: string[] = [];
     const found: HoverRule[] = [];
     let head = "";
@@ -343,13 +344,15 @@ describe("CSS static guard", () => {
 
   test("button and inline action radii switch with the pointer type only in the theme and control density rules", () => {
     const definitions = all.filter((entry) => INPUT_RADII.has(entry.property));
-    const offenders = definitions.filter((entry) => ![THEME_FILE, "app/pwa-controls.css"].includes(entry.file)
+    const offenders = definitions.filter((entry) => ![THEME_FILE, "app/pwa-controls.css", "app/globals.css"].includes(entry.file)
       || !INPUT_RADII.get(entry.property)!.includes(entry.value)).map(keyOf);
     expect(offenders).toEqual([]);
     for (const [token, values] of INPUT_RADII) {
       // 主题默认按触控取胶囊；pwa-controls.css 在纯细指针时改为 8，存在粗指针时改回。
       expect(definitions.filter((entry) => entry.property === token).map((entry) => `${entry.file} ${entry.value}`), token)
-        .toEqual([`app/pwa-controls.css ${values[1]}`, `app/pwa-controls.css ${values[0]}`, `${THEME_FILE} ${values[0]}`]);
+        .toEqual(token === "--pwa-button-radius"
+          ? [`app/globals.css ${values[1]}`, `app/globals.css ${values[0]}`, `${THEME_FILE} ${values[0]}`]
+          : [`app/pwa-controls.css ${values[1]}`, `app/pwa-controls.css ${values[0]}`, `${THEME_FILE} ${values[0]}`]);
     }
   });
 
