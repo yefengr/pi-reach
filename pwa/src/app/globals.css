@@ -364,6 +364,8 @@ body:has(.pwa-root) { overflow: hidden; }
 .pwa-root .pwa-settings-choice .mantine-Radio-body { display: flex; align-items: center; gap: 10px; }
 .pwa-root .pwa-settings-choice .mantine-Radio-inner { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; }
 .pwa-root .pwa-settings-choice .mantine-Radio-radio { width: 100%; height: 100%; margin: 0; border-radius: 0; cursor: pointer; }
+/* 焦点由整行绘制，公共输入兜底不应再给视觉隐藏的 radio 画一圈。 */
+.pwa-root .pwa-settings-choice .mantine-Radio-radio:focus-visible { outline: none; }
 .pwa-root .pwa-settings-choice .mantine-Radio-labelWrapper { min-width: 0; flex: 1; }
 .pwa-root .pwa-settings-choice .mantine-Radio-label { display: block; padding: 0; color: var(--pwa-ink); line-height: var(--pwa-leading-ui); cursor: pointer; }
 .pwa-settings-choice-copy { display: flex; align-items: center; gap: 10px; }
