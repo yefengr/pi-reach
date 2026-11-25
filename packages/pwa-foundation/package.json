@@ -1,14 +1,13 @@
 {
   "name": "@yefengr/pwa-foundation",
-  "version": "0.0.1",
-  "description": "Shared safe-area CSS tokens and floating overlay middleware for React PWAs",
+  "version": "0.0.2",
+  "description": "Shared safe-area utilities, theme tokens and Mantine controls for React PWAs",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yefengr/pi-reach.git",
     "directory": "packages/pwa-foundation"
   },
-  "homepage": "https://github.com/yefengr/pi-reach/tree/pwa-foundation-v0.0.1/packages/pwa-foundation",
   "bugs": "https://github.com/yefengr/pi-reach/issues",
   "publishConfig": {
     "access": "public",
@@ -21,9 +20,12 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./foundation.css": "./foundation.css"
+    "./foundation.css": "./foundation.css",
+    "./theme.css": "./theme.css",
+    "./controls.css": "./controls.css",
+    "./mantine": { "types": "./dist/mantine.d.ts", "default": "./dist/mantine.js" }
   },
-  "files": ["dist", "foundation.css"],
+  "files": ["dist", "foundation.css", "theme.css", "controls.css", "CHANGELOG.md"],
   "scripts": {
     "build": "tsc",
     "prepack": "pnpm build && pnpm test",
@@ -31,11 +33,23 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "react": "^19.2.4"
+    "react": "^19.2.4",
+    "@mantine/core": "9.5.2",
+    "@mantine/hooks": "9.5.2",
+    "lucide-react": "1.33.0"
+  },
+  "peerDependenciesMeta": {
+    "@mantine/core": { "optional": true },
+    "@mantine/hooks": { "optional": true },
+    "lucide-react": { "optional": true }
   },
   "devDependencies": {
     "@types/react": "^19",
+    "@mantine/core": "9.5.2",
+    "@mantine/hooks": "9.5.2",
+    "lucide-react": "1.33.0",
     "react": "19.2.4",
+    "react-dom": "19.2.4",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

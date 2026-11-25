@@ -1,0 +1,211 @@
+/* 可选控件 token；不重置页面布局。 */
+:root,
+:root[data-mantine-color-scheme="light"] {
+  color-scheme: light;
+  --pwa-bg: #FFFFFF;
+  --pwa-surface: #FFFFFF;
+  --pwa-panel: #F7F7F7;
+  --pwa-hover: #EBEBEB;
+  --pwa-selected: #E5E5E5;
+  --pwa-neutral-active: #DEDEDE;
+  --pwa-disabled-bg: #F0F0F0;
+  --pwa-tonal: #EBEBEB;
+  --pwa-tonal-hover: #E0E0E0;
+  --pwa-tonal-active: #D6D6D6;
+  --pwa-ink: #2A2A2A;
+  --pwa-secondary: #606060;
+  --pwa-line: #E0E0E0;
+  --pwa-control-line: #878787;
+  --pwa-accent: #446396;
+  --pwa-accent-hover: #395687;
+  --pwa-accent-active: #2E4A78;
+  --pwa-on-accent: #FFFFFF;
+  --pwa-scrim: #00000047;
+  --pwa-shadow-color: #00000014;
+  --pwa-shadow-contact-color: #0000001F;
+  --pwa-error: #AE463E;
+  --pwa-error-wash: #F8ECEA;
+  --pwa-error-hover: #973B34;
+  --pwa-error-active: #82312C;
+  --pwa-on-status: #FFFFFF;
+}
+
+:root[data-mantine-color-scheme="dark"] {
+  color-scheme: dark;
+  --pwa-bg: #1E1E1E;
+  --pwa-surface: #2D2D2D;
+  --pwa-panel: #282828;
+  --pwa-hover: #353535;
+  --pwa-selected: #3A3A3A;
+  --pwa-neutral-active: #404040;
+  --pwa-disabled-bg: #2A2A2A;
+  --pwa-tonal: #404040;
+  --pwa-tonal-hover: #4A4A4A;
+  --pwa-tonal-active: #545454;
+  --pwa-ink: #F0F0F0;
+  --pwa-secondary: #BCBCBC;
+  --pwa-line: #464646;
+  --pwa-control-line: #848484;
+  --pwa-accent: #98B8E6;
+  --pwa-accent-hover: #A6C3ED;
+  --pwa-accent-active: #B4CEF4;
+  --pwa-on-accent: #142237;
+  --pwa-scrim: #0000008F;
+  --pwa-shadow-color: #00000047;
+  --pwa-shadow-contact-color: #00000052;
+  --pwa-error: #EFA39B;
+  --pwa-error-wash: #422F30;
+  --pwa-error-hover: #F4B2AC;
+  --pwa-error-active: #F8C4BD;
+  --pwa-on-status: #1E1E1E;
+}
+
+@media (prefers-color-scheme: dark) {
+:root:not([data-mantine-color-scheme]) {
+  color-scheme: dark;
+  --pwa-bg: #1E1E1E;
+  --pwa-surface: #2D2D2D;
+  --pwa-panel: #282828;
+  --pwa-hover: #353535;
+  --pwa-selected: #3A3A3A;
+  --pwa-neutral-active: #404040;
+  --pwa-disabled-bg: #2A2A2A;
+  --pwa-tonal: #404040;
+  --pwa-tonal-hover: #4A4A4A;
+  --pwa-tonal-active: #545454;
+  --pwa-ink: #F0F0F0;
+  --pwa-secondary: #BCBCBC;
+  --pwa-line: #464646;
+  --pwa-control-line: #848484;
+  --pwa-accent: #98B8E6;
+  --pwa-accent-hover: #A6C3ED;
+  --pwa-accent-active: #B4CEF4;
+  --pwa-on-accent: #142237;
+  --pwa-scrim: #0000008F;
+  --pwa-shadow-color: #00000047;
+  --pwa-shadow-contact-color: #00000052;
+  --pwa-error: #EFA39B;
+  --pwa-error-wash: #422F30;
+  --pwa-error-hover: #F4B2AC;
+  --pwa-error-active: #F8C4BD;
+  --pwa-on-status: #1E1E1E;
+}
+
+
+}
+
+:root {
+  --pwa-error-wash-hover: color-mix(in srgb, var(--pwa-error) 4%, var(--pwa-error-wash));
+  --pwa-font-ui: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  --pwa-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Noto Sans Mono", "DejaVu Sans Mono", monospace;
+  --pwa-text-meta: 13px;
+  --pwa-text-list: 14px;
+  --pwa-text-body: 16px;
+  --pwa-text-title: 18px;
+  --pwa-text-page: 24px;
+  --pwa-leading-body: 1.65;
+  --pwa-leading-ui: 1.4;
+  --pwa-leading-title: 1.25;
+  --pwa-weight-regular: 400;
+  --pwa-weight-strong: 600;
+  --pwa-icon-inline: 1em;
+  --pwa-icon-inline-stroke: 1.5;
+  --pwa-icon-inline-stroke-strong: 2;
+  --pwa-icon-control: 20px;
+  --pwa-icon-control-stroke: 1.8;
+  --pwa-radius-xs: 4px;
+  --pwa-radius-md: 8px;
+  --pwa-radius-lg: 12px;
+  --pwa-radius-xl: 16px;
+  --pwa-radius-2xl: 24px;
+  --pwa-radius-toast: 22px;
+  --pwa-radius-pill: 999px;
+  --pwa-space-2xs: 4px;
+  --pwa-space-xs: 8px;
+  --pwa-space-sm: 12px;
+  --pwa-space-md: 16px;
+  --pwa-space-lg: 24px;
+  --pwa-space-xl: 32px;
+  --pwa-space-2xl: 48px;
+  --pwa-shadow-float: 0 1px 2px var(--pwa-shadow-contact-color), 0 4px 16px var(--pwa-shadow-color);
+  --pwa-shadow-modal: 0 12px 32px var(--pwa-shadow-color);
+  --pwa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --pwa-ease-enter: cubic-bezier(0, 0, 0, 1);
+  --pwa-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  --pwa-ease-content: linear(0, 0.017, 0.06, 0.12, 0.189, 0.261, 0.334, 0.405, 0.472, 0.535, 0.592, 0.644, 0.691, 0.733, 0.771, 0.803, 0.832, 0.858, 0.88, 0.899, 0.915, 0.93, 0.942, 0.953, 0.962, 0.97, 0.976, 0.982, 0.987, 0.991, 0.994, 0.997, 1);
+  --pwa-tier-press: 90ms;
+  --pwa-tier-quick: 120ms;
+  --pwa-tier-leave: 200ms;
+  --pwa-tier-respond: 240ms;
+  --pwa-tier-appear: 400ms;
+  --pwa-duration-modal-in: var(--pwa-tier-appear);
+  --pwa-duration-modal-out: var(--pwa-tier-leave);
+  --pwa-duration-fade: var(--pwa-tier-quick);
+  --pwa-duration-press-in: var(--pwa-tier-press);
+  --pwa-duration-press-out: var(--pwa-tier-respond);
+  --pwa-duration-reduced: 120ms;
+  --pwa-press-icon-scale: 0.97;
+  --pwa-press-button-scale: 0.98;
+  --pwa-overlay-shift: 12px;
+  --pwa-motion-shift: 1;
+  --pwa-button-height: 44px;
+  --pwa-button-radius: var(--pwa-radius-toast);
+}
+
+:root[data-pwa-text-size="large"] {
+  --pwa-text-meta: 14px;
+  --pwa-text-list: 16px;
+  --pwa-text-body: 18px;
+  --pwa-text-title: 20px;
+  --pwa-text-page: 28px;
+}
+
+:root[data-pwa-text-size="xlarge"] {
+  --pwa-text-meta: 15px;
+  --pwa-text-list: 18px;
+  --pwa-text-body: 20px;
+  --pwa-text-title: 22px;
+  --pwa-text-page: 32px;
+}
+
+@media (pointer: coarse) {
+:root {
+  --pwa-text-meta: 14px;
+  --pwa-text-list: 16px;
+  --pwa-text-body: 17px;
+  --pwa-text-page: 28px;
+  --pwa-icon-control: 22px;
+  --pwa-icon-control-stroke: 1.636;
+}
+
+:root[data-pwa-text-size="large"] {
+  --pwa-text-meta: 15px;
+  --pwa-text-list: 18px;
+  --pwa-text-body: 19px;
+  --pwa-text-page: 30px;
+}
+
+:root[data-pwa-text-size="xlarge"] {
+  --pwa-text-meta: 16px;
+  --pwa-text-list: 20px;
+  --pwa-text-body: 21px;
+}
+
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+:root {
+  --pwa-motion-shift: 0;
+  --pwa-ease-content: var(--pwa-ease-standard);
+  --pwa-tier-press: var(--pwa-duration-reduced);
+  --pwa-tier-quick: var(--pwa-duration-reduced);
+  --pwa-tier-leave: var(--pwa-duration-reduced);
+  --pwa-tier-respond: var(--pwa-duration-reduced);
+  --pwa-tier-appear: var(--pwa-duration-reduced);
+}
+
+
+}
+
+.pwa-ui-scope { font-family: var(--pwa-font-ui); font-size: var(--pwa-text-body); font-weight: var(--pwa-weight-regular); line-height: var(--pwa-leading-body); }
