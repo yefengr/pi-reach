@@ -1,0 +1,103 @@
+name: PWA foundation npm
+
+on:
+  push:
+    branches: [main]
+    paths: [packages/pwa-foundation/package.json]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 已人工确认无同版本待审，将审核 tarball 提交 npm 待审（不直接发布）
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pwa-foundation-npm
+  cancel-in-progress: false
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      stage: ${{ steps.decide.outputs.stage }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Decide and enforce main-only execution
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          REQUEST_STAGE: ${{ inputs.stage }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == yefengr/pi-reach && "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          stage=false
+          if [[ "$EVENT" == push ]]; then
+            git cat-file -e "$BEFORE^{commit}"
+            previous="$(git show "$BEFORE:packages/pwa-foundation/package.json" | jq -er .version)"
+            current="$(jq -er .version packages/pwa-foundation/package.json)"
+            if [[ "$previous" != "$current" ]]; then stage=true; fi
+          elif [[ "$EVENT" == workflow_dispatch && "$REQUEST_STAGE" == true ]]; then
+            stage=true
+          fi
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: decide
+    if: needs.decide.outputs.stage == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Validate and pack only
+        env:
+          PWA_FOUNDATION_PACK_DIR: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash packages/pwa-foundation/publish-npm.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pwa-foundation-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          retention-days: 14
+      - run: echo '验证与打包完成，未上传 npm。制品包含 tarball、源码 SHA、文件清单与摘要。' >> "$GITHUB_STEP_SUMMARY"
+
+  stage:
+    needs: decide
+    if: >-
+      needs.decide.outputs.stage == 'true' &&
+      github.repository == 'yefengr/pi-reach' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Stage inspected tarball through OIDC
+        env:
+          PWA_FOUNDATION_PACK_DIR: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash packages/pwa-foundation/publish-npm.sh --stage
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: pwa-foundation-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pwa-foundation-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: ignore
+          retention-days: 14
+      - run: echo '请核对脚本结果：已公开版本会跳过；提交待审不等于公开。上传失败或结果不明时，先人工检查 npm 待审区，不要直接重跑。批准需要维护者 2FA。' >> "$GITHUB_STEP_SUMMARY"

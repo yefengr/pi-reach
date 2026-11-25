@@ -6,6 +6,14 @@ PWA 基础包：安全区与最小点击区 CSS 变量、浮层 shift 中间件�
 
 共享颜色、字体、间距、表面、动效、确认顺序与可访问性以 [公共设计与交互规范](DESIGN.md) 为唯一公共来源；本 README 只维护安装与接线契约。规范自 `0.0.3` 随包分发，旧版 `0.0.2` 不含 DESIGN.md，不回写该版本。
 
+## 维护与发布
+
+维护者可在 [PWA foundation npm 工作流](https://github.com/yefengr/pi-reach/actions/workflows/pwa-foundation-npm.yml)运行验证；手动运行的 `stage` 默认关闭，只检查类型、构建、测试并保存审核 tarball 与摘要，不上传 npm。也可在仓库中运行 `bash packages/pwa-foundation/publish-npm.sh`，本地临时包在退出时清理。
+
+新版本合入 `main` 且包版本变化时，工作流通过 GitHub OIDC 将同一个审核 tarball 提交 npm 待审；手动勾选 `stage` 前应确认没有同版本待审。待审不是公开发布，需维护者在 npm 用 2FA 批准。已公开版本跳过，不重传；上传失败或结果不明时，先检查 npm 待审区，不直接重跑。
+
+发布基础包不会自动升级消费者。消费端仍需显式更新 npm 精确版本与锁文件，并完成各自的界面和交互验证；本地验证制品不能代替正式 npm 消费。
+
 ## 安全区 API 边界
 
 - `useFloatingSafeMiddlewares` 只提供 `shift.padding`：对每侧取 5px 与安全区中的较大值。Popover、Menu 与 Combobox 可共用这组值；实际能否移动仍由浮层的定位、宽度和启用轴决定。例如 Mantine 上下定位且与锚点同宽时，默认关闭横向 shift。
