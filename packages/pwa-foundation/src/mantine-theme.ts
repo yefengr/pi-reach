@@ -1,0 +1,136 @@
+import { createElement } from "react";
+import { ActionIcon, Button, CloseButton, Drawer, createTheme, Modal, type CSSVariablesResolver, type MantineTransition } from "@mantine/core";
+import { X } from "lucide-react";
+
+
+/** 居中 Modal 宽度只由 Mantine size 决定（DESIGN「表单与叠层」）：表单类与快捷键取主题默认，确认类单独指定。 */
+export const PWA_DIALOG_SIZE = 480;
+export const PWA_CONFIRM_DIALOG_SIZE = 400;
+
+/**
+ * 居中 Modal 统一轻量进出：单层遮罩淡入，弹窗轻微位移并淡入；进入用 --pwa-duration-modal-in 与内容曲线，退出用 --pwa-duration-modal-out 与退出曲线，时长取值见 DESIGN「动效时长」。
+ * 退出期间不接收指针；焦点由 Mantine 在关闭开始时交还来源控件。减少动态效果时位移为 0，只保留淡化。
+ */
+export const pwaModalTransition = {
+  in: { opacity: 1, transform: "translateY(0)", "--pwa-modal-ease": "var(--pwa-ease-content)" },
+  out: { opacity: 0, transform: "translateY(calc(var(--pwa-overlay-shift) * var(--pwa-motion-shift, 1)))", pointerEvents: "none", "--pwa-modal-ease": "var(--pwa-ease-exit)" },
+  transitionProperty: "opacity, transform",
+} as MantineTransition;
+
+/**
+ * Mantine 负责基础组件行为；颜色、字号、间距、圆角与阴影取自 pwa-theme.css 的设计 token，
+ * 不另外维护与 token 平行的视觉取值。断点是媒体查询阈值，不能引用 CSS 变量，仍以 em 字面量与 768px 对应。
+ */
+export function createPwaTheme(modalInDuration: number, modalOutDuration: number) {
+  return createTheme({
+  primaryColor: "pwaFoundation",
+  // 0–9 为雾蓝色阶；浅色主题主色 6 = accent #446396，深色主题主色 3 = accent #98B8E6。
+  primaryShade: { light: 6, dark: 3 },
+  colors: {
+    pwaFoundation: [
+      "#EFF4FC",
+      "#DDE7F7",
+      "#BED2F3",
+      "#98B8E6",
+      "#7C9CD0",
+      "#5F7FB4",
+      "#446396",
+      "#395687",
+      "#2E4A78",
+      "#223A61",
+    ],
+  },
+  white: "#FFFFFF",
+  black: "#2A2A2A",
+  fontFamily: "var(--pwa-font-ui)",
+  fontFamilyMonospace: "var(--pwa-font-mono)",
+  headings: {
+    fontFamily: "var(--pwa-font-ui)",
+    fontWeight: "var(--pwa-weight-strong)",
+    sizes: {
+      h1: { fontSize: "var(--pwa-text-page)", lineHeight: "var(--pwa-leading-title)" },
+      h2: { fontSize: "var(--pwa-text-title)", lineHeight: "var(--pwa-leading-ui)" },
+      h3: { fontSize: "var(--pwa-text-body)", lineHeight: "var(--pwa-leading-ui)" },
+      h4: { fontSize: "var(--pwa-text-body)", lineHeight: "var(--pwa-leading-ui)" },
+      h5: { fontSize: "var(--pwa-text-body)", lineHeight: "var(--pwa-leading-ui)" },
+      h6: { fontSize: "var(--pwa-text-body)", lineHeight: "var(--pwa-leading-ui)" },
+    },
+  },
+  fontSizes: { xs: "var(--pwa-text-meta)", sm: "var(--pwa-text-list)", md: "var(--pwa-text-body)", lg: "var(--pwa-text-title)", xl: "var(--pwa-text-page)" },
+  lineHeights: { xs: "var(--pwa-leading-ui)", sm: "var(--pwa-leading-ui)", md: "var(--pwa-leading-body)", lg: "var(--pwa-leading-ui)", xl: "var(--pwa-leading-ui)" },
+  spacing: { "2xs": "var(--pwa-space-2xs)", xs: "var(--pwa-space-xs)", sm: "var(--pwa-space-sm)", md: "var(--pwa-space-md)", lg: "var(--pwa-space-lg)", xl: "var(--pwa-space-xl)", "2xl": "var(--pwa-space-2xl)" },
+  defaultRadius: "sm",
+  radius: { xs: "var(--pwa-radius-xs)", sm: "var(--pwa-radius-md)", md: "var(--pwa-radius-md)", lg: "var(--pwa-radius-lg)", xl: "var(--pwa-radius-lg)" },
+  shadows: {
+    xs: "var(--pwa-shadow-float)",
+    sm: "var(--pwa-shadow-float)",
+    md: "var(--pwa-shadow-float)",
+    lg: "var(--pwa-shadow-modal)",
+    xl: "var(--pwa-shadow-modal)",
+  },
+  // 单一断点 768px：sm 及以上为桌面布局。
+  breakpoints: { xs: "36em", sm: "48em", md: "62em", lg: "75em", xl: "88em" },
+  focusRing: "never",
+  // 减少动态效果由 pwa-theme.css 的全局规则统一处理：位移改为淡化，加载等状态动画照常运行。
+  respectReducedMotion: false,
+  cursorType: "pointer",
+  components: {
+    Button: Button.extend({ classNames: { root: "pwa-button" }, defaultProps: { size: "md", variant: "filled" } }),
+    ActionIcon: ActionIcon.extend({ classNames: { root: "pwa-icon-button" }, defaultProps: { size: "var(--pwa-hit-target)", variant: "subtle" } }),
+    // Modal、Drawer 与通知的关闭按钮改用 Lucide X，与其他图标同一线宽；Mantine 自带的关闭图标是另一套画法。
+    CloseButton: CloseButton.extend({ defaultProps: { icon: createElement(X, { size: 20, "aria-hidden": true }) } }),
+    // 标签在上、说明与错误在输入框下方。
+    TextInput: { classNames: { root: "pwa-input" }, defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
+    Textarea: { classNames: { root: "pwa-textarea" }, defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
+    Select: { classNames: { root: "pwa-select" }, defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
+    NativeSelect: { classNames: { root: "pwa-select" }, defaultProps: { size: "md", inputWrapperOrder: ["label", "input", "description", "error"] } },
+    Drawer: Drawer.extend({ classNames: { content: "pwa-drawer", header: "pwa-drawer-head", title: "pwa-drawer-title", close: "pwa-icon-button" } }),
+    Modal: Modal.extend({
+      classNames: { content: "pwa-dialog", header: "pwa-dialog-head", title: "pwa-dialog-title", body: "pwa-dialog-body", close: "pwa-icon-button", overlay: "pwa-scrim" },
+      defaultProps: {
+        centered: true,
+        size: PWA_DIALOG_SIZE,
+        transitionProps: { transition: pwaModalTransition, duration: modalInDuration, exitDuration: modalOutDuration, timingFunction: "var(--pwa-modal-ease, var(--pwa-ease-content))" },
+      },
+    }),
+
+  },
+  });
+}
+
+const sharedVariables = {
+  "--mantine-color-body": "var(--pwa-bg)",
+  "--mantine-color-text": "var(--pwa-ink)",
+  "--mantine-color-dimmed": "var(--pwa-secondary)",
+  "--mantine-color-default": "var(--pwa-surface)",
+  "--mantine-color-default-hover": "var(--pwa-hover)",
+  "--mantine-color-default-color": "var(--pwa-ink)",
+  "--mantine-color-default-border": "var(--pwa-line)",
+  "--mantine-color-placeholder": "var(--pwa-secondary)",
+  "--mantine-color-anchor": "var(--pwa-accent)",
+  "--mantine-color-error": "var(--pwa-error)",
+  "--mantine-color-primary-filled": "var(--pwa-accent)",
+  "--mantine-color-primary-filled-hover": "var(--pwa-accent-hover)",
+  "--mantine-color-primary-contrast": "var(--pwa-on-accent)",
+  // 浅色变体（选中、轻提示）只用中性底与正文色，主色留给操作。
+  "--mantine-color-primary-light": "var(--pwa-selected)",
+  "--mantine-color-primary-light-hover": "var(--pwa-hover)",
+  "--mantine-color-primary-light-color": "var(--pwa-ink)",
+  "--mantine-color-pwaFoundation-filled": "var(--pwa-accent)",
+  "--mantine-color-pwaFoundation-filled-hover": "var(--pwa-accent-hover)",
+  "--mantine-color-pwaFoundation-light": "var(--pwa-selected)",
+  "--mantine-color-pwaFoundation-light-hover": "var(--pwa-hover)",
+  "--mantine-color-pwaFoundation-light-color": "var(--pwa-ink)",
+  "--mantine-color-pwaFoundation-text": "var(--pwa-accent)",
+  "--mantine-color-disabled": "var(--pwa-disabled-bg)",
+  "--mantine-color-disabled-color": "var(--pwa-secondary)",
+  "--mantine-color-disabled-border": "var(--pwa-line)",
+  "--mantine-color-scheme-overlay": "var(--pwa-scrim)",
+};
+
+/** 明暗两套 Mantine 语义变量都指向同一组 token，token 自身按主题切换。 */
+export const pwaCssVariablesResolver: CSSVariablesResolver = () => ({
+  variables: {},
+  light: sharedVariables,
+  dark: sharedVariables,
+});

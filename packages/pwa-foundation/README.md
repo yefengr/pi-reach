@@ -1,6 +1,6 @@
 # @yefengr/pwa-foundation
 
-PWA 的安全区基础包：安全区与最小点击区 CSS 变量，以及浮层 shift 中间件。
+PWA 基础包：安全区与最小点击区 CSS 变量、浮层 shift 中间件，以及从 0.0.2 起提供的可选主题与 Mantine 控件样式。
 
 ## 公共规则
 
@@ -33,3 +33,56 @@ function Example() {
 ```
 
 它只定义 `--pwa-safe-top`、`--pwa-safe-right`、`--pwa-safe-bottom`、`--pwa-safe-left`（取 `env(safe-area-inset-*, 0px)`）与 `--pwa-hit-target: 44px`，不包含颜色、字体与断点。
+
+## 可选主题与控件（0.0.2）
+
+旧根入口与 `foundation.css` 不变，根入口不静态依赖 Mantine 或 Lucide。
+新增导出：`theme.css`、`controls.css` 和 `mantine`。
+后者导出 `createPwaTheme(modalInDuration: number, modalOutDuration: number)`、`usePwaTheme()`、`pwaCssVariablesResolver`、`pwaModalTransition`、`PWA_DIALOG_SIZE`（480）、`PWA_CONFIRM_DIALOG_SIZE`（400）。时长单位为毫秒。
+
+仅验证过 React 19.2.4、Mantine core/hooks 9.5.2、lucide-react 1.33.0。三个新 peer 均为 optional，使用 Mantine 入口时必须自行安装这些精确版本；仅使用安全区能力不需要安装。宿主使用 Mantine 所需的 react-dom。
+
+样式按以下顺序导入，宿主业务 CSS 最后导入：
+
+```tsx
+import "@mantine/core/styles.css";
+import "@yefengr/pwa-foundation/foundation.css";
+import "@yefengr/pwa-foundation/theme.css";
+import "@yefengr/pwa-foundation/controls.css";
+import { MantineProvider, Button, Modal } from "@mantine/core";
+import { LucideProvider } from "lucide-react";
+import { usePwaTheme, pwaCssVariablesResolver, PWA_CONFIRM_DIALOG_SIZE } from "@yefengr/pwa-foundation/mantine";
+
+function Ui({ opened, onClose, onConfirm }) {
+  const theme = usePwaTheme();
+  return <LucideProvider strokeWidth={1.5} absoluteStrokeWidth>
+    <MantineProvider theme={theme} cssVariablesResolver={pwaCssVariablesResolver}>
+      <div className="pwa-ui-scope">
+        <div id="overlay-root" />
+        <Modal opened={opened} onClose={onClose} title="确认操作" size={PWA_CONFIRM_DIALOG_SIZE}
+          portalProps={{ target: "#overlay-root" }}>
+          <p className="pwa-confirm-description">请确认后继续。</p>
+          <div className="pwa-confirm-actions">
+            <Button onClick={onConfirm}>确认</Button>
+            <Button variant="default" onClick={onClose}>取消</Button>
+          </div>
+        </Modal>
+      </div>
+    </MantineProvider>
+  </LucideProvider>;
+}
+```
+
+LucideProvider 使用实际线宽 1.5px（`absoluteStrokeWidth`）；按钮文字旁 `size={16}` 的行内图标跟随字号并使用 2px 实际线宽，独立图标按钮用 `size={20}`。主题关闭按钮自动使用 Lucide X。
+
+`theme.css` 在根元素提供明暗语义 token、系统字体、间距与三档字号；未指定 Mantine 主题属性时按系统暗色回退。字号通过根元素 `data-pwa-text-size="large"`／`"xlarge"` 选择，移除属性恢复标准档；选择逻辑与持久化由宿主负责。没有 body reset、应用高度或层级默认值。
+
+`controls.css` 仅作用于 `.pwa-ui-scope` 后代；Portal 节点也必须位于该作用域内。主题自动分配 Button 的 `pwa-button`、ActionIcon/关闭按钮的 `pwa-icon-button`、TextInput 的 `pwa-input`、Textarea 的 `pwa-textarea`、Select/NativeSelect 的 `pwa-select`，以及 Modal 的 `pwa-dialog`／`pwa-dialog-head`／`pwa-dialog-title`／`pwa-dialog-body`、Drawer 的 `pwa-drawer`／`pwa-drawer-head`／`pwa-drawer-title`。Modal 遮罩通过主题 `classNames.overlay` 自动使用 `pwa-scrim`，传入 `overlayProps`（如 `blur: 0`）不会丢失该默认类；宿主仍可明确覆盖样式。桌面外侧留白沿用 Mantine 默认值（5vw），24px 是内容内边距；手机外侧留白为 16px 与左右安全区的较大值。
+
+宿主显式使用的辅助类为 `pwa-confirm-description`、`pwa-confirm-error`、`pwa-confirm-actions`、`pwa-danger-confirm`。确认操作 DOM 必须确认在前、取消在后；手机纵向全宽，桌面横排，不用 CSS order 颠倒读屏顺序。主操作默认 filled，次级使用 default，危险入口使用 outline，最终危险确认使用 filled 加 `pwa-danger-confirm`，不要传 color。危险确认在 pending/禁用时仍保留实心错误色，这是沿用来源的外观，不代表宿主可以省略 pending 操作门禁。
+
+`usePwaTheme` 挂载后读取 CSS Modal 进入/退出时长并监听系统减少动态效果变化，SSR/首次水合回退 400/200ms；样式缺失且系统要求减少动态效果时回退 120ms。非浏览器消费者可直接调用工厂。本批不迁移完整动效框架。
+
+只迁移原生 `:active` 按钮绘制与 reduced-motion CSS，不提供 `usePwaButtonPressFeedback`；部分触控浏览器不保持 `:active` 时不保证与 Pi Reach 的触控补绘制相同。业务行按下、outside-tap guard、Drawer 转场/手势/导航、Portal 目标、层级、单层遮罩互斥、焦点返回、实例存活与 pending 门禁仍由宿主负责。
+
+只使用安全区的现有消费者可继续锁定 npm 0.0.1。使用新增主题与控件时，显式安装 npm 精确 0.0.2、所需 peer 和样式，接入 Provider/scope，并验证真实 Portal、键盘焦点、移动与桌面表现；本地制品验证不是正式升级，不要留下长期 file/workspace 依赖。
