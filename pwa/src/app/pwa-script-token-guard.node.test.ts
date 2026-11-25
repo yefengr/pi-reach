@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+import { readStyles, themeDeclarations } from "@/test/node/foundation-styles";
 import { CONTENT_ENTER_OPACITY } from "@/components/pwa/use-timeline-enter-fade";
 import { PWA_MOTION_FALLBACK_MS } from "@/lib/ui/motion-duration";
 import { piReachTheme } from "@/lib/ui/pi-reach-theme";
@@ -11,7 +12,7 @@ import { ICON_STROKE_WIDTH, ICON_STROKE_WIDTH_STRONG } from "@/lib/ui/icon-metri
 import { DESKTOP_LAYOUT_QUERY, MOBILE_LAYOUT_QUERY } from "@/lib/ui/viewport-queries";
 
 const SOURCE_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const THEME = readFileSync(new URL("./pwa-theme.css", import.meta.url), "utf8");
+const THEME = readStyles(new URL("./pwa-theme.css", import.meta.url));
 /** 开发展厅与测试夹具不属于产品界面。 */
 const EXCLUDED_DIRECTORIES = new Set(["dev", "test"]);
 const VIEWPORT_QUERIES_FILE = "lib/ui/viewport-queries.ts";
@@ -38,9 +39,7 @@ function lineOf(text: string, index: number): number {
 
 /** 主题中某个选择器块内的 token（与 pwa-theme-contrast 相同的取法）。 */
 function declarations(selector: string): Record<string, string> {
-  const open = THEME.indexOf("{", THEME.indexOf(selector));
-  const close = THEME.indexOf("}", open);
-  return Object.fromEntries([...THEME.slice(open + 1, close).matchAll(/(--pwa-[a-z-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()]));
+  return themeDeclarations(THEME, selector);
 }
 
 /** 常规动效下的毫秒时长：取每个 token 与档位的首次定义（减少动态效果的改写在其后），组件 token 经档位解析为毫秒。 */
@@ -170,7 +169,7 @@ describe("script token guard", () => {
   test("Mantine colors that must be literal match the theme tokens", () => {
     const light = { ...declarations("\n:root {"), ...declarations(':root[data-mantine-color-scheme="light"] {') };
     const dark = declarations(':root[data-mantine-color-scheme="dark"] {');
-    const shades = piReachTheme.colors?.piReach ?? [];
+    const shades = piReachTheme.colors?.[piReachTheme.primaryColor ?? ""] ?? [];
     expect([piReachTheme.white, piReachTheme.black]).toEqual([light["--pwa-bg"], light["--pwa-ink"]]);
     expect(piReachTheme.primaryShade).toEqual({ light: 6, dark: 3 });
     expect([shades[6], shades[7], shades[8]]).toEqual([light["--pwa-accent"], light["--pwa-accent-hover"], light["--pwa-accent-active"]]);

@@ -1,25 +1,4 @@
-/* 微交互只改变绘制层；覆盖 Mantine 的根节点 active 位移，命中区与焦点轮廓保持原位。 */
-.pwa-ui-scope .pwa-button:active,
-.pwa-ui-scope .pwa-icon-button:active { transform: none; }
-.pwa-ui-scope .pwa-root .pwa-icon-button::before {
-  transition: transform var(--pwa-duration-press-out) var(--pwa-ease-content), background-color var(--pwa-duration-fade) var(--pwa-ease-standard), border-color var(--pwa-duration-fade) var(--pwa-ease-standard);
-}
-.pwa-ui-scope .pwa-button .mantine-Button-inner,
-.pwa-ui-scope .pwa-icon-button .mantine-ActionIcon-icon {
-  /* 松开以内容曲线从容回弹；按下仍是标准曲线的短时长（见下方按下态）。 */
-  transition: transform var(--pwa-duration-press-out) var(--pwa-ease-content);
-}
-.pwa-ui-scope .pwa-root .pwa-icon-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled])::before,
-.pwa-ui-scope .pwa-icon-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) .mantine-ActionIcon-icon {
-  transform: scale(var(--pwa-press-icon-scale));
-  transition-duration: var(--pwa-duration-press-in);
-  transition-timing-function: var(--pwa-ease-standard);
-}
-.pwa-ui-scope .pwa-button:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) .mantine-Button-inner {
-  transform: scale(var(--pwa-press-button-scale));
-  transition-duration: var(--pwa-duration-press-in);
-  transition-timing-function: var(--pwa-ease-standard);
-}
+/* 基础按钮按压绘制由公共 controls.css 提供；以下保留 Reach 行反馈。 */
 /* 行类按下态（触屏）：usePwaPressFeedback 延迟标记 data-pwa-pressed，滚动起手不闪；底色统一为 neutral-active，
    盖过 hover 与 selected。延迟结束即直接显示、不再淡入；松开后标记 data-pwa-press-release，以 press-out 淡出。
    有真实悬停的设备仍用各自的 :active 规则。 */
@@ -34,22 +13,6 @@
 .pwa-ui-scope .pwa-root .pwa-menu-motion .mantine-Menu-item[data-menu-item][data-pwa-press-release]::before,
 .pwa-ui-scope .pwa-root .pwa-composer-model[data-pwa-press-release]::before,
 .pwa-ui-scope .pwa-root .pwa-session-trigger[data-pwa-press-release] .pwa-session-trigger-icon::before { transition: background-color var(--pwa-duration-press-out) var(--pwa-ease-standard); }
-.pwa-ui-scope .pwa-root .pwa-icon-button:is(:disabled, [data-disabled])::before,
-.pwa-ui-scope .pwa-icon-button:is(:disabled, [data-disabled]) .mantine-ActionIcon-icon,
-.pwa-ui-scope .pwa-button:is(:disabled, [data-disabled]) .mantine-Button-inner {
-  transform: none;
-  transition-duration: 0ms;
-}
-
-/* 鼠标移出时撤销 :active 绘制；触控显式状态由 pointercancel 等原生事件清理。 */
-@media (hover: hover) {
-  .pwa-ui-scope .pwa-root .pwa-icon-button:active:not(:hover):not(:focus-visible)::before,
-  .pwa-ui-scope .pwa-icon-button:active:not(:hover):not(:focus-visible) .mantine-ActionIcon-icon,
-  .pwa-ui-scope .pwa-button:active:not(:hover):not(:focus-visible) .mantine-Button-inner {
-    transform: none;
-    transition-duration: 0ms;
-  }
-}
 
 /* 从 Mantine 实际定位结果而不是调用时的预设方向推导原点：缩放从触发按钮所在的一角展开，翻转后仍朝向按钮。 */
 .pwa-menu-motion { transform-origin: top center; }
@@ -98,8 +61,6 @@
     --pwa-menu-row-padding: 4px;
     --pwa-navigation-row-padding: 4px;
     --pwa-menu-visual-inset: 2px;
-    --pwa-button-height: 36px;
-    --pwa-button-radius: var(--pwa-radius-md);
     --pwa-chip-radius: var(--pwa-radius-md);
   }
 }
@@ -109,8 +70,6 @@
     --pwa-menu-row-padding: 6px;
     --pwa-navigation-row-padding: 6px;
     --pwa-menu-visual-inset: 0px;
-    --pwa-button-height: var(--pwa-hit-target);
-    --pwa-button-radius: var(--pwa-radius-toast);
     --pwa-chip-radius: var(--pwa-radius-pill);
   }
 }
@@ -118,9 +77,4 @@
 @media (prefers-reduced-motion: reduce) {
   /* Mantine 只在 mounted 切换时更新缓存时长；当前菜单也必须立即响应系统偏好。 */
   .pwa-menu-motion[style] { transition-duration: var(--pwa-duration-fade) !important; }
-  .pwa-ui-scope .pwa-root .pwa-icon-button:is(:active, [data-pwa-pressed])::before,
-  .pwa-ui-scope .pwa-icon-button:is(:active, [data-pwa-pressed]) .mantine-ActionIcon-icon,
-  .pwa-ui-scope .pwa-button:is(:active, [data-pwa-pressed]) .mantine-Button-inner {
-    transform: none !important;
-  }
 }

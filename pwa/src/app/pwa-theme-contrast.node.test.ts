@@ -1,16 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
+import { readStyles, themeDeclarations } from "@/test/node/foundation-styles";
 
-const css = readFileSync(new URL("./pwa-theme.css", import.meta.url), "utf8");
+const css = readStyles(new URL("./pwa-theme.css", import.meta.url));
 
 function declarations(selector: string): Record<string, string> {
-  const start = css.indexOf(selector);
-  if (start < 0) throw new Error(`missing ${selector}`);
-  const open = css.indexOf("{", start);
-  const close = css.indexOf("}", open);
-  const tokens: Record<string, string> = {};
-  for (const match of css.slice(open + 1, close).matchAll(/(--pwa-[a-z-]+):\s*([^;]+);/g)) tokens[match[1]!] = match[2]!.trim();
-  return tokens;
+  return themeDeclarations(css, selector);
 }
 
 const shared = declarations("\n:root {");
