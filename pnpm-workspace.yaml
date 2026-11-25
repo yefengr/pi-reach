@@ -49,3 +49,4 @@ overrides:
 minimumReleaseAgeExclude:
   - '@yefengr/pwa-foundation@0.0.1'
   - '@yefengr/pwa-foundation@0.0.2'
+  - '@yefengr/pwa-foundation@0.0.3'
