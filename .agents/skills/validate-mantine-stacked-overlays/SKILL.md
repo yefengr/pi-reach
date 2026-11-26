@@ -39,7 +39,7 @@ description: 在 Pi Reach PWA 中实现或审查 Mantine Modal、Drawer、Menu�
 - `Drawer.Content` 的 class 可能同时落在 inner 与 content；尺寸、纵向 flex 和定位用实际节点与 Styles API 核对。Group 的内联 flex 可能覆盖低特异性移动 CSS，检查 computed style 而不只看截图。
 - 全屏外框高度不证明正文可滚动。核对 content 的纵向 flex、header 不收缩、正文 `min-height: 0` 与剩余高度；使用超出视口的真实内容实际滚到末尾，再验焦点和关闭。
 - 独立 Browser 测试加载所需组件样式；字体与 font 简写使用有效系统字体 fallback。
-- Menu 与 Popover 以触发按钮为原点缩放进出，命令菜单切换子视图时面板高度另有过渡（期间 `overflow: hidden`）：量几何、命中区或滚动前先等不透明度到 1、`getAnimations()` 为空，不在进入途中断言尺寸。进入回调触发时 CSS 缩放仍可能未归位；用 `getBoundingClientRect()` 差值调整 `scrollTop` 时须按当前缩放比例换回布局像素，不能用放宽一像素断言掩盖目录条目被裁切。
+- Menu 与 Popover 以触发按钮为原点缩放进出，命令菜单切换子视图时面板高度另有过渡（期间 `overflow: hidden`）：量几何、命中区或滚动前先等不透明度到 1、实际缩放归位且 `getAnimations()` 为空，不在进入途中断言尺寸。只等待一次当前动画列表的 `finished` 可能漏过随后启动的过渡，进入回调也不证明 CSS 缩放已归位；用 `getBoundingClientRect()` 差值调整 `scrollTop` 时须按当前缩放比例换回布局像素，不能用放宽一像素断言掩盖目录条目被裁切。
 - 复用菜单宽度变量前确认其定义作用域覆盖当前 Portal 面板；只在其他菜单 class 中定义的变量不会随 `width` 引用一起生效。目录用短标题和长标题分别量宽，避免内容自适应掩盖尺寸失效；同时核对标题、关闭入口及关闭后的回焦。
 - 越界阻尼只用于不贴屏幕边缘的表面（Toast）。左右 Drawer、设置页、移动导航和贴底边的电脑选择底部面板朝关闭的反方向越过原位时必须停在原位：先朝关闭方向拖过方向锁定，再反向拖过起点，核对表面贴边的一侧仍与屏幕边缘重合，不露出背后内容。
 - Drawer 在等待下一帧打开时可能已经挂载。跨断点取消打开时，直接释放预挂载实例和入口门禁，因为它还没有退出回调。已打开的 Drawer 若失去会话，立即撤下旧状态，让外壳走完退出并释放 history 与入口门禁。
