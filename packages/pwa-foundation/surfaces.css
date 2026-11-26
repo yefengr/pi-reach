@@ -1,0 +1,21 @@
+/* 可选视觉角色；不接管布局、Portal、焦点或业务状态。 */
+.pwa-ui-scope .pwa-surface-card {
+  border: 0;
+  background: var(--pwa-card);
+  box-shadow: none;
+  border-radius: var(--pwa-radius-xl);
+}
+
+.pwa-ui-scope .pwa-surface-float {
+  border: var(--pwa-hairline) solid var(--pwa-edge);
+  background: var(--pwa-surface);
+  box-shadow: var(--pwa-shadow-float);
+  border-radius: var(--pwa-radius-lg);
+}
+
+.pwa-ui-scope .pwa-surface-panel {
+  border: var(--pwa-hairline) solid var(--pwa-edge);
+  background: var(--pwa-panel);
+  box-shadow: var(--pwa-shadow-panel);
+  border-radius: var(--pwa-radius-xl);
+}

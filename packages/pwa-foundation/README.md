@@ -6,6 +6,47 @@ PWA 基础包：安全区与最小点击区 CSS 变量、浮层 shift 中间件�
 
 共享颜色、字体、间距、表面、动效、确认顺序与可访问性以 [公共设计与交互规范](DESIGN.md) 为唯一公共来源；本 README 只维护安装与接线契约。规范自 `0.0.3` 随包分发，旧版 `0.0.2` 不含 DESIGN.md，不回写该版本。
 
+## 动效与触控辅助（0.0.4）
+
+本节及下方表面能力自 `0.0.4` 提供，`0.0.3` 不包含它们。版本公开状态以 npm 为准，不得把本地制品冒充正式消费，也不能上传新候选覆盖旧版本。
+
+- 根入口 `readPwaMotionDuration(token, fallback?, root?)`、`resolvePwaMotionDuration(style, token)`、`usePwaMotionDuration(token, fallback?, root?)` 读取时长；通用 fallback map 为 `PWA_MOTION_FALLBACK_MS`。宿主专属 token 显式传 fallback。支持毫秒、秒和有界 token 引用，非法值回退；hook 首次 SSR/水合采用普通回退，挂载后读 CSS 并响应系统减少动态效果，卸载清理监听。可选 root 使用其所属窗口。
+- `pwaStandardEasing(element)`、`pwaContentEasing(element)`、`pwaMotionShiftDisabled(element)` 读取基础曲线与位移开关；不负责逐帧滚动、跟手或路由编排。
+- `mantine` 入口增加 `pwaFadeTransition`、`pwaMenuTransition`、`pwaDrawerTransitions`（四向）、`PWA_DRAWER_EASE`、`usePwaMenuTransition()` 和 `usePwaDrawerTransition(position)`。后者返回可直接传给 Mantine `transitionProps` 的值；宿主仍负责 opened、Portal、关闭门禁和焦点。
+- `installPressFeedback(scope, { buttonSelector, rowSelector?, shouldIgnore? })` 仅补该显式 scope 内的触控/笔按压绘制，不阻止原生点击或滚动。按钮即时反馈，行延迟 100ms；移动超过 10px、滚动、取消、失焦、隐藏、禁用或移除会清理，短触行补显 120ms，再用 press-out 淡出。卸载调用返回的释放函数。通用行外观显式添加 `pwa-press-row`；宿主可自行将标记映射到业务表面或伪元素。
+- `installOutsideTapGuard(scope, { getTopFloating, isOwnTrigger })` 只保护宿主明确选定的无罩浮层，按下事件仍交给 Mantine 关闭；只取消同一次触摸外按随后产生的点按及焦点，不吞鼠标/键盘、浮层内部或自己的触发器。移动/滚动/取消/失焦/隐藏/新按下及卸载撤销。`outsideTapSwallowed(event)` 可用作按压辅助的 `shouldIgnore`。
+- `readSystemBodySize(root?)`、`supportsSystemTextSize(root?)` 与 `textSizeForSystemBody(px)` 提供 WebKit 系统字号实测及三档映射（18/20px 分界，不能读取时标准档）。探针无论成功或异常均移除；它们不存储偏好、不注册应用跟踪，应用的身份、存储键、可见性恢复与设置入口仍由宿主维护。
+
+上述安装器没有默认全页目标或业务选择器，须在客户端为自己拥有的根安装，生命周期结束释放。没有无罩浮层的应用不需要安装外点按保护；原生 select 不需要此辅助。
+
+### 边框与表面
+
+本节 API 自 `0.0.4` 提供。表面样式在 `theme.css` 后、宿主 CSS 前导入：
+
+```tsx
+import "@yefengr/pwa-foundation/surfaces.css";
+import { installHairlineDetection } from "@yefengr/pwa-foundation";
+
+// 在客户端启动时调用；React effect 可直接返回此释放函数。
+const release = installHairlineDetection(document.documentElement);
+// 宿主卸载或热更新清理时：
+release();
+```
+
+根入口导出 `HAIRLINE_ATTRIBUTE`（`data-pwa-hairline`）、`detectHairline(root?: HTMLElement): boolean`、`installHairlineDetection(root?: HTMLElement): () => void`。省略 root 时使用当前 document 的根元素；SSR 检测返回 false、安装返回空释放函数，不在模块加载时读取 DOM。指定 root 时探针与监听使用其 ownerDocument/defaultView；标记可放在该根上，但包主题档位选择器针对 document 根元素。
+
+`detectHairline` 是一次性实测并更新标记，不安装监听；只有实测高度大于 0 且小于 1 才启用半像素，隐藏、零高度或检测异常均回退常规档。安装会立即检测，随后在 resize 和分辨率变化时重测、重绑当前密度查询，不按 DPR 推断支持。相同 root 重复安装共享监听，各释放函数幂等，最后一份释放移除监听并恢复首次安装前的属性和值；安装期间显式 detect 改变标记也不改变这个恢复基准。
+
+`theme.css` 新增 `card`、`separator-regular/hairline`、`edge-regular/hairline`、`hairline`、`separator`、`edge`、`shadow-panel`、`green/green-wash` 与 `amber/amber-wash`（均为 `--pwa-*` 变量）。最后两组只是颜色，不定义成功、运行等业务状态枚举；宿主自行映射。
+
+可选 `surfaces.css` 只提供 `.pwa-ui-scope` 后代中的三个视觉角色：
+
+- `pwa-surface-card`：card 底，无边框与阴影，16px 圆角；块级嵌入内容由宿主覆盖为 `var(--pwa-radius-lg)`（12px）。
+- `pwa-surface-float`：surface 底，实测档位 edge 细框，float 阴影，12px 圆角。
+- `pwa-surface-panel`：panel 底，实测档位 edge 细框，更轻的 panel 阴影（深色 none），16px 圆角。
+
+这些不是业务组件，不自动添加到 Mantine Modal/Drawer，不改变已有控件的 1px 轮廓与 2px 焦点，也不接管 Portal、层级或生命周期。真实 Portal 使用这些角色时仍须位于 scope 内。
+
 ## 维护与发布
 
 维护者可在 [PWA foundation npm 工作流](https://github.com/yefengr/pi-reach/actions/workflows/pwa-foundation-npm.yml)运行验证；手动运行的 `stage` 默认关闭，只检查类型、构建、测试并保存审核 tarball 与摘要，不上传 npm。也可在仓库中运行 `bash packages/pwa-foundation/publish-npm.sh`，本地临时包在退出时清理。
@@ -103,6 +144,6 @@ LucideProvider 使用实际线宽 1.5px（`absoluteStrokeWidth`）；按钮文�
 
 `usePwaTheme` 挂载后读取 CSS Modal 进入/退出时长并监听系统减少动态效果变化，SSR/首次水合回退 400/200ms；样式缺失且系统要求减少动态效果时回退 120ms。非浏览器消费者可直接调用工厂。本批不迁移完整动效框架。
 
-只迁移原生 `:active` 按钮绘制与 reduced-motion CSS，不提供 `usePwaButtonPressFeedback`；部分触控浏览器不保持 `:active` 时不保证与 Pi Reach 的触控补绘制相同。业务行按下、outside-tap guard、Drawer 转场/手势/导航、Portal 目标、层级、单层遮罩互斥、焦点返回、实例存活与 pending 门禁仍由宿主负责。
+`0.0.2`／`0.0.3` 仅提供原生 `:active` 绘制。`0.0.4` 增加本页开头的显式触控安装器及普通 Drawer 转场；宿主需传入自己的作用域与目标，不提供自动侵入整页的 `usePwaButtonPressFeedback`。业务行表面映射、手势/导航、Portal 目标、层级、单层遮罩互斥、焦点返回、实例存活与 pending 门禁仍由宿主负责。
 
-只使用安全区的现有消费者可继续锁定 npm 0.0.1。使用主题与控件时，显式安装 npm 精确版本（本版为 0.0.3）、所需 peer 和样式，接入 Provider/scope，并验证真实 Portal、键盘焦点、移动与桌面表现；本地制品验证不是正式升级，不要留下长期 file/workspace 依赖。
+只使用安全区的现有消费者可继续锁定 npm 0.0.1。使用主题与控件时，显式安装 npm 精确版本（本版为 0.0.4）、所需 peer 和样式，接入 Provider/scope，并验证真实 Portal、键盘焦点、移动与桌面表现；本地制品验证不是正式升级，不要留下长期 file/workspace 依赖。

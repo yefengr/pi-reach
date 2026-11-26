@@ -89,7 +89,15 @@ test("所有提取 token 按原选择器及媒体 scope 比较，而非任意位
     const tokens = Object.fromEntries(Object.entries(rule.declarations).filter(([key]) => key.startsWith("--pwa-")));
     if (!Object.keys(tokens).length) continue;
     const original = declarations(sourceTheme, rule.selector, rule.media);
-    for (const [key, value] of Object.entries(tokens)) expect(original[key], `${rule.media} ${rule.selector} ${key}`).toBe(value);
+    // B 候选使用通用视觉名称，历史基线保持原业务名；其余 token 仍逐项同名比较。
+    const renamed: Record<string, string> = {
+      "--pwa-shadow-panel": "--pwa-shadow-sidebar",
+      "--pwa-green": "--pwa-complete",
+      "--pwa-green-wash": "--pwa-complete-wash",
+      "--pwa-amber": "--pwa-running",
+      "--pwa-amber-wash": "--pwa-running-wash",
+    };
+    for (const [key, value] of Object.entries(tokens)) expect(original[renamed[key] ?? key], `${rule.media} ${rule.selector} ${key}`).toBe(value);
   }
   // 防止删除某个主题/字号媒体分支后，逐条循环空过。
   for (const media of ["", "@media (pointer: coarse)"]) {

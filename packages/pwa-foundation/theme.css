@@ -5,6 +5,16 @@
   --pwa-bg: #FFFFFF;
   --pwa-surface: #FFFFFF;
   --pwa-panel: #F7F7F7;
+  --pwa-card: var(--pwa-panel);
+  --pwa-separator-regular: #00000014;
+  --pwa-separator-hairline: #0000001F;
+  --pwa-edge-regular: #0000001F;
+  --pwa-edge-hairline: #00000033;
+  --pwa-shadow-panel: 0 1px 2px #00000014, 0 2px 8px #0000000A;
+  --pwa-green: #347953;
+  --pwa-green-wash: #EAF3EC;
+  --pwa-amber: #90611F;
+  --pwa-amber-wash: #F9F2E6;
   --pwa-hover: #EBEBEB;
   --pwa-selected: #E5E5E5;
   --pwa-neutral-active: #DEDEDE;
@@ -31,6 +41,16 @@
 }
 
 :root[data-mantine-color-scheme="dark"] {
+  --pwa-card: var(--pwa-surface);
+  --pwa-separator-regular: #FFFFFF1F;
+  --pwa-separator-hairline: #FFFFFF29;
+  --pwa-edge-regular: #FFFFFF29;
+  --pwa-edge-hairline: #FFFFFF3D;
+  --pwa-shadow-panel: none;
+  --pwa-green: #95CBA8;
+  --pwa-green-wash: #26392E;
+  --pwa-amber: #DFBA77;
+  --pwa-amber-wash: #3D3528;
   color-scheme: dark;
   --pwa-bg: #1E1E1E;
   --pwa-surface: #2D2D2D;
@@ -62,6 +82,16 @@
 
 @media (prefers-color-scheme: dark) {
 :root:not([data-mantine-color-scheme]) {
+  --pwa-card: var(--pwa-surface);
+  --pwa-separator-regular: #FFFFFF1F;
+  --pwa-separator-hairline: #FFFFFF29;
+  --pwa-edge-regular: #FFFFFF29;
+  --pwa-edge-hairline: #FFFFFF3D;
+  --pwa-shadow-panel: none;
+  --pwa-green: #95CBA8;
+  --pwa-green-wash: #26392E;
+  --pwa-amber: #DFBA77;
+  --pwa-amber-wash: #3D3528;
   color-scheme: dark;
   --pwa-bg: #1E1E1E;
   --pwa-surface: #2D2D2D;
@@ -95,6 +125,9 @@
 }
 
 :root {
+  --pwa-hairline: 1px;
+  --pwa-separator: var(--pwa-separator-regular);
+  --pwa-edge: var(--pwa-edge-regular);
   --pwa-error-wash-hover: color-mix(in srgb, var(--pwa-error) 4%, var(--pwa-error-wash));
   --pwa-font-ui: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
   --pwa-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Noto Sans Mono", "DejaVu Sans Mono", monospace;
@@ -138,6 +171,25 @@
   --pwa-tier-leave: 200ms;
   --pwa-tier-respond: 240ms;
   --pwa-tier-appear: 400ms;
+  --pwa-tier-short: 160ms;
+  --pwa-tier-return: 280ms;
+  --pwa-tier-fade-in: 320ms;
+  --pwa-tier-panel: 360ms;
+  --pwa-duration-drawer: var(--pwa-tier-panel);
+  --pwa-duration-drawer-out: var(--pwa-tier-return);
+  --pwa-duration-collapse-in: var(--pwa-tier-appear);
+  --pwa-duration-collapse-out: var(--pwa-tier-return);
+  --pwa-duration-collapse-settle: var(--pwa-tier-return);
+  --pwa-duration-menu-in: var(--pwa-tier-respond);
+  --pwa-duration-menu-out: var(--pwa-tier-short);
+  --pwa-duration-menu-resize: var(--pwa-tier-return);
+  --pwa-duration-menu-view: var(--pwa-tier-leave);
+  --pwa-duration-feedback: var(--pwa-tier-short);
+  --pwa-duration-toggle: var(--pwa-tier-return);
+  --pwa-duration-toggle-track: var(--pwa-tier-leave);
+  --pwa-duration-appearance: var(--pwa-tier-fade-in);
+  --pwa-duration-content: var(--pwa-tier-fade-in);
+  --pwa-menu-scale: 0.9;
   --pwa-duration-modal-in: var(--pwa-tier-appear);
   --pwa-duration-modal-out: var(--pwa-tier-leave);
   --pwa-duration-fade: var(--pwa-tier-quick);
@@ -150,6 +202,12 @@
   --pwa-motion-shift: 1;
   --pwa-button-height: 44px;
   --pwa-button-radius: var(--pwa-radius-toast);
+}
+
+:root[data-pwa-hairline] {
+  --pwa-hairline: 0.5px;
+  --pwa-separator: var(--pwa-separator-hairline);
+  --pwa-edge: var(--pwa-edge-hairline);
 }
 
 :root[data-pwa-text-size="large"] {
@@ -203,6 +261,10 @@
   --pwa-tier-leave: var(--pwa-duration-reduced);
   --pwa-tier-respond: var(--pwa-duration-reduced);
   --pwa-tier-appear: var(--pwa-duration-reduced);
+  --pwa-tier-short: var(--pwa-duration-reduced);
+  --pwa-tier-return: var(--pwa-duration-reduced);
+  --pwa-tier-fade-in: var(--pwa-duration-reduced);
+  --pwa-tier-panel: var(--pwa-duration-reduced);
 }
 
 

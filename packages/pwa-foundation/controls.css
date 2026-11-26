@@ -30,12 +30,14 @@
 @media (hover: hover) { .pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-ink); background: transparent; } }
 @media (hover: hover) { .pwa-ui-scope .pwa-icon-button:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-hover); } }
 .pwa-ui-scope .pwa-icon-button:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-neutral-active); }
+.pwa-ui-scope .pwa-icon-button[data-pwa-pressed]:not(:disabled):not([data-disabled])::before { background: var(--pwa-neutral-active); }
 /* 实心图标按钮：常显直径 36 的强调色圆。 */
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"] { color: var(--pwa-on-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { color: var(--pwa-on-accent); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]::before { background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:active:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-active); }
+.pwa-ui-scope .pwa-icon-button[data-variant="filled"][data-pwa-pressed]:not(:disabled):not([data-disabled])::before { background: var(--pwa-accent-active); }
 .pwa-ui-scope .pwa-icon-button:disabled,
 .pwa-ui-scope .pwa-icon-button[data-disabled] { color: var(--pwa-secondary); cursor: default; }
 .pwa-ui-scope .pwa-icon-button[data-variant="filled"]:disabled::before,
@@ -51,10 +53,12 @@
 .pwa-ui-scope .pwa-button[data-variant="filled"] { border-color: var(--pwa-accent); color: var(--pwa-on-accent); background: var(--pwa-accent); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="filled"]:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-hover); background: var(--pwa-accent-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="filled"]:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
+.pwa-ui-scope .pwa-button[data-variant="filled"][data-pwa-pressed]:not(:disabled):not([data-disabled]) { border-color: var(--pwa-accent-active); background: var(--pwa-accent-active); }
 /* 次级按钮只用 default 变体：无边框的 tonal 色调底、ink 文字；浅色下 surface 与 bg 同为白色，不能靠细边识别。 */
 .pwa-ui-scope .pwa-button[data-variant="default"] { border-color: transparent; color: var(--pwa-ink); background: var(--pwa-tonal); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="default"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-tonal-hover); } }
 .pwa-ui-scope .pwa-button[data-variant="default"]:active:not(:disabled):not([data-disabled]) { background: var(--pwa-tonal-active); }
+.pwa-ui-scope .pwa-button[data-variant="default"][data-pwa-pressed]:not(:disabled):not([data-disabled]) { background: var(--pwa-tonal-active); }
 .pwa-ui-scope .pwa-button[data-variant="transparent"] { padding: 0 10px; border-color: transparent; color: var(--pwa-accent); background: transparent; }
 @media (hover: hover) { .pwa-ui-scope .pwa-button[data-variant="transparent"]:hover:not(:disabled):not([data-disabled]) { background: var(--pwa-hover); } }
 /* outline 变体只用于危险入口（会弹出确认的操作），不作普通次级按钮；外观为无边框的错误色轻底与错误色文字。 */
@@ -94,7 +98,13 @@
   transition-duration: 0ms;
 }
 
-/* 鼠标移出时撤销原生 :active 绘制。本包不安装触控补绘制监听器。 */
+/* 行反馈由宿主显式 opt-in；不绑定导航、菜单等业务选择器。 */
+.pwa-ui-scope .pwa-press-row:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]):not([aria-disabled="true"]) { background: var(--pwa-neutral-active); transition-duration: 0ms; }
+.pwa-ui-scope .pwa-press-row[data-pwa-press-release] { transition: background-color var(--pwa-duration-press-out) var(--pwa-ease-standard); }
+.pwa-ui-scope .pwa-button[data-variant="transparent"]:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) { background: var(--pwa-neutral-active); }
+.pwa-ui-scope .pwa-button[data-variant="outline"]:is(:active, [data-pwa-pressed]):not(:disabled):not([data-disabled]) { background: var(--pwa-error-active); }
+
+/* 鼠标移出时撤销原生 :active 绘制。触控补绘制须由宿主显式安装。 */
 @media (hover: hover) {
   .pwa-ui-scope .pwa-icon-button:active:not(:hover):not(:focus-visible)::before,
   .pwa-ui-scope .pwa-icon-button:active:not(:hover):not(:focus-visible) .mantine-ActionIcon-icon,
@@ -144,6 +154,7 @@
 .pwa-ui-scope .pwa-button.pwa-danger-confirm { border-color: var(--pwa-error); color: var(--pwa-on-status); background: var(--pwa-error); }
 @media (hover: hover) { .pwa-ui-scope .pwa-button.pwa-danger-confirm:hover:not(:disabled):not([data-disabled]) { border-color: var(--pwa-error-hover); background: var(--pwa-error-hover); } }
 .pwa-ui-scope .pwa-button.pwa-danger-confirm:active:not(:disabled):not([data-disabled]) { border-color: var(--pwa-error-active); background: var(--pwa-error-active); }
+.pwa-ui-scope .pwa-button.pwa-danger-confirm[data-pwa-pressed]:not(:disabled):not([data-disabled]) { border-color: var(--pwa-error-active); background: var(--pwa-error-active); }
 @media (max-width: 767.98px) {
   .pwa-ui-scope .mantine-Modal-root { --modal-x-offset: max(16px, var(--pwa-safe-left), var(--pwa-safe-right)) !important; }
   .pwa-ui-scope .pwa-dialog { width: 100%; padding: 16px; }
