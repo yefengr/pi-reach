@@ -156,8 +156,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/protocol
       '@yefengr/pwa-foundation':
-        specifier: 0.0.3
-        version: 0.0.3(@mantine/core@9.5.2(@mantine/hooks@9.5.2(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@mantine/hooks@9.5.2(react@19.2.4))(lucide-react@1.33.0(react@19.2.4))(react@19.2.4)
+        specifier: 0.0.4
+        version: 0.0.4(@mantine/core@9.5.2(@mantine/hooks@9.5.2(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@mantine/hooks@9.5.2(react@19.2.4))(lucide-react@1.33.0(react@19.2.4))(react@19.2.4)
       dexie:
         specifier: ^4.4.5
         version: 4.4.5
@@ -1608,8 +1608,8 @@ packages:
   '@vitest/utils@4.1.12':
     resolution: {integrity: sha512-Q3awXrwOfEV+qc3WmO5ONyE0yO7Q1gQ9/oyHxGLZ/pl7N3NO/ZztqQwKLuwMkV+CA1JYSIeO3gkHnRDIo4AVaA==}
 
-  '@yefengr/pwa-foundation@0.0.3':
-    resolution: {integrity: sha512-qFJuOYff+Z7C9vBpcXuBpY97Vf/rFtLHNFy5MEtZTtAfcSDswKxQV051uWdmRh2P5TNFkQXcdIwX02nvY3FMjw==}
+  '@yefengr/pwa-foundation@0.0.4':
+    resolution: {integrity: sha512-2JB/Za5yeaZPmtU04kSF9dQMmGKQ0v3EUmdsLQ+/Xz7E6pG877ir1DF8b+LQzqhTEvqw3Hb2Rv0jAMqb7MbAMA==}
     peerDependencies:
       '@mantine/core': 9.5.2
       '@mantine/hooks': 9.5.2
@@ -5136,7 +5136,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
-  '@yefengr/pwa-foundation@0.0.3(@mantine/core@9.5.2(@mantine/hooks@9.5.2(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@mantine/hooks@9.5.2(react@19.2.4))(lucide-react@1.33.0(react@19.2.4))(react@19.2.4)':
+  '@yefengr/pwa-foundation@0.0.4(@mantine/core@9.5.2(@mantine/hooks@9.5.2(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@mantine/hooks@9.5.2(react@19.2.4))(lucide-react@1.33.0(react@19.2.4))(react@19.2.4)':
     dependencies:
       react: 19.2.4
     optionalDependencies:

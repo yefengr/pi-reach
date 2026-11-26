@@ -25,7 +25,8 @@ if (shouldRestoreTextSize(reviewPath)) {
   previewTextSize(DEFAULT_TEXT_SIZE);
 }
 // 同理在渲染前确定发丝线档位，避免分隔线先粗后细。
-installHairlineDetection();
+const releaseHairline = installHairlineDetection();
+import.meta.hot?.dispose(releaseHairline);
 
 const appRoot = createRoot(root);
 

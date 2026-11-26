@@ -6,7 +6,6 @@ import { useFloatingSafeMiddlewares } from "@/lib/ui/safe-area";
 import type { DocumentHeading } from "./file-text-content";
 import { pwaMotionShiftDisabled, usePwaMenuTransition, usePwaMotionDuration } from "./use-pwa-motion";
 import { pwaSpringProgress } from "@/lib/ui/motion";
-import { useOutsideTapGuard } from "./use-outside-tap-guard";
 import "./reader-document.css";
 
 export type ReaderTocProps = { headings: readonly DocumentHeading[]; scroll: HTMLElement | null; partial?: boolean };
@@ -21,7 +20,6 @@ export function ReaderToc({ headings, scroll, partial = false }: ReaderTocProps)
   const transition = usePwaMenuTransition();
   const middlewares = useFloatingSafeMiddlewares();
   const scrollDuration = usePwaMotionDuration("--pwa-duration-scroll-latest");
-  useOutsideTapGuard();
   const [opened, setOpened] = useState(false);
   const [active, setActive] = useState<string>();
   const glideFrame = useRef<number | null>(null);

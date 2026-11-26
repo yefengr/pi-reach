@@ -15,7 +15,7 @@ const appearanceManager = localStorageColorSchemeManager({ key: APPEARANCE_STORA
 export function PwaUiProvider({ children, colorSchemeManager = appearanceManager }: { children: React.ReactNode; colorSchemeManager?: MantineColorSchemeManager }) {
   const pressScopeRef = usePwaPressFeedback();
   usePwaAnimationVisibility(pressScopeRef);
-  useOutsideTapGuard();
+  useOutsideTapGuard(pressScopeRef);
   const modalIn = usePwaMotionDuration("--pwa-duration-modal-in");
   const modalOut = usePwaMotionDuration("--pwa-duration-modal-out");
   const theme = useMemo(() => createPiReachTheme(modalIn, modalOut), [modalIn, modalOut]);

@@ -391,7 +391,8 @@ test("placeholder kind changes use fade timing and clip only safe outgoing text 
   expect(getComputedStyle(loading).transitionDuration).toBe("1s");
   expect(layoutElement(".pwa-session-status-card").textContent).not.toContain("42.0%");
   await expect.poll(() => loading.getAnimations().length).toBeGreaterThan(0);
-  await expect.poll(() => getComputedStyle(loading).opacity).toBe("1");
+  // 本例刻意拉长到 1s，不能与默认同为 1s 的 poll 期限争最后一帧；仍严格等到最终透明度。
+  await expect.poll(() => getComputedStyle(loading).opacity, { timeout: 5000 }).toBe("1");
   await screen.rerender(fixture({ kind: "offline" }));
   expect(loading.dataset.presence).toBe("leaving");
   expect(loading.inert).toBe(true);

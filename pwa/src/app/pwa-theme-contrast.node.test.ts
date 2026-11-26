@@ -185,9 +185,10 @@ test("the opacity scale steps by 4% up to 32% and by 8% above", () => {
 });
 
 test("sidebar elevation is lighter in light mode and absent in dark mode without changing other surfaces", () => {
-  expect(light["--pwa-shadow-sidebar"]).toBe("0 1px 2px #00000014, 0 2px 8px #0000000A");
-  expect(dark["--pwa-shadow-sidebar"]).toBe("none");
-  expect(systemDark["--pwa-shadow-sidebar"]).toBe("none");
+  expect(shared["--pwa-shadow-sidebar"]).toBe("var(--pwa-shadow-panel)");
+  expect(light["--pwa-shadow-panel"]).toBe("0 1px 2px #00000014, 0 2px 8px #0000000A");
+  expect(dark["--pwa-shadow-panel"]).toBe("none");
+  expect(systemDark["--pwa-shadow-panel"]).toBe("none");
   expect(shared["--pwa-shadow-float"]).toBe("0 1px 2px var(--pwa-shadow-contact-color), 0 4px 16px var(--pwa-shadow-color)");
   expect(shared["--pwa-shadow-modal"]).toBe("0 12px 32px var(--pwa-shadow-color)");
   expect(light["--pwa-shadow-composer"]).toBe("0 1px 2px var(--pwa-shadow-contact-color), 0 6px 20px var(--pwa-shadow-color)");
