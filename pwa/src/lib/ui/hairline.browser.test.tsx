@@ -24,10 +24,10 @@ afterEach(() => {
 test("Chromium draws 0.5px borders as a full pixel, so detection leaves the hairline flag off and removes the probe", async () => {
   await renderPwa(<div />);
   root.setAttribute(HAIRLINE_ATTRIBUTE, "");
-  const children = document.body.childElementCount;
+  const children = [...root.children];
   expect(detectHairline()).toBe(false);
   expect(root.hasAttribute(HAIRLINE_ATTRIBUTE)).toBe(false);
-  expect(document.body.childElementCount).toBe(children);
+  expect([...root.children]).toEqual(children);
 });
 
 test.each(["light", "dark"])("the hairline flag switches width with the separator and edge tiers together in %s", async scheme => {

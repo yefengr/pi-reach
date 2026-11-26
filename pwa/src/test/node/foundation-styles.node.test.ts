@@ -7,13 +7,13 @@ import { cssRules, foundationCssPath, pwaRoot, readStyles, themeDeclarations } f
 
 const source = (path: string) => readFileSync(resolve(pwaRoot, path), "utf8");
 describe("registry foundation consumption", () => {
-  test("精确消费 registry 0.0.3 而非维护源码链接", () => {
-    expect(JSON.parse(source("package.json")).dependencies["@yefengr/pwa-foundation"]).toBe("0.0.3");
+  test("精确消费 registry 0.0.4 而非维护源码链接", () => {
+    expect(JSON.parse(source("package.json")).dependencies["@yefengr/pwa-foundation"]).toBe("0.0.4");
     const installed = realpathSync(resolve(pwaRoot, "node_modules/@yefengr/pwa-foundation"));
-    expect(installed).toContain("node_modules/.pnpm/@yefengr+pwa-foundation@0.0.3");
-    expect(JSON.parse(readFileSync(resolve(installed, "package.json"), "utf8")).version).toBe("0.0.3");
+    expect(installed).toContain("node_modules/.pnpm/@yefengr+pwa-foundation@0.0.4");
+    expect(JSON.parse(readFileSync(resolve(installed, "package.json"), "utf8")).version).toBe("0.0.4");
     expect(foundationCssPath("theme")).toContain(installed);
-    expect(source("../pnpm-lock.yaml")).toContain("'@yefengr/pwa-foundation@0.0.3':");
+    expect(source("../pnpm-lock.yaml")).toContain("'@yefengr/pwa-foundation@0.0.4':");
   });
   test("旧主题入口仅合并应用 Badge，公共控件原样复用", () => {
     const base = createPwaTheme(400, 200);

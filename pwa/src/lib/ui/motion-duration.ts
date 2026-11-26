@@ -1,19 +1,13 @@
-/**
- * 毫秒时长 token 的回退值，与 pwa-theme.css 常规动效下经档位解析后的取值一致（pwa-script-token-guard 校验）。
- * 只在读不到计算样式（无 DOM、样式未加载）时使用；调用点不另写数值。循环动画的秒级 token 不经脚本读取。
- */
+import { PWA_MOTION_FALLBACK_MS as COMMON_FALLBACK_MS, readPwaMotionDuration as readDuration } from "@yefengr/pwa-foundation";
+export { resolvePwaMotionDuration } from "@yefengr/pwa-foundation";
+
+/** 公共回退由包维护；这里只补充路由、消息、阅读和输入停靠的应用时长。 */
 export const PWA_MOTION_FALLBACK_MS = {
+  ...COMMON_FALLBACK_MS,
   "--pwa-duration-sidebar": 360,
   "--pwa-duration-page": 360,
   "--pwa-duration-page-out": 280,
-  "--pwa-duration-drawer": 360,
-  "--pwa-duration-drawer-out": 280,
   "--pwa-duration-switch-out": 200,
-  "--pwa-duration-modal-in": 400,
-  "--pwa-duration-modal-out": 200,
-  "--pwa-duration-collapse-in": 400,
-  "--pwa-duration-collapse-out": 280,
-  "--pwa-duration-collapse-settle": 280,
   "--pwa-duration-keyboard-dock": 200,
   "--pwa-duration-image-in": 400,
   "--pwa-duration-image-out": 280,
@@ -21,45 +15,14 @@ export const PWA_MOTION_FALLBACK_MS = {
   "--pwa-duration-overscroll": 280,
   "--pwa-duration-toast": 400,
   "--pwa-duration-toast-out": 200,
-  "--pwa-duration-fade": 120,
   "--pwa-duration-message-in": 400,
   "--pwa-duration-scroll-latest": 400,
   "--pwa-duration-reorder": 280,
-  "--pwa-duration-press-in": 90,
-  "--pwa-duration-press-out": 240,
-  "--pwa-duration-menu-in": 240,
-  "--pwa-duration-menu-out": 160,
-  "--pwa-duration-menu-resize": 280,
-  "--pwa-duration-menu-view": 200,
-  "--pwa-duration-feedback": 160,
-  "--pwa-duration-toggle": 280,
-  "--pwa-duration-toggle-track": 200,
-  "--pwa-duration-appearance": 320,
-  "--pwa-duration-reduced": 120,
-  "--pwa-duration-content": 320,
 } as const;
 
 export type PwaMotionDurationToken = keyof typeof PWA_MOTION_FALLBACK_MS;
 
-/**
- * 时长 token 的原始计算值。getPropertyValue 对自定义属性可能返回原始 var(...)，须沿 token 与档位引用解析；
- * 减少动态效果时由全局媒体查询改写的 token 同样生效。
- */
-export function resolvePwaMotionDuration(style: CSSStyleDeclaration, variable: PwaMotionDurationToken): string {
-  let value = style.getPropertyValue(variable).trim();
-  for (let depth = 0; depth < 4; depth += 1) {
-    const reference = /^var\((--pwa-(?:duration|tier)-[\w-]+)\)$/.exec(value);
-    if (!reference) break;
-    value = style.getPropertyValue(reference[1]).trim();
-  }
-  return value;
-}
-
-/** 读取 `--pwa-duration-*` 的计算值（毫秒）；读取失败返回同名回退值。 */
+/** 保留应用旧入口与完整 token 集；解析和系统偏好回退统一由包实现。 */
 export function readPwaMotionDuration(variable: PwaMotionDurationToken): number {
-  const fallback = PWA_MOTION_FALLBACK_MS[variable];
-  if (typeof document === "undefined") return fallback;
-  const value = resolvePwaMotionDuration(getComputedStyle(document.documentElement), variable);
-  const duration = Number.parseFloat(value);
-  return value.endsWith("ms") && Number.isFinite(duration) ? duration : fallback;
+  return readDuration(variable, PWA_MOTION_FALLBACK_MS[variable]);
 }

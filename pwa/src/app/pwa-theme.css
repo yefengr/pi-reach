@@ -1,24 +1,14 @@
 @import "@yefengr/pwa-foundation/theme.css";
 
-/* Reach 应用增量：阅读/语法、状态、发丝线、层级与布局；基础 token 来自公共包。 */
+/* 应用增量：阅读/语法、业务状态映射、层级与布局；视觉基础来自公共包。 */
 :root,
 :root[data-mantine-color-scheme="light"] {
   --pwa-grouped-bg: var(--pwa-panel);
-  --pwa-card: var(--pwa-panel);
   --pwa-message: #F2F2F2;
   --pwa-soft-ink: #4A4A4A;
-  --pwa-separator-regular: #00000014;
-  --pwa-separator-hairline: #0000001F;
-  --pwa-edge-regular: #0000001F;
-  --pwa-edge-hairline: #00000033;
   --pwa-shadow-composer: 0 1px 2px var(--pwa-shadow-contact-color), 0 6px 20px var(--pwa-shadow-color);
   --pwa-shadow-composer-docked: 0 1px 2px var(--pwa-shadow-contact-color), 0 -6px 20px -6px var(--pwa-shadow-color);
-  --pwa-shadow-sidebar: 0 1px 2px #00000014, 0 2px 8px #0000000A;
   --pwa-selection: #44639633;
-  --pwa-complete: #347953;
-  --pwa-complete-wash: #EAF3EC;
-  --pwa-running: #90611F;
-  --pwa-running-wash: #F9F2E6;
   --pwa-code-bg: #272727;
   --pwa-code-muted: #C2C2C2;
   --pwa-code-surface: var(--pwa-panel);
@@ -36,21 +26,11 @@
 
 :root[data-mantine-color-scheme="dark"] {
   --pwa-grouped-bg: var(--pwa-bg);
-  --pwa-card: var(--pwa-surface);
   --pwa-message: #353535;
   --pwa-soft-ink: #D4D4D4;
-  --pwa-separator-regular: #FFFFFF1F;
-  --pwa-separator-hairline: #FFFFFF29;
-  --pwa-edge-regular: #FFFFFF29;
-  --pwa-edge-hairline: #FFFFFF3D;
   --pwa-shadow-composer: none;
   --pwa-shadow-composer-docked: none;
-  --pwa-shadow-sidebar: none;
   --pwa-selection: #98B8E63D;
-  --pwa-complete: #95CBA8;
-  --pwa-complete-wash: #26392E;
-  --pwa-running: #DFBA77;
-  --pwa-running-wash: #3D3528;
   --pwa-code-bg: #191919;
   --pwa-code-muted: #BEBEBE;
   --pwa-code-surface: var(--pwa-code-bg);
@@ -69,21 +49,11 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-mantine-color-scheme]) {
     --pwa-grouped-bg: var(--pwa-bg);
-    --pwa-card: var(--pwa-surface);
     --pwa-message: #353535;
     --pwa-soft-ink: #D4D4D4;
-    --pwa-separator-regular: #FFFFFF1F;
-    --pwa-separator-hairline: #FFFFFF29;
-    --pwa-edge-regular: #FFFFFF29;
-    --pwa-edge-hairline: #FFFFFF3D;
     --pwa-shadow-composer: none;
     --pwa-shadow-composer-docked: none;
-    --pwa-shadow-sidebar: none;
     --pwa-selection: #98B8E63D;
-    --pwa-complete: #95CBA8;
-    --pwa-complete-wash: #26392E;
-    --pwa-running: #DFBA77;
-    --pwa-running-wash: #3D3528;
     --pwa-code-bg: #191919;
     --pwa-code-muted: #BEBEBE;
     --pwa-code-surface: var(--pwa-code-bg);
@@ -107,10 +77,11 @@
   --pwa-opacity-disabled: 0.48;
   --pwa-opacity-breathe: 0.72;
   --pwa-opacity-enter: 0.32;
-  /* 由实测 data-pwa-hairline 选择，不按屏幕密度猜测。 */
-  --pwa-hairline: 1px;
-  --pwa-separator: var(--pwa-separator-regular);
-  --pwa-edge: var(--pwa-edge-regular);
+  --pwa-complete: var(--pwa-green);
+  --pwa-complete-wash: var(--pwa-green-wash);
+  --pwa-running: var(--pwa-amber);
+  --pwa-running-wash: var(--pwa-amber-wash);
+  --pwa-shadow-sidebar: var(--pwa-shadow-panel);
   --pwa-text-code: 14px;
   --pwa-text-heading: 20px;
   --pwa-text-subheading: 18px;
@@ -138,19 +109,10 @@
   --pwa-space-composer: 10px;
   --pwa-space-menu-pad: 12px;
   --pwa-ease-settle: var(--pwa-ease-content);
-  --pwa-tier-short: 160ms;
-  --pwa-tier-return: 280ms;
-  --pwa-tier-fade-in: 320ms;
-  --pwa-tier-panel: 360ms;
   --pwa-duration-sidebar: var(--pwa-tier-panel);
   --pwa-duration-page: var(--pwa-tier-panel);
   --pwa-duration-page-out: var(--pwa-tier-return);
-  --pwa-duration-drawer: var(--pwa-tier-panel);
-  --pwa-duration-drawer-out: var(--pwa-tier-return);
   --pwa-duration-switch-out: var(--pwa-tier-leave);
-  --pwa-duration-collapse-in: var(--pwa-tier-appear);
-  --pwa-duration-collapse-out: var(--pwa-tier-return);
-  --pwa-duration-collapse-settle: var(--pwa-tier-return);
   --pwa-duration-keyboard-dock: var(--pwa-tier-leave);
   --pwa-duration-image-in: var(--pwa-tier-appear);
   --pwa-duration-image-out: var(--pwa-tier-return);
@@ -161,22 +123,12 @@
   --pwa-duration-message-in: var(--pwa-tier-appear);
   --pwa-duration-scroll-latest: var(--pwa-tier-appear);
   --pwa-duration-reorder: var(--pwa-tier-return);
-  --pwa-duration-menu-in: var(--pwa-tier-respond);
-  --pwa-duration-menu-out: var(--pwa-tier-short);
-  --pwa-duration-menu-resize: var(--pwa-tier-return);
-  --pwa-duration-menu-view: var(--pwa-tier-leave);
-  --pwa-duration-feedback: var(--pwa-tier-short);
-  --pwa-duration-toggle: var(--pwa-tier-return);
-  --pwa-duration-toggle-track: var(--pwa-tier-leave);
-  --pwa-duration-appearance: var(--pwa-tier-fade-in);
-  --pwa-menu-scale: 0.9;
   --pwa-swap-scale: 0.8;
   --pwa-message-shift: 12px;
   --pwa-collapse-shift: 8px;
   --pwa-menu-row-padding: 6px;
   --pwa-navigation-row-padding: 6px;
   --pwa-menu-visual-inset: 0px;
-  --pwa-duration-content: var(--pwa-tier-fade-in);
   --pwa-duration-spin: 1.3s;
   --pwa-duration-breathe: 2s;
   --pwa-topbar-height: 48px;
@@ -201,19 +153,6 @@
   :root[data-pwa-text-size="large"] { --pwa-text-heading: 24px; --pwa-text-subheading: 22px; }
   :root[data-pwa-text-size="xlarge"] { --pwa-text-heading: 26px; --pwa-text-subheading: 24px; }
 }
-:root[data-pwa-hairline] {
-  --pwa-hairline: 0.5px;
-  --pwa-separator: var(--pwa-separator-hairline);
-  --pwa-edge: var(--pwa-edge-hairline);
-}
 @media (display-mode: standalone) {
   :root { --pwa-app-height: 100lvh; }
-}
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --pwa-tier-short: var(--pwa-duration-reduced);
-    --pwa-tier-return: var(--pwa-duration-reduced);
-    --pwa-tier-fade-in: var(--pwa-duration-reduced);
-    --pwa-tier-panel: var(--pwa-duration-reduced);
-  }
 }

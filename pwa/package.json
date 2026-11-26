@@ -32,7 +32,7 @@
     "@mantine/notifications": "9.5.2",
     "@noble/ed25519": "catalog:",
     "@pi-reach/protocol": "workspace:*",
-    "@yefengr/pwa-foundation": "0.0.3",
+    "@yefengr/pwa-foundation": "0.0.4",
     "dexie": "^4.4.5",
     "highlight.js": "11.12.0",
     "jsqr": "1.4.0",
