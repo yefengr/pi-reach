@@ -48,6 +48,9 @@ if(name==='pnpm' && args[0]==='pack') {
   if(process.env.BAD_EXPORT) pkg.exports['.'].default='./dist/missing.js';
   fs.writeFileSync(path.join(root,'payload/package/package.json'),JSON.stringify(pkg));
   if(process.env.BAD_FILE) fs.writeFileSync(path.join(root,'payload/package/.env'),'private');
+  if(process.env.MISSING_SURFACES) fs.rmSync(path.join(root,'payload/package/surfaces.css'));
+  if(process.env.BAD_CSS_EXPORT) pkg.exports['./surfaces.css']='./other.css';
+  if(process.env.BAD_CSS_EXPORT) fs.writeFileSync(path.join(root,'payload/package/package.json'),JSON.stringify(pkg));
   if(process.env.BAD_DIST_TEST) fs.writeFileSync(path.join(root,'payload/package/dist/test.js'),'fixture');
   if(process.env.BAD_LINK) fs.symlinkSync('/etc/passwd',path.join(root,'payload/package/dist/evil.js'));
   const r=cp.spawnSync('tar',['-czf',path.join(destination,'package.tgz'),'-C',path.join(root,'payload'),'package']);
@@ -63,7 +66,7 @@ function fixture(t) {
   const pkg=JSON.parse(readFileSync(join(ROOT,'packages/pwa-foundation/package.json')));
   pkg.version='9.9.9';
   writeFileSync(join(root,'package.json'),JSON.stringify(pkg));
-  for(const file of ['README.md','LICENSE','DESIGN.md','CHANGELOG.md','foundation.css','theme.css','controls.css','dist/index.js','dist/index.d.ts','dist/mantine.js','dist/mantine.d.ts']) writeFileSync(join(root,'payload/package',file),'fixture');
+  for(const file of ['README.md','LICENSE','DESIGN.md','CHANGELOG.md','foundation.css','theme.css','controls.css','surfaces.css','dist/index.js','dist/index.d.ts','dist/mantine.js','dist/mantine.d.ts']) writeFileSync(join(root,'payload/package',file),'fixture');
   writeFileSync(join(root,'calls'),'');
   for(const name of ['npm','pnpm','git','curl']) { writeFileSync(join(root,'bin',name),CLI); chmodSync(join(root,'bin',name),0o755); }
   t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -106,7 +109,8 @@ test('OIDC uploads exactly the inspected tarball once and retains verifiable saf
   assert.equal(meta.sourceSha,SHA); assert.equal(meta.version,'9.9.9');
   for(const alg of ['sha256','sha512']) assert.equal(meta[alg],createHash(alg).update(bytes).digest('hex'));
   assert.ok(meta.files.includes('package/DESIGN.md'));
-  assert.equal(meta.files.length,12);
+  assert.ok(meta.files.includes('package/surfaces.css'));
+  assert.equal(meta.files.length,13);
   assert.ok(!JSON.stringify(meta).includes(TOKEN));
   assert.deepEqual(readdirSync(out).sort(),['metadata.json','package.tgz']);
   assert.deepEqual(readdirSync(join(root,'tmp')),[]);
@@ -119,10 +123,10 @@ for(const [label,env] of Object.entries({
   'network failure':{NETWORK_FAIL:'1'}, 'typecheck failure':{BUILD_FAIL:'1'},
   'pack failure':{PACK_FAIL:'1'}, 'wrong packed name':{BAD_NAME:'1'},
   'wrong packed version':{BAD_VERSION:'1'}, 'wrong exports':{BAD_EXPORT:'1'},
-  'credential file':{BAD_FILE:'1'}, 'compiled test file':{BAD_DIST_TEST:'1'}, 'symlink':{BAD_LINK:'1'}, 'multiple tarballs':{TWO_TARS:'1'},
+  'credential file':{BAD_FILE:'1'}, 'missing surface CSS':{MISSING_SURFACES:'1'}, 'wrong CSS export':{BAD_CSS_EXPORT:'1'}, 'compiled test file':{BAD_DIST_TEST:'1'}, 'symlink':{BAD_LINK:'1'}, 'multiple tarballs':{TWO_TARS:'1'},
 })) test(`${label} fails closed without uploading`,t=>{
   const root=fixture(t);
-  const prepareFailure=Object.keys(env).some(key=>/^(BUILD|PACK|BAD|TWO)_/.test(key));
+  const prepareFailure=Object.keys(env).some(key=>/^(BUILD|PACK|BAD|TWO|MISSING)_/.test(key));
   const r=prepareFailure ? run(root,[],env) : stage(root,env);
   assert.notEqual(r.status,0); noUpload(root);
   assert.ok(!r.stdout.includes(TOKEN) && !r.stderr.includes(TOKEN));

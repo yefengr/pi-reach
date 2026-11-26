@@ -17,7 +17,7 @@ PWA 不启动或唤醒 Pi；Relay 也不运行 Pi。Extension 在 Pi `session_st
 | 子项目 | 职责 |
 | --- | --- |
 | [`packages/protocol/`](../packages/protocol/) | 私有 workspace 包 `@pi-reach/protocol`，提供跨端共享 outer 与 session 实现。 |
-| [`packages/pwa-foundation/`](../packages/pwa-foundation/) | 公开 npm 包 `@yefengr/pwa-foundation` 的维护源码，提供安全区变量、最小点击区与浮层 shift 参数。 |
+| [`packages/pwa-foundation/`](../packages/pwa-foundation/) | 公开 npm 包 `@yefengr/pwa-foundation` 的维护源码，提供公共设计规范、安全区、主题/控件/表面样式及通用动效与触控辅助。 |
 | [`pwa/`](../pwa/) | 浏览器入口，负责 pairing、0/1/N 活动 Pi 选择、会话输入、正式 timeline 持久化和只读历史展示。 |
 | [`relay/`](../relay/) | WebSocket Relay，负责实时 endpoint 注册、ACL、订阅、短期 pairing-code target 与消息路由。 |
 | [`pi-extension/`](../pi-extension/) | Pi Extension，负责设备身份、Owner pairing/ACL、当前 Pi endpoint 和 Protocol v2 会话。 |
@@ -28,7 +28,7 @@ PWA 不启动或唤醒 Pi；Relay 也不运行 Pi。Extension 在 Pi `session_st
 
 PWA、Extension、Node Relay、`packages/protocol` 与 `packages/pwa-foundation` 的维护源码由根 pnpm workspace 统一安装，依赖 catalog、构建许可和安全 overrides 集中在根 `pnpm-workspace.yaml`，使用单一 `pnpm-lock.yaml`。端侧编译器基线通过命名 catalog 分别保留；Relay 使用 TypeScript、Node.js 与 `ws`，身份验证使用 Node 内置 Ed25519。
 
-`packages/pwa-foundation` 以 `@yefengr/pwa-foundation` 独立发布到 npm。PWA 清单锁定明确版本，安装和生产构建消费 registry 中的 JS、类型声明与 CSS，不链接该目录的维护源码；根验证仍检查维护源码与测试。包只提供四向安全区变量、44px 点击区和浮层 `shift.padding`，不携带应用品牌、配色、业务状态或安装／离线策略。
+`packages/pwa-foundation` 以 `@yefengr/pwa-foundation` 独立发布到 npm。PWA 清单锁定明确版本，安装和生产构建消费 registry 中的 JS、类型声明与 CSS，不链接该目录的维护源码；根验证仍检查维护源码与测试。包提供四向安全区变量、44px 点击区、浮层 `shift.padding`、共享主题/控件/表面、发丝线检测，以及通用动效、触控与系统字号读取。根入口不静态依赖可选 Mantine/Lucide；Mantine 主题与过渡由独立入口提供。包不携带应用品牌、业务状态、路由/手势编排、持久化或安装／离线策略；具体公共规则与宿主接线以包内 DESIGN/README 为准。
 
 `packages/protocol` 是私有包 `@pi-reach/protocol`，只导出 `@pi-reach/protocol/outer` 和 `@pi-reach/protocol/session`。它输出 ESM `dist/*.js` 及对应 `.d.ts`，使用浏览器原生 API，唯一生产依赖为 Zod；不引入 Pi SDK、React、Node 的 crypto/fs 或网络客户端。
 

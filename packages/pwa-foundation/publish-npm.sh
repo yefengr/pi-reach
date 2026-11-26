@@ -85,12 +85,12 @@ for(const file of listing) {
   if(/(?:^|[\/_.-])(?:tests?|specs?|fixtures?)(?:[\/_.-]|$)/i.test(file)) fail();
   if(!file.startsWith('package/') || file.includes('..') || file.includes('\\')) fail();
   if(file.endsWith('/')) { if(!/^package\/(dist\/)?$/.test(file)) fail(); continue; }
-  if(!/^package\/(package\.json|README\.md|LICENSE|CHANGELOG\.md|DESIGN\.md|foundation\.css|theme\.css|controls\.css|dist\/[a-zA-Z0-9_-]+\.(js|d\.ts))$/.test(file)) fail();
+  if(!/^package\/(package\.json|README\.md|LICENSE|CHANGELOG\.md|DESIGN\.md|foundation\.css|theme\.css|controls\.css|surfaces\.css|dist\/[a-zA-Z0-9_-]+\.(js|d\.ts))$/.test(file)) fail();
 }
-for(const file of ['package.json','README.md','LICENSE','CHANGELOG.md','DESIGN.md','foundation.css','theme.css','controls.css']) if(!files.includes('package/'+file)) fail();
+for(const file of ['package.json','README.md','LICENSE','CHANGELOG.md','DESIGN.md','foundation.css','theme.css','controls.css','surfaces.css']) if(!files.includes('package/'+file)) fail();
 const pkg = JSON.parse(tar('-xOf', tgz, 'package/package.json'));
 if(pkg.name !== '@yefengr/pwa-foundation' || pkg.version !== version) fail();
-const expectedExports = {'.':{types:'./dist/index.d.ts',default:'./dist/index.js'},'./foundation.css':'./foundation.css','./theme.css':'./theme.css','./controls.css':'./controls.css','./mantine':{types:'./dist/mantine.d.ts',default:'./dist/mantine.js'}};
+const expectedExports = {'.':{types:'./dist/index.d.ts',default:'./dist/index.js'},'./foundation.css':'./foundation.css','./theme.css':'./theme.css','./controls.css':'./controls.css','./surfaces.css':'./surfaces.css','./mantine':{types:'./dist/mantine.d.ts',default:'./dist/mantine.js'}};
 if(JSON.stringify(pkg.exports) !== JSON.stringify(expectedExports)) fail();
 function checkTargets(value) {
   if(typeof value === 'string') { if(!files.includes('package/'+value.slice(2))) fail(); return; }

@@ -1,6 +1,6 @@
 {
   "name": "@yefengr/pwa-foundation",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Shared safe-area utilities, theme tokens and Mantine controls for React PWAs",
   "license": "MIT",
   "repository": {
@@ -23,9 +23,10 @@
     "./foundation.css": "./foundation.css",
     "./theme.css": "./theme.css",
     "./controls.css": "./controls.css",
+    "./surfaces.css": "./surfaces.css",
     "./mantine": { "types": "./dist/mantine.d.ts", "default": "./dist/mantine.js" }
   },
-  "files": ["dist", "foundation.css", "theme.css", "controls.css", "CHANGELOG.md", "DESIGN.md"],
+  "files": ["dist", "foundation.css", "theme.css", "controls.css", "surfaces.css", "CHANGELOG.md", "DESIGN.md"],
   "scripts": {
     "build": "tsc",
     "prepack": "pnpm build && pnpm test",

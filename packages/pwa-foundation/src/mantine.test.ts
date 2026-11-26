@@ -2,22 +2,26 @@ import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
 import { createPwaTheme, pwaCssVariablesResolver, PWA_DIALOG_SIZE, PWA_CONFIRM_DIALOG_SIZE, pwaModalTransition } from "./mantine-theme.js";
 
-const hooks = vi.hoisted(() => ({ effects: [] as (() => void | (() => void))[], state: undefined as readonly number[] | undefined }));
+const hooks = vi.hoisted(() => ({ effects: [] as (() => void | (() => void))[], state: undefined as number[] | undefined, cursor: 0 }));
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),
   useEffect: (effect: () => void | (() => void)) => { hooks.effects.push(effect); },
-  useState: (initial: readonly number[]) => [hooks.state ?? initial, (update: (previous: readonly number[]) => readonly number[]) => { hooks.state = update(hooks.state ?? initial); }],
+  useState: (initial: () => number) => {
+    const index = hooks.cursor++;
+    const value = initial();
+    return [hooks.state?.[index] ?? value, (next: number) => { (hooks.state ??= [400, 200])[index] = next; }];
+  },
   useMemo: (factory: () => unknown) => factory(),
 }));
 import { usePwaTheme } from "./mantine.js";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const css = read("../theme.css");
 const controls = read("../controls.css");
-afterEach(() => { vi.unstubAllGlobals(); hooks.effects = []; hooks.state = undefined; });
+afterEach(() => { vi.unstubAllGlobals(); hooks.effects = []; hooks.state = undefined; hooks.cursor = 0; });
 
 test("入口保持向后兼容并把 Mantine 限制在可选入口", async () => {
   const manifest = JSON.parse(read("../package.json"));
-  expect(Object.keys(manifest.exports)).toEqual([".", "./foundation.css", "./theme.css", "./controls.css", "./mantine"]);
+  expect(Object.keys(manifest.exports)).toEqual([".", "./foundation.css", "./theme.css", "./controls.css", "./surfaces.css", "./mantine"]);
   expect(manifest.exports["."].default).toBe("./dist/index.js");
   expect(manifest.files).toContain("CHANGELOG.md");
   expect(manifest.description).toContain("safe-area");
@@ -62,14 +66,15 @@ test("resolver 明暗同组语义且 palette 去品牌化", () => {
 test("无 DOM 首次调用不读样式，模拟 effect 读取引用与秒单位并刷新/清理",  () => {
   vi.stubGlobal("document", undefined);
   expect(usePwaTheme().components?.Modal.defaultProps.transitionProps).toMatchObject({ duration: 400, exitDuration: 200 });
-  let change = () => {};
-  const remove = vi.fn();
-  const media = { matches: false, addEventListener: vi.fn((_event: string, fn: () => void) => { change = fn; }), removeEventListener: remove };
+  const listeners = new Set<() => void>();
+  const change = () => { for (const listener of listeners) listener(); };
+  const remove = vi.fn((_event: string, fn: () => void) => { listeners.delete(fn); });
+  const media = { matches: false, addEventListener: vi.fn((_event: string, fn: () => void) => { listeners.add(fn); }), removeEventListener: remove };
   vi.stubGlobal("window", { matchMedia: () => media });
   vi.stubGlobal("document", { documentElement: {} });
   let values: Record<string, string> = { "--pwa-duration-modal-in": "var(--pwa-tier-appear)", "--pwa-tier-appear": "0.4s", "--pwa-duration-modal-out": "200ms" };
   vi.stubGlobal("getComputedStyle", () => ({ getPropertyValue: (key: string) => values[key] ?? "" }));
-  const cleanup = hooks.effects[0]();
+  const cleanups = hooks.effects.map((effect) => effect());
   expect(hooks.state).toEqual([400, 200]);
   media.matches = true; values = {}; change();
   expect(hooks.state).toEqual([120, 120]);
@@ -77,8 +82,9 @@ test("无 DOM 首次调用不读样式，模拟 effect 读取引用与秒单位�
   expect(hooks.state).toEqual([90, 0]);
   values = { "--pwa-duration-modal-in": "-1ms", "--pwa-duration-modal-out": "NaNms" }; change();
   expect(hooks.state).toEqual([120, 120]);
-  if (cleanup) cleanup();
-  expect(remove).toHaveBeenCalledWith("change", change);
+  for (const cleanup of cleanups) cleanup?.();
+  expect(remove).toHaveBeenCalledTimes(2);
+  expect(listeners.size).toBe(0);
 });
 
 test("token 依赖闭包、提取值与来源等价，明暗回退和字号保留", () => {
